@@ -3329,16 +3329,106 @@ that needs no erg, and it can run in a test.
       skips the backward-bucket ring entry** (`useMonitorSession.ts`
       ~1809 stops the recorder without reading the count) — the one
       close where the diagnostic dies silently; final review minor 2.
-- [ ] **Phase RC CLOSE-OUT: a derivation audit (James, 2026-08-25).**
-      Before the phase closes, enumerate every CONSUMER-SIDE derivation
-      of a wire fact the driver already resolves (interval membership,
-      rest state, boundaries, totals — sweep every consumer of
-      `MonitorFrame` and the parsed status), classify each
-      consume-the-authority vs. invented-heuristic, and queue fixes for
-      the heuristics. Motivated by the series-truth defect being the
-      THIRD of its class in this repo: the recorder's own key
-      derivation (this PR), Phase LL's boundary fold (below), and the
-      CM-era boundary heuristic.
+- [x] **Phase RC CLOSE-OUT: a derivation audit — RUN 2026-08-27.**
+      `docs/superpowers/audits/2026-08-27-derivation-audit.md` plus three
+      per-file tables beside it. 133 sites classified across ~7,000 lines by
+      three independent readers.
+      **The question it was asked, answered: the series-truth class does NOT
+      recur.** Interval membership, rest state and totals are all read from
+      the driver's own resolution — every actual files under
+      `toProgramIndex`, rest comes off `frame.state`. The thing this audit
+      existed to find is not there.
+      **What it found instead is a different class and a worse one:** link
+      and lifecycle state. 40 invented-heuristic, 18 re-derived, 43
+      consumes-authority, 32 not-a-derivation. Unlike a membership error,
+      several of these write a stored record or send a command to the erg.
+      **Queued as RC-29 through RC-36 below**, ranked by cost. Two
+      corrections to the audit's own brief are recorded in the document:
+      `Timer.tsx` consumes zero monitor frames, and `seriesRecorder`'s
+      header sentence is about the rest mark, not attribution.
+      **An invented heuristic is not automatically a defect** — where the
+      wire carries no such fact, inventing one is the only option, and
+      `PAUSED_FRAME_HOLD`/`PULL_EVIDENCE_FRAMES` are the clean example (the
+      PM5 has no paused state; both are cosmetic by construction). The
+      queued items are the ones that DUPLICATE an authority or decide
+      something durable on an unpinned threshold.
+      **The model to copy is `decideResumeLatch`:** measured constant, both
+      boundaries pinned, and it defers to the watchdog when that has already
+      spoken instead of forming a second opinion.
+- [ ] **RC-29 — a 2.5 s banner threshold writes a stored field AND
+      suppresses a wire command. THE AUDIT'S WORST FINDING.**
+      `useMonitorSession.ts:3145`: `linkGone = phase === "disconnected" ||
+      frameSilence` writes `endedBy: "link-lost"` and `:3155` skips
+      `driver.terminate()`. A false latch stores a lie AND leaves the PM5
+      running the piece. **The false positive is measured** — nine banners
+      in 288 s over a link that never dropped
+      (`docs/monitor/sessions/walk-2026-08-26/`). Phase LM fixed the
+      LIFECYCLE producer of that silence; the WATCHDOG producer is
+      untouched, and no test pins the false-positive direction. **M**
+- [ ] **RC-30 — teardown can terminate a live piece.**
+      `useMonitorSession.ts:2513-2522` sends TERMINATE keyed on our derived
+      `phase === "ready"`, not on `frame.state`. While that gate lags (a
+      stuck Inactive byte, up to ~5 s at the 1 Hz cadence) any unmount kills
+      the rower's piece on the erg. No test covers the lagging gate. **The
+      only finding in the audit that reaches out and changes the
+      machine.** **S**
+- [ ] **RC-31 — RC-28 is far wider than the r0 case it was filed as.**
+      `surfaceModel.ts:253`/`:893`/`:962`, `PaneLive.tsx:151`. Because
+      `WORKOUTSTATE` 8/9 map to `"rowing"` and 6/7 to `"resting"`
+      (`parse.ts:517-532`), the resting-with-no-rest-phase fallthrough fires
+      for a tick at **every boundary of every rest-bearing program**, not
+      only on zero-rest intervals. The hero then paints a coasting split
+      with a verdict colour against the work target. Pinned only as intended
+      behaviour (`surfaceModel.test.ts:309`); no test asserts the colour.
+      **Supersedes RC-28's scoping; keep RC-28 for its capture question.**
+      **M**
+- [ ] **RC-32 — F2b's clean sweep is VACUOUS.** `continuity.ts`'s F2b count
+      bound writes `completedAt` + `endedBy: "link-lost"` and seals the
+      record. Its sweep excludes all six committed captures, so **zero pairs
+      were compared** (`continuity.test.ts:974`). The gate reports clean
+      because it never ran. **Recurring failure #21's third instance in two
+      days**, after RC-24 shipped two. **S**
+- [ ] **RC-33 — the grid's rest countdown ignores a lost link. Shipped by
+      RC-24 on 2026-08-26; found by this audit the next day.**
+      `surfaceModel.ts:1526`: `restingNow` has no `!stale` term and
+      `buildGridModel` takes no `stale` parameter — its comment "nothing in
+      this function needs to know" predates RC-24 handing it two raw frame
+      fields. So a link lost mid-rest leaves pane C sunken and gold with a
+      FROZEN `R 0:42` while pane B reverts to `LAST SEEN`.
+      **RC-24 and RC-27 are the same change on two surfaces and only one got
+      the guard** — the controller wrote the reasoning into RC-27's comment
+      (*"a countdown frozen at its last value is a false claim of motion"*)
+      a day after shipping RC-24 without it, and neither review caught the
+      asymmetry. The lost-link test at `:917` asserts only the hero. **S**
+- [ ] **RC-34 — `acceptableFinalBoundary` re-derives the driver's own
+      vouch.** `monitorRun.ts:618-627` recomputes `finalBoundary` from
+      `index === intervals.length - 1`. A wrong refusal drops the final
+      interval's actual FOREVER, short-summing all four RC-1 fields and
+      rendering `N-1 OF N INTERVALS MEASURED`. No test drives a flagged
+      final boundary with `index: null` through it. **S**
+- [ ] **RC-35 — the series recorder's absent-key arm rests on a false
+      premise.** `seriesRecorder.ts:333-358` assumes
+      `attributedIntervalIndex` is present; `driver.ts:2175-2229` leaves it
+      undefined on `terminated`/`idle`/`armed`, and a terminated frame DOES
+      reach `onFrame` (`useMonitorSession.ts:1987`) before terminal
+      handling. Damage is bounded today only by accident (max-merge plus a
+      bucket drop). Same file folds the driver's register map a second time
+      (`driver.ts:2462-2469` sums it differently) writing `series[].t/d`,
+      with no test comparing the two. **S**
+- [ ] **RC-36 — `frame.intervalIndex ?? 0` collapses a deliberate null.**
+      `surfaceModel.ts:860`. The driver's `null` also means "a real interval
+      is current but diverged"; `?? 0` turns that into interval 0, so the
+      surface says `1 OF 4`, marks grid row 1 active and shows row 1's
+      targets, silently. **Two consumers already opted out individually
+      after measured defects** (`:1038`, `:1159`) — the source was never
+      fixed, which is the tell. **S**
+      **Riders, all unpinned, all cheap:** `countdownDisplayFor`'s
+      kind-mismatch fallback to the full programmed value (`:1672`);
+      `phaseSeconds(...) ?? 0` pricing unpriced phases at zero in BOTH
+      numerator and denominator while `hasRemainingEstimate` is an ANY not
+      an ALL, leaving the bar and EST LEFT built partly on zeros; and
+      nothing asserting `FINISH_HANDOFF_HOLD_MS > FINISH_GRACE_MS` despite
+      the comment requiring it (the cheapest missing gate in the audit).
 - [ ] **RC — CROSS-CONNECT TO THE CONCEPT2 LOGBOOK. Belongs to this phase;
       DEFERRED to Saturday by James (2026-08-27: "we also haven't
       cross-connected to logbook yet, which should be in phase RC but can
