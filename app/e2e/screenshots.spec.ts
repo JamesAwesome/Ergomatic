@@ -2428,18 +2428,14 @@ test("log-detail", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("2:04.0 work · 500m")).toBeVisible();
   await expect(page.getByText("CODE AF99-4706 C021-B054")).toBeVisible();
-  // RC-5 (hero-truth spec) §3, Task 3: the caption's THIRD correction
-  // (Task 3 fix round 4, PM gate finding 6, copy-only — no re-shoot).
-  // "Everything else on this screen includes rest" went false the moment
-  // the heroes became work-only (this task). The second wording still
-  // argued with the screen: the TOTAL line ("4:04 total · plus 242 m
-  // coasting in rest") sits four lines above this caption and IS a
-  // rest-inclusive total. New copy separates "the three numbers above"
-  // (work-only) from "the total line and the chart below" (both
-  // rest-inclusive).
-  await expect(
-    page.getByText("Rest is in the total line and the chart."),
-  ).toBeVisible();
+  // THE CAPTION IS GONE (James, 2026-08-27: "just no prose"). Asserted as
+  // an ABSENCE so the committed capture keeps showing a three-line block:
+  // this is the PR's visual record, and a re-added sentence would
+  // otherwise only be caught by a human noticing it in the PNG. The block
+  // was rewritten four times before someone read it and saw every version
+  // was redundant — the title says WORK ONLY, and the TOTAL line four
+  // lines up names its own rest outright.
+  await expect(page.locator(".log-machine-confirmed-caption")).toHaveCount(0);
 
   // Dedicated capture: the trace-chart scroll below moves the viewport
   // far enough down that the block (which sits ABOVE the chart) can
