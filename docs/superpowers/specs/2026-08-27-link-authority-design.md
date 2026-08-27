@@ -298,12 +298,44 @@ sent.
 No aggressive threshold is needed: the wrong structure holds **112
 consecutive frames over 56.4 s** in the capture.
 
-## OPEN QUESTION — for James
+## GATE 0 — James approves the rendered design BEFORE any implementation
+
+**Binding, and it precedes every task** (James, 2026-08-27: *"Make sure to
+gate on designs too"*). This spec changes what a rower READS in two places,
+and neither may be built from a description.
+
+What gets presented, rendered rather than described:
+
+1. **The connected screen during `explained-quiet`** — the rower has just
+   unlocked after 39 seconds. Shown against today's `LOST THE MONITOR`
+   banner, at real proportions, in BOTH orientations. Portrait first: RC-24
+   proved a shape can be approved on a description and turn out invisible on
+   the surface that prompted the complaint.
+2. **The saved row**, before and after, for a locked-phone session — with the
+   `LINK LOST · the app lost the monitor before the end` line present and
+   then absent, **and the TIER A headline numbers alongside**, since the same
+   physical session renders a different distance, time and split after this
+   change. That number difference is a design question, not only a data one:
+   it must be legible as an improvement, not as a row that quietly changed.
+3. **Every colour pairing's contrast ratio computed and stated as a number**
+   (recurring failure #6), re-derived from `tokens.css` rather than quoted.
+4. **The copy itself, in the app's register.** Short. James's standing note:
+   *"This is a workout app people aren't going to read a fucking novel of
+   warnings."*
+
+**Nothing is implemented until he has seen it and said yes.** A verbal
+description of copy is not a design; RC-24's Gate 0 exists because a shape
+approved on description was invisible in portrait, and its landscape half was
+then rejected on sight of the first capture.
+
+## OPEN QUESTION — for James, answered at Gate 0
 
 During `explained-quiet` — the rower unlocks after 39 seconds — **what do
 they see live, and what does the saved row say later?** `LOST THE MONITOR`
 blames the erg for our own suspension. Silence hides a real hole. A third
-option names us. One ruling covers both surfaces. Nothing else depends on it.
+option names us. One ruling covers both surfaces. Nothing else in the spec
+depends on the answer, which is why it can wait for the gate rather than
+block the plan.
 
 ## Testing — **[R2: two of three gates were unrunnable]**
 

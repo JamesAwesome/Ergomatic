@@ -83,6 +83,26 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   independent adversarial reviews named that tail as the only place an
   unknown defect could still hide. A fast-path change that ships a bug
   sends the next change of its kind back to the full cycle.
+- **A SPEC THAT CHANGES WHAT A ROWER READS OR SEES CARRIES A DESIGN GATE
+  (James, 2026-08-27: "Make sure to gate on designs too" — asked twice,
+  so it is standing).** Any spec whose scope includes user-visible COPY
+  or LAYOUT gets a Gate 0: James approves the RENDERED thing before any
+  implementation task starts. Not a description of the copy, not a
+  sentence in the spec — the actual screen, at real proportions, in both
+  orientations, against what it replaces, with every colour pairing's
+  contrast ratio computed and stated as a number.
+  **Why it is a hard gate and not a courtesy:** RC-24's shape was
+  approved on a DESCRIPTION and turned out to be `display: none` in
+  portrait — the exact surface whose complaint produced it. Its landscape
+  half was then rejected on sight of the first real capture, because
+  showing `REST 0:59` beside a REST column reading `3:00` says REST twice
+  with two numbers. Neither was findable in prose.
+  **A number change is a design question too**, not only a data one: if a
+  saved row renders a different figure after a change, the gate shows the
+  before and after side by side, because it has to read as an improvement
+  rather than as a row that quietly moved.
+  Present it as a rendered artifact, then STOP. The gate is the approval,
+  not the presentation.
 - **Brainstorming carries a research pass and a does-it-exist question
   (added 2026-08-14).** Before a design is presented for approval, two
   things happen, and the spec records both — including "nothing found",
