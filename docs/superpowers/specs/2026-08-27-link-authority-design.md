@@ -5,6 +5,44 @@ axis survived; its mechanism did not. Every change is marked **[R2]** with
 what falsified it. The pass's full findings are in
 `.claude/agents/antagonist-ledger.md` under "Phase LA anchor pass".
 
+## The outcomes this drives
+
+**One sentence: the app stops asserting things about the erg that it does not
+know.** Every item below is the same shape — a confident claim built on a
+guess — and they are ranked by what they cost the person rowing.
+
+1. **A rower who pockets their phone stops being told their erg vanished.**
+   Nine red LOST THE MONITOR banners in 288 s, on one row, over a link that
+   never dropped (walk-2026-08-26). The erg was fine every time; the app was
+   asleep.
+2. **A session that was fine stops being permanently recorded as damaged.**
+   `endedBy: "link-lost"` is a stamp on a saved row that outlives the
+   session, and today a locked phone earns it.
+3. **A saved row stops carrying a sentence that is false.**
+   *"LINK LOST · the app lost the monitor before the end"* prints on rows
+   where the app lost nothing.
+4. **The app stops walking away from a piece still running on the erg.**
+   A false link-lost SKIPS the terminate, so the rower leaves and the machine
+   keeps counting. The next person finds someone else's workout.
+5. **The app loses the ability to kill a live piece.** The same seam in the
+   other direction: terminates fired off our own guesses, at teardown and at
+   End, into a machine that may be mid-piece. A terminated partial leaves no
+   trace in PM5 memory, so those metres are gone for good.
+6. **A rower who ends the workout at the erg is not left staring at a screen
+   that thinks it is still running** — and, more importantly, does not then
+   row a free piece the app files against a program the machine discarded.
+7. **We gain the one measurement that unblocks the rest.** The frame-gap
+   distribution on the platform every real row comes from is UNMEASURED, by
+   the admission of the constant that depends on it. `max_stream_gap_ms`
+   starts gathering it, which is what any future retune of the 2.5 s
+   threshold — and the other half of RC-29 — has to be built on.
+
+**What this deliberately does NOT do:** it does not make the app work while
+backgrounded. iOS suspends the WebView and this spec does not fight that. It
+makes the app HONEST about the gap instead of blaming the machine for it.
+Correct background operation is a separate, larger question and stays out of
+scope.
+
 ## What and why
 
 Three defects share one cause. We hold beliefs about the monitor that the
