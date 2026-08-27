@@ -5,6 +5,42 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.24.0 (2026-08-26): range v0.23.0..main = 4 merges, each accounted
+    // per RF15. #198 (Phase LM) is the whole entry. #199 (type-naming) is
+    // ledgers + ROADMAP only — a decision recorded and deferred to PROD,
+    // zero user-visible change. #197 is the walk record, docs. #196's
+    // reason was already written: diagnostics ring only.
+    //
+    // CAUSE-FREE, SCOPED (the #198 PM re-gate's own steer, and the trap it
+    // named): the constraint forbids asserting a cause for a GENUINE
+    // silence — three producers remain undistinguished, so nothing here
+    // says why the app stopped hearing the erg. It does NOT forbid naming
+    // what triggered the FALSE alarm, which is PRIMARY from the plugin's
+    // own iOS source. Item 2 names it deliberately; censoring it would
+    // withhold the one explanation a tester who saw the flapping needs.
+    //
+    // ITEM 5 IS THE CLAUSE MOST LIKELY TO BE DROPPED, predicted at two
+    // consecutive PM gates: the v0.17.0 correction, carried IN FULL here
+    // because a correction appended to an old version's entry has an
+    // audience of zero. v0.17.0's own string stays unedited — shipped
+    // notes are history.
+    //
+    // NOT WRITTEN, deliberately: the stored-row half. A rower whose phone
+    // never heard a pull still gets LOGGED BY HAND in history, and that is
+    // said plainly in item 4 — but the reason (there is no record to mark)
+    // is machinery, not news.
+    version: "v0.24.0",
+    date: "2026-08-26",
+    items: [
+      "If you start a workout and the app has not heard your first pull yet, the screen now says so. It used to show 1 OF 4 · WORK over a row of zeros, which looks exactly like a piece already under way. It now says READY, and the numbers beside it are labelled as your targets rather than posing as readings. This is the screen a tester was looking at when they lost a workout: they locked the phone before their first stroke, rowed, and the app never started recording, because it only opens a record when it sees you pull.",
+      "LOST THE MONITOR has stopped crying wolf. It was firing on things that are not losses at all: a swipe into Control Centre, a glance at a notification. On one row it appeared nine times in five minutes while the erg was talking to the app the whole time. It now waits until the app has genuinely not heard the erg, and it says how much survived: '2 intervals kept.', or 'Nothing kept.' when there is nothing.",
+      "PULL TO RESUME no longer appears before you have pulled. Starting an interval while the flywheel was still coasting could show it within about two seconds, telling you to resume something you had not begun.",
+      "When the app never heard a thing, the end-of-session screen now says NO MONITOR READING instead of LOGGED BY HAND, and still offers all three ways to save. One thing it cannot fix: in your history, those sessions still read LOGGED BY HAND, and rows already saved that way cannot be changed. The end screen tells the truth; the saved row does not yet.",
+      "A correction to what v0.17.0 told you. That update said the lost-monitor banner 'cannot flicker at you' and listed a phone call as a way it appears. Both were wrong: it flickered, and a phone call was never the trigger we saw. The flickering is what this release fixes.",
+      "And one small thing for anyone reporting a problem: the diagnostics copy on the log screen now works on a phone's very first connected session, and carries only that session's own trace instead of everything the app has ever recorded.",
+    ],
+  },
+  {
     // v0.23.0 (2026-08-25): range v0.22.0..main = EXACTLY ONE merge, #194
     // (RC-5, hero-truth) — v0.22.0 was tagged at main's tip (#193), so
     // this is the cleanest attributable range this project has had.
