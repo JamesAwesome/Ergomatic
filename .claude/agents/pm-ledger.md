@@ -2818,3 +2818,73 @@ this spec's close).
   wrote the words and you're hiding them" -- that four analytical passes had
   not said plainly. **Worth repeating: put a naive user in front of the real
   captures early; it reorders the findings.**
+
+## Phase-open gate, 2026-08-27 (the link-authority spec, rev 2 — TRIAD: a number's meaning + a stored shape)
+
+- **Suppressing a wire command can delete the event that produces the data the
+  other half of the same spec depends on.** The spec's terminate rule ("stale
+  state, do not send") and its relabel ("now writes the machine's own totals")
+  were designed independently and interact: if we decline to terminate, the
+  machine never ends the workout, so 0x0039 never fires, so `summaryTotals` is
+  null and TIER A is unreachable. **At a gate on any spec with a wire half and a
+  stored half, trace whether the wire half is the PRODUCER of the stored half's
+  input.** The spec's headline claim ("the same physical session renders
+  different numbers") survived, but only for a cohort three conditions narrower
+  than it stated.
+- **The dangerous-window argument applies to WRITES as well as SENDS, and specs
+  apply it only to sends.** The same 39 s blind window that made a terminate
+  unsafe (the machine may have started a cool-down) makes the machine's summary
+  possibly a DIFFERENT workout's. The identity oracle was free and already
+  parsed: 0x0039 carries its own `workoutType`, read today only inside a log
+  template (`driver.ts:2565`). **When a spec refuses to trust the machine's
+  STATE across a window, ask why it trusts the machine's NUMBERS across the same
+  window.**
+- **A stored column with no reader is an unfalsifiable claim — give it one in
+  the same PR.** `max_stream_gap_ms` was specced write-only, on a branch whose
+  own thesis is that our instruments were blind (RF#19). Its reader is the saved
+  row's honest gap line, which is also the replacement for the `LINK LOST` line
+  the spec deletes. One decision solved both.
+- **Deleting a false disclosure without replacing it converts an under-claim
+  into an over-claim.** Dropping `LINK LOST · …` from a locked-phone row while
+  the same change makes that row eligible for `MACHINE CONFIRMED · WORK ONLY`
+  leaves a row asserting confirmation over 39 s nobody watched. Extends the
+  2026-08-25 (#198) prefer-the-false-negative ruling: **check what the row GAINS
+  in the same change before ruling a removal safe.**
+- **A disclosure floor is owed whenever a transient signal becomes a durable
+  one.** v0.24.0 promised testers the banner stopped firing on a Control Centre
+  swipe; stamping a permanent row line for a 3 s background blip re-breaks that
+  promise in a more durable place. Named constant, own comment, sanity-checked
+  at the walk.
+- **Copy rulings (James's tone rule + the banner's title-plus-four-words gate,
+  `ConnectedSurface.tsx:691-693`):** live, `THE APP WAS ASLEEP` / `39s missed.`;
+  saved row, `ASLEEP · 39s the app did not see`; a declined terminate says
+  `STILL RUNNING ON THE ERG · press Menu to stop it` when we know it is live and
+  `WE COULD NOT STOP THE ERG · check the monitor` when the state is stale; RC-37
+  says `THE ERG CLEARED IT` / `Send it again.` with the re-send affordance
+  present. **Naming ourselves does not violate the banner's no-cause rule** —
+  that rule forbids inventing a cause for the ERG's behaviour, and here the
+  cause is us and it is measured.
+- **The app had ZERO post-end copy about the machine's state.** Every "the erg
+  is still counting" string in the repo is a retired or rejected draft quoted in
+  a comment. A spec that makes "we left the erg running" more common must add
+  the first one; trading a silent destructive failure for a silent
+  non-destructive one is the same disease.
+- **Shape: two PRs, ordered, and the ordering is load-bearing.** Terminate
+  gating + RC-37 first (no stored shape); the verdict/relabel/columns second
+  (triad, alone). Today `linkGone` suppresses the terminate, so the relabel
+  UN-suppresses it — shipped first, it sends a derived-verdict terminate into a
+  possibly-live piece, the exact failure the spec exists to prevent. **Generalises:
+  when a relabel moves rows across an allowlist, check whether the OLD label was
+  also suppressing a side effect.**
+- **"Phase LA" does not exist in the ROADMAP.** Both spec commits touched one
+  file. RC-29/30/37 are already Phase RC items, so the 2026-08-13 "no new phase
+  for work that finishes an existing one" principle applies: keep
+  `link-authority` as a spec codename, file the conditions as checkboxes under
+  Phase RC. Discharges RF#17 and #198's checkbox condition at zero cost.
+- **Release call: one MINOR (`v0.26.0`) after BOTH PRs and the walk; no tag
+  between them.** Independently owed: `v0.25.0..main` already carries #206 (the
+  LIVE hero counts the rest, RC-27) — tester-visible, merged AFTER v0.25.0's own
+  notes PR, currently un-noted. Also owed: an explicit correction to v0.23.0's
+  shipped note (`releaseNotes.ts:96`, "keeps the headline it was saved with"),
+  written in the NEW version's entry, plus a from-this-build-forward clause —
+  old link-lost rows stay rest-fused forever.
