@@ -5959,7 +5959,16 @@ const WORKOUTSTATE_RESTING = 3;
  *  CSAFE spec — the PM5's own `CSAFE_PM_SET_RESTDURATION` ceiling, pinned
  *  by `domain/monitor/program.test.ts`'s "compileProgram: rest-too-long").
  *  595 is that exact, INCLUSIVE bound — the widest string this cell can
- *  ever hold in a real connected session, not a margin beyond it. */
+ *  ever hold in a real connected session, not a margin beyond it.
+ *
+ *  `currentSplit: 117.8`, fix round 2, item A — deliberately NOT 0. A
+ *  dead-stop `currentSplit: 0` already dashes via a DIFFERENT, older rule
+ *  ("a zero split is not a reading"), which would make this story unable
+ *  to tell the fix-round-2 suppression apart from that pre-existing one —
+ *  the exact gap James caught ("So /500m in landscape isn't '-' during
+ *  rest???"): a real, decaying coasting split, `1:57.8`, the same number
+ *  the round-1 capture actually showed. If the model-level suppression
+ *  ever regressed, THIS is the value that would expose it; `0` would not. */
 const RESTING_STORY = [
   rowingAt(CONNECTED_STORY_START_MS, { elapsedSeconds: 5, distanceMeters: 30 }),
   {
@@ -5969,7 +5978,7 @@ const RESTING_STORY = [
     elapsedSeconds: 5,
     distanceMeters: 30,
     spm: 0,
-    currentSplit: 0,
+    currentSplit: 117.8,
     heartRateBpm: 140,
     programIntervalIndex: 0,
     restSeconds: 595,
@@ -7103,11 +7112,15 @@ test.describe("connected screens (fake-driven)", () => {
     });
 
     // --- RC-24: the grid says a rest is running ---
-    test("the rest countdown does not overflow its /500M column — narrowest supported portrait (390x844)", async ({
+    // Fix round 2, item C: 375×812, not 390×844 — this repo's own
+    // "tightest common width" (`e2e/screenshots.spec.ts`'s own
+    // `today-capped` test, "narrower than this file's default 390×844"),
+    // the genuinely narrowest supported portrait, not merely a common one.
+    test("the rest countdown does not overflow its /500M column, and lines up EXACTLY with every other row — narrowest supported portrait (375x812)", async ({
       page,
     }) => {
       const title = "Design Connected Rest No-Clip Workout";
-      await page.setViewportSize({ width: 390, height: 844 });
+      await page.setViewportSize({ width: 375, height: 812 });
       await injectConnectedFake(page, RESTING_STORY);
       await openConnected(page, title, "design-connected-rest-noclip@e2e.test");
       await walkToSurface(page);
@@ -7119,14 +7132,13 @@ test.describe("connected screens (fake-driven)", () => {
 
       const measured = await page.evaluate(() => {
         // MEASURE THE FLEX ITEM, NOT ITS INLINE CHILD (fix round's own
-        // second self-caught bug, found running the mutation this report
-        // documents): `.connected-grid-rest-countdown` is a plain inline
-        // `<span>` nested INSIDE `.connected-grid-pace` now (the DOM
-        // restructuring the landscape swap needed) — an inline element's
-        // `scrollWidth`/`clientWidth` are 0 by CSSOM definition, so
-        // measuring it directly always reads `0 <= 0` and passes no
-        // matter what overflows. `.connected-grid-pace` is the actual
-        // flex item (blockified by being a flex child, per the CSS
+        // second self-caught bug): `.connected-grid-rest-countdown` is a
+        // plain inline `<span>` nested INSIDE `.connected-grid-pace` (the
+        // DOM restructuring the landscape swap needed) — an inline
+        // element's `scrollWidth`/`clientWidth` are 0 by CSSOM
+        // definition, so measuring it directly always reads `0 <= 0` and
+        // passes no matter what overflows. `.connected-grid-pace` is the
+        // actual flex item (blockified by being a flex child, per the CSS
         // Display spec), the same element every other no-clip test in
         // this file already measures for its own column — THAT box is
         // what can genuinely overflow the row.
@@ -7138,15 +7150,13 @@ test.describe("connected screens (fake-driven)", () => {
         )!;
         const row = paceCell.closest(".connected-grid-row")!;
         const doc = document.documentElement;
-        // Fix round, review finding C: the fix that stops the /500M cell
-        // clipping borrows its extra width from this SAME row's other
-        // cells (`.connected-grid-resting .connected-grid-pace`'s own
-        // `min-width: max-content`, `index.css`) — this gate used to check
-        // only the rest cell and the document, so a regression that grew
-        // the borrow would have shipped silently. `reference` is an
-        // upcoming row (untouched by the fix) at the SAME columns, so a
-        // right-edge delta against it is a direct measurement of the
-        // steal, not an assumption about what "should" line up.
+        // Fix round 2, item C: `reference` is an upcoming row at the SAME
+        // columns, so a right-edge delta against it is a direct
+        // measurement of any steal this row's own column costs its
+        // neighbours — not an assumption about what "should" line up.
+        // The `R` label (item B) needs no column widening at all
+        // (measured, `index.css`'s own rule comment has the numbers), so
+        // this now asserts EXACT alignment, not a bounded deficit.
         const reference = document.querySelector(".connected-grid-upcoming")!;
         const rightEdgeDelta = (cls: string): number =>
           Math.abs(
@@ -7166,10 +7176,12 @@ test.describe("connected screens (fake-driven)", () => {
         };
       });
       // Real render, real layout, not the eyeballed capture recurring
-      // failure #7 warns against — `REST 9:55` is the TRUE ceiling
-      // (`RESTING_STORY`'s own doc comment has the citation), not a
-      // synthetic stress value, measured, not asserted by construction.
-      expect(measured.cellText).toBe("REST 9:55");
+      // failure #7 warns against — `R 9:55` is the label the fix-round-2
+      // measurement chose (`index.css`'s own rule comment has both
+      // labels' numbers), at the TRUE ceiling
+      // (`RESTING_STORY`'s own doc comment has the `MAX_REST_SECONDS`
+      // citation), measured, not asserted by construction.
+      expect(measured.cellText).toBe("R 9:55");
       expect(measured.rowResting).toBe(true);
       expect(measured.cellScrollWidth).toBeLessThanOrEqual(
         measured.cellClientWidth,
@@ -7177,13 +7189,14 @@ test.describe("connected screens (fake-driven)", () => {
       expect(measured.docScrollWidth).toBeLessThanOrEqual(
         measured.docClientWidth,
       );
-      // BOUNDED, not zero (review finding C's own measurement: ~7px on
-      // METERS, ~2px on SPM/HR, at 390px). A generous ceiling — not a
-      // target to creep toward — catches a regression that widens the
-      // borrow without failing on the accepted, reported cosmetic cost.
-      expect(measured.metersDelta).toBeLessThan(10);
-      expect(measured.spmDelta).toBeLessThan(10);
-      expect(measured.hrDelta).toBeLessThan(10);
+      // EXACTLY ZERO (fix round 2, item C — tightened from a bounded
+      // deficit): the resting row's columns line up with every other row,
+      // pixel for pixel. A gate that still permitted the old deficit would
+      // not notice its return — proven red in the report (a temporary
+      // revert of the fix reintroduces a real, non-zero delta here).
+      expect(measured.metersDelta).toBe(0);
+      expect(measured.spmDelta).toBe(0);
+      expect(measured.hrDelta).toBe(0);
 
       await cleanupAllConnected(page, title);
     });
@@ -7234,14 +7247,14 @@ test.describe("connected screens (fake-driven)", () => {
       // `.connected-grid-rest-live`'s own token, `--marker` (#7d5510).
       expect(measured.restCellText).toBe("9:55");
       expect(measured.restCellColor).toBe("rgb(125, 85, 16)");
-      // And /500M reverted to the ordinary split, unjudged — no
-      // `timer-card-actual-*` class, per James's ruling that the
-      // coast-verdict defect is wrong in this column regardless of
-      // orientation. The coast span genuinely has content (a rendered
-      // split), and it is the ONLY text the rendered cell shows.
-      expect(measured.coastText).not.toBe("");
-      expect(measured.coastText).not.toContain("REST");
-      expect(measured.paceCellRenderedText).toBe(measured.coastText);
+      // Fix round 2, item A (James: "So /500m in landscape isn't '-'
+      // during rest???"): /500M does NOT revert to the coasting split —
+      // it dashes, unjudged. `RESTING_STORY` scripts a real, non-zero
+      // `currentSplit: 117.8` (the same `1:57.8` the round-1 capture
+      // showed) specifically so this assertion cannot pass by accident of
+      // an already-dashing zero reading.
+      expect(measured.coastText).toBe("—");
+      expect(measured.paceCellRenderedText).toBe("—");
       expect(measured.paceCellClasses).not.toMatch(/timer-card-actual-/);
       // The CSS orientation swap itself, computed — not assumed from the
       // class list alone: the coast form is genuinely painted, the

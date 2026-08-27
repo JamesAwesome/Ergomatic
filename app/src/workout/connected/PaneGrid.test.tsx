@@ -37,7 +37,6 @@ import type {
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../../domain/types.js";
-import { fmtSplit } from "../../../domain/format.js";
 import { ONBOARDING_TITLES } from "../../../domain/onboarding.js";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../../server/seed/library/onboarding";
@@ -818,7 +817,11 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
     expect(cell).not.toBeNull();
     // Floored, not rounded — 42.0 is already whole, so this also doubles as
     // the render-through check for the CSS comment's own worked example.
-    expect(cell!.textContent).toBe("REST 0:42");
+    // Fix round 2, item B (James: "reduce 'rest' to r/"): `R`, not `REST`
+    // — measured to need exactly the width every row's own flex share
+    // already gives this column (`index.css`'s own rule comment has the
+    // numbers), unlike `REST` which needed 16px more.
+    expect(cell!.textContent).toBe("R 0:42");
   });
 
   // Fix round (James, 2026-08-26): landscape moves the countdown into the
@@ -826,16 +829,18 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
   // render unconditionally now (this component never asks which
   // orientation is live; jsdom could not answer if it did — CSS decides,
   // proven in a real browser by `e2e/design.spec.ts`). This pins the
-  // STRUCTURE and CONTENT both orientations depend on, and folds into the
-  // unjudged check below rather than a separate render.
-  it("is NOT judged during a rest, in either /500M form: a coasting split that would otherwise tint the cell carries no verdict class", () => {
-    // currentSplit: 60 is the same "would otherwise scream a verdict" value
-    // the disconnected-staleness tests above use — far OUTSIDE
-    // PACE_TOLERANCE_SECONDS of the 2000 m rep's own ~126s target (fix
-    // round, review D1: the previous comment here said "inside tolerance",
-    // backwards — 60 is dramatically faster than target, which is exactly
-    // what tints "faster"/blue three lines below when this cell IS judged,
-    // during work).
+  // STRUCTURE both orientations depend on.
+  //
+  // Fix round 2, item A (James: "So /500m in landscape isn't '-' during
+  // rest???"): the coast form no longer shows the coasting split AT ALL —
+  // `row.pace` is the house dash, unjudged, straight off the MODEL
+  // (`surfaceModel.test.ts`'s own dedicated pair pins the model fact; this
+  // pins that the DOM cell actually renders what the model now says).
+  it("dashes during a rest, unjudged, in the coast form too — no coasting split ever reaches either /500M form", () => {
+    // currentSplit: 60 is a live, plausible coasting reading (not the
+    // already-dashing dead-stop case, `currentSplit: 0`) — proves the
+    // suppression is the fix-round-2 model change, not an accident of a
+    // zero reading already dashing on its own.
     renderGrid({
       frame: frame({
         state: "resting",
@@ -848,14 +853,12 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
     expect(active.querySelector(".connected-grid-pace")!.className).not.toMatch(
       /timer-card-actual-/,
     );
-    // Fix round (James ruling): unjudged in BOTH forms, not just the one
-    // portrait shows — `cellClass` is never called on the coast span
-    // either, so its class is the bare literal, nothing appended, and its
-    // TEXT is the same `fmtSplit` reading the ordinary (non-resting) cell
-    // would show — landscape's own real content, not a placeholder.
+    // Unjudged in BOTH forms — `cellClass` is never called on the coast
+    // span either, so its class is the bare literal, nothing appended —
+    // and its TEXT is the house dash, not a coasting reading.
     const coast = active.querySelector(".connected-grid-pace-coast");
     expect(coast!.className).toBe("connected-grid-pace-coast");
-    expect(coast!.textContent).toBe(fmtSplit(60));
+    expect(coast!.textContent).toBe(DASH);
   });
 
   it("during work the pace cell is unchanged: the same judged tint it has today, no resting row, no rest word", () => {

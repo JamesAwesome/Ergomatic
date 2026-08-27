@@ -41,21 +41,29 @@
 // PORTRAIT (no REST column at all — `.connected-grid-rest`'s own
 // `display: none`) the `/500M` cell carries it, exactly as shipped; in
 // LANDSCAPE it moves into the REST column instead, and `/500M` reverts to
-// `livePace`. ONE MODEL, NOT TWO CODE PATHS: `row.restCountdown` is
-// rendered into BOTH cells unconditionally whenever `row.countdown ===
-// "rest"` — the `/500M` cell always carries both its rest-form and its
-// ordinary coast-pace form, and CSS (`.connected-grid-rest-countdown` /
-// `.connected-grid-pace-coast`, the landscape query) is what decides which
-// one a given orientation shows; this component never asks what
-// orientation it is in. UNJUDGED IN BOTH FORMS, both orientations (this
-// task's own coast-verdict finding, generalised past the cell it started
-// on): `livePace` during a rest is `frame.currentSplit`, a coasting
-// flywheel's split judged against a work target it no longer means, and
-// that is wrong regardless of which column happens to show it — so
-// `cellClass` is never called on the coast span either. See
+// its ORDINARY (coast-pace) form. ONE MODEL, NOT TWO CODE PATHS:
+// `row.restCountdown` is rendered into BOTH cells unconditionally whenever
+// `row.countdown === "rest"` — the `/500M` cell always carries both its
+// rest-form and its coast-pace form, and CSS (`.connected-grid-rest-
+// countdown` / `.connected-grid-pace-coast`, the landscape query) is what
+// decides which one a given orientation shows; this component never asks
+// what orientation it is in.
+//
+// THE COAST-PACE FORM DASHES DURING A REST — fix round 2 (James, spotting
+// it in the committed landscape capture: "So /500m in landscape isn't '-'
+// during rest???"). `row.pace` is NOT `livePace` on this row while
+// resting: `buildGridModel`'s active branch (`surfaceModel.ts`) already
+// replaces it with the house dash, unjudged, before this component ever
+// sees it — `livePace`/`frame.currentSplit` during a rest is a coasting
+// flywheel's split, judged against a work target it no longer means, and
+// that number is worse than the tint already removed (round 1): it is
+// precisely the number a rower could mistake for their result, on the row
+// whose REST column is counting down beside it. `cellClass` is never
+// called on the coast span either way, but the span's own TEXT is now the
+// dash the model hands it, not a coasting reading. See
 // `GridRow.countdown`'s own doc comment (`surfaceModel.ts`) for the wire
 // reasoning and the design spec's "superseded" ruling for the record of
-// why landscape changed.
+// why landscape changed, twice.
 //
 // THE `#` CELL (design spec §5b, built by Task 4b's `intervalNumbering`):
 // numbering starts at 1 on the first piece. `row.ordinal` used to be `null`
@@ -230,7 +238,7 @@ function Row({ row, ref }: { row: GridRow; ref?: React.Ref<HTMLDivElement> }) {
            `cellClass` either, in either orientation. */
         <span className="connected-grid-pace">
           <span className="connected-grid-rest-countdown">
-            <span className="connected-grid-rest-word">REST</span>{" "}
+            <span className="connected-grid-rest-word">R</span>{" "}
             {row.restCountdown}
           </span>
           <span className="connected-grid-pace-coast">{row.pace.display}</span>

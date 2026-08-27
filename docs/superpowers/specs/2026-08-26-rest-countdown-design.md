@@ -215,6 +215,25 @@ a DIFFERENT cell depending on orientation, gold on the REST column in
 landscape (`.connected-grid-rest-live`) exactly as it was gold on `/500M` in
 portrait.
 
+**"`/500M` reverts to showing pace there" — CORRECTED, fix round 2
+(James, spotting it in the committed landscape capture: "So /500m in
+landscape isn't '-' during rest???").** The sentence above was wrong about
+WHAT pace it reverts to. `/500M`'s coast-pace form does not show
+`livePace` — it shows the house dash, unjudged. `livePace` during a rest
+IS the coasting flywheel's split (measured, real, decaying — the round-1
+capture actually showed `1:57.8`), and that number is worse than the tint
+already removed: a tint is a colour a rower can learn to distrust, but the
+number itself is exactly what a rower glancing at their result could
+mistake for it, on the row whose REST column is counting down right beside
+it. The "unjudged in both forms" ruling two paragraphs up was right that
+the coast-verdict TINT is wrong in both orientations; it did not go far
+enough — the coast-verdict NUMBER is wrong in both orientations too, for
+the identical reason. Fixed cell-locally in `buildGridModel`'s active
+branch (`restingNow` already existed there), never in `livePace` itself —
+pane B's split hero carries the identical defect for the identical reason
+and stays deliberately out of scope, filed separately, so a function-level
+fix could not silently reach it.
+
 ### RULING — `resting` with a ZERO programmed rest
 
 `driver.ts` notes that a machine can briefly report `resting` on an interval
@@ -330,10 +349,42 @@ every other row of the column.
   citing it, which is what the delta pass would have been asked to check.
 - **44 px hit targets and WCAG AA** are hard requirements. Nothing here adds a
   control, so the targets should be untouched; say so rather than assuming it.
-- **The cell must not clip.** `/500M` is `flex: 1.1` and `REST 0:42` is longer
-  than any split it replaces. `white-space: nowrap`, the word at
-  `--c-size-thead` and the number at row size, and a structural assertion at
-  the narrowest supported width.
+- **The cell must not clip.** `/500M` is `flex: 1.1` and `R 0:42` (the word
+  CORRECTED, fix round 2 — see "THE LABEL" below; `REST 0:42` was the
+  round-1 word) is longer than any split it replaces. `white-space: nowrap`,
+  the word at `--c-size-thead` and the number at row size, and a structural
+  assertion at the narrowest supported width — corrected in the same round
+  from 390px to 375px, this repo's own "tightest common width"
+  (`e2e/screenshots.spec.ts`'s `today-capped` convention).
+
+### THE LABEL — `R`, not `REST` (fix round 2, James: "reduce 'rest' to r/")
+
+James, looking at the round-1 portrait capture: *"is there any way to make
+the portrait view have less of a bump out. It's a bit triggering things
+aren't more aligned. Maybe like reduce 'rest' to r/"* The bump was review
+finding C's own cost — `min-width: max-content` (round 1's no-clip fix)
+stole a few px from the resting row's METERS/SPM/HR to make room for
+`REST m:ss`.
+
+**Measured, not assumed, at 375×812 (this repo's own tightest common
+width):** `REST 9:55` (the true ceiling, `compileProgram`'s own
+`MAX_REST_SECONDS = 595`) needs 84px; every row's existing flex share
+already gives this column 68px. `R 9:55` needs exactly 68px — the SAME
+number, zero deficit. `R` is not invented shorthand: this repo's own
+bulk-import grammar already writes `r1` for a one-minute rest
+(`domain/bulk.ts`), so a rower who has authored a workout has already read
+this abbreviation as "rest".
+
+**Decision: `R`.** James's own tie-break was "if REST achieves zero bump at
+an acceptable cost, keep REST; only drop to R if REST cannot fit." REST
+technically fits (with the min-width fix), but only by permanently taxing
+every portrait row's alignment by 16px to save one word — judged not
+acceptable against a zero-cost alternative that is already this repo's own
+grammar. The round-1 `min-width: max-content` fix is DELETED, not
+repointed: `R`'s content already fits the existing flex allocation with no
+override needed (`index.css`'s own rule comment carries both labels'
+numbers). The two-size treatment (word at `--c-size-thead`, number at row
+size) and the gold both hold unchanged.
 
 ## Testing
 
@@ -362,10 +413,12 @@ every other row of the column.
    is left, from the `/500M` cell, on a sunken row, without reading the step
    line. **Fix round (James, 2026-08-26 — see the LANDSCAPE section, now
    SUPERSEDED): landscape tells the same two facts from the REST column
-   instead, `/500M` reverting to `livePace` there** — not identical
-   treatment, but the identical PROMISE (a rower can tell a rest is running
-   and how long is left) kept in the cell each orientation actually has room
-   for without repeating itself.
+   instead, `/500M` dashing there** (CORRECTED, fix round 2 — `/500M` does
+   NOT revert to `livePace`, which is the coasting split James caught it
+   still showing; see the LANDSCAPE section's own second correction) — not
+   identical treatment, but the identical PROMISE (a rower can tell a rest
+   is running and how long is left) kept in the cell each orientation
+   actually has room for without repeating itself.
 3. During work, and while armed, the marker is where it is today. Pinned.
 4. Exactly one cell wears the marker at any time. Pinned.
 5. The three wire facts above are pinned as tests, not as comments.

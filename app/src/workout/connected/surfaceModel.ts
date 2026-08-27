@@ -1502,7 +1502,26 @@ export function buildGridModel(args: {
         restCountdown: restingNow
           ? fmtDuration(Math.floor(restSeconds) / 60)
           : null,
-        pace: { display: args.livePace.display, judged: args.livePace },
+        // Fix round 2 (James: "So /500m in landscape isn't '-' during
+        // rest???"): `livePace` is `frame.currentSplit`, a COASTING
+        // flywheel's split — real, decaying, and worse than the judged
+        // tint we already removed, because it is still a NUMBER a rower
+        // can mistake for their result, on the row whose REST column is
+        // counting down beside it. Dashed here, cell-local, in BOTH
+        // orientations: portrait never shows this cell at all during a
+        // rest (the countdown replaces it structurally), so the dash only
+        // ever reaches a reader through landscape's `/500M`, where the
+        // countdown moved OUT of this cell and left the coast split
+        // standing alone. `judged: null` for the same reason the
+        // countdown's own cell was never judged — a dash is not a reading
+        // to compare, the same stance `armedNeverRowed`'s own preview
+        // takes. Deliberately NOT a change to `livePace` itself — pane
+        // B's split hero has the identical defect for the identical
+        // reason and is OUT OF SCOPE here (filed separately); a
+        // function-level fix would silently change that surface too.
+        pace: restingNow
+          ? { display: DASH, judged: null }
+          : { display: args.livePace.display, judged: args.livePace },
         spm: { display: args.liveRate.display, judged: args.liveRate },
         hr: args.liveHr.display,
         rest,

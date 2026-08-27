@@ -41,6 +41,7 @@ import { createReplayTransport } from "../../monitor/transports/replay";
 import {
   buildSurfaceModel,
   connectedNextText,
+  DASH,
   intervalNumbering,
   judgedValue,
   ON_TARGET_BAND_SECONDS,
@@ -816,6 +817,48 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
         }),
       ),
     ).toBe(1);
+  });
+
+  // Fix round 2, item A (James: "So /500m in landscape isn't '-' during
+  // rest???"). The countdown replaces the coast split in PORTRAIT (one
+  // cell, one value); landscape shows the coast split back in `/500M`
+  // alongside the countdown in the REST column, and that split is
+  // `frame.currentSplit` — a coasting flywheel, judged against a work
+  // target it no longer means. The fix is CELL-LOCAL, in this same active
+  // branch, not in `livePace` itself (pane B's identical defect is
+  // deliberately out of scope, filed separately).
+  it("the pace cell dashes during a rest, unjudged — the coast split never reaches either orientation's /500M cell", () => {
+    const row = activeRow(
+      model({
+        frame: frame({
+          state: "resting",
+          restSeconds: 42,
+          intervalIndex: 1,
+          // A real, non-zero coasting reading — the exact number James
+          // saw in the landscape capture (1:57.8 rendered from something
+          // in this neighbourhood). If suppression only caught the
+          // already-dashing dead-stop case (currentSplit: 0), this value
+          // would prove nothing; a live, plausible split is the point.
+          currentSplit: 117.8,
+        }),
+      }),
+    );
+    expect(row.pace.display).toBe(DASH);
+    expect(row.pace.judged).toBeNull();
+  });
+
+  it("the WORK-interval pace is unchanged: still the live split, still judged — the rest suppression cannot leak into work", () => {
+    const row = activeRow(
+      model({
+        frame: frame({
+          state: "rowing",
+          intervalIndex: 1,
+          currentSplit: 117.8,
+        }),
+      }),
+    );
+    expect(row.pace.display).toBe(fmtSplit(117.8));
+    expect(row.pace.judged).not.toBeNull();
   });
 });
 

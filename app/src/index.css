@@ -6949,62 +6949,55 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 .connected-grid-rest-countdown {
   color: var(--marker);
-  /* `/500M` is flex 1.1 and `REST 0:42` is longer than any split it
-     replaces. Nothing may wrap mid-value. */
+  /* `/500M` is flex 1.1; nothing may wrap mid-value. */
   white-space: nowrap;
 }
 
-/* THE NO-CLIP FIX. Scoped to `.connected-grid-pace` INSIDE a resting row —
-   not to `.connected-grid-rest-countdown` itself, which is a plain child
-   of the flex item, not the flex item (fix round's own second-pass
-   correction: an earlier draft of this rule sat on the child, where
-   `min-width` cannot influence the flex shrink algorithm at all, since
-   that algorithm reads the ITEM's own `min-width`, never a descendant's —
-   caught rewriting this rule for the fix round, before it shipped, by
-   re-deriving what `min-width: max-content` actually needs to sit on).
+/* FIX ROUND 2, ITEM B (James: "is there any way to make the portrait view
+   have less of a bump... Maybe like reduce 'rest' to r/"). This cell used
+   to read `REST m:ss` and carry its own `min-width: max-content` override
+   (deleted here) to stop that string clipping — which cost the resting
+   row's METERS/SPM/HR a few px of misalignment against every other row,
+   review finding C's own "bump". Two numbers, MEASURED (not eyeballed) at
+   375×812, this repo's own "tightest common width"
+   (`e2e/screenshots.spec.ts`'s own convention, narrower than the 390 the
+   round-1 fix was measured against), one real render each:
 
-   `flex: 1.1` (`.connected-grid-pace`'s own base rule, unchanged) plus
-   `min-width: 0` there let the row's flex algorithm shrink the /500M cell
-   below its own content width whenever the shrink budget ran out —
-   invisible at `REST 0:42` (the only value the captured wire session
-   ever showed) but measured clipping a genuinely reachable rest.
+     REST 9:55  needs  84px  —  16px more than the 68px every row's own
+                                 flex share already gives this column
+     R 9:55     needs  68px  —  EXACTLY the 68px every row already has
 
-   THE REAL CEILING IS `REST 9:55`, NOT THE BUILDER'S OWN `0:01..60:00`
-   AUTHORING BOUND (review finding B — the first version of this comment
-   cited the WRONG LAYER). `domain/validate.ts`'s `restMinutes` check
-   governs what a rower may TYPE; it says nothing about what a connected
-   session can actually carry, because every program a rower authors still
-   has to pass `compileProgram` before it reaches the machine, and
-   `compileProgram` rejects a folded rest over `MAX_REST_SECONDS = 595`
-   (9:55) as `rest-too-long` (`domain/monitor/program.ts:200-204`, Table 19
-   of the CSAFE spec — the PM5's own `CSAFE_PM_SET_RESTDURATION` ceiling,
-   pinned by `domain/monitor/program.test.ts`'s "compileProgram:
-   rest-too-long" describe block). So the widest string this cell can EVER
-   hold in a connected session is `REST 9:55` — nine characters, the exact
-   same width as `REST 0:59` (both single-digit minutes, since 595s < 600s
-   never reaches a two-digit minute) — not the ten-character `REST 59:59`
-   the first version of this fix was measured against.
+   `R` is not invented shorthand — this repo's own bulk-import grammar
+   already uses `r1` for a one-minute rest (`domain/bulk.ts`), so a
+   rower who has typed a workout has already seen this abbreviation mean
+   "rest". Both figures are true for EVERY valid rest value, not just the
+   9:55 ceiling: `compileProgram`'s `MAX_REST_SECONDS = 595` (Table 19)
+   means minutes is always exactly one digit (0-9), so every rendered
+   string is the same character count in this monospace font — the
+   measurement at the ceiling is the measurement at every other value too.
+   `REST` would need this column widened 16px on EVERY portrait row (not
+   only the resting one) to reach zero bump, with no existing portrait
+   no-clip proof that a widened column still holds a five-digit METERS
+   reading (the landscape stress test at `e2e/design.spec.ts:7069` proves
+   only the 844px-wide case). `R` needs no column change at all — the
+   existing flex table already covers its worst case exactly, proven by
+   the equal numbers above, not assumed. Chosen for zero cost over REST's
+   16px permanent tax on every row's alignment, per James's own tie-break
+   ("only drop to R if REST cannot fit [at an acceptable cost]") — 16px on
+   every row, forever, to save one word, was judged not acceptable.
 
-   `min-width: max-content` still earns its keep: even the true, BOUNDED
-   worst case overflows this cell's plain flex-allocated width (measured:
-   `REST 0:59`, already in the committed capture, needed more than its
-   72px share at 390px). It overrides the inherited `min-width: 0` for
-   THIS row's pace cell only (the `.connected-grid-resting` ancestor scope
-   — every other row's `.connected-grid-pace` is untouched), so flex's
-   shrink phase takes the deficit out of this row's OTHER cells (which
-   keep `min-width: 0`) instead of this one. Review finding C measured the
-   cost: the resting row's METERS/SPM/HR sit a few px out of column
-   alignment with every other row while this is active — bounded (the
-   deficit is fixed now that the ceiling is known, not open-ended) and
-   cosmetic; `e2e/design.spec.ts`'s own no-clip test measures the
-   neighbour columns too, so a regression that widens the deficit fails
-   there. */
-.connected-grid-resting .connected-grid-pace {
-  min-width: max-content;
-}
+   NO `min-width` OVERRIDE HERE ANY MORE — deleted, not left dead: `R`'s
+   own content already fits inside the ordinary flex allocation with zero
+   slack needed, so forcing a floor here would do nothing. Verified, not
+   assumed: `e2e/design.spec.ts`'s no-clip test now asserts the resting
+   row's METERS/SPM/HR align with every other row EXACTLY (0px, not a
+   bounded deficit), and that gate is proven to go red if this ever stops
+   being true (the report has the mutation).
 
-/* The word rides at the column-head size so the pair fits the cell; the
-   number stays at row size, because the number is what is read. */
+   THE WORD RIDES AT THE COLUMN-HEAD SIZE SO THE PAIR FITS THE CELL; THE
+   NUMBER STAYS AT ROW SIZE, BECAUSE THE NUMBER IS WHAT IS READ — the same
+   two-size treatment the round-1 shape had, held through the label
+   change. */
 .connected-grid-rest-word {
   font-size: var(--c-size-thead);
 }
