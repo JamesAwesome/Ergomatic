@@ -73,6 +73,15 @@ not the picture. A release-time regeneration is what catches that class.
 The calendar is held constant for free, so anything that still moves is
 nondeterminism rather than the date.
 
+**Run this on the build Mac, never on Linux.** The committed captures are a
+macOS artifact. Measured 2026-08-27 in
+`mcr.microsoft.com/playwright:v1.62.1-noble` against the same stack:
+**90 of 90 captures differ, zero identical**, max channel delta 255, and
+one page renders a different HEIGHT — FreeType against CoreText is a
+different layout, not a hinting wobble. The suite still passed 81/81 in the
+container, because every assertion is about the DOM and none can see this.
+Regenerating anywhere else produces a 90-file diff that means nothing.
+
 ## Cutting a release (~10 min, on the build Mac, fully CLI)
 
 1. `git checkout main && git pull`
