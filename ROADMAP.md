@@ -3926,10 +3926,61 @@ that needs no erg, and it can run in a test.
       costs no change to what any number MEANS, so it carries none of that
       ruling's TRIAD weight. The numbers stay honestly live; only the labelling
       stops being ambiguous.
+- [ ] **RC-28 — the r0 case: a rest the app cannot see, where the coast IS
+      still judged. Found at RC-27's review, 2026-08-27; correctly outside
+      that brief, filed here because it existed only in a review report.**
+      An interval with ZERO programmed rest never gets a `"rest"` phase at
+      all (`domain/expand.ts`/`engine.ts` check `restMinutes` for truthiness;
+      `surfaceModel.ts:864-876` already documents the consequence). So when
+      a machine BRIEFLY reports `resting` there, `phaseIndexForInterval`
+      resolves to the WORK phase, `targetSplitSeconds` is non-null, and the
+      coasting split renders **judged against a work target** — the exact
+      motivating defect of RC-24 and RC-27, in the one window RC-27's
+      `restSeconds > 0` term deliberately excludes (that field reads `0.00`
+      here, so the countdown correctly does not fire, but the suppression
+      does not fire either).
+      **The design already names this** as "gets the average but never the
+      colour" under its own Honest limits.
+      **Unknown without a capture:** whether `midSessionMirror`
+      (`surfaceModel.ts:927-930`) masks it when distance has reset. Settle
+      that from a recording before designing anything — an r0 program is
+      cheap to walk, and the grammar expresses it by OMITTING the rest
+      token, never `r0` (which `validate.ts` rejects; see recurring failure
+      #13's own canned-block story).
+      **Trigger:** the next connected-surface phase, or the RC close-out
+      derivation audit, which is looking for exactly this shape. **S**
+- [ ] **The `log-detail` screenshot is RED on main, and nothing gates it.**
+      Found 2026-08-27 across three RC-24 rounds and RC-27, each time
+      reported as "pre-existing, unrelated" and each time correctly so — it
+      asserts a `summaryModel.ts` rest-coasting total line those diffs
+      cannot reach. **The reason it can sit there indefinitely is the
+      point:** `screenshots.spec.ts` is excluded from the chromium project
+      CI runs (`playwright.config.ts:27`, `ci.yml`'s `--project=chromium`),
+      so a red capture gate never fails a PR and is only seen by whoever
+      runs `pnpm screenshots` by hand.
+      **The sibling case is why this is filed rather than tolerated:** the
+      OTHER long-standing "pre-existing" screenshots failure, `releases`,
+      turned out to be a genuinely stale `v0.23.0` version pin left behind
+      when v0.24.0 shipped — a real bug wearing the same label, fixed in
+      #205. A permanently-red gate trains everyone to read "unrelated" and
+      move on, which is how the stale pin survived a whole release.
+      **Two things owed:** fix the assertion, and decide whether the
+      screenshots project should gate CI at all — a capture suite nobody
+      runs in CI is documentation, not a gate (recurring failure #21's
+      family). **S**
 - [ ] **RC-27 — the LIVE tab's big split shows the COASTING flywheel's split
-      during a rest, judged against the work target. Found 2026-08-27 while
-      James was reviewing RC-24's captures; deliberately kept OUT of RC-24's
-      scope by him, to be discussed after #204 merges.**
+      during a rest, judged against the work target. BUILT, on branch
+      `rest-hero`, in review. Found 2026-08-27 while James was reviewing
+      RC-24's captures; deliberately kept OUT of RC-24's scope by him.**
+      **CORRECTION, from RC-27's own review:** this entry's "judged against
+      the work target" is WRONG for the ordinary case, and the mockup that
+      sold the fix drew the hero in blue on the same false premise. A rest
+      phase carries no `targetKind`, so `targetSplitSeconds` resolves
+      `null` and `judgeActual` (`domain/judge.ts:129`) returns `"within"` —
+      the coast renders in PLAIN INK. It is a false NUMBER, not a false
+      verdict. The fix is unchanged; the severity was overstated by the
+      person filing it. The judged case is real but confined to r0
+      intervals — filed as RC-28 above.
       **The mechanism, verified in code:** `livePace` (`surfaceModel.ts:641-658`)
       suppresses to `null` only when `status === "paused"`. During a rest it
       passes `frame.currentSplit` straight through — and through the coast
