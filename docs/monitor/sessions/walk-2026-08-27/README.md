@@ -139,3 +139,39 @@ a terminate. Silence WITHOUT one is the genuinely suspicious case.
 
 Both inputs already exist and are already instrumented. The walk found the
 right axis by killing the wrong one.
+
+## Addendum, same evening — RC-37 confirmed (zero rowing)
+
+James, after the walk: *"if you hit 'menu' to end the workout while the app
+is on the ready screen, it doesn't cancel out."* Captured as
+`menu-at-ready-recording.jsonl.gz`. Observed: **app screen does nothing; PM5
+shows its main menu.**
+
+Decoded from 0x0031, printing only the ticks where the structural quadruple
+changes:
+
+```
+t= 7.17   wt=8  it=0  ws=0  durRaw=24000  durType=0     <- armed, programmed
+t=29.05   wt=1  it=1  ws=0  durRaw=0      durType=128   <- Menu pressed
+```
+
+**`workoutState` never moves.** It is `0` (WaitToBegin) before and after, and
+`0` maps to `"armed"`, which is what READY renders from. No TERMINATE (11),
+no terminal state of any kind, and the machine keeps streaming — 156 status
+frames across the capture — so there is no frame silence either. Nothing in
+our link machinery has anything to fire on.
+
+**The divergence is present in every single frame, and we throw it away.**
+`workoutType` 8 -> 1 rides in the same 19-byte status packet we already
+parse, and the driver logs the change (`kind: "structure"`). The
+`structure-mismatch` check that would catch it runs only during the verify
+phase, by its own design note ("one entry per verify phase, never per tick").
+
+`pm5-ble-ecosystem-review.md` records workoutType 8 in **3447 of 3448**
+committed frames for a programmed piece. This is the first observed piece to
+lose it mid-arm, and `wt=1 durType=128` is the machine's unprogrammed shape —
+identical to the pre-program frame in this same walk's phone leg.
+
+Filed as RC-37. The stuck screen is the small half: a pull after this rows a
+free row on the machine while the app attributes it to a program the machine
+no longer has.

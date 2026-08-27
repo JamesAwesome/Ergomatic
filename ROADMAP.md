@@ -3392,32 +3392,44 @@ that needs no erg, and it can run in a test.
       a capture, and is now unwitnessed with evidence against. **One
       capture cannot prove impossibility**; the code path stays, the
       priority does not.
-- [ ] **RC-37 — Menu at READY: the machine leaves the program and the app
-      never notices. REPORTED BY JAMES 2026-08-27; MECHANISM INFERRED, NOT
-      OBSERVED — capture owed.**
-      His words: *"if you hit 'menu' to end the workout while the app is on
-      the ready screen, it doesn't cancel out."*
-      **VERIFIED in code:** `WORKOUTSTATE` 0 (WaitToBegin) maps to `"armed"`
-      (`parse.ts:518`), which is what READY renders from; the session closes
-      ONLY on `finished` (10/12) or `terminated` (11)
-      (`driver.ts:2527`); and the programmed structure is verified once per
-      arm, never per tick (the ring's own `structure-mismatch` note: "one
-      entry per verify phase, never per tick").
-      **INFERRED, and the capture must settle it:** that Menu at WaitToBegin
-      does not pass through TERMINATE — there is no running workout to
-      terminate — so the machine drops the program and returns to
-      WaitToBegin while we see `armed` throughout and never get a terminal
-      state.
+- [ ] **RC-37 — Menu at READY: the machine drops the program, keeps
+      streaming, and we never look. CONFIRMED AT THE ERG 2026-08-27, wire
+      captured** (`walk-2026-08-27/menu-at-ready-recording.jsonl.gz`).
+      James: *"if you hit 'menu' to end the workout while the app is on the
+      ready screen, it doesn't cancel out."* Observed: app screen does
+      nothing, PM5 shows its main menu.
+      **THE WIRE, decoded from 0x0031:**
+      ```
+      t= 7.17  wt=8  it=0  ws=0  durRaw=24000  durType=0    <- armed
+      t=29.05  wt=1  it=1  ws=0  durRaw=0      durType=128  <- Menu
+      ```
+      **`workoutState` NEVER CHANGES.** It is `0` (WaitToBegin) before and
+      after, and `parse.ts:518` maps 0 -> `"armed"`, so READY keeps
+      rendering. There is no TERMINATE (11), no terminal state, and the
+      machine keeps streaming — 156 status frames — so there is no silence,
+      no banner, and nothing for the link watchdog to notice either.
+      **The divergence is visible in EVERY frame and we discard it.**
+      `workoutType` 8 -> 1 sits in the same 19-byte status packet we already
+      parse, and the driver even LOGS it (`kind: "structure"`, seq 20 of the
+      ring). The `structure-mismatch` check that would catch it runs only
+      during the verify phase — its own note: "one entry per verify phase,
+      never per tick" — so a post-arm structure change is recorded and
+      ignored.
+      **`workoutType 8` is our documented invariant for a programmed piece:**
+      `pm5-ble-ecosystem-review.md` records "every piece we program reads
+      back workoutType 8 in 3447 of 3448 committed frames". This is the
+      first observed piece to LOSE it mid-arm. The `wt=1 durType=128` shape
+      is the machine's UNPROGRAMMED resting shape — the same triple the
+      phone walk's own pre-program frame carries.
       **The stuck screen is the small half.** The PM5 has discarded the
-      program and the app has not, and nothing re-verifies structure after
-      arming. A pull after that rows a FREE row on the machine while the app
-      still believes it is running interval 1 of N, attributing the result
-      to a program the machine no longer has. Silent divergence, not a hang.
-      **Mirror of RC-30**: that one is US sending TERMINATE off a derived
-      ready-gate; this is the MACHINE leaving and us not noticing. Same
-      seam, opposite direction — fix them together.
-      **The capture costs ZERO rowing:** connect, let it arm, press Menu,
-      record the `workoutState` sequence. **S**
+      program and we have not. A pull after this rows a FREE row on the
+      machine while the app still believes it is running interval 1 of N and
+      attributes the result to a program the machine no longer has.
+      **Fix shape (not yet designed):** re-verify the armed structure per
+      tick, not per verify-phase, and treat a workoutType change under an
+      open armed run as the machine leaving. **Mirror of RC-30** — that one
+      is US sending TERMINATE off a derived ready-gate, this is the MACHINE
+      leaving and us not noticing. Same seam; design them together. **S**
 - [ ] **RC-32 — F2b's clean sweep is VACUOUS.** `continuity.ts`'s F2b count
       bound writes `completedAt` + `endedBy: "link-lost"` and seals the
       record. Its sweep excludes all six committed captures, so **zero pairs
