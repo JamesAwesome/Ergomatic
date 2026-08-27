@@ -111,9 +111,16 @@ James's answer was one character: **"B"**.
 
 ### THE APPROVED SHAPE
 
-**During a rest, the active row's `/500M` cell becomes `REST m:ss`, counting
+**During a rest, the active row's `/500M` cell becomes `R m:ss`, counting
 down from the machine's own `restSeconds`, wearing the gold `--marker`, on a
 row filled `--surface-sunken`. When the rest ends, every one of those reverts.**
+
+> **Two later rulings amend this section; it is written as amended.** The
+> label was `REST` when James approved the shape and became `R` in fix round
+> 2 (see "THE LABEL" below — `REST 9:55` cost a permanent 16px on every
+> portrait row and `R 9:55` costs zero). And in LANDSCAPE the countdown moved
+> to the real REST column (see "LANDSCAPE", superseded and re-ruled); the
+> `/500M` cell there shows the house dash. Portrait is as written here.
 
 The `--marker` **MOVES** onto that cell and off `time`/`meters` for the
 duration of the rest. It does not multiply — see Constraints. This is the
@@ -135,8 +142,9 @@ which is the whole complaint. The rest is what is counting. Moving the gold
 mark says exactly that, in the grid's own existing vocabulary, and keeps the
 one-mark invariant intact.
 
-**Three channels carry the meaning, only one of them colour:** the word
-`REST`, the sunken row fill, and the gold. The grid's own stylesheet states the
+**Three channels carry the meaning, only one of them colour:** the letter
+`R` (the word `REST` as approved; shortened in fix round 2), the sunken row
+fill, and the gold. The grid's own stylesheet states the
 rule this obeys (`index.css:6801`): *"THE DASH CARRIES 'NOT YET ROWED'; COLOUR
 DOES NOT."* Option A — recolouring the 4x20 row marker gold and nothing else —
 was rejected for breaking it, at a measured **2.63:1**.
@@ -148,7 +156,7 @@ which is still true during a rest. It is not part of this change.
 
 | Pairing | Ratio | Requirement | Verdict |
 | --- | --- | --- | --- |
-| `--marker` on `--surface-sunken` (the REST text and its gold) | **5.50:1** | 4.5:1 text, 3:1 graphic | passes both |
+| `--marker` on `--surface-sunken` (the `R m:ss` text and its gold) | **5.50:1** | 4.5:1 text, 3:1 graphic | passes both |
 | `--marker` on `--surface` | **6.49:1** | 3:1 graphic | passes |
 | `--ink` on `--surface-sunken` (the row's other values) | **14.50:1** | 4.5:1 | passes |
 | `--surface` vs `--surface-sunken` (the fill shift itself) | 1.18:1 | — | supporting channel only, never the sole signal — which is why the word and the gold are both required |
@@ -375,8 +383,12 @@ bulk-import grammar already writes `r1` for a one-minute rest
 (`domain/bulk.ts`), so a rower who has authored a workout has already read
 this abbreviation as "rest".
 
-**Decision: `R`.** James's own tie-break was "if REST achieves zero bump at
-an acceptable cost, keep REST; only drop to R if REST cannot fit." REST
+**Decision: `R`.** James's words were only *"maybe like reduce 'rest' to r/"*,
+offered as a suggestion for reducing the bump; the tie-break — "if REST
+achieves zero bump at an acceptable cost, keep REST; only drop to R if REST
+cannot fit" — was the CONTROLLER's, set in the fix-round brief so the
+measurement would decide rather than the suggestion. Attributing it to James
+would put words in his mouth he did not say. REST
 technically fits (with the min-width fix), but only by permanently taxing
 every portrait row's alignment by 16px to save one word — judged not
 acceptable against a zero-cost alternative that is already this repo's own
