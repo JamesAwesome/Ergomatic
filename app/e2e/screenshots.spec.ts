@@ -2024,6 +2024,18 @@ async function postLog(
       avgPaceSecondsPer500m?: number;
       verificationBytes: number[];
     } | null;
+    // RC-1's stored work/rest pair, and the reason this helper needs it:
+    // a TIER A row (both `machineWork*` set) is handed an EMPTY `stepSums`
+    // on purpose (`storedSummary.ts`'s `buildHeroes`, fix-round-2 finding
+    // C1 — a terminated row can be tier A while this pair is null, and its
+    // abandoned final interval would poison a derived sum). So for tier A,
+    // `buildStoredRest`'s row-level branch is the ONLY rung that can fire:
+    // without this pair a tier-A row's TOTAL line silently degrades to
+    // work-only, with no coasting clause. A real FINISHED monitor session
+    // always stores it (`completeMonitorRun`'s `computeWorkRestSums`), so
+    // a fixture omitting it is not a smaller row — it is an impossible one.
+    restSeconds?: number | null;
+    restMeters?: number | null;
   },
 ): Promise<void> {
   const result = await page.evaluate(async (b) => {
@@ -2282,6 +2294,20 @@ test("log-detail", async ({ page }) => {
     avgSplitSeconds: 124.0,
     timeSeconds: 244,
     distanceMeters: 742,
+    // RC-1's stored work/rest pair — see the helper's own comment on why a
+    // TIER A row cannot derive these. 60(r1)+60(r2) = 120 s and 147+95 =
+    // 242 m, the same two rests the steps below already describe, so the
+    // TOTAL line's `124 + 120 = 244 s = 4:04` is arithmetic a reader can
+    // check against this fixture rather than a number to take on trust.
+    //
+    // WITHOUT THIS PAIR THIS CAPTURE STOPPED SHOWING ITS OWN FEATURE
+    // (2026-08-27): the row rendered a bare `2:04 total`, the assertion
+    // below went red, and the failure was reported as "pre-existing,
+    // unrelated" in four consecutive task reports — correctly each time,
+    // and that is exactly how it survived. The committed PNG was never
+    // wrong; the FIXTURE drifted out of realism (recurring failure #3).
+    restSeconds: 120,
+    restMeters: 242,
     advancesPlan: true,
     steps: [
       {
