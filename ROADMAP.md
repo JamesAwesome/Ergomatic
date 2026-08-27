@@ -3329,16 +3329,204 @@ that needs no erg, and it can run in a test.
       skips the backward-bucket ring entry** (`useMonitorSession.ts`
       ~1809 stops the recorder without reading the count) — the one
       close where the diagnostic dies silently; final review minor 2.
-- [ ] **Phase RC CLOSE-OUT: a derivation audit (James, 2026-08-25).**
-      Before the phase closes, enumerate every CONSUMER-SIDE derivation
-      of a wire fact the driver already resolves (interval membership,
-      rest state, boundaries, totals — sweep every consumer of
-      `MonitorFrame` and the parsed status), classify each
-      consume-the-authority vs. invented-heuristic, and queue fixes for
-      the heuristics. Motivated by the series-truth defect being the
-      THIRD of its class in this repo: the recorder's own key
-      derivation (this PR), Phase LL's boundary fold (below), and the
-      CM-era boundary heuristic.
+- [x] **Phase RC CLOSE-OUT: a derivation audit — RUN 2026-08-27.**
+      `docs/superpowers/audits/2026-08-27-derivation-audit.md` plus three
+      per-file tables beside it. 133 sites classified across ~7,000 lines by
+      three independent readers.
+      **The question it was asked, answered: the series-truth class does NOT
+      recur.** Interval membership, rest state and totals are all read from
+      the driver's own resolution — every actual files under
+      `toProgramIndex`, rest comes off `frame.state`. The thing this audit
+      existed to find is not there.
+      **What it found instead is a different class and a worse one:** link
+      and lifecycle state. 40 invented-heuristic, 18 re-derived, 43
+      consumes-authority, 32 not-a-derivation. Unlike a membership error,
+      several of these write a stored record or send a command to the erg.
+      **Queued as RC-29 through RC-36 below**, ranked by cost. Two
+      corrections to the audit's own brief are recorded in the document:
+      `Timer.tsx` consumes zero monitor frames, and `seriesRecorder`'s
+      header sentence is about the rest mark, not attribution.
+      **An invented heuristic is not automatically a defect** — where the
+      wire carries no such fact, inventing one is the only option, and
+      `PAUSED_FRAME_HOLD`/`PULL_EVIDENCE_FRAMES` are the clean example (the
+      PM5 has no paused state; both are cosmetic by construction). The
+      queued items are the ones that DUPLICATE an authority or decide
+      something durable on an unpinned threshold.
+      **The model to copy is `decideResumeLatch`:** measured constant, both
+      boundaries pinned, and it defers to the watchdog when that has already
+      spoken instead of forming a second opinion.
+- [ ] **RC-29 — a 2.5 s banner threshold writes a stored field AND
+      suppresses a wire command. THE AUDIT'S WORST FINDING.**
+      `useMonitorSession.ts:3145`: `linkGone = phase === "disconnected" ||
+      frameSilence` writes `endedBy: "link-lost"` and `:3155` skips
+      `driver.terminate()`. A false latch stores a lie AND leaves the PM5
+      running the piece. **The false positive is measured** — nine banners
+      in 288 s over a link that never dropped
+      (`docs/monitor/sessions/walk-2026-08-26/`). Phase LM fixed the
+      LIFECYCLE producer of that silence; the WATCHDOG producer is
+      untouched, and no test pins the false-positive direction. **M**
+- [ ] **RC-30 — teardown can terminate a live piece.**
+      `useMonitorSession.ts:2513-2522` sends TERMINATE keyed on our derived
+      `phase === "ready"`, not on `frame.state`. While that gate lags (a
+      stuck Inactive byte, up to ~5 s at the 1 Hz cadence) any unmount kills
+      the rower's piece on the erg. No test covers the lagging gate. **The
+      only finding in the audit that reaches out and changes the
+      machine.** **S**
+- [x] **RC-31 — FALSIFIED at the erg, 2026-08-27. The trigger does not
+      exist. Do not build the fix.** The audit predicted the
+      resting-with-no-rest-phase fallthrough fires "for a tick at every
+      boundary of every rest-bearing program", reasoning from the
+      `WORKOUTSTATE` 8/9 -> `rowing`, 6/7 -> `resting` mapping. **The wire
+      disagrees.** Both boundaries in one piece, as distance resets
+      (`walk-2026-08-27/boundaries-terminated-recording.jsonl.gz`):
+      `t=228.56  311.4 -> 0.5  ws=3->5` (boundary 1->2, WITH a rest) and
+      `t=294.71  249.9 -> 1.6  ws=5->5` (boundary 2->3, ZERO rest).
+      **A zero-rest boundary produces no state change whatever** — the
+      machine stays in `IntervalWorkDistance` and resets the register. It
+      never reports `resting`, so the fallthrough has no trigger.
+      **The lesson is the audit's own rule turned on itself:** this was an
+      INFERENCE from an enum mapping, presented in a table beside measured
+      findings, and it read like one of them. RC-28 inherits the
+      correction — its premise ("a machine can briefly report `resting` on
+      an interval with no programmed rest") came from a code comment, never
+      a capture, and is now unwitnessed with evidence against. **One
+      capture cannot prove impossibility**; the code path stays, the
+      priority does not.
+- [ ] **RC-37 — Menu at READY: the machine drops the program, keeps
+      streaming, and we never look. CONFIRMED AT THE ERG 2026-08-27, wire
+      captured** (`walk-2026-08-27/menu-at-ready-recording.jsonl.gz`).
+      James: *"if you hit 'menu' to end the workout while the app is on the
+      ready screen, it doesn't cancel out."* Observed: app screen does
+      nothing, PM5 shows its main menu.
+      **THE WIRE, decoded from 0x0031:**
+      ```
+      t= 7.17  wt=8  it=0  ws=0  durRaw=24000  durType=0    <- armed
+      t=29.05  wt=1  it=1  ws=0  durRaw=0      durType=128  <- Menu
+      ```
+      **`workoutState` NEVER CHANGES.** It is `0` (WaitToBegin) before and
+      after, and `parse.ts:518` maps 0 -> `"armed"`, so READY keeps
+      rendering. There is no TERMINATE (11), no terminal state, and the
+      machine keeps streaming — 156 status frames — so there is no silence,
+      no banner, and nothing for the link watchdog to notice either.
+      **The divergence is visible in EVERY frame and we discard it.**
+      `workoutType` 8 -> 1 sits in the same 19-byte status packet we already
+      parse, and the driver even LOGS it (`kind: "structure"`, seq 20 of the
+      ring). The `structure-mismatch` check that would catch it runs only
+      during the verify phase — its own note: "one entry per verify phase,
+      never per tick" — so a post-arm structure change is recorded and
+      ignored.
+      **`workoutType 8` is our documented invariant for a programmed piece:**
+      `pm5-ble-ecosystem-review.md` records "every piece we program reads
+      back workoutType 8 in 3447 of 3448 committed frames". This is the
+      first observed piece to LOSE it mid-arm. The `wt=1 durType=128` shape
+      is the machine's UNPROGRAMMED resting shape — the same triple the
+      phone walk's own pre-program frame carries.
+      **The stuck screen is the small half.** The PM5 has discarded the
+      program and we have not. A pull after this rows a FREE row on the
+      machine while the app still believes it is running interval 1 of N and
+      attributes the result to a program the machine no longer has.
+      **Fix shape (not yet designed):** re-verify the armed structure per
+      tick, not per verify-phase, and treat a workoutType change under an
+      open armed run as the machine leaving. **Mirror of RC-30** — that one
+      is US sending TERMINATE off a derived ready-gate, this is the MACHINE
+      leaving and us not noticing. Same seam; design them together. **S**
+- [ ] **RC-38 — transcribe `OBJ_WORKOUTTYPE_T`. We have read ONE ROW of an
+      enum we key a check on.** Raised by James 2026-08-27 on seeing RC-37's
+      evidence: *"have we been making assumptions that are unfounded here?
+      is there documentation about workoutType from concept2?"*
+      **The honest split.** `8` IS sourced — Appendix A's
+      `OBJ_WORKOUTTYPE_T`, pinned through `CSAFE_PM_SET_WORKOUTTYPE`'s
+      `0x08 = WORKOUTTYPE_VARIABLE_INTERVAL`, confirmed against both the
+      enum listing and §12's worked-example byte. **`1` and `0` are sourced
+      NOWHERE.** Every claim we make about them is our own observation, and
+      "empty arm" is a name WE gave a silhouette, not a documented meaning.
+      Recurring failure #16's second corollary, exactly: we quoted the row
+      that pinned `0x08` and never read its neighbours. This same field has
+      already had one bad citation caught (`pm5-interface-notes.md:454`
+      records correcting a misdirected "§7 above").
+      **The larger assumption underneath:** `8` is not a PM5 universal, it
+      is OUR COMPILER'S CHOICE. `pm5-ble-ecosystem-review.md` records that
+      real apps send `FIXEDTIME`/`DIST_INTERVAL` for equal intervals and
+      reserve type 8 for unequal ones, and that we always compile 8. So
+      "workoutType reads back 8" is a fact about US that would stop being
+      true the day anyone optimises the compiler.
+      **Binding on RC-37 whether or not this is done first:** the check
+      compares against WHAT WE SENT for this arm, never a literal `8`.
+      `verifyArmed` already does this, so RC-37 is extending an existing
+      comparison's lifetime, not writing a new rule. **S**
+- [ ] **PHASE PROTO — a wire-semantics audit: are we hallucinating the
+      protocol? (James, 2026-08-27.)** His words: *"im also interested into
+      a deep dive to ensure we arent hallucinating anything in the protocol
+      when we could be referencing concept2's documentation. we've misused
+      fields before or conflated them to meanings they dont have."*
+      **The method is the derivation audit's, pointed at wire semantics
+      instead of derivations.** Enumerate every claim we make about a PM5
+      field — in `pm5-interface-notes.md`, in `domain/monitor/pm5/*`, and in
+      the load-bearing code comments — and classify each:
+      **VENDOR-CITED** (a document says so, and the quoted LINE is recorded
+      beside the claim), **OBSERVED** (our captures say so, n=?),
+      **INFERRED** (neither). Then verify each VENDOR-CITED claim actually
+      says what we use it for — the #16 corollary, since a real citation
+      answering the wrong question reads exactly like evidence.
+      **The track record justifying it, both directions.** Caught already:
+      TWD "reports the goal" FALSIFIED and its mirror verdict retired
+      (RC-9); the `SCREENTYPE_WORKOUT` inline-comment misprint; the
+      misdirected `workoutType` cite. Still open or unexplained:
+      `0x003A`'s Interval Rest Time reading 0 across three real r60s;
+      `0x0039`'s avgStrokeRate 44-vs-22 doubling in the August capture,
+      still uncaused after the 2026-08-27 screen oracle cleared our decode;
+      `OBJ_WORKOUTTYPE_T` read one row deep (RC-38).
+      **Do it AFTER the link-authority wave**, and note it may need the
+      source document rather than our transcription of it — the notes cite
+      Appendix A by page, so the doc was in hand at some point; confirm we
+      can still reach it before scoping the work. **L**
+- [ ] **RC-32 — F2b's clean sweep is VACUOUS.** `continuity.ts`'s F2b count
+      bound writes `completedAt` + `endedBy: "link-lost"` and seals the
+      record. Its sweep excludes all six committed captures, so **zero pairs
+      were compared** (`continuity.test.ts:974`). The gate reports clean
+      because it never ran. **Recurring failure #21's third instance in two
+      days**, after RC-24 shipped two. **S**
+- [ ] **RC-33 — the grid's rest countdown ignores a lost link. Shipped by
+      RC-24 on 2026-08-26; found by this audit the next day.**
+      `surfaceModel.ts:1526`: `restingNow` has no `!stale` term and
+      `buildGridModel` takes no `stale` parameter — its comment "nothing in
+      this function needs to know" predates RC-24 handing it two raw frame
+      fields. So a link lost mid-rest leaves pane C sunken and gold with a
+      FROZEN `R 0:42` while pane B reverts to `LAST SEEN`.
+      **RC-24 and RC-27 are the same change on two surfaces and only one got
+      the guard** — the controller wrote the reasoning into RC-27's comment
+      (*"a countdown frozen at its last value is a false claim of motion"*)
+      a day after shipping RC-24 without it, and neither review caught the
+      asymmetry. The lost-link test at `:917` asserts only the hero. **S**
+- [ ] **RC-34 — `acceptableFinalBoundary` re-derives the driver's own
+      vouch.** `monitorRun.ts:618-627` recomputes `finalBoundary` from
+      `index === intervals.length - 1`. A wrong refusal drops the final
+      interval's actual FOREVER, short-summing all four RC-1 fields and
+      rendering `N-1 OF N INTERVALS MEASURED`. No test drives a flagged
+      final boundary with `index: null` through it. **S**
+- [ ] **RC-35 — the series recorder's absent-key arm rests on a false
+      premise.** `seriesRecorder.ts:333-358` assumes
+      `attributedIntervalIndex` is present; `driver.ts:2175-2229` leaves it
+      undefined on `terminated`/`idle`/`armed`, and a terminated frame DOES
+      reach `onFrame` (`useMonitorSession.ts:1987`) before terminal
+      handling. Damage is bounded today only by accident (max-merge plus a
+      bucket drop). Same file folds the driver's register map a second time
+      (`driver.ts:2462-2469` sums it differently) writing `series[].t/d`,
+      with no test comparing the two. **S**
+- [ ] **RC-36 — `frame.intervalIndex ?? 0` collapses a deliberate null.**
+      `surfaceModel.ts:860`. The driver's `null` also means "a real interval
+      is current but diverged"; `?? 0` turns that into interval 0, so the
+      surface says `1 OF 4`, marks grid row 1 active and shows row 1's
+      targets, silently. **Two consumers already opted out individually
+      after measured defects** (`:1038`, `:1159`) — the source was never
+      fixed, which is the tell. **S**
+      **Riders, all unpinned, all cheap:** `countdownDisplayFor`'s
+      kind-mismatch fallback to the full programmed value (`:1672`);
+      `phaseSeconds(...) ?? 0` pricing unpriced phases at zero in BOTH
+      numerator and denominator while `hasRemainingEstimate` is an ANY not
+      an ALL, leaving the bar and EST LEFT built partly on zeros; and
+      nothing asserting `FINISH_HANDOFF_HOLD_MS > FINISH_GRACE_MS` despite
+      the comment requiring it (the cheapest missing gate in the audit).
 - [ ] **RC — CROSS-CONNECT TO THE CONCEPT2 LOGBOOK. Belongs to this phase;
       DEFERRED to Saturday by James (2026-08-27: "we also haven't
       cross-connected to logbook yet, which should be in phase RC but can
@@ -3879,26 +4067,15 @@ that needs no erg, and it can run in a test.
       alarm, which is PRIMARY from the plugin's own source. Told only
       "cause-free", a notes writer will censor the one explanation testers
       most need.
-- [ ] **RC-25 — Task 5's coast fix is pinned in ONE direction only, and has
-      never been walked.** Filed at the PM re-gate rather than left implied.
-      That a genuine mid-interval pause still fires is pinned hard: a corpus
-      regression across all nine committed recordings, onsets identical, with a
-      non-vacuity check. **That the coast case is now SILENT has no oracle at
-      all** — the corpus provably lacks the trigger, the erg reproduction was
-      never downloadable (the device build's recording row is dev-gated), and
-      the failing test is a hand-built frame sequence using real wire values.
-      **Not a blocker:** if the fix is wrong the rower loses an instruction,
-      not a workout.
-      **THE INSTRUMENT IS BUILT (James, 2026-08-26: "Add the instrument now").**
-      The pause edge now writes a `pause-declared` ring entry carrying
-      `frames`, `hold`, `pulled`, and the frame's own distance/split/spm — what
-      the predicate weighed, no cause asserted. Edge only, never per frame.
-      **So this row now closes on one NATURAL occurrence and a `COPY` tap, not
-      on a walk.** Pinned in both directions: removing the log fails the test,
-      and logging per frame instead of on the edge also fails it — the fixture
-      had to be extended so the pause HOLDS, because with a one-frame pause
-      "exactly one entry" could not tell the two apart, and the mutation
-      stayed green until it was.
+- [x] **RC-25 — CLOSED 2026-08-27 by a natural occurrence, exactly as
+      designed.** The `pause-declared` instrument fired during the
+      walk-2026-08-27 phone-lock leg, WHILE THE ROWER WAS ROWING:
+      `frames=4 hold=4 pulled=true d=181.9 split=140.94 spm=29`.
+      **The finding is bigger than the item.** The freeze predicate cannot
+      tell a stopped rower from a stopped WEBVIEW: a suspended WebView
+      replays identical `distance|split|spm` keys, which is precisely what
+      `PAUSED_FRAME_HOLD` counts. It declared a pause at 29 spm. Feeds the
+      link-authority spec (below) rather than needing its own fix.
 - [x] **RC-26 — CLOSED AS INVALID (James, 2026-08-27). The string stays.
       Do not reopen.** His ruling: *"'keep the screen on' implies 'dont lock
       your phone' we can leave it."*
