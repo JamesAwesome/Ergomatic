@@ -2692,3 +2692,56 @@ this spec's close).
   monitor's OTHER average-pace field" as proof of independence from OUR
   accumulator — a non-sequitur; and the body of a walk-only PR never named either
   ring entry. Still James's to re-set or retire.
+
+## Advisory, 2026-08-26 (James asks whether "O2 AT TR AN" should be renamed)
+
+- **A vocabulary complaint from the owner is an N of 1 who also wrote the
+  model.** Grepping ROADMAP, `docs/`, both ledgers and the release notes for
+  type-code confusion returns ZERO; the only "confusing" report on record is
+  bulk paste in the builder form. The cohort is a household behind an
+  `ALLOWED_EMAILS` allowlist. **Before designing against a felt opacity, find
+  the instrument** -- here it was `article_reads` (`schema.ts:422`), which says
+  whether anyone read `workout-types` (News index 0, written to teach exactly
+  these four). Unread means nobody was taught; read-and-still-opaque means the
+  article failed. Opposite fixes, indistinguishable from inside. (In this case
+  the instrument was moot -- closed prod, no audience -- which is itself the
+  answer: **an app with no users cannot have a comprehension problem yet, only
+  a comprehension RISK.**)
+- **Check where the app already discloses before calling it a naming problem.**
+  `TYPE_WORDS` (`components/typeWords.ts`) renders under the type chips on
+  Today (`Today.tsx:1254`) and the Library filter (`Library.tsx:364`); the
+  builder's classification card names them too. The only bare code is
+  `TypeBadge` -- no `aria-label`, no `title` -- on Library `WorkoutRow` and
+  history `LogRow`. That reframes a rename request as a disclosure fix. **Ask
+  which surfaces lack the words before asking for better words.**
+- **`WorkoutType` is the bulk-import grammar token** (`bulk.ts:65`), on top of
+  being a pgEnum and stored `text` on `session_logs`, the filenames of 302
+  seeded workouts, `plans.ts`'s sequences, `patterns.json`, the archetype
+  classifier, four CSS tokens and 17 migration snapshots. **Price any rename
+  against 8A PR B (#156)**: renaming TWO free-text titles cost 44 files,
+  +689/-244, a solo triad PR merged last, a four-condition gate, a same-day
+  tag, and permanent residue. (Refined by the premise pass the same day: the
+  DATABASE is cheap -- catalog-only DDL -- the LITERALS and the readability of
+  eight invariants are the cost.)
+- **Ruling: NOT YET, no rename, no phase of its own.** The naming decision has
+  an owner -- **Phase PROD**, "the last phase before strangers", which is
+  exactly when a non-James rower meets a bare `TR` for the first time.
+  (Originally proposed for 8B's calendar legend; James placed it in PROD on
+  2026-08-26, leaning the 2x2 named-chip option and wanting a fuller design
+  pass first.) **Generalises: a labelling decision belongs to the first phase
+  whose AUDIENCE cannot already read the label** -- not to a phase of its own,
+  and not necessarily to the first phase that must draw a legend.
+- **Why not HR zones 1-5, recorded so it is not re-argued.** They are the more
+  universally understood ladder and self-document their ordering. Rejected on
+  two grounds: zones are HR-defined and this app has NO heart rate
+  (`judge.ts:46`), so adopting them asserts a concept the system does not have
+  -- the does-it-exist rule, fake-pause shape; and our four are a subset of
+  Concept2's own ladder, i.e. already standard for the sport. The gap is
+  public-audience legibility, and the fix for that is teaching, not renaming.
+- **When the answer is "show what you already have", say so before designing
+  anything new.** The app owned four plain words the whole time and rendered
+  them one at a time, for the chip already selected, `aria-hidden` in two of
+  three places. A user-persona pass caught it in one sentence -- "you already
+  wrote the words and you're hiding them" -- that four analytical passes had
+  not said plainly. **Worth repeating: put a naive user in front of the real
+  captures early; it reorders the findings.**
