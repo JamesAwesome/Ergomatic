@@ -636,4 +636,161 @@ changed `e2e/design.spec.ts`'s own `restSeconds` value from the synthetic
 `3599` to the real ceiling `595`, since testing an admittedly-impossible
 value right after being corrected on exactly this point would have looked
 like the lesson had not landed, and the neighbour-measurement gate (C)
+
+---
+
+# Fix round 2
+
+Two changes, both from James looking at the fix-round-1 captures.
+
+## A. The coast split dashes during a rest (both orientations)
+
+James: *"So /500m in landscape isn't '-' during rest???"* Right, and a real
+gap. Round 1 removed the coast-verdict TINT but left the coast-verdict
+NUMBER: landscape's `/500M` cell was still showing `1:57.8` — the split of
+a coasting flywheel — on the exact row whose REST column is counting down
+beside it. Precisely the number a rower could mistake for their result.
+
+**Fix, cell-local, in `buildGridModel`'s active branch** (`surfaceModel.ts`),
+where `restingNow` already existed: `pace` becomes `{ display: DASH, judged:
+null }` when `restingNow`, instead of `{ display: livePace.display, judged:
+livePace }`. `PaneGrid.tsx` needed NO changes — the coast span already
+reads `row.pace.display`, so the model fix alone reaches the DOM.
+
+**`livePace` itself is untouched**, exactly as instructed — grepped
+`surfaceModel.ts:641-658` before finishing to confirm nothing there moved;
+pane B's split hero carries the identical defect and stays out of scope,
+filed separately by the coordinator.
+
+**Tests (failing first):** two new `surfaceModel.test.ts` cases — resting
+active row dashes with `judged: null` at a REAL, non-zero `currentSplit:
+117.8` (not the already-dashing dead-stop `0` case, which would prove
+nothing); the WORK-interval pace is unchanged (still the live split, still
+judged), pinning that the suppression cannot leak. `PaneGrid.test.tsx`'s
+own coast-form test updated to assert the dash reaches the DOM. Both
+`e2e/design.spec.ts` RESTING_STORY tests updated: `currentSplit` changed
+from `0` (which already dashed via the OLDER "zero split is not a reading"
+rule, and so proved nothing about THIS fix) to `117.8` — the same number
+the round-1 capture actually showed — so the landscape e2e test's `coastText
+=== "—"` assertion is discriminating, not accidentally true.
+
+**Self-mutation:** two, both on the new `pace: restingNow ? ... : ...`
+ternary. (1) Dropped the ternary entirely (`pace: {display: livePace...}`
+unconditional) — failed 3 tests: the new model test, the new PaneGrid DOM
+test, AND the `ConnectedSurface.screens.test.tsx` fixture snapshot
+(collateral — the committed HTML fixture itself encodes the dash). (2) Kept
+`display: DASH` but left `judged: args.livePace` (simulating "dashed the
+number, forgot the tint") — failed the model test's own `judged`
+assertion specifically (`expected {…, display: '1:57.8', …} to be null`),
+proving the two halves of the pin are independently checked, not just the
+visible half. Both restored, green.
+
+**Recaptured, opened, read.** `connected-pane-grid-resting-landscape.png`:
+`/500M` now shows `—` on the active row (was `1:57.8`); the REST column
+still shows `0:59` in gold. Portrait's own capture is unaffected by item A
+(portrait never showed the coast form at all — the countdown already
+replaced it structurally in round 1).
+
+## B. Killing the portrait bump
+
+James: *"is there any way to make the portrait view have less of a bump
+out... Maybe like reduce 'rest' to r/"*
+
+**Investigated with real measurements, at 375×812** — this repo's own
+"tightest common width" (`e2e/screenshots.spec.ts`'s `today-capped` test:
+"narrower than this file's default 390×844"), corrected from round 1's
+390px per the coordinator's own instruction to check the true narrowest
+width, not merely a common one:
+
+| Label | Content width needed | Every row's existing flex share | Deficit |
+| --- | --- | --- | --- |
+| `REST 9:55` | 84px | 68px | **16px** |
+| `R 9:55` | 68px | 68px | **0px** |
+
+Measured by rendering each label for real (`e2e/design.spec.ts`, a
+temporary debug `console.log` of the measured object, removed before
+committing) and reading `scrollWidth`/`clientWidth` off the actual flex
+item (`.connected-grid-pace`) and an ordinary upcoming row's own copy of
+the same cell. Both figures hold for EVERY valid rest value, not only the
+9:55 ceiling: `compileProgram`'s `MAX_REST_SECONDS = 595` means the minutes
+digit is always exactly one character (0-9), so every rendered string in
+this monospace font is the identical width — the ceiling measurement is
+the measurement.
+
+**Decision: `R`.** James's own tie-break was "if REST achieves zero bump at
+an acceptable cost, keep REST; only drop to R if REST cannot fit." REST
+technically avoids clipping (with the round-1 `min-width: max-content`
+fix), but only by permanently widening every portrait row's `/500M` column
+by 16px — a cost with no existing safety proof (the repo's only METERS
+five-digit no-clip stress test runs in landscape's generous 844px, not
+portrait's tight 375px) — to save one word that already has grammar
+precedent (`domain/bulk.ts`'s `r1` token for a one-minute rest). Judged not
+acceptable against a genuinely zero-cost alternative.
+
+**B2 became a no-op, not a base-rule change** — and that is itself the
+measured answer, not an assumption: `R`'s content already fits the EXISTING
+flex allocation with zero slack needed (68px needed, 68px already given),
+so there was nothing to widen. The round-1 `.connected-grid-resting
+.connected-grid-pace { min-width: max-content; }` rule is DELETED
+outright, not repointed — `R` needs no override, and CLAUDE.md's own rule
+("do not leave a rule whose reason no longer exists") applies literally.
+
+**The e2e gate tightened, and proven it can go red.** The no-clip test now
+asserts `metersDelta === 0`, `spmDelta === 0`, `hrDelta === 0` (was `< 10`,
+a bounded deficit) against an upcoming row at the same columns.
+Self-mutation, run TWICE to isolate the right cause: (1) reverted the
+label to `REST` alone (no column change) — failed at the CLIP assertion
+(`84 > 68`, no steal, since without a `min-width` override the cell just
+overflows visually rather than pushing siblings) — informative, but not
+the alignment assertion itself. (2) reverted the label to `REST` AND
+reinstated the deleted `min-width: max-content` rule (reproducing round
+1's exact shape) — failed exactly at `expect(measured.metersDelta).toBe(0)`
+(`expected 0, received 9.890625`), the precise assertion the tightening
+was meant to protect. Both reverted, green (`git diff --stat` clean before
+committing).
+
+**Recaptured, opened, read — the actual question asked.** Both captures
+regenerated (the portrait capture changed this round, unlike round 1,
+since the label lives in the cell portrait shows). `connected-pane-grid-
+resting.png`: row 2's METERS ("1200") right edge sits flush with rows 3-5's
+("2000") and row 1's ("1905"); SPM ("21" vs "22") and HR ("164" vs "158"/
+"—") columns are similarly flush — no visible step where the resting row
+sits, matching the 0px measurement. `-landscape.png`: same alignment,
+`/500M` reads `—` (item A), REST column reads `0:59` gold on the active
+row and `3:00`/`—` elsewhere.
+
+## Gates (round 2)
+
+- `pnpm lint` / `pnpm typecheck` / `pnpm format:check` — clean.
+- `pnpm test` — 210 files, 5651 passed, 1 skipped, clean on every run this
+  round (no flake observed).
+- `pnpm e2e` — **414/414, clean on both full runs** (before and after the
+  self-mutation restorations).
+- `pnpm screenshots` — **77/79**, same 2 pre-existing failures as both
+  prior rounds (`releases`, `log-detail`), neither touched by this diff.
+  Both `connected-pane-grid-resting` captures passed; unrelated date-drift
+  PNGs reverted with `git checkout --` before committing, same as before.
+
+## Per-file coverage (round 2)
+
+| File | Statements | Branches | Functions | Lines |
+| --- | --- | --- | --- | --- |
+| `surfaceModel.ts` | 98.81% | 95.74% | 100% | 98.67% |
+| `PaneGrid.tsx` | 100% | 100% | 100% | 100% |
+
+`surfaceModel.ts`'s branch coverage moved up slightly (95.70% → 95.74%,
+the new `restingNow` pace ternary); its uncovered lines are still only
+`221-222`, the same pre-existing, unrelated exhaustiveness arm from round
+1. Grepped the HTML coverage report for `restingNow` specifically — no
+uncovered-branch markers near the new ternary.
+
+## Where the brief and the code agreed / disagreed
+
+Both items were correct as described, and the measurement work (B) is what
+the review explicitly wanted rather than a restatement of its own guess —
+"give me the numbers either way" was taken literally, and the numbers said
+`R`, not the "shrink the column" mechanism B2 described as the fix.
+Reporting that B2's own prescribed action turned out to be unnecessary,
+rather than quietly implementing a no-op rule to look compliant, is the
+one place this round's report goes beyond confirming the review was right.
 needed to be calibrated against the REAL worst case to mean anything.
