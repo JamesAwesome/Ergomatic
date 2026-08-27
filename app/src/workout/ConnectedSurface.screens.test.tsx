@@ -711,11 +711,36 @@ describe("screen fixtures for pnpm screenshots", () => {
    *  the whole point of this capture is proving that a real, non-zero
    *  coasting split in the frame no longer reaches the hero — a fixture
    *  built on an already-absent split would prove nothing.
-   *  `elapsedSeconds`/`distanceMeters` are zeroed for the identical reason
-   *  the grid capture states: `surfaceModel.ts`'s `livePace` reads
-   *  `frame.currentSplit`, never the interval clock, so neither field
-   *  feeds the split hero, and zeroing sidesteps `assertFramePossible`'s
-   *  pace-plausibility check (run on every frame this file builds).
+   *
+   *  FIX ROUND 1, ITEM 3 (James): the round-1 version of this fixture left
+   *  `liveFrame`'s mid-work defaults untouched on the two fields that say
+   *  whether a rower is PULLING — `rowingActive: true`, `spm: 21` — so the
+   *  committed picture showed 21 spm during a rest, contradicting the
+   *  brief's own deliberate omission ("the rate hero shows 0 during a
+   *  rest"). `rowingActive: false` / `spm: 0` say so honestly now.
+   *
+   *  The rest of the frame is a SMALL, SELF-CONSISTENT coast into the
+   *  rest, not `liveFrame`'s own mid-work 800 m/205.44 s — a naive zero on
+   *  BOTH `elapsedSeconds` and `distanceMeters` (this file's usual "the
+   *  pane doesn't read these" move, and what round 1 did) collides with
+   *  `rowingActive: false` here: `midSessionMirror`
+   *  (`surfaceModel.ts:927-930`) fires on `rowingActive === false` paired
+   *  with `distanceMeters <= 1`, substituting `paceActual = 0` and masking
+   *  the very coasting split this capture exists to disprove is still
+   *  shown. `distanceMeters: 20` clears that 1 m floor; `elapsedSeconds:
+   *  secondsFor(20)` (5.136 s) keeps `assertFramePossible`'s own
+   *  metres-over-clock check honest against `splitAvgPace` below, AND
+   *  stays under the REST phase's own 180 s price (Filling Low's 3:00
+   *  rest) — `state: "resting"` folds `assertFramePossible`'s phase
+   *  lookup onto that REST phase (`phaseIndexForInterval`), which is
+   *  ALWAYS time-priced at its own duration (`phaseSeconds`,
+   *  `domain/expand.ts:99`), so `liveFrame`'s own 205.44 s WORK-interval
+   *  clock would fail that bound for a reason that has nothing to do with
+   *  this task. Reads, physically: a few seconds and a few metres of
+   *  flywheel coast right after the rest began — not the frozen final
+   *  work reading round 1 used, and not the reset-to-zero the mirror
+   *  would otherwise claim.
+   *
    *  `splitAvgPace: FIXTURE_AVG_SPLIT` (this file's own published pace)
    *  gives AVG a real judged value, so the capture shows both halves of
    *  the brief's own claim at once: the hero no longer shows a coasting
@@ -727,8 +752,10 @@ describe("screen fixtures for pnpm screenshots", () => {
         frame: {
           state: "resting",
           restSeconds: 59.91,
-          elapsedSeconds: 0,
-          distanceMeters: 0,
+          rowingActive: false,
+          spm: 0,
+          elapsedSeconds: secondsFor(20),
+          distanceMeters: 20,
           splitAvgPace: FIXTURE_AVG_SPLIT,
         },
       }),

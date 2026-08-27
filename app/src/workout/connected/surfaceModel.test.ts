@@ -42,6 +42,7 @@ import {
   buildSurfaceModel,
   connectedNextText,
   DASH,
+  formatRestCountdown,
   intervalNumbering,
   judgedValue,
   ON_TARGET_BAND_SECONDS,
@@ -920,6 +921,24 @@ describe("RC-27: the LIVE split hero counts a running rest", () => {
     });
     expect(m.restCountdown).toBeNull();
     expect(m.nowLabel).toBe("LAST SEEN");
+  });
+
+  it("formatRestCountdown floors, never rounds (59.91 -> 0:59, the value round would give is 1:00)", () => {
+    expect(formatRestCountdown(59.91)).toBe("0:59");
+    expect(formatRestCountdown(60)).toBe("1:00");
+    expect(formatRestCountdown(1.91)).toBe("0:01");
+  });
+
+  it("the hero and the grid cell agree: ONE frame, two call sites, byte-identical strings (fix round 1, item 4 — a shared call site alone cannot prove this, only a test comparing the two outputs can)", () => {
+    const m = model({
+      frame: frame({ state: "resting", restSeconds: 59.91, intervalIndex: 1 }),
+    });
+    const gridCell = m.grid.rows[m.grid.activeIndex]!.restCountdown;
+    // Neither side is trivially null — the point is a real agreement, not
+    // two absent values that happen to `toBe` equal.
+    expect(m.restCountdown).not.toBeNull();
+    expect(gridCell).not.toBeNull();
+    expect(m.restCountdown).toBe(gridCell);
   });
 });
 

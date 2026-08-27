@@ -8250,6 +8250,47 @@ test.describe("connected screens (fake-driven)", () => {
     });
   });
 
+  // RC-27 fix round 1, item 1 (James: "nothing proves the gold actually
+  // paints" — recurring failure #21's own shape). `PaneLive.test.tsx`'s
+  // CSS-source-text assertion proves the RULE exists in `index.css`; it
+  // cannot prove the RESOLVED colour, because jsdom loads no stylesheet —
+  // a later rule that out-ranks or follows `.connected-hero-value-rest`
+  // would leave both that assertion AND the class-name check green while
+  // the hero painted black. This reads `getComputedStyle` against the
+  // real cascade, the same technique the grid's own rest-countdown colour
+  // check already uses two describe blocks up ("landscape shows the
+  // countdown in the REST column...", `restCellColor`).
+  test.describe("2A/2C — LIVE, mid-rest (RC-27)", () => {
+    test("portrait: the split hero's countdown resolves to --marker gold, not merely carries the class", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live-resting");
+      const value = await page
+        .locator(".connected-hero-split .connected-hero-value")
+        .evaluate((el) => ({
+          color: getComputedStyle(el).color,
+          text: el.textContent,
+        }));
+      expect(value.text).toBe("0:59");
+      expect(value.color).toBe(MARKER_RGB);
+    });
+
+    test("landscape: the same resolved colour, and no judgement class rides along with it", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 844, height: 390 });
+      await loadConnectedFixture(page, "connected-pane-live-resting");
+      const value = await page
+        .locator(".connected-hero-split .connected-hero-value")
+        .evaluate((el) => ({
+          color: getComputedStyle(el).color,
+          className: el.className,
+        }));
+      expect(value.color).toBe(MARKER_RGB);
+      expect(value.className).not.toMatch(/timer-card-actual-/);
+    });
+  });
+
   test.describe("2D — First frame (armed), landscape (design spec §2D)", () => {
     test.use({ viewport: { width: 844, height: 390 } });
 

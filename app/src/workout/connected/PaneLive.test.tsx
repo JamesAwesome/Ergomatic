@@ -532,6 +532,43 @@ describe("RC-27: the split hero counts a running rest (design spec option B)", (
     expect(value.className).not.toContain("connected-hero-value-rest");
   });
 
+  it("the precedence itself is falsifiable: a forced model carrying BOTH nowLabel and restCountdown resolves to LAST SEEN, never REST", () => {
+    // Fix round 1, item 2 (James): `buildSurfaceModel` cannot produce this
+    // combination today — the `restCountdown` guard requires `!linkLost`
+    // and `nowLabel` requires `stale`, so the two are mutually exclusive
+    // BY CONSTRUCTION at the model layer (the two tests above prove each
+    // half separately). That leaves PaneLive's OWN precedence
+    // (`splitHeroLabel`'s ternary) untested by any real-model case: a
+    // mutant that flips it to `restCountdown !== null ? "REST" :
+    // heroLabel` passes every other test in this file, because none of
+    // them can express the conflict. Forcing it directly — the same
+    // technique the judged-class test above uses — is the only thing that
+    // can see it.
+    const built = buildSurfaceModel({
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      status: "live",
+      linkLost: false,
+      frame: frame({
+        state: "resting",
+        restSeconds: 59.91,
+        intervalIndex: 1,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    // Sanity: the fixture genuinely produces a countdown and no stale
+    // label before the override forces the conflict.
+    expect(built.restCountdown).not.toBeNull();
+    expect(built.nowLabel).toBe("");
+    const forced = { ...built, nowLabel: "LAST SEEN" };
+    render(<PaneLive model={forced} />);
+    const label = document.querySelector(
+      ".connected-hero-split .connected-hero-label",
+    )!;
+    expect(label.textContent).toBe("LAST SEEN");
+  });
+
   it("index.css: the gold rest value reads var(--marker), no bar/rule/fill added", () => {
     const body = ruleBody(".connected-hero-value-rest");
     expect(body).toContain("var(--marker)");

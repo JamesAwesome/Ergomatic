@@ -136,13 +136,15 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
   // BOTH heroes wear the SAME label (carried forward, I-1): one field, read
   // twice, cannot disagree with itself the way two re-derivations could.
   // RC-27 gives the SPLIT hero alone a second source: `model.nowLabel`
-  // (the stale caption) still wins outright when it applies — "A LOST LINK
-  // BEATS A FROZEN ERG" (`surfaceModel.ts`'s own `livePace` comment) is the
-  // identical precedence here, a stale link beating a running rest — and
-  // only once it does NOT apply does a running rest claim `REST`. The rate
-  // hero below keeps reading `heroLabel` alone, unchanged: putting `REST`
-  // into `heroLabel` itself would label the RATE hero `REST` too, which is
-  // THE TRAP this task's brief names outright.
+  // (stale) wins over a running rest — "A LOST LINK BEATS A FROZEN ERG"
+  // (`surfaceModel.ts`'s `livePace` comment), the identical precedence
+  // here. The two never actually co-occur through `buildSurfaceModel`
+  // (`restCountdown`'s own guard requires `!linkLost`), so this ternary's
+  // ORDER is pinned by a FORCED model, not a real one —
+  // `PaneLive.test.tsx`'s "the precedence itself is falsifiable" test. The
+  // rate hero below keeps reading `heroLabel` alone: putting `REST` into
+  // `heroLabel` itself would label the RATE hero `REST` too — THE TRAP
+  // this task's brief names outright.
   const heroLabel = model.nowLabel;
   const splitHeroLabel =
     heroLabel !== "" ? heroLabel : model.restCountdown !== null ? "REST" : "";
