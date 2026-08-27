@@ -1,6 +1,8 @@
 # Just Row — observe the machine's own free row
 
-**Date:** 2026-08-24 · **Rev 2** (all phase-open gate findings folded:
+**Date:** 2026-08-24 · **Rev 3** (2026-08-26: `workout_type` is NULL for a
+free row, not `"JustRow"` — James's ruling after an engineer pass; see
+"The stored type, decided") · **Rev 2** (all phase-open gate findings folded:
 antagonist anchor pass 12 findings, PM GO-WITH-CONDITIONS C1–C7) ·
 **Status:** Approved by James (design sections + two gate rulings, this
 session) · **Phase:** JR
@@ -54,9 +56,12 @@ deliberately refuses to infer a run without a program — naming a
 
 **Yes at every layer — we invent nothing conceptually.** The PM5's Just Row
 is its native unprogrammed mode (PRIMARY); Concept2's Logbook API carries
-`workout_type: "JustRow"` first-class, with distance and time both
-required, no title field, and no rest concept for it (PRIMARY, verified
-against the live source at the anchor pass —
+`JustRow` in its `workout_type` enum, with distance and time both
+required, no title field, and no rest concept for it. **Correction (rev 3):
+their `workout_type` is documented `Required: No`, and `unknown` is a
+first-class member of that enum** — rev 2 leaned on this field to justify
+storing their word in OUR column without checking it was required. It is
+not, and that premise is retired (PRIMARY —
 <https://log.concept2.com/developers/documentation/>); our driver documents
 the no-program case and explicitly reserves a follow mode for real design
 (`driver.ts:920-926`).
@@ -230,8 +235,8 @@ One `session_logs` row:
 | --- | --- | --- |
 | `workout_id` | `null` | already nullable end-to-end |
 | `workout_title` | `"Just Row"` | display name; NOT NULL column |
-| `workout_type` | `"JustRow"` | Concept2's enum word; the column is plain `text` (NOT the same-named pgEnum, which types `workouts.type` only — vetted). In the same PR, the server CLOSES `workoutType` to the known set (`AN/O2/AT/TR/JustRow`) instead of any non-empty string. |
-| `steps` | `[]` | server branch: empty allowed **iff** `workoutType === "JustRow"`. No fabricated steps — record, not projection. (Vetted: the only server consumer of steps is create-time validation; client renderers absorb `[]` — the summary self-gates on zero rows.) |
+| `workout_type` | **`null`** | "No intensity was prescribed" — true of a free row, and true again of the targetless-workout follow-on. The column becomes NULLABLE in PR 1 (`DROP NOT NULL`, folded into the migration PR 1 already writes). It stays plain `text`, and stays OUR intensity axis only; Concept2's structural vocabulary never enters it. See "The stored type, decided". |
+| `steps` | `[]` | server branch: empty allowed **iff** `workoutType` is null. No fabricated steps — record, not projection. (Vetted: the only server consumer of steps is create-time validation; client renderers absorb `[]` — the summary self-gates on zero rows.) |
 | `time_seconds`, `distance_meters` | the observer's recorded totals | both headline numbers, matching the Logbook API's both-required rule. **Their correctness against auto-split resets is OPEN 1 — PR 2 does not merge until the capture answers it.** |
 | `avg_split_seconds` | **derived by us: `500 × time/distance`**, labelled ours | no live frame carries a piece average (the per-split field is split-scoped; the whole-row average lives only on unreliable 0x0039). This is a NEW derived number — named as such, tested, and covered by the TRIAD pass. |
 | `work_seconds/meters` | = the whole piece | rest does not exist for JustRow (Logbook-aligned) |
@@ -245,7 +250,7 @@ One `session_logs` row:
 defaults to TRUE and nothing is type-aware — as-is, a free row would tick
 "SESSION n OF 84" and deleting it would un-count a plan day. PR 1 ships
 both: the client posts `advancesPlan: false`, AND the server refuses to
-advance when `workoutType === "JustRow"` regardless of the flag. Pinned
+advance when `workoutType` is null regardless of the flag. Pinned
 by an integration test asserting **`plan_state.done_n` is unchanged
 across a Just Row save** (the non-tautological form).
 
@@ -258,14 +263,78 @@ shallow-validated, so a Just Row record carries `program:
 the rejected fabricated-steps case: it fabricates no rowing structure,
 and `buildMonitorLogSteps` returns `[]` on it (vetted, no throw).
 
-**Version skew / release ordering (B10):** an unknown `workout_type` in
-today's `TypeBadge` degrades to invisible text (computed 1.11:1 against
-a 4.5:1 floor), not to a graceful fallback. Therefore **PR 1 ships the
-read-side fallback (neutral badge for unknown types) and is TAGGED
-before PR 2 ever writes a `"JustRow"` row** — the R-A discipline
-(read-side first, its own tag) already named in `schema.ts`. The
-`RecentLog`/`StoredLog` client types widen from the four-literal union
-to admit `"JustRow"` in the same PR.
+**Version skew / release ordering (B10):** an absent or unknown
+`workout_type` in today's `TypeBadge` degrades to invisible text
+(computed 1.11:1 against a 4.5:1 floor), not to a graceful fallback.
+Therefore **PR 1 ships the read-side handling — no badge for a null
+type, a neutral badge for any unknown string — and is TAGGED before PR 2
+ever writes a typeless row**, the R-A discipline (read-side first, its
+own tag) already named in `schema.ts`. The `RecentLog`/`StoredLog`
+client types widen from the four-literal union to `WorkoutType | null`
+in the same PR.
+
+### The stored type, decided (rev 3, James 2026-08-26)
+
+Rev 2 wrote `"JustRow"` into `session_logs.workout_type` and closed the
+column to `AN/O2/AT/TR/JustRow`. **That is retired.** A free row stores
+`workout_type: null`.
+
+**Why the old plan was wrong.** Our four codes are an INTENSITY axis (how
+hard a piece should feel). Concept2's `workout_type` is a STRUCTURE axis
+(what shape the piece was: `JustRow`, `FixedDistanceInterval`,
+`VariableInterval`…), and their only intensity concept is
+`targets.heart_rate_zone` 0-5 — a heart-rate field this app deliberately
+does not have (`judge.ts:44-47`). Writing their word into our column put
+one structural value beside four intensity values, serving neither axis:
+it corrupts the intensity axis PS will chart, and it is not a structural
+record either, because the other 100% of rows would still need their
+structure derived at sync time.
+
+**The premise it rested on was false.** Rev 2 cited the Logbook API to
+justify the word. That field is documented **`Required: No`**, with
+`unknown` first-class in the enum, and C2's own GET examples return
+`"workout_type": "unknown"`. A future upload can omit it entirely.
+
+**The structure is derivable, so there is nothing to store.**
+`domain/monitor/pm5/commands.ts:158` sets the PM5's workout type
+**unconditionally** to `WORKOUTTYPE_VARIABLE_INTERVAL`, hardware-confirmed
+stable at ordinal 8 across TIME, DISTANCE and rest-zero shapes
+(`commands.ts:386-392`, session 4a). So the mapping is total and needs no
+inspection of our step grammar: a programmed row is `VariableInterval`, a
+free row is `JustRow`. **Deriving is also more CORRECT than storing** —
+C2 requires `workout_type` to match the verification code for a verified
+upload, and we already store `verificationBytes` (`schema.ts:308-322`), so
+a value picked by hand at save time could silently break verification
+where a derived one cannot.
+
+**What a sync would actually owe first, recorded so nobody designs for the
+wrong gap:** `weight_class` (H or L), which C2 documents as **required for
+rower results** and which appears NOWHERE in this codebase. It is a user
+attribute, so it meets the standing minimal-PII rule head-on and is a
+product decision, not a schema one. The expensive alignment — work-only
+distance and time with rest carried separately — RC-1's spine already did
+(`schema.ts:289-292`).
+
+**Why null rather than a sentinel.** Identical code cost (the client union
+widens and the badge needs a fallback either way), but a sentinel puts a
+non-value in a column and makes every future `WHERE workout_type = …` a
+trap. Null says the true thing: no intensity was prescribed. It also
+retires `resolveWorkoutType`'s last-resort `?? "O2"`
+(`LogSession.tsx:309`), which the code's own comment already apologises
+for as not a meaningful guess.
+
+**Why it had to be decided before PR 1 tags.** CLAUDE.md's additive-only
+rule between tags: once PR 1 shipped a validator CLOSING the column to a
+five-word set, removing `"JustRow"` later would be a narrowing the rule
+forbids — we would accept a value we had decided was wrong, permanently.
+The delta while PR 1 is unshipped is one cell in the table above, a
+`DROP NOT NULL` folded into the migration PR 1 is already writing for the
+`idle` enum member, and two client type widenings. Same PR, same gate, no
+extra tag.
+
+**Unchanged by this ruling** (decision-independent, still in PR 1): the
+read-side badge handling, the client type widening, the plan refusal, the
+`idle` enum member, and the MonitorRun `mode` field.
 
 ### The log door (B8/C6)
 
@@ -279,8 +348,9 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
 
 ### Consumers
 
-- **History/log screens:** "Just Row · distance · time"; the neutral
-  unknown-type badge from PR 1. No AN/O2/AT/TR chip.
+- **History/log screens:** "Just Row · distance · time", with **no type
+  badge at all** — an absence, matching this spec's own abstention rule
+  for the steps widget. No AN/O2/AT/TR chip and no substitute for one.
 - **From-the-log:** renders without a steps widget — an absence, not an
   empty version (the abstention ruling); `ended_by: idle` gets its own
   copy line.
@@ -288,8 +358,11 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   ruling covers it; `plan_key` null means non-plan-linked, which is
   exactly 8B's spec.
 - **Phase PS input (recorded now, per the PM gate):** JR creates a log
-  population with `steps: []`, no rest, and a fifth type string — PS's
-  charts need a JustRow bucket decision at its brainstorm.
+  population with `steps: []`, no rest, and a NULL type — PS's "time by
+  type" gets four intensity buckets plus an honest "no type" bucket.
+  Deliberately NOT a fifth peer of AN/O2/AT/TR: a free row has no
+  intensity, and a bucket that looked like their peer would make the
+  chart lie.
 - **Suggestions/streaks/plan:** untouched by construction (plan refusal
   above; not a pool member; post-test prompt stays ineligible —
   title-gated, vetted).
@@ -311,7 +384,8 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   to time out; a third started already-rowing if budget allows. Capture
   lands in `docs/monitor/sessions/`; findings amend this spec.
 - **PR 1 — every stored shape (TRIAD, tagged alone before PR 2):**
-  the `session_logs` validation branch + closed `workoutType` set, the
+  the `session_logs` validation branch + `DROP NOT NULL` on
+  `workout_type`, the
   `idle` enum migration, the plan refusal (both halves), the
   unknown-type badge fallback + client type widening, the MonitorRun
   `mode` field. Full antagonist pass + PM final-PR gate. Its PR body
@@ -338,8 +412,9 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
 
 1. `plan_state.done_n` is unchanged across a Just Row save (integration
    test), and deleting a Just Row log leaves it unchanged too.
-2. A history list containing a `workoutType: "JustRow"` row renders it
-   with the neutral badge at ≥4.5:1 contrast — asserted structurally, and
+2. A history list containing a null-`workoutType` row renders it with NO
+   badge (an absence, not an empty badge), and any unknown type string
+   renders a neutral badge at ≥4.5:1 contrast — asserted structurally, and
    proven on a build that predates PR 2's writer (the R-A ordering).
 3. A `session_logs` row with `steps: []` renders in from-the-log with no
    steps widget (absence, not empty widget).
