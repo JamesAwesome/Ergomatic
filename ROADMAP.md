@@ -3899,9 +3899,20 @@ that needs no erg, and it can run in a test.
       a copy question only James can settle, it is asked in the first rest or
       recorded as unasked. Fast-path after merge; the test pins a word COUNT,
       so the string is free to change.
-- [ ] **RC-24 — During a rest, the grid's REST cell counts down and wears the
-      accent. APPROVED (James, 2026-08-26); not yet built.** This is the other
-      half of RC-23's ruling and the reason that ruling is safe.
+- [x] **RC-24 — During a rest, the grid counts down and wears the marker.
+      BUILT, on branch `rest-countdown`, awaiting James's merge word.** This
+      is the other half of RC-23's ruling and the reason that ruling is safe.
+      **The shape shipped is NOT the shape this entry originally described.**
+      Two design gates moved it. (1) The approved "REST cell counts down" is
+      invisible in PORTRAIT — `.connected-grid-rest` is `display: none` there
+      — and portrait is where James raised the complaint. Gate 0 presented
+      three orientation-honest candidates with computed contrast; he chose
+      the `/500M` cell (option B). (2) Seeing the landscape capture, he then
+      ruled that landscape puts the countdown in its real REST column, since
+      showing `REST 0:59` beside a REST column reading `3:00` says REST twice
+      with two numbers. Final: **portrait `/500M`, landscape REST column,
+      gold `--marker`, sunken row, split by CSS with one model behind it.**
+      Spec: `docs/superpowers/specs/2026-08-26-rest-countdown-design.md`.
       **The gap, verified in code:** the grid's active row keeps rendering the
       interval's own time and metres from live frames
       (`surfaceModel.ts:1443-1451`), and its `rest` cell is only the PROGRAMMED
