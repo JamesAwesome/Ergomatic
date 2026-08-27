@@ -6952,23 +6952,54 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* `/500M` is flex 1.1 and `REST 0:42` is longer than any split it
      replaces. Nothing may wrap mid-value. */
   white-space: nowrap;
-  /* RC-24 fix round: `flex: 1.1` (inherited from `.connected-grid-pace`,
-     unchanged) plus `min-width: 0` (`.connected-grid-pace`'s own base
-     rule) let the row's flex algorithm shrink this cell below its own
-     content width whenever the shrink budget ran out — invisible at
-     `REST 0:42` (the only value the captured wire session ever showed)
-     but measured clipping a genuinely authorable rest: the builder's own
-     `w` step bound is `0:01..60:00` (`domain/validate.ts`'s
-     `restMinutes` check), so `REST 59:59` is production-reachable, not a
-     synthetic stress value, and it overflowed its column at the
-     narrowest supported portrait width (390px: 95px of content in a
-     72px box) — caught by `e2e/design.spec.ts`'s own no-clip test.
-     `min-width: max-content` overrides the inherited `min-width: 0` for
-     THIS cell only, so flex's shrink phase takes the deficit out of this
-     row's OTHER cells (which keep `min-width: 0`) instead of this one —
-     the fix scales to any digit count a real rest can produce, rather
-     than being tuned to one measured worst case. Word and number keep
-     their spec'd sizes untouched; only the column's own width yields. */
+}
+
+/* THE NO-CLIP FIX. Scoped to `.connected-grid-pace` INSIDE a resting row —
+   not to `.connected-grid-rest-countdown` itself, which is a plain child
+   of the flex item, not the flex item (fix round's own second-pass
+   correction: an earlier draft of this rule sat on the child, where
+   `min-width` cannot influence the flex shrink algorithm at all, since
+   that algorithm reads the ITEM's own `min-width`, never a descendant's —
+   caught rewriting this rule for the fix round, before it shipped, by
+   re-deriving what `min-width: max-content` actually needs to sit on).
+
+   `flex: 1.1` (`.connected-grid-pace`'s own base rule, unchanged) plus
+   `min-width: 0` there let the row's flex algorithm shrink the /500M cell
+   below its own content width whenever the shrink budget ran out —
+   invisible at `REST 0:42` (the only value the captured wire session
+   ever showed) but measured clipping a genuinely reachable rest.
+
+   THE REAL CEILING IS `REST 9:55`, NOT THE BUILDER'S OWN `0:01..60:00`
+   AUTHORING BOUND (review finding B — the first version of this comment
+   cited the WRONG LAYER). `domain/validate.ts`'s `restMinutes` check
+   governs what a rower may TYPE; it says nothing about what a connected
+   session can actually carry, because every program a rower authors still
+   has to pass `compileProgram` before it reaches the machine, and
+   `compileProgram` rejects a folded rest over `MAX_REST_SECONDS = 595`
+   (9:55) as `rest-too-long` (`domain/monitor/program.ts:200-204`, Table 19
+   of the CSAFE spec — the PM5's own `CSAFE_PM_SET_RESTDURATION` ceiling,
+   pinned by `domain/monitor/program.test.ts`'s "compileProgram:
+   rest-too-long" describe block). So the widest string this cell can EVER
+   hold in a connected session is `REST 9:55` — nine characters, the exact
+   same width as `REST 0:59` (both single-digit minutes, since 595s < 600s
+   never reaches a two-digit minute) — not the ten-character `REST 59:59`
+   the first version of this fix was measured against.
+
+   `min-width: max-content` still earns its keep: even the true, BOUNDED
+   worst case overflows this cell's plain flex-allocated width (measured:
+   `REST 0:59`, already in the committed capture, needed more than its
+   72px share at 390px). It overrides the inherited `min-width: 0` for
+   THIS row's pace cell only (the `.connected-grid-resting` ancestor scope
+   — every other row's `.connected-grid-pace` is untouched), so flex's
+   shrink phase takes the deficit out of this row's OTHER cells (which
+   keep `min-width: 0`) instead of this one. Review finding C measured the
+   cost: the resting row's METERS/SPM/HR sit a few px out of column
+   alignment with every other row while this is active — bounded (the
+   deficit is fixed now that the ceiling is known, not open-ended) and
+   cosmetic; `e2e/design.spec.ts`'s own no-clip test measures the
+   neighbour columns too, so a regression that widens the deficit fails
+   there. */
+.connected-grid-resting .connected-grid-pace {
   min-width: max-content;
 }
 
@@ -6976,6 +7007,29 @@ section:not(.news-pinned) .news-row:last-of-type {
    number stays at row size, because the number is what is read. */
 .connected-grid-rest-word {
   font-size: var(--c-size-thead);
+}
+
+/* RC-24 fix round (James, 2026-08-26): the /500M cell's LANDSCAPE form —
+   the ordinary coast pace, hidden in portrait (the rest-countdown form
+   above is what portrait shows instead) and revealed by the landscape
+   query below. UNJUDGED: no `cellClass` is ever applied to this span (see
+   `PaneGrid.tsx`'s own header note) — a coasting split judged against a
+   work target is wrong in this column regardless of which orientation is
+   showing it, which is the whole reason this cell existed in the first
+   place. */
+.connected-grid-pace-coast {
+  display: none;
+}
+
+/* RC-24 fix round: the REST column's own live-countdown treatment
+   (landscape only — the column itself stays portrait-hidden via
+   `.connected-grid-rest`'s base rule above, so this never paints
+   anywhere a rower can see it in portrait). Gold, the same mark that
+   would otherwise sit on `/500M` — the mark still moves with the
+   counting cell, it has simply moved to a different cell in this
+   orientation. */
+.connected-grid-rest-live {
+  color: var(--marker);
 }
 
 /* Pinned under the scroller: the distance rule (and, since CR2 spec 3
@@ -8225,9 +8279,14 @@ section:not(.news-pinned) .news-row:last-of-type {
      geometry stays "today's" (the pre-redesign scroller's row height and
      column widths), only its skin (tokens, table-head treatment) is new;
      the literal 30px is a LANDSCAPE-table figure. Every OTHER column's
-     flex weight is already the table's number in the base rule above —
-     TIME/METERS/PACE/SPM/HR do not change between orientations, only `#`'s
-     width and REST's visibility do. Widening this fixed column costs the
+     FLEX WEIGHT is already the table's number in the base rule above —
+     TIME/METERS/PACE/SPM/HR's weights do not change between orientations,
+     only `#`'s width and REST's visibility do (RC-24 fix round: PACE's
+     own CONTENT during a rest now does differ by orientation — the
+     `/500M` cell's rest-countdown form vs its ordinary coast-pace form,
+     `.connected-grid-rest-countdown`/`.connected-grid-pace-coast` below —
+     this paragraph is about the flex TABLE, unchanged, not about every
+     pixel this column ever paints). Widening this fixed column costs the
      row's own flexible siblings a few px each (`min-width: 0` on every one
      of them, this file's own comment on the width-invariant test), not
      vertical fit — row HEIGHT is unrelated to this column's WIDTH, and the
@@ -8243,6 +8302,20 @@ section:not(.news-pinned) .news-row:last-of-type {
     display: block;
     flex: 0.8;
     text-align: right;
+  }
+
+  /* RC-24 fix round (James, 2026-08-26): landscape is where the REST
+     column is real, so this is where the two /500M forms swap — the
+     rest-countdown form (portrait's own cell) hides, and the ordinary
+     coast-pace form (hidden by default, above) takes over. The value and
+     the mark itself have moved to `.connected-grid-rest-live` just below;
+     nothing here repaints gold. */
+  .connected-pane-grid .connected-grid-rest-countdown {
+    display: none;
+  }
+
+  .connected-pane-grid .connected-grid-pace-coast {
+    display: inline;
   }
 
   /* --- The diagnostics sheet at 844x390 --------------------------------- */

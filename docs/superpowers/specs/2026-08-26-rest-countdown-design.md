@@ -154,21 +154,66 @@ which is still true during a rest. It is not part of this change.
 | `--surface` vs `--surface-sunken` (the fill shift itself) | 1.18:1 | — | supporting channel only, never the sole signal — which is why the word and the gold are both required |
 | `--marker` vs `--ink` (option A's whole signal) | 2.63:1 | — | **why A was rejected** |
 
-### LANDSCAPE — one behaviour, stated as a ruling not an omission
+### LANDSCAPE — SUPERSEDED (James, fix round, 2026-08-26). Kept for the record.
 
-James was asked whether the orientations should differ and answered only "B",
-so this is my call, recorded as such. **Landscape gets the identical
-treatment: the `/500M` cell counts down, in both orientations.** Landscape's
-REST column keeps showing that interval's PROGRAMMED rest on every row,
-including the active one — which is what that column means everywhere else,
-and is the same "settles back to a stated value" rule James already ruled for.
-The two are not in conflict: the REST column says *this interval is programmed
-for 1:00*, the `/500M` cell says *0:42 of it is left*.
+**This section's own prediction came true, and James corrected it the same
+day the landscape capture reached him.** The original ruling below was
+right that it was a guess ("this is my call, recorded as such") and right
+that a bad landscape capture would be a finding, not a surprise — it was
+wrong about what the finding would be.
 
-One code path, one test surface, no orientation-conditional meaning — which
-the design reference dislikes and which would have cost two of everything.
-**If the landscape capture reads badly, that is a finding, not a surprise**;
-revisit it there rather than pre-building a second path.
+> #### LANDSCAPE — one behaviour, stated as a ruling not an omission (SUPERSEDED)
+>
+> James was asked whether the orientations should differ and answered only
+> "B", so this is my call, recorded as such. **Landscape gets the identical
+> treatment: the `/500M` cell counts down, in both orientations.** Landscape's
+> REST column keeps showing that interval's PROGRAMMED rest on every row,
+> including the active one — which is what that column means everywhere else,
+> and is the same "settles back to a stated value" rule James already ruled
+> for. The two are not in conflict: the REST column says *this interval is
+> programmed for 1:00*, the `/500M` cell says *0:42 of it is left*.
+>
+> One code path, one test surface, no orientation-conditional meaning — which
+> the design reference dislikes and which would have cost two of everything.
+> **If the landscape capture reads badly, that is a finding, not a surprise**;
+> revisit it there rather than pre-building a second path.
+
+**What actually happened.** The first landscape capture showed the active
+row saying REST *twice*, with two different numbers: `REST 0:59` in the
+`/500M` cell (this section's own prediction) and the programmed `3:00`,
+unchanged, in the REST column beside it. The "not in conflict" argument
+above is correct in THEORY — one cell says "programmed for," the other says
+"left of it" — but a rower glancing at the row for half a second reads two
+REST readings that disagree, not two readings of different quantities. The
+double-REST ambiguity was the defect, not a failure to program the REST
+column correctly.
+
+**THE RULING (James, after seeing the capture): in landscape the countdown
+goes in the REST column, and `/500M` reverts to showing pace there.**
+Portrait is unchanged — there is no REST column in portrait to move the
+countdown into, so the `/500M` cell keeps carrying it exactly as shipped.
+
+**Mechanism, not a second code path.** `GridRow.restCountdown` is rendered
+into BOTH cells unconditionally whenever `row.countdown === "rest"` — the
+`/500M` cell always carries both its rest-countdown form and its ordinary
+coast-pace form, and the REST column always carries both the programmed
+value and the live countdown. CSS (an orientation media query for `/500M`'s
+two forms; the REST column's own pre-existing portrait `display: none`)
+decides which a given orientation actually shows. `PaneGrid.tsx` never asks
+what orientation it is in.
+
+**UNJUDGED IN BOTH FORMS, both orientations (James's ruling, generalising
+this task's own coast-verdict finding C past the cell it started on).**
+`livePace`/`frame.currentSplit` during a rest is a coasting flywheel's
+split, judged against a work target it no longer means — that is wrong
+regardless of which column happens to show it, so the coast-pace form
+carries no `cellClass` tint in landscape either, the same as the countdown
+form never did in portrait.
+
+The mark itself still moves rather than multiplies — it simply now moves to
+a DIFFERENT cell depending on orientation, gold on the REST column in
+landscape (`.connected-grid-rest-live`) exactly as it was gold on `/500M` in
+portrait.
 
 ### RULING — `resting` with a ZERO programmed rest
 
@@ -315,7 +360,12 @@ every other row of the column.
    the orientation question ruled.
 2. During a rest, a rower in PORTRAIT can tell a rest is running AND how long
    is left, from the `/500M` cell, on a sunken row, without reading the step
-   line. Landscape behaves identically.
+   line. **Fix round (James, 2026-08-26 — see the LANDSCAPE section, now
+   SUPERSEDED): landscape tells the same two facts from the REST column
+   instead, `/500M` reverting to `livePace` there** — not identical
+   treatment, but the identical PROMISE (a rower can tell a rest is running
+   and how long is left) kept in the cell each orientation actually has room
+   for without repeating itself.
 3. During work, and while armed, the marker is where it is today. Pinned.
 4. Exactly one cell wears the marker at any time. Pinned.
 5. The three wire facts above are pinned as tests, not as comments.

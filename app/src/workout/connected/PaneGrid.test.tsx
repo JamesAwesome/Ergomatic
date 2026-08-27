@@ -37,6 +37,7 @@ import type {
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../../domain/types.js";
+import { fmtSplit } from "../../../domain/format.js";
 import { ONBOARDING_TITLES } from "../../../domain/onboarding.js";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../../server/seed/library/onboarding";
@@ -820,11 +821,21 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
     expect(cell!.textContent).toBe("REST 0:42");
   });
 
-  it("is NOT judged during a rest: a coasting split that would otherwise tint the cell carries no verdict class", () => {
+  // Fix round (James, 2026-08-26): landscape moves the countdown into the
+  // REST column and reverts `/500M` to the coast pace there — BOTH forms
+  // render unconditionally now (this component never asks which
+  // orientation is live; jsdom could not answer if it did — CSS decides,
+  // proven in a real browser by `e2e/design.spec.ts`). This pins the
+  // STRUCTURE and CONTENT both orientations depend on, and folds into the
+  // unjudged check below rather than a separate render.
+  it("is NOT judged during a rest, in either /500M form: a coasting split that would otherwise tint the cell carries no verdict class", () => {
     // currentSplit: 60 is the same "would otherwise scream a verdict" value
-    // the disconnected-staleness tests above use — far enough inside
-    // PACE_TOLERANCE_SECONDS of the 2000 m rep's own target to tint blue if
-    // this cell were judged at all.
+    // the disconnected-staleness tests above use — far OUTSIDE
+    // PACE_TOLERANCE_SECONDS of the 2000 m rep's own ~126s target (fix
+    // round, review D1: the previous comment here said "inside tolerance",
+    // backwards — 60 is dramatically faster than target, which is exactly
+    // what tints "faster"/blue three lines below when this cell IS judged,
+    // during work).
     renderGrid({
       frame: frame({
         state: "resting",
@@ -833,8 +844,18 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
         currentSplit: 60,
       }),
     });
-    const cell = row(2).querySelector(".connected-grid-pace")!;
-    expect(cell.className).not.toMatch(/timer-card-actual-/);
+    const active = row(2);
+    expect(active.querySelector(".connected-grid-pace")!.className).not.toMatch(
+      /timer-card-actual-/,
+    );
+    // Fix round (James ruling): unjudged in BOTH forms, not just the one
+    // portrait shows — `cellClass` is never called on the coast span
+    // either, so its class is the bare literal, nothing appended, and its
+    // TEXT is the same `fmtSplit` reading the ordinary (non-resting) cell
+    // would show — landscape's own real content, not a placeholder.
+    const coast = active.querySelector(".connected-grid-pace-coast");
+    expect(coast!.className).toBe("connected-grid-pace-coast");
+    expect(coast!.textContent).toBe(fmtSplit(60));
   });
 
   it("during work the pace cell is unchanged: the same judged tint it has today, no resting row, no rest word", () => {
@@ -847,6 +868,50 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
     expect(active.querySelector(".connected-grid-pace")!.className).toContain(
       "timer-card-actual-faster",
     );
+  });
+
+  // Exit criterion 4 ("exactly one cell wears the marker"), pinned at the
+  // DOM level (review D2 — the model-level pin already covers `GridRow`
+  // fields; this is the render-time consequence, so a regression that
+  // added a second `connected-grid-countdown` in the markup would be
+  // caught here even though structure makes it true today).
+  it("marks no cell but the /500M-or-REST pair while resting: TIME and METERS carry no countdown class", () => {
+    renderGrid({
+      frame: frame({ state: "resting", restSeconds: 42, intervalIndex: 1 }),
+    });
+    const active = row(2);
+    expect(
+      active.querySelector(".connected-grid-time")!.className,
+    ).not.toContain("connected-grid-countdown");
+    expect(
+      active.querySelector(".connected-grid-meters")!.className,
+    ).not.toContain("connected-grid-countdown");
+  });
+
+  // Fix round (James ruling): the REST column's own half of the swap.
+  // Landscape is where this column is actually visible — `.connected-grid
+  // -rest`'s own base rule hides it in portrait, unchanged by this task —
+  // but its CONTENT decision is orientation-independent (same field,
+  // `row.countdown`, the /500M cell above reads), so it is pinned here
+  // rather than needing a browser.
+  it("the REST column carries the live countdown, gold, on the active row while resting — and the programmed value everywhere else", () => {
+    renderGrid({
+      frame: frame({ state: "resting", restSeconds: 42, intervalIndex: 1 }),
+    });
+    const active = row(2);
+    expect(active.querySelector(".connected-grid-rest")!.textContent).toBe(
+      "0:42",
+    );
+    expect(active.querySelector(".connected-grid-rest")!.className).toContain(
+      "connected-grid-rest-live",
+    );
+    // Row 1 (completed) and row 3 (upcoming) are untouched: still the
+    // PROGRAMMED rest, still the plain (non-gold) class.
+    for (const n of [1, 3]) {
+      const cell = row(n).querySelector(".connected-grid-rest")!;
+      expect(cell.className).not.toContain("connected-grid-rest-live");
+      expect(cell.textContent).not.toBe("0:42");
+    }
   });
 });
 
