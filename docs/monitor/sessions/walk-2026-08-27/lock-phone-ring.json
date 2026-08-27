@@ -1,0 +1,11 @@
+[
+  {"seq":23,"kind":"frame","detail":"state=rowing elapsed=0.9 distance=2.8 rowingActive=true spm=0"},
+  {"seq":24,"kind":"liveness-silence","detail":"frame stream silent for 2500ms"},
+  {"seq":25,"kind":"app-lifecycle","detail":"resume gap=39410ms threshold=2500ms silent=true latched=true"},
+  {"seq":26,"kind":"resume-frames","detail":"phase=live framesWhileHidden=1 rowingActive=true distanceIncreased=false"},
+  {"seq":27,"kind":"liveness-recovery","detail":"frame stream resumed"},
+  {"seq":28,"kind":"twd-sample","detail":"machineTotal=250m at elapsed=57.25s distance=181.9m workoutState=5"},
+  {"seq":29,"kind":"pause-declared","detail":"frames=4 hold=4 pulled=true d=181.9 split=140.94 spm=29"},
+  {"seq":32,"kind":"frame","detail":"state=finished elapsed=81.33 distance=250 rowingActive=true spm=29"},
+  {"seq":33,"kind":"final-totals","detail":"accumulator=250m accumulatorElapsed=81.3s machineTotal=250m registers=1 of 1"}
+]

@@ -3372,16 +3372,26 @@ that needs no erg, and it can run in a test.
       the rower's piece on the erg. No test covers the lagging gate. **The
       only finding in the audit that reaches out and changes the
       machine.** **S**
-- [ ] **RC-31 — RC-28 is far wider than the r0 case it was filed as.**
-      `surfaceModel.ts:253`/`:893`/`:962`, `PaneLive.tsx:151`. Because
-      `WORKOUTSTATE` 8/9 map to `"rowing"` and 6/7 to `"resting"`
-      (`parse.ts:517-532`), the resting-with-no-rest-phase fallthrough fires
-      for a tick at **every boundary of every rest-bearing program**, not
-      only on zero-rest intervals. The hero then paints a coasting split
-      with a verdict colour against the work target. Pinned only as intended
-      behaviour (`surfaceModel.test.ts:309`); no test asserts the colour.
-      **Supersedes RC-28's scoping; keep RC-28 for its capture question.**
-      **M**
+- [x] **RC-31 — FALSIFIED at the erg, 2026-08-27. The trigger does not
+      exist. Do not build the fix.** The audit predicted the
+      resting-with-no-rest-phase fallthrough fires "for a tick at every
+      boundary of every rest-bearing program", reasoning from the
+      `WORKOUTSTATE` 8/9 -> `rowing`, 6/7 -> `resting` mapping. **The wire
+      disagrees.** Both boundaries in one piece, as distance resets
+      (`walk-2026-08-27/boundaries-terminated-recording.jsonl.gz`):
+      `t=228.56  311.4 -> 0.5  ws=3->5` (boundary 1->2, WITH a rest) and
+      `t=294.71  249.9 -> 1.6  ws=5->5` (boundary 2->3, ZERO rest).
+      **A zero-rest boundary produces no state change whatever** — the
+      machine stays in `IntervalWorkDistance` and resets the register. It
+      never reports `resting`, so the fallthrough has no trigger.
+      **The lesson is the audit's own rule turned on itself:** this was an
+      INFERENCE from an enum mapping, presented in a table beside measured
+      findings, and it read like one of them. RC-28 inherits the
+      correction — its premise ("a machine can briefly report `resting` on
+      an interval with no programmed rest") came from a code comment, never
+      a capture, and is now unwitnessed with evidence against. **One
+      capture cannot prove impossibility**; the code path stays, the
+      priority does not.
 - [ ] **RC-32 — F2b's clean sweep is VACUOUS.** `continuity.ts`'s F2b count
       bound writes `completedAt` + `endedBy: "link-lost"` and seals the
       record. Its sweep excludes all six committed captures, so **zero pairs
@@ -3969,26 +3979,15 @@ that needs no erg, and it can run in a test.
       alarm, which is PRIMARY from the plugin's own source. Told only
       "cause-free", a notes writer will censor the one explanation testers
       most need.
-- [ ] **RC-25 — Task 5's coast fix is pinned in ONE direction only, and has
-      never been walked.** Filed at the PM re-gate rather than left implied.
-      That a genuine mid-interval pause still fires is pinned hard: a corpus
-      regression across all nine committed recordings, onsets identical, with a
-      non-vacuity check. **That the coast case is now SILENT has no oracle at
-      all** — the corpus provably lacks the trigger, the erg reproduction was
-      never downloadable (the device build's recording row is dev-gated), and
-      the failing test is a hand-built frame sequence using real wire values.
-      **Not a blocker:** if the fix is wrong the rower loses an instruction,
-      not a workout.
-      **THE INSTRUMENT IS BUILT (James, 2026-08-26: "Add the instrument now").**
-      The pause edge now writes a `pause-declared` ring entry carrying
-      `frames`, `hold`, `pulled`, and the frame's own distance/split/spm — what
-      the predicate weighed, no cause asserted. Edge only, never per frame.
-      **So this row now closes on one NATURAL occurrence and a `COPY` tap, not
-      on a walk.** Pinned in both directions: removing the log fails the test,
-      and logging per frame instead of on the edge also fails it — the fixture
-      had to be extended so the pause HOLDS, because with a one-frame pause
-      "exactly one entry" could not tell the two apart, and the mutation
-      stayed green until it was.
+- [x] **RC-25 — CLOSED 2026-08-27 by a natural occurrence, exactly as
+      designed.** The `pause-declared` instrument fired during the
+      walk-2026-08-27 phone-lock leg, WHILE THE ROWER WAS ROWING:
+      `frames=4 hold=4 pulled=true d=181.9 split=140.94 spm=29`.
+      **The finding is bigger than the item.** The freeze predicate cannot
+      tell a stopped rower from a stopped WEBVIEW: a suspended WebView
+      replays identical `distance|split|spm` keys, which is precisely what
+      `PAUSED_FRAME_HOLD` counts. It declared a pause at 29 spm. Feeds the
+      link-authority spec (below) rather than needing its own fix.
 - [x] **RC-26 — CLOSED AS INVALID (James, 2026-08-27). The string stays.
       Do not reopen.** His ruling: *"'keep the screen on' implies 'dont lock
       your phone' we can leave it."*
