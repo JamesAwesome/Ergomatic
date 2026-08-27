@@ -33,7 +33,11 @@ export default function You({
         <div className="avatar" aria-hidden="true">
           {initials(user.name)}
         </div>
-        <div>
+        {/* NAMED so it can carry `min-width: 0`. A flex child's default
+            `min-width: auto` refuses to shrink below its content, so a long
+            address used to push this block a whole line taller — see
+            `.you-identity` in index.css. */}
+        <div className="you-identity">
           <p className="you-name">{user.name}</p>
           <p className="you-email">{user.email}</p>
         </div>

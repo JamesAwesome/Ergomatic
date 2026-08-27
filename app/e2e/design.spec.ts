@@ -3835,6 +3835,67 @@ test.describe("you screen with the derivation offer visible (6k-target mirror, r
   });
 });
 
+// THE EMAIL MAY NOT REFLOW THE PAGE (2026-08-27). Found by an antagonist
+// pass on the capture suite, and it falsifies a ROADMAP item marked DONE
+// on 2026-08-20: `e2e/helpers.ts`'s `RUN_ID` was made fixed-LENGTH by
+// construction and the reflow was declared fixed, but the layout reads
+// WIDTH, and Archivo has no tabular figures (measured in the running
+// stack at 13px: ten `1` = 67.734px, ten `8` = 74.625px; a 6-char base36
+// suffix spans 17.41px to 67.09px). Twelve sampled run ids spread 9.23px,
+// straddling the wrap boundary — so the same address LENGTH rendered
+// either two or three lines depending on which characters it drew, and
+// three lines pushed four whole You captures down by a row band
+// (48,610-62,167px of image diff, an independent coin flip per run).
+//
+// This is a real product bug, not only a test-harness one: any user whose
+// address is long enough gets the same push. The fix clamps the address to
+// one line (`min-width: 0` on the flex child plus ellipsis on the value),
+// so the block's height stops depending on its content at all.
+//
+// ASSERT THE DIMENSION THE LAYOUT READS, which is the lesson that produced
+// this test: the pin is the BLOCK'S HEIGHT against a long address, never
+// the string's length or its character set.
+test.describe("you screen: the address may not reflow the identity block", () => {
+  test("the address renders on exactly ONE line and is clamped, however long it is", async ({
+    page,
+  }) => {
+    // `signInViaBackdoor` appends `RUN_ID` to whatever is passed, so every
+    // e2e address is already long — that is the point, and it is why an
+    // earlier draft of this test passed vacuously: BOTH its "short" and
+    // "long" cases wrapped to the same 42px (three lines), so comparing
+    // them proved nothing. Measure the element against ITS OWN line box
+    // instead of against another address.
+    await signInViaBackdoor(page, {
+      email: `design-you-${"n".repeat(48)}@e2e.test`,
+      name: "Design You Tester",
+    });
+    await page.goto("/you");
+
+    const email = await page.locator(".you-email").evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        offsetHeight: (el as HTMLElement).offsetHeight,
+        lineHeight: parseFloat(cs.lineHeight),
+        fontSize: parseFloat(cs.fontSize),
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      };
+    });
+
+    // ONE LINE. `lineHeight: normal` computes to a number in Chromium, so
+    // this is a real comparison; the fallback keeps it honest if a future
+    // rule sets a keyword the parse cannot resolve.
+    const oneLine = Number.isFinite(email.lineHeight)
+      ? email.lineHeight
+      : email.fontSize * 1.2;
+    expect(email.offsetHeight).toBeLessThanOrEqual(Math.ceil(oneLine) + 1);
+
+    // ...and genuinely clamped, not accidentally short: the content is
+    // wider than the box showing it, which is what ellipsis means here.
+    expect(email.scrollWidth).toBeGreaterThan(email.clientWidth);
+  });
+});
+
 // Phase 6B (Task 5): the pre-workout countdown (handoff §5). A single
 // 2-minute work step gets a rower here directly off Start (fast-follow
 // Task 4: ConfirmTargets is deleted) without ever pressing SKIP —

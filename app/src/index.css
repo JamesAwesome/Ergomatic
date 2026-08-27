@@ -393,10 +393,40 @@ button:disabled {
   margin: 0;
 }
 
+/* THE ADDRESS MAY NOT REFLOW THIS BLOCK (2026-08-27). A flex child
+   defaults to `min-width: auto`, which refuses to shrink below its own
+   content, so a long address pushed the whole card a line taller — and
+   pushed everything below it down the page with it.
+
+   Found by an antagonist pass on the capture suite, where the test user's
+   address flipped between a two- and three-line wrap from run to run and
+   moved four whole You captures by a row band (48,610-62,167px of image
+   diff, an independent coin flip per run). But the reflow is a REAL
+   product bug, not only a harness one: any account whose address is long
+   enough gets the same push.
+
+   It also closes a defect that was declared fixed and was not. ROADMAP's
+   own note (marked DONE 2026-08-20) made `e2e/helpers.ts`'s `RUN_ID`
+   fixed-LENGTH by construction and called the reflow solved. The layout
+   reads WIDTH: Archivo has no tabular figures, so ten `1` measure 67.734px
+   against ten `8` at 74.625px (13px, measured in the running stack), and
+   twelve sampled run ids spread 9.23px — straddling the wrap boundary at
+   identical length. Constraining the alphabet to equal-width glyphs was
+   measured too and only shrinks the spread to 0.52px, because kerning is
+   not additive; it makes the flip rare, not impossible. Clamping the
+   element is the only fix that removes the dependency rather than
+   narrowing it. */
+.you-identity {
+  min-width: 0;
+}
+
 .you-email {
   color: var(--ink-3);
   margin: 0;
   font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .avatar {
