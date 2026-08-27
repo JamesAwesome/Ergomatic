@@ -75,11 +75,13 @@ import { check as checkContinuity } from "./continuity";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
 import { defaultTransport } from "../adapters/monitorTransport";
 import { registerAppLifecycleListener } from "../adapters/appLifecycle";
-import type {
-  CancelFn,
-  LivenessDeps,
-  LivenessSnapshot,
+import {
+  SILENCE_THRESHOLD_MS,
+  type CancelFn,
+  type LivenessDeps,
+  type LivenessSnapshot,
 } from "./transports/liveness";
+import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
 
 /** The session state machine (design spec §2, verbatim, MINUS `"paused"` —
  *  connected-axes 2a, task 5). Every value here is reached by a REAL event
@@ -414,6 +416,80 @@ export function handleFrameRecovery(
   }, BANNER_RETRACT_HYSTERESIS_MS);
 }
 
+/** What `decideResumeLatch` concluded, and the number it concluded it
+ *  from. `gapMs` is `null` when nothing could be measured (no liveness
+ *  decorator on this transport, or no 0x0031 has ever arrived) — an
+ *  absence, deliberately distinguished from a measured zero. */
+export interface ResumeLatchDecision {
+  latch: boolean;
+  gapMs: number | null;
+}
+
+/**
+ * PHASE LM PR 1, FIX ROUND 2 (design spec `2026-08-26-lost-monitor-trigger-
+ * design.md`, Task 1) — **the fix**. Decides whether a lifecycle resume
+ * should raise the lost-link alarm, by MEASURING the stream instead of
+ * assuming.
+ *
+ * **What was wrong.** The resume handler latched `frameSilence: true`
+ * unconditionally and then, three lines later, read the frame count that
+ * refuted it. On 2026-08-26 that produced nine red `LOST THE MONITOR /
+ * Nothing kept.` banners in 288 s over a link that never dropped, with 233
+ * frames arriving across the nine supposed gaps and `liveness-recovery`
+ * following every latch within 3-72 ms
+ * (`docs/monitor/sessions/walk-2026-08-26/`). Correcting which plugin event
+ * we bind (`src/native/appLifecycle.ts`, `pause`/`resume` rather than
+ * `appStateChange`) reduces the FREQUENCY; it does not make the logic
+ * right, because a genuine 800 ms backgrounding is still a real resume over
+ * a stream that never stopped. This predicate is what makes it right.
+ *
+ * **The rule.** Latch only when the evidence says a gap actually happened:
+ *   - `snapshot.silent` — the watchdog already declared silence and has not
+ *     seen a recovery. Its verdict stands regardless of the gap, and it
+ *     cannot be re-derived from the gap: a DRAINED BACKLOG rearms the
+ *     watchdog's timer (`liveness.ts`'s `noteStatusArrival` -> `rearmTimer`),
+ *     so stale arrivals can leave `lastArrivalMs` recent while `silent` is
+ *     the honest reading.
+ *   - otherwise, the measured gap between the snapshot's own clock reading
+ *     and the last 0x0031 arrival, `>= thresholdMs`.
+ *
+ * `Date.now()` — the clock both readings come from
+ * (`livenessDepsRef.current.now`) — is WALL CLOCK and advances THROUGH an
+ * iOS suspension, which is exactly the direction this predicate needs: a
+ * real background shows up as a real gap the instant we resume, with
+ * nothing to wait for.
+ *
+ * **A NEGATIVE gap is not evidence.** A wall clock stepped backwards (an
+ * NTP correction) says nothing about the stream, and reading it as "no gap"
+ * would be as wrong as reading it as a huge one. We do not latch; the
+ * watchdog's own timer, which is still pending, owns that case. There is
+ * deliberately NO separate `gapMs < 0` branch: a negative number can never
+ * be `>= thresholdMs` (2500, positive by construction — see
+ * `SILENCE_THRESHOLD_MS`), so the one comparison below already delivers
+ * this, and an extra guard would be a branch no test could ever kill. The
+ * BEHAVIOUR is pinned by its own test either way.
+ *
+ * **An UNMEASURABLE gap is not evidence either** (no decorator, or no
+ * 0x0031 ever seen). The pre-stream window belongs to the connect/program
+ * timeouts — `liveness.ts`'s header states that boundary for the watchdog's
+ * own arming rule, and this predicate keeps to the same line.
+ *
+ * Pure and directly testable, the same discipline `handleFrameSilence`/
+ * `handleFrameRecovery`/`programHasDistanceGoal` above already follow.
+ */
+export function decideResumeLatch(
+  snapshot: LivenessSnapshot | null,
+  thresholdMs: number,
+): ResumeLatchDecision {
+  if (snapshot === null) return { latch: false, gapMs: null };
+  const lastArrivalMs =
+    snapshot.characteristics[GENERAL_STATUS_UUID]?.lastArrivalMs ?? null;
+  const gapMs = lastArrivalMs === null ? null : snapshot.atMs - lastArrivalMs;
+  if (snapshot.silent) return { latch: true, gapMs };
+  if (gapMs === null) return { latch: false, gapMs };
+  return { latch: gapMs >= thresholdMs, gapMs };
+}
+
 /** Phase LL Task 4 (design spec §4's continuity rule): true whenever `p`
  *  contains ANY distance-kind interval — `continuity.ts`'s own header
  *  comment has the full wire citation: on a distance-goal interval,
@@ -727,9 +803,12 @@ export interface MonitorSession {
    *  task 2, the same call `frozen` is. */
   runOpen: boolean;
   /** Mirrors `SessionState.frameSilence` (Phase LL Task 2). Published for
-   *  `connectedAxes.ts`'s `deriveLink` — routed through the EXISTING
-   *  `stale` `SurfaceStatus`, never a new one (spec §2a's own correction:
-   *  no new axis, no new word, no parallel path). */
+   *  `connectedAxes.ts`'s `deriveLink` — routed through the EXISTING lost
+   *  link, never a new state (spec §2a's own correction: no new axis, no
+   *  new word, no parallel path). Phase LM moved where "lost" is CARRIED —
+   *  `SurfaceModelInput.linkLost`, independent of `SurfaceStatus`, so an
+   *  armed surface can report the loss without ceasing to be armed — but
+   *  not what produces it, which is still this field and this axis. */
   frameSilence: boolean;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
@@ -838,7 +917,10 @@ export interface MonitorSessionDeps {
  * THREE rowing metrics — `distanceMeters`, `currentSplit`, `spm` —
  * unchanged TOGETHER across `PAUSED_FRAME_HOLD` consecutive frames while
  * the machine reads `rowing` AND the interval has banked distance
- * (`distanceMeters > 0`). Exit on ANY change to any of the three.
+ * (`distanceMeters > 0`) AND THIS INTERVAL HAS BEEN PULLED IN
+ * (`PULL_EVIDENCE_FRAMES`, added 2026-08-26 — read its comment before
+ * changing anything here; the hold below is necessary and has not been
+ * sufficient since). Exit on ANY change to any of the three.
  *
  * Why `elapsedSeconds` is NOT in the key (§17 item 20, ANSWERED by the
  * 2026-08-08 hardware recording): on a real PROGRAMMED timed interval the
@@ -874,14 +956,33 @@ export interface MonitorSessionDeps {
  * elapsed broke the run one frame before the 4-hold fired; without
  * elapsed, the zeros could keep matching for as long as the rower's first
  * strokes take to move split/spm — an unbounded run no fixed hold clears.
- * Every boundary frame carries `d 0`, and a genuine mid-interval stop has
- * distance already banked, so freeze frames simply do not COUNT until the
- * interval has distance: the boundary case resets on the guard, not on a
- * one-frame margin. (The rower who stops at the exact instant of a
- * changeover, having moved zero meters in the new interval, reads as the
- * interval's own waiting state rather than PAUSED — the display cost is
- * nothing.) The 4-frame hold itself is retained as recorded-margin
- * against single-frame repeats.
+ * MOST frames of that no-rest changeover carry `d 0` — 4 of the 5 recorded
+ * no-rest changeovers do (MEDIUM-1, Task 5's review, 2026-08-26). The fifth
+ * does NOT: `walk-2026-08-23/keystone-pm5-recording-1787491974452.jsonl.gz`
+ * index 96 goes `rowing/248.5 -> rowing/1.9` with no intervening `d<=0` and
+ * no non-rowing frame, so the freeze run never resets there and `pulled`
+ * carries across. **Pre-existing — the old guard leaked identically — and
+ * REST boundaries are safe because a `resting` frame always resets**, so the
+ * defect Task 5 fixed is genuinely closed. Recorded because the converse the
+ * per-interval story leans on ("every boundary resets a freeze run") is the
+ * half that is not guaranteed. A genuine
+ * mid-interval stop has distance already banked, so freeze frames simply do
+ * not COUNT until the interval has distance: the no-rest boundary case
+ * resets on the guard, not on a one-frame margin. (The rower who stops at
+ * the exact instant of a changeover, having moved zero meters in the new
+ * interval, reads as the interval's own waiting state rather than PAUSED —
+ * the display cost is nothing.) The 4-frame hold itself is retained as
+ * recorded-margin against single-frame repeats.
+ *
+ * **THAT GUARD DOES NOT COVER A REST BOUNDARY, and this comment used to
+ * claim it covered every boundary** (2026-08-26). Measured, by decoding
+ * 0x0031 across every committed recording: the first work frame after a
+ * REST is ABOVE ZERO in 5 of the 8 rest->work transitions across all nine
+ * recordings, reading 1.1, 0.9, 0, 0, 0.2, 1.5, 0.1, 0 — coast metres from a
+ * flywheel that never stopped. (This used to cite the single `0.1` reading
+ * and generalise from it; the corpus makes the point STRONGER than the
+ * original sentence claimed, and up to 1.5 m rather than 0.1 m.) The guard is therefore already clear on that frame, which is
+ * how the false pause `PULL_EVIDENCE_FRAMES` exists to stop got through.
  *
  * Exit is on ANY CHANGE, never on "advance" — equality is the whole
  * predicate. (The record's backwards elapsed ticks, up to −0.57 s,
@@ -918,15 +1019,95 @@ export interface MonitorSessionDeps {
  */
 export const PAUSED_FRAME_HOLD = 4;
 
+/**
+ * HOW MUCH PROGRESS COUNTS AS "THIS INTERVAL HAS BEEN PULLED IN" (Phase LM
+ * fix round 2, task 5 — the second half of the predicate).
+ *
+ * Reported at the erg on 2026-08-26: `PULL TO RESUME` about two seconds into
+ * a work interval, before the rower had taken a stroke in it, with the
+ * flywheel still coasting. The conditions were a pull or two DURING the rest
+ * and then stopping as the work interval began (walk card
+ * `phase-lm-pr1.md`, leg 2b). A coast that has decayed below the wire's own
+ * 0.1 m resolution reports the SAME distance frame after frame, with split
+ * and rate at 0, above a distance that is nevertheless greater than zero —
+ * so `nextFreezeRun`'s `distanceMeters <= 0` guard is already clear on the
+ * interval's first frame, four identical frames follow, and the app tells
+ * the rower to resume something they never started. The same class as the
+ * `READY`/`WORK` defect this phase fixed one predicate over: a state
+ * machine asserting a transition the rower never made.
+ *
+ * So the hold is necessary and no longer sufficient. A pause is a claim
+ * about a rower who WAS rowing, and this counter is the evidence for the
+ * "was": FIVE consecutive frames of strictly increasing distance inside
+ * this interval, evaluated by the very same `nextRowingStreak` the ready
+ * gate's own fallback uses, whose doc comment carries the derivation —
+ * "the shape a coast cannot hold and a rower cannot fail."
+ *
+ * IT IS A SEPARATE CONSTANT FROM `ROWING_ACTIVE_FALLBACK_FRAMES` ON
+ * PURPOSE, though today they hold the same number for the same recorded
+ * reason. The two gates want opposite asymmetries and must be free to move
+ * apart: the ready gate is deliberately GENEROUS about a coast because
+ * failing it silently loses a whole session, while this gate is the
+ * cautious one — the cost of holding it too long is a couple of seconds of
+ * missing instruction, and the cost of opening it too early is the defect
+ * above. Tie them together and a future change made for the ready gate's
+ * asymmetry silently changes this one's.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT KEY ON, and why:
+ * - **Stroke rate.** The record says rate reads 0 for the first ~4 s of a
+ *   work interval while the metres are visibly climbing (three separate
+ *   changeovers in `walk-2026-08-25/rests-finished-recording.jsonl.gz`), and
+ *   the interval's own first frame carries the PREVIOUS interval's rate
+ *   over a zeroed clock — so a rate-based gate is both late for a rower who
+ *   is rowing and already satisfied for one who is not. It is also the
+ *   field that stays PINNED through a real stop (`PAUSED_FRAME_HOLD`'s own
+ *   comment), so it can neither open nor close this gate honestly.
+ * - **`rowingActive`.** Same standing reason `PAUSED_FRAME_HOLD` gives, now
+ *   with the byte FALSIFIED as a hard gate (Phase LM task 2: it read
+ *   `false` through an entire real row). Keying a pause on it would trade
+ *   this defect for a silent one — a genuine stop that never says anything.
+ *
+ * THE RESIDUAL FALSE POSITIVE, and how narrow it measures. A coast strong
+ * enough to bank five strictly-increasing frames and THEN die inside the
+ * hold would still earn the gate and declare a pause the rower did not make.
+ * Written here rather than left in a git-excluded task report (recurring
+ * failure #14). Measured at Task 5's review rather than left as a worry: at
+ * both recorded mid-interval stops the flywheel falls from ~1.2 m/frame to
+ * below the wire's 0.1 m resolution in ONE to TWO frames (1.2, 1.3, 1.1,
+ * dead; and 1.2, 0.4, dead). A coast holding strictly-increasing distance
+ * for ~2.5 s is not a shape any committed recording contains.
+ *
+ * ITS ONE KNOWN DEPENDENCE: frames arrive at ~2 Hz in EIGHT of the nine
+ * committed recordings (median 539.8 ms) — but at ~1 Hz in the ninth
+ * (`walk-2026-08-23/keystone-…`, median 990 ms, min 810, max 1260), measured
+ * at Task 5's review. **So the cost below is ~5 s on that cadence, not
+ * ~2.5 s.** The earlier "every committed recording" was false, and "strictly increasing" is evaluated per frame, so a much
+ * faster stream would need less real motion to satisfy it and a much slower
+ * rower more. That is the same dependence `ROWING_ACTIVE_FALLBACK_FRAMES`
+ * already carries and the same cadence every capture in
+ * `docs/monitor/sessions/` shows; it is written down here rather than
+ * assumed away.
+ */
+export const PULL_EVIDENCE_FRAMES = 5;
+
 /** How many consecutive frames have now carried IDENTICAL values for the
  *  three rowing metrics `freezeKey` keys on — distance, split and rate;
  *  elapsed and heart rate are both deliberately out of it (see
  *  `freezeKey`). `frames` counts the frames themselves (a fresh
  *  value is 1, not 0), so `frames >= PAUSED_FRAME_HOLD` reads exactly as
- *  the spec's sentence does. */
+ *  the spec's sentence does.
+ *
+ *  `pull`/`pulled` carry the OTHER half (`PULL_EVIDENCE_FRAMES`): the run of
+ *  strictly-progressing frames seen so far in this interval, and whether it
+ *  has ever reached the threshold. Both live here rather than in their own
+ *  ref because they share this one's lifetime exactly — every reset of the
+ *  freeze run IS an interval boundary (a rest, or a distance back at zero),
+ *  which is precisely when pull evidence must be forgotten. */
 export interface FreezeRun {
   key: string;
   frames: number;
+  pull: RowingStreak | null;
+  pulled: boolean;
 }
 
 /** The three metrics, and only those three — `elapsedSeconds` is excluded
@@ -940,10 +1121,14 @@ function freezeKey(frame: MonitorFrame): string {
   // INTERVAL-SCOPED ON PURPOSE — `distanceMeters`, never
   // `sessionDistanceMeters` (added Phase 7B for TOTAL LEFT and the METERS
   // card). The whole no-rest-boundary defence in `PAUSED_FRAME_HOLD`'s
-  // comment rests on 0x0031's per-interval RESET: every boundary frame reads
-  // `d 0`, which is what `nextFreezeRun`'s `> 0` guard clears the false
-  // positive with. The accumulated field never returns to 0 mid-session, so
-  // swapping it in here would silently re-open that defect.
+  // comment rests on 0x0031's per-interval RESET: every frame of a no-rest
+  // changeover reads `d 0`, which is what `nextFreezeRun`'s `> 0` guard
+  // clears the false positive with. The accumulated field never returns to 0
+  // mid-session, so swapping it in here would silently re-open that defect.
+  // (A REST boundary is a different story and this guard does not cover it —
+  // `PULL_EVIDENCE_FRAMES` does. The reset is still what makes the pull
+  // evidence per-interval, so the same "never the accumulated field" rule
+  // applies to `nextRowingStreak`'s reading of it.)
   return `${frame.distanceMeters}|${frame.currentSplit}|${frame.spm}`;
 }
 
@@ -961,19 +1146,37 @@ export function nextFreezeRun(
   // stroke. The `distanceMeters > 0` guard is the no-rest-boundary
   // clearer — see `PAUSED_FRAME_HOLD`'s own comment.
   if (frame.state !== "rowing" || frame.distanceMeters <= 0) {
-    return { key: "", frames: 0 };
+    return { key: "", frames: 0, pull: null, pulled: false };
   }
+  // Pull evidence, forgotten by the reset above at every interval boundary
+  // and re-earned inside each interval — see `PULL_EVIDENCE_FRAMES`. The
+  // streak's own "a frame that fails to beat the previous distance starts a
+  // NEW streak of one" rule is what a dying coast lands on.
+  const pull = nextRowingStreak(previous?.pull ?? null, frame);
+  const pulled =
+    (previous?.pulled ?? false) ||
+    (pull !== null && pull.frames >= PULL_EVIDENCE_FRAMES);
   const key = freezeKey(frame);
   return previous !== null && previous.key === key
-    ? { key, frames: previous.frames + 1 }
-    : { key, frames: 1 };
+    ? { key, frames: previous.frames + 1, pull, pulled }
+    : { key, frames: 1, pull, pulled };
 }
 
+/** BOTH halves, and the order of the sentence is the product claim: the
+ *  rower has pulled in this interval (`pulled`) AND nothing has moved since
+ *  (`frames`). Without the first half the app tells a rower to resume a
+ *  piece they never started; without the second it never tells a rower who
+ *  genuinely stopped anything at all. */
 export function isPausedRun(run: FreezeRun): boolean {
-  return run.frames >= PAUSED_FRAME_HOLD;
+  return run.pulled && run.frames >= PAUSED_FRAME_HOLD;
 }
 
-const NO_FREEZE: FreezeRun = { key: "", frames: 0 };
+const NO_FREEZE: FreezeRun = {
+  key: "",
+  frames: 0,
+  pull: null,
+  pulled: false,
+};
 
 /**
  * THE `rowingActive` FALLBACK (erg-day review, HIGH-1).
@@ -1018,7 +1221,8 @@ export interface RowingStreak {
 }
 
 /**
- * Pure, exported for the fallback's own tests. `null` means "no streak" —
+ * Pure, exported for the ready-gate fallback's AND the pause gate's tests
+ * (two callers since Task 5, not one). `null` means "no streak" —
  * the frame was not a rowing frame at all, which resets outright rather
  * than merely failing to increment (an `armed`/`resting` frame must not
  * lend its position to the next rowing frame's count).
@@ -1061,9 +1265,10 @@ interface SessionState {
   /** Phase LL Task 2 (design spec §2a): `true` whenever the frame stream
    *  is currently being treated as suspect — the watchdog's own
    *  `onSilence` (armed at the first 0x0031 after connect, tripped after
-   *  `SILENCE_THRESHOLD_MS` with no further arrival) or an app-lifecycle
-   *  resume (mechanism 2: no radio fault, the phone simply stopped
-   *  delivering frames while suspended). Latches on `handleFrameSilence`,
+   *  `SILENCE_THRESHOLD_MS` with no further arrival) or a lifecycle resume
+   *  whose MEASURED gap reached that same threshold (mechanism 2, as
+   *  corrected by Phase LM: `decideResumeLatch` — a resume alone is not a
+   *  reason, only the measurement is). Latches on `handleFrameSilence`,
    *  retracts only after `BANNER_RETRACT_HYSTERESIS_MS` of continuous
    *  healthy frames (`handleFrameRecovery`) — never on a single frame.
    *  Published for `connectedAxes.ts`'s `frameSilence` axis input, the
@@ -1235,6 +1440,13 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
+  /** Task 1 (lost-monitor design spec): counts frames `handleFrame` sees
+   *  while the app-lifecycle listener believes the app is backgrounded —
+   *  `null` when not currently tracking a hidden window (never
+   *  backgrounded yet this connection, or the last one has already been
+   *  reported at resume). Set to `0` on every "background" transition,
+   *  read and reset back to `null` on the matching "foreground" one. */
+  const framesWhileHiddenRef = useRef<number | null>(null);
   /** Phase LL Task 4 (design spec §4's continuity rule), widened to all
    *  three axes by F2a (design spec 2026-08-23-continuity-corroboration
    *  §2): the last live frame's own `totalWorkDistanceMeters`,
@@ -1475,7 +1687,20 @@ export function useMonitorSession(
   const closeRecord = useCallback(
     (terminated: boolean, endedBy: CloseReason): void => {
       const run = runRef.current;
-      if (run === null || run.completedAt !== null) return;
+      // Task 1 (lost-monitor design spec): today this returns silently —
+      // the exact silence that cost a tester a workout and two days to
+      // find. Records only that nothing was open to close and the two
+      // values the caller offered; never why no run had opened (the
+      // caller's own three producers are undistinguished here on
+      // purpose — see the design spec's own hard constraint).
+      if (run === null) {
+        logRef.current?.record(
+          "close-no-record",
+          `endedBy=${endedBy} terminated=${terminated}`,
+        );
+        return;
+      }
+      if (run.completedAt !== null) return;
       const withFinalSeries = withSeries(run);
       runRef.current = completeMonitorRun(
         withFinalSeries,
@@ -1591,6 +1816,13 @@ export function useMonitorSession(
 
   const handleFrame = useCallback(
     (frame: MonitorFrame, driver: MonitorDriver): void => {
+      // Task 1 (lost-monitor design spec): counted for EVERY frame, in
+      // whatever phase, while a hidden window is open — the resume
+      // handler below reports this at the next "foreground" regardless
+      // of what else this frame does.
+      if (framesWhileHiddenRef.current !== null) {
+        framesWhileHiddenRef.current += 1;
+      }
       const phase = stateRef.current.phase;
       // FIRST ROWING FRAME WITH FLYWHEEL EVIDENCE -> live (spec §2:
       // every transition maps to a real event or frame field). Two
@@ -1759,7 +1991,9 @@ export function useMonitorSession(
         // should ultimately arbitrate a resumed stream"). Runs whenever
         // the banner currently considers the stream suspect
         // (`frameSilence`) — covers BOTH suspect sources (a genuine
-        // watchdog silence and an app-lifecycle resume both latch
+        // watchdog silence, and an app-lifecycle resume whose MEASURED gap
+        // exceeded the threshold — 2026-08-26: a resume alone no longer
+        // latches anything, see `decideResumeLatch`) both latch
         // `frameSilence` the identical way, so both resume through this
         // same check). Deliberately NOT gated to "only the very first
         // frame after suspicion": `applyContinuityCheck` re-checking every
@@ -1829,8 +2063,21 @@ export function useMonitorSession(
           // is this app's own decision, the same bucket the rower's own
           // End press already occupies, and `ConnectedSurface.tsx`'s own
           // `=== "machine"` ternary reads it that way: anything else
-          // renders the neutral "Your numbers are kept," never a false
-          // "The monitor finished it." No handoff hold: a reset is not a
+          // renders "Your numbers are kept," never a false "The monitor
+          // finished it."
+          //
+          // "THE NEUTRAL OPTION" IS WHAT THAT LINE USED TO SAY, and it was
+          // only ever neutral where a record existed (fix round,
+          // whole-branch review HIGH). `endSession` reaches the same
+          // `phase: "ended"` frame with NO record at all — `closeRecord`
+          // logs `close-no-record` and returns — and "your numbers are
+          // kept" over nothing was the flagship lie. That frame now asks
+          // `summaryModel.ts`'s measured-anything rule FIRST and says "No
+          // numbers to keep." at zero, so the `endedBy` choice recorded
+          // here only ever picks between the two honest promises. A
+          // continuity reset closes a record that has actuals, so it lands
+          // on the neutral one exactly as before.
+          // No handoff hold: a reset is not a
           // natural finish (no boundary is coming), the same reasoning
           // `endByMachine`'s own `terminated` branch already uses to
           // skip `openHandoffHold()`.
@@ -1848,9 +2095,35 @@ export function useMonitorSession(
                 distanceMeters: frame.distanceMeters,
                 intervalCount: frame.rawIntervalCount,
               };
+        const wasPaused = isPausedRun(freezeRef.current);
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
-        update({ frame, frozen: isPausedRun(freeze) });
+        const nowPaused = isPausedRun(freeze);
+        // RC-25 (James, 2026-08-26: "Add the instrument now"). The pause is
+        // DERIVED and was never logged, which is why his sighting of a false
+        // `PULL TO RESUME` at a rest boundary left no trace and had to be
+        // provoked at the erg to be seen at all. Task 5's fix is pinned hard
+        // in one direction (a genuine pause still fires — corpus regression
+        // over all nine committed recordings) and has NO oracle in the other:
+        // no committed capture contains the coast shape, and a device build
+        // cannot produce a recording.
+        //
+        // So log the EDGE, with the frame that closed the run and the evidence
+        // the predicate weighed. The next natural occurrence then proves or
+        // refutes the model with a `COPY` tap, and no walk is needed for it.
+        // Edge only, never per frame: a pause holds for many frames and a
+        // per-frame entry would bury the ring it is written into.
+        //
+        // Records what was MEASURED and asserts no cause — the same rule the
+        // resume line follows since the trigger fix.
+        if (nowPaused && !wasPaused) {
+          logRef.current?.record(
+            "pause-declared",
+            `frames=${freeze.frames} hold=${PAUSED_FRAME_HOLD} pulled=${freeze.pulled} ` +
+              `d=${frame.distanceMeters} split=${frame.currentSplit} spm=${frame.spm}`,
+          );
+        }
+        update({ frame, frozen: nowPaused });
         return;
       }
       // Every other phase still SEES the frame (the machine's current
@@ -2278,9 +2551,25 @@ export function useMonitorSession(
       // a burst still in flight gets a SECOND stash once they finally do
       // (rewritten from "would never reach sessionStorage" to name it,
       // storage-spine design spec §2, Task 3).
-      // sessionStorage, not localStorage: diagnostics for the tab's own
-      // lifetime, not a record. Read it back from the console:
+      // sessionStorage, not localStorage, for the two keys above:
+      // diagnostics for the tab's own lifetime, not a record. Read them
+      // back from the console:
       //   copy(sessionStorage.getItem("ergomatic:last-monitor-log"))
+      //
+      // Task 1 (lost-monitor design spec): a THIRD key, `ergomatic:
+      // last-session-log`, is written UNCONDITIONALLY below — never gated
+      // on `runRef.current !== null` the way the rowed-only key above is.
+      // The flagship case this phase exists for (armed, never pulled,
+      // phone locked before the first stroke) is exactly the case where
+      // `runRef.current` is `null` by definition, so the rowed-only key
+      // and its console-only sibling are both unreachable on the one
+      // device that matters — no console on iOS, and `MonitorLogRow`
+      // (`LogSession.tsx`) used to render only when the rowed key
+      // existed. `localStorage`, deliberately, not `sessionStorage`: a
+      // WebContent process kill is one of the probe's own three possible
+      // outcomes (design spec's §D1e) and would destroy session-scoped
+      // evidence — the instrument would erase exactly the result it
+      // exists to catch.
       const stash = (): void => {
         const log = logRef.current;
         if (log === null) return;
@@ -2296,6 +2585,7 @@ export function useMonitorSession(
           if (runRef.current !== null) {
             sessionStorage.setItem("ergomatic:last-rowed-log", exported);
           }
+          localStorage.setItem("ergomatic:last-session-log", exported);
         } catch {
           // Quota or privacy mode: diagnostics never break a teardown.
         }
@@ -2570,6 +2860,11 @@ export function useMonitorSession(
         (() => createEventLog(undefined, livenessDepsRef.current.now))
       )();
       logRef.current = log;
+      // Task 1 (lost-monitor design spec): a fresh connection tracks no
+      // hidden window yet — clears whatever a PREVIOUS connection's own
+      // background/foreground pair (or an interrupted one that never saw
+      // its matching foreground) left behind.
+      framesWhileHiddenRef.current = null;
       // S6: once per connect, straight into this session's own ring —
       // see `requestStoragePersistence`'s own doc comment for the full
       // reasoning.
@@ -2619,43 +2914,118 @@ export function useMonitorSession(
       // RESUME, where the very next frame this session sees might follow
       // an arbitrary real-world gap. `registerAppLifecycleListener` is the
       // adapter-layer seam (`src/adapters/appLifecycle.ts`); the platform
-      // conditional lives there, never here. §4's continuity rule (Task 4,
-      // not yet built by this phase) is what should ultimately arbitrate a
-      // resumed stream — until it exists, a resume LATCHES `frameSilence`
-      // immediately, same as any other silence, but the CLEARING path is
-      // real, not a claim: `transport.markSuspect()` (guarded by
+      // conditional lives there, never here.
+      //
+      // PHASE LM PR 1, FIX ROUND 2 (design spec `2026-08-26-lost-monitor-
+      // trigger-design.md`, Task 1). This handler used to latch
+      // `frameSilence: true` on EVERY foreground, unconditionally — and
+      // then read `framesWhileHidden`, the evidence that refutes it, three
+      // lines further down. It raised nine red banners in 288 s over a
+      // link that never dropped
+      // (`docs/monitor/sessions/walk-2026-08-26/`). It now MEASURES:
+      // `decideResumeLatch` (this file, above) reads the liveness snapshot
+      // we already hold and latches only when the gap since the last
+      // 0x0031 genuinely reached `SILENCE_THRESHOLD_MS`, or the watchdog
+      // has already declared silence. Alarm on the LEVEL (stream health),
+      // never on the EDGE (a lifecycle event) — the edge is only a prompt
+      // to re-measure.
+      //
+      // WHEN WE DO NOT LATCH, WE TOUCH NOTHING. Specifically: no
+      // `markSuspect()` (it does `stopTimer(); silent = true`, so with no
+      // latch and no further arrival to rearm, `onSilence` could never
+      // fire and a resume followed by genuine total silence would show
+      // NOTHING AT ALL), and no `hysteresisCancelRef` cancel (a retract
+      // window already counting down belongs to a silence this resume
+      // knows nothing about; cancelling it without re-latching would strand
+      // `frameSilence` at `true` with no timer left to clear it). Leaving
+      // the decorator's own pending timer alone is the fail-safe — the
+      // wall clock advances through suspension, so it matures on resume.
+      //
+      // When we DO latch, the clearing path is the same real one it has
+      // always been: `transport.markSuspect()` (guarded by
       // `hasMarkSuspect`) sets the liveness decorator's OWN internal
       // `silent` flag, so the very next healthy 0x0031 arrival takes the
       // decorator's EXISTING recovery branch and calls `deps.onRecovery()`
       // — the SAME `handleFrameRecovery`/`BANNER_RETRACT_HYSTERESIS_MS`
-      // path a real watchdog silence goes through.
+      // path a real watchdog silence goes through. (That routing was
+      // itself an earlier review fix: calling `update({ frameSilence:
+      // true })` here while leaving the decorator's `silent` at `false`
+      // meant `noteStatusArrival`'s `if (silent)` branch never matched, so
+      // `frameSilence` never cleared again for the rest of the session.
+      // See `markSuspect`'s own doc comment in `liveness.ts`.)
       //
-      // REVIEW FIX (this was wrong the first time this task shipped):
-      // calling `update({ frameSilence: true })` directly here, with
-      // nothing touching the decorator's own `silent` flag, left `silent`
-      // at `false` for any pre-background stream that had been healthy —
-      // so `noteStatusArrival`'s `if (silent)` branch never matched on
-      // resume, `onRecovery` never fired, and `frameSilence` never cleared
-      // again for the rest of the session on any resume shorter than
-      // `SILENCE_THRESHOLD_MS` (a Control Center swipe, a notification
-      // peek — routine, not an edge case; reproduced empirically: 30
-      // healthy frames over 15s, banner still up). `markSuspect()` is what
-      // closes that gap — see its own doc comment in `liveness.ts`.
       // Minor 1: a fresh token for THIS attempt, checked (not read back off
       // the ref) by the `.then()` below — see `lifecycleAttemptRef`'s own
       // doc comment for the race this closes.
       const lifecycleAttempt = { cancelled: false };
       lifecycleAttemptRef.current = lifecycleAttempt;
       const lifecycleResult = registerAppLifecycleListener((event) => {
+        if (event === "background") {
+          // Task 1 (lost-monitor design spec): opens a hidden window for
+          // `handleFrame`'s own counter to fill in — read back and
+          // cleared at the matching "foreground" below.
+          framesWhileHiddenRef.current = 0;
+          return;
+        }
+        // Task 1: with "background" handled above, `AppLifecycleEvent`'s
+        // only other member is "foreground" — this check is now
+        // belt-and-braces against a badly-typed native bridge, not a
+        // reachable branch under the type as declared (same posture as
+        // this file's other known-redundant guards).
         if (event !== "foreground") return;
-        hysteresisCancelRef.current?.();
-        hysteresisCancelRef.current = null;
-        update({ frameSilence: true });
+        // Snapshotted BEFORE anything below can move the decorator's own
+        // state — `markSuspect()` at the bottom of this handler sets
+        // `silent`, so reading after it would be reading our own write.
+        const snapshot = livenessRef.current?.snapshot() ?? null;
+        const { latch, gapMs } = decideResumeLatch(
+          snapshot,
+          SILENCE_THRESHOLD_MS,
+        );
+        if (latch) {
+          hysteresisCancelRef.current?.();
+          hysteresisCancelRef.current = null;
+          update({ frameSilence: true });
+        }
+        // EXIT CRITERION 4 (design spec): every resume is recorded either
+        // way, with the number the decision was made from — and the
+        // wording ASSERTS NO CAUSE. The line this replaced read "resumed
+        // from background — stream treated as suspect", which claimed a
+        // cause nobody had checked and, on the walk that produced this
+        // fix, was untrue nine times out of nine. Three producers of a
+        // silence remain undistinguished; this entry reports what was
+        // MEASURED and what was DECIDED, nothing about why.
         log.record(
           "app-lifecycle",
-          "resumed from background — stream treated as suspect",
+          `resume gap=${gapMs === null ? "unmeasured" : `${gapMs}ms`} ` +
+            `threshold=${SILENCE_THRESHOLD_MS}ms ` +
+            `silent=${snapshot === null ? "unmeasured" : snapshot.silent} ` +
+            `latched=${latch}`,
         );
-        if (hasMarkSuspect(transport)) transport.markSuspect();
+        // Task 1 (lost-monitor design spec): what arrived while hidden
+        // and what the ready gate saw, read off state this hook already
+        // tracks — the frame count, the machine's own Active declaration
+        // on the last frame seen, and the ready-gate streak's own
+        // banked-distance evidence (`nextRowingStreak`, only ever
+        // written while `phase === "ready"`, so a resume during `"live"`
+        // reports the last window that phase was in `"ready"` for, if
+        // any). Records what was observed, never why the gate did or
+        // didn't open — three producers of the identical symptom are
+        // undistinguished here on purpose.
+        const framesWhileHidden = framesWhileHiddenRef.current ?? 0;
+        framesWhileHiddenRef.current = null;
+        const lastFrame = stateRef.current.frame;
+        const streak = rowingStreakRef.current;
+        const distanceIncreased = streak !== null && streak.frames > 1;
+        log.record(
+          "resume-frames",
+          `phase=${stateRef.current.phase} framesWhileHidden=${framesWhileHidden} ` +
+            `rowingActive=${lastFrame?.rowingActive ?? "unseen"} ` +
+            `distanceIncreased=${distanceIncreased}`,
+        );
+        // Only when we latched — see this handler's own header for why
+        // calling this on a non-latching resume would disarm the watchdog
+        // and leave a genuinely silent stream showing nothing at all.
+        if (latch && hasMarkSuspect(transport)) transport.markSuspect();
       });
       if (lifecycleResult instanceof Promise) {
         void lifecycleResult.then((unsub) => {
@@ -2764,8 +3134,8 @@ export function useMonitorSession(
     //
     // WHOLE-BRANCH REVIEW B1 (RULED): `phase === "disconnected"` ALONE
     // predates Task 2, which widened what "lost" means for the SCREEN —
-    // the watchdog and the app-lifecycle resume both latch `frameSilence`
-    // with `phase` still `"live"` (a suppressed stream is not a torn-down
+    // the watchdog and a resume that MEASURED a real gap both latch
+    // `frameSilence` with `phase` still `"live"` (a suppressed stream is not a torn-down
     // connection). Without the `frameSilence` half, a rower pressing End
     // under a LOST THE MONITOR banner stored `"rower"` — the exact
     // conflation `endedBy` exists to end, reintroduced by this phase's own

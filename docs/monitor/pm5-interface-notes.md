@@ -2231,6 +2231,11 @@ alongside a recording of the panes' own numbers.
   the INSTANT path; the five-frame distance fallback never ran. RATE
   read sane too (25, then 24), which reads walk 1's "57-68" as a
   barely-moving-stroke artifact rather than a decode fault.
+  **This did NOT settle the byte — see §20 fact 13.** The reading stands
+  as a session observation, but walk 2026-08-26 later recorded the
+  OPPOSITE on the same machine (`false` on every frame of a whole row).
+  Walk 3 was right to call byte 9 an unobserved premise; one true
+  reading did not make it dependable.
 - **0x0031's Elapsed Time AND Distance ARE PER-INTERVAL, not
   session-cumulative — found and FIXED here.** The frame log carries
   the pair: `state=resting elapsed=37.81 distance=101.8` followed
@@ -4231,20 +4236,79 @@ it actually saw, so up to one status tick per boundary goes uncounted. The
 per-interval pair is still the right input for "how far into THIS interval".
 
 **13. The workout clock runs before the first pull and through a stopped
-rower; byte 9 is the only reliable first-pull signal.** The PM5 starts the
-workout clock at "row to begin", so elapsed time moves with zero meters and
-zero rate. A rower who stops mid-interval freezes meters, split and rate
-while the interval clock keeps counting down and heart rate keeps moving. A
-flywheel still coasting from a previous piece banks real meters on a piece
-the monitor does not consider started. 0x0031's byte 9 (Rowing State, 0 =
-Inactive, 1 = Active) is the machine's own declaration that rowing has
-begun, and it read TRUE on the first pull.
+rower; byte 9 is the only field that distinguishes a pull from a coast — and
+it is NOT dependable.** The PM5 starts the workout clock at "row to begin",
+so elapsed time moves with zero meters and zero rate. A rower who stops
+mid-interval freezes meters, split and rate while the interval clock keeps
+counting down and heart rate keeps moving. A flywheel still coasting from a
+previous piece banks real meters on a piece the monitor does not consider
+started. 0x0031's byte 9 (Rowing State, 0 = Inactive, 1 = Active) is the
+machine's own declaration that rowing has begun, and nothing else on the
+wire carries that fact — but it does not always carry it either.
+
+**Both readings have now been observed on the same PM5 (432331249):**
+
+- **TRUE on the first pull, and that is the ordinary case.** §18 walk 4
+  (2026-08-08, a 2×100 m) promoted on the instant path; the five-frame
+  distance fallback never ran. It has held ever since: across the 16
+  committed diagnostics rings from seven phone/laptop walks between
+  2026-08-15 and 2026-08-25, **every ring that got past the ready screen
+  carries at least one `rowingActive=true` frame line**, and
+  `docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json`'s own
+  first rowing frame reads `state=rowing elapsed=0.98 distance=3
+  rowingActive=true spm=0` — one day before the falsifying walk, same
+  machine, same phone stack.
+- **FALSE on every frame of an entire real row** — walk 2026-08-26
+  (`docs/monitor/sessions/walk-2026-08-26/README.md`, "Second finding";
+  `phone-ring.json` seq 30 and 34), a PROGRAMMED single-interval 2000 m
+  distance goal (`durationRaw=2000 durationType=128`) on iOS build 775.
+  The frame line reads `state=rowing elapsed=24.03 distance=32.9
+  rowingActive=false spm=24`; elapsed and distance advance sanely
+  throughout, so this is not a misaligned decode. **The session opened its
+  record only because the five-frame strictly-increasing-distance fallback
+  fired** (`rowing-active-fallback`, seq 34) — the only time that entry
+  appears in any committed capture, and the fallback's first observed save
+  on hardware.
+
+**So "byte 9 goes Active when the rower pulls" is FALSIFIED as a dependable
+gate, while remaining the usual behaviour.** Any predicate requiring
+`rowingState === 1` must carry a fallback or it can lose a whole session
+silently; any predicate requiring `=== 0` silently degenerates to its other
+conjuncts when the byte sticks.
+
+**What is NOT established.** One session, one machine, one workout — the
+byte is not known to be generally useless, and nothing here says why it read
+false.
+
+- **No cause is known and none is asserted.** Firmware version was not
+  captured. A free row is ruled out (the ring shows the full programming
+  handshake, seq 11-19). Workout-goal type is a weak hypothesis at best:
+  walk 4, which read TRUE, was also a distance goal. What differed from the
+  passing walks — a single long interval rather than several short ones, a
+  2.5 s frame-stream silence immediately before the first rowing frame
+  (seq 27) — is recorded as difference, not as mechanism.
+- **What byte 9 actually held.** `pm5/parse.ts` reads a strict
+  `rowingState === 1`, so ANY other value decodes to `false`, and the
+  diagnostics ring stores only the decoded boolean. That walk kept no
+  `.jsonl.gz` recording, and the raw-`0x0031` ring lines the driver does
+  emit fire on terminal states only — all of this session's raw
+  `structure` entries predate the row. **So this capture cannot
+  distinguish "the machine said Inactive" from "the machine said something
+  we do not decode."**
+- **Whether it recovers within a session.** It read false on every frame
+  that session logged; no later frame shows it going true, and no walk
+  since has re-tested it.
+
 **Official docs:** SILENT on all of it. Byte 9 appears in the BLE doc's
 layout (p.13, §10's table) as a bare enum with no stated semantics, and
 nothing describes when the clock starts.
-**Evidence:** §18 walks 1, 2, 3 and 4. Consequences worth stating: a gate
-keyed on elapsed time or on banked meters is wrong on real hardware, and a
-paused-detection key that includes elapsed can never fire.
+**Evidence:** §18 walks 1, 2, 3 and 4; the 16 rings under
+`docs/monitor/sessions/`; and `walk-2026-08-26/phone-ring.json`.
+Consequences worth stating: a gate keyed on elapsed time or on banked meters
+is wrong on real hardware; a paused-detection key that includes elapsed can
+never fire; and a gate keyed on byte 9 ALONE loses the session with no error
+anywhere, which is why `useMonitorSession.ts` carries
+`ROWING_ACTIVE_FALLBACK_FRAMES`.
 
 **14. Stroke rate is instantaneous per stroke and HOLDS its last value
 through a stop.** 0x0032's Stroke Rate is 60 divided by the stroke period,

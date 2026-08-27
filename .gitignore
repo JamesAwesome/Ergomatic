@@ -13,3 +13,12 @@ app/ios/App/Pods/
 app/ios/App/output/
 app/ios/DerivedData/
 app/ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# Worktrees live inside the repo for convenience; git must never stage one.
+# A shell cwd reset plus `git add -A` in the MAIN checkout committed an entire
+# worktree as an embedded repo on 2026-08-26 (seventh stray-write incident, and
+# the first that could have destroyed work: undoing it with --hard would have
+# deleted the worktree the commit had swallowed). The SDLC rule said "use
+# absolute paths"; the rule was written and then broken by its own author the
+# next day. This line is the mechanical version of it.
+.claude/worktrees/

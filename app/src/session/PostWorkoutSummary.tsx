@@ -71,10 +71,12 @@ export function offsetFragment(label: string): string {
  *  (multi-target) distinct values both read as "no hint" — the same
  *  `undefined` outcome, no separate branch needed, since a caller asking
  *  "was there a single honest number to anchor this hint on" gets the same
- *  answer either way. The manual (by-hand) door never calls this at all —
- *  its own caller passes the fixed `"BY FEEL"` string instead (spec:
- *  "by-hand manual door: BY FEEL" — an unconditional override, not a
- *  degenerate case of this rule). Exported for a direct, non-integration
+ *  answer either way. The by-hand door passes the fixed `"BY FEEL"` string
+ *  instead (spec: "by-hand manual door: BY FEEL" — an unconditional override,
+ *  not a degenerate case of this rule). **Phase LM Task 4 added the one
+ *  exception:** a `?from=monitor` arrival that opened no record renders
+ *  through the manual door but is NOT by-hand, so it calls this and shows the
+ *  workout's own target rather than `BY FEEL`. Exported for a direct, non-integration
  *  test (this file's own convention, matching `monitorModeRun`). */
 // eslint-disable-next-line react-refresh/only-export-components
 export function singleTargetHint(
@@ -480,8 +482,12 @@ export interface PostWorkoutSummaryProps {
    *  `null` omits the caption entirely (the F1 rule: never a bare dash). */
   pacesOffCaption: string | null;
   /** `TARGET m:ss` / `BY FEEL` / absent — see `singleTargetHint`'s own doc
-   *  comment for the derivation; the manual door's caller always passes
-   *  the literal `"BY FEEL"` string instead of calling that function. */
+   *  comment for the derivation; the manual door's caller passes the
+   *  literal `"BY FEEL"` string instead of calling that function, EXCEPT
+   *  for Phase LM Task 4's connected arrival with no record, which was
+   *  rowed against a programmed workout and so takes the same
+   *  single-target rule the connected door does (`LogSession.tsx`'s own
+   *  comment at that call site). */
   hint: string | undefined;
   expectedPain: number | null;
   held: HeldResult | null;

@@ -18,13 +18,24 @@
 //     verdict (`GridValue.judged` is `null` for them) — "programmed values
 //     are never tinted; only what actually happened gets judged".
 //  2. **Stale beats everything.** `judgeActual`'s own precedence already
-//     returns `"stale"` ahead of any comparison; `staleFor` below is the
-//     single place that decides WHEN a reading is stale (the link is lost —
-//     a real `disconnected` phase, OR frame silence past the watchdog's
-//     threshold, both routed through `connectedAxes.ts`'s `deriveLink` onto
-//     the same `"stale"` status since Phase LL Task 2/§2a — never a
-//     `disconnected` phase alone any more), so no cell can opt out of the
-//     greying.
+//     returns `"stale"` ahead of any comparison, and `SurfaceModelInput.
+//     linkLost` is the single fact that decides WHEN a reading is stale (the
+//     link is lost — a real `disconnected` phase, OR frame silence past the
+//     watchdog's threshold, both routed through `connectedAxes.ts`'s
+//     `deriveLink`), so no cell can opt out of the greying.
+//
+//     **PHASE LM MOVED THAT FACT OFF `SurfaceStatus`.** It used to be a
+//     MEMBER of that union — `"stale"` — resolved by the caller ahead of
+//     `"armed"`, which meant a surface could not be both at once. It cost a
+//     tester a workout: they locked the phone before their first pull, the
+//     link went quiet, `"stale"` evicted `"armed"`, and four displays that
+//     all hang off `armedMirror` flipped together into claiming a piece that
+//     had never begun (`1 OF 4 · WORK`, `LAST 0:00.0`, `LAST 0`, and an
+//     `EST LEFT` counting down). The two facts are independent and are
+//     carried independently now: `status` says what the surface is DOING,
+//     `linkLost` says whether we can still hear the erg. `staleFor` is gone
+//     with the member — there is nothing left to decide, only a fact to
+//     read.
 //
 // This module is pure: no React, no clock, no storage. `MonitorFrame` in,
 // display strings out.
@@ -52,22 +63,36 @@ import {
   phaseKindWord,
   totalSessionSecondsOf,
 } from "../../session/Timer";
+import { measuredIntervalCount } from "../../session/summaryModel";
 import { FREE, targetSplitDisplay } from "../../session/TimerTargets";
 
-/** What the surface itself renders differently — NOT a narrowed
- *  `ConnectedPhase` any more (connected-axes design spec §1, task 2). The
+/** WHAT THE SURFACE IS DOING — and, since Phase LM, nothing else. NOT a
+ *  narrowed `ConnectedPhase` (connected-axes design spec §1, task 2). The
  *  CALLER (`ConnectedSurface.tsx`) derives this from `connectedAxes.ts`'s
- *  four axes, in one place, in the precedence that module's own header
- *  comment writes down: `stale` (the link is lost) beats `armed` (a program
- *  sits on the machine with no session open yet — `"ready"`, once the rower
- *  has asked for the numbers, used to launder into `"live"` here via this
- *  file's own `?? "live"`; it no longer does, which is this task's whole
- *  reason to exist) beats `paused` (the freeze predicate fired) beats
- *  `live` (everything else the surface draws). `"ended"` is not a member:
+ *  four axes, in one place: `armed` (a program sits on the machine with no
+ *  session open yet — `"ready"`, once the rower has asked for the numbers)
+ *  beats `paused` (the freeze predicate fired) beats `live` (everything
+ *  else the surface draws). `"ended"` is not a member:
  *  `ConnectedSurface.tsx` renders its own hand-off frame and returns before
  *  `buildSurfaceModel` is ever called for it, so this module never has to
- *  answer for a phase with no live pane at all. */
-export type SurfaceStatus = "live" | "paused" | "stale" | "armed";
+ *  answer for a phase with no live pane at all.
+ *
+ *  **`"stale"` IS NOT A MEMBER ANY MORE (Phase LM PR 1 Task 2).** The lost
+ *  link is not something the surface is doing, it is something that has
+ *  happened to the feed, and modelling it as a fourth member of THIS union
+ *  made the two mutually exclusive: the moment the link went quiet the
+ *  surface stopped being `armed`, and the four displays keyed on
+ *  `armedMirror` all collapsed at once (see this file's header). It rides
+ *  `SurfaceModelInput.linkLost` instead, alongside whichever of the three
+ *  members is true — a surface can now be armed AND unheard, which is
+ *  exactly the state that cost a tester a workout.
+ *
+ *  Deleting it did NOT change what a lost link looks like at any other
+ *  status: `livePace`/`liveRate` and `ConnectedSurface`'s own paused block
+ *  each carry the "a lost link beats a frozen erg" precedence explicitly
+ *  now, where the member used to carry it implicitly by winning the
+ *  ternary. Only the ARMED case moves, and that is the fix. */
+export type SurfaceStatus = "live" | "paused" | "armed";
 
 /** One live actual, ready to place: the formatted string and the verdict
  *  that colours it. `absent` is NOT a fifth judgement — it is "there is no
@@ -107,14 +132,22 @@ export function judgedValue(args: {
   };
 }
 
-/** WHEN a reading is stale, in one place. Only the lost link makes a number
- *  unvouchable: a paused erg is still talking to us, it just isn't moving
- *  (`useMonitorSession`'s own paused derivation is "distance/split/rate
- *  unchanged across N frames", not "no frames"), so paused values are held
- *  and greyed by their own treatment, not judged `"stale"`. */
-export function staleFor(status: SurfaceStatus): boolean {
-  return status === "stale";
-}
+// `staleFor(status)` USED TO LIVE HERE (deleted, Phase LM PR 1 Task 2). It
+// answered "is this reading stale" by asking whether the status word was
+// `"stale"`, which is the whole defect this task removes: the answer is a
+// property of the FEED, not of what the surface is doing, and asking the
+// status for it is what made a lost link and an armed program mutually
+// exclusive. `SurfaceModelInput.linkLost` carries the fact directly now and
+// `buildSurfaceModel` reads it once into its own `stale` local, so there is
+// still exactly one place the greying is decided — it is just not a
+// function any more, because there is no longer a decision to make.
+//
+// The rule it documented survives unchanged and is worth keeping written
+// down: only the lost link makes a number unvouchable. A paused erg is
+// still talking to us, it just isn't moving (`useMonitorSession`'s own
+// freeze predicate is "distance/split/rate unchanged across N frames", not
+// "no frames"), so paused values are held and greyed by their own
+// treatment, never judged `"stale"`.
 
 /** The NEXT line's own extent phrase (design spec §"Composition", Item B):
  *  `1500m` for a distance phase, the house duration format for a time one.
@@ -296,6 +329,19 @@ export interface SurfaceModelInput {
    *  render is, and a `// @ts-expect-error` test pins that a missing one is
    *  a compile error, not a silent live surface. */
   status: SurfaceStatus;
+  /** CAN WE STILL HEAR THE ERG? An INDEPENDENT fact, not a fourth
+   *  `SurfaceStatus` member (Phase LM PR 1 Task 2 — see that type's own doc
+   *  comment for the workout this cost). The caller derives it from the one
+   *  axis that answers it, `connectedAxes.ts`'s `deriveLink() === "lost"`,
+   *  which covers both a real `disconnected` phase and frame silence past
+   *  the watchdog's threshold (Phase LL Task 2/§2a).
+   *
+   *  Required, not optional, for the same reason `status` is: every caller
+   *  must SAY whether the link is up. A default would let a caller that
+   *  forgot silently render a healthy link over a dead one, which is the
+   *  exact class of laundering (`?? "live"`) this module already deleted
+   *  once. */
+  linkLost: boolean;
   frame: MonitorFrame | null;
   deviceName: string | null;
   /** Everything the machine has reported finishing, straight off the hook.
@@ -375,6 +421,15 @@ export interface SurfaceModel {
   status: SurfaceStatus;
   /** Every actual is greyed and unjudgeable. */
   stale: boolean;
+  /** HOW MANY INTERVALS THE MACHINE ACTUALLY MEASURED (Phase LM PR 1 Task
+   *  3). The lost banner names this number out loud, so it must be the
+   *  number the summary screen agrees with minutes later — it is
+   *  `summaryModel.ts`'s own `measuredIntervalCount`, imported rather than
+   *  re-derived, and that module's "measured-anything rule" section
+   *  carries the reasoning. Zero is the case the banner exists for: a
+   *  surface that lost the link before the first pull has nothing to keep,
+   *  and the old copy promised it would keep it anyway. */
+  measuredIntervals: number;
   /** Filled indicator square (linked) vs hollow (link lost). */
   linked: boolean;
   /** `PM5 430123456`, or `PM5 430123456 · LOST`. */
@@ -408,11 +463,13 @@ export interface SurfaceModel {
    *  (`3 OF 12 · 38:20 LEFT`), so a later task reads the ordinal without
    *  re-parsing the phase word back out of the combined caption. */
   intervalOrdinalLabel: string | null;
-  /** `LAST` once the link is gone (handoff §4); `""` every other status.
+  /** `LAST SEEN` once the link is gone (handoff §4's `LAST`, widened by
+   *  Phase LM PR 1 Task 3 — see the return site for why); `""` every other
+   *  status.
    *  CR2 spec 3 Task 2 (design spec §3 fate table, "Stale" table): the
    *  `NOW` branch DIES with the hero labels themselves — 2A's own table
-   *  cuts `NOW`/`TARGET`/`UP NEXT` labels from LIVE outright, so `LAST` is
-   *  now the only word this field ever produces, and `PaneLive.tsx`'s
+   *  cuts `NOW`/`TARGET`/`UP NEXT` labels from LIVE outright, so that is
+   *  now the only caption this field ever produces, and `PaneLive.tsx`'s
    *  existing `!== ""` guard already renders nothing for every other
    *  status with no pane-file change required. The unit used to ride in
    *  this label (`NOW · /500M`); testers asked for it beside the NUMERAL
@@ -581,8 +638,22 @@ export interface SurfaceModel {
  *  a reading; it maps to the same `null` the paused case takes, so the
  *  hero renders the dash in ink and judgement colours appear only once a
  *  real split exists. */
-function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
-  if (status === "paused") return null;
+function livePace(
+  frame: MonitorFrame,
+  status: SurfaceStatus,
+  linkLost: boolean,
+): number | null {
+  // A LOST LINK BEATS A FROZEN ERG, said out loud (Phase LM PR 1 Task 2).
+  // This precedence is not new — `"stale"` used to be a `SurfaceStatus`
+  // member the caller resolved AHEAD of `"paused"`, so a lost link simply
+  // never arrived here wearing the paused word and the suppression below
+  // never ran. With the link carried independently the two can now be true
+  // at once, so the order has to be written rather than inherited from a
+  // ternary: while the link is down the pane keeps the last reading it
+  // actually had, greyed and unjudged, instead of blanking it to the
+  // paused dash. Identical pixels to before this task at every non-armed
+  // status; the deletion of the member is what would have changed them.
+  if (status === "paused" && !linkLost) return null;
   return frame.currentSplit === 0 ? null : frame.currentSplit;
 }
 
@@ -601,8 +672,13 @@ function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
  *  absence rule already covers it), so this function is shorter than
  *  `livePace`: paused suppresses, everything else passes the frame's spm
  *  straight through. */
-function liveRate(frame: MonitorFrame, status: SurfaceStatus): number | null {
-  if (status === "paused") return null;
+function liveRate(
+  frame: MonitorFrame,
+  status: SurfaceStatus,
+  linkLost: boolean,
+): number | null {
+  // Same precedence, same reason, as `livePace` just above.
+  if (status === "paused" && !linkLost) return null;
   return frame.spm;
 }
 
@@ -730,7 +806,9 @@ function avgValue(args: {
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const { phases, program, deviceName, status } = input;
   const frame = input.frame ?? NO_FRAME;
-  const stale = staleFor(status);
+  // ONE READ, one local, every stale consumer below (Phase LM PR 1 Task 2 —
+  // `staleFor` is gone; see the note where it used to live).
+  const stale = input.linkLost;
 
   // THE SESSION'S OWN RUNNING TOTAL (connected-metrics design spec, "Total
   // meters (whole session)"): exposed here because `PaneLive` reads only
@@ -840,7 +918,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     frame.distanceMeters <= MID_SESSION_RESET_METERS;
   const mirrored = armedMirror || midSessionMirror;
 
-  const rawPace = livePace(frame, status);
+  const rawPace = livePace(frame, status, stale);
   const cappedPace =
     rawPace !== null && rawPace > PACE_HERO_CAP_SECONDS ? null : rawPace;
   // The ACTUAL slot substitutes; the TARGET slot rendered beneath it
@@ -864,7 +942,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // frame still gets its `0` regardless of `status`, and `liveRate`'s own
   // paused suppression only ever applies on the branch mirroring is not
   // already deciding.
-  const rateActual = mirrored ? 0 : liveRate(frame, status);
+  const rateActual = mirrored ? 0 : liveRate(frame, status, stale);
   const rateJudgeTarget = mirrored ? null : targetSpm;
 
   const pace = judgedValue({
@@ -1113,8 +1191,9 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   return {
     status,
     stale,
-    linked: status !== "stale",
-    deviceCaption: deviceCaptionFor(deviceName, status),
+    measuredIntervals: measuredIntervalCount(input.actuals),
+    linked: !stale,
+    deviceCaption: deviceCaptionFor(deviceName, stale),
     intervalLabel: ordinal === null ? kindWord : `INTERVAL ${counted}`,
     // ARMED READS READY (CR2 spec 3 Task 2, design spec §2D — the READY
     // word ships HERE). Not-armed is entirely unchanged from before this
@@ -1138,7 +1217,27 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // precedence, one fewer case. `PaneLive.tsx` renders nothing for the
     // empty string, the same "absent, not blank" idiom the target-ref
     // caption beside it already uses.
-    nowLabel: stale ? "LAST" : "",
+    //
+    // ARMED STILL CARRIES NO LABEL EVEN WITH THE LINK DOWN (Phase LM PR 1
+    // Task 2 — the FIFTH consumer, which the task brief's own table of four
+    // did not name and which the fix would otherwise have left wrong). Once
+    // `armed` survives a lost link, the split hero beneath this label shows
+    // the TARGET as a preview (`armedMirror`, above), and a number nobody
+    // has rowed captioned `LAST SEEN` is a stronger lie than the one this
+    // task is fixing: it says we measured it. The caption is only ever
+    // honest about a reading that WAS live, so it is suppressed at armed
+    // exactly as it is
+    // at every other status where nothing was ever now. The walk's own
+    // screen showed `LAST 0:00.0` for this reason.
+    //
+    // `LAST SEEN`, NOT `LAST` (Phase LM PR 1 Task 3, Gate 0). The bare
+    // word reads as an ordinal — the last of several readings, the most
+    // recent one — which is exactly the impression a held number must not
+    // give. The fact the rower needs is that this is the last value we
+    // HEARD, and that it stopped being current at a moment nobody told
+    // them about. Two words buy that; the same greying (`--ink-3`) that
+    // covers every other stale value covers the number underneath it.
+    nowLabel: stale && !armedMirror ? "LAST SEEN" : "",
     // ARMED'S UP-NEXT IS THE FIRST INTERVAL FORWARD (design spec §2D,
     // antagonist correction 2): today's `connectedNextText(phases,
     // phaseIndex)` names `phases[phaseIndex + 1]` — the coming REST at
@@ -1374,9 +1473,10 @@ export function buildGridModel(args: {
       // judgement the rower had earned, on the one pane whose job is to show
       // what they have done, the moment a link dropped.
       //
-      // `staleFor` stays "the single place that decides WHEN a reading is
-      // stale" — this is not a second opinion about when, it is a cell that
-      // holds no reading to ask about.
+      // `input.linkLost` stays "the single place that decides WHEN a reading
+      // is stale" (Phase LM Task 2 retired `staleFor`, and `SurfaceStatus`
+      // can no longer express the link at all) — this is not a second
+      // opinion about when, it is a cell that holds no reading to ask about.
       const pace = judgedValue({
         kind: "pace",
         actual: actual?.avgSplit ?? null,
@@ -1598,8 +1698,8 @@ export function splitHero(display: string): [string, string] {
  *  caption states the fact, `LOST`, and promises nothing. */
 function deviceCaptionFor(
   deviceName: string | null,
-  status: SurfaceStatus,
+  linkLost: boolean,
 ): string {
   const name = deviceName ?? "PM5";
-  return status === "stale" ? `${name} · LOST` : name;
+  return linkLost ? `${name} · LOST` : name;
 }

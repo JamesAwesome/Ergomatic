@@ -33,6 +33,41 @@ describe("useWorkouts", () => {
     expect(result.current.workouts).toStrictEqual(rows);
   });
 
+  // RC-21. A 200 whose body is not an array used to reach `state: "ready"`
+  // with a non-array, and `RetestShortcut` then threw
+  // `workouts.find is not a function`, taking down the You screen. The
+  // component's own guard (`state !== "ready"`) is correct; the invariant
+  // "ready implies array" was the only thing holding, and a bare `as` cast
+  // does not hold it. Reachable from an error envelope, `null`, `{}`, or the
+  // HTML a captive portal serves with a 200.
+  it.each([
+    ["an error envelope", JSON.stringify({ error: "nope" })],
+    ["null", "null"],
+    // Real HTML rejects in res.json() and reaches the pre-existing .catch;
+    // this row is a JSON STRING, which parses fine and is still not a list.
+    // Named for what it sends (scoped review finding 4).
+    ["a JSON string body, not a list", JSON.stringify("<html></html>")],
+  ])(
+    "a 200 carrying %s fails into error, never ready",
+    async (_label, body) => {
+      vi.doMock("../api", () => ({
+        api: vi.fn(
+          async () =>
+            new Response(body, {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }),
+        ),
+      }));
+      const { useWorkouts } = await import("./useWorkouts");
+      const { result } = renderHook(() => useWorkouts());
+      await waitFor(() => expect(result.current.state).toBe("error"));
+      // The retry the error state already carries is the recovery path.
+      if (result.current.state !== "error") throw new Error("expected error");
+      expect(typeof result.current.retry).toBe("function");
+    },
+  );
+
   it("surfaces a retry when the request fails", async () => {
     const apiMock = vi.fn(async () => new Response("nope", { status: 500 }));
     vi.doMock("../api", () => ({

@@ -152,8 +152,53 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: "v0.17.0",
     date: "2026-08-22",
     items: [
+      // RE-CHECKED AGAINST THE REWRITTEN BANNER (Phase LM PR 1 Task 3,
+      // 2026-08-25) and left as it stands, clause by clause. Task 3
+      // rewrites the banner's BODY and fills it red; this item quotes
+      // neither. `LOST THE MONITOR` is still the title, in both of the
+      // branches the body now has, and deliberately so — it is what a
+      // tester has learned to recognise and what this note tells them to
+      // expect. "The live numbers visibly freeze" is more true than it
+      // was, not less: the session metre counter now greys with the
+      // heroes instead of holding at full ink, and both heroes read `LAST
+      // SEEN`. The ten-second healthy-stream hold is the watchdog's, which
+      // this task does not touch. The item's scenario is a link dying
+      // MID-ROW; the never-started case Phase LM exists for is a
+      // different screen and this note makes no claim about it.
+      //
+      // **THAT ALL-CLEAR IS NOW PARTLY FALSE — 2026-08-26, and the shipped
+      // string below carries TWO falsified clauses.** It was re-checked
+      // against the new CODE and never against the phase's own
+      // no-asserting-a-cause CONSTRAINT, which is a different check.
+      //   1. "so it cannot flicker at you" — it flickered NINE times in
+      //      288 seconds on a link that never dropped
+      //      (`docs/monitor/sessions/walk-2026-08-26/`). Fixed now, but the
+      //      sentence was false when shipped.
+      //   2. "a phone call taking the app to the background" names a CAUSE,
+      //      and the wrong one: the trigger was iOS's active/inactive
+      //      signal, which a Control Center swipe or a notification peek
+      //      raises. A phone call has never been observed causing it.
+      // **DO NOT edit the v0.17.0 string to fix this.** Testers do not
+      // re-read an old version's entry, so a correction there has an
+      // audience of zero. The correction belongs IN FULL in the v0.24.0
+      // entry — tracked at ROADMAP `## Phase LM — owed work`, not only in a
+      // design spec, because the next person to edit this file reads this
+      // comment and not the spec.
       "If the Bluetooth link dies mid-row, the app now says so, within a few seconds: LOST THE MONITOR appears, the live numbers visibly freeze instead of pretending, and the banner stays up until the stream has been genuinely healthy for ten seconds, so it cannot flicker at you. This covers the ways a link dies silently: switching Bluetooth off and on, a phone call taking the app to the background, and drops the app used to swallow.",
-      "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up. (Corrected 2026-08-23: the record knows the difference; the history screen does not show it yet. That surface is coming.)",
+      // RECONCILED BY Phase LM PR 1 Task 4 (2026-08-25), which is what the
+      // spec asked this task to decide. The sentence WAS false as a
+      // general claim once Task 3 kept the lost banner up in the pre-row
+      // state: a session the app never heard a pull from opens no record
+      // at all, so nothing is stored as link-lost and the save falls
+      // through the manual door. The claim is narrowed to the case it is
+      // true of (a link lost mid-row) rather than deleted, because that
+      // case still holds exactly as shipped; and the second correction
+      // states BOTH halves of Task 4's option 2 — what the tester sees at
+      // save time, and what the stored row still says — so this note
+      // cannot over-claim the way its first correction had to walk back.
+      // Cause-free by the phase's own constraint: three producers of the
+      // silence are undistinguished, so it says what we saw, never why.
+      "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up. (Corrected 2026-08-23: the record knows the difference; the history screen does not show it yet. That surface is coming.) (Corrected 2026-08-25: only for a link lost mid-row. If the app never heard a pull there is no record to mark: the end-of-session screen says NO MONITOR READING, and the saved row still reads LOGGED BY HAND.)",
       "A failed connection attempt no longer poisons the next one. Try Again genuinely starts over, and the app asks your phone what it is already connected to before offering to connect again.",
       "There is a connection log now, one tap from the failure screen, with timestamps. If something goes wrong at the erg, copying that log is the single most useful thing you can send.",
     ],

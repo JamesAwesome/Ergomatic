@@ -75,6 +75,12 @@ import { deriveAxes } from "../monitor/connectedAxes";
 import type { MonitorSession } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import type { EnginePhase } from "../session/engine";
+// The ended frame's own consumer of the measured-anything rule (fix round,
+// whole-branch review HIGH). `buildSurfaceModel` reads the same function
+// for `SurfaceModel.measuredIntervals`, but it is never called on the
+// ENDED frame (see that branch's own comment), so this screen reads the
+// rule directly rather than inventing a second one.
+import { measuredIntervalCount } from "../session/summaryModel";
 import ConnectionLine from "./connected/ConnectionLine";
 import ConnectionLogSheet from "./connected/ConnectionLogSheet";
 import PaneGrid from "./connected/PaneGrid";
@@ -395,27 +401,73 @@ export default function ConnectedSurface({
     // spec §1, task 2: the type dropped it outright) — `buildSurfaceModel`
     // is never called for this frame, which is drawn straight off `session`
     // instead.
+    //
+    // THE PROMISE IS CONDITIONAL NOW (fix round, whole-branch review HIGH).
+    // "Your numbers are kept." used to be unconditional, and the flagship
+    // path runs straight through here: `endSession` calls `closeRecord`,
+    // which records `close-no-record` and returns early because there is no
+    // run, and then flips the phase to `"ended"` regardless. So the rower
+    // who locked their phone before their first pull met three screens in
+    // a row — the banner's "Nothing kept.", this line promising the
+    // opposite, and the summary's "NO MONITOR READING" — with the middle
+    // one the only false member of the three. This phase's own thesis,
+    // inverted, on this phase's own path.
+    //
+    // ONE RULE, NOT A SECOND NOTION OF MEASURED. `measuredIntervalCount` is
+    // `summaryModel.ts`'s exported measured-anything rule, the same one the
+    // banner's `kept` count and the summary's TARGETS ONLY caption read
+    // (design spec exit criterion 5, "one rule plus one adapter per
+    // consumer"). A locally invented "any actual at all" test would
+    // disagree with both of them on a sub-second boundary, which is exactly
+    // the disagreement the shared rule exists to prevent.
+    //
+    // THE ZERO BRANCH NAMES NO CAUSE, and must not learn to: three
+    // producers of the silence are undistinguished here (the design spec's
+    // own "What we do NOT know"). It also drops "The monitor finished it."
+    // — the ending's AUTHOR is not what makes the promise true, the
+    // MEASUREMENT is, and a machine-finished session that measured nothing
+    // (an armed program the PM5 completed with no pull ever seen —
+    // `openHandoffHold`'s own doc comment names that shape) has nothing to
+    // keep either. Four words, per this surface's own copy constraint.
+    const kept = measuredIntervalCount(session.actuals);
     return (
       <main className="screen connected-surface connected-surface-ended">
         <p className="connected-status-label">SESSION ENDED</p>
         <p className="connected-serif-line">That is the session</p>
         <p className="connected-body-line">
-          {session.endedBy === "machine"
-            ? "The monitor finished it. Your numbers are kept."
-            : "Your numbers are kept."}
+          {kept === 0
+            ? "No numbers to keep."
+            : session.endedBy === "machine"
+              ? "The monitor finished it. Your numbers are kept."
+              : "Your numbers are kept."}
         </p>
       </main>
     );
   }
 
-  // THE STATUS PRECEDENCE, REALIZED (connected-axes design spec §1;
-  // `connectedAxes.ts`'s own header comment names the order this collapses
-  // to: `ended > disconnected > (armed | mirror | live)`). `ended` is
-  // handled above, before axes are even derived, so this is the one
-  // decision left: `stale` (the link is lost) beats `armed` (a program sits
-  // on the machine with no session open yet — `"ready"`, once the rower has
-  // asked for the numbers) beats `paused` (the freeze predicate fired)
-  // beats `live` (everything else).
+  // TWO INDEPENDENT FACTS, NOT ONE RANKED LIST (Phase LM PR 1 Task 2 —
+  // this replaces the single four-way ternary that used to live here).
+  //
+  // The old version resolved `stale` (the link is lost) AHEAD of `armed` (a
+  // program sits on the machine with no session open yet) into one
+  // `SurfaceStatus`, which made them mutually exclusive. A rower who locked
+  // their phone before their first pull met exactly that combination: the
+  // phase never left `"ready"`, the frames went quiet, `stale` won, and
+  // every display keyed on `armedMirror` flipped together into describing a
+  // piece that had never begun — `1 OF 4 · WORK`, `LAST 0:00.0`, `LAST 0`,
+  // and an `EST LEFT` counting down. It cost them the workout and it took
+  // two days to find, because the screen looked like a session in progress.
+  //
+  // THE FIX IS NOT A REORDER. Putting `armed` first in the same ternary
+  // would have traded one wrong screen for another: the surface would have
+  // said READY and stopped saying it had lost the erg. `linkLost` is passed
+  // ALONGSIDE the status instead, so both are told at once — the header
+  // reads `1 OF 4 · READY` and the device caption reads `· LOST` on the
+  // same frame.
+  //
+  // `status` is now activity only, in the surviving precedence: `armed`
+  // beats `paused` (the freeze predicate fired) beats `live` (everything
+  // else). `ended` is handled above, before axes are even derived.
   //
   // `failureLeavesLinkUp: null` — the conservative "no evidence of a
   // surviving link" reading (`AxesInput`'s own doc comment) — is not a
@@ -434,23 +486,27 @@ export default function ConnectedSurface({
     runOpen: session.runOpen,
     failureLeavesLinkUp: null,
     // Phase LL Task 2 (§2a): the one live consumer of this axis —
-    // `deriveLink` routes it onto the EXISTING `"lost"` member, which this
-    // component's own `status` ternary below already treats as `"stale"`.
+    // `deriveLink` routes it onto the EXISTING `"lost"` member, which is
+    // what `linkLost` below reads.
     frameSilence: session.frameSilence,
   });
+  // THE LINK, ON ITS OWN. One axis answers it — a real `disconnected`
+  // phase or frame silence past the watchdog both land on `"lost"`
+  // (`deriveLink`) — and it travels to the model beside `status`, never
+  // through it.
+  const linkLost = axes.link === "lost";
   const status: SurfaceStatus =
-    axes.link === "lost"
-      ? "stale"
-      : axes.program === "armed" && axes.session === "none"
-        ? "armed"
-        : axes.activity === "frozen"
-          ? "paused"
-          : "live";
+    axes.program === "armed" && axes.session === "none"
+      ? "armed"
+      : axes.activity === "frozen"
+        ? "paused"
+        : "live";
 
   const model = buildSurfaceModel({
     phases,
     program,
     status,
+    linkLost,
     frame: session.frame,
     deviceName: session.deviceName,
     actuals: session.actuals,
@@ -554,7 +610,7 @@ export default function ConnectedSurface({
           {end.armed ? "TAP AGAIN" : "END"}
         </button>
       </div>
-      {model.stale && <LostBanner />}
+      {model.stale && <LostBanner kept={model.measuredIntervals} />}
       <div className="connected-surface-body">
         {pane === "live" && <PaneLive model={model} />}
         {pane === "grid" && <PaneGrid model={model} />}
@@ -576,7 +632,17 @@ export default function ConnectedSurface({
           `1fr` track rather than painting over it, so TOTAL LEFT and its bar
           stay fully on screen every frame the block is up. */}
       <div className="connected-surface-footer">
-        {model.status === "paused" && (
+        {/* A LOST LINK BEATS A FROZEN ERG, said out loud (Phase LM PR 1
+            Task 2). This precedence is not new: `"stale"` used to be a
+            `SurfaceStatus` member the ternary above resolved AHEAD of
+            `"paused"`, so a lost link never reached this line wearing the
+            paused word. Now that the link rides its own field the two can
+            be true at once, and the order has to be written rather than
+            inherited. It stays as it was for a reason — `PULL TO RESUME`
+            over a dead feed instructs the rower to fix something the pull
+            cannot fix, and the lost banner above is the message that
+            actually applies. */}
+        {model.status === "paused" && !model.stale && (
           <PausedBlock armed={end.armed} onEnd={handleEnd} />
         )}
       </div>
@@ -611,13 +677,47 @@ export default function ConnectedSurface({
  *  lose-and-degrade"), because no transport this app ships can reconnect
  *  mid-piece. So the banner states the fact and what still works, and
  *  nothing on it moves. The `RECONNECTED · CAUGHT UP` banner and the grid
- *  backfill go with the same descope. */
-function LostBanner() {
+ *  backfill go with the same descope.
+ *
+ *  IT NOW BRANCHES, AND IT IS SHORT (Phase LM PR 1 Task 3).
+ *
+ *  The old body — "Row on. The erg is still counting and End keeps what we
+ *  saw." — was twelve words that promised a rower something we had no way
+ *  to deliver in exactly the case that costs them a workout. It is true
+ *  whenever we saw something. A tester who locked their phone before their
+ *  first pull read it, rowed, and lost the piece: nothing had been
+ *  measured, so End kept nothing. James on the wording, 2026-08-25: "Too
+ *  much prose. Holy fuck why is everything a whole sentence. This is a
+ *  workout app people aren't going to read a fucking novel of warnings."
+ *  A rower reads this mid-stroke or not at all, so the whole banner is a
+ *  title plus at most four words (Gate 0).
+ *
+ *  `kept` is `SurfaceModel.measuredIntervals`, which is
+ *  `summaryModel.ts`'s own rule (`measuredIntervalCount`) rather than a
+ *  count this screen invented — the summary screen judges the SAME run
+ *  minutes later, and a banner saying two intervals were kept over a
+ *  summary reading TARGETS ONLY · NOTHING MEASURED is the disagreement
+ *  that rule exists to prevent.
+ *
+ *  IT NAMES NO CAUSE, in either branch, and must not learn to. Three
+ *  producers of the silence are undistinguished here — the design spec's
+ *  own "What we do NOT know" — so the banner says what was observed and
+ *  stops. It also promises no recovery: nothing the rower does to their
+ *  phone brings back a reading that was never taken.
+ *
+ *  The title is the SAME in both branches on purpose. It is what the rower
+ *  has already learned to recognise, it is what the shipped v0.17.0
+ *  release note tells them to expect, and the fact it states — we have
+ *  lost the monitor — is equally true either way. Only the promise
+ *  underneath it changes. */
+function LostBanner({ kept }: { kept: number }) {
   return (
     <div className="connected-lost" role="status">
       <span className="connected-lost-title">LOST THE MONITOR</span>
       <span className="connected-lost-body">
-        Row on. The erg is still counting and End keeps what we saw.
+        {kept === 0
+          ? "Nothing kept."
+          : `${kept} ${kept === 1 ? "interval" : "intervals"} kept.`}
       </span>
     </div>
   );

@@ -44,7 +44,12 @@ import {
   type FakeScript,
   type FakeTimelineEvent,
 } from "./transports/fake";
-import { withLiveness, type LivenessDeps } from "./transports/liveness";
+import {
+  SILENCE_THRESHOLD_MS,
+  withLiveness,
+  type LivenessDeps,
+  type LivenessSnapshot,
+} from "./transports/liveness";
 import { fromHexString, parseRecording } from "./transports/recording";
 import {
   parseAdditionalStatus2,
@@ -58,6 +63,7 @@ import {
   applyContinuityCheck,
   BANNER_RETRACT_HYSTERESIS_MS,
   BURST_LINGER_MS,
+  decideResumeLatch,
   defaultLivenessSchedule,
   handleFrameRecovery,
   handleFrameSilence,
@@ -66,6 +72,7 @@ import {
   nextRowingStreak,
   PAUSED_FRAME_HOLD,
   programHasDistanceGoal,
+  PULL_EVIDENCE_FRAMES,
   recordLivenessRecovery,
   recordLivenessSilence,
   useMonitorSession,
@@ -2883,6 +2890,35 @@ describe("useMonitorSession: ending", () => {
     status(200, { elapsedSeconds: 40, distanceMeters: 140 }),
   ];
 
+  /** Task 1 (lost-monitor design spec): the flagship shape this phase
+   *  exists for — connected, programmed, armed, and never pulled (the
+   *  ready gate never sees flywheel evidence, so no run ever opens).
+   *  `teardown` drives the REAL `endSession()` path (not `cancel()`), so
+   *  both `closeRecord`'s own null-run branch and the ordinary teardown
+   *  stash run for real, then unmounts (the hook's own `teardown()` runs
+   *  from the unmount effect, same as every other test in this file). */
+  async function arriveArmedWithoutRowing(): Promise<{
+    result: Session;
+    teardown: () => Promise<void>;
+  }> {
+    const { result, fake, unmount } = harness({
+      program: TWO_INTERVALS,
+      events: timeline,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+    return {
+      result,
+      teardown: async (): Promise<void> => {
+        await act(async () => {
+          await result.current.endSession();
+        });
+        unmount();
+      },
+    };
+  }
+
   it("the rower's End closes the record, terminates the erg, and reports endedBy user", async () => {
     const { result, fake, transport } = harness({
       program: TWO_INTERVALS,
@@ -3102,6 +3138,29 @@ describe("useMonitorSession: ending", () => {
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(
       "THE ROW I MEANT TO COPY",
     );
+  });
+
+  it("stashes the diagnostics log even when no run was ever created (the never-rowed case)", async () => {
+    const { teardown } = await arriveArmedWithoutRowing();
+    await teardown();
+
+    const stash = localStorage.getItem("ergomatic:last-session-log");
+    expect(stash).not.toBeNull();
+    expect((JSON.parse(stash!) as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it("Task 1 (lost-monitor design spec): endSession closing with no record open writes a close-no-record entry naming what was closed, not why nothing was there", async () => {
+    const { teardown } = await arriveArmedWithoutRowing();
+    await teardown();
+
+    const stash = localStorage.getItem("ergomatic:last-session-log");
+    const entries = JSON.parse(stash!) as { kind: string; detail: string }[];
+    const closeNoRecord = entries.find((e) => e.kind === "close-no-record");
+    expect(closeNoRecord).toBeDefined();
+    // Observed call parameters only — endedBy/terminated, never a reason
+    // for why the record was never opened (the hard constraint against
+    // stating a cause for the silence).
+    expect(closeNoRecord!.detail).toBe("endedBy=rower terminated=true");
   });
 
   it("End is idempotent against the terminal event its own terminate() provokes", async () => {
@@ -4499,18 +4558,55 @@ const RECORDED_BOUNDARY_RESET: MonitorFrame[] = [
   }),
 ];
 
-/** log lines 3546-3551, plus one later frame from the same stretch: the
- *  rower stops. Two moving frames, then the three keyed metrics freeze at
+/** log lines 3542-3551, plus one later frame from the same stretch: the
+ *  rower stops. SIX moving frames, then the three keyed metrics freeze at
  *  `108.4 / 236.75 / 16` (the elapsed `57.78` alongside them is the empty
  *  arm's own artifact, not part of the key) — and stay frozen for 216 consecutive
  *  frames (3548-3763, where split and spm finally zero), with the heart
- *  rate moving the whole time. The seventh fixture frame below (HR 60) is
+ *  rate moving the whole time. The last fixture frame below (HR 60) is
  *  a real frame from further down that stretch, not line 3552 — HR 60
  *  occurs 24 times inside it; it is here to carry the HR movement into the
  *  fixture, and its keyed metrics are the same frozen three. spm PINNED at
  *  16, not zeroed: the observation that killed the original `spm === 0`
- *  predicate. */
+ *  predicate.
+ *
+ *  IT STARTS FOUR FRAMES EARLIER THAN IT USED TO (`:3542-3545`, still
+ *  verbatim), because the predicate now asks whether THIS interval has
+ *  seen a pull before it will call anything a pause (`PULL_EVIDENCE_FRAMES`).
+ *  The old six-frame window opened two frames before the stop, which is
+ *  less rowing than a real stopped rower has ever done — the fixture was
+ *  shorter than the behaviour it stands for, recurring failure #3. These
+ *  four lines are the same continuous stretch of the same recording, not a
+ *  hand-built runway. */
 const RECORDED_STOP: MonitorFrame[] = [
+  frame({
+    elapsedSeconds: 55.06,
+    distanceMeters: 103.8,
+    currentSplit: 236.75,
+    spm: 16,
+    heartRateBpm: 83,
+  }),
+  frame({
+    elapsedSeconds: 55.53,
+    distanceMeters: 104.7,
+    currentSplit: 236.75,
+    spm: 16,
+    heartRateBpm: 83,
+  }),
+  frame({
+    elapsedSeconds: 56.05,
+    distanceMeters: 105.6,
+    currentSplit: 236.75,
+    spm: 16,
+    heartRateBpm: 83,
+  }),
+  frame({
+    elapsedSeconds: 56.54,
+    distanceMeters: 106.4,
+    currentSplit: 236.75,
+    spm: 16,
+    heartRateBpm: 83,
+  }),
   frame({
     elapsedSeconds: 57.04,
     distanceMeters: 107.3,
@@ -4601,9 +4697,13 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     const { runs, everPaused } = replay(RECORDED_STOP);
 
     expect(everPaused).toBe(true);
-    // Frames 0-1 are still moving; the freeze starts at index 2, so the
-    // fourth frozen frame is index 5.
+    // Frames 0-5 are still moving; the freeze starts at index 6, so the
+    // fourth frozen frame is index 9.
     expect(runs.map(isPausedRun)).toStrictEqual([
+      false,
+      false,
+      false,
+      false,
       false,
       false,
       false,
@@ -4646,6 +4746,19 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     heartRateBpm: 61,
   };
 
+  /** The recorded stop's own five progressing frames (`:3542-3546`,
+   *  103.8 -> 107.3), folded in before a hand-built hold. The predicate
+   *  will not call anything a pause until THIS interval has produced pull
+   *  evidence (`PULL_EVIDENCE_FRAMES`), so a hold assembled out of nothing
+   *  but identical frames is a rower who never started — the case the
+   *  false-pause tests below own. Every assertion here is about the KEY, so
+   *  each one starts from a rower who genuinely rowed first. */
+  function afterAPull(): FreezeRun {
+    let run: FreezeRun | null = null;
+    for (const f of RECORDED_STOP.slice(0, 5)) run = nextFreezeRun(run, f);
+    return run!;
+  }
+
   it.each([
     ["distanceMeters", { distanceMeters: 109.2 }],
     ["currentSplit", { currentSplit: 231.4 }],
@@ -4654,7 +4767,7 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     "a frame that changes ONLY %s breaks a three-frame hold",
     (_metric, moved) => {
       const held = frame(FROZEN);
-      let run = nextFreezeRun(null, held);
+      let run = nextFreezeRun(afterAPull(), held);
       run = nextFreezeRun(run, held);
       run = nextFreezeRun(run, held);
       expect(run.frames).toBe(3);
@@ -4673,7 +4786,7 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     // one field that keeps moving while the three freeze, so it is the one
     // field the key must NOT contain.
     const held = frame(FROZEN);
-    let run = nextFreezeRun(null, held);
+    let run = nextFreezeRun(afterAPull(), held);
     run = nextFreezeRun(run, held);
     run = nextFreezeRun(run, held);
     run = nextFreezeRun(run, frame({ ...FROZEN, heartRateBpm: 59 }));
@@ -4688,7 +4801,7 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     // at 4:16.1, rate at 68. With elapsed in the key, the key never
     // repeats on real hardware and PAUSED can never fire at all.
     const held = frame(FROZEN);
-    let run = nextFreezeRun(null, held);
+    let run = nextFreezeRun(afterAPull(), held);
     run = nextFreezeRun(run, held);
     run = nextFreezeRun(run, held);
     run = nextFreezeRun(run, frame({ ...FROZEN, elapsedSeconds: 58.28 }));
@@ -4702,7 +4815,12 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     // backwards tick) sits at distance 0: under the old key this pair was
     // the backwards-tick-is-a-change pin; under the guard neither frame
     // accumulates at all.
-    const frozen: FreezeRun = { key: "", frames: 0 };
+    const frozen: FreezeRun = {
+      key: "",
+      frames: 0,
+      pull: null,
+      pulled: false,
+    };
     const first = nextFreezeRun(frozen, RECORDED_BACKWARDS[0]!);
     const second = nextFreezeRun(first, RECORDED_BACKWARDS[1]!);
 
@@ -4786,6 +4904,164 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
 });
 
 // ---------------------------------------------------------------------------
+// THE WORK INTERVAL NOBODY HAS PULLED IN YET (Phase LM fix round 2, task 5)
+//
+// Reported on hardware, 2026-08-26: `PULL TO RESUME` appeared about two
+// seconds into a work interval, while the flywheel was still coasting and
+// before the rower had taken a stroke in it. The rower's own conditions,
+// from the walk card's leg 2b: take a pull or two DURING the rest, then stop
+// as the work interval starts.
+//
+// EVIDENCE CLASS, STATED HONESTLY. This is an OBSERVATION with conditions,
+// not a wire capture — a device build cannot produce a recording (the
+// download row is dev-gated), and the whole committed corpus contains no
+// boundary of this shape: every recorded rest-to-work changeover in
+// `docs/monitor/sessions/` has the rower pulling immediately (measured, this
+// session, by decoding 0x0031 and 0x0032 across all nine committed
+// recordings — the two identical-key runs that exist in the corpus are both
+// mid-interval stops, pinned as such below). So the sequence below is
+// SYNTHETIC, built frame by frame from readings the record does contain:
+//   - the resting frames hold the just-finished interval's distance
+//     ("distance-still", `nextFreezeRun`'s own doc comment);
+//   - the first frame of the new interval reads `d 0.1` with the PREVIOUS
+//     interval's split and rate carried over a zeroed clock — verbatim from
+//     `walk-2026-08-25/rests-finished-recording.jsonl.gz` (its second
+//     rest-to-work changeover: `d 0.1 / split 195.6 / spm 24`, the frame
+//     right after two resting frames at `d 348.6`);
+//   - the frames after it hold `d 0.1 / split 0 / rate 0` while the workout
+//     clock keeps running, which is a coast that has fallen below the wire's
+//     own 0.1 m resolution (`parse.ts` divides the raw field by 10).
+// The synthetic part is only that the rower does NOT pull. Nothing here
+// asserts a cause for what the machine reports; it asserts what the app may
+// say about it.
+// ---------------------------------------------------------------------------
+
+/** Two resting frames, then a work interval whose flywheel is still turning
+ *  too slowly to move the wire's own resolution. `d 0.1 > 0`, so the
+ *  `distanceMeters <= 0` guard is ALREADY clear on the interval's first
+ *  frame — which is why that guard alone never stood between this rower and
+ *  a pause declaration. */
+const COASTED_BOUNDARY: MonitorFrame[] = [
+  frame({ state: "resting", elapsedSeconds: 0, distanceMeters: 348.6 }),
+  frame({ state: "resting", elapsedSeconds: 0, distanceMeters: 348.6 }),
+  frame({
+    elapsedSeconds: 0.09,
+    distanceMeters: 0.1,
+    currentSplit: 195.6,
+    spm: 24,
+  }),
+  ...Array.from({ length: 6 }, (_, i) =>
+    frame({
+      elapsedSeconds: 0.6 + i * 0.5,
+      distanceMeters: 0.1,
+      currentSplit: 0,
+      spm: 0,
+    }),
+  ),
+];
+
+describe("the interval that has not been pulled in yet", () => {
+  it("a dying coast into a fresh work interval NEVER declares a pause, however long it holds the same reading", () => {
+    const { runs, everPaused } = replay(COASTED_BOUNDARY);
+
+    expect(everPaused).toBe(false);
+    // The hold itself is real and is NOT what changed: six identical frames
+    // still accumulate exactly as they always did. What the session may
+    // conclude from them is what changed.
+    expect(runs[runs.length - 1]!.frames).toBeGreaterThanOrEqual(
+      PAUSED_FRAME_HOLD,
+    );
+  });
+
+  it("...and the SAME coast declares one the moment the interval has actually been rowed", () => {
+    // The other direction, on the same fixture shape: five progressing
+    // frames — a rower who pulled — and then the identical dead hold. This
+    // is the feature, and it must survive the fix: a rower who stops
+    // MID-INTERVAL still gets told to pull.
+    // 1.8 / 3.8 / 5.7 / 7.5 / 9.3 and the split beside them are the record's
+    // own: the third rest-to-work changeover in
+    // `walk-2026-08-25/rests-finished-recording.jsonl.gz`, where the rower
+    // pulls straight away. Note the RATE reads 0 through all five of them
+    // while the metres climb — the machine takes about four seconds to
+    // report a stroke rate after a changeover, which is why the rate can
+    // never be what "this interval has been pulled in" is read from.
+    const rowed: MonitorFrame[] = [
+      ...COASTED_BOUNDARY.slice(0, 3),
+      ...[1.8, 3.8, 5.7, 7.5, 9.3].map((distanceMeters, i) =>
+        frame({
+          elapsedSeconds: 0.6 + i * 0.5,
+          distanceMeters,
+          currentSplit: distanceMeters < 5 ? 0 : 138.34,
+          spm: 0,
+        }),
+      ),
+      ...Array.from({ length: 4 }, (_, i) =>
+        frame({
+          elapsedSeconds: 3.1 + i * 0.5,
+          distanceMeters: 9.3,
+          currentSplit: 138.34,
+          spm: 0,
+        }),
+      ),
+    ];
+
+    expect(replay(rowed).everPaused).toBe(true);
+  });
+
+  /** The threshold itself, from both sides — the mutant that survived the
+   *  first pass through this block was `>=` for `>`, because every other
+   *  fixture here happens to carry a frame or two more runway than the
+   *  constant needs. One frame short of `PULL_EVIDENCE_FRAMES` is not
+   *  evidence; exactly `PULL_EVIDENCE_FRAMES` is. Distances are the real
+   *  post-rest ramp (`walk-2026-08-25`, third changeover), truncated to the
+   *  frame count each case needs. */
+  function rampThenHold(progressingFrames: number): MonitorFrame[] {
+    const ramp = [0.1, 1.8, 3.8, 5.7, 7.5, 9.3].slice(0, progressingFrames);
+    const last = ramp[ramp.length - 1]!;
+    return [
+      ...ramp.map((distanceMeters, i) =>
+        frame({ elapsedSeconds: 0.1 + i * 0.5, distanceMeters, spm: 0 }),
+      ),
+      ...Array.from({ length: PAUSED_FRAME_HOLD }, (_, i) =>
+        frame({
+          elapsedSeconds: 3.1 + i * 0.5,
+          distanceMeters: last,
+          spm: 0,
+        }),
+      ),
+    ];
+  }
+
+  it("five progressing frames earn a pause and four do not", () => {
+    // LITERALS, not `PULL_EVIDENCE_FRAMES ± 1`: written in terms of the
+    // constant, this test moves with it and pins nothing — a silent ratchet
+    // to 4 or 6 stays green. Five is what ships, and the number is a
+    // judgement (`PULL_EVIDENCE_FRAMES`'s own comment says where it came
+    // from and which way its two costs run), so changing it should cost a
+    // red test and a fresh derivation rather than an edit.
+    expect(PULL_EVIDENCE_FRAMES).toBe(5);
+    expect(replay(rampThenHold(5)).everPaused).toBe(true);
+    expect(replay(rampThenHold(4)).everPaused).toBe(false);
+  });
+
+  it("the PREVIOUS interval's rowing does not count as this one's pull", () => {
+    // The rower rows interval 0 in full, rests, and coasts into interval 1
+    // without pulling. Pull evidence has to be per-INTERVAL or it is
+    // worthless here: anything session-scoped is already satisfied by the
+    // frames above the rest, and the false pause is straight back.
+    const previousInterval = RECORDED_STOP.slice(0, 6);
+    const rest = Array.from({ length: 4 }, () =>
+      frame({ state: "resting", distanceMeters: 108.4 }),
+    );
+
+    expect(
+      replay([...previousInterval, ...rest, ...COASTED_BOUNDARY.slice(2)])
+        .everPaused,
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Phase LL minor 3 (design spec §2b, task-2-report.md's own finding):
 // §2b's suspected mechanism — a flywheel-gated work-interval open reading
 // as PAUSED because the clock is legally stationary before the first pull
@@ -4820,6 +5096,13 @@ const LL_CORPUS_FILES = [
   "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
   "walk-2026-08-17/step-4-pm5-recording-1786974067695.jsonl",
   "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
+  // LOW-5, Task 5's review: the sweep covered 6 of 9 committed recordings and
+  // omitted the file the whole diagnosis is drawn from. Adding all three —
+  // and the keystone one is the file whose no-rest changeover skips `d 0`
+  // entirely (MEDIUM-1), which this sweep would have surfaced.
+  "walk-2026-08-23/keystone-pm5-recording-1787491974452.jsonl.gz",
+  "walk-2026-08-25/rests-finished-recording.jsonl.gz",
+  "walk-2026-08-25/smoke-terminated-recording.jsonl.gz",
 ];
 
 const LL_SESSIONS_DIR = import.meta.url
@@ -4888,6 +5171,51 @@ describe("Phase LL minor 3: §2b's falsification, pinned as a committed regressi
     },
   );
 
+  /** Where a pause is DECLARED in the committed corpus, measured this
+   *  session by replaying every recording frame by frame. Two, in two files,
+   *  and both are the same shape: metres climbing frame after frame, then
+   *  the three keyed metrics dead while the workout clock keeps running —
+   *  a rower who stopped mid-interval. This is the half of the record the
+   *  false-pause fix must NOT touch, so it is pinned as a positive: the
+   *  negative sweep above would stay green if the predicate stopped firing
+   *  at all. */
+  const LL_RECORDED_MID_INTERVAL_STOPS: Record<string, number[]> = {
+    "walk-2026-08-16/session-1-keystone-2x250r0.jsonl": [],
+    "walk-2026-08-16/session-2-wu-4unequal.jsonl": [],
+    "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl": [],
+    "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl": [
+      246,
+    ],
+    "walk-2026-08-17/step-4-pm5-recording-1786974067695.jsonl": [],
+    "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz": [
+      1080,
+    ],
+    // The three added at Task 5's review (LOW-5). Empty is a FINDING, not a
+    // gap: across all nine committed recordings the corpus contains exactly
+    // two identical-key runs, both above. The rest-bearing file is the one
+    // the whole false-pause diagnosis was drawn from, and it contains no
+    // mid-interval stop of its own — the rower rowed straight through both
+    // of its boundaries.
+    "walk-2026-08-23/keystone-pm5-recording-1787491974452.jsonl.gz": [],
+    "walk-2026-08-25/rests-finished-recording.jsonl.gz": [],
+    "walk-2026-08-25/smoke-terminated-recording.jsonl.gz": [],
+  };
+
+  it.each(LL_CORPUS_FILES)(
+    "%s: every mid-interval stop the recording contains still declares a pause, at the frame it always did",
+    (fileName) => {
+      const { runs } = replay(loadCorpusFreezeFrames(fileName));
+      const onsets: number[] = [];
+      for (let i = 0; i < runs.length; i += 1) {
+        if (isPausedRun(runs[i]!) && (i === 0 || !isPausedRun(runs[i - 1]!))) {
+          onsets.push(i);
+        }
+      }
+
+      expect(onsets).toStrictEqual(LL_RECORDED_MID_INTERVAL_STOPS[fileName]);
+    },
+  );
+
   it("sanity: the corpus genuinely contains post-rest work-interval starts — a suite where this were 0 for every file would prove nothing", () => {
     const total = LL_CORPUS_FILES.reduce((sum, fileName) => {
       const frames = loadCorpusFreezeFrames(fileName);
@@ -4951,28 +5279,47 @@ describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
       currentSplit: 236,
       spm: 16,
     };
-    const { result, fake } = harness({
+    // The recording's own five progressing frames ahead of the stop
+    // (`pm5-session3-final.log:3542-3546`) — a rower who actually rowed
+    // this interval, which is what `PULL_EVIDENCE_FRAMES` requires before
+    // anything may be called a pause. The fixture used to open two frames
+    // before the freeze; that is less rowing than any real stopped rower
+    // has done, and it is the same lengthening `RECORDED_STOP` took.
+    const rowed = [103.8, 104.7, 105.6, 106.4, 107.3].map((distanceMeters, i) =>
+      status(100 + i * 100, {
+        elapsedSeconds: 55.06 + i * 0.5,
+        distanceMeters,
+        spm: 16,
+        currentSplit: 236,
+      }),
+    );
+    const { result, fake, unmount } = harness({
       program: TWO_INTERVALS,
       events: [
-        status(100, {
-          elapsedSeconds: 57.04,
-          distanceMeters: 107.3,
-          spm: 16,
-          currentSplit: 236,
-        }),
-        status(200, frozen),
-        status(300, frozen),
-        status(400, frozen),
-        status(500, frozen),
-        status(600, { ...frozen, elapsedSeconds: 58.3, distanceMeters: 109 }),
+        ...rowed,
+        status(600, frozen),
+        status(700, frozen),
+        status(800, frozen),
+        status(900, frozen),
+        // RC-25: two MORE frozen frames so the pause HOLDS past its onset.
+        // Without them the pause lasts a single frame, and "exactly one
+        // pause-declared entry" cannot tell an edge-triggered log from a
+        // per-frame one — a mutation to `if (nowPaused)` stayed green until
+        // these were added.
+        status(1000, frozen),
+        status(1100, frozen),
+        status(1200, { ...frozen, elapsedSeconds: 58.3, distanceMeters: 109 }),
       ],
     });
     await connect(result);
     await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
 
-    tick(fake, 100);
-    expect(result.current.phase).toBe("live");
-    expect(result.current.frozen).toBe(false);
+    for (let i = 0; i < rowed.length; i += 1) {
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      expect(result.current.frozen).toBe(false);
+    }
+
     tick(fake, 100);
     tick(fake, 100);
     tick(fake, 100);
@@ -4984,9 +5331,36 @@ describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
     expect(result.current.phase).toBe("live");
     expect(result.current.frozen).toBe(true);
 
+    // The pause HOLDS across further identical frames (RC-25's fixture
+    // extension) — this is what makes the edge-vs-per-frame check below real.
+    tick(fake, 100);
+    expect(result.current.frozen).toBe(true);
+    tick(fake, 100);
+    expect(result.current.frozen).toBe(true);
+
     tick(fake, 100);
     expect(result.current.phase).toBe("live");
     expect(result.current.frozen).toBe(false);
+
+    // RC-25 (James: "Add the instrument now"). The pause is DERIVED and used
+    // to be logged nowhere, which is why a false PULL TO RESUME at the erg
+    // left no trace and had to be provoked to be seen. The edge is now
+    // recorded with the evidence the predicate weighed, so the next NATURAL
+    // occurrence is diagnosable from a COPY tap instead of a walk.
+    // The ring reaches sessionStorage at TEARDOWN, so unmount first — the
+    // pause assertions above are already done.
+    unmount();
+    const stash = sessionStorage.getItem("ergomatic:last-monitor-log");
+    const declared = (
+      JSON.parse(stash ?? "[]") as { kind: string; detail: string }[]
+    ).filter((e) => e.kind === "pause-declared");
+    // EXACTLY ONE: the edge, not every frame the pause holds for. A per-frame
+    // entry would bury the ring it is written into.
+    expect(declared).toHaveLength(1);
+    // The evidence, not a verdict — and no cause asserted.
+    expect(declared[0]!.detail).toContain("frames=4");
+    expect(declared[0]!.detail).toContain("pulled=true");
+    expect(declared[0]!.detail).toContain("d=");
   });
 
   // THE ENUM-READER PIN'S OWN COMPILE-TIME HALF (task 5 step 1, requirement
@@ -5916,6 +6290,138 @@ describe("Phase LL Task 2: handleFrameSilence/handleFrameRecovery (the hysteresi
 });
 
 // ---------------------------------------------------------------------------
+// Phase LM PR 1 fix round 2 (design spec `2026-08-26-lost-monitor-trigger-
+// design.md`, Task 1): `decideResumeLatch` — the predicate that replaced an
+// unconditional latch on a lifecycle edge. The 2026-08-26 walk raised the
+// banner nine times over a link that never dropped, while the snapshot that
+// refutes every one of them was already in hand three lines further down.
+// EVALUATE, never assert.
+// ---------------------------------------------------------------------------
+
+describe("Phase LM: decideResumeLatch (pure) — the resume alarm keys on a measurement", () => {
+  /** A snapshot shaped exactly as `withLiveness` builds one, with the
+   *  0x0031 arrival `gapMs` before the snapshot's own clock reading (or
+   *  no arrival at all when `gapMs` is `null`). */
+  function snapshotWith(
+    gapMs: number | null,
+    silent = false,
+  ): LivenessSnapshot {
+    const atMs = 1_000_000;
+    return {
+      atMs,
+      armed: gapMs !== null,
+      silent,
+      characteristics:
+        gapMs === null
+          ? {}
+          : {
+              [GENERAL_STATUS_UUID]: {
+                lastArrivalMs: atMs - gapMs,
+                count: 42,
+              },
+            },
+      recentEvents: [],
+    };
+  }
+
+  it("a stream that never stopped does NOT latch — the nine-false-alarm case, with the walk's own shortest observed gap", () => {
+    // `docs/monitor/sessions/walk-2026-08-26/README.md`: 233 frames arrived
+    // across the nine supposed gaps, and `liveness-recovery` followed every
+    // latch within 3-72 ms. A frame 500 ms ago is a healthy stream.
+    expect(
+      decideResumeLatch(snapshotWith(500), SILENCE_THRESHOLD_MS),
+    ).toStrictEqual({
+      latch: false,
+      gapMs: 500,
+    });
+  });
+
+  it("the worst in-stream gap the whole committed corpus contains (810 ms) still does NOT latch — the threshold's own 3.09x margin, not a number picked here", () => {
+    expect(
+      decideResumeLatch(snapshotWith(810), SILENCE_THRESHOLD_MS),
+    ).toStrictEqual({
+      latch: false,
+      gapMs: 810,
+    });
+  });
+
+  it("one millisecond under the threshold does NOT latch, and the threshold exactly DOES — the boundary, both sides", () => {
+    expect(
+      decideResumeLatch(snapshotWith(2499), SILENCE_THRESHOLD_MS),
+    ).toStrictEqual({
+      latch: false,
+      gapMs: 2499,
+    });
+    expect(
+      decideResumeLatch(snapshotWith(2500), SILENCE_THRESHOLD_MS),
+    ).toStrictEqual({
+      latch: true,
+      gapMs: 2500,
+    });
+  });
+
+  it("a genuine multi-second gap latches — a real suspension is exactly what this alarm is for", () => {
+    expect(
+      decideResumeLatch(snapshotWith(9000), SILENCE_THRESHOLD_MS),
+    ).toStrictEqual({
+      latch: true,
+      gapMs: 9000,
+    });
+  });
+
+  it("a snapshot already reporting `silent` latches whatever the gap says — the watchdog got there first and its verdict stands", () => {
+    // The `silent` arm cannot be inferred from the gap: `markSuspect()` and
+    // a matured watchdog timer both set it, and a drained backlog can
+    // rearm the timer (spec: "stale arrivals can silence the very watchdog
+    // we would be handing the whole job to"). Gap of 10 ms, latches anyway.
+    expect(
+      decideResumeLatch(snapshotWith(10, true), SILENCE_THRESHOLD_MS),
+    ).toStrictEqual({ latch: true, gapMs: 10 });
+  });
+
+  it("a NEGATIVE gap is no evidence and does NOT latch — a wall clock stepped backwards (NTP) says nothing about the stream; the watchdog owns that case", () => {
+    expect(
+      decideResumeLatch(snapshotWith(-4000), SILENCE_THRESHOLD_MS),
+    ).toStrictEqual({ latch: false, gapMs: -4000 });
+  });
+
+  it("no snapshot at all reports an UNMEASURED gap and does not latch — an alarm needs evidence, and a transport with no liveness decorator supplies none", () => {
+    expect(decideResumeLatch(null, SILENCE_THRESHOLD_MS)).toStrictEqual({
+      latch: false,
+      gapMs: null,
+    });
+  });
+
+  it("a snapshot with no 0x0031 arrival yet reports an UNMEASURED gap and does not latch — the pre-stream window belongs to the connect/program timeouts, not this alarm", () => {
+    expect(
+      decideResumeLatch(snapshotWith(null), SILENCE_THRESHOLD_MS),
+    ).toStrictEqual({
+      latch: false,
+      gapMs: null,
+    });
+  });
+
+  it("reads the 0x0031 arrival specifically — an arrival on some OTHER characteristic is not evidence the status stream is alive", () => {
+    const stale: LivenessSnapshot = {
+      atMs: 1_000_000,
+      armed: true,
+      silent: false,
+      characteristics: {
+        [ADDITIONAL_STATUS_1_UUID]: {
+          lastArrivalMs: 999_990,
+          count: 7,
+        },
+      },
+      recentEvents: [],
+    };
+    expect(decideResumeLatch(stale, SILENCE_THRESHOLD_MS)).toStrictEqual({
+      latch: false,
+      gapMs: null,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Phase LL Task 1: THE HOOK'S OWN WIRING — proving `livenessDepsRef`'s
 // `onSilence`/`onRecovery` closures (built inside the hook, never passed
 // `logRef` itself — `react-hooks/refs` forbids that) really do write into
@@ -6377,6 +6883,67 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     }).not.toThrow();
   });
 
+  it("Task 1 (lost-monitor design spec): resume records frames seen while hidden and what the ready gate saw — driven through the NATIVE dispatch, same reason the reviewer's probe below needs it (minor 9: the web arm never calls back at all)", async () => {
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    // One status frame, never satisfying the ready gate (no rowingActive,
+    // no banked distance) — the exact shape the flagship defect leaves
+    // behind: a frame arrived, but nothing about it looked like a pull.
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { rowingState: 0 })],
+    });
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    act(() => {
+      lifecycleCb!("background");
+    });
+    tick(fake, 100); // the one frame arrives while "hidden"
+    expect(result.current.phase).toBe("ready"); // the gate never opened
+    act(() => {
+      lifecycleCb!("foreground");
+    });
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const resumeEntry = exported.find((e) => e.kind === "resume-frames");
+    expect(resumeEntry).toBeDefined();
+    // Observed values only: what arrived and what the gate saw — never a
+    // claim about why the gate stayed shut.
+    expect(resumeEntry!.detail).toBe(
+      "phase=ready framesWhileHidden=1 rowingActive=false distanceIncreased=false",
+    );
+  });
+
   it("NATIVE arm: registerAppLifecycleListener resolves via the async native path, and its unsubscribe reaches lifecycleUnsubRef (the Promise branch)", async () => {
     const nativeUnsub = vi.fn();
     let nativeCb: ((event: "background" | "foreground") => void) | undefined;
@@ -6416,7 +6983,247 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     vi.restoreAllMocks();
   });
 
-  it("REVIEWER'S PROBE (review fix), driven through the NATIVE dispatch (Phase LL minor 9: lifecycle-suspect marking is native-only, so a web visibilitychange can no longer drive this — this probe's own value was always about markSuspect()'s routing, not which platform triggered it, so it moves to the native arm): a SHORT resume — shorter than SILENCE_THRESHOLD_MS, so the decorator's OWN watchdog timer never matures — still clears frameSilence after BANNER_RETRACT_HYSTERESIS_MS of healthy frames post-resume, because markSuspect() routes through the decorator instead of around it", async () => {
+  it("PHASE LM, THE FIX AT THE HOOK LEVEL: a resume over a stream that never stopped raises NOTHING — no banner, no markSuspect, and a ring entry that reports the measured gap instead of asserting a cause", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [];
+    for (let i = 1; i <= 10; i += 1) {
+      events.push(
+        status(i * 500, { elapsedSeconds: i * 0.5, distanceMeters: i * 2 }),
+      );
+    }
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    // The REAL decorator, composed exactly as `defaultTransport` does — so
+    // the snapshot the resume handler reads is the production one.
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // Two healthy frames: the first arms the watchdog, the second leaves a
+    // 0x0031 arrival 500 ms in the past — well inside SILENCE_THRESHOLD_MS,
+    // and comfortably inside the 810 ms worst in-stream gap the committed
+    // corpus contains.
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+    expect(result.current.frameSilence).toBe(false);
+
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+
+    // THE DEFECT THIS PINS: nine of these fired on 2026-08-26 while 233
+    // frames were arriving (`docs/monitor/sessions/walk-2026-08-26/`). The
+    // rower loses far more than a banner when this latches — `deriveLink()`
+    // goes "lost", every judged value greys, pace and rate blank.
+    expect(result.current.frameSilence).toBe(false);
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    // EXIT CRITERION 4: the resume IS recorded — silence here would be its
+    // own failure — with the number the decision came from, and no cause.
+    const entry = exported.find((e) => e.kind === "app-lifecycle");
+    expect(entry).toBeDefined();
+    expect(entry!.detail).toBe(
+      `resume gap=500ms threshold=${SILENCE_THRESHOLD_MS}ms silent=false latched=false`,
+    );
+
+    // `markSuspect()` was NOT called. Proven by CONSEQUENCE, not by
+    // spying: `markSuspect` sets the decorator's own `silent`, and the
+    // very next 0x0031 arrival would then take `noteStatusArrival`'s
+    // recovery branch and write a `liveness-recovery` entry. So feed one
+    // more healthy frame and check the ring stayed quiet — nothing was
+    // ever declared suspect, so there is nothing to recover from.
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    const afterFrame = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+    }[];
+    expect(afterFrame.some((e) => e.kind === "liveness-recovery")).toBe(false);
+    expect(afterFrame.some((e) => e.kind === "liveness-silence")).toBe(false);
+    expect(result.current.frameSilence).toBe(false);
+  });
+
+  it("PHASE LM, THE FAIL-SAFE: after a resume that did NOT latch, a stream that then genuinely goes silent still raises the banner — the watchdog was left armed, because markSuspect() would have disarmed it", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [];
+    for (let i = 1; i <= 10; i += 1) {
+      events.push(
+        status(i * 500, { elapsedSeconds: i * 0.5, distanceMeters: i * 2 }),
+      );
+    }
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    expect(result.current.frameSilence).toBe(false);
+
+    // Now the link really does die. THE MUTATION THIS PINS (the design
+    // spec's own named trap): calling `markSuspect()` on a resume that did
+    // not latch does `stopTimer(); silent = true` — and with no latch and
+    // no further arrival to rearm, `onSilence` could NEVER fire again. A
+    // rower whose monitor genuinely dropped one second after a Control
+    // Centre swipe would be shown nothing at all.
+    act(() => {
+      vi.advanceTimersByTime(SILENCE_THRESHOLD_MS + 1);
+    });
+    expect(result.current.frameSilence).toBe(true);
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+    }[];
+    expect(exported.some((e) => e.kind === "liveness-silence")).toBe(true);
+  });
+
+  it("PHASE LM: a healthy resume ARRIVING MID-RETRACT does not strand the banner — the watchdog's own silence is still retracted on its own schedule, because a non-latching resume cancels nothing", async () => {
+    vi.useFakeTimers();
+    // 60 frames, 500ms apart: enough to arm, then recover, then carry the
+    // full 10s hysteresis window.
+    const events: FakeTimelineEvent[] = [];
+    for (let i = 1; i <= 60; i += 1) {
+      events.push(
+        status(i * 500, { elapsedSeconds: i * 0.5, distanceMeters: i * 2 }),
+      );
+    }
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    function healthyFrame(): void {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    // Arm on the first 0x0031, then let the REAL watchdog trip on a REAL
+    // silence — no lifecycle event involved at all.
+    healthyFrame();
+    act(() => {
+      vi.advanceTimersByTime(SILENCE_THRESHOLD_MS + 1);
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // One healthy frame: the decorator's recovery branch fires and the
+    // hook schedules its BANNER_RETRACT_HYSTERESIS_MS retract window.
+    healthyFrame();
+    expect(result.current.frameSilence).toBe(true);
+
+    // A routine resume lands mid-window, over a stream that is now
+    // healthy. THE MUTATION THIS PINS: cancelling `hysteresisCancelRef`
+    // unconditionally (as this handler used to, before Phase LM moved the
+    // cancel inside the latch) kills the only timer that can ever clear
+    // `frameSilence` — with no latch to re-arm one, the banner would stay
+    // up for the rest of the session over a stream nothing is wrong with.
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // The window runs to completion on its ORIGINAL schedule and the
+    // banner retracts.
+    for (let i = 0; i < 25; i += 1) healthyFrame();
+    expect(result.current.frameSilence).toBe(false);
+  });
+
+  it("REVIEWER'S PROBE (review fix), driven through the NATIVE dispatch (Phase LL minor 9: lifecycle-suspect marking is native-only, so a web visibilitychange can no longer drive this — this probe's own value was always about markSuspect()'s routing, not which platform triggered it, so it moves to the native arm): a resume whose MEASURED gap reached SILENCE_THRESHOLD_MS latches (Phase LM: it is the measurement that latches, never the resume) and then clears frameSilence after BANNER_RETRACT_HYSTERESIS_MS of healthy frames, because markSuspect() routes through the decorator instead of around it", async () => {
     vi.useFakeTimers();
     // 40 events, 500ms apart — the first arms the watchdog (Task 1's
     // arming rule); the rest are the post-resume "healthy frames" the
@@ -6488,15 +7295,23 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     healthyFrame();
     expect(result.current.frameSilence).toBe(false);
 
-    // A SHORT resume: the decorator's own SILENCE_THRESHOLD_MS=2500ms
-    // timer never started counting down from a genuine gap, let alone
-    // matured — exactly the "Control Center swipe, not an edge case"
-    // scenario the review named, now fired through the native dispatch.
+    // A GENUINE suspension: the wall clock advances 3000 ms across it
+    // while no frame arrives, so the resume handler MEASURES a gap past
+    // SILENCE_THRESHOLD_MS and latches. (Phase LM: the resume alone no
+    // longer does — the test immediately above pins that half. What this
+    // probe was always about is what happens AFTER a latch, and it needs a
+    // latch to happen, honestly.) The decorator's own 2500 ms timer is
+    // still merely pending here: fake timers are not advanced, only the
+    // clock `livenessDepsRef.now` reads — which is exactly the shape of an
+    // iOS suspension, where wall time passes and nothing runs.
     expect(lifecycleCb).toBeDefined();
+    const resumeAt = Date.now() + 3000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(resumeAt);
     act(() => {
       lifecycleCb!("background");
       lifecycleCb!("foreground");
     });
+    nowSpy.mockRestore();
     expect(result.current.frameSilence).toBe(true);
 
     // The FIRST post-resume healthy frame: `noteStatusArrival` sees
@@ -6947,11 +7762,12 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
 describe("Phase LL Task 4: the continuity consumption seam, through the real hook composition — a healthy resume never false-positives", () => {
   afterEach(() => {
     vi.doUnmock("../adapters/appLifecycle");
+    vi.doUnmock("../adapters/monitorTransport");
     vi.resetModules();
     vi.restoreAllMocks();
   });
 
-  it("a foreground resume followed by ordinary forward-moving live frames never closes the record (companion to continuity.test.ts's own corpus sweep, at the hook level)", async () => {
+  it("a resume after a genuine gap, followed by ordinary forward-moving live frames, never closes the record (companion to continuity.test.ts's own corpus sweep, at the hook level)", async () => {
     const events: FakeTimelineEvent[] = [];
     for (let i = 1; i <= 10; i += 1) {
       events.push(
@@ -6963,6 +7779,18 @@ describe("Phase LL Task 4: the continuity consumption seam, through the real hoo
       program: TWO_INTERVALS,
       events,
     });
+    // Phase LM: `applyContinuityCheck` is ARMED by `frameSilence`, and
+    // `frameSilence` now needs a measured gap — so this test composes the
+    // REAL liveness decorator (the same thing `defaultTransport` does) and
+    // gives it a real gap below. Before Phase LM it could arm the check by
+    // firing a bare resume; that path no longer exists, and reaching for a
+    // shortcut here would leave this test arming nothing at all.
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
     // Phase LL minor 9: lifecycle-suspect marking is native-only now, so
     // this test's own resume trigger has to look like the native dispatch
     // (same idiom the "NATIVE arm"/REVIEWER'S PROBE tests use) rather than
@@ -6981,9 +7809,7 @@ describe("Phase LL Task 4: the continuity consumption seam, through the real hoo
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({ createTransport: () => fake }),
-    );
+    const { result } = renderHook(() => freshUseMonitorSession());
 
     await connect(result);
     await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
@@ -6991,10 +7817,15 @@ describe("Phase LL Task 4: the continuity consumption seam, through the real hoo
     expect(result.current.phase).toBe("live");
 
     expect(lifecycleCb).toBeDefined();
+    // A genuine suspension: the wall clock the decorator reads advances
+    // 4000 ms while nothing arrives, so the resume MEASURES a real gap.
+    const resumeAt = Date.now() + 4000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(resumeAt);
     act(() => {
       lifecycleCb!("background");
       lifecycleCb!("foreground");
     });
+    nowSpy.mockRestore();
     expect(result.current.frameSilence).toBe(true);
 
     // Ordinary forward-moving frames post-resume — the fake's own
@@ -7100,6 +7931,29 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
    *  `fake.ts` to model a wire-impossible reading (its own doc comments
    *  already refuse to do that for other fields — this seam sits AT the
    *  boundary those comments describe, not inside the fake itself). */
+  /** PHASE LM: `frameSilence` is the arming gate for
+   *  `applyContinuityCheck` (`useMonitorSession.ts`, `if (!frameSilence)
+   *  return`), and it no longer latches on a lifecycle resume by itself —
+   *  only on a MEASURED gap. Every test in this block is about what the
+   *  continuity check does ONCE ARMED, so each suspends for a genuine
+   *  `gapMs` of wall clock (the same `Date.now` the liveness decorator
+   *  reads through `livenessDepsRef.now`) with no frame arriving in it —
+   *  the shape of a real iOS suspension, where wall time passes and
+   *  nothing runs. Faking the latch instead would arm the gate without
+   *  exercising the predicate that guards it. */
+  function resumeAfterGap(
+    cb: (event: "background" | "foreground") => void,
+    gapMs = 4000,
+  ): void {
+    const resumeAt = Date.now() + gapMs;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(resumeAt);
+    act(() => {
+      cb("background");
+      cb("foreground");
+    });
+    nowSpy.mockRestore();
+  }
+
   function interceptingTransport(
     inner: Transport,
   ): Transport & { deliverRaw(char: string, bytes: Uint8Array): void } {
@@ -7218,14 +8072,11 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     });
     expect(result.current.phase).toBe("live");
 
-    // The resume: app-lifecycle marks the stream suspect (Task 2's own
-    // mechanism, native-only per minor 9), the identical trigger a real
-    // background/foreground gap fires.
+    // The resume: a measured gap marks the stream suspect (Task 2's own
+    // mechanism, native-only per minor 9, keyed on a measurement per
+    // Phase LM) — the identical trigger a real suspension fires.
     expect(lifecycleCb).toBeDefined();
-    act(() => {
-      lifecycleCb!("background");
-      lifecycleCb!("foreground");
-    });
+    resumeAfterGap(lifecycleCb!);
     expect(result.current.frameSilence).toBe(true);
 
     // "after": the capture's own real, EARLIER reading — a genuine
@@ -7346,10 +8197,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(result.current.phase).toBe("live");
 
     expect(lifecycleCb).toBeDefined();
-    act(() => {
-      lifecycleCb!("background");
-      lifecycleCb!("foreground");
-    });
+    resumeAfterGap(lifecycleCb!);
     expect(result.current.frameSilence).toBe(true);
 
     // "after": the capture's own seq 33 reading — TWD backward
@@ -7439,10 +8287,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(result.current.phase).toBe("live");
 
     expect(lifecycleCb).toBeDefined();
-    act(() => {
-      lifecycleCb!("background");
-      lifecycleCb!("foreground");
-    });
+    resumeAfterGap(lifecycleCb!);
     expect(result.current.frameSilence).toBe(true);
 
     // The genuine-reset counterfactual: all three axes read lower —
@@ -7573,10 +8418,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
       );
     });
     expect(lifecycleCb).toBeDefined();
-    act(() => {
-      lifecycleCb!("background");
-      lifecycleCb!("foreground");
-    });
+    resumeAfterGap(lifecycleCb!);
     expect(result.current.frameSilence).toBe(true);
 
     act(() => {

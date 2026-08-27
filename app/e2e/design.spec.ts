@@ -5904,6 +5904,20 @@ const EXTREME_SPLIT_STORY = [
  *  stays on screen indefinitely instead of racing the sweep. */
 const FREEZING_STORY = [
   ...ROWING_STORY,
+  // TWO MORE PROGRESSING FRAMES BEFORE THE FREEZE (2026-08-26), for the
+  // reason `connected.spec.ts`'s own story carries at length: the predicate
+  // now asks whether THIS interval has been pulled in before it will call a
+  // hold a pause (`PULL_EVIDENCE_FRAMES`, five consecutive frames of
+  // strictly increasing distance), so a fixture that freezes after three
+  // frames is a rower who never started rowing — which is now, correctly,
+  // not a pause.
+  ...[125, 133].map((distanceMeters, i) =>
+    rowingAt(CONNECTED_STORY_START_MS + 700 + i * 100, {
+      elapsedSeconds: 18 + i,
+      distanceMeters,
+      programIntervalIndex: 1,
+    }),
+  ),
   // WIRE-IMPOSSIBLE (review IMPORTANT-2, same shape again — 20s/140m
   // continues cumulatively past `ROWING_STORY`'s own 17s/115m rather than
   // resetting per-interval): historically rendered METERS LEFT as 0
@@ -8141,7 +8155,7 @@ test.describe("connected screens (fake-driven)", () => {
   test.describe("Stale — link lost, values held (design spec Stale table)", () => {
     test.use({ viewport: { width: 844, height: 390 } });
 
-    test("values: heroes grey (stale), LAST caption above each hero — the only post-redesign hero label", async ({
+    test("values: heroes grey (stale), LAST SEEN caption above each hero — the only post-redesign hero label", async ({
       page,
     }) => {
       await loadConnectedFixture(page, "connected-disconnected");
@@ -8157,7 +8171,11 @@ test.describe("connected screens (fake-driven)", () => {
         );
       expect(labels).toHaveLength(2);
       for (const label of labels) {
-        expect(label.text).toBe("LAST");
+        // `LAST SEEN`, not `LAST` (Phase LM PR 1 Task 3, Gate 0): the bare
+        // word reads as an ordinal — the last of several readings — where
+        // the fact the rower needs is that this is the last number we
+        // HEARD.
+        expect(label.text).toBe("LAST SEEN");
         expect(label.fontSize).toBe("15px");
         expect(label.letterSpacing).toBeCloseTo(15 * 0.1, 1);
         expect(label.color).toBe(INK_3_RGB);
@@ -8175,6 +8193,17 @@ test.describe("connected screens (fake-driven)", () => {
       );
       expect(rate.judgement).toBe("stale");
       expect(rate.color).toBe(INK_3_RGB);
+
+      // EVERYTHING STALE GREYS TOGETHER, INCLUDING THE METRES (Gate 0).
+      // The session counter is fed by frames that simply stop arriving, so
+      // it used to hold its last value at full `--ink` beside two greyed
+      // heroes: the one number still painted as current was the one nobody
+      // could vouch for. Resolved through the real cascade here, not just
+      // asserted as a class name.
+      const meters = await page
+        .locator(".connected-progress-meters")
+        .evaluate((el) => getComputedStyle(el).color);
+      expect(meters).toBe(INK_3_RGB);
     });
 
     test("banner: LostBanner (landscape one-line variant), device caption PM5…LOST, hollow mark", async ({
@@ -8186,9 +8215,32 @@ test.describe("connected screens (fake-driven)", () => {
       await expect(page.locator(".connected-lost-title")).toHaveText(
         "LOST THE MONITOR",
       );
+      // A TITLE PLUS AT MOST FOUR WORDS, and the body names what actually
+      // survives (Phase LM PR 1 Task 3, Gate 0). The twelve-word promise
+      // this replaces — "Row on. The erg is still counting and End keeps
+      // what we saw." — was true whenever we saw something and a lie in
+      // exactly the case that costs a rower their workout. This fixture
+      // carries interval 0's own actual, so one interval survives.
       await expect(page.locator(".connected-lost-body")).toHaveText(
-        "Row on. The erg is still counting and End keeps what we saw.",
+        "1 interval kept.",
       );
+      // FILLED RED (Gate 0), resolved through the real cascade rather than
+      // read off the stylesheet: `--judge-slower` ground with `--surface`
+      // text measures 7.94:1, against the house 4.5:1 floor. The banner
+      // has to land at arm's length mid-stroke — "the LOST isn't easy to
+      // notice, i think we need to highlight that more" (James,
+      // 2026-08-25).
+      const fill = await banner.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { bg: cs.backgroundColor };
+      });
+      expect(fill.bg).toBe(JUDGE_SLOWER_RGB);
+      for (const child of [".connected-lost-title", ".connected-lost-body"]) {
+        const color = await page
+          .locator(child)
+          .evaluate((el) => getComputedStyle(el).color);
+        expect(color).toBe(SURFACE_RGB);
+      }
       const device = await page.locator(".connected-line-device").textContent();
       expect(device).toBe("PM5 432331249 · LOST");
       const hollow = await page

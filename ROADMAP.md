@@ -3818,6 +3818,224 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
+- [x] **RC-21 — FIXED 2026-08-26 (ultrareview round). The "RetestShortcut flake" was not a flake. It is an
+      unvalidated cast at a trust boundary, and it can crash the You screen
+      in production.** Found 2026-08-26 while dismissing it for the third
+      time. `useWorkouts.ts:32` reads
+      `const workouts = (await res.json()) as LibraryWorkout[]` — **a cast,
+      not a check** — and sets `state: "ready"` with it. `RetestShortcut`
+      (`you/RetestShortcut.tsx:29`) correctly guards
+      `state !== "ready"` and then calls `workouts.find(...)`, so the
+      invariant "ready implies array" is the only thing between a 200
+      response and a `TypeError: workoutsState.workouts.find is not a
+      function` that takes down the screen.
+      **Any 200 whose body is not an array reaches it:** an error envelope,
+      `null`, `{}`, or the HTML a captive portal or a misrouted proxy
+      returns with a 200. The unit suite reproduces it intermittently
+      through mock ordering, which is exactly why it kept being recorded as
+      a flake — **a TypeError thrown from a component is never a flake; it
+      is a real crash with a timing-dependent trigger.**
+      **Fix shape:** validate the shape before declaring ready
+      (`Array.isArray`, and reject otherwise into the existing `"error"`
+      state, which already has a retry). Then the cast can go. Cheap, and it
+      converts a crash into the retry path that already exists.
+      **Sibling of RC-19** — both are failures dismissed as flaky that
+      encode a real defect. Worth asking, once, how many others are on that
+      list.
+      **FIXED:** `useWorkouts` now validates with `Array.isArray` and fails
+      into the existing `"error"` state, which already carries a retry. Three
+      table-driven tests (error envelope, `null`, an HTML page served with
+      200) all go red without the guard — verified by reverting it.
+      **How it got fixed rather than deferred again:** an unrelated one-line
+      change to `LogSession.tsx` flipped the race from 1-in-3 to 3-in-3, which
+      made it blocking. **That is the whole lesson — the "flake" was a race
+      whose odds any nearby edit could change, and three sessions of re-running
+      it green were three sessions of not looking.**
+- [ ] **v0.24.0's notes owe the v0.17.0 correction IN FULL, and the
+      cause-free rule must be scoped when briefing whoever writes them.**
+      Moved here at the PM re-gate because it had been living only in a dated
+      design spec — a record of a decision, not a queue (RF#14's newest
+      syntax). The shipped v0.17.0 item carries two falsified clauses: *"so it
+      cannot flicker at you"* (it flickered nine times in 288 s) and *"a phone
+      call taking the app to the background"* (a CAUSE, and the wrong one —
+      the trigger was iOS active/inactive, raised by a Control Center swipe).
+      **Do not fix them in the v0.17.0 entry**; a correction on an old
+      version's entry has an audience of zero. Put it in v0.24.0's.
+      **And scope the constraint when briefing the notes session:** cause-free
+      forbids asserting a cause for a GENUINE silence (three producers
+      undistinguished). It does NOT forbid naming what triggered the FALSE
+      alarm, which is PRIMARY from the plugin's own source. Told only
+      "cause-free", a notes writer will censor the one explanation testers
+      most need.
+- [ ] **RC-25 — Task 5's coast fix is pinned in ONE direction only, and has
+      never been walked.** Filed at the PM re-gate rather than left implied.
+      That a genuine mid-interval pause still fires is pinned hard: a corpus
+      regression across all nine committed recordings, onsets identical, with a
+      non-vacuity check. **That the coast case is now SILENT has no oracle at
+      all** — the corpus provably lacks the trigger, the erg reproduction was
+      never downloadable (the device build's recording row is dev-gated), and
+      the failing test is a hand-built frame sequence using real wire values.
+      **Not a blocker:** if the fix is wrong the rower loses an instruction,
+      not a workout.
+      **THE INSTRUMENT IS BUILT (James, 2026-08-26: "Add the instrument now").**
+      The pause edge now writes a `pause-declared` ring entry carrying
+      `frames`, `hold`, `pulled`, and the frame's own distance/split/spm — what
+      the predicate weighed, no cause asserted. Edge only, never per frame.
+      **So this row now closes on one NATURAL occurrence and a `COPY` tap, not
+      on a walk.** Pinned in both directions: removing the log fails the test,
+      and logging per frame instead of on the edge also fails it — the fixture
+      had to be extended so the pause HOLDS, because with a one-frame pause
+      "exactly one entry" could not tell the two apart, and the mutation
+      stayed green until it was.
+- [ ] **RC-26 — `KEEP THE SCREEN ON` warns against the one thing that cannot
+      happen.** The spec's own criterion 3 forbids wording that "blames the
+      screen timeout (which keep-awake already handles)" — and the shipped
+      string is a screen-timeout instruction. Keep-awake has covered this flow
+      since 2026-08-11, and this phase's own ROADMAP says the loss was a MANUAL
+      lock that no wake-lock work would have prevented. So the four words name
+      the wrong hazard. `DON'T LOCK YOUR PHONE` is the same four words.
+      **The walk card raised this verbatim, said only James can answer it, and
+      the walk ran without asking** — which is its own lesson: when a card names
+      a copy question only James can settle, it is asked in the first rest or
+      recorded as unasked. Fast-path after merge; the test pins a word COUNT,
+      so the string is free to change.
+- [ ] **RC-24 — During a rest, the grid's REST cell counts down and wears the
+      accent. APPROVED (James, 2026-08-26); not yet built.** This is the other
+      half of RC-23's ruling and the reason that ruling is safe.
+      **The gap, verified in code:** the grid's active row keeps rendering the
+      interval's own time and metres from live frames
+      (`surfaceModel.ts:1443-1451`), and its `rest` cell is only the PROGRAMMED
+      rest string, static. So **nothing on the grid says a rest is currently
+      running** — which is why moving numbers there read to the rower as their
+      work interval being mis-measured. The step line does say `N OF M · REST`;
+      the grid header deliberately drops the kind word (`:406`).
+      James's framing: *"maybe we can figure out a way to indicate the person
+      is in rest so they arent worried the wrong numbers would be recorded."*
+      **Chosen: the active row's REST cell becomes the countdown during a
+      rest** — `1:00` ticking to `0:00` — and takes the accent mark. It reuses
+      the mechanism that already means "this is the thing counting" rather than
+      inventing a second signal, and answers both "am I resting?" and "how long
+      left?" in the one place a rower is already looking.
+      **Known cost, stated because it widens a documented rule:** `countdown`
+      is currently `"time" | "meters" | null` and `--accent` is documented as
+      "the only place accent appears anywhere on the three panes"
+      (`surfaceModel.ts:398-400`). Both widen to admit rest. Reconcile those
+      comments in the same change, and check `docs/design/DEVIATIONS.md`.
+      **Why this beats locking the numbers** (the option RC-23 rejected): it
+      costs no change to what any number MEANS, so it carries none of that
+      ruling's TRIAD weight. The numbers stay honestly live; only the labelling
+      stops being ambiguous.
+- [x] **RC-23 — DECIDED, KEEP AS IS (James, 2026-08-26): the grid keeps
+      showing live frames through the rest and settles when the split lands.**
+      Raised by James from his own row — *"the grid view updates during rest,
+      then locks in the right numbers after rest. as soon as work ends, the
+      grid view should lock finals from the split"* — and then **ruled the
+      other way by him once the cost was on the table.** Recorded so nobody
+      re-opens it from the symptom alone.
+      **The wire fact, measured not guessed:** the split halves for interval N
+      do NOT arrive at the work->rest boundary. They arrive at the END of the
+      rest. In `docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json`
+      the frame turns `resting` at `atMs 1787693807210` (seq 21) and
+      `interval-complete index=0` lands at `1787693866878` (seq 31) — **59.7 s
+      later, the whole programmed `r60`.** The grid moves during the rest
+      because it is showing live frames while waiting for a split that cannot
+      arrive yet, and rest-coast metres plus the machine's still-running clock
+      keep those frames moving.
+      **So "lock finals when work ends" cannot mean "lock from the split" —
+      the split is the late thing.** It would mean locking from OUR
+      accumulator and reconciling ~60 s later when the split arrives. Those two
+      have measurably disagreed: 1.4 m / 0.7 s on the terminate in
+      walk-2026-08-25 W-4, because the accumulator closes at the terminal frame
+      while the machine takes one more sample.
+      **The ruling, and its reasoning:** a row that is honestly still live is
+      better than a row that looks final and then CHANGES under the rower's eye
+      when the split lands. Locking early would buy the appearance of finality
+      at the price of a number that moves after it claimed to be settled —
+      which is the failure this whole phase exists to stamp out.
+      **Reopen only with:** evidence the accumulator and split agree closely
+      enough at a work->rest boundary that a locked value would not visibly
+      change (the W-4 delta was measured on a TERMINATE, not a rest boundary,
+      so it does not settle this), or a rower complaint about the live movement
+      itself rather than about the settling.
+- [ ] **RC-22 — `ergomatic:last-session-log` is never cleared either, so a
+      STALE-URL arrival still copies a previous session's ring.** Residual of
+      the ultrareview's bug_002, found at its scoped review (2026-08-26). The
+      flagship case is genuinely fixed: a session that just ended wrote that
+      key at teardown, so a `?from=monitor` arrival gets its own ring. But
+      **nothing clears the key**, so opening a bookmarked or reloaded
+      `/library/:id/log?from=monitor` with no teardown behind it copies
+      whatever session wrote it last — the same "reloaded bookmark" story the
+      door-miss pruning already had to defend against.
+      Lower harm than bug_002 (it needs a deliberate stale URL rather than the
+      ordinary failure path) but the same shape: a diagnostic presenting an
+      old session's evidence as this one's. **Fix shape:** the same `atMs`
+      floor the door-miss merge now uses, or a per-arrival freshness marker.
+      Do NOT fix it by clearing at connect — that was tried for bug_002 and
+      broke the by-hand recovery path.
+- [ ] **RC-19 — `server/routes/data.test.ts` flakes under the combined
+      `--project unit --project client` run, and it is NOT one flaky test.**
+      Observed four times across three sessions on 2026-08-25, and the
+      interesting part is that it fails a DIFFERENT test each time: once
+      *"DELETE is idempotent"*, once *"accepts distanceMeters at its exact
+      upper bound"*, and twice unnamed. Always green on re-run, always green
+      under `--project unit` alone (46 files / 1434 tests), and green in
+      isolation. **A different assertion failing each time means the fault is
+      shared state or ordering, not a bad assertion** — chasing the named test
+      will find nothing. Landed here rather than left in three task reports
+      (recurring failure #14). First moves, from the flake-hunt playbook this
+      repo already has: capture the failure instead of re-running to green,
+      then check whether failures cluster by worker index or by file ordering,
+      to separate a harness race from an app race. Related in kind to the two
+      e2e flakes already tracked.
+- [ ] **RC-18 (PAIR WITH THE `door` COLUMN — both want the next stored-shape
+      change to the logs table; PM re-gate, 2026-08-26. RC-18 is also precisely
+      the over-claiming row the under/over-claim argument was written about: a
+      row asserting a machine identity it does not know.) — `"PM5"` is baked
+      into a fallback the rower can SEE, and it
+      will be wrong the day we support another monitor.** James, 2026-08-25,
+      on Phase LM Task 4's new label: *"We may one day support other rowers.
+      Be careful where we use 'PM5'."* That label was renamed in the same
+      breath (`NO MONITOR READING`, matching the shipped `LOST THE MONITOR` —
+      **"monitor" is the house word, "PM5" is a model number**), but the sweep
+      found a SECOND instance that is not copy and was not fixed:
+      `webBluetooth.ts` and `capacitorBle.ts` both do `device.name ?? "PM5"`,
+      so an erg advertising an empty GATT name gets literally named "PM5" in
+      the device caption, in `deviceName` on the saved row, and therefore in
+      the stored record forever. On a Concept2 that is merely redundant; on
+      anything else it is a false claim about which machine the rower used,
+      persisted. **Fix shape:** fall back to a neutral noun, not a model
+      number. Left out of Phase LM PR 1 deliberately — it touches both
+      transports and a stored value, so it wants its own failing test rather
+      than riding a copy change.
+      **Standing rule this establishes:** user-facing copy says "monitor";
+      "PM5" appears only where we are quoting the device's OWN advertised
+      name, or in release notes describing what shipped at the time.
+- [ ] **RC-17 — The tier-A total line drops rest, and only `pnpm screenshots`
+      sees it.** Found 2026-08-25 by Phase LM's Task 2 implementer, on a
+      capture unrelated to its own work, and landed here rather than left in a
+      task report (recurring failure #14). `e2e/screenshots.spec.ts:2370`
+      expects `.summary-total-line` to read `4:04 total · plus 242 m coasting
+      in rest`; it renders `2:04 total`. **Reproduced on a fresh
+      `docker compose down -v` volume, so it is not stale test data.**
+      Diagnosis from the code, not by elimination: the seeded row is tier A
+      (`machineWorkSeconds`/`machineWorkMeters` both set), and `buildHeroes`'s
+      tier-A branch calls `buildStoredTotalLine(row, timeSeconds, {})` with an
+      EMPTY `stepSums` — the fix-round-2 C1 change from RC-5
+      (`storedSummary.ts:620-634`) — while that seed sets neither
+      `restSeconds` nor `restMeters`, so the rest half of the line vanishes.
+      **Owner is whoever landed RC-5, not Phase LM.** **The fix, inlined here
+      because the report it used to point at lives in git-excluded
+      `.superpowers/` and dies with its worktree (RF#16's corollary, caught at
+      #198's PM gate): add `restSeconds: 120, restMeters: 242` to that
+      screenshot seed's `postLog`.** The unit fixture asserting the identical
+      string (`src/log/storedSummary.test.ts:118-119`) already seeds both and
+      passes, which is exactly why the unit test stayed green while the capture
+      rotted.
+      **Why it went unnoticed: `pnpm screenshots` is not part of CI**, so a
+      capture assertion can rot indefinitely between the hand-runs that touch
+      it. That gap is the more interesting half of this row — the unit test
+      asserting the same string passes, because it supplies the step sums the
+      seed does not.
 - [ ] **RC-14 — The avg-pace verdict's zero-fire on an ORDINARY finish
       (walk 2026-08-25, W-2). A SECOND, DISTINCT shape from RC-13 — do
       not fold them.** Piece 1 of the walk (`w 1' r1 / w 500m r1 / w 1'`,
@@ -5831,51 +6049,273 @@ report first try (`docs/monitor/sessions/walk-2026-08-25/`, finding W-10).
 Scoped by James to all three defects together after he was shown the frame:
 *"the LOST isn't easy to notice, i think we need to highlight that more."*
 
-**What happened.** A tester connected, programmed a workout, tapped "Show me
-the numbers", locked the phone and put it in their pocket, rowed, then hit End
-— and concluded the recording was lost. It was. Locking the phone drops the
-monitor link; nothing rowed while pocketed reaches the run. After ~30 s of real
-rowing the screen read `0m`. The row is not missing from history, though: it is
-saved as a targets-only record stamped **LOGGED BY HAND**, which is exactly
-what a vanished recording looks like from the outside.
+**What happened. CORRECTED 2026-08-25 by the antagonist anchor pass — the
+first diagnosis was wrong and the corrected one is narrower and sharper.** A
+tester connected, programmed a workout, tapped "Show me the numbers", locked
+the phone and pocketed it, rowed, then hit End, and concluded the recording was
+lost. It was never STARTED. The app opens a record only when it sees the first
+pull — `createMonitorRun` has one call site (`useMonitorSession.ts:1681`) inside
+the `phase === "ready"` gate — so locking before that pull leaves the phase in
+`ready` forever, creates no record, and gives End nothing to close
+(`closeRecord:1477` returns on `run === null`). The file's own comment at
+`useMonitorSession.ts:988-990` describes this verbatim, and **this ROADMAP
+already recorded the mechanism at `:3271` from James's own 2026-08-24 tester
+report** — the phase was opened without reading it.
+
+The row then saves through the MANUAL door (`monitorModeRun` null →
+`LogSession.tsx:1578`), whose POST carries neither `deviceName` nor `endedBy`,
+so the stored row reads **LOGGED BY HAND** — which is exactly what a vanished
+recording looks like from the outside.
 
 **The three defects, which are one story.**
 
-1. **`· LOST` is easy to miss.** It is small mono text in the header, next to
-   the erg's serial number, while the numbers that dominate the screen read
-   `0:00.0` and `0` — which look like a piece that has not started, not like an
-   app that has gone deaf. A rower mid-piece will not notice.
+1. **The screen looks like a session in progress when it is not.** The panes
+   paint live-LOOKING numbers off fall-through frames while the phase is still
+   `ready`, and the only contrary signal is `· LOST` in small mono text beside
+   the erg's serial. James asked for that to be louder, and he was right for a
+   sharper reason than he was given: those numbers are not stale readings, they
+   were never readings at all.
 2. **The banner promises something false.** "Row on. The erg is still counting
    and End keeps what we saw" is true whenever we saw anything, and a lie in
    the one case that costs a workout — where we saw nothing. Copy that is
    reassuring in proportion to how bad the situation is.
-3. **The saved row misdescribes its own provenance.** LOGGED BY HAND is a
-   claim about how a record came to exist, and it is wrong here: the rower
-   rowed, and we failed to hear it. That is a different thing from typing
-   numbers in, and the record should not conflate them.
+3. **The saved row poses as hand-logged.** The rower rowed and we did not hear
+   them; neither of those is "logged by hand". **But the fix is NOT a
+   `LINK LOST` source label** (anchor pass, and this was revision 1's biggest
+   hole): `sourceLabel` answers "where did these numbers come from" while
+   `endedBy` answers "how did this close", and they agree only on the
+   zero-measured case. On a link dropping after 3 of 4 intervals, a `LINK LOST`
+   source would stamp failure over genuinely PM5-measured rows and delete the
+   one signal saying they came off the machine — the mirror shape in display
+   clothing. `LINK_LOST_LINE` (`storedSummary.ts:874`) already carries the close
+   reason for rows that have data.
 
 **TRIAD weight** — defect 3 changes what a stored row claims about itself, so
 this gets the full antagonist pass on its spec and a PM final-PR gate,
-regardless of how small the diff turns out to be.
+regardless of how small the diff turns out to be. Note the stored row currently
+has `ended_by = NULL` (the manual door never posts it), so fixing the STORED
+record — not just the live screen — is a write-path change, and the spec makes
+the PR say which of the two it did.
 
-**Required research before the design is presented** (the standing
-brainstorming rule, and the reason this is a phase and not a fast-path styling
-tweak): iOS owns backgrounding, and we have never checked what it permits.
-Screen Wake Lock, Capacitor's background modes, whether a BLE central can hold
-a subscription while the app is suspended, and what Core Bluetooth
-state-restoration would and would not give us. Vendor docs first, tagged
-PRIMARY / SECONDARY / INFERENCE. **And the does-it-exist question, explicitly:
-before designing any "keep rowing while locked" affordance, establish that iOS
-will actually deliver those notifications — if it will not, name what we are
-asserting on its behalf.** The walk settled that the link IS lost; it did NOT
-settle the mechanism (central torn down vs notifications withheld vs WebView
-suspended), and the fix shape depends on which.
+**The research was ALREADY DONE and is not owed again** — this is the second
+correction the anchor pass forced. `docs/superpowers/research/2026-08-20-ble-connection-management.md`
+plus James's ruling at `:2095-2130` settle it: **"The recommendation is CORRECT
+RESUME, not a background mode."** The obstacle is WebKit's WebContent
+throttler, whose runnable set is *visible, audible, capturing*, and **nothing in
+that chain reads `UIBackgroundModes`** — so a background mode buys "the link
+stays up" and never "we keep logging the row". Keep-awake is likewise already
+done (`ConnectedInterstitial.tsx:283`, spanning the whole connected flow since
+2026-08-11), so this was a MANUAL lock and no wake-lock work would have helped.
+**PR 2 is correct resume.** Any proposal for `UIBackgroundModes` is re-opening a
+closed ruling and needs James, not a research pass.
 
-**Not yet decided, and the design owes an answer to each:** whether a
-zero-measured connected session should offer "Log against plan" at all;
-whether the rower should be warned BEFORE locking rather than after; and
-whether a lost link mid-piece should be recoverable by reconnecting rather than
-only endable.
+**What is genuinely unknown** and must not be asserted in any copy or PR body:
+whether the zero came from frames never arriving (WebKit suspended) or frames
+arriving and the ready gate refusing them (it needs `rowingActive` AND
+increasing distance). `pm5-interface-notes.md:4663` records a 15-20 s lock NOT
+dropping the link, with the session resuming ticking on unlock — so the platform
+explanation is not even complete. PR 1's Task 1 instruments this rather than
+guessing, because PR 2's shape depends on the answer.
+
+**Three open questions, ANSWERED 2026-08-25 as PR 1 was built** (this list
+documented current state and had gone stale):
+
+- *Should a zero-measured connected session offer "Log against plan" at all?*
+  **Yes, and undemoted** — James's ruling: the rower did the work, only our
+  recording failed. All three exits stay, `Log against plan` leads. Pinned by
+  a test in `LogSession.test.tsx`, not left to the shared component's defaults.
+- *Should the rower be warned BEFORE locking rather than after?* **Yes** —
+  PR 1's ready-screen warning (spec Task 2).
+- *Should a lost link mid-piece be recoverable by reconnecting?* Still **PR 2**
+  (correct resume). Unchanged.
+
+**Status: PR 1 walked and ready to merge (2026-08-26).** The re-walk passed
+leg A with zero spurious latches, counted from a committed ring
+(`docs/monitor/sessions/walk-2026-08-26b/`). Criterion 9 is CLOSED BY RULING,
+not met — James cancelled the probe on incidental evidence, and it closed the
+control arm only. Criterion 10's leg B was SUBSTITUTED by a 98 s background
+rather than a deliberate lock. **Nothing else in this phase is complete on
+merge:** PR 2 (correct resume) and three owed rows below remain.
+
+### Phase LM — owed work
+
+Checkboxes, because this section ran 140 lines with none, and its own defect had
+to be filed into Phase RC's backlog for want of a home here. Caught at #198's PM
+gate.
+
+- [ ] **Lifecycle transitions are REPLAY-ONLY, never captured live — and both
+      ends would have to move before that changes.** Filed by fix-round-2
+      Task 4, which added the `lifecycle` member to `RecordedEvent` and taught
+      `transports/replay.ts` to emit it. Live capture was considered and
+      rejected on evidence, not taste: the recording tap is reachable only from
+      `transports/index.ts`'s `fakeMonitorEnabled`-gated WEB arm, and
+      `adapters/monitorTransport.ts`'s `isNative()` branch takes native
+      straight to Capacitor BLE without passing through it — so the recorder
+      exists only where `adapters/appLifecycle.ts`'s web arm is a deliberate
+      no-op (Phase LL minor 9) and never calls back. A live recorder would be
+      an instrument wired to a surface with no signal on it. **Revisit when
+      either end moves**: a recorder composed on the native arm, or a web arm
+      that reports transitions again. Until then a synthesised transition
+      drives the same production handler through the same seam, which is what
+      the gate needs — see `lifecycleReplay.test.ts`.
+- [ ] **LM PR 2 — correct resume**, per James's 2026-08-20 ruling ("CORRECT
+      RESUME, not a background mode"). **UNBLOCKED 2026-08-26 — and it was
+      blocked on an event that will never happen.** This row used to read "do
+      not start before the probe reports"; James CANCELLED the probe, so the
+      probe will never report. What the cancellation gathered instead:
+      `framesWhileHidden=2` on both real backgrounds, i.e. a genuine background
+      delivers almost nothing, which is the input correct resume has to assume.
+      Start from that.
+- [ ] **The stored row still reads `LOGGED BY HAND` for a connected session
+      that opened no record — permanently and unbackfillably, for that row and
+      every earlier one.** PR 1 took option 2 knowingly. **This is a knowing
+      exception to James's 2026-08-18 ruling that the same fact must not read as
+      two different words live versus from the log**, and the strongest argument
+      against option 2 is that the divergence is PERMANENT — so it gets a
+      trigger, not merely a record. **Trigger: the `door` column lands with the
+      NEXT stored-shape change to the logs table.** The argument that settles
+      the original call, worth reusing: a row that UNDER-claims is a recoverable
+      false negative, while a row posting a best-effort last-used `deviceName`
+      over a session that measured nothing is a false positive indistinguishable
+      from a real measurement, and would poison the very audit that counts how
+      often this fires.
+- [ ] **The in-flight interval's metres are DISCARDED on a mid-row link loss,
+      and `Nothing kept.` is honestly reporting it.** Filed at #198's PM gate,
+      which checked rather than accepting the "cosmetic" label:
+      `measuredIntervalCount` counts COMPLETED intervals, `closeRecord` records
+      no partial, tier-B heroes need actuals. **On a SINGLE-interval workout —
+      the tester's own 2000 m "Beam Sea" — any mid-row loss gives `kept = 0`
+      beside a nonzero greyed counter.** That is not an oddity to note on walk
+      leg B; it is the MAJORITY outcome of leg B. Say explicitly whether PR 2's
+      correct resume recovers those metres; if not, that is a product decision,
+      not an implementation detail.
+- [x] **The diagnostics row never renders on a device's FIRST EVER
+      connected session, and no hardware walk can catch it.** FIXED by
+      fix-round-2 Task 3: `MonitorLogRow` now re-reads the stash once in a
+      post-mount effect, which React runs AFTER the outgoing subtree's
+      passive cleanup in the same commit, so the teardown's write is seen
+      without a remount. The connected-arrival gate is unchanged (the
+      re-read goes through the same `readMonitorLogStash(fromMonitor)`), and
+      a session that already had a stash at mount renders exactly as before.
+      Pinned by two tests that drive the REAL navigation ordering rather
+      than seeding storage and mounting: a first-ever-device hand-off that
+      must show and copy the row, and a by-hand arrival that must still show
+      nothing when a teardown writes while it is on screen. **The
+      walk-protocol trap below still stands** — a walk on a much-connected
+      phone would have passed either way, so the ordering test is the only
+      thing that proves this, and any walk card claiming to exercise the
+      never-rowed readout must still say which device state it ran on.
+      (Was RC-20; re-homed to Phase LM at #198's PM gate — it is Phase LM's own component, found by Phase LM's own fix round.) Found by Phase
+      LM's fix round, verified independently at its re-review, and filed rather
+      than fixed at the time because it was pre-existing (shipped by Task 1) and
+      narrower than the PR that found it. **The mechanism, kept because it is the
+      class rather than the instance:** `MonitorLogRow` read the stash in a
+      `useState` LAZY INITIALIZER only — no effect, no storage listener, no
+      re-read — while `useMonitorSession`'s `teardown` is a passive `useEffect`
+      cleanup, and React runs the new route's render BEFORE the outgoing
+      subtree's passive cleanup. So on a genuine first-ever connected session
+      there was no prior entry at mount, the row rendered `null`, and it never
+      got a second chance; Task 1's promise (diagnostics reachable on a phone in
+      the never-rowed case) held only from the SECOND connected session onward.
+      **A test that seeds storage and then mounts cannot see this** — it
+      exercises the already-working path, which is why every unit test was green.
+      **The walk-protocol trap is the important half, and it is why this got
+      its own row rather than a line in a PR body:** every walk this project
+      runs happens on a phone that has connected dozens of times, so **a walk
+      will PASS while a brand-new tester gets nothing.** Validating this case
+      needs a factory-reset-equivalent device state, not merely "has not rowed
+      this session". That is the same verify-the-app-against-itself shape as
+      recurring failure #11. Any walk card claiming to exercise the
+      never-rowed readout must say which device state it ran on.
+- [ ] **`rowingActive` is falsified but not dangerous — one test and one
+      diagnostic are owed, no behaviour change.** Walk 2026-08-26 read
+      0x0031's byte 9 `false` on every frame of a real row (§20 fact 13,
+      corrected). Task 2 enumerated all six production consumers; **four need
+      nothing at all**, and the two that carry the predicate are:
+      - **The ready gate's fallback works and is pinned.** It is the only
+        consumer where a stuck byte can lose data, and it already carries
+        `ROWING_ACTIVE_FALLBACK_FRAMES`. Deleting `frame.rowingActive` from
+        `declared` (`useMonitorSession.ts:1747`) fails three tests. **Stated
+        cost, accepted:** the fallback opens the record ~5 frames late, so
+        that walk's record opened at the machine's own `elapsed=24.03 /
+        distance=32.9` and `seriesRecorder` missed the row's first metres.
+        The stored per-interval actuals come from 0x0037/0x0038 and are
+        unaffected.
+      - **`surfaceModel.ts:915`'s `midSessionMirror` conjunct is UNPINNED, and
+        this is the actual owed work.** MEASURED, not inferred: deleting
+        `frame.rowingActive === false` from that predicate leaves **5357 tests
+        and 191 test files green**. Its own guard test says in a comment that
+        it isolates the DISTANCE half; nothing isolates the other half. The
+        degeneration is cosmetic — the predicate widens to distance-only, so
+        the heroes read `0:00.0 / 0` for the first metre of an interval
+        instead of clearing on the first pull, self-clearing in ~1 stroke —
+        which is why **no behaviour change is proposed**. Owed: one test that
+        pins the byte half (a `rowingActive: true` frame inside the reset
+        window must NOT mirror), and a reconciled comment.
+      - **Owed diagnostic, and it is the thing that would settle the
+        question:** the ring stores only the decoded boolean, and
+        `pm5/parse.ts:608` is a strict `rowingState === 1`, so any non-1 value
+        reads `false`. Raw `0x0031` ring lines fire on terminal states only.
+        **The next occurrence still will not tell us whether the machine said
+        Inactive or said something we do not decode.** Carry the raw byte in
+        the `frame` / `rowing-active-fallback` entries, or require a
+        `.jsonl.gz` recording on any walk re-testing this.
+      - **Not owed, stated so it is not re-derived:** `parse.ts:608` is the
+        producer; the three log entries (`driver.ts:2517`,
+        `useMonitorSession.ts:1768`, `:2868`) are diagnostics with no
+        behaviour attached; `surfaceModel.ts:312`'s `NO_FRAME` is a constant.
+        `seriesRecorder.ts` never reads the field, so **no stored data depends
+        on this byte**.
+
+**OWED, and deliberately not built in PR 1: the STORED row for a
+never-started connected session is still wrong.** PR 1 took the design
+spec's Task 4 **option 2** — fix the live screen, leave the stored row —
+and this is the record of what that costs and of the analysis the next
+attempt should start from rather than redo.
+
+- **What ships in PR 1:** the end-of-session summary for a `?from=monitor`
+  arrival with NO record reads `NO MONITOR READING` in the SOURCE slot instead of
+  `LOGGED BY HAND`, and takes the workout's own target hint instead of
+  `BY FEEL`. The predicate is deliberately narrow — `from=monitor` AND no
+  record in storage at all — because the other three `monitorModeRun` miss
+  conditions leave a record that may hold real PM5 readings we simply cannot
+  render, and claiming "no reading" over those would not be earned.
+- **What stays wrong:** the saved row keeps reading `LOGGED BY HAND` on the
+  history screen, permanently and unbackfillably, for this row and every
+  earlier one. It is not wrong about its NUMBERS (`TARGETS ONLY · NOTHING
+  MEASURED` is exactly true); it is wrong about the DOOR. The live screen and
+  the stored screen therefore disagree for this one case, which is a knowing
+  exception to the 2026-08-18 copy ruling that the same fact must not read as
+  two different words live versus from the log (`storedSummary.ts`'s SOURCE
+  INFERENCE header carries the exception, at the place the ruling lives).
+- **Why not option 1, and what a future attempt must not re-derive.** Making
+  the stored row honest needs a NEW stored field plus a migration; neither
+  existing candidate works. `endedBy` would assert a close reason for a record
+  that never existed (a sixth enum value, and `buildLinkLostLine`'s deliberate
+  equality check would render it invisibly anyway); `deviceName` IS reachable
+  (`loadLastDevice()`, `ConnectedInterstitial.tsx:57`, written on every pair at
+  `:321` — the "unknowable" claim was itself false and is corrected here), but
+  it is a best-effort LAST-USED name rather than this session's authoritative
+  device, and posting it would make the stored row assert that a named erg
+  supplied numbers that came off nothing — a STRONGER false claim than
+  `LOGGED BY HAND` — while granting it a wall-clock `timeLabel` the live screen
+  never shows. Worth keeping, because the spec first rejected `deviceName` for a
+  DIFFERENT
+  reason ("claims PM5 provenance for numbers that came off nothing") that
+  **already describes shipped behaviour**: a monitor-door row whose record
+  exists but measured nothing posts `deviceName` today and renders
+  `PM5 <name>` with the targets-only caption. So the provenance objection is
+  not the one that kills it here; the missing data is.
+- **The shape a future spec should weigh:** a narrow nullable column
+  carrying exactly "this row came through the connected door and holds no
+  monitor reading", versus the broader and better-modelled `door` column the
+  from-the-log spec's own SOURCE INFERENCE note already wishes existed. The
+  second would retire an inference this repo has flagged as a hack, and would
+  change what EVERY row claims — its own spec, not a tail task. Either way
+  the timeLabel gate in `storedSummary.ts`'s `buildMeta` (currently keyed on
+  `sourceLabel !== "LOGGED BY HAND"`) has to be re-derived positively, or a
+  third bucket silently gains a wall-clock reading the live screen never
+  shows.
 
 ## Bugfix rounds
 

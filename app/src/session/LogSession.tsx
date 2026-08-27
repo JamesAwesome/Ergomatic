@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Link,
   Navigate,
@@ -200,6 +200,63 @@ function manualLockedBaseline(
     : null;
 }
 
+// Task 1 (lost-monitor design spec): mirrors `recordPostSacrifice`'s own
+// append idiom (below, module scope), recording WHICH gate a `from=monitor`
+// arrival missed on. Best-effort and silent on any failure (missing or
+// malformed stash, localStorage disabled) — diagnostics never block this
+// screen's render.
+//
+// **ITS OWN KEY, AND THE PREMISE THAT SENT IT SOMEWHERE ELSE WAS FALSE**
+// (fix round, whole-branch review MEDIUM). Task 1 appended these entries
+// straight onto `ergomatic:last-session-log`, on the stated premise that a
+// `from=monitor` arrival "just finished tearing down the connected session
+// that sent it here, so this key is very likely to already hold that
+// session's own exported ring". It does not — it holds the PREVIOUS
+// session's ring, and it is about to be overwritten:
+//
+//  - this append runs during `ManualDoorLog`'s RENDER (a lazy `useState`
+//    initializer, below), and
+//  - `useMonitorSession.ts`'s `teardown` is a PASSIVE effect cleanup
+//    (`useEffect(() => teardown, [teardown])`) whose stash does a full
+//    `localStorage.setItem` of that same key.
+//
+// React runs the new route's render before the old subtree's passive
+// unmount, so on the flagship `?from=monitor` arrival the entry was written
+// and clobbered milliseconds later — destroyed on the one path it was built
+// for, with every unit test green because they called `monitorModeRun`
+// directly and never navigated.
+//
+// A separate key, rather than teaching `teardown` to merge: the two writers
+// are on opposite sides of a navigation, neither can see the other's
+// timing, and a merge would have to distinguish "entries from the session
+// I am closing" from "entries from the session before it" using data
+// neither side carries. The single-artifact intent survives in the READ:
+// `readMonitorLogStash` merges the misses onto the ring, so `MONITOR LOG ·
+// COPY` still yields one story in one paste.
+const LOG_DOOR_MISS_KEY = "ergomatic:log-door-misses";
+const LOG_DOOR_MISS_CAPACITY = 500;
+
+function recordLogDoorMiss(condition: string): void {
+  try {
+    const raw = localStorage.getItem(LOG_DOOR_MISS_KEY);
+    let entries = raw !== null ? (JSON.parse(raw) as MonitorLogEntry[]) : [];
+    const nextSeq =
+      entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
+    entries.push({
+      seq: nextSeq,
+      atMs: Date.now(),
+      kind: "log-door-miss",
+      detail: condition,
+    });
+    if (entries.length > LOG_DOOR_MISS_CAPACITY) {
+      entries = entries.slice(entries.length - LOG_DOOR_MISS_CAPACITY);
+    }
+    localStorage.setItem(LOG_DOOR_MISS_KEY, JSON.stringify(entries));
+  } catch {
+    // Best-effort diagnostics; never block or complicate this screen's render.
+  }
+}
+
 /** The monitor mode gate (7C spec §4) — the manual door's route
  *  (`/library/:id/log`) is ALSO where `WorkoutDetail.tsx`'s
  *  `handleConnectedEnded` sends a just-finished connected session
@@ -247,9 +304,21 @@ function manualLockedBaseline(
  *
  *  Exported for tests (task brief): each condition gets its own
  *  independent-removal test against this one function, cheaper than
- *  driving the whole screen four times over. Pure — reads `localStorage`
- *  via `loadMonitorRun()` the same way `loadRun`/`loadDraft` already do at
- *  this screen's other call sites, never a hook of its own. */
+ *  driving the whole screen four times over. Reads `localStorage` via
+ *  `loadMonitorRun()` the same way `loadRun`/`loadDraft` already do at this
+ *  screen's other call sites, never a hook of its own.
+ *
+ *  **Task 1 (lost-monitor design spec): no longer side-effect-free.** A
+ *  `from=monitor` arrival that finds no usable record is exactly the
+ *  flagship shape this phase exists to make self-diagnosing, so every
+ *  null-returning branch below (save the flag itself — an ordinary manual
+ *  visit is not evidence of anything) makes one best-effort append onto
+ *  `ergomatic:log-door-misses` via `recordLogDoorMiss`, naming WHICH gate
+ *  missed and never why. The RETURN VALUE and every condition's own logic
+ *  are unchanged; this call site's `useState` lazy initializer may run
+ *  twice under StrictMode in dev, which duplicates at most one diagnostic
+ *  entry — harmless for a best-effort append, same posture every other
+ *  writer onto this stash already takes. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function monitorModeRun(
   search: URLSearchParams,
@@ -257,14 +326,54 @@ export function monitorModeRun(
 ): MonitorRun | null {
   if (search.get("from") !== "monitor") return null;
   const run = loadMonitorRun();
-  if (run === null || run.completedAt === null) return null;
-  if (run.workoutId !== workoutId) return null;
+  if (run === null) {
+    recordLogDoorMiss("no-run");
+    return null;
+  }
+  if (run.completedAt === null) {
+    recordLogDoorMiss("not-completed");
+    return null;
+  }
+  if (run.workoutId !== workoutId) {
+    recordLogDoorMiss("workout-id-mismatch");
+    return null;
+  }
   try {
     buildMonitorLogSteps(run);
   } catch {
+    recordLogDoorMiss("log-steps-build-failed");
     return null;
   }
   return run;
+}
+
+/** Phase LM PR 1 Task 4 (lost-monitor design spec): the flagship arrival,
+ *  as a predicate. TRUE only when this route was reached from the
+ *  CONNECTED door (`?from=monitor`, `WorkoutDetail.tsx`'s
+ *  `handleConnectedEnded`) and there is NO RECORD AT ALL in storage — the
+ *  session where the app never heard a first pull, so `createMonitorRun`
+ *  never fired and End had nothing to close.
+ *
+ *  **Deliberately narrower than "`monitorModeRun` returned null".** That
+ *  function misses on four conditions and only the FIRST of them (no
+ *  record) proves we hold nothing: a record that is merely unfinished, for
+ *  another workout, or one whose `logSeed` no longer aligns can carry real
+ *  PM5 readings we simply cannot render here. Saying "no reading" over
+ *  those would be a claim we have not earned, so they keep the
+ *  door-ambiguous `LOGGED BY HAND` they render today. The one rule this
+ *  file already trusts for the same storage read applies: read
+ *  `loadMonitorRun()` directly, never a state var.
+ *
+ *  Known and accepted: a RELOAD of this URL after a successful monitor-mode
+ *  save also lands here (that save clears the record), and this predicate
+ *  cannot tell it from the flagship. Both are "we hold no reading for the
+ *  row you are about to save", which is what the label says — and the same
+ *  pair `recordLogDoorMiss("no-run")` above already records as one class.
+ *
+ *  Exported for tests, same reasoning as `monitorModeRun` above. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function connectedArrivalWithNoRecord(search: URLSearchParams): boolean {
+  return search.get("from") === "monitor" && loadMonitorRun() === null;
 }
 
 /** Resolves the POST body's `workoutType` — `SessionRun` itself doesn't
@@ -372,6 +481,42 @@ function recordPostSacrifice(status: number): void {
       entries = entries.slice(entries.length - POST_SACRIFICE_LOG_CAPACITY);
     }
     sessionStorage.setItem("ergomatic:last-rowed-log", JSON.stringify(entries));
+    // SCOPED REVIEW finding 1 (2026-08-26): this entry must land in BOTH
+    // stashes, because it is appended AFTER the teardown that wrote them.
+    // `readMonitorLogStash` now prefers `last-session-log` on a
+    // `?from=monitor` arrival (bug_002: the rowed key outlives its session
+    // and was handing a previous success to a current failure) — and this is
+    // the one screen that produces a `post-sacrifice` entry, so writing only
+    // the rowed key made it invisible exactly where it is read. That would
+    // have silently falsified this function's own reason for existing: a
+    // systematic server refusal of `series` must be visible in diagnostics.
+    // Written as a second independent read-modify-write rather than reusing
+    // `entries`: the two stashes are not required to be identical, and this
+    // one must not overwrite the session stash with the rowed ring's tail.
+    const sessionRaw = localStorage.getItem("ergomatic:last-session-log");
+    if (sessionRaw !== null) {
+      let sessionEntries = JSON.parse(sessionRaw) as MonitorLogEntry[];
+      if (Array.isArray(sessionEntries)) {
+        sessionEntries.push({
+          seq:
+            sessionEntries.length > 0
+              ? sessionEntries[sessionEntries.length - 1]!.seq + 1
+              : 0,
+          atMs: Date.now(),
+          kind: "post-sacrifice",
+          detail: `series dropped from POST /api/logs after status ${status}`,
+        });
+        if (sessionEntries.length > POST_SACRIFICE_LOG_CAPACITY) {
+          sessionEntries = sessionEntries.slice(
+            sessionEntries.length - POST_SACRIFICE_LOG_CAPACITY,
+          );
+        }
+        localStorage.setItem(
+          "ergomatic:last-session-log",
+          JSON.stringify(sessionEntries),
+        );
+      }
+    }
   } catch {
     // Best-effort diagnostics; never block or complicate the save.
   }
@@ -709,37 +854,234 @@ function RecordingDownloadRow() {
   );
 }
 
+/** Merges the log-door misses onto a session ring, so `MONITOR LOG · COPY`
+ *  yields ONE artifact for the whole story — what the session recorded, and
+ *  what the log door then found (or didn't). The misses live under their
+ *  own key (see `recordLogDoorMiss` for why), so this is where the two come
+ *  back together.
+ *
+ *  The misses are RENUMBERED to continue the ring's own `seq` rather than
+ *  carrying their key-local numbering into a merged array where it would
+ *  restart at 0 halfway down. Anything unparseable on either side degrades
+ *  to the ring exactly as read — a diagnostics reader never gets less than
+ *  it would have without this function. */
+function withDoorMisses(stash: string): string {
+  try {
+    const raw = localStorage.getItem(LOG_DOOR_MISS_KEY);
+    if (raw === null) return stash;
+    const entries = JSON.parse(stash) as MonitorLogEntry[];
+    const misses = JSON.parse(raw) as MonitorLogEntry[];
+    if (!Array.isArray(entries) || !Array.isArray(misses)) return stash;
+    // ULTRAREVIEW bug_001 (2026-08-26): merge only the misses that belong to
+    // THIS session. The key is append-only and nothing clears it, so without
+    // this a real diagnostic copy carried every miss the install had ever
+    // recorded — months of stale entries from reloaded bookmarks — diluting
+    // the one artifact whose whole job is to explain the failure in front of
+    // you.
+    //
+    // The cut is principled rather than a chosen window: a miss stamped
+    // BEFORE this session's ring even began cannot be about this session.
+    // Both records carry `atMs` from the same `Date.now` clock.
+    //
+    // FAILS OPEN. `atMs` is optional on a ring entry (`eventLog.ts`), and a
+    // ring with no stamped entry gives no floor to compare against — so when
+    // there is no floor, every miss is kept, exactly as before. Losing a
+    // relevant miss is worse than keeping an irrelevant one: the miss is
+    // often the only record of WHY the door was missed at all.
+    //
+    // Storage growth needs no separate cleanup: `LOG_DOOR_MISS_CAPACITY`
+    // already bounds the key at 500 entries. Pruning the STORED list here
+    // would mean writing during a render, which is what this function is
+    // called from.
+    const stamps = entries
+      .map((e) => e.atMs)
+      .filter((t): t is number => typeof t === "number");
+    const floor = stamps.length > 0 ? Math.min(...stamps) : null;
+    const relevant =
+      floor === null
+        ? misses
+        : misses.filter((m) => typeof m.atMs !== "number" || m.atMs >= floor);
+    let seq = entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
+    return JSON.stringify([
+      ...entries,
+      ...relevant.map((m) => ({ ...m, seq: seq++ })),
+    ]);
+  } catch {
+    return stash;
+  }
+}
+
+/** Reads the stashes a connected session's teardown may have left behind,
+ *  rowed one first: `ergomatic:last-rowed-log` (sessionStorage, written
+ *  only when a run actually opened) falls back to
+ *  `ergomatic:last-session-log` (localStorage, written UNCONDITIONALLY on
+ *  every teardown as of Task 1, lost-monitor design spec) — the key that
+ *  exists for the never-rowed case this component used to have nothing to
+ *  show for. A session that opened a run writes both, so the more specific
+ *  rowed key still wins whenever it exists.
+ *
+ *  **THE FALLBACK IS GATED ON THE CONNECTED ARRIVAL** (fix round,
+ *  whole-branch review MEDIUM), and Task 1's own claim that "only the
+ *  never-rowed case ever falls through to the second read" was false in a
+ *  way that cost the rower something. `ergomatic:last-session-log` is
+ *  localStorage: it survives relaunch where the rowed sessionStorage key
+ *  does not, it is written on EVERY connected teardown including a failed
+ *  pairing and a connect-then-cancel, and nothing ever clears it. So after
+ *  a rower's first ever Connect, EVERY log screen fell through to it and
+ *  wore `MONITOR LOG · COPY` for the life of the install — on by-hand
+ *  entries that never touched a monitor.
+ *
+ *  `fromMonitor` is the arrival that key exists for. Every finished
+ *  connected session, rowed or not, reaches
+ *  `/library/:id/log?from=monitor` (`WorkoutDetail.tsx`'s
+ *  `handleConnectedEnded`), so gating on it costs the never-rowed readout
+ *  — Task 1's whole point — nothing at all, while a by-hand door stops
+ *  seeing a monitor's leftovers. The rowed sessionStorage read stays
+ *  ungated: it is tab-scoped and dies with the tab, which is the bound
+ *  the localStorage key does not have. */
+function readMonitorLogStash(fromMonitor: boolean): string | null {
+  const rowed = sessionStorage.getItem("ergomatic:last-rowed-log");
+  // ULTRAREVIEW bug_002 (2026-08-26): WHICH stash is right depends on how
+  // this screen was reached, and only the reader knows that.
+  //
+  // `?from=monitor` means the session that just ended sent us here, so its
+  // own trace is the answer. The rowed key is written ONLY by a session that
+  // opened a run and is never cleared, so preferring it here handed the
+  // flagship never-rowed failure the PREVIOUS successful session's log and
+  // presented it as this failure's evidence — worse than an empty copy,
+  // because it sends whoever reads the paste chasing a session that worked.
+  // (On iOS the WebView's sessionStorage lives for the whole app launch, so
+  // "it dies with the tab" was never a bound in practice.)
+  //
+  // A rowed session writes BOTH keys at the same teardown, so preferring the
+  // session stash costs a rowed arrival nothing — same log, same session.
+  //
+  // A by-hand visit (no `from=monitor`) still reads the rowed key alone: no
+  // session just ended, so "the row I meant to copy" is exactly right there,
+  // and the pin for it stays green.
+  //
+  // Fixed HERE rather than by clearing the rowed key at `connect()`, which
+  // was the first attempt: that also destroyed the by-hand recovery path and
+  // failed that pin. The two readers want different keys; the reader is where
+  // that is known.
+  const stash = fromMonitor
+    ? (localStorage.getItem("ergomatic:last-session-log") ?? rowed)
+    : rowed;
+  if (stash === null) return null;
+  // The misses only ever exist for a `from=monitor` arrival, and only that
+  // arrival's own reader wants them.
+  return fromMonitor ? withDoorMisses(stash) : stash;
+}
+
+/** The same never-throw posture all three of `MonitorLogRow`'s read sites
+ *  share, in one place rather than three copies of the same `try`: a quota
+ *  error, privacy mode, or a storage the platform has taken away must never
+ *  break this screen — the row simply does not appear. Task 3 gave this
+ *  component a THIRD read site (the post-mount re-read), which is what
+ *  earned the helper. */
+function readMonitorLogStashSafely(fromMonitor: boolean): string | null {
+  try {
+    return readMonitorLogStash(fromMonitor);
+  } catch {
+    return null;
+  }
+}
+
 /** The wire log's one UI door (7B iteration, 2026-08-08 — James: "1 but I
  *  want it to not disrupt the product experience"). A connected session's
- *  teardown stashes its full trace in sessionStorage
- *  (`useMonitorSession.ts`); the ended hand-off frame navigates HERE
- *  before the diagnostics sheet can be reached, so this screen is where
- *  the operator has always wanted the log and never had it. Deliberately
- *  whisper-quiet: absent entirely unless a rowed stash exists in this
- *  tab, one mono caption line below the actions, no layout the manual
- *  path ever sees.
+ *  teardown stashes its full trace (`useMonitorSession.ts`); the ended
+ *  hand-off frame navigates HERE before the diagnostics sheet can be
+ *  reached, so this screen is where the operator has always wanted the
+ *  log and never had it. Deliberately whisper-quiet: absent entirely
+ *  unless a stash exists, one mono caption line below the actions.
+ *
+ *  **"NO LAYOUT THE MANUAL PATH EVER SEES" WAS OVERSTATED, AND TASK 1 MADE
+ *  IT FALSE OUTRIGHT** (fix round, whole-branch review MEDIUM). This
+ *  component renders on all three doors — the session door, the monitor
+ *  door, and the plain by-hand one — so what actually keeps it off a manual
+ *  entry is that no stash is READABLE there, not the render site. Task 1's
+ *  localStorage fallback broke exactly that: it survives relaunch, is
+ *  written on every connected teardown, and is never cleared, so after one
+ *  Connect the row sat on every log screen forever. `readMonitorLogStash`
+ *  now gates that fallback on the connected arrival (see its own comment).
+ *  What remains true, and is the honest version of the old claim: the only
+ *  stash a NON-`from=monitor` door can still read is the tab-scoped
+ *  `ergomatic:last-rowed-log`, so a by-hand entry can see this row only in
+ *  a tab where a connected session actually opened a run, and only until
+ *  that tab closes.
  *
  *  I2 fix (final-review): the button used to copy `stash` — a value read
  *  ONCE at mount via `useState`'s lazy initializer. The hold-open
- *  instrument (Phase RC spec 1) appends to this SAME key on
+ *  instrument (Phase RC spec 1) appends to the rowed key on
  *  release/expiry, up to 90s AFTER this screen has already mounted (the
  *  finish hand-off navigates here well before that window closes) — so
  *  the mount-time snapshot could never contain the held-open window, and
  *  exit criterion 1's claim that this button "shows the window" was false
- *  as shipped. `stash` now only gates whether the row renders at all (a
- *  session that never rowed has no key at mount and none ever
- *  materializes later either — that part of the mount-time read is still
- *  correct); the CLICK handler re-reads the key fresh, so a hold that
- *  finished after mount is included. */
+ *  as shipped. `stash` now only gates whether the row renders at all; the
+ *  CLICK handler re-reads live, so a hold that finished after mount is
+ *  included.
+ *
+ *  **Task 1 (lost-monitor design spec): the never-rowed case used to have
+ *  no key at mount and none ever materialized later either — that claim
+ *  is why this whole task exists, and it is no longer true.**
+ *  `readMonitorLogStash` falls back to the never-rowed key both at mount
+ *  and at click time, so a session that never opened a run now renders
+ *  and copies exactly like a rowed one.
+ *
+ *  **TASK 3 (fix-round-2 spec): THE MOUNT-TIME READ ALONE MISSED A DEVICE'S
+ *  FIRST EVER CONNECTED SESSION**, which is the one session where nothing
+ *  was in storage beforehand. The read above is a lazy `useState`
+ *  initializer, so it runs during the new route's RENDER; the teardown that
+ *  writes the only stash such a device has ever had is a PASSIVE unmount
+ *  cleanup (`useMonitorSession.ts`'s `useEffect(() => teardown, [teardown])`)
+ *  — the exact ordering `recordLogDoorMiss`'s own comment already describes
+ *  from the other side. The row rendered `null` and never re-read, so Task
+ *  1's promise (diagnostics reachable on a phone in the never-rowed case)
+ *  held only from the SECOND connected session onward, and no walk could
+ *  ever catch it: every walk runs on a phone that has connected dozens of
+ *  times. The effect below re-reads once after mount, which React runs
+ *  AFTER the outgoing subtree's passive cleanup in that same commit — so
+ *  the stash written milliseconds later is seen without a remount.
+ *
+ *  It re-reads through `readMonitorLogStash` with this door's own
+ *  `fromMonitor`, so the connected-arrival gate above is unchanged: a
+ *  by-hand door still cannot see a connected teardown's leftovers, not even
+ *  one written while it is on screen. And it only ever fills a null — a
+ *  session that already had a stash at mount renders exactly as before. */
 function MonitorLogRow() {
-  const [stash] = useState<string | null>(() => {
-    try {
-      return sessionStorage.getItem("ergomatic:last-rowed-log");
-    } catch {
-      return null;
-    }
-  });
+  // Read here rather than threaded from each of the three call sites: a
+  // call site that lied about its own door would silently reinstate the
+  // permanent-furniture bug, and this component already knows the router.
+  const [searchParams] = useSearchParams();
+  const fromMonitor = searchParams.get("from") === "monitor";
+  const [stash, setStash] = useState<string | null>(() =>
+    readMonitorLogStashSafely(fromMonitor),
+  );
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
+  // One re-read, not a poll: `teardown`'s stash is synchronous at t=0 on
+  // both its paths (`useMonitorSession.ts`'s STEP 2 comment — the deferred
+  // path defers steps 1/3/4, never this one), and the navigation that
+  // brought us here is what unmounts it, so a single pass through the
+  // passive-mount phase is enough. A later append (the hold-open
+  // instrument, up to 90s out) is already covered by the click handler's
+  // own live read below — it changes the CONTENTS, never whether a stash
+  // exists.
+  useEffect(() => {
+    if (stash !== null) return;
+    // The READ is this effect's real work — storage is the external system
+    // here, and its content changed underneath us while React was
+    // committing. react-hooks' `set-state-in-effect` rule flags a setState
+    // made directly and synchronously in an effect body; routing it through
+    // a resolved-microtask callback is the same "setState in a callback
+    // when external state changes" shape the rule's own message
+    // recommends, and it is the idiom `Countdown.tsx` already uses here for
+    // exactly this reason. The read itself stays in the effect body, which
+    // is what pins the ordering — a microtask changes when the row appears
+    // by nothing a human could perceive, not what it reads.
+    const late = readMonitorLogStashSafely(fromMonitor);
+    if (late === null) return;
+    void Promise.resolve().then(() => setStash(late));
+  }, [stash, fromMonitor]);
   if (stash === null) return null;
   return (
     <button
@@ -749,15 +1091,10 @@ function MonitorLogRow() {
         // I2 fix: read live, not the mount-time closure — see this
         // component's own doc comment for why the mount-time value can be
         // stale by up to HOLD_OPEN_MS. Falls back to the mount-time
-        // `stash` only if sessionStorage has become unreadable between
+        // `stash` only if BOTH storages have become unreadable between
         // mount and click (extremely unlikely, but never worse than the
         // pre-fix behaviour).
-        let latest: string | null;
-        try {
-          latest = sessionStorage.getItem("ergomatic:last-rowed-log");
-        } catch {
-          latest = null;
-        }
+        const latest = readMonitorLogStashSafely(fromMonitor);
         void navigator.clipboard
           .writeText(latest ?? stash)
           .then(() => setCopied("copied"))
@@ -1149,6 +1486,15 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // from under a still-mounted component.
   const [monitorRun] = useState<MonitorRun | null>(() =>
     monitorModeRun(searchParams, workoutId),
+  );
+
+  // Task 4: computed once at mount, the same lazy-init idiom and for the
+  // same reason as `monitorRun` above — this reads storage, and a later
+  // render (a successful save clears the record) must not change what the
+  // screen already told the rower. Only ever consumed in the plain-manual
+  // branch below; the monitor branch returns before it is read.
+  const [connectedNoRecord] = useState<boolean>(() =>
+    connectedArrivalWithNoRecord(searchParams),
   );
 
   // This door never read the draft/run records in the first place (the
@@ -1578,6 +1924,12 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     door: "manual",
     steps: logSteps,
     dateIso: new Date().toISOString(),
+    // Task 4: the ONE thing that differs for a connected arrival with no
+    // record — the SOURCE slot (`NO_MONITOR_READING_SOURCE`'s own doc comment
+    // has the rule and its accepted stored-row divergence). Rows, heroes
+    // and caption are identical to a by-hand entry, because the numbers on
+    // screen genuinely are targets and nothing else.
+    connectedNoRecord,
   });
   const k2 = manualLockedBaseline("2k", workout.steps, baselines);
   const k6 = manualLockedBaseline("6k", workout.steps, baselines);
@@ -1652,9 +2004,16 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       title={workout.title}
       model={model}
       pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
-      // §2D: "by-hand manual door: BY FEEL" — an unconditional override,
-      // never the single-target rule (`singleTargetHint`'s own doc comment).
-      hint="BY FEEL"
+      // §2D: "by-hand manual door: BY FEEL" — an unconditional override
+      // for a genuine off-app entry, never the single-target rule
+      // (`singleTargetHint`'s own doc comment). Task 4 carves out the ONE
+      // arrival that is not an off-app entry: a connected session rowed
+      // against a PROGRAMMED workout, whose targets the erg itself was
+      // carrying. `BY FEEL` there is the same false by-hand claim the
+      // source slot just stopped making, in the other half of the screen —
+      // so this arrival gets the rule the connected door itself uses, and
+      // shows no hint at all when the workout has no single target.
+      hint={connectedNoRecord ? singleTargetHint(logSteps) : "BY FEEL"}
       expectedPain={workout.pain}
       held={held}
       onHeld={setHeld}

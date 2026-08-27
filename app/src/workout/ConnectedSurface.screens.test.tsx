@@ -304,6 +304,15 @@ interface CaptureOptions {
    *  `frozen: true` is what the caller's own status ternary
    *  (`ConnectedSurface.tsx`) reads to produce `SurfaceStatus`'s `"paused"`. */
   frozen?: boolean;
+  /** Phase LM PR 1 Task 4: the watchdog's own published fact — frames have
+   *  stopped arriving. It is the ONLY way to build a capture that is BOTH
+   *  in the pre-row state and link-lost, which is this phase's flagship
+   *  frame: `phase: "disconnected"` would take the session axis with it and
+   *  lose the READY status, while `frameSilence` leaves the phase alone and
+   *  moves only the link axis (`ConnectedSurface.tsx`'s own "two
+   *  independent facts, not one ranked list" comment). Defaults false, so
+   *  every existing capture is byte-identical. */
+  frameSilence?: boolean;
   /** Runs against the mounted surface before the markup is read — the
    *  diagnostics sheet has no prop of its own, it is opened by the same
    *  triple-tap a rower uses. */
@@ -324,7 +333,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     handoffHeld: false,
     frozen: options.frozen ?? false,
     runOpen: true,
-    frameSilence: false,
+    frameSilence: options.frameSilence ?? false,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
@@ -552,6 +561,18 @@ describe("screen fixtures for pnpm screenshots", () => {
           intervalIndex: 0,
           rowingActive: false,
           distanceMeters: 0,
+          // FOUND WHILE ADDING THE LOST TWIN BELOW (Phase LM PR 1 Task 4),
+          // and fixed here rather than left as a known-wrong committed
+          // capture: this frame is BEFORE THE FIRST STROKE, and the three
+          // session/interval fields were inheriting `liveFrame`'s
+          // mid-session defaults — so the picture showed a `2,705m`
+          // session counter and a part-run interval clock on a piece
+          // nobody had pulled yet (recurring failure #7, a capture whose
+          // own numbers contradict each other). Zero is not a placeholder
+          // here; it is what an armed machine reports.
+          elapsedSeconds: 0,
+          sessionDistanceMeters: 0,
+          sessionElapsedSeconds: 0,
           spm: 46,
           currentSplit: 251,
         },
@@ -602,6 +623,48 @@ describe("screen fixtures for pnpm screenshots", () => {
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live-opener.html");
   });
 
+  /** THE PHASE'S FLAGSHIP FRAME, and until now the one state in this whole
+   *  phase with no committed picture (Phase LM PR 1 Task 4). It is the
+   *  armed capture above with ONE fact changed — the frames stopped
+   *  arriving — so the two files sit side by side as the before/after of
+   *  the defect this phase exists for: same header ordinal, same READY
+   *  status, `· LOST` now on the device caption, and the banner reading
+   *  `Nothing kept.` because nothing ever was.
+   *
+   *  ZERO ACTUALS IS THE POINT HERE, not an empty fixture (recurring
+   *  failure #3): the mid-row capture below deliberately carries the
+   *  interval it has obviously rowed, and this one deliberately carries
+   *  none, because "no reading at all" is the state under test. The frame
+   *  is the armed capture's own re-arm ghost (spm 46, currentSplit 251 —
+   *  the PREVIOUS piece's numbers, which a re-armed machine really does
+   *  hold) so the capture proves the ghost stays suppressed here too
+   *  rather than being absent by accident.
+   *
+   *  `frameSilence`, not `phase: "disconnected"`: that phase would move the
+   *  session axis as well and the header would stop saying READY, which is
+   *  the very combination this phase had to stop treating as impossible. */
+  it("pane B, armed and the link lost — nothing was ever measured", async () => {
+    await expect(
+      capture("live", {
+        phase: "ready",
+        frameSilence: true,
+        fixture: NO_WARMUP_FIXTURE,
+        actuals: [],
+        frame: {
+          state: "armed",
+          intervalIndex: 0,
+          rowingActive: false,
+          distanceMeters: 0,
+          elapsedSeconds: 0,
+          sessionDistanceMeters: 0,
+          sessionElapsedSeconds: 0,
+          spm: 46,
+          currentSplit: 251,
+        },
+      }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-ready-lost.html");
+  });
+
   it("pane B, no HR monitor", async () => {
     await expect(
       capture("live", { frame: { heartRateBpm: null } }),
@@ -617,9 +680,23 @@ describe("screen fixtures for pnpm screenshots", () => {
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-paused.html");
   });
 
+  /** THE FIXTURE CARRIES THE INTERVAL IT HAS OBVIOUSLY ROWED (Phase LM PR
+   *  1 Task 3). It used to pass no `actuals` at all, which was invisible
+   *  until the lost banner started naming how many intervals survive: the
+   *  capture would have shown a surface two intervals into Filling Low,
+   *  2,705 m on its own counter, over a banner reading "Nothing kept." —
+   *  the empty-fixture defect (recurring failure #3) rendered as a
+   *  contradiction a reviewer can see. Interval 0's actual is the record
+   *  a real mid-session drop would have; the frame is unchanged, and so
+   *  are the progress-bar boundaries (`actualFor` prices a TIME interval
+   *  at its own programmed length, which is what `measuredWorkSeconds`
+   *  already assumed). */
   it("pane B, connection lost", async () => {
     await expect(
-      capture("live", { phase: "disconnected" }),
+      capture("live", {
+        phase: "disconnected",
+        actuals: [actualFor(0, FIXTURE.program)],
+      }),
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-disconnected.html");
   });
 
@@ -705,8 +782,22 @@ describe("screen fixtures for pnpm screenshots", () => {
   });
 
   it("the hand-off frame at ended", async () => {
+    // The ORDINARY ending, which is what this fixture has always shown:
+    // the rower rowed, the machine reported a boundary, and the frame is
+    // free to promise the numbers are kept. It carries a real actual as of
+    // the fix round (whole-branch review HIGH) because that promise is
+    // conditional now — with the empty `actuals` this used to pass, the
+    // capture would silently have become the NOTHING-measured frame while
+    // keeping the ordinary frame's name (recurring failure #3). The
+    // nothing-measured wording is pinned in `ConnectedSurface.test.tsx`'s
+    // own "ended" block; this file's job is the layout `e2e` asserts on,
+    // which is identical either way (one `<p>`, different words).
     await expect(
-      capture("live", { phase: "ended", endedBy: "user" }),
+      capture("live", {
+        phase: "ended",
+        endedBy: "user",
+        actuals: [actualFor(0, FIXTURE.program)],
+      }),
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-ended.html");
   });
 });

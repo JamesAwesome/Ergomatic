@@ -240,6 +240,26 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
       heartRateBpm: 140,
       programIntervalIndex: 1,
     },
+    // TWO MORE PROGRESSING FRAMES BEFORE THE FREEZE (2026-08-26). The
+    // predicate now requires evidence that this interval has actually been
+    // pulled in before it will call a hold a pause — `PULL_EVIDENCE_FRAMES`
+    // in `useMonitorSession.ts`, five consecutive frames of strictly
+    // increasing distance, which is what separates a rower who stopped from
+    // a flywheel coasting into an interval nobody has started. This story
+    // had four such frames and now has six. A real 17-second interval emits
+    // ~34 of them; the story is still the shorter thing, just no longer
+    // shorter than the behaviour it stands for.
+    ...[125, 133].map((distanceMeters, i) => ({
+      atMs: t + 1000 + i * 100,
+      kind: "status" as const,
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 18 + i,
+      distanceMeters,
+      spm: 24,
+      currentSplit: 110,
+      heartRateBpm: 140,
+      programIntervalIndex: 1,
+    })),
     // THE FREEZE — many consecutive frames while the machine reads `rowing`
     // in which DISTANCE, SPLIT and RATE hold identical values and the
     // WORKOUT CLOCK KEEPS RUNNING (`PAUSED_FRAME_HOLD`, `useMonitorSession.

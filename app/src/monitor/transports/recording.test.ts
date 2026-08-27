@@ -62,6 +62,38 @@ describe("recording serialization", () => {
       /not a pm5 recording/,
     );
   });
+
+  // Phase LM Task 4: the format carries app-lifecycle transitions now, so a
+  // recording can say "the app went away here / came back here" and a desk
+  // replay can drive the class of defect that enters above the wire.
+  it("carries a lifecycle transition through serialize/parse, alongside the wire events", () => {
+    const withLifecycle = [
+      { seq: 0, t: 0, kind: "connect", id: "dev-1" } as const,
+      { seq: 1, t: 12, dir: "rx", char: "0031", hex: "00 01" } as const,
+      { seq: 2, t: 40, kind: "lifecycle", event: "background" } as const,
+      { seq: 3, t: 900, kind: "lifecycle", event: "foreground" } as const,
+    ];
+    const parsed = parseRecording(serializeRecording(header, withLifecycle));
+    expect(parsed.events).toStrictEqual(withLifecycle);
+  });
+
+  // BACK-COMPATIBILITY, stated as a test rather than as a comment: the
+  // `lifecycle` member is additive inside `pm5-recording/v1`. A file written
+  // before it existed carries no such line and must parse to exactly what it
+  // always did — which is why the tag was NOT bumped (a bump makes
+  // `parseRecording` reject every committed capture in
+  // `docs/monitor/sessions/`). The committed-file end of this is
+  // `lifecycleReplay.test.ts`, which replays a real capture from three days
+  // before the member existed and asserts zero divergences.
+  it("a recording with no lifecycle line parses exactly as before — the tag is still v1", () => {
+    const text = serializeRecording(header, [...events]);
+    const parsed = parseRecording(text);
+    expect(parsed.header.v).toBe(RECORDING_FORMAT_TAG);
+    expect(parsed.events).toStrictEqual(events);
+    expect(
+      parsed.events.some((e) => "kind" in e && e.kind === "lifecycle"),
+    ).toBe(false);
+  });
 });
 
 /** A bare hand-rolled `Transport` for the tap's own edge cases — pattern

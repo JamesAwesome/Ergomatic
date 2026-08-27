@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
@@ -35,6 +36,7 @@ import {
   type MonitorRun,
 } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder";
+import type { MonitorLogEntry } from "../monitor/eventLog";
 // Pure function (task brief: "export the pure helper ... for tests") — a
 // static top-level import is safe here (unlike every other `./LogSession`
 // reference in this file, which goes through a per-test dynamic `import()`
@@ -904,12 +906,306 @@ describe("LogSession: the ledger residual (workoutId mismatch)", () => {
 describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
   it("absent entirely when no rowed stash exists — the manual path never sees it", async () => {
     sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.removeItem("ergomatic:last-session-log");
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(document.querySelector(".log-monitor-diag")).toBeNull();
+  });
+
+  // Task 1 (lost-monitor design spec): the flagship case — armed, never
+  // pulled, so no `MonitorRun` and no rowed-only sessionStorage key ever
+  // existed — is exactly the case `ergomatic:last-rowed-log` cannot serve
+  // (`MonitorLogRow`'s own header comment used to claim, falsely as of
+  // this task, that such a session "has no key at mount and none ever
+  // materializes later either"). The unconditional `ergomatic:
+  // last-session-log` stash now covers it.
+  //
+  // FIX ROUND (whole-branch review, MEDIUM): the arrival this must serve is
+  // a `?from=monitor` one — `WorkoutDetail.tsx`'s `handleConnectedEnded`
+  // sends every finished connected session, rowed or not, to
+  // `/library/:id/log?from=monitor`. The test used to prove it on the
+  // SESSION door instead, which is the door a connected session never
+  // reaches, and that mismatch is what let the fallback become permanent
+  // furniture on every log screen in the app.
+  it("renders from the never-rowed stash on the connected arrival when no rowed record was ever saved, and copies IT", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    const stash = JSON.stringify([
+      {
+        seq: 0,
+        atMs: 1000,
+        kind: "close-no-record",
+        detail: "endedBy=rower terminated=true",
+      },
+    ]);
+    localStorage.setItem("ergomatic:last-session-log", stash);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const row = screen.getByRole("button", { name: "MONITOR LOG · COPY" });
+    await userEvent.click(row);
+
+    // The whole story in one artifact: the session's own ring, plus the
+    // `log-door-miss` this very arrival appended (no record in storage, so
+    // `monitorModeRun` missed on `no-run`).
+    const copied = JSON.parse(
+      writeText.mock.calls[0]![0] as string,
+    ) as MonitorLogEntry[];
+    expect(copied[0]).toMatchObject({ kind: "close-no-record" });
+    expect(copied[1]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "no-run",
+    });
+    localStorage.removeItem("ergomatic:last-session-log");
+  });
+
+  // The merge degrades to the ring rather than losing it: a diagnostics
+  // reader must never come away with LESS than it would have had before
+  // the misses key existed. Both malformed shapes a hand-edited or
+  // ULTRAREVIEW bug_001 (2026-08-26). The misses key is append-only and
+  // nothing clears it, so a real diagnostic copy used to carry every miss the
+  // install had ever recorded — months of stale entries from reloaded
+  // bookmarks — diluting the one artifact whose job is to explain the failure
+  // in front of you. A miss stamped BEFORE this session's ring began cannot
+  // be about this session.
+  it("copies only the misses from THIS session, not the install's whole history", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    const ring = JSON.stringify([
+      { seq: 0, atMs: 5000, kind: "write", detail: "THIS SESSION" },
+      { seq: 1, atMs: 5200, kind: "write", detail: "THIS SESSION TOO" },
+    ]);
+    localStorage.setItem("ergomatic:last-session-log", ring);
+    localStorage.setItem(
+      "ergomatic:log-door-misses",
+      JSON.stringify([
+        {
+          seq: 0,
+          atMs: 100,
+          kind: "log-door-miss",
+          detail: "ANCIENT-BOOKMARK",
+        },
+        { seq: 1, atMs: 4999, kind: "log-door-miss", detail: "STILL-TOO-OLD" },
+        // Exactly ON the floor: inclusive, because a miss can be stamped in
+        // the same millisecond as the ring's first entry. `>=` vs `>`
+        // survived mutation without this row (scoped review finding 3).
+        { seq: 2, atMs: 5000, kind: "log-door-miss", detail: "ON-THE-FLOOR" },
+        { seq: 3, atMs: 5100, kind: "log-door-miss", detail: "no-run" },
+      ]),
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: workout.id });
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "MONITOR LOG · COPY" }),
+    );
+    const copied = writeText.mock.calls[0]![0] as string;
+    expect(copied).toContain("no-run");
+    expect(copied).toContain("ON-THE-FLOOR");
+    expect(copied).not.toContain("ANCIENT-BOOKMARK");
+    expect(copied).not.toContain("STILL-TOO-OLD");
+    localStorage.removeItem("ergomatic:last-session-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+  });
+
+  // FAILS OPEN: a ring with no `atMs` gives no floor, so every miss is kept.
+  // Losing a relevant miss is worse than keeping an irrelevant one — the miss
+  // is often the only record of WHY the door was missed at all.
+  it("keeps every miss when the ring carries no timestamp to compare against", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.setItem(
+      "ergomatic:last-session-log",
+      JSON.stringify([{ seq: 0, kind: "write", detail: "NO STAMP HERE" }]),
+    );
+    localStorage.setItem(
+      "ergomatic:log-door-misses",
+      JSON.stringify([
+        { seq: 0, atMs: 1, kind: "log-door-miss", detail: "ANCIENT-BUT-KEPT" },
+      ]),
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: workout.id });
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "MONITOR LOG · COPY" }),
+    );
+    expect(writeText.mock.calls[0]![0] as string).toContain("ANCIENT-BUT-KEPT");
+    localStorage.removeItem("ergomatic:last-session-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+  });
+
+  // half-written key can take.
+  it.each([
+    ["unparseable JSON", "{not json"],
+    ["a parseable non-array", JSON.stringify({ seq: 0 })],
+    ["an entry-shaped object, not a list", JSON.stringify({ kind: "x" })],
+  ])(
+    "a misses key holding %s still copies the session ring, unchanged",
+    async (_label, misses) => {
+      sessionStorage.removeItem("ergomatic:last-rowed-log");
+      const ring = JSON.stringify([
+        { seq: 0, atMs: 1000, kind: "write", detail: "f1" },
+      ]);
+      localStorage.setItem("ergomatic:last-session-log", ring);
+      localStorage.setItem("ergomatic:log-door-misses", misses);
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", {
+        value: { writeText },
+        configurable: true,
+      });
+      const workout = manualWorkoutFixture();
+      mockWorkouts([workout]);
+      mockBaselines();
+      // A record IS in storage, so this is not the never-rowed shape — the
+      // malformed misses key is the only thing under test. (A malformed
+      // key is unwritable as well as unreadable: `recordLogDoorMiss`'s own
+      // parse throws and its catch swallows the append, so the key stays
+      // exactly as seeded whether or not a miss was attempted.)
+      const { run } = buildMonitorFixture();
+      saveMonitorRun({ ...run, workoutId: workout.id });
+      await renderManualLog(workout.id, "?from=monitor");
+      await screen.findByRole("heading", { name: "Hoarfrost" });
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "MONITOR LOG · COPY" }),
+      );
+      expect(writeText).toHaveBeenCalledWith(ring);
+      localStorage.removeItem("ergomatic:last-session-log");
+      localStorage.removeItem("ergomatic:log-door-misses");
+    },
+  );
+
+  // FIX ROUND (whole-branch review, MEDIUM) — THE REGRESSION THIS CLOSES.
+  // `ergomatic:last-session-log` is localStorage, written on EVERY
+  // connected teardown (a failed pairing and a connect-then-cancel
+  // included) and never cleared. Ungated, that made `MONITOR LOG · COPY`
+  // permanent furniture on every log screen in the app for the life of the
+  // install, after a rower's first ever Connect — including on a by-hand
+  // entry that has nothing to do with a monitor. The one place in this
+  // phase a rower was straightforwardly worse off.
+  it("the plain by-hand door does NOT show the row just because a connected session once tore down on this device", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.setItem(
+      "ergomatic:last-session-log",
+      JSON.stringify([{ seq: 0, atMs: 1000, kind: "write", detail: "f1" }]),
+    );
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(document.querySelector(".log-monitor-diag")).toBeNull();
+    localStorage.removeItem("ergomatic:last-session-log");
+  });
+
+  it("the timer's own session door does not show it either", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.setItem(
+      "ergomatic:last-session-log",
+      JSON.stringify([{ seq: 0, atMs: 1000, kind: "write", detail: "f1" }]),
+    );
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(document.querySelector(".log-monitor-diag")).toBeNull();
+    localStorage.removeItem("ergomatic:last-session-log");
+  });
+
+  // The rowed key still wins when BOTH exist (a rowed session's own
+  // teardown writes both) — this pins that the fallback never shadows the
+  // more specific key a rowed session already had.
+  // ULTRAREVIEW bug_002 (2026-08-26). The rowed key is written only by a
+  // session that OPENED A RUN and is never cleared, so on any device that had
+  // ever rowed, the flagship never-rowed failure copied the PREVIOUS
+  // successful session's log and presented it as this failure's evidence. A
+  // false positive is worse than an empty copy: it sends whoever reads the
+  // paste chasing a session that worked. No hardware walk can catch it —
+  // every walk phone has rowed before, so the key is always populated.
+  it("a from=monitor arrival copies THIS session's log, not a previous rowed session's", async () => {
+    const previousSuccess = JSON.stringify([
+      { seq: 0, kind: "write", detail: "A SESSION THAT WORKED" },
+    ]);
+    const thisFailure = JSON.stringify([
+      { seq: 0, kind: "close-no-record", detail: "THIS SESSION HEARD NOTHING" },
+    ]);
+    sessionStorage.setItem("ergomatic:last-rowed-log", previousSuccess);
+    localStorage.setItem("ergomatic:last-session-log", thisFailure);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog("/session/log?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "MONITOR LOG · COPY" }),
+    );
+
+    const copied = writeText.mock.calls[0]![0] as string;
+    expect(copied).toContain("THIS SESSION HEARD NOTHING");
+    expect(copied).not.toContain("A SESSION THAT WORKED");
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.removeItem("ergomatic:last-session-log");
+  });
+
+  it("a BY-HAND arrival still reads the rowed stash when both keys exist", async () => {
+    const rowed = JSON.stringify([{ seq: 0, kind: "write", detail: "f1" }]);
+    const general = JSON.stringify([
+      { seq: 0, kind: "write", detail: "SOMETHING ELSE" },
+    ]);
+    sessionStorage.setItem("ergomatic:last-rowed-log", rowed);
+    localStorage.setItem("ergomatic:last-session-log", general);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const row = screen.getByRole("button", { name: "MONITOR LOG · COPY" });
+    await userEvent.click(row);
+
+    expect(writeText).toHaveBeenCalledWith(rowed);
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.removeItem("ergomatic:last-session-log");
   });
 
   it("with a stash: one mono line, and tapping it copies the stash byte-for-byte", async () => {
@@ -2190,6 +2486,118 @@ describe("LogSession: the manual door (Task 3)", () => {
   });
 });
 
+// Phase LM PR 1, Task 4 (lost-monitor design spec) — THE FLAGSHIP ARRIVAL.
+// A rower connected, programmed the workout, rowed, and the app never
+// opened a record at all (`createMonitorRun`'s only call site sits behind
+// the ready gate — `useMonitorSession.ts`). End therefore hands this route
+// `?from=monitor` with NOTHING behind it: `monitorModeRun`'s condition 2,
+// the `no-run` miss Task 1 already writes to the diagnostics stash. The
+// screen falls through to the manual door, and until this task the row it
+// showed said the rower had typed it in by hand.
+//
+// THE FIXTURE IS "NO RECORD AT ALL", deliberately — never a record with
+// zero actuals, which is a different and currently-working path (a real
+// `MonitorRun` reaches the monitor branch and renders `PM5 <name>`). A
+// test built on that shape passes while this arrival fails (recurring
+// failure #3).
+describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () => {
+  it("never says LOGGED BY HAND — the source reads NO MONITOR READING instead", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    // The fixture, stated as an assertion rather than assumed: storage is
+    // empty, so there is no record for this arrival to find.
+    expect(loadMonitorRun()).toBeNull();
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(
+      screen.getByText(
+        `${formatLogDate(new Date().toISOString())} · NO MONITOR READING`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/LOGGED BY HAND/)).not.toBeInTheDocument();
+  });
+
+  it("does not claim the row was rowed BY FEEL — it shows the workout's own single target", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // Both of this fixture's steps resolve to the same target (6k + 12 =
+    // 132 -> 2:12.0), so the single-target rule fires — the same hint the
+    // connected door itself would have shown for this workout.
+    expect(screen.getByText("TARGET 2:12.0")).toBeInTheDocument();
+    expect(screen.queryByText("BY FEEL")).not.toBeInTheDocument();
+  });
+
+  it("keeps all three exits, with Log against plan LEADING and undemoted (James's ruling: the rower did the work)", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    mockPlan(readyPlanState(activePlan()));
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const logAgainstPlan = screen.getByRole("button", {
+      name: /^Log against plan/,
+    });
+    const saveWithout = screen.getByRole("button", {
+      name: "Save without logging",
+    });
+    expect(logAgainstPlan.className).toContain("summary-save-lead");
+    expect(saveWithout.className).toContain("summary-save-secondary");
+    expect(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    ).toBeInTheDocument();
+    // Undemoted means it also comes FIRST in the stack, not merely that it
+    // carries the lead class.
+    expect(
+      logAgainstPlan.compareDocumentPosition(saveWithout) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("an ordinary by-hand visit to the same route is untouched — no from=monitor, still LOGGED BY HAND and BY FEEL", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(
+      screen.getByText(
+        `${formatLogDate(new Date().toISOString())} · LOGGED BY HAND`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("BY FEEL")).toBeInTheDocument();
+  });
+
+  it("a from=monitor arrival that DOES have a record — one for another workout — still reads LOGGED BY HAND: the label is pinned to 'no record at all', never to 'the gate missed'", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(
+      screen.getByText(
+        `${formatLogDate(new Date().toISOString())} · LOGGED BY HAND`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/NO MONITOR READING/)).not.toBeInTheDocument();
+  });
+});
+
 // 7C Task 4: `monitorModeRun`'s own four-condition gate (spec §4), tested
 // directly against the pure function first — cheaper than driving the
 // whole screen four times over — with the full screen describe block below
@@ -2274,6 +2682,337 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
     saveMonitorRun(run);
     const search = new URLSearchParams(); // reload/bookmark: no from=monitor
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+});
+
+// Task 1 (lost-monitor design spec): a `from=monitor` arrival that finds no
+// usable record is exactly the flagship shape ("a from=monitor arrival with
+// NO record") — each of `monitorModeRun`'s four remaining conditions (the
+// flag itself is condition 1 and never logged: it means this page load was
+// never a monitor arrival at all, not that evidence went missing) now
+// appends WHICH one missed onto its own `ergomatic:log-door-misses` stash,
+// which `readMonitorLogStash` merges onto the session's exported ring — so
+// the never-rowed case's evidence is reachable through ONE copy affordance
+// as a single artifact. Records only which condition, never why.
+//
+// FIX ROUND (whole-branch review, MEDIUM): these entries used to be
+// appended straight onto `ergomatic:last-session-log`, which
+// `useMonitorSession.ts`'s teardown overwrites wholesale milliseconds
+// later — see the ordering describe below for the sequence, and
+// `recordLogDoorMiss`'s own comment for why a SEPARATE key is the fix
+// rather than a merge.
+describe("LogSession: monitorModeRun logs which condition missed onto the log-door stash", () => {
+  function missEntries(): { kind: string; detail: string }[] {
+    const raw = localStorage.getItem("ergomatic:log-door-misses");
+    return raw === null
+      ? []
+      : (JSON.parse(raw) as { kind: string; detail: string }[]);
+  }
+
+  it("condition 1 (no from=monitor flag at all) logs nothing — an ordinary manual visit is not the silence this stash exists to catch", () => {
+    const search = new URLSearchParams();
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    expect(missEntries()).toHaveLength(0);
+  });
+
+  it("condition 2 (no record at all): logs no-run", () => {
+    const search = new URLSearchParams("from=monitor");
+    expect(loadMonitorRun()).toBeNull();
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    const entries = missEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "no-run",
+    });
+  });
+
+  it("condition 2 (record not completed): logs not-completed", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, completedAt: null });
+    const search = new URLSearchParams("from=monitor");
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    expect(missEntries()[0]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "not-completed",
+    });
+  });
+
+  it("condition 3 (workoutId mismatch): logs workout-id-mismatch", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    const search = new URLSearchParams("from=monitor");
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    expect(missEntries()[0]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "workout-id-mismatch",
+    });
+  });
+
+  it("condition 4 (buildMonitorLogSteps throws): logs log-steps-build-failed", () => {
+    const { run } = buildMonitorFixture();
+    const { logSeed: _drop, ...v1Shaped } = run;
+    saveMonitorRun({ ...v1Shaped, v: 1 });
+    const search = new URLSearchParams("from=monitor");
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    expect(missEntries()[0]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "log-steps-build-failed",
+    });
+  });
+
+  it("a real, engaging arrival logs nothing at all", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun(run);
+    const search = new URLSearchParams("from=monitor");
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(run);
+    expect(missEntries()).toHaveLength(0);
+  });
+
+  // Same discipline `recordPostSacrifice`'s own capacity cap already has a
+  // dedicated test for (this file's "POST sacrifice" describe block) —
+  // `recordLogDoorMiss` caps this stash the same way `eventLog.ts`'s own
+  // `record()` caps the ring: oldest entry dropped first, count never
+  // grows past capacity.
+  it("caps the stash at 500 entries, oldest dropped first", () => {
+    const seeded = Array.from({ length: 500 }, (_, i) => ({
+      seq: i,
+      atMs: i,
+      kind: "log-door-miss",
+      detail: `entry ${i}`,
+    }));
+    localStorage.setItem("ergomatic:log-door-misses", JSON.stringify(seeded));
+    const search = new URLSearchParams("from=monitor");
+    expect(loadMonitorRun()).toBeNull();
+
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+
+    const entries = missEntries();
+    expect(entries).toHaveLength(500);
+    expect(entries[0]).toMatchObject({ seq: 1, detail: "entry 1" });
+    expect(entries[499]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "no-run",
+    });
+  });
+});
+
+// FIX ROUND (whole-branch review, MEDIUM) — THE ORDERING, WHICH THE TESTS
+// ABOVE CANNOT SEE. They call `monitorModeRun` directly, so nothing in them
+// ever exercises the one sequence the entry exists for: a `?from=monitor`
+// hand-off. React runs the NEW route's render (where the miss is appended,
+// out of `ManualDoorLog`'s lazy `useState`) before the OLD subtree's
+// PASSIVE unmount cleanup — and `useMonitorSession.ts`'s `teardown` is
+// exactly such a cleanup (`useEffect(() => teardown, [teardown])`), whose
+// stash does a full `localStorage.setItem` of the same key the miss used to
+// be appended onto. The entry was written and clobbered milliseconds later,
+// on the one path it was built for, and every unit test passed.
+describe("LogSession: the log-door miss survives the teardown that follows it", () => {
+  /** Stands in for `ConnectedInterstitial`: a component whose PASSIVE
+   *  unmount cleanup overwrites `ergomatic:last-session-log` with the
+   *  session's exported ring, which is what `useMonitorSession.ts`'s own
+   *  `teardown` does. Nothing here mocks the ordering — React's own commit
+   *  order produces it. */
+  function ConnectedStandIn({
+    workoutId,
+    exported,
+    search = "?from=monitor",
+  }: {
+    workoutId: string;
+    exported: string;
+    /** The door the hand-off lands on. Defaults to the real one
+     *  (`WorkoutDetail.tsx`'s `handleConnectedEnded`); the by-hand door is
+     *  passed explicitly by the gate-pin test below. */
+    search?: string;
+  }) {
+    const navigate = useNavigate();
+    useEffect(
+      () => () => {
+        localStorage.setItem("ergomatic:last-session-log", exported);
+      },
+      [exported],
+    );
+    return (
+      <button
+        type="button"
+        onClick={() => navigate(`/library/${workoutId}/log${search}`)}
+      >
+        HAND OFF
+      </button>
+    );
+  }
+
+  async function renderHandOff(
+    workoutId: string,
+    exported: string,
+    search?: string,
+  ) {
+    const { default: LogSession } = await import("./LogSession");
+    return render(
+      <MemoryRouter initialEntries={["/connected"]}>
+        <Routes>
+          <Route
+            path="/connected"
+            element={
+              <ConnectedStandIn
+                workoutId={workoutId}
+                exported={exported}
+                search={search}
+              />
+            }
+          />
+          <Route path="/library/:id/log" element={<LogSession />} />
+          <Route path="/library/:id" element={<p>WORKOUT DETAIL SCREEN</p>} />
+          <Route path="/today" element={<p>TODAY SCREEN</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("the connected hand-off's own teardown does not destroy the miss the log door just recorded", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+    // The flagship: armed, never pulled, so no `MonitorRun` was ever
+    // created and the arrival misses on `no-run`.
+    expect(loadMonitorRun()).toBeNull();
+    // A device that has connected before — which is what the tester who
+    // lost the workout had (recurring failure #3: the emptier fixture is
+    // not the production one). It used to be what made the row RENDER at
+    // all, because `MonitorLogRow` gated on a mount-time read and this
+    // session's own teardown has not written yet at that moment; Task 3's
+    // post-mount re-read closed that gap, and the first-ever-session test
+    // below is the one that pins it. The seed stays: this test is about
+    // the MISS surviving the teardown, and it should keep asserting that
+    // on the production-shaped device state.
+    localStorage.setItem(
+      "ergomatic:last-session-log",
+      JSON.stringify([
+        { seq: 0, atMs: 500, kind: "write", detail: "a previous session" },
+      ]),
+    );
+    const exported = JSON.stringify([
+      {
+        seq: 0,
+        atMs: 1000,
+        kind: "close-no-record",
+        detail: "endedBy=rower terminated=true",
+      },
+    ]);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderHandOff(workout.id, exported);
+
+    await userEvent.click(screen.getByRole("button", { name: "HAND OFF" }));
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // The teardown DID run and DID overwrite the session key — this test
+    // proves the miss survives it, not that it never happened.
+    expect(localStorage.getItem("ergomatic:last-session-log")).toBe(exported);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "MONITOR LOG · COPY" }),
+    );
+    const copied = JSON.parse(
+      writeText.mock.calls[0]![0] as string,
+    ) as MonitorLogEntry[];
+    expect(copied.map((e) => e.kind)).toStrictEqual([
+      "close-no-record",
+      "log-door-miss",
+    ]);
+    expect(copied[1]).toMatchObject({ detail: "no-run" });
+    localStorage.removeItem("ergomatic:last-session-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+  });
+
+  // TASK 3 (fix-round-2 spec) — THE FIRST-EVER CONNECTED SESSION. Every
+  // other test of this row seeds a stash and THEN mounts, which exercises
+  // the path that already worked and can never see this defect. The test
+  // above seeds a PREVIOUS session's stash on purpose; take that seed away
+  // — a device whose very first Connect is this one — and the ordering
+  // this describe block exists for becomes the whole bug: the row's read
+  // ran in a `useState` lazy initializer during the new route's RENDER,
+  // and the teardown that writes the only stash there will ever be is a
+  // PASSIVE unmount cleanup that runs afterwards. The row rendered `null`
+  // and never got a second chance, so the instrument was invisible until a
+  // device's SECOND connected session — and no hardware walk can catch
+  // that, because every walk runs on a phone that has connected dozens of
+  // times (ROADMAP, Phase LM owed work).
+  it("renders on a device's FIRST EVER connected session, where the stash lands AFTER this screen has mounted", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+    // A device that has never connected: `beforeEach` clears localStorage,
+    // and nothing seeds it back. Pinned rather than assumed — the seeded
+    // version of this test passes with or without the fix.
+    expect(localStorage.getItem("ergomatic:last-session-log")).toBeNull();
+    expect(loadMonitorRun()).toBeNull();
+    const exported = JSON.stringify([
+      {
+        seq: 0,
+        atMs: 1000,
+        kind: "close-no-record",
+        detail: "endedBy=rower terminated=true",
+      },
+    ]);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderHandOff(workout.id, exported);
+
+    await userEvent.click(screen.getByRole("button", { name: "HAND OFF" }));
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // Not merely present: it copies THIS session's ring plus the miss this
+    // very arrival recorded — the artifact a tester is asked to send.
+    await userEvent.click(
+      await screen.findByRole("button", { name: "MONITOR LOG · COPY" }),
+    );
+    const copied = JSON.parse(
+      writeText.mock.calls[0]![0] as string,
+    ) as MonitorLogEntry[];
+    expect(copied.map((e) => e.kind)).toStrictEqual([
+      "close-no-record",
+      "log-door-miss",
+    ]);
+    expect(copied[1]).toMatchObject({ detail: "no-run" });
+    localStorage.removeItem("ergomatic:last-session-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+  });
+
+  // THE GATE THE RE-READ MUST NOT DISSOLVE (same regression the "permanent
+  // furniture" test above pins, now on the ordering path): the post-mount
+  // re-read goes through `readMonitorLogStash` with this door's own
+  // `fromMonitor`, so a by-hand arrival still cannot see a connected
+  // teardown's localStorage leftovers — not even one written while it was
+  // on screen.
+  it("a by-hand door still shows nothing when a connected teardown writes the session key after IT has mounted", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    const exported = JSON.stringify([
+      { seq: 0, atMs: 1000, kind: "write", detail: "f1" },
+    ]);
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderHandOff(workout.id, exported, "");
+
+    await userEvent.click(screen.getByRole("button", { name: "HAND OFF" }));
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // The write DID happen — this proves the gate holds, not that the
+    // ordering never occurred.
+    expect(localStorage.getItem("ergomatic:last-session-log")).toBe(exported);
+    expect(document.querySelector(".log-monitor-diag")).toBeNull();
+    localStorage.removeItem("ergomatic:last-session-log");
   });
 });
 
@@ -3109,6 +3848,15 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
         { seq: 0, kind: "session-start", detail: "prior entry" },
       ]),
     );
+    // A real teardown writes BOTH stashes (`useMonitorSession`'s `stash()`),
+    // so seed both — the fixture used to carry only the rowed key, which is
+    // a shape production never produces after a rowed session.
+    localStorage.setItem(
+      "ergomatic:last-session-log",
+      JSON.stringify([
+        { seq: 0, atMs: 1000, kind: "session-start", detail: "prior entry" },
+      ]),
+    );
     mockWorkouts([workout]);
     mockBaselines();
     const clearSpy = mockMonitorRunClearSpy();
@@ -3166,6 +3914,22 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(ring[1]!.kind).toBe("post-sacrifice");
     expect(ring[1]!.detail).toContain("413");
     expect(ring[1]!.seq).toBe(1);
+
+    // SCOPED REVIEW finding 1 (2026-08-26): and it must reach the SESSION
+    // stash too. This entry is appended AFTER the teardown that wrote both,
+    // and `readMonitorLogStash` prefers the session stash on a
+    // `?from=monitor` arrival — which is the only arrival that produces a
+    // post-sacrifice. Writing the rowed key alone made the entry invisible
+    // exactly where it is read, silently falsifying the reason this logging
+    // exists: a systematic server refusal of `series` must show up in
+    // diagnostics.
+    const sessionRing = JSON.parse(
+      localStorage.getItem("ergomatic:last-session-log")!,
+    ) as { seq: number; kind: string; detail: string }[];
+    expect(sessionRing.map((e) => e.kind)).toContain("post-sacrifice");
+    expect(
+      sessionRing.find((e) => e.kind === "post-sacrifice")!.detail,
+    ).toContain("413");
     sessionStorage.removeItem("ergomatic:last-rowed-log");
   });
 

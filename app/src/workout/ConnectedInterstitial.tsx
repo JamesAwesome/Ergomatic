@@ -645,6 +645,35 @@ export default function ConnectedInterstitial({
           <p className="connected-body-line">
             The monitor starts the clock on your first stroke.
           </p>
+          {/* THE ONLY PREVENTIVE ELEMENT IN PHASE LM (PR 1 Task 2, Gate 0
+              ruling — James, 2026-08-25). Everything else the phase ships
+              tells the rower after the workout is already gone; this screen
+              is where they stand in the seconds before they pocket the
+              phone, which makes it the one place a warning can still change
+              the outcome.
+
+              FOUR WORDS, every session, quiet. The length is the ruling,
+              not a stylistic preference — Gate 0 rejected the longer copy
+              in as many words ("This is a workout app people aren't going
+              to read a fucking novel of warnings"), and
+              `ConnectedInterstitial.test.tsx` pins the WORD COUNT as well
+              as the string so an appended explanatory sentence goes red.
+              Every session rather than once-per-device because the rower
+              who forgets is exactly the rower this exists for, and four
+              quiet words on a screen they pass through anyway cost nothing
+              to skip.
+
+              IT NAMES NO CAUSE, and that is a hard constraint, not an
+              omission (spec, "What we do NOT know"): three producers of the
+              silence are undistinguished, and PR 1's own probe exists to
+              decide between them. Copy explaining WHY would assert one of
+              them as fact on a screen a rower reads, months before we know.
+              It also promises no sufficiency — keep-awake is already armed
+              for this whole flow (`keepAwakeOn` at mount, above), and an
+              incoming call or a WebContent process kill background the app
+              with no rower action at all, so this asks for the one thing
+              the rower CAN do rather than claiming it is enough. */}
+          <p className="connected-keep-on">KEEP THE SCREEN ON</p>
         </div>
         <div className="action-stack connected-interstitial-actions">
           <button

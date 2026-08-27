@@ -28,7 +28,8 @@
 //   `program()` at the right moments, on a REAL compiled library workout)
 //   end to end, not just that the render function is correct in isolation.
 
-import { act, render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -48,12 +49,30 @@ import {
   type MonitorSession,
   type RunIdentity,
 } from "../monitor/useMonitorSession";
+import { commentStrippedSource, cssRules } from "../test/cssView";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import ConnectedInterstitial, {
   loadLastDevice,
   saveLastDevice,
 } from "./ConnectedInterstitial";
+
+/** `index.css` with every comment stripped — the same view
+ *  `ConnectedSurface.test.tsx` takes of the stylesheet, and for its reason:
+ *  a rule's own PROSE must never be able to satisfy an assertion about its
+ *  declarations (`cssView.ts`'s header records that defect three times
+ *  over). Vitest mocks every `.css` import to an empty string for this
+ *  project, so reading the source is the only view there is —
+ *  `getComputedStyle` has no rule to see. Same `import.meta.url` string
+ *  surgery, one directory shallower. */
+const INTERSTITIAL_CSS = commentStrippedSource(
+  readFileSync(
+    import.meta.url
+      .replace(/^file:\/\//, "")
+      .replace(/workout\/[^/]+\.test\.tsx$/, "index.css"),
+    "utf-8",
+  ),
+);
 
 vi.mock("../adapters/keepAwake", () => ({
   keepAwakeOn: vi.fn(async () => {}),
@@ -982,6 +1001,92 @@ describe("state 7: ready", () => {
       screen.getByText("The monitor starts the clock on your first stroke."),
     ).toBeInTheDocument();
     expect(screen.getByText(`${DEVICE_NAME} · PROGRAMMED`)).toBeInTheDocument();
+  });
+
+  // THE READY-SCREEN WARNING (Phase LM PR 1 Task 2, Gate 0 ruling — James,
+  // 2026-08-25). The ONE preventive element in the phase: every other change
+  // tells the rower after the workout is already gone, and this screen is
+  // where they stand in the seconds before they pocket the phone.
+  //
+  // FOUR WORDS, and the count is the point, not a coincidence — Gate 0
+  // rejected longer copy outright ("This is a workout app people aren't
+  // going to read a fucking novel of warnings"). The assertions below pin
+  // the exact string AND the word count, so a future task that "helpfully"
+  // appends an explanatory sentence goes red rather than shipping.
+  //
+  // IT NAMES NO CAUSE, deliberately (spec, "What we do NOT know"): three
+  // producers of the silence are undistinguished — iOS/WebKit delivering no
+  // frames while suspended, the ready gate refusing the frames that did
+  // arrive, and the link dropping while suspended. The warning says what to
+  // DO. Anything explaining WHY would be asserting one of the three as fact
+  // in shipped copy, in the same PR whose probe exists to decide between
+  // them.
+  describe("the keep-the-screen-on warning (Phase LM, Gate 0)", () => {
+    it("shows exactly the four words, under the first-stroke line", () => {
+      renderInterstitial({ phase: "ready", deviceName: DEVICE_NAME });
+      const warning = screen.getByText("KEEP THE SCREEN ON");
+      expect(warning).toBeInTheDocument();
+      // FOUR WORDS. Asserted as a count, not merely by the literal above:
+      // the literal alone would still pass if a second element were added
+      // beside it carrying the sentence Gate 0 cut.
+      expect(warning.textContent!.trim().split(/\s+/)).toHaveLength(4);
+      // AFTER the body line, per Gate 0's placement ("under 'The monitor
+      // starts the clock on your first stroke.'") — `compareDocumentPosition`
+      // rather than a child-index read, so a wrapper element added between
+      // them does not silently move the warning above the line it follows.
+      const bodyLine = screen.getByText(
+        "The monitor starts the clock on your first stroke.",
+      );
+      expect(
+        bodyLine.compareDocumentPosition(warning) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("states no cause — it says what to do and asserts nothing about why", () => {
+      renderInterstitial({ phase: "ready", deviceName: DEVICE_NAME });
+      const body = document.body.textContent ?? "";
+      // The three undistinguished producers, by the words shipped copy
+      // would have to reach for to name any of them.
+      for (const forbidden of [
+        /\bbackground(ed|s)?\b/i,
+        /\bsuspend(ed)?\b/i,
+        /\block(s|ed|ing)?\b/i,
+        /\bsleep(s|ing)?\b/i,
+        /\bbluetooth\b/i,
+        /\bdisconnect(s|ed|ion)?\b/i,
+      ]) {
+        expect(body).not.toMatch(forbidden);
+      }
+    });
+
+    it("is every session, quiet — no dismissal, no once-per-device gate", () => {
+      // Rendered twice from a clean store: Gate 0's ruling is "every
+      // session", so nothing may remember having shown it once.
+      renderInterstitial({ phase: "ready", deviceName: DEVICE_NAME });
+      expect(screen.getByText("KEEP THE SCREEN ON")).toBeInTheDocument();
+      cleanup();
+      renderInterstitial({ phase: "ready", deviceName: DEVICE_NAME });
+      expect(screen.getByText("KEEP THE SCREEN ON")).toBeInTheDocument();
+    });
+
+    it("wears the sunken strip and its --marker rule (the tokens Gate 0 approved)", () => {
+      const rules = cssRules(INTERSTITIAL_CSS).filter((r) =>
+        r.selectors.includes(".connected-keep-on"),
+      );
+      expect(
+        rules,
+        "expected exactly one .connected-keep-on rule",
+      ).toHaveLength(1);
+      const body = rules[0]!.body;
+      // Computed, never eyeballed (recurring failure #6): --marker #7d5510
+      // on --surface-sunken #efeade is 5.50:1, and on --surface #fffdf7 is
+      // 6.49:1 — both clear the 4.5:1 AA floor. The rule must actually use
+      // those two tokens for either number to mean anything.
+      expect(body).toContain("color: var(--marker)");
+      expect(body).toContain("background: var(--surface-sunken)");
+      expect(body).toContain("border-left: 3px solid var(--marker)");
+    });
   });
 
   // LOW-2, task-5 review: the old fallback produced a bare leading-space

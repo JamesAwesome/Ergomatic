@@ -48,6 +48,7 @@ const MODEL = buildSurfaceModel({
   phases: FIXTURE.phases,
   program: FIXTURE.program,
   status: "live",
+  linkLost: false,
   frame: null,
   deviceName: DEVICE,
   actuals: [],

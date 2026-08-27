@@ -52,18 +52,33 @@
 // deletions); the `/500m` unit beside the split numeral; the word TARGET.
 //
 // STALE: `model.nowLabel` is the ONLY hero label left post-redesign — it
-// collapses to `stale ? "LAST" : ""` (`surfaceModel.ts`'s own comment), so
-// the existing `!== ""` guard below renders nothing at every other status.
+// collapses to `stale && !armedMirror ? "LAST SEEN" : ""`
+// (`surfaceModel.ts`'s own comment, which carries why the two words beat
+// the one). The `&& !armedMirror` half is Phase LM Task 2's: a surface
+// that lost the link BEFORE the first pull is showing a target preview, and
+// captioning that at all would claim a reading that never existed. The
+// existing `!== ""` guard below renders nothing at every other status.
 //
 // ARMED (design spec §2D): the split hero's ACTUAL reading previews the
-// target value (`surfaceModel.ts`'s `armedMirror`) with its judgement
-// forced to `"within"` — plain ink, indistinguishable from an ordinary
-// unjudged reading. §2D wants MORE than that: a GHOST, ink-4, never ink-5.
+// target value (`surfaceModel.ts`'s `armedMirror`) with its judging target
+// forced null, so an armed surface with the link UP judges `"within"` —
+// plain ink, indistinguishable from an ordinary unjudged reading. §2D
+// wants MORE than that: a GHOST, ink-4, never ink-5.
 // `connected-hero-ghost` is the one bit of pane-local styling this file
 // adds on top of the model's own judgement class, keyed on `model.status`
 // directly (armed is the only status where the split hero previews a
 // number nobody has actually rowed yet). The rate hero does NOT ghost —
 // §2D: "rate shows 0 plain ink" — so no equivalent class there.
+//
+// "ALWAYS within" WAS TRUE ONLY WHILE ARMED AND STALE COULD NOT COEXIST
+// (fix round, whole-branch review LOW). Task 2 pulled the link out of
+// `SurfaceStatus`, so an armed surface can be stale and `judgeActual`
+// returns `"stale"` before it looks at anything else — the hero then wears
+// `.timer-card-actual-stale` AND this ghost, and the ghost wins on source
+// order. Accepted, deliberately: the number underneath is a target
+// preview, not a held reading, so a stale grey has nothing to describe.
+// `index.css`'s `.connected-hero-ghost` rule carries the full reasoning
+// and the measured contrast.
 
 import type { Judgement } from "../../../domain/judge.js";
 import ConnectedProgressBar from "./ConnectedProgressBar";
@@ -167,8 +182,23 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
             is independently reliable (`frame.sessionDistanceMeters`, not
             derived from the phase estimate), so an unpriced phase ahead is
             no reason to hide it too. */}
+        {/* GREYS WITH EVERYTHING ELSE WHEN THE LINK IS GONE (Phase LM PR 1
+            Task 3, Gate 0: "everything stale greys to --ink-3 together,
+            including the metres"). This counter's own source
+            (`frame.sessionDistanceMeters`) just stops arriving, so before
+            this it held its last value at full ink while both heroes
+            greyed and took a `LAST SEEN` caption beside it — the single
+            number still painted as current was the one nobody could vouch
+            for. Keyed on `model.stale`, the same field the heroes'
+            judgement already reads, so the frame greys as ONE thing. */}
         {model.sessionDistanceMeters !== null && (
-          <span className="connected-progress-meters">
+          <span
+            className={
+              model.stale
+                ? "connected-progress-meters connected-progress-meters-stale"
+                : "connected-progress-meters"
+            }
+          >
             {fmtMeters(model.sessionDistanceMeters)}
           </span>
         )}

@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
-import type { WorkoutProgram } from "../../domain/monitor/program.js";
+import {
+  compileProgram,
+  type WorkoutProgram,
+} from "../../domain/monitor/program.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
 import {
   parseAdditionalSplitIntervalData,
@@ -30,6 +33,9 @@ import {
   buildSummaryModel,
   buildTotalLine,
   deviationBarWidthPercent,
+  isMeasuredReading,
+  measuredIntervalCount,
+  readingOfLogStep,
   rowJudgment,
   type MeasuredRow,
   type SummaryRow,
@@ -1720,6 +1726,55 @@ describe("buildSummaryModel — manual door, a real library workout (Calm Sea, a
     expect(model.meta.sourceLabel).toBe("LOGGED BY HAND");
   });
 
+  // Phase LM PR 1 Task 4: the same real library workout, arriving through
+  // the CONNECTED door with no record behind it. Everything about the
+  // model stays identical — the numbers on screen genuinely are targets —
+  // except the one slot that was making a false claim about the door.
+  it("connectedNoRecord flips ONLY the source slot: NO MONITOR READING, with rows, heroes, caption and the absent timeLabel all unchanged", () => {
+    const w = library("Calm Sea");
+    const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
+    const byHand = buildSummaryModel({
+      door: "manual",
+      steps,
+      dateIso: "2026-08-17T09:00:00.000Z",
+    });
+    const noReading = buildSummaryModel({
+      door: "manual",
+      steps,
+      dateIso: "2026-08-17T09:00:00.000Z",
+      connectedNoRecord: true,
+    });
+
+    expect(noReading.meta.sourceLabel).toBe("NO MONITOR READING");
+    expect(byHand.meta.sourceLabel).toBe("LOGGED BY HAND");
+    // A wall-clock reading here would be one the log screen never shows
+    // for the same row (`storedSummary.ts`'s own timeLabel gate).
+    expect(noReading.meta.timeLabel).toBeUndefined();
+    expect(noReading.meta.dateLabel).toBe(byHand.meta.dateLabel);
+    expect(noReading.rows).toStrictEqual(byHand.rows);
+    expect(noReading.heroes).toStrictEqual(byHand.heroes);
+    expect(noReading.caption).toBe("TARGETS ONLY · NOTHING MEASURED");
+  });
+
+  it("connectedNoRecord: false is byte-identical to omitting it — an ordinary by-hand entry is untouched", () => {
+    const w = library("Calm Sea");
+    const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
+    expect(
+      buildSummaryModel({
+        door: "manual",
+        steps,
+        dateIso: "2026-08-17T09:00:00.000Z",
+        connectedNoRecord: false,
+      }),
+    ).toStrictEqual(
+      buildSummaryModel({
+        door: "manual",
+        steps,
+        dateIso: "2026-08-17T09:00:00.000Z",
+      }),
+    );
+  });
+
   it("a TIME-based work step (Hoarfrost: 2×12' @ 6k+12) renders its duration as m:ss, not a meters suffix", () => {
     const w = library("Hoarfrost");
     const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
@@ -2334,5 +2389,130 @@ describe("buildSummaryModel — §6.3b THE WIRE-SCOPING PROOF (the pyramid captu
     expect(row1!.spmCell?.target).toBe(22);
     expect(row2!.spmCell?.target).toBe(24);
     expect(row3!.spmCell?.target).toBe(22);
+  });
+});
+
+// ---------------------------------------------------------------------
+// THE MEASURED-ANYTHING RULE (Phase LM PR 1 Task 3)
+//
+// ONE rule, three CALLERS holding three different shapes. The connected
+// surface's lost banner counts `IntervalActual`s; `monitorWorkRows` judges
+// a `LogStep`; `targetsOnlyCaption` judges already-built `SummaryRow`s.
+// Before this task the first of those did not exist, and the obvious way
+// to write it — "any actual at all" — disagrees with the other two on a
+// sub-second reading: the banner would tell a rower two intervals were
+// kept while the summary screen for the very same run says TARGETS ONLY ·
+// NOTHING MEASURED. The tests below are the ADAPTERS CHECKED AGAINST EACH
+// OTHER, on one fixture, in both directions.
+// ---------------------------------------------------------------------
+
+/** A REAL library workout's compiled program (the seeded 300's "Filling
+ *  Low" — an easy opener plus 2000 m reps), so the rule is exercised
+ *  against production interval shapes rather than a hand-built pair. */
+function libraryProgram(title: string): WorkoutProgram {
+  const w = library(title);
+  const draft = buildDraft({
+    id: `id-${title}`,
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const compiled = compileProgram(buildRun(draft, BASELINES, NOW).phases);
+  if ("code" in compiled) {
+    throw new Error(`fixture failed to compile: ${compiled.code}`);
+  }
+  return compiled;
+}
+
+describe("the measured-anything rule, one rule across three shapes", () => {
+  const PROGRAM = libraryProgram("Filling Low");
+
+  /** An actual for `PROGRAM`'s interval `index`, rowed for exactly
+   *  `elapsedSeconds`. Everything else is a plausible reading off the same
+   *  interval — the only variable under test is the elapsed time. */
+  function actualOf(index: number, elapsedSeconds: number): IntervalActual {
+    const iv = PROGRAM.intervals[index]!;
+    return {
+      index,
+      elapsedSeconds,
+      distanceMeters: iv.kind === "distance" ? iv.value : 250,
+      avgSplit: iv.targetSplit ?? 132,
+      avgSpm: iv.displaySpm ?? 22,
+      avgHeartRateBpm: 158,
+      restDistanceMeters: 0,
+    };
+  }
+
+  function captionFor(actuals: IntervalActual[]): string | undefined {
+    return buildSummaryModel({
+      door: "monitor",
+      run: monitorRun({ program: PROGRAM, actuals }),
+    }).caption;
+  }
+
+  it("counts the intervals a rower actually rowed — two real readings are two kept intervals, and the summary agrees they were measured", () => {
+    const actuals = [actualOf(0, 480), actualOf(1, 428.4)];
+    expect(measuredIntervalCount(actuals)).toBe(2);
+    expect(captionFor(actuals)).toBeUndefined();
+  });
+
+  it("counts nothing when nothing was reported: no actuals at all", () => {
+    expect(measuredIntervalCount([])).toBe(0);
+    expect(captionFor([])).toBe("TARGETS ONLY · NOTHING MEASURED");
+  });
+
+  // THE DISAGREEMENT THIS RULE EXISTS TO PREVENT. A naive "actuals.length"
+  // banner says TWO intervals were kept here; the summary screen for the
+  // same run says NOTHING MEASURED. Both cannot be right, and the rower
+  // meets both.
+  it("a sub-second reading is kept by neither: the banner's count and the summary's caption cannot disagree", () => {
+    const actuals = [actualOf(0, 0.4), actualOf(1, 0.9)];
+    expect(measuredIntervalCount(actuals)).toBe(0);
+    expect(captionFor(actuals)).toBe("TARGETS ONLY · NOTHING MEASURED");
+  });
+
+  // The floor itself, from both sides, on the one value where a `>` and a
+  // `>=` disagree.
+  it("the floor is inclusive on both sides of the adapter: exactly one second counts, a hair under does not", () => {
+    expect(measuredIntervalCount([actualOf(0, 1)])).toBe(1);
+    expect(captionFor([actualOf(0, 1)])).toBeUndefined();
+    expect(measuredIntervalCount([actualOf(0, 0.999)])).toBe(0);
+    expect(captionFor([actualOf(0, 0.999)])).toBe(
+      "TARGETS ONLY · NOTHING MEASURED",
+    );
+  });
+
+  it("a mixed set counts only the real readings, and the summary still calls the run measured", () => {
+    const actuals = [actualOf(0, 0.5), actualOf(1, 428.4)];
+    expect(measuredIntervalCount(actuals)).toBe(1);
+    expect(captionFor(actuals)).toBeUndefined();
+  });
+
+  // THE LOG-STEP ADAPTER, against the same rule the row builder already
+  // used — `isMonitorRowMeasurable` is now that rule plus an adapter, so
+  // this pins that a hand-logged row can never be counted as a monitor
+  // reading no matter how long it ran.
+  it("provenance is half the rule: a stopwatch reading of the same length is not a measured monitor reading", () => {
+    expect(
+      isMeasuredReading(
+        readingOfLogStep({
+          label: "x",
+          actualSource: "pm5",
+          actualSeconds: 60,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isMeasuredReading(
+        readingOfLogStep({
+          label: "x",
+          actualSource: "stopwatch",
+          actualSeconds: 60,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isMeasuredReading(readingOfLogStep({ label: "x", actualSeconds: 60 })),
+    ).toBe(false);
   });
 });
