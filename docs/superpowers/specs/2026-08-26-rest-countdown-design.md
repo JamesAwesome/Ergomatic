@@ -23,36 +23,163 @@ row that is honestly still live beats a row that looks final and then moves.
 **This change makes the honesty legible instead of ambiguous, and changes what
 no number MEANS.**
 
-## The wire supports it. Measured, not assumed.
+## The wire supports it. Measured frame-by-frame, and it corrected me twice.
 
-`0x0032` byte 13-15 carries `restSeconds` at 0.01 s/lsb (`parse.ts:169`), and it
-**counts DOWN**. Decoded across the real `r60` in
-`docs/monitor/sessions/walk-2026-08-25/rests-finished-recording.jsonl.gz`:
+`0x0032` bytes 13-15 carry `restSeconds` at 0.01 s/lsb
+(`app/domain/monitor/pm5/parse.ts:169`, `readU24LE(bytes, 13) / 100`), and it
+**counts DOWN**. `0x0031` byte 8 carries `workoutState`; `3` is
+`WORKOUTSTATE_INTERVALREST`, which `toMonitorState` maps to
+`MonitorFrame.state === "resting"` (`parse.ts:547`). Both fields decoded
+together, every frame, across BOTH real `r60` rests in
+`docs/monitor/sessions/walk-2026-08-25/rests-finished-recording.jsonl.gz`
+(the program is `w 1' r1 / w 500m r1 / w 1'`; script output reproduced from
+`hex` in that recording, 1615 status frames).
+
+**Rest 1 — the entry, where the two fields disagree:**
 
 ```
-t=100.3s  restSeconds=60      t=130.7s  restSeconds=31.91
-t=102.3s  restSeconds=59.91   t=151.0s  restSeconds=10.91
-t=110.4s  restSeconds=51.91   t=159.2s  restSeconds=2.91
-                              t=161.2s  restSeconds=60     <- next work interval
+idx  t=       char  ws   restSeconds  restDistance
+369  100.81   0032   4      60.00          0        <- still working
+370  101.26   0031   3      60.00          0        <- RESTING flips HERE
+371  101.27   0032   3      60.00          0
+373  101.81   0032   3      60.00          2
+375  102.26   0032   3      59.91          3        <- countdown starts HERE, +1.0s
 ```
 
-**Two facts from that decode that the design must respect:**
+**Rest 1 — the exit:**
 
-1. **It reads `60` OUTSIDE a rest, not `0`.** It is the programmed rest value
-   at idle and only counts down while resting. So `restSeconds` **alone cannot
-   say a rest is running** — pair it with the resting state or a work interval
-   will show a frozen `1:00` in a marked cell, which is the exact false
-   "something is counting" claim this change exists to prevent.
-2. **`restDistanceMeters` climbs alongside** (0 → 125 m over that rest). Not
-   used here, but it is the coast this phase has been chasing, and it explains
-   why the row's metres move during a rest.
+```
+603  160.21   0032   3       1.91        128
+606  161.20   0031   5       1.91        129        <- work flips back on
+607  161.20   0032   5      60.00          0        <- resets to the NEXT rest's 60
+```
+
+**Rest 2 — the exit, which falsified my own spec:**
+
+```
+1373 356.05   0032   3       1.91        142
+1374 356.59   0031   4       1.91        142        <- work flips back on
+1375 356.60   0032   4       0.00          0        <- resets to ZERO, not 60
+```
+
+**Four facts the design must respect. Two of them corrected revision 2.**
+
+1. **`resting` leads the countdown by ~1 second (2-3 frames).** The state flips
+   to `3` while `restSeconds` still reads a flat `60.00`, and only then does it
+   begin ticking. **A naive `resting → render restSeconds` shows a FROZEN
+   `1:00` for about a second at the top of every rest** — a small dose of the
+   exact false-motion claim this change exists to prevent. Accepted, not
+   ignored: a real clock also dwells on its first number for a second, and the
+   dwell is bounded at ~1 s rather than the whole interval. Recorded so no
+   later reader mistakes it for a bug, and pinned by a test so it cannot grow.
+2. **Outside a rest it is the CURRENT interval's PROGRAMMED rest, not a
+   sentinel and not always 60.** Revision 2 said "it reads 60 outside a rest";
+   that is true only when a rest is programmed. After rest 2 it resets to
+   **`0.00`**, because the interval that follows has no programmed rest. The
+   conclusion the old wording served survives and is now better founded:
+   **`restSeconds` alone can say nothing about whether a rest is running** —
+   it is 60.00 through all of work interval 1, and 0.00 through all of work
+   interval 3. Only `state === "resting"` says it.
+3. **The countdown never reaches `0:00`.** Both rests end with the state
+   flipping at `1.91`. Copy must not promise a zero, and no test may wait for
+   one.
+4. **It ticks at `x.91`, not `x.00`** (60.00, 59.91, 58.91 … 2.91, 1.91), so
+   the display **floors**. Rounding would re-render `1:00` on the first
+   counted frame and add a second to fact 1's dwell.
+
+`restDistanceMeters` climbs alongside (0 → 129 m, 0 → 142 m). Not used here,
+but it is the coast this phase has been chasing, and it is why the row's
+metres move during a rest.
 
 **The resting fact is already in scope at the call site.** `surfaceModel.ts:837`
-computes `const resting = frame.state === "resting"`, and `buildGridModel` is
-called from the same function (`:1310`). Threading it in is an argument, not a
-new mechanism.
+computes `const resting = frame.state === "resting"`, `frame.restSeconds` is
+already a `MonitorFrame` field (`parse.ts:617`), and `buildGridModel` is called
+from the same function (`:1310`). Threading both in is an argument, not a new
+mechanism.
 
-## Chosen shape (James approved the DIRECTION, 2026-08-26)
+**Method note, for the record.** This decode was run because the spec was about
+to assert a wire behaviour it had only sampled. It falsified two of the spec's
+own sentences. Recurring failure #16's second corollary — a sourced premise
+fails by being UNDER-READ — earned its place again.
+
+## GATE 0 IS PASSED. James approved option B, 2026-08-26.
+
+Presented as a rendered artifact showing the grid mid-rest in PORTRAIT, three
+candidate treatments against the current state, every colour pairing computed:
+<https://claude.ai/code/artifact/340fb9c9-2239-41e1-9ba4-5392c18d29c0>.
+James's answer was one character: **"B"**.
+
+### THE APPROVED SHAPE
+
+**During a rest, the active row's `/500M` cell becomes `REST m:ss`, counting
+down from the machine's own `restSeconds`, wearing the gold `--marker`, on a
+row filled `--surface-sunken`. When the rest ends, every one of those reverts.**
+
+The `--marker` **MOVES** onto that cell and off `time`/`meters` for the
+duration of the rest. It does not multiply — see Constraints. This is the
+original approved direction ("the rest cell counts down and wears the marker")
+relocated to a cell portrait actually renders.
+
+**Why the `/500M` cell.** During a rest it holds `livePace`, which is
+`frame.currentSplit` — the split of a **coasting flywheel**
+(`surfaceModel.ts:641-658`). That number is worse than absent: it is judged
+against the work interval's target, so a coast can paint a red or blue verdict
+on a rest. Replacing it costs no information and removes a wrong judgement.
+The alternative cells were both rejected in the artifact: TIME and METERS mean
+"this interval's time/metres" everywhere else, and making them mean two things
+by state is precisely the ambiguity RC-23 refused.
+
+**Why the marker moves rather than adds.** During a rest, the interval's time
+and metres are not counting toward anything — they are drifting on the coast,
+which is the whole complaint. The rest is what is counting. Moving the gold
+mark says exactly that, in the grid's own existing vocabulary, and keeps the
+one-mark invariant intact.
+
+**Three channels carry the meaning, only one of them colour:** the word
+`REST`, the sunken row fill, and the gold. The grid's own stylesheet states the
+rule this obeys (`index.css:6801`): *"THE DASH CARRIES 'NOT YET ROWED'; COLOUR
+DOES NOT."* Option A — recolouring the 4x20 row marker gold and nothing else —
+was rejected for breaking it, at a measured **2.63:1**.
+
+**The 4x20 row marker stays `--ink`.** It means "this is the row you are on",
+which is still true during a rest. It is not part of this change.
+
+### CONTRAST, COMPUTED (recurring failure #6)
+
+| Pairing | Ratio | Requirement | Verdict |
+| --- | --- | --- | --- |
+| `--marker` on `--surface-sunken` (the REST text and its gold) | **5.50:1** | 4.5:1 text, 3:1 graphic | passes both |
+| `--marker` on `--surface` | **6.49:1** | 3:1 graphic | passes |
+| `--ink` on `--surface-sunken` (the row's other values) | **14.50:1** | 4.5:1 | passes |
+| `--surface` vs `--surface-sunken` (the fill shift itself) | 1.18:1 | — | supporting channel only, never the sole signal — which is why the word and the gold are both required |
+| `--marker` vs `--ink` (option A's whole signal) | 2.63:1 | — | **why A was rejected** |
+
+### LANDSCAPE — one behaviour, stated as a ruling not an omission
+
+James was asked whether the orientations should differ and answered only "B",
+so this is my call, recorded as such. **Landscape gets the identical
+treatment: the `/500M` cell counts down, in both orientations.** Landscape's
+REST column keeps showing that interval's PROGRAMMED rest on every row,
+including the active one — which is what that column means everywhere else,
+and is the same "settles back to a stated value" rule James already ruled for.
+The two are not in conflict: the REST column says *this interval is programmed
+for 1:00*, the `/500M` cell says *0:42 of it is left*.
+
+One code path, one test surface, no orientation-conditional meaning — which
+the design reference dislikes and which would have cost two of everything.
+**If the landscape capture reads badly, that is a finding, not a surprise**;
+revisit it there rather than pre-building a second path.
+
+### RULING — `resting` with a ZERO programmed rest
+
+`driver.ts` notes that a machine can briefly report `resting` on an interval
+with no programmed rest. Fact 2 above says `restSeconds` reads `0.00` there.
+**Show nothing.** The countdown renders only when `resting && restSeconds > 0`;
+a rest of zero duration has nothing to count, and flashing a rest marker for a
+frame or two IS the false claim. Cost if wrong: a genuine sub-second rest goes
+unmarked, which is the state before this change.
+
+## Superseded — the shape approved on my description (kept for the record)
 
 **During a rest, the active row's REST cell becomes the countdown and wears the
 marker.** `1:00` ticking to `0:00`, with the gold `--marker` mark moving to it.
@@ -113,21 +240,11 @@ feasibility question had two halves and I answered the interesting one. See
 recurring failure #13 — an instruction (or a design) is a claim about the
 system, and it gets the same evidence bar as any other.
 
-## Gate 0 — James approves the visual BEFORE any implementation
+## Gate 0 — PASSED (James, 2026-08-26). Implementation is unblocked.
 
-**Binding, and it precedes every task.** James asked for this gate explicitly.
-Nothing is built until he has seen it.
-
-What gets presented:
-
-- The grid mid-rest, current versus proposed, at the real proportions, with the
-  marker in both positions so the move is visible.
-- The **work-interval** state alongside, unchanged — the proof that the marker
-  went somewhere rather than multiplied.
-- Every colour pairing's contrast ratio **computed and stated as a number**
-  (recurring failure #6). `--marker` on the grid's backgrounds is already
-  measured at 6.49 / 5.85 / 5.50:1 in `tokens.css`; re-derive rather than quote.
-- **The open question below, answered by him, not by the spec.**
+**It was binding and it preceded every task.** The artifact above was
+presented; James chose B; nothing was built before that. The record of what
+the gate required, and how it was met, is above under "GATE 0 IS PASSED".
 
 **DECIDED (James, 2026-08-26): count down during the rest, and RESTORE the
 programmed value once the rest ends.** His reasoning: *"I think 'restore it when
@@ -148,17 +265,30 @@ every other row of the column.
 - **`--marker` moves; it does not multiply.** It is documented as the single
   "this is what's counting" mark on the pane. Exactly one cell wears it at a
   time, and a test pins that.
-- **`countdown` widens from `"time" | "meters" | null` to admit rest**, and the
-  comments at `surfaceModel.ts:398-400` and `:1414-1419` that describe the
-  narrower rule get reconciled in the same change. So does
-  `docs/design/DEVIATIONS.md` if it describes the cell.
+- **`GridRow.countdown` widens from `"time" | "meters" | null` to admit
+  `"rest"`**, and the comments at `surfaceModel.ts:398-400` and `:1414-1419`
+  that describe the narrower rule get reconciled in the same change. So does
+  `PaneGrid.tsx`'s `countdownClass` signature and its own header comment,
+  which currently states the portrait/landscape column difference as the ONLY
+  orientation difference. So does `docs/design/DEVIATIONS.md` if it describes
+  the cell.
 - **Suppressed while armed**, exactly as time/meters already are: before the
   first pull nothing is counting, including a rest that has not begun.
+- **Renders only when `resting && frame.restSeconds > 0`** — the zero-rest
+  ruling above.
+- **FLOORS to whole seconds.** Wire fact 4: the field ticks at `x.91`.
 - **No stored shape, no number's meaning changes.** This is a display change,
   and it carries none of RC-23's TRIAD weight — which is precisely why it is
-  the cheaper answer to the same complaint.
+  the cheaper answer to the same complaint. **Not TRIAD, so no PM final-PR
+  gate and no antagonist delta pass**; the wire claims that would have earned
+  one were settled by decoding the capture directly (above) rather than by
+  citing it, which is what the delta pass would have been asked to check.
 - **44 px hit targets and WCAG AA** are hard requirements. Nothing here adds a
   control, so the targets should be untouched; say so rather than assuming it.
+- **The cell must not clip.** `/500M` is `flex: 1.1` and `REST 0:42` is longer
+  than any split it replaces. `white-space: nowrap`, the word at
+  `--c-size-thead` and the number at row size, and a structural assertion at
+  the narrowest supported width.
 
 ## Testing
 
@@ -169,21 +299,26 @@ every other row of the column.
 - Assert the rendered cell and which cell wears the marker, never that a helper
   exists (#4).
 - Pin the **negative**: during WORK the marker is on time or metres and NOT on
-  rest; while armed no cell wears it.
+  the pace cell; while armed no cell wears it.
+- **Pin the three wire facts as behaviour**, since each one silently breaks a
+  plausible-looking implementation: the ~1 s `60.00` dwell at rest entry is
+  bounded and does not extend into work; `restSeconds` reading `60.00` during
+  WORK renders no countdown; `restSeconds` reading `0.00` while `resting`
+  renders no countdown.
 - `pnpm e2e` is mandatory (`app/src/`), and **`pnpm screenshots` too** — this
-  changes a screen's layout. Then open the captures and look at them (#7).
+  changes a screen's layout, in BOTH orientations. Then open the captures and
+  look at them (#7), portrait first.
 
 ## Exit criteria
 
-1. Gate 0 approved by James, with contrast ratios stated as numbers and the
-   open question above answered.
-2. During a rest, a rower in PORTRAIT can tell a rest is running, by whichever
-   shape Gate 0 chooses. In landscape the rest cell counts down from the
-   machine's own `restSeconds` and wears the marker.
+1. **PASSED** — Gate 0 approved by James, contrast ratios stated as numbers,
+   the orientation question ruled.
+2. During a rest, a rower in PORTRAIT can tell a rest is running AND how long
+   is left, from the `/500M` cell, on a sunken row, without reading the step
+   line. Landscape behaves identically.
 3. During work, and while armed, the marker is where it is today. Pinned.
 4. Exactly one cell wears the marker at any time. Pinned.
-5. A rower on the grid mid-rest can tell a rest is running without reading the
-   step line.
+5. The three wire facts above are pinned as tests, not as comments.
 
 ## Not in scope
 
