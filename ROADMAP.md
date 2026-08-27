@@ -3430,6 +3430,56 @@ that needs no erg, and it can run in a test.
       open armed run as the machine leaving. **Mirror of RC-30** — that one
       is US sending TERMINATE off a derived ready-gate, this is the MACHINE
       leaving and us not noticing. Same seam; design them together. **S**
+- [ ] **RC-38 — transcribe `OBJ_WORKOUTTYPE_T`. We have read ONE ROW of an
+      enum we key a check on.** Raised by James 2026-08-27 on seeing RC-37's
+      evidence: *"have we been making assumptions that are unfounded here?
+      is there documentation about workoutType from concept2?"*
+      **The honest split.** `8` IS sourced — Appendix A's
+      `OBJ_WORKOUTTYPE_T`, pinned through `CSAFE_PM_SET_WORKOUTTYPE`'s
+      `0x08 = WORKOUTTYPE_VARIABLE_INTERVAL`, confirmed against both the
+      enum listing and §12's worked-example byte. **`1` and `0` are sourced
+      NOWHERE.** Every claim we make about them is our own observation, and
+      "empty arm" is a name WE gave a silhouette, not a documented meaning.
+      Recurring failure #16's second corollary, exactly: we quoted the row
+      that pinned `0x08` and never read its neighbours. This same field has
+      already had one bad citation caught (`pm5-interface-notes.md:454`
+      records correcting a misdirected "§7 above").
+      **The larger assumption underneath:** `8` is not a PM5 universal, it
+      is OUR COMPILER'S CHOICE. `pm5-ble-ecosystem-review.md` records that
+      real apps send `FIXEDTIME`/`DIST_INTERVAL` for equal intervals and
+      reserve type 8 for unequal ones, and that we always compile 8. So
+      "workoutType reads back 8" is a fact about US that would stop being
+      true the day anyone optimises the compiler.
+      **Binding on RC-37 whether or not this is done first:** the check
+      compares against WHAT WE SENT for this arm, never a literal `8`.
+      `verifyArmed` already does this, so RC-37 is extending an existing
+      comparison's lifetime, not writing a new rule. **S**
+- [ ] **PHASE PROTO — a wire-semantics audit: are we hallucinating the
+      protocol? (James, 2026-08-27.)** His words: *"im also interested into
+      a deep dive to ensure we arent hallucinating anything in the protocol
+      when we could be referencing concept2's documentation. we've misused
+      fields before or conflated them to meanings they dont have."*
+      **The method is the derivation audit's, pointed at wire semantics
+      instead of derivations.** Enumerate every claim we make about a PM5
+      field — in `pm5-interface-notes.md`, in `domain/monitor/pm5/*`, and in
+      the load-bearing code comments — and classify each:
+      **VENDOR-CITED** (a document says so, and the quoted LINE is recorded
+      beside the claim), **OBSERVED** (our captures say so, n=?),
+      **INFERRED** (neither). Then verify each VENDOR-CITED claim actually
+      says what we use it for — the #16 corollary, since a real citation
+      answering the wrong question reads exactly like evidence.
+      **The track record justifying it, both directions.** Caught already:
+      TWD "reports the goal" FALSIFIED and its mirror verdict retired
+      (RC-9); the `SCREENTYPE_WORKOUT` inline-comment misprint; the
+      misdirected `workoutType` cite. Still open or unexplained:
+      `0x003A`'s Interval Rest Time reading 0 across three real r60s;
+      `0x0039`'s avgStrokeRate 44-vs-22 doubling in the August capture,
+      still uncaused after the 2026-08-27 screen oracle cleared our decode;
+      `OBJ_WORKOUTTYPE_T` read one row deep (RC-38).
+      **Do it AFTER the link-authority wave**, and note it may need the
+      source document rather than our transcription of it — the notes cite
+      Appendix A by page, so the doc was in hand at some point; confirm we
+      can still reach it before scoping the work. **L**
 - [ ] **RC-32 — F2b's clean sweep is VACUOUS.** `continuity.ts`'s F2b count
       bound writes `completedAt` + `endedBy: "link-lost"` and seals the
       record. Its sweep excludes all six committed captures, so **zero pairs
