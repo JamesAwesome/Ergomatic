@@ -863,6 +863,67 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
 });
 
 // ---------------------------------------------------------------------------
+// RC-27 — the LIVE hero counts the rest. Same wire facts as RC-24 (this
+// file's own comment above), one surface over: `SurfaceModel.restCountdown`
+// is the machine's own rest countdown for pane B's split hero, non-null
+// EXACTLY while a rest is genuinely running (`resting && restSeconds > 0 &&
+// !armed && !linkLost`).
+// ---------------------------------------------------------------------------
+describe("RC-27: the LIVE split hero counts a running rest", () => {
+  it("mid-rest: floors the wire's own countdown, never rounds it (59.91 -> 0:59, not the 1:00 Math.round would give)", () => {
+    const m = model({
+      frame: frame({ state: "resting", restSeconds: 59.91, intervalIndex: 1 }),
+    });
+    expect(m.restCountdown).toBe("0:59");
+  });
+
+  it("wire fact 2, the most important negative: restSeconds ALONE never says a rest is running", () => {
+    for (const restSeconds of [60, 0]) {
+      const m = model({
+        frame: frame({ state: "rowing", restSeconds, intervalIndex: 1 }),
+      });
+      expect(m.restCountdown).toBeNull();
+    }
+  });
+
+  it("rest-entry dwell is BOUNDED, not forbidden (wire fact 1): a flat restSeconds: 60 renders 1:00 while resting, and the identical restSeconds: 60 renders nothing while rowing", () => {
+    const resting = model({
+      frame: frame({ state: "resting", restSeconds: 60, intervalIndex: 1 }),
+    });
+    expect(resting.restCountdown).toBe("1:00");
+
+    const rowing = model({
+      frame: frame({ state: "rowing", restSeconds: 60, intervalIndex: 1 }),
+    });
+    expect(rowing.restCountdown).toBeNull();
+  });
+
+  it("the zero-rest artifact: resting with restSeconds 0 has nothing to count", () => {
+    const m = model({
+      frame: frame({ state: "resting", restSeconds: 0, intervalIndex: 1 }),
+    });
+    expect(m.restCountdown).toBeNull();
+  });
+
+  it("armed beats resting: nothing counts before the first pull, including a rest that has not begun", () => {
+    const m = model({
+      status: "armed",
+      frame: frame({ state: "resting", restSeconds: 59.91, intervalIndex: 1 }),
+    });
+    expect(m.restCountdown).toBeNull();
+  });
+
+  it("a lost link beats a running rest: the countdown goes null and nowLabel still reads LAST SEEN", () => {
+    const m = model({
+      linkLost: true,
+      frame: frame({ state: "resting", restSeconds: 59.91, intervalIndex: 1 }),
+    });
+    expect(m.restCountdown).toBeNull();
+    expect(m.nowLabel).toBe("LAST SEEN");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PHASE LM PR 1 TASK 2 — armed AND unheard, the combination the old union
 // could not express.
 //

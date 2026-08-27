@@ -6230,6 +6230,33 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-4);
 }
 
+/* RC-27: while a rest is genuinely running, the split hero's numeral is the
+   machine's OWN countdown (`SurfaceModel.restCountdown`), never a judged
+   reading — `PaneLive.tsx` never calls `judgedClass` for this value, so
+   there is no verdict class to out-rank here, unlike `.connected-hero-
+   ghost` just above. `--marker`, the SAME gold RC-24 put on the grid's own
+   running-rest mark ("GOLD MEANS LOOK HERE, NEVER YOU ARE BEHIND",
+   `tokens.css`'s own comment) — one colour, one meaning, reused rather than
+   invented a second time.
+
+   NO MARKER GRAPHIC (James, on the mockup): the grid's 4x20 gold bar
+   answers "which of twelve rows is yours"; this pane has exactly one hero,
+   so that question does not exist here. The gold on the numeral alone
+   carries the meaning — no border, no fill, no rule.
+
+   CONTRAST, COMPUTED (recurring failure #6), against `--page`, the colour
+   `.connected-pane`/`.connected-surface` inherit with no override of their
+   own (`body { background: var(--page) }`, and nothing between it and this
+   hero repaints it): `--marker` #7d5510 on `--page` #f4f1e8 = 5.85:1
+   (re-derived from the WCAG relative-luminance formula against the two
+   token hexes, not copied from a prior spec's own figure for a different
+   background pair) — clears the 4.5:1 text floor `tokens.css`'s own
+   comment on `--marker` already measured for the grid's `--surface-
+   sunken` pairing (5.50:1), with more room to spare here. */
+.connected-hero-value-rest {
+  color: var(--marker);
+}
+
 .connected-hero-target {
   display: flex;
   align-items: baseline;

@@ -569,6 +569,11 @@ export interface SurfaceModel {
   paceWhole: string;
   paceTenths: string;
   rate: JudgedValue;
+  /** RC-27: the machine's own rest countdown (`0:59`), floored, for the
+   *  LIVE pane's split hero. NON-NULL ONLY while a rest is genuinely
+   *  running — see the guard below. `null` is "the hero shows the split",
+   *  which is every other moment of a session. */
+  restCountdown: string | null;
   /** THE INTERVAL AVERAGE (connected-metrics design spec, "Average split" +
    *  States table): `frame.splitAvgPace`, plain ink and unjudged while the
    *  interval runs (the standing start dominates a live running average
@@ -924,6 +929,26 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     frame.rowingActive === false &&
     frame.distanceMeters <= MID_SESSION_RESET_METERS;
   const mirrored = armedMirror || midSessionMirror;
+
+  // RC-27. Four terms, none removable:
+  //  - `resting` is the ONLY field that can say a rest is running (wire
+  //    fact 2 — `restSeconds` reads its programmed value all through work).
+  //  - `restSeconds > 0` excludes the zero-rest artifact: a machine can
+  //    briefly report `resting` on an interval with no programmed rest,
+  //    where this field reads 0.00 and there is nothing to count.
+  //  - `!armed` because nothing is counting before the first pull, the
+  //    same stance the grid's countdown and pane B's heroes already take.
+  //  - `!linkLost` because a countdown frozen at its last value is a false
+  //    claim of motion, which is the whole defect class this fixes. While
+  //    the link is down the hero keeps its last reading, greyed and
+  //    unjudged, exactly as it does today.
+  // FLOOR, not round (RC-24's own comment, identical wire field): the wire
+  // ticks at x.91 (59.91, 58.91 ... 1.91), so rounding would re-render
+  // 1:00 on the first counted frame.
+  const restCountdown =
+    resting && frame.restSeconds > 0 && !armedMirror && !stale
+      ? fmtDuration(Math.floor(frame.restSeconds) / 60)
+      : null;
 
   const rawPace = livePace(frame, status, stale);
   const cappedPace =
@@ -1285,6 +1310,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     paceWhole,
     paceTenths,
     rate,
+    restCountdown,
     avg,
     // `Free`, not a dash, for the same reason `targetSplit` names its phase
     // (James, 2026-08-12): the phone timer has always said `free` here, and
