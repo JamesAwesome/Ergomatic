@@ -5,6 +5,35 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.25.0 (2026-08-27): range v0.24.0..main = 2 merges, each accounted
+    // per RF15. #204 (RC-24) is the whole entry. #203 (Phase UR, undefined
+    // rest) is ROADMAP-only — 74 lines, one file, a phase filed and its
+    // primary sources recorded; nothing a tester receives.
+    //
+    // ONE ITEM, NOT THREE. The countdown, the row tint and the dashed pace
+    // are one change from the rower's side: "the grid now tells you a rest
+    // is running." Splitting them would report mechanisms.
+    //
+    // THE SECOND SENTENCE IS THE LOAD-BEARING ONE. James's actual words
+    // were about worry — "so they arent worried the wrong numbers would be
+    // recorded" — so the note names the fear, not the feature. A tester who
+    // watched their metres climb during a rest needs to hear that nothing
+    // was wrong, not that a cell changed colour.
+    //
+    // NOT WRITTEN, deliberately: that the LIVE tab's big split still shows
+    // the coasting flywheel during a rest (RC-27, filed, out of #204's
+    // scope by James's own call). It is a real remaining rough edge, but
+    // announcing a defect we have not fixed, on a screen this release does
+    // not touch, spends a tester's attention on something they cannot act
+    // on. It goes in the note that ships its fix.
+    version: "v0.25.0",
+    date: "2026-08-27",
+    items: [
+      "The grid now tells you when you are resting. During a rest the row you are on sinks to a shaded band and counts the rest down in gold: in portrait it replaces the pace column, in landscape it fills the REST column. Your time and metres keep climbing through a rest because the flywheel is still spinning, and until now nothing on that screen said so. Nothing was ever being recorded wrong; the screen just could not tell you which numbers were the rest.",
+      "The pace column no longer shows a number while you rest. It used to keep reporting a split as the flywheel slowed, which was a pace nobody was rowing. It now shows a dash until you pull again.",
+    ],
+  },
+  {
     // v0.24.0 (2026-08-26): range v0.23.0..main = 4 merges, each accounted
     // per RF15. #198 (Phase LM) is the whole entry. #199 (type-naming) is
     // ledgers + ROADMAP only — a decision recorded and deferred to PROD,
