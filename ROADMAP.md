@@ -5990,11 +5990,45 @@ never emits an 'undefined rest' interval". Concept2's Logbook API carries
 `VariableIntervalUndefinedRest` as a distinct `workout_type` member, so the
 concept is theirs and first-class — we simply never reach for it.
 
+**What the feature IS, from Concept2's own words** (PRIMARY, all from
+<https://www.concept2.com/support/monitors/pm5/how-to-use>, section
+"Setting Up a Workout with Undefined Rest" — the only page C2 publishes on
+it; the PM manual PDF says nothing):
+- It is **a value of the rest field, not a workout type in the menus**.
+  You dial rest past its bottom: "Select the plus button. 'Undefined Rest
+  Time' is displayed."
+- **The rower presses Continue to end it** — this is the load-bearing
+  fact: "When you are ready to start the next interval, select Continue
+  and resume rowing." Rowing during the rest does NOT advance it, it just
+  accrues rest metres ("262 meters were completed during the rest time").
+- Purpose in their words: "helpful for workouts such as CrossFit workouts
+  that combine indoor rowing/skiing with other activities off the indoor
+  rower (box jumps, kettle bell swings, etc)."
+- Capped at **10 minutes** per rest, and **cannot be saved as a favorite
+  or custom workout** on the monitor.
+- **Wire, from C2's CSAFE spec (PRIMARY):** interval types
+  `TIMERESTUNDEFINED` 3, `DISTANCERESTUNDEFINED` 4, `RESTUNDEFINED` 5,
+  `CALORIERESTUNDEFINED` 7; workout type
+  `WORKOUTTYPE_VARIABLE_UNDEFINEDREST_INTERVAL` = **9** (we send 8
+  unconditionally today). A FIXED interval workout with undefined rest has
+  no wire form of its own — "should be programmed as variable interval
+  workouts with undefined rest". And `SplitDurationDistance` must be 0
+  when any undefined rest interval is configured, or Biathlon logic
+  triggers.
+- **Two unreconciled numbers, do not trust either across paths:** the
+  how-to-use page says up to **29** undefined rest intervals; the CSAFE
+  spec says **50**. Likely menu limit vs wire limit; C2 reconciles them
+  nowhere.
+- **OPEN, unfound in any C2 source:** whether the rest clock counts UP or
+  DOWN on screen, and what happens AT the 10:00 cap (auto-advance? end?).
+
 **Open questions for the brainstorm** (do not answer them here):
-- **Does the phone timer even have the concept?** `src/session/engine.ts`
-  walks a frozen phase list on a clock. An undefined rest ends when the
-  ROWER decides, not when a timer expires. If the engine has no
-  wait-for-the-user phase, that is the real cost, not the grammar.
+- **The phone timer needs a new phase kind — this is now ANSWERED, not
+  open.** `src/session/engine.ts` walks a frozen phase list on a clock,
+  and C2's own instruction is that the rower presses Continue. So an
+  undefined rest is a phase that ends on a USER EVENT, which the engine
+  has nowhere. That is the real cost, not the grammar. Size the phase on
+  this, not on the `Step` union.
 - **What does it do to work/rest accounting?** RC-1's spine stores
   `rest_seconds`/`rest_meters`. An undefined rest still produces real
   numbers there, but nothing PREDICTS them, so anything that compares
