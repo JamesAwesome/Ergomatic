@@ -3715,6 +3715,54 @@ that needs no erg, and it can run in a test.
       made it blocking. **That is the whole lesson — the "flake" was a race
       whose odds any nearby edit could change, and three sessions of re-running
       it green were three sessions of not looking.**
+- [ ] **v0.24.0's notes owe the v0.17.0 correction IN FULL, and the
+      cause-free rule must be scoped when briefing whoever writes them.**
+      Moved here at the PM re-gate because it had been living only in a dated
+      design spec — a record of a decision, not a queue (RF#14's newest
+      syntax). The shipped v0.17.0 item carries two falsified clauses: *"so it
+      cannot flicker at you"* (it flickered nine times in 288 s) and *"a phone
+      call taking the app to the background"* (a CAUSE, and the wrong one —
+      the trigger was iOS active/inactive, raised by a Control Center swipe).
+      **Do not fix them in the v0.17.0 entry**; a correction on an old
+      version's entry has an audience of zero. Put it in v0.24.0's.
+      **And scope the constraint when briefing the notes session:** cause-free
+      forbids asserting a cause for a GENUINE silence (three producers
+      undistinguished). It does NOT forbid naming what triggered the FALSE
+      alarm, which is PRIMARY from the plugin's own source. Told only
+      "cause-free", a notes writer will censor the one explanation testers
+      most need.
+- [ ] **RC-25 — Task 5's coast fix is pinned in ONE direction only, and has
+      never been walked.** Filed at the PM re-gate rather than left implied.
+      That a genuine mid-interval pause still fires is pinned hard: a corpus
+      regression across all nine committed recordings, onsets identical, with a
+      non-vacuity check. **That the coast case is now SILENT has no oracle at
+      all** — the corpus provably lacks the trigger, the erg reproduction was
+      never downloadable (the device build's recording row is dev-gated), and
+      the failing test is a hand-built frame sequence using real wire values.
+      **Not a blocker:** if the fix is wrong the rower loses an instruction,
+      not a workout.
+      **THE INSTRUMENT IS BUILT (James, 2026-08-26: "Add the instrument now").**
+      The pause edge now writes a `pause-declared` ring entry carrying
+      `frames`, `hold`, `pulled`, and the frame's own distance/split/spm — what
+      the predicate weighed, no cause asserted. Edge only, never per frame.
+      **So this row now closes on one NATURAL occurrence and a `COPY` tap, not
+      on a walk.** Pinned in both directions: removing the log fails the test,
+      and logging per frame instead of on the edge also fails it — the fixture
+      had to be extended so the pause HOLDS, because with a one-frame pause
+      "exactly one entry" could not tell the two apart, and the mutation
+      stayed green until it was.
+- [ ] **RC-26 — `KEEP THE SCREEN ON` warns against the one thing that cannot
+      happen.** The spec's own criterion 3 forbids wording that "blames the
+      screen timeout (which keep-awake already handles)" — and the shipped
+      string is a screen-timeout instruction. Keep-awake has covered this flow
+      since 2026-08-11, and this phase's own ROADMAP says the loss was a MANUAL
+      lock that no wake-lock work would have prevented. So the four words name
+      the wrong hazard. `DON'T LOCK YOUR PHONE` is the same four words.
+      **The walk card raised this verbatim, said only James can answer it, and
+      the walk ran without asking** — which is its own lesson: when a card names
+      a copy question only James can settle, it is asked in the first rest or
+      recorded as unasked. Fast-path after merge; the test pins a word COUNT,
+      so the string is free to change.
 - [ ] **RC-24 — During a rest, the grid's REST cell counts down and wears the
       accent. APPROVED (James, 2026-08-26); not yet built.** This is the other
       half of RC-23's ruling and the reason that ruling is safe.
@@ -3803,7 +3851,11 @@ that needs no erg, and it can run in a test.
       then check whether failures cluster by worker index or by file ordering,
       to separate a harness race from an app race. Related in kind to the two
       e2e flakes already tracked.
-- [ ] **RC-18 — `"PM5"` is baked into a fallback the rower can SEE, and it
+- [ ] **RC-18 (PAIR WITH THE `door` COLUMN — both want the next stored-shape
+      change to the logs table; PM re-gate, 2026-08-26. RC-18 is also precisely
+      the over-claiming row the under/over-claim argument was written about: a
+      row asserting a machine identity it does not know.) — `"PM5"` is baked
+      into a fallback the rower can SEE, and it
       will be wrong the day we support another monitor.** James, 2026-08-25,
       on Phase LM Task 4's new label: *"We may one day support other rowers.
       Be careful where we use 'PM5'."* That label was renamed in the same
@@ -5926,10 +5978,13 @@ documented current state and had gone stale):
 - *Should a lost link mid-piece be recoverable by reconnecting?* Still **PR 2**
   (correct resume). Unchanged.
 
-**Status: PR 1 implemented and reviewed; BLOCKED ON THE WALKS** (James,
-2026-08-25: "Have the walks block"). Exit criteria 9 and 10 are unmet until the
-phone walk and the two-build probe run. Nothing in this phase is complete on
-merge.
+**Status: PR 1 walked and ready to merge (2026-08-26).** The re-walk passed
+leg A with zero spurious latches, counted from a committed ring
+(`docs/monitor/sessions/walk-2026-08-26b/`). Criterion 9 is CLOSED BY RULING,
+not met — James cancelled the probe on incidental evidence, and it closed the
+control arm only. Criterion 10's leg B was SUBSTITUTED by a 98 s background
+rather than a deliberate lock. **Nothing else in this phase is complete on
+merge:** PR 2 (correct resume) and three owed rows below remain.
 
 ### Phase LM — owed work
 
@@ -5953,9 +6008,13 @@ gate.
       drives the same production handler through the same seam, which is what
       the gate needs — see `lifecycleReplay.test.ts`.
 - [ ] **LM PR 2 — correct resume**, per James's 2026-08-20 ruling ("CORRECT
-      RESUME, not a background mode"). Blocked on PR 1's §D1e probe: the
-      never-started case falls OUTSIDE that ruling's scope, which is the whole
-      reason the probe exists. Do not start before the probe reports.
+      RESUME, not a background mode"). **UNBLOCKED 2026-08-26 — and it was
+      blocked on an event that will never happen.** This row used to read "do
+      not start before the probe reports"; James CANCELLED the probe, so the
+      probe will never report. What the cancellation gathered instead:
+      `framesWhileHidden=2` on both real backgrounds, i.e. a genuine background
+      delivers almost nothing, which is the input correct resume has to assume.
+      Start from that.
 - [ ] **The stored row still reads `LOGGED BY HAND` for a connected session
       that opened no record — permanently and unbackfillably, for that row and
       every earlier one.** PR 1 took option 2 knowingly. **This is a knowing

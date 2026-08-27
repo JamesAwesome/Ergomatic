@@ -5,7 +5,19 @@ failure #13 (an instruction is a claim about the system, and gets the same
 evidence bar). Exit criteria 9 and 10 of
 `docs/superpowers/specs/2026-08-25-lost-monitor-design.md`.
 
-**This card gates a merge.** PR 1 does not land until both criteria are met —
+**CLOSED OUT 2026-08-26. Do not re-run this card as written** — legs 3 and 4
+were CANCELLED by James and re-running them would spend erg time he already
+declined. Outcomes per leg are recorded in each section below, and the evidence
+is committed at `docs/monitor/sessions/walk-2026-08-26b/`.
+
+| Leg | Outcome |
+| --- | --- |
+| 1 | **PASSED.** Zero spurious latches (2 entries, both real, both `latched=true`), `1 OF 4 · READY` preserved, banner correct and retracting |
+| 2 | **SUBSTITUTED, not walked.** A 98 s BACKGROUND while `live`, not a deliberate LOCK. Landing 1 (run continued) observed and recorded. See the walk record for why this PR is the wrong one to blur that distinction |
+| 2b | **REPRODUCED** the false pause (second attempt), fixed at `3423e95`, and **the fix was never re-walked** |
+| 3, 4 | **CANCELLED by James's ruling** — the §D1e probe closed on incidental evidence. See the spec's "The §D1e probe: CLOSED without running it" |
+
+**This card gated a merge.** PR 1 did not land until the criteria were met —
 James's ruling, 2026-08-25: *"Have the walks block."*
 
 ## Budget

@@ -165,6 +165,25 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       // this task does not touch. The item's scenario is a link dying
       // MID-ROW; the never-started case Phase LM exists for is a
       // different screen and this note makes no claim about it.
+      //
+      // **THAT ALL-CLEAR IS NOW PARTLY FALSE — 2026-08-26, and the shipped
+      // string below carries TWO falsified clauses.** It was re-checked
+      // against the new CODE and never against the phase's own
+      // no-asserting-a-cause CONSTRAINT, which is a different check.
+      //   1. "so it cannot flicker at you" — it flickered NINE times in
+      //      288 seconds on a link that never dropped
+      //      (`docs/monitor/sessions/walk-2026-08-26/`). Fixed now, but the
+      //      sentence was false when shipped.
+      //   2. "a phone call taking the app to the background" names a CAUSE,
+      //      and the wrong one: the trigger was iOS's active/inactive
+      //      signal, which a Control Center swipe or a notification peek
+      //      raises. A phone call has never been observed causing it.
+      // **DO NOT edit the v0.17.0 string to fix this.** Testers do not
+      // re-read an old version's entry, so a correction there has an
+      // audience of zero. The correction belongs IN FULL in the v0.24.0
+      // entry — tracked at ROADMAP `## Phase LM — owed work`, not only in a
+      // design spec, because the next person to edit this file reads this
+      // comment and not the spec.
       "If the Bluetooth link dies mid-row, the app now says so, within a few seconds: LOST THE MONITOR appears, the live numbers visibly freeze instead of pretending, and the banner stays up until the stream has been genuinely healthy for ten seconds, so it cannot flicker at you. This covers the ways a link dies silently: switching Bluetooth off and on, a phone call taking the app to the background, and drops the app used to swallow.",
       // RECONCILED BY Phase LM PR 1 Task 4 (2026-08-25), which is what the
       // spec asked this task to decide. The sentence WAS false as a

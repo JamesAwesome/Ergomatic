@@ -5293,7 +5293,7 @@ describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
         currentSplit: 236,
       }),
     );
-    const { result, fake } = harness({
+    const { result, fake, unmount } = harness({
       program: TWO_INTERVALS,
       events: [
         ...rowed,
@@ -5301,7 +5301,14 @@ describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
         status(700, frozen),
         status(800, frozen),
         status(900, frozen),
-        status(1000, { ...frozen, elapsedSeconds: 58.3, distanceMeters: 109 }),
+        // RC-25: two MORE frozen frames so the pause HOLDS past its onset.
+        // Without them the pause lasts a single frame, and "exactly one
+        // pause-declared entry" cannot tell an edge-triggered log from a
+        // per-frame one — a mutation to `if (nowPaused)` stayed green until
+        // these were added.
+        status(1000, frozen),
+        status(1100, frozen),
+        status(1200, { ...frozen, elapsedSeconds: 58.3, distanceMeters: 109 }),
       ],
     });
     await connect(result);
@@ -5324,9 +5331,36 @@ describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
     expect(result.current.phase).toBe("live");
     expect(result.current.frozen).toBe(true);
 
+    // The pause HOLDS across further identical frames (RC-25's fixture
+    // extension) — this is what makes the edge-vs-per-frame check below real.
+    tick(fake, 100);
+    expect(result.current.frozen).toBe(true);
+    tick(fake, 100);
+    expect(result.current.frozen).toBe(true);
+
     tick(fake, 100);
     expect(result.current.phase).toBe("live");
     expect(result.current.frozen).toBe(false);
+
+    // RC-25 (James: "Add the instrument now"). The pause is DERIVED and used
+    // to be logged nowhere, which is why a false PULL TO RESUME at the erg
+    // left no trace and had to be provoked to be seen. The edge is now
+    // recorded with the evidence the predicate weighed, so the next NATURAL
+    // occurrence is diagnosable from a COPY tap instead of a walk.
+    // The ring reaches sessionStorage at TEARDOWN, so unmount first — the
+    // pause assertions above are already done.
+    unmount();
+    const stash = sessionStorage.getItem("ergomatic:last-monitor-log");
+    const declared = (
+      JSON.parse(stash ?? "[]") as { kind: string; detail: string }[]
+    ).filter((e) => e.kind === "pause-declared");
+    // EXACTLY ONE: the edge, not every frame the pause holds for. A per-frame
+    // entry would bury the ring it is written into.
+    expect(declared).toHaveLength(1);
+    // The evidence, not a verdict — and no cause asserted.
+    expect(declared[0]!.detail).toContain("frames=4");
+    expect(declared[0]!.detail).toContain("pulled=true");
+    expect(declared[0]!.detail).toContain("d=");
   });
 
   // THE ENUM-READER PIN'S OWN COMPILE-TIME HALF (task 5 step 1, requirement

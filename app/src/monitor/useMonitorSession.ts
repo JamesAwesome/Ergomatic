@@ -2095,9 +2095,35 @@ export function useMonitorSession(
                 distanceMeters: frame.distanceMeters,
                 intervalCount: frame.rawIntervalCount,
               };
+        const wasPaused = isPausedRun(freezeRef.current);
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
-        update({ frame, frozen: isPausedRun(freeze) });
+        const nowPaused = isPausedRun(freeze);
+        // RC-25 (James, 2026-08-26: "Add the instrument now"). The pause is
+        // DERIVED and was never logged, which is why his sighting of a false
+        // `PULL TO RESUME` at a rest boundary left no trace and had to be
+        // provoked at the erg to be seen at all. Task 5's fix is pinned hard
+        // in one direction (a genuine pause still fires — corpus regression
+        // over all nine committed recordings) and has NO oracle in the other:
+        // no committed capture contains the coast shape, and a device build
+        // cannot produce a recording.
+        //
+        // So log the EDGE, with the frame that closed the run and the evidence
+        // the predicate weighed. The next natural occurrence then proves or
+        // refutes the model with a `COPY` tap, and no walk is needed for it.
+        // Edge only, never per frame: a pause holds for many frames and a
+        // per-frame entry would bury the ring it is written into.
+        //
+        // Records what was MEASURED and asserts no cause — the same rule the
+        // resume line follows since the trigger fix.
+        if (nowPaused && !wasPaused) {
+          logRef.current?.record(
+            "pause-declared",
+            `frames=${freeze.frames} hold=${PAUSED_FRAME_HOLD} pulled=${freeze.pulled} ` +
+              `d=${frame.distanceMeters} split=${frame.currentSplit} spm=${frame.spm}`,
+          );
+        }
+        update({ frame, frozen: nowPaused });
         return;
       }
       // Every other phase still SEES the frame (the machine's current
