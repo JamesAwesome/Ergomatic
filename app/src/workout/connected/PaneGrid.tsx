@@ -34,6 +34,37 @@
 // REST, `index.css`'s own `display: none` toggle) and the handful of size
 // tokens (row height, `#` column width) the landscape media query steps.
 //
+// RC-24 (2026-08-26): the ACTIVE row now has a rest-countdown form, and
+// WHICH CELL WEARS IT DIFFERS BY ORIENTATION — JAMES RULING 2026-08-26,
+// after the first capture showed the row saying REST twice (`0:59` in
+// `/500M`, the programmed `3:00` in the REST column, on the same row): in
+// PORTRAIT (no REST column at all — `.connected-grid-rest`'s own
+// `display: none`) the `/500M` cell carries it, exactly as shipped; in
+// LANDSCAPE it moves into the REST column instead, and `/500M` reverts to
+// its ORDINARY (coast-pace) form. ONE MODEL, NOT TWO CODE PATHS:
+// `row.restCountdown` is rendered into BOTH cells unconditionally whenever
+// `row.countdown === "rest"` — the `/500M` cell always carries both its
+// rest-form and its coast-pace form, and CSS (`.connected-grid-rest-
+// countdown` / `.connected-grid-pace-coast`, the landscape query) is what
+// decides which one a given orientation shows; this component never asks
+// what orientation it is in.
+//
+// THE COAST-PACE FORM DASHES DURING A REST — fix round 2 (James, spotting
+// it in the committed landscape capture: "So /500m in landscape isn't '-'
+// during rest???"). `row.pace` is NOT `livePace` on this row while
+// resting: `buildGridModel`'s active branch (`surfaceModel.ts`) already
+// replaces it with the house dash, unjudged, before this component ever
+// sees it — `livePace`/`frame.currentSplit` during a rest is a coasting
+// flywheel's split, judged against a work target it no longer means, and
+// that number is worse than the tint already removed (round 1): it is
+// precisely the number a rower could mistake for their result, on the row
+// whose REST column is counting down beside it. `cellClass` is never
+// called on the coast span either way, but the span's own TEXT is now the
+// dash the model hands it, not a coasting reading. See
+// `GridRow.countdown`'s own doc comment (`surfaceModel.ts`) for the wire
+// reasoning and the design spec's "superseded" ruling for the record of
+// why landscape changed, twice.
+//
 // THE `#` CELL (design spec §5b, built by Task 4b's `intervalNumbering`):
 // numbering starts at 1 on the first piece. `row.ordinal` used to be `null`
 // for a warm-up row, which rendered `WU`; Phase WU removed that case. This
@@ -160,12 +191,21 @@ export default function PaneGrid({ model }: { model: SurfaceModel }) {
 }
 
 function Row({ row, ref }: { row: GridRow; ref?: React.Ref<HTMLDivElement> }) {
+  // Fix round (review D3): narrowed back to the two cells this is actually
+  // called for. `GridRow.countdown` itself still admits `"rest"` — the
+  // /500M cell and the REST column both read it directly (below), never
+  // through this helper, so widening this signature to match was dead.
   const countdownClass = (cell: "time" | "meters"): string =>
     row.countdown === cell ? " connected-grid-countdown" : "";
   return (
     <div
       ref={ref}
-      className={`connected-grid-row connected-grid-${row.state}`}
+      // RC-24: a running rest sinks the row (`--surface-sunken`), the third
+      // of the three channels that carry "a rest is running" — the word
+      // REST and the gold mark are the other two, none of them alone.
+      className={`connected-grid-row connected-grid-${row.state}${
+        row.countdown === "rest" ? " connected-grid-resting" : ""
+      }`}
       // The colour-free half of "this is the one you are on": the marker
       // square and the ink border say it visually, this says it to a
       // screen reader.
@@ -189,14 +229,46 @@ function Row({ row, ref }: { row: GridRow; ref?: React.Ref<HTMLDivElement> }) {
       <span className={`connected-grid-meters${countdownClass("meters")}`}>
         {row.meters}
       </span>
-      <span className={cellClass("connected-grid-pace", row.pace)}>
-        {row.pace.display}
-      </span>
+      {row.countdown === "rest" ? (
+        /* RC-24 fix round (James, 2026-08-26): BOTH forms render
+           unconditionally — this component does not know or ask which
+           orientation is live, CSS does (the landscape query flips which
+           span is `display: none`). Neither form is judged: see this
+           file's own header note on why the coast span carries no
+           `cellClass` either, in either orientation. */
+        <span className="connected-grid-pace">
+          <span className="connected-grid-rest-countdown">
+            <span className="connected-grid-rest-word">R</span>{" "}
+            {row.restCountdown}
+          </span>
+          <span className="connected-grid-pace-coast">{row.pace.display}</span>
+        </span>
+      ) : (
+        <span className={cellClass("connected-grid-pace", row.pace)}>
+          {row.pace.display}
+        </span>
+      )}
       <span className={cellClass("connected-grid-spm", row.spm)}>
         {row.spm.display}
       </span>
       <span className="connected-grid-hr">{row.hr}</span>
-      <span className="connected-grid-rest">{row.rest}</span>
+      {/* RC-24 fix round: the REST column's own content decision — this
+          row's PROGRAMMED rest, or (active row, resting) the machine's
+          live countdown, gold like the /500M form landscape suppresses.
+          Not an orientation branch: this ternary reads `row.countdown`,
+          the same field the /500M cell above reads, and runs identically
+          whether or not the column is even visible — the column's OWN
+          existing display:none/block toggle (portrait/landscape) is what
+          orientation actually governs here, unchanged by this task. */}
+      <span
+        className={
+          row.countdown === "rest"
+            ? "connected-grid-rest connected-grid-rest-live"
+            : "connected-grid-rest"
+        }
+      >
+        {row.countdown === "rest" ? row.restCountdown : row.rest}
+      </span>
     </div>
   );
 }

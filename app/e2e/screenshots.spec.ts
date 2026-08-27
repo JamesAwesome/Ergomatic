@@ -3708,6 +3708,9 @@ const CONNECTED_STATES = [
   // case that forces the contained scroll (DEVIATIONS row 2), and the
   // diagnostics sheet the triple-tap opens over it.
   "connected-pane-grid",
+  // RC-24: the same mid-session frame, mid-rest — the active row's /500M
+  // cell counting down instead of showing a coasting split.
+  "connected-pane-grid-resting",
   "connected-pane-grid-long",
   "connected-log-sheet",
   "connected-ended",

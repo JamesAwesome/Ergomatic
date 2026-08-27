@@ -6934,6 +6934,97 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--marker);
 }
 
+/* RC-24: the active row while the machine is RESTING. The `/500M` cell
+   becomes the machine's own rest countdown and takes the gold mark; the row
+   sinks. THREE CHANNELS, only one of them colour — the word REST, the
+   sunken fill, and the gold — because this grid's own rule (see the
+   dashed-rule comment above) is that meaning never rides colour alone.
+   --marker on --surface-sunken: 5.50:1 (4.5:1 text floor, 3:1 graphic
+   floor — passes both). --ink on --surface-sunken: 14.50:1, so the row's
+   other values stay legible on the new fill. The fill shift itself is only
+   1.18:1, which is exactly why it is never the sole signal. */
+.connected-grid-active.connected-grid-resting {
+  background: var(--surface-sunken);
+}
+
+.connected-grid-rest-countdown {
+  color: var(--marker);
+  /* `/500M` is flex 1.1; nothing may wrap mid-value. */
+  white-space: nowrap;
+}
+
+/* FIX ROUND 2, ITEM B (James: "is there any way to make the portrait view
+   have less of a bump... Maybe like reduce 'rest' to r/"). This cell used
+   to read `REST m:ss` and carry its own `min-width: max-content` override
+   (deleted here) to stop that string clipping — which cost the resting
+   row's METERS/SPM/HR a few px of misalignment against every other row,
+   review finding C's own "bump". Two numbers, MEASURED (not eyeballed) at
+   375×812, this repo's own "tightest common width"
+   (`e2e/screenshots.spec.ts`'s own convention, narrower than the 390 the
+   round-1 fix was measured against), one real render each:
+
+     REST 9:55  needs  84px  —  16px more than the 68px every row's own
+                                 flex share already gives this column
+     R 9:55     needs  68px  —  EXACTLY the 68px every row already has
+
+   `R` is not invented shorthand — this repo's own bulk-import grammar
+   already uses `r1` for a one-minute rest (`domain/bulk.ts`), so a
+   rower who has typed a workout has already seen this abbreviation mean
+   "rest". Both figures are true for EVERY valid rest value, not just the
+   9:55 ceiling: `compileProgram`'s `MAX_REST_SECONDS = 595` (Table 19)
+   means minutes is always exactly one digit (0-9), so every rendered
+   string is the same character count in this monospace font — the
+   measurement at the ceiling is the measurement at every other value too.
+   `REST` would need this column widened 16px on EVERY portrait row (not
+   only the resting one) to reach zero bump, with no existing portrait
+   no-clip proof that a widened column still holds a five-digit METERS
+   reading (the landscape stress test at `e2e/design.spec.ts:7069` proves
+   only the 844px-wide case). `R` needs no column change at all — the
+   existing flex table already covers its worst case exactly, proven by
+   the equal numbers above, not assumed. Chosen for zero cost over REST's
+   16px permanent tax on every row's alignment, per James's own tie-break
+   ("only drop to R if REST cannot fit [at an acceptable cost]") — 16px on
+   every row, forever, to save one word, was judged not acceptable.
+
+   NO `min-width` OVERRIDE HERE ANY MORE — deleted, not left dead: `R`'s
+   own content already fits inside the ordinary flex allocation with zero
+   slack needed, so forcing a floor here would do nothing. Verified, not
+   assumed: `e2e/design.spec.ts`'s no-clip test now asserts the resting
+   row's METERS/SPM/HR align with every other row EXACTLY (0px, not a
+   bounded deficit), and that gate is proven to go red if this ever stops
+   being true (the report has the mutation).
+
+   THE WORD RIDES AT THE COLUMN-HEAD SIZE SO THE PAIR FITS THE CELL; THE
+   NUMBER STAYS AT ROW SIZE, BECAUSE THE NUMBER IS WHAT IS READ — the same
+   two-size treatment the round-1 shape had, held through the label
+   change. */
+.connected-grid-rest-word {
+  font-size: var(--c-size-thead);
+}
+
+/* RC-24 fix round (James, 2026-08-26): the /500M cell's LANDSCAPE form —
+   the ordinary coast pace, hidden in portrait (the rest-countdown form
+   above is what portrait shows instead) and revealed by the landscape
+   query below. UNJUDGED: no `cellClass` is ever applied to this span (see
+   `PaneGrid.tsx`'s own header note) — a coasting split judged against a
+   work target is wrong in this column regardless of which orientation is
+   showing it, which is the whole reason this cell existed in the first
+   place. */
+.connected-grid-pace-coast {
+  display: none;
+}
+
+/* RC-24 fix round: the REST column's own live-countdown treatment
+   (landscape only — the column itself stays portrait-hidden via
+   `.connected-grid-rest`'s base rule above, so this never paints
+   anywhere a rower can see it in portrait). Gold, the same mark that
+   would otherwise sit on `/500M` — the mark still moves with the
+   counting cell, it has simply moved to a different cell in this
+   orientation. */
+.connected-grid-rest-live {
+  color: var(--marker);
+}
+
 /* Pinned under the scroller: the distance rule (and, since CR2 spec 3
    Task 5, the README's own "N MORE BELOW" scroll hint merged ahead of it —
    `surfaceModel.ts`'s `footerCaptionFor`), in words, never a glyph. */
@@ -8181,9 +8272,14 @@ section:not(.news-pinned) .news-row:last-of-type {
      geometry stays "today's" (the pre-redesign scroller's row height and
      column widths), only its skin (tokens, table-head treatment) is new;
      the literal 30px is a LANDSCAPE-table figure. Every OTHER column's
-     flex weight is already the table's number in the base rule above —
-     TIME/METERS/PACE/SPM/HR do not change between orientations, only `#`'s
-     width and REST's visibility do. Widening this fixed column costs the
+     FLEX WEIGHT is already the table's number in the base rule above —
+     TIME/METERS/PACE/SPM/HR's weights do not change between orientations,
+     only `#`'s width and REST's visibility do (RC-24 fix round: PACE's
+     own CONTENT during a rest now does differ by orientation — the
+     `/500M` cell's rest-countdown form vs its ordinary coast-pace form,
+     `.connected-grid-rest-countdown`/`.connected-grid-pace-coast` below —
+     this paragraph is about the flex TABLE, unchanged, not about every
+     pixel this column ever paints). Widening this fixed column costs the
      row's own flexible siblings a few px each (`min-width: 0` on every one
      of them, this file's own comment on the width-invariant test), not
      vertical fit — row HEIGHT is unrelated to this column's WIDTH, and the
@@ -8199,6 +8295,20 @@ section:not(.news-pinned) .news-row:last-of-type {
     display: block;
     flex: 0.8;
     text-align: right;
+  }
+
+  /* RC-24 fix round (James, 2026-08-26): landscape is where the REST
+     column is real, so this is where the two /500M forms swap — the
+     rest-countdown form (portrait's own cell) hides, and the ordinary
+     coast-pace form (hidden by default, above) takes over. The value and
+     the mark itself have moved to `.connected-grid-rest-live` just below;
+     nothing here repaints gold. */
+  .connected-pane-grid .connected-grid-rest-countdown {
+    display: none;
+  }
+
+  .connected-pane-grid .connected-grid-pace-coast {
+    display: inline;
   }
 
   /* --- The diagnostics sheet at 844x390 --------------------------------- */

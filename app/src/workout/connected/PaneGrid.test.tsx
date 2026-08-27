@@ -801,6 +801,124 @@ describe("the dash carries 'not yet', colour does not (handoff §3)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// RC-24 — the grid says a rest is running. Row 2 is FILLING_LOW's program
+// index 1, the first 2000 m rep ("the ACTIVE row is the machine's interval"
+// above pins the same mapping).
+// ---------------------------------------------------------------------------
+
+describe("RC-24: the /500M cell counts down a running rest", () => {
+  it("renders the word and the countdown, and sinks the row", () => {
+    renderGrid({
+      frame: frame({ state: "resting", restSeconds: 42, intervalIndex: 1 }),
+    });
+    const active = row(2);
+    expect(active.className).toContain("connected-grid-resting");
+    const cell = active.querySelector(".connected-grid-rest-countdown");
+    expect(cell).not.toBeNull();
+    // Floored, not rounded — 42.0 is already whole, so this also doubles as
+    // the render-through check for the CSS comment's own worked example.
+    // Fix round 2, item B (James: "reduce 'rest' to r/"): `R`, not `REST`
+    // — measured to need exactly the width every row's own flex share
+    // already gives this column (`index.css`'s own rule comment has the
+    // numbers), unlike `REST` which needed 16px more.
+    expect(cell!.textContent).toBe("R 0:42");
+  });
+
+  // Fix round (James, 2026-08-26): landscape moves the countdown into the
+  // REST column and reverts `/500M` to the coast pace there — BOTH forms
+  // render unconditionally now (this component never asks which
+  // orientation is live; jsdom could not answer if it did — CSS decides,
+  // proven in a real browser by `e2e/design.spec.ts`). This pins the
+  // STRUCTURE both orientations depend on.
+  //
+  // Fix round 2, item A (James: "So /500m in landscape isn't '-' during
+  // rest???"): the coast form no longer shows the coasting split AT ALL —
+  // `row.pace` is the house dash, unjudged, straight off the MODEL
+  // (`surfaceModel.test.ts`'s own dedicated pair pins the model fact; this
+  // pins that the DOM cell actually renders what the model now says).
+  it("dashes during a rest, unjudged, in the coast form too — no coasting split ever reaches either /500M form", () => {
+    // currentSplit: 60 is a live, plausible coasting reading (not the
+    // already-dashing dead-stop case, `currentSplit: 0`) — proves the
+    // suppression is the fix-round-2 model change, not an accident of a
+    // zero reading already dashing on its own.
+    renderGrid({
+      frame: frame({
+        state: "resting",
+        restSeconds: 42,
+        intervalIndex: 1,
+        currentSplit: 60,
+      }),
+    });
+    const active = row(2);
+    expect(active.querySelector(".connected-grid-pace")!.className).not.toMatch(
+      /timer-card-actual-/,
+    );
+    // Unjudged in BOTH forms — `cellClass` is never called on the coast
+    // span either, so its class is the bare literal, nothing appended —
+    // and its TEXT is the house dash, not a coasting reading.
+    const coast = active.querySelector(".connected-grid-pace-coast");
+    expect(coast!.className).toBe("connected-grid-pace-coast");
+    expect(coast!.textContent).toBe(DASH);
+  });
+
+  it("during work the pace cell is unchanged: the same judged tint it has today, no resting row, no rest word", () => {
+    renderGrid({
+      frame: frame({ state: "rowing", intervalIndex: 1, currentSplit: 60 }),
+    });
+    const active = row(2);
+    expect(active.className).not.toContain("connected-grid-resting");
+    expect(active.querySelector(".connected-grid-rest-word")).toBeNull();
+    expect(active.querySelector(".connected-grid-pace")!.className).toContain(
+      "timer-card-actual-faster",
+    );
+  });
+
+  // Exit criterion 4 ("exactly one cell wears the marker"), pinned at the
+  // DOM level (review D2 — the model-level pin already covers `GridRow`
+  // fields; this is the render-time consequence, so a regression that
+  // added a second `connected-grid-countdown` in the markup would be
+  // caught here even though structure makes it true today).
+  it("marks no cell but the /500M-or-REST pair while resting: TIME and METERS carry no countdown class", () => {
+    renderGrid({
+      frame: frame({ state: "resting", restSeconds: 42, intervalIndex: 1 }),
+    });
+    const active = row(2);
+    expect(
+      active.querySelector(".connected-grid-time")!.className,
+    ).not.toContain("connected-grid-countdown");
+    expect(
+      active.querySelector(".connected-grid-meters")!.className,
+    ).not.toContain("connected-grid-countdown");
+  });
+
+  // Fix round (James ruling): the REST column's own half of the swap.
+  // Landscape is where this column is actually visible — `.connected-grid
+  // -rest`'s own base rule hides it in portrait, unchanged by this task —
+  // but its CONTENT decision is orientation-independent (same field,
+  // `row.countdown`, the /500M cell above reads), so it is pinned here
+  // rather than needing a browser.
+  it("the REST column carries the live countdown, gold, on the active row while resting — and the programmed value everywhere else", () => {
+    renderGrid({
+      frame: frame({ state: "resting", restSeconds: 42, intervalIndex: 1 }),
+    });
+    const active = row(2);
+    expect(active.querySelector(".connected-grid-rest")!.textContent).toBe(
+      "0:42",
+    );
+    expect(active.querySelector(".connected-grid-rest")!.className).toContain(
+      "connected-grid-rest-live",
+    );
+    // Row 1 (completed) and row 3 (upcoming) are untouched: still the
+    // PROGRAMMED rest, still the plain (non-gold) class.
+    for (const n of [1, 3]) {
+      const cell = row(n).querySelector(".connected-grid-rest")!;
+      expect(cell.className).not.toContain("connected-grid-rest-live");
+      expect(cell.textContent).not.toBe("0:42");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Distance intervals
 // ---------------------------------------------------------------------------
 
@@ -987,6 +1105,8 @@ describe("distance intervals (handoff §3's distance rules)", () => {
         liveHr: NO_READING,
         numbering: intervalNumbering(intervals),
         armed: false,
+        resting: false,
+        restSeconds: 0,
       }).caption;
     };
 

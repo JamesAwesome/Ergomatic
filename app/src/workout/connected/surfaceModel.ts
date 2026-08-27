@@ -395,10 +395,17 @@ export interface GridRow {
   time: string;
   meters: string;
   /** Which cell is the ACTIVE row's countdown — the programmed dimension
-   *  (handoff §3: "the programmed dimension is the one that counts down and
-   *  the one that wears accent"). `null` on every other row, and it is the
-   *  only place `--accent` appears anywhere on the three panes. */
-  countdown: "time" | "meters" | null;
+   *  for a work interval, and `"rest"` while the machine is resting. This
+   *  field names THE ONE marked cell on the pane, which is what makes
+   *  "the marker moves, it does not multiply" structural rather than a
+   *  convention each cell has to remember. `null` on every non-active row,
+   *  and while armed. */
+  countdown: "time" | "meters" | "rest" | null;
+  /** The rest countdown's rendered value (`0:42`), floored to whole
+   *  seconds. NON-NULL EXACTLY WHEN `countdown === "rest"` — pinned by a
+   *  test, because two fields that must agree are two fields that can
+   *  disagree. */
+  restCountdown: string | null;
   pace: GridValue;
   spm: GridValue;
   hr: string;
@@ -1321,6 +1328,8 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       liveHr: hr,
       numbering,
       armed: armedMirror,
+      resting,
+      restSeconds: frame.restSeconds,
     }),
   };
 }
@@ -1416,10 +1425,35 @@ export function buildGridModel(args: {
    *  says "this is the one you're on and it's moving" would be claiming a
    *  motion that has not started. Suppressing `countdown` here is the same
    *  "nothing is judged" stance frame 2D takes on pane B's heroes, carried
-   *  to pane C's own analogous mark. */
+   *  to pane C's own analogous mark. RC-24: a running rest now also claims
+   *  this mark (see `resting`/`restSeconds` below), and `armed` still wins
+   *  over it — a rest that has not begun is no more real than work that
+   *  has not begun. */
   armed: boolean;
+  /** RC-24: `frame.state === "resting"`, straight through from
+   *  `buildSurfaceModel`'s own `resting` (`:837`). The ONLY field that can
+   *  say a rest is running — a rower mid-rest sees their work interval's
+   *  time and metres still moving (the flywheel coasts) and nothing else on
+   *  the grid says why; `restSeconds` alone cannot say it (see the next
+   *  field's own comment). */
+  resting: boolean;
+  /** RC-24: `frame.restSeconds`, the machine's own countdown (0x0032 bytes
+   *  13-15, 0.01 s/lsb). Meaningless outside a rest — it reads the CURRENT
+   *  interval's programmed rest, not a sentinel (measured: `60.00` through
+   *  all of a work interval with a programmed rest, `0.00` through all of
+   *  one with none) — which is why it is read only under `resting`. */
+  restSeconds: number;
 }): GridModel {
-  const { intervals, activeIndex, remaining, accrued, numbering, armed } = args;
+  const {
+    intervals,
+    activeIndex,
+    remaining,
+    accrued,
+    numbering,
+    armed,
+    resting,
+    restSeconds,
+  } = args;
   // An actual whose own `index` is `null` belongs to no interval we can
   // name (`IntervalActual.index`'s own contract: "A CONSUMER MUST NOT TREAT
   // `null` AS INTERVAL 0"), so it files against no row rather than against
@@ -1442,14 +1476,52 @@ export function buildGridModel(args: {
     if (index === activeIndex) {
       const countdown = countdownDisplayFor(interval, remaining);
       const accrual = accruedDisplayFor(interval, accrued);
+      // RC-24: a rest that is actually running takes the mark. `armed`
+      // still wins over everything (nothing counts before the first pull),
+      // and `restSeconds > 0` excludes the zero-rest artifact — a machine
+      // can briefly report `resting` on an interval with no programmed
+      // rest, where this field reads 0.00 and there is nothing to count.
+      // Flashing a rest mark for that frame IS the false "something is
+      // counting" claim this whole change exists to prevent.
+      const restingNow = !armed && resting && restSeconds > 0;
       return {
         index,
         ordinal,
         state: "active",
         time: interval.kind === "time" ? countdown : accrual,
         meters: interval.kind === "distance" ? countdown : accrual,
-        countdown: armed ? null : interval.kind === "time" ? "time" : "meters",
-        pace: { display: args.livePace.display, judged: args.livePace },
+        countdown: armed
+          ? null
+          : restingNow
+            ? "rest"
+            : interval.kind === "time"
+              ? "time"
+              : "meters",
+        // FLOOR, not round: the wire ticks at x.91 (59.91, 58.91 ...), so
+        // rounding would re-render 1:00 on the first counted frame.
+        restCountdown: restingNow
+          ? fmtDuration(Math.floor(restSeconds) / 60)
+          : null,
+        // Fix round 2 (James: "So /500m in landscape isn't '-' during
+        // rest???"): `livePace` is `frame.currentSplit`, a COASTING
+        // flywheel's split — real, decaying, and worse than the judged
+        // tint we already removed, because it is still a NUMBER a rower
+        // can mistake for their result, on the row whose REST column is
+        // counting down beside it. Dashed here, cell-local, in BOTH
+        // orientations: portrait never shows this cell at all during a
+        // rest (the countdown replaces it structurally), so the dash only
+        // ever reaches a reader through landscape's `/500M`, where the
+        // countdown moved OUT of this cell and left the coast split
+        // standing alone. `judged: null` for the same reason the
+        // countdown's own cell was never judged — a dash is not a reading
+        // to compare, the same stance `armedNeverRowed`'s own preview
+        // takes. Deliberately NOT a change to `livePace` itself — pane
+        // B's split hero has the identical defect for the identical
+        // reason and is OUT OF SCOPE here (filed separately); a
+        // function-level fix would silently change that surface too.
+        pace: restingNow
+          ? { display: DASH, judged: null }
+          : { display: args.livePace.display, judged: args.livePace },
         spm: { display: args.liveRate.display, judged: args.liveRate },
         hr: args.liveHr.display,
         rest,
@@ -1502,6 +1574,7 @@ export function buildGridModel(args: {
             ? DASH
             : String(Math.round(actual.distanceMeters)),
         countdown: null,
+        restCountdown: null,
         pace: { display: pace.display, judged: pace },
         spm: { display: spm.display, judged: spm },
         hr:
@@ -1523,6 +1596,7 @@ export function buildGridModel(args: {
       time: interval.kind === "time" ? fmtDuration(interval.value / 60) : DASH,
       meters: interval.kind === "distance" ? String(interval.value) : DASH,
       countdown: null,
+      restCountdown: null,
       pace: {
         display:
           interval.targetSplit === null ? DASH : fmtSplit(interval.targetSplit),

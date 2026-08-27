@@ -5934,6 +5934,57 @@ const FREEZING_STORY = [
   ),
 ];
 
+/** `pm5/parse.ts`'s `WORKOUTSTATE_INTERVALREST`, copied as a plain number —
+ *  this file drives the app from outside and never imports its modules
+ *  (`WORKOUTSTATE_ROWING` above does the same). `3`, NOT `4`
+ *  (`WORKOUTSTATE_ROWING`) — `connected.spec.ts`'s own header names the
+ *  exact bug that swapping these two produces. */
+const WORKOUTSTATE_RESTING = 3;
+
+/** RC-24: one pull, then a rest — `programIntervalIndex: 0` on the resting
+ *  tick because `toProgramIndex` undoes the wire's own forward attribution
+ *  (`domain/monitor/pm5/intervalIndex.ts`: a rest tick's machine index is
+ *  ONE HIGHER than the interval it belongs to, so authoring OUR index here
+ *  keeps this tick filed against the SAME interval — index 0 — the rowing
+ *  tick before it already put the active row on).
+ *
+ *  `restSeconds: 595` is the TRUE ceiling, not a synthetic stress value —
+ *  fix round, review finding B corrected an earlier version of this story
+ *  that used `3599` (59:59), reasoning from the wrong layer
+ *  (`domain/validate.ts`'s builder-authoring bound, `0:01..60:00`, which
+ *  governs what a rower may TYPE, not what a connected session can carry).
+ *  Every authored program still has to pass `compileProgram`, which
+ *  rejects a folded rest over `MAX_REST_SECONDS = 595` (9:55) as
+ *  `rest-too-long` (`domain/monitor/program.ts:200-204`, Table 19 of the
+ *  CSAFE spec — the PM5's own `CSAFE_PM_SET_RESTDURATION` ceiling, pinned
+ *  by `domain/monitor/program.test.ts`'s "compileProgram: rest-too-long").
+ *  595 is that exact, INCLUSIVE bound — the widest string this cell can
+ *  ever hold in a real connected session, not a margin beyond it.
+ *
+ *  `currentSplit: 117.8`, fix round 2, item A — deliberately NOT 0. A
+ *  dead-stop `currentSplit: 0` already dashes via a DIFFERENT, older rule
+ *  ("a zero split is not a reading"), which would make this story unable
+ *  to tell the fix-round-2 suppression apart from that pre-existing one —
+ *  the exact gap James caught ("So /500m in landscape isn't '-' during
+ *  rest???"): a real, decaying coasting split, `1:57.8`, the same number
+ *  the round-1 capture actually showed. If the model-level suppression
+ *  ever regressed, THIS is the value that would expose it; `0` would not. */
+const RESTING_STORY = [
+  rowingAt(CONNECTED_STORY_START_MS, { elapsedSeconds: 5, distanceMeters: 30 }),
+  {
+    atMs: CONNECTED_STORY_START_MS + 400,
+    kind: "status" as const,
+    workoutState: WORKOUTSTATE_RESTING,
+    elapsedSeconds: 5,
+    distanceMeters: 30,
+    spm: 0,
+    currentSplit: 117.8,
+    heartRateBpm: 140,
+    programIntervalIndex: 0,
+    restSeconds: 595,
+  },
+];
+
 /** 200 ms per write for the SURFACE walks — `connected.spec.ts` proved
  *  120 ms enough to make pairing and programming observable at all, and
  *  `screenshots.spec.ts` raised it to 200 ms for the same reason. These
@@ -7056,6 +7107,160 @@ test.describe("connected screens (fake-driven)", () => {
         measured.metersClientWidth,
       );
       expect(measured.metersText).toBe("21097");
+
+      await cleanupAllConnected(page, title);
+    });
+
+    // --- RC-24: the grid says a rest is running ---
+    // Fix round 2, item C: 375×812, not 390×844 — this repo's own
+    // "tightest common width" (`e2e/screenshots.spec.ts`'s own
+    // `today-capped` test, "narrower than this file's default 390×844"),
+    // the genuinely narrowest supported portrait, not merely a common one.
+    test("the rest countdown does not overflow its /500M column, and lines up EXACTLY with every other row — narrowest supported portrait (375x812)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Rest No-Clip Workout";
+      await page.setViewportSize({ width: 375, height: 812 });
+      await injectConnectedFake(page, RESTING_STORY);
+      await openConnected(page, title, "design-connected-rest-noclip@e2e.test");
+      await walkToSurface(page);
+      // The pane switch is a UI action, not a wire event — safe to do
+      // before the story's own resting tick has even fired.
+      await page.getByRole("button", { name: "Grid pane" }).click();
+      await expect(page.locator(".connected-pane-grid")).toBeVisible();
+      await pumpUntil(page, ".connected-grid-rest-countdown");
+
+      const measured = await page.evaluate(() => {
+        // MEASURE THE FLEX ITEM, NOT ITS INLINE CHILD (fix round's own
+        // second self-caught bug): `.connected-grid-rest-countdown` is a
+        // plain inline `<span>` nested INSIDE `.connected-grid-pace` (the
+        // DOM restructuring the landscape swap needed) — an inline
+        // element's `scrollWidth`/`clientWidth` are 0 by CSSOM
+        // definition, so measuring it directly always reads `0 <= 0` and
+        // passes no matter what overflows. `.connected-grid-pace` is the
+        // actual flex item (blockified by being a flex child, per the CSS
+        // Display spec), the same element every other no-clip test in
+        // this file already measures for its own column — THAT box is
+        // what can genuinely overflow the row.
+        const paceCell = document.querySelector<HTMLElement>(
+          ".connected-grid-active .connected-grid-pace",
+        )!;
+        const textCell = document.querySelector<HTMLElement>(
+          ".connected-grid-rest-countdown",
+        )!;
+        const row = paceCell.closest(".connected-grid-row")!;
+        const doc = document.documentElement;
+        // Fix round 2, item C: `reference` is an upcoming row at the SAME
+        // columns, so a right-edge delta against it is a direct
+        // measurement of any steal this row's own column costs its
+        // neighbours — not an assumption about what "should" line up.
+        // The `R` label (item B) needs no column widening at all
+        // (measured, `index.css`'s own rule comment has the numbers), so
+        // this now asserts EXACT alignment, not a bounded deficit.
+        const reference = document.querySelector(".connected-grid-upcoming")!;
+        const rightEdgeDelta = (cls: string): number =>
+          Math.abs(
+            row.querySelector(`.${cls}`)!.getBoundingClientRect().right -
+              reference.querySelector(`.${cls}`)!.getBoundingClientRect().right,
+          );
+        return {
+          cellText: (textCell.textContent ?? "").replace(/\s+/g, " ").trim(),
+          rowResting: row.className.includes("connected-grid-resting"),
+          cellScrollWidth: paceCell.scrollWidth,
+          cellClientWidth: paceCell.clientWidth,
+          docScrollWidth: doc.scrollWidth,
+          docClientWidth: doc.clientWidth,
+          metersDelta: rightEdgeDelta("connected-grid-meters"),
+          spmDelta: rightEdgeDelta("connected-grid-spm"),
+          hrDelta: rightEdgeDelta("connected-grid-hr"),
+        };
+      });
+      // Real render, real layout, not the eyeballed capture recurring
+      // failure #7 warns against — `R 9:55` is the label the fix-round-2
+      // measurement chose (`index.css`'s own rule comment has both
+      // labels' numbers), at the TRUE ceiling
+      // (`RESTING_STORY`'s own doc comment has the `MAX_REST_SECONDS`
+      // citation), measured, not asserted by construction.
+      expect(measured.cellText).toBe("R 9:55");
+      expect(measured.rowResting).toBe(true);
+      expect(measured.cellScrollWidth).toBeLessThanOrEqual(
+        measured.cellClientWidth,
+      );
+      expect(measured.docScrollWidth).toBeLessThanOrEqual(
+        measured.docClientWidth,
+      );
+      // EXACTLY ZERO (fix round 2, item C — tightened from a bounded
+      // deficit): the resting row's columns line up with every other row,
+      // pixel for pixel. A gate that still permitted the old deficit would
+      // not notice its return — proven red in the report (a temporary
+      // revert of the fix reintroduces a real, non-zero delta here).
+      expect(measured.metersDelta).toBe(0);
+      expect(measured.spmDelta).toBe(0);
+      expect(measured.hrDelta).toBe(0);
+
+      await cleanupAllConnected(page, title);
+    });
+
+    // --- RC-24 fix round (James, 2026-08-26): the landscape swap ---
+    test("landscape shows the countdown in the REST column and reverts /500M to the coast pace, unjudged — 844x390", async ({
+      page,
+    }) => {
+      const title = "Design Connected Rest Landscape Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
+      await injectConnectedFake(page, RESTING_STORY);
+      await openConnected(
+        page,
+        title,
+        "design-connected-rest-landscape@e2e.test",
+      );
+      await walkToSurface(page);
+      await page.getByRole("button", { name: "Grid pane" }).click();
+      await expect(page.locator(".connected-pane-grid")).toBeVisible();
+      await pumpUntil(page, ".connected-grid-rest-live");
+
+      const measured = await page.evaluate(() => {
+        const activeRow = document.querySelector(".connected-grid-active")!;
+        const restCell = activeRow.querySelector(".connected-grid-rest")!;
+        const paceCell = activeRow.querySelector(
+          ".connected-grid-pace",
+        ) as HTMLElement;
+        const coast = activeRow.querySelector<HTMLElement>(
+          ".connected-grid-pace-coast",
+        )!;
+        const rest = activeRow.querySelector(".connected-grid-rest-countdown");
+        return {
+          restCellText: (restCell.textContent ?? "").trim(),
+          restCellColor: getComputedStyle(restCell).color,
+          // `innerText`, NOT `textContent`: a `display: none` sibling's
+          // text is still IN `textContent` (a DOM property, blind to
+          // rendering) — the exact trap `showConnectedFixture`'s own
+          // comment elsewhere in this file names for the same reason.
+          // `innerText` approximates what a rower actually sees.
+          paceCellRenderedText: paceCell.innerText.trim(),
+          coastText: coast.textContent?.trim(),
+          paceCellClasses: paceCell.className,
+          coastDisplay: getComputedStyle(coast).display,
+          restFormDisplay: rest ? getComputedStyle(rest).display : "none",
+        };
+      });
+      // The countdown moved: the REST column now shows it, gold — matches
+      // `.connected-grid-rest-live`'s own token, `--marker` (#7d5510).
+      expect(measured.restCellText).toBe("9:55");
+      expect(measured.restCellColor).toBe("rgb(125, 85, 16)");
+      // Fix round 2, item A (James: "So /500m in landscape isn't '-'
+      // during rest???"): /500M does NOT revert to the coasting split —
+      // it dashes, unjudged. `RESTING_STORY` scripts a real, non-zero
+      // `currentSplit: 117.8` (the same `1:57.8` the round-1 capture
+      // showed) specifically so this assertion cannot pass by accident of
+      // an already-dashing zero reading.
+      expect(measured.coastText).toBe("—");
+      expect(measured.paceCellRenderedText).toBe("—");
+      expect(measured.paceCellClasses).not.toMatch(/timer-card-actual-/);
+      // The CSS orientation swap itself, computed — not assumed from the
+      // class list alone: the coast form is genuinely painted, the
+      // rest-countdown form genuinely is not.
+      expect(measured.coastDisplay).not.toBe("none");
+      expect(measured.restFormDisplay).toBe("none");
 
       await cleanupAllConnected(page, title);
     });
