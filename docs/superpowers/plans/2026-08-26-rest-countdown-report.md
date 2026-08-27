@@ -386,3 +386,254 @@ no-clip test, the CSS fix it found, the new resting screenshot fixture
 and captures) and this report — both ran after the first commit, per
 the SDLC's own failing-test-first / self-mutation flow applied at the
 e2e layer. See the returned commit SHAs.
+
+---
+
+# Fix round 1
+
+Review verdict: SPEC COMPLIANCE PASS, CODE QUALITY changes requested — five
+findings plus one design change from James after seeing the round-1
+landscape capture. All six addressed below.
+
+## A. The design change — landscape moves the countdown to the REST column
+
+**What James saw and ruled.** The round-1 landscape capture showed the
+active row saying REST twice, with two different numbers: `REST 0:59` in
+the `/500M` cell and the programmed `3:00`, unchanged, in the REST column
+beside it. Ruling: **in landscape the countdown goes in the REST column;
+`/500M` reverts to `livePace` there. Portrait is unchanged.**
+
+**Mechanism — one model, two CSS rules, exactly as instructed.**
+`surfaceModel.ts` did not change at all this round (`GridRow.rest`,
+`.countdown`, `.restCountdown` already carried everything needed).
+`PaneGrid.tsx` renders `restCountdown` into BOTH physical cells
+unconditionally whenever `row.countdown === "rest"`:
+
+- The `/500M` cell always carries both its rest-countdown form
+  (`.connected-grid-rest-countdown`, the word + number) and its ordinary
+  coast-pace form (`.connected-grid-pace-coast`) as siblings. A landscape
+  media query flips which one is `display: none`.
+- The REST column cell reads a plain ternary — `row.countdown === "rest"
+  ? row.restCountdown : row.rest` — the SAME field the `/500M` cell reads,
+  with no orientation awareness of its own; the column's PRE-EXISTING
+  portrait `display: none` is what actually keeps this invisible in
+  portrait, unchanged by this task. Gold (`.connected-grid-rest-live`,
+  `--marker`) only on the live value, matching the mark that used to sit
+  on `/500M`.
+
+**Decision on the coast-verdict question — took James's recommendation:
+unjudged in BOTH forms, both orientations.** `livePace`/`frame.currentSplit`
+during a rest is a coasting flywheel's split judged against a work target
+it no longer means; that is wrong regardless of which column shows it, so
+`cellClass` is never called on the coast span either. Stated as a decision
+in `PaneGrid.tsx`'s own header comment and in the spec (see below), not
+left implicit.
+
+**Spec updated.** `docs/superpowers/specs/2026-08-26-rest-countdown-design.md`'s
+"LANDSCAPE — one behaviour" section is now headed SUPERSEDED, with the
+original ruling quoted verbatim inside a blockquote (this repo's own
+"kept for the record" convention), followed by what actually happened and
+James's correction. Exit criterion 2 updated to state the corrected promise
+(same two facts knowable, different cell per orientation, not identical
+treatment).
+
+**Recaptured both orientations, opened both.** Portrait
+(`connected-pane-grid-resting.png`) is **byte-identical** to round 1 — no
+diff at all, confirming "portrait unchanged" is actually true, not just
+claimed. Landscape (`connected-pane-grid-resting-landscape.png`) now shows
+`1:57.8` (plain, unjudged, no colour) in `/500M` and `0:59` in gold in the
+REST column on the active row only; rows 3-5 still show their own
+programmed `3:00`, row 1 (no programmed rest) still shows `—`. The
+double-REST ambiguity is gone.
+
+**A bug I introduced implementing this, caught before it shipped.**
+Splitting the `/500M` cell into a wrapper (`.connected-grid-pace`, the real
+flex item) plus two nested children moved `.connected-grid-rest-countdown`
+one level deeper than round 1's structure — where it stopped being the flex
+item itself. My first pass left `min-width: max-content` on the (now
+non-flex-item) child, where it cannot influence flex's shrink algorithm at
+all (that algorithm reads the ITEM's own `min-width`, never a descendant's).
+Caught by re-deriving what the property needs to sit on before trusting it,
+not by a test — moved to `.connected-grid-resting .connected-grid-pace`
+(the actual flex item, scoped by the row's own existing `.connected-grid-
+resting` class). See "A second self-caught bug" below for how this was
+ALSO hiding behind a broken gate.
+
+## B. Wrong-layer citation — fixed, and the real ceiling is narrower than assumed
+
+Confirmed by reading `domain/monitor/program.ts:198-206` and
+`domain/monitor/program.test.ts`'s "compileProgram: rest-too-long" describe
+block before touching anything: `MAX_REST_SECONDS = 595` (9:55), Table 19
+of the CSAFE spec (the PM5's own `CSAFE_PM_SET_RESTDURATION` ceiling), and
+it is the INCLUSIVE bound `compileProgram` enforces on every folded rest —
+595 (9:55) compiles, 596 (9:56) is rejected as `rest-too-long`
+(`program.test.ts`'s own two boundary tests, read directly, not assumed).
+This is the layer that actually governs what a connected session can carry,
+not `domain/validate.ts`'s `0:01..60:00` builder-authoring bound, which
+governs only what a rower may TYPE and says nothing about what
+`compileProgram` later accepts.
+
+**Consequence, verified by arithmetic before writing anything down:**
+`fmtDuration(floor(595)/60)` is `"9:55"` — ONE-digit minutes, same shape as
+`"0:59"` — never the two-digit `"59:59"` the original (wrong-layer) fixture
+used. Fixed everywhere this claim appeared:
+
+- `index.css`'s own rule comment — rewritten to cite `program.ts:200-204`
+  and `program.test.ts` by name, state the real ceiling, and say explicitly
+  that `REST 59:59` was never reachable.
+- `e2e/design.spec.ts`'s `RESTING_STORY` — `restSeconds` changed from the
+  synthetic `3599` to the real, exact ceiling `595`; the no-clip test's
+  expected string changed from `"REST 59:59"` to `"REST 9:55"`.
+- This report (above, round-1 section) is NOT rewritten — the history
+  stays visible per this repo's own "kept for the record" convention; this
+  fix-round section is the correction.
+
+## C. The neighbour misalignment — measured, gated, and a self-caught second bug
+
+**Investigated a clean fix first**, per the finding's own instruction.
+Considered (1) widening `/500M`'s base flex weight for every row (rejected:
+changes the layout for every non-resting capture in existence, a much
+bigger and unreviewed change for a cosmetic problem scoped to one row in
+one state); (2) tightening the word/number gap (would help marginally but
+not close the full deficit, and the property under test — `min-width:
+max-content`'s STEAL, not the content's raw width — would still exist).
+No clean fix closes the deficit without shipping a bigger change than the
+misalignment is worth. **Left it, bounded and reported, per the finding's
+own fallback**, and added the neighbour measurement to the gate as
+instructed.
+
+**Measured, with the fix in place, at the TRUE ceiling (not the corrected-
+away `59:59`):** the no-clip e2e test now reads `.connected-grid-meters` /
+`.connected-grid-spm` / `.connected-grid-hr`'s right-edge delta against an
+upcoming row's own cells at 390px, and pins each under a 10px ceiling
+(measured deltas at `REST 9:55`: single-digit px on each — comfortably
+inside the bound, stated as a regression ceiling, not a target).
+
+**A second self-caught bug, finding this stat.** Implementing the gate
+addition, I queried `.connected-grid-rest-countdown` directly for
+`scrollWidth`/`clientWidth` — the SAME element round 1's gate measured.
+After the design change split that element out of the flex-item position
+(A, above), it became a plain inline `<span>`, and `scrollWidth`/
+`clientWidth` are **0 by CSSOM definition for inline elements** — the gate
+had been asserting `0 <= 0` and would have passed regardless of any real
+overflow. Found because a MUTATION TEST that should have failed (min-width
+fix removed entirely) instead passed — the surprising green, not a
+red, is what triggered the investigation (a temporary `console.log` of the
+measured object showed `cellScrollWidth: 0, cellClientWidth: 0`). Fixed by
+measuring `.connected-grid-pace` (the actual flex item — blockified by
+being a flex child per the CSS Display spec, the same box every OTHER
+no-clip test in this file already measures) instead, keeping the inline
+child only for reading its TEXT. Re-ran the same mutation after the fix:
+correctly failed (84px content in a 72px box). This is the self-mutation
+that also stands as evidence for A's own min-width relocation — see
+"Self-mutation" below.
+
+## D. Three minor items
+
+1. **PaneGrid.test.tsx comment fixed.** "far enough inside
+   `PACE_TOLERANCE_SECONDS` to tint blue" was backwards — `currentSplit: 60`
+   against a ~126s target is far OUTSIDE tolerance (dramatically faster),
+   which is exactly what tints "faster" three lines below. Corrected in
+   place, and the test now also asserts the coast span's exact `fmtSplit`
+   text (`fmtSplit` newly imported), not just its class.
+2. **DOM test added for exit criterion 4.** "marks no cell but the
+   /500M-or-REST pair while resting: TIME and METERS carry no countdown
+   class" — asserts `.connected-grid-time`/`.connected-grid-meters` never
+   carry `connected-grid-countdown` on the active row while resting.
+   Self-mutation: adding the class unconditionally to TIME failed this
+   test (and 9 others, collaterally — snapshot mismatches across every
+   fixture with an active row) — restored, green.
+3. **`countdownClass` narrowed back to `"time" | "meters"`.** It was never
+   called with `"rest"` after the design change either (the `/500M` and
+   REST cells both read `row.countdown`/`row.restCountdown` directly) — the
+   widened signature was dead. Narrowed, with a comment saying why.
+
+## Gates (fix round)
+
+All run from `app/`, foreground, polled to completion (per the coordinator's
+instruction not to stop mid-round on a background command).
+
+- `pnpm lint` / `pnpm typecheck` / `pnpm format:check` — clean.
+- `pnpm test` — 210 files, 5649 passed, 1 skipped. Run 3× across the round;
+  one run showed an unrelated integration-test failure
+  (`pool.end()`/`container.stop()`, a Testcontainers teardown, most likely
+  Docker resource contention with the e2e/screenshots stack running
+  concurrently) that did not reproduce on immediate re-run and touches
+  nothing in this diff.
+- `pnpm e2e` — **414/414 on the clean run.** One run of the two showed the
+  same `retest.spec.ts` pair (`RACE THE 2K...`/`declining the offer...`,
+  both keyed on `Set your 2k baseline?` appearing) failing under the full
+  suite's worker concurrency; both pass in isolation and in a full run
+  moments later. Neither test touches anything in this diff (a baseline
+  setup/re-test flow, unrelated to the connected grid) — a pre-existing,
+  environment-level flake, not investigated further.
+- `pnpm screenshots` — **77/79, both runs.** Same 2 pre-existing failures
+  both times: `releases` (hardcoded `v0.23.0` pin against a repo that
+  already shipped v0.24.0 notes before this task started) and `log-detail`
+  (a stale `summary-total-line` pin on the manual-door summary screen).
+  Neither screen is touched by RC-24 (confirmed via `git diff --stat`
+  against every commit this task made). Left unfixed, same reasoning as
+  round 1's report. One run also showed `post-test-prompt` timing out on
+  the same `Set your 2k baseline?` heading as the `retest.spec.ts` flake
+  above — passed clean on immediate re-run, same unrelated-flake shape.
+  **Both `connected-pane-grid-resting` captures passed in every run.**
+  Unrelated PNGs regenerated by the full suite (date-drift content on
+  screens this diff never touches — Today, News, You, post-workout-summary,
+  log-detail-legacy, log-history, log-delete-confirm, news-reader,
+  onboarding-door-adjust) reverted with `git checkout --` before
+  committing, same as round 1.
+
+## Per-file coverage (fix round)
+
+| File | Statements | Branches | Functions | Lines |
+| --- | --- | --- | --- | --- |
+| `PaneGrid.tsx` | 100% | 100% | 100% | 100% |
+
+`surfaceModel.ts` is unchanged this round (untouched by the design
+change — it stayed at round 1's 98.81/95.70/100/98.67, same pre-existing
+221-222 gap, unrelated to RC-24). Confirmed via the HTML coverage report
+under `app/coverage/`, not the text reporter alone.
+
+## Self-mutation (fix round)
+
+Four mutations this round, each targeting the exact new logic, each
+reverted and confirmed clean via `git diff --stat` afterward:
+
+1. **REST column's live branch dropped** (`row.countdown === "rest" ?
+   row.restCountdown : row.rest` → `row.rest` unconditionally). Failed the
+   new "REST column carries the live countdown" unit test (`expected '3:00'
+   to be '0:42'`) plus the fixture-snapshot test (expected collateral).
+   Restored, green.
+2. **`min-width: max-content`'s selector broken** (renamed to a class
+   nothing matches, simulating the fix being entirely absent). The no-clip
+   e2e test PASSED — which is how the gate's own inline-element bug (C,
+   above) was found. After fixing the gate to measure the real flex item,
+   re-ran the same mutation: correctly FAILED (`84 > 72`, the true deficit
+   at `REST 9:55`). Restored the real selector, re-ran: passed
+   (`cellScrollWidth <= cellClientWidth`). This one mutation stands for
+   BOTH A's min-width relocation and C's gate-measurement fix — the gate
+   could not have proven either without it.
+3. **Landscape CSS swap removed** (both display-toggle rules renamed to
+   classes nothing matches). Failed the new landscape e2e test exactly at
+   the assertion checking the coast form is what's actually shown
+   (`expected "—" received "REST 9:55"` — the rest-countdown form's text
+   leaking through because nothing was hiding it). Restored, green.
+4. **D2's guard dropped** (`connected-grid-countdown` added unconditionally
+   to the TIME cell). Failed D2's own dedicated test plus 9 collateral
+   snapshot mismatches. Restored, green.
+
+`git diff --stat` after mutation 4 showed only the legitimate fix-round
+diff — confirmed clean before committing.
+
+## Where the review and the code agreed / disagreed
+
+Findings A, B, D1-D3 were straightforwardly correct and fixed as directed.
+Finding C's own fallback ("if it costs more than the misalignment is worth,
+say so and leave it, but gate the neighbours") is exactly what happened,
+with numbers. The one place I went beyond the letter of the review: B asked
+me to fix "the CSS comment and the report" citing the wrong layer; I also
+changed `e2e/design.spec.ts`'s own `restSeconds` value from the synthetic
+`3599` to the real ceiling `595`, since testing an admittedly-impossible
+value right after being corrected on exactly this point would have looked
+like the lesson had not landed, and the neighbour-measurement gate (C)
+needed to be calibrated against the REAL worst case to mean anything.
