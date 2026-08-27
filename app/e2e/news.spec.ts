@@ -183,30 +183,31 @@ test("/news/releases lists every version, newest first", async ({ page }) => {
   // deliberately fails here — that is this pin's job, and it is why the
   // title no longer names a number that goes stale every tag.
   const versions = page.locator(".news-release-version");
-  await expect(versions).toHaveCount(23);
+  await expect(versions).toHaveCount(24);
   await expect(versions.nth(0)).toContainText("v0.25.0");
-  await expect(versions.nth(1)).toContainText("v0.23.0");
-  await expect(versions.nth(2)).toContainText("v0.22.0");
-  await expect(versions.nth(3)).toContainText("v0.21.0");
-  await expect(versions.nth(4)).toContainText("v0.20.0");
-  await expect(versions.nth(5)).toContainText("v0.19.1");
-  await expect(versions.nth(6)).toContainText("v0.19.0");
-  await expect(versions.nth(7)).toContainText("v0.18.1");
-  await expect(versions.nth(8)).toContainText("v0.18.0");
-  await expect(versions.nth(9)).toContainText("v0.17.0");
-  await expect(versions.nth(10)).toContainText("v0.16.0");
-  await expect(versions.nth(11)).toContainText("v0.15.0");
-  await expect(versions.nth(12)).toContainText("v0.14.0");
-  await expect(versions.nth(13)).toContainText("v0.13.0");
-  await expect(versions.nth(14)).toContainText("v0.12.0");
-  await expect(versions.nth(15)).toContainText("v0.11.0");
-  await expect(versions.nth(16)).toContainText("v0.10.0");
-  await expect(versions.nth(17)).toContainText("v0.9.0");
-  await expect(versions.nth(18)).toContainText("v0.8.0");
-  await expect(versions.nth(19)).toContainText("v0.7.0");
-  await expect(versions.nth(20)).toContainText("v0.5.1");
-  await expect(versions.nth(21)).toContainText("v0.5.0");
-  await expect(versions.nth(22)).toContainText("v0.4.0");
+  await expect(versions.nth(1)).toContainText("v0.24.0");
+  await expect(versions.nth(2)).toContainText("v0.23.0");
+  await expect(versions.nth(3)).toContainText("v0.22.0");
+  await expect(versions.nth(4)).toContainText("v0.21.0");
+  await expect(versions.nth(5)).toContainText("v0.20.0");
+  await expect(versions.nth(6)).toContainText("v0.19.1");
+  await expect(versions.nth(7)).toContainText("v0.19.0");
+  await expect(versions.nth(8)).toContainText("v0.18.1");
+  await expect(versions.nth(9)).toContainText("v0.18.0");
+  await expect(versions.nth(10)).toContainText("v0.17.0");
+  await expect(versions.nth(11)).toContainText("v0.16.0");
+  await expect(versions.nth(12)).toContainText("v0.15.0");
+  await expect(versions.nth(13)).toContainText("v0.14.0");
+  await expect(versions.nth(14)).toContainText("v0.13.0");
+  await expect(versions.nth(15)).toContainText("v0.12.0");
+  await expect(versions.nth(16)).toContainText("v0.11.0");
+  await expect(versions.nth(17)).toContainText("v0.10.0");
+  await expect(versions.nth(18)).toContainText("v0.9.0");
+  await expect(versions.nth(19)).toContainText("v0.8.0");
+  await expect(versions.nth(20)).toContainText("v0.7.0");
+  await expect(versions.nth(21)).toContainText("v0.5.1");
+  await expect(versions.nth(22)).toContainText("v0.5.0");
+  await expect(versions.nth(23)).toContainText("v0.4.0");
 });
 
 test("item 1 / round 4: opening an article from a scrolled News feed lands the reader at the top of its OWN scroller, and ← BACK now restores News's own scroll position (CL item: News scroll memory)", async ({
