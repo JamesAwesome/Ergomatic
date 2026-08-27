@@ -1,239 +1,325 @@
 # The link authority — what we know about the erg, and what that licenses
 
+**REVISION 2 (2026-08-27), after a BLOCKING antagonist pass.** Revision 1's
+axis survived; its mechanism did not. Every change is marked **[R2]** with
+what falsified it. The pass's full findings are in
+`.claude/agents/antagonist-ledger.md` under "Phase LA anchor pass".
+
 ## What and why
 
-Three separate defects share one cause. We hold beliefs about the monitor
-that the monitor has abandoned, and we let those beliefs decide things they
-are not qualified to decide.
+Three defects share one cause. We hold beliefs about the monitor that the
+monitor has abandoned, and we let those beliefs decide things they are not
+qualified to decide.
 
 - A **2.5-second** frame-silence threshold, built to flip a banner, also
   writes `endedBy: "link-lost"` into a saved row and suppresses the
-  `terminate()` we send to the erg. So a false latch stores a lie AND leaves
-  a piece running on the machine (RC-29).
-- Teardown sends TERMINATE off our own **derived** `phase === "ready"`, not
-  off the machine's state. While that gate lags, an unmount kills the rower's
-  live piece (RC-30).
+  `terminate()` we send to the erg (RC-29).
+- Teardown sends TERMINATE off our own **derived** `phase === "ready"`. While
+  that gate lags, an unmount kills the rower's live piece (RC-30).
 - Pressing **Menu** at READY makes the PM5 drop the program and return to its
-  unprogrammed shape. We never notice, keep showing READY, and would
-  attribute the next pull to a program the machine no longer has (RC-37).
+  unprogrammed shape. We never notice and keep showing READY (RC-37).
 
-The fix is one idea: **name what we actually know, and license each answer
-for only what it can carry.**
+The fix: **name what we actually know, and license each answer for only what
+it can carry.**
 
-## The evidence this is built on, and what it killed
+## The evidence, and what it killed
 
-An earlier draft proposed: *only a transport-confirmed disconnect may write a
-stored field or move the erg.* **The walk of 2026-08-27 falsified that before
-it was written** (`docs/monitor/sessions/walk-2026-08-27/`).
+An earlier draft proposed *only a transport-confirmed disconnect may write a
+stored field or move the erg.* **The walk of 2026-08-27 falsified it before
+it was written.** A phone locked 39.4 s mid-row produced `resume
+gap=39410ms`, `framesWhileHidden=1`, `phase=live`, and **no `disconnected`
+event at all**. That rule would have fired on nothing.
 
-A phone locked for 39.4 seconds mid-row produced:
+What the walk gave instead: the lifecycle event fires, so "the app was
+asleep" is positively identifiable. That is the axis.
 
-```
-liveness-silence   frame stream silent for 2500ms
-app-lifecycle      resume gap=39410ms threshold=2500ms silent=true latched=true
-resume-frames      phase=live framesWhileHidden=1 rowingActive=true
-liveness-recovery  frame stream resumed
-```
+## The authority — WHERE it lives **[R2: moved]**
 
-**No `disconnected` event, anywhere.** `phase` stayed `live` throughout. One
-frame arrived in 39 seconds — the WebView is suspended, not throttled.
+**Revision 1 said `withLiveness` "already accepts a
+`LivenessLifecycleEvent`". That was false.** That type is the decorator's
+record of its OWN transport lifecycle (`connect | write | disconnect |
+link-drop | silence | recovery`) and is a return value of `snapshot()`, not
+an input. Four references exist, all inside `liveness.ts`. App lifecycle
+reaches the decorator only through `markSuspect()`, which by a Phase LM exit
+criterion **refuses to carry a cause** — *"Names WHO, never WHY"*.
 
-So a transport-confirmed disconnect essentially never fires for the failure
-that actually happens to a rower. The rejected rule would have meant "we stop
-writing `link-lost` at all", while reading as though it made the field more
-accurate.
+**So the verdict is computed in `useMonitorSession`, not in the decorator.**
+That is where both inputs already meet: the lifecycle listener is registered
+at `:2962`, and `frameSilence`/`silent` arrive from the decorator's snapshot.
+This reverses no ruling and adds no plumbing to a layer that was deliberately
+kept cause-free.
 
-**What the walk gave instead:** `resume gap=39410ms` proves the lifecycle
-event fires. "The app was asleep" is positively identifiable and
-distinguishable from "the link died". That is the axis.
+`withLiveness` is unchanged by this spec.
 
-## The authority
+## The verdict
 
-`withLiveness` (`src/monitor/transports/liveness.ts`) already decorates the
-transport and is **the one seam that sees all three inputs** — the
-transport's own `onDisconnect`, frame arrivals, and lifecycle events (it
-already accepts a `LivenessLifecycleEvent`). Today it publishes a single
-boolean, `silent`, and `useMonitorSession` ORs that with `phase`.
+| verdict | how it is known |
+| --- | --- |
+| `live` | frames arriving |
+| `explained-quiet` | silence past threshold AND a lifecycle resume accounts for the gap |
+| `quiet` | silence past threshold, no explanation |
+| `down` | the transport's `onDisconnect` fired |
 
-It publishes a verdict instead:
+### Lifetime and priority — **[R2: was unspecified, and that made the fix inert]**
 
-| verdict | how it is known | what it means |
-| --- | --- | --- |
-| `live` | frames arriving | — |
-| `explained-quiet` | no frames past `SILENCE_THRESHOLD_MS` AND a lifecycle event accounts for the gap | **our** suspension; not a link problem |
-| `quiet` | no frames past the threshold, no explanation | genuinely suspicious |
-| `down` | the transport's `onDisconnect` fired | definitive, and rare |
+`silent` clears on the FIRST arriving frame; `frameSilence` clears
+`BANNER_RETRACT_HYSTERESIS_MS` (10 000 ms) later. Revision 1 never said which
+the verdict follows. Computed from `silent`, the verdict would read `live`
+throughout the ~10 s window in which End still writes `link-lost` today — and
+the whole spec would change nothing. A fourth inert gate in three days
+(recurring failure #21).
 
-`SILENCE_THRESHOLD_MS` (2500) is unchanged and the banner stays as fast as it
-is now. **The consumer changes, not the threshold.**
+**The verdict is as sticky as `frameSilence`, not as `silent`.** Explicitly:
 
-## The licensing rule
+- `down` is **sticky and dominant**. Once the transport reports a
+  disconnect, no later verdict overrides it for this session.
+- `explained-quiet` and `quiet` persist exactly as long as `frameSilence`.
+- `live` only when `frameSilence` is false.
+
+**The lock-plus-out-of-range hole, named.** A rower can lock the phone AND
+leave Bluetooth range: a genuine loss arriving with a lifecycle explanation,
+which classifies `explained-quiet`. `down`'s dominance is what corrects it —
+**if** iOS delivers the disconnect. Apple documents that you do not learn of
+a disconnect until resume, and is silent on ordering relative to the
+plugin's `resume` event. **No capture settles it, and this spec does not
+pretend otherwise:** the ordering is an owed walk item, and until it is
+measured, the exposure is that a real loss in that combination stores
+`"rower"` plus evidence rather than `"link-lost"`.
+
+**Not in the taxonomy at all:** jetsam, force-quit, battery death. No code
+runs, so no verdict is computed and no row is written. The four tiers are not
+exhaustive over reality — only over the cases where we are alive to classify.
+
+## The licensing rule — **[R2: narrowed, twice]**
 
 > A derived verdict may change what a rower **sees**. Only `down` or `quiet`
-> may change what is **stored** or what is **sent to the erg**.
-> `explained-quiet` may change neither.
+> may change what is **stored**. **No verdict may send a wire command.**
 
-Everything below follows from that sentence.
+### Wire commands read `frame.state`, never a verdict **[R2]**
 
-### What it fixes, case by case
+Revision 1 said terminate is attempted under `quiet` and `explained-quiet`
+"because the link is probably fine", and argued the worst case was "a
+terminate on an already-finished piece". **That inverts.** The argument
+assumes the machine did nothing during a blind window the walk measured at
+39.4 s. Reachable, every step observed: background mid-session, finish at the
+erg, press Menu, start a cool-down, unlock, press End. Revision 1 sends a
+terminate into a **live new piece**.
 
-- **`endedBy`.** Written `"link-lost"` under `down` or `quiet`. Under
-  `explained-quiet`, End stores `"rower"` — which is TRUE, the rower pressed
-  End — and the evidence fields (below) carry the fact that the app had been
-  asleep. No case forces a lie.
-- **`terminate()` suppression.** Suppressed only under `down`. Under `quiet`
-  or `explained-quiet` we still attempt it, because the link is probably fine
-  and leaving a piece running is the worse failure. A failed terminate is
-  caught and recorded; a piece left running is not recoverable by the app.
-- **Teardown's TERMINATE (RC-30).** Keyed on `frame.state`, never on our
-  derived `phase`. If the machine has not told us it is at WaitToBegin, we do
-  not send a terminate on unmount.
+There is no safety net at the machine. `pm5-interface-notes.md:1598-1602`
+records a standalone terminate to an idle PM5 acking `slaveState=READY` —
+**"An ACCEPT, not a reject"** — retracting an earlier belief that the PM
+refuses one. And a terminated partial leaves **no trace** in PM5 memory
+(walk-2026-08-27 finding 7), so the destroyed metres are unrecoverable by
+anyone.
 
-Every one of those moves in the **safe** direction: a wrong verdict now costs
-a terminate on an already-finished piece, or a `"rower"` row with evidence
-attached — never a sealed false `link-lost` or an abandoned live piece.
+**Both terminate sites gate on `frame.state`,** with an explicit freshness
+rule, because a `frame.state` read 39 s ago is exactly as derived as `phase`:
 
-## What gets stored
+| `frame.state` | send terminate? |
+| --- | --- |
+| absent (no frame yet this session) | **yes** — we armed it ourselves moments ago; nothing can be live, and DEVIATIONS row 63's harm (the next rower finds someone else's intervals) is real. The pre-stream window is measured at 3775-4454 ms |
+| fresh (`stream_quiet_ms` under threshold) and `armed`/`idle`/`finished` | **yes** |
+| fresh and `rowing`/`resting` | **no** — a piece is live |
+| **stale** (silence past threshold) | **no** — we do not know what the machine is doing, and the cost of guessing wrong is destroying a live piece |
 
-Two additive nullable columns on the logs table, mirroring `MonitorRun` the
-way the existing monitor fields do. **`endedBy`'s enum is untouched.**
+That last row is the whole correction. It applies to `endSession`'s terminate
+(RC-29's wire half) and teardown's (RC-30) identically.
 
-- **`link_verdict_at_close`** — a NEW pgEnum (`live` / `explained_quiet` /
-  `quiet` / `down`), its own type.
-- **`stream_quiet_ms`** — integer. How long frames had been absent at close.
+### The continuity door is licensed by its own evidence **[R2: carve-out]**
 
-`endedBy` goes back to answering ONE question — *what ended this session* —
-and the new columns answer the independent one, *what was the link doing*.
-Forcing both into a five-value enum is what made every option a lie in some
-case.
+`applyContinuityCheck` opens `if (!frameSilence) return run;` and its only
+writing exit is `completeContinuityReset` → stored `endedBy: "link-lost"`.
+Under revision 1's rule, the commonest latched silence is
+lifecycle-explained, so the door would be **switched off for exactly the case
+it was built for** — "the app slept, the machine moved on", the 16938-vs-4384
+class.
 
-`endedBy`'s doc comment currently claims *"Every `endedBy` value is one its
-one writer HONESTLY KNOWS at close time"*. Today that is false for
-`"link-lost"`. After this change it is true again, and the comment stays
-rather than being reworded around.
+**Carve-out, stated as a rule rather than an exception:** *a close backed by
+independent wire evidence is licensed by that evidence, not by the link
+tier.* The continuity door's three-axis divergence IS independent wire
+evidence (`monitorRun.ts:994-999`, RULED F1/I1 as "the close with the
+STRONGEST evidence of the two"). It keeps its write under any verdict.
 
-**Old rows are null**, meaning "not recorded". No backfill, no migration of
-existing data, additive-only for the API.
+The link tier governs closes that have **no** evidence but the silence.
 
-### The consequence, stated rather than discovered
+### What `quiet` does and does not fix **[R2: honesty correction]**
 
-We will write `link-lost` **less often**. A genuine loss where iOS never
-fires `onDisconnect` AND a lifecycle event explains the gap now stores
-`"rower"` plus evidence.
+Revision 1 claimed "No case forces a lie" and that `endedBy`'s honesty
+doc-comment "is true again". **Both overstated.**
 
-**The consumers, enumerated here rather than left as homework.** There is
-exactly one user-visible one:
+`quiet` is still the 2.5 s threshold with no explanation attached — the
+banner-grade signal — and it retains durable-write rights. RC-29's own text
+says *"Phase LM fixed the LIFECYCLE producer of that silence; the WATCHDOG
+producer is untouched"*. **This spec fixes the lifecycle producer and leaves
+the watchdog producer where it was.** For that producer nothing changes: 2.5 s
+of missing frames still seals `link-lost`, and the writer honestly knows only
+"frames stopped for 2.5 s".
 
-- `storedSummary.ts:893-902` — `buildLinkLostLine` renders
-  **`"LINK LOST · the app lost the monitor before the end"`** on a plain
-  equality against `"link-lost"`, and `FromTheLog.tsx:450` prints it. Its
-  own comment states the rule this change must respect: *"no other `endedBy`
-  values render anything"* — it is "the lost-link surface, not an `endedBy`
-  taxonomy display".
-- `monitorRun.ts:431` — a shallow validator listing all five members. Not a
-  branch on meaning; unaffected.
-- `monitorRun.ts:951-999` — `completeWithoutWireEvidence`, the second
-  producer. It writes the value; it does not read it.
+The threshold's adequacy on the platform that produces every real row is
+disclaimed in its own constant's comment: *"Native's own inter-frame gap
+distribution is UNMEASURED… necessary-and-not-sufficient evidence, not
+proof, for the platform it exists to protect."* The 810 ms worst gap is
+desktop-only.
 
-**So the behaviour change a rower can see is precisely this:** a locked-phone
-session that today prints `LINK LOST · the app lost the monitor before the
-end` will stop printing it, because the app did not lose the monitor — the
-app went to sleep. That sentence is currently a false statement about the
-erg, printed on a saved row. **Removing it is part of the point, not a
-regression.**
+**So: this spec NARROWS RC-29 to the lifecycle-explained subset.** RC-29
+stays open for the watchdog producer, and closing it needs a measured native
+gap distribution — which is what the stored evidence below exists to gather.
 
-Whether that row should print something ELSE — naming our own suspension —
-is the same open question as the live banner, and gets the same answer.
+## What gets stored — **[R2: the scalar was useless]**
 
-## RC-37 — the same disease, a different signal
+Two additive nullable columns. **`endedBy`'s enum is untouched.**
 
-The link tiers cannot see RC-37 at all: pressing Menu at READY produces **no
-silence**. 156 frames kept arriving. Wire evidence:
+- **`link_verdict_at_close`** — a new pgEnum (`live` / `explained_quiet` /
+  `quiet` / `down`).
+- **`max_stream_gap_ms`** — integer. The LONGEST frame gap observed during
+  the session. **[R2: was `stream_quiet_ms`, "absent at close".]** On the
+  flagship case — lock 39 s mid-piece, unlock, row on, finish, press End —
+  frames are flowing at close, so the old field would have stored `0` and the
+  39-second sleep would be invisible in the very row that motivated the spec.
+  A close-time scalar can also never yield the gap distribution `quiet`'s
+  retuning needs.
+
+This follows the repo's established additive pattern exactly: migrations
+`0012` and `0013` each did `CREATE TYPE` plus a nullable `ADD COLUMN`, no
+default, no backfill. GET selects columns explicitly, so old clients are
+unaffected. **Check open PRs before generating the migration index** — the
+index race is a named hazard.
+
+`endedBy` goes back to answering one question — *what ended this session* —
+and the new columns answer the independent one.
+
+### The relabel moves rows across predicates. Deliberate, not incidental. **[R2]**
+
+Revision 1 claimed "exactly one user-visible consumer". **False, and the
+misses change stored NUMBERS.** `"rower"` is on the admitted side of two
+`{finished, rower}` allowlists:
+
+- `useMonitorSession.ts:2630` — `burstEligible`. Teardown now **lingers
+  `BURST_LINGER_MS` (2000 ms)** for the summary burst instead of hanging up.
+- `monitorRun.ts:1096` — `appendSummaryObservations` now **writes**
+  `summaryTotals`/`summaryDetail`/`verificationBytes`.
+
+`summaryTotals` becomes `machine_work_seconds`/`machine_work_meters`, which
+flips the saved row onto `storedSummary.ts:618`'s **TIER A** — the branch
+deriving the headline distance, time and split from the machine's own totals
+rather than the fallback. **The same physical session renders different
+headline numbers before and after this change.**
+
+**Ruling: this is correct and we keep it.** Those predicates mean "did the
+machine finish it, or did a person end it", and a lifecycle-explained close
+IS a person ending it. The rower gets the machine's own numbers where they
+previously got a fallback. **But it is a change to what a saved row SAYS, it
+is why this spec carries TRIAD weight, and it must appear in release notes
+rather than being discovered.**
+
+The remaining consumers, all benign and listed so the enumeration is closed:
+`storedSummary.ts`'s TIER B2 allowlist (both values decline; no change),
+`monitorRun.ts:431`'s shallow validator, `LogRow.tsx:79`'s sibling comment,
+and `buildLinkLostLine` (below). No analytics, CSV or export path exists in
+`src/` or `server/`.
+
+### The one user-visible line
+
+`storedSummary.ts:893-902` renders **`"LINK LOST · the app lost the monitor
+before the end"`** on equality with `"link-lost"`. For a locked phone that
+sentence is false — the app went to sleep. It stops printing in that case,
+which is the point rather than a regression.
+
+## RC-37 — same disease, different signal
+
+The link tiers cannot see RC-37: Menu at READY produces **no silence**. 156
+frames kept arriving.
 
 ```
 t= 7.17   wt=8  it=0  ws=0  durRaw=24000  durType=0     <- armed
 t=29.05   wt=1  it=1  ws=0  durRaw=0      durType=128   <- Menu
 ```
 
-`workoutState` never moves — `0` before and after, and `0` maps to `"armed"`,
-which is what READY renders from.
+**Fix: extend `verifyArmed`'s existing comparison past the verify phase.**
+Under an open ARMED run, keep comparing the readback against the program we
+sent.
 
-**The divergence is in every frame and we discard it.** The `workoutType`
-change rides in the same 19-byte status packet we already parse, the driver
-LOGS it (`kind: "structure"`), and `verifyArmed`'s structure check runs only
-during the verify phase — its own note: *"one entry per verify phase, never
-per tick"*.
+**[R2] Three constraints the pass established:**
 
-**The fix is to extend an existing comparison's lifetime, not to write a new
-rule.** Under an open ARMED run, keep comparing the readback against the
-program we sent; a sustained mismatch (reuse `STRUCTURE_MISMATCH_TICKS`'s
-existing N=3, do not invent a second constant) means the machine has left,
-and the session ends the way a machine-side terminate ends it.
+1. **Use BOTH constants, not one.** Revision 1 reused
+   `STRUCTURE_MISMATCH_TICKS`'s N=3 alone. That constant's own comment says
+   it is **"NO LONGER SUFFICIENT ON ITS OWN (hardware walk 5)"** — it carries
+   the STABILITY half, `STRUCTURE_MISMATCH_WINDOW_MS` carries the DURATION
+   half, *"and a rejection needs both."* Reusing both invents nothing.
+2. **The `armed` gate MUST stay** (`driver.ts:4767`, `state === "armed"`).
+   The structural quadruple legitimately moves mid-session in healthy
+   captures — `rests-finished` goes durRaw 6000→500 with durType 0→128 — so
+   an always-on comparator would end live rows. Filtered to armed frames
+   across four healthy captures: 447 frames, **2 mismatches**, both
+   single-tick arming transitions. Corpus-clean **only** with the gate.
+3. **Compare against what we SENT, never a literal `8`** (RC-38).
+   `expectedArmedStructure(p)` already does this. `8` is our compiler's
+   choice, not a PM5 universal, and we have read one row of
+   `OBJ_WORKOUTTYPE_T`.
 
-**BINDING (RC-38): compare against WHAT WE SENT, never a literal `8`.**
-`8` is our compiler's choice, not a PM5 universal — real apps send
-fixed-interval types for equal intervals. `verifyArmed` already compares
-against the sent program; keep it that way. We have read exactly one row of
-`OBJ_WORKOUTTYPE_T`, and `1` is a silhouette we named, not a documented
-value.
+No aggressive threshold is needed: the wrong structure holds **112
+consecutive frames over 56.4 s** in the capture.
 
-## OPEN QUESTION — for James, not for the spec
+## OPEN QUESTION — for James
 
 During `explained-quiet` — the rower unlocks after 39 seconds — **what do
-they see?**
+they see live, and what does the saved row say later?** `LOST THE MONITOR`
+blames the erg for our own suspension. Silence hides a real hole. A third
+option names us. One ruling covers both surfaces. Nothing else depends on it.
 
-- `LOST THE MONITOR` blames the erg for our own suspension. That is what
-  James saw on the walk, and it is wrong.
-- Showing nothing hides a real hole in the data.
-- A third option names US rather than the machine.
+## Testing — **[R2: two of three gates were unrunnable]**
 
-Not decided here. The rest of the spec does not depend on the answer.
+**A ring is not a recording.** `walk-2026-08-26/phone-ring.json` and
+`walk-2026-08-27/lock-phone-ring.json` are event-log rings (`{seq, kind,
+detail}`), zero wire bytes. Revision 1 called the first "real wire data"; it
+contains none.
 
-## Constraints
+**And no committed capture can ever carry a lifecycle event.** All six
+`.jsonl.gz` return zero for `"kind":"lifecycle"`, and none can: the byte
+recorder is web/dev-only while the web lifecycle arm is a deliberate no-op.
+The platform with the signal has no recorder; the platform with the recorder
+has no signal.
 
-- **Additive-only API** (CLAUDE.md): new nullable fields, no enum member
-  removed, no existing column's meaning changed.
-- **TRIAD weight** — a stored shape AND what `endedBy` means. Full antagonist
-  pass on this spec, PM gate on the PR.
-- **`SILENCE_THRESHOLD_MS` does not change.** Any proposal to retune it is
-  out of scope and would need the evidence `stream_quiet_ms` exists to gather.
-- **Do not touch `livePace`.** RC-27's surface is deliberately unchanged.
-- No em-dashes in user-facing strings.
+**The runnable substitute is precedented.** `lifecycleReplay.test.ts` splices
+synthetic lifecycle events into a real capture. Use that.
 
-## Testing
-
-- **Replay `walk-2026-08-26`** — nine false latches over a link that never
-  dropped — and assert **zero** durable `link-lost` writes and **zero**
-  suppressed terminates. Real wire data that previously produced the defect.
-- **Replay `walk-2026-08-27`'s phone leg** and assert the close resolves
-  `explained_quiet` with a `stream_quiet_ms` near 39410.
-- **Replay `walk-2026-08-27`'s menu-at-ready capture** and assert the session
-  ends rather than sitting at READY. This capture is the RC-37 oracle and it
-  is already committed.
-- Pin the negative in both directions: `explained-quiet` reaches neither
-  durable path; `quiet` and `down` still do.
-- **Every new gate proved red by mutation, with the transcript in the
-  report** (recurring failure #21). Three inert gates shipped in two days;
-  this spec adds none.
+- Splice a 39 s lifecycle gap into a real recording; assert the verdict
+  resolves `explained_quiet`, that neither durable path is reached, and that
+  no terminate is sent. **`max_stream_gap_ms ≈ 39410` is a spliced constant,
+  not a replayed hardware figure** — say so in the test's own comment.
+- Replay `menu-at-ready-recording.jsonl.gz` (a real recording, already
+  committed) and assert the session ends rather than sitting at READY. Note
+  its `header.program` is absent, as it is for every real capture, so the
+  test hardcodes the program.
+- Pin the terminate table above, row by row, including the **stale** row.
+- Pin that `down` is sticky and dominates a standing `explained-quiet`.
+- **The 2026-08-26 replay is probably already green.** Those nine latches
+  came from the unconditional resume latch that Phase LM deleted. **Prove it
+  red before trusting it**, or replace it with a fixture that latches under
+  today's rules (recurring failure #21).
+- Every new gate proved red by mutation, transcript in the report.
 
 ## Exit criteria
 
-1. A false latch on a healthy link cannot write `endedBy` or skip a
-   terminate. Pinned by replaying the capture that caused it.
-2. A locked-phone gap resolves `explained_quiet`, stores `"rower"` with
-   evidence, and shows the rower whatever James rules above.
-3. Teardown never sends TERMINATE off a derived phase.
-4. Menu at READY ends the session instead of leaving a stale READY.
-5. Every consumer of `endedBy === "link-lost"` enumerated, with its new
-   behaviour recorded.
-6. **A hardware walk closes this.** Desk gates can prove we do not send a
-   terminate wrongly; only an erg proves the piece still ends when the rower
-   presses End.
+1. A false latch on a healthy link cannot write `endedBy` or send a
+   terminate. Proved red first.
+2. A lifecycle-explained gap resolves `explained_quiet`, stores `"rower"`
+   plus `max_stream_gap_ms`, and shows whatever James rules above.
+3. **No verdict, at any tier, sends a wire command.** Both terminate sites
+   read `frame.state` with the freshness table above.
+4. The continuity door still writes under `explained-quiet`.
+5. Menu at READY ends the session, with the `armed` gate and both structure
+   constants intact.
+6. The TIER A number change is in the release notes.
+7. **A hardware walk closes this**, and it owes one measurement revision 1
+   did not know it needed: **does a disconnect that happens while
+   backgrounded arrive before or after the lifecycle resume?** That ordering
+   is the lock-plus-out-of-range hole's only resolution.
 
 ## Not in scope
 
-- Retuning `SILENCE_THRESHOLD_MS`.
+- Retuning `SILENCE_THRESHOLD_MS`, and closing RC-29's watchdog half. Both
+  need the native gap distribution `max_stream_gap_ms` exists to gather.
 - RC-28/RC-31 — falsified or unwitnessed at the 2026-08-27 walk.
-- RC-32 (F2b's vacuous sweep), RC-33 (the grid's missing `!stale`), RC-34,
-  RC-35, RC-36 — real, queued, and independently reviewable.
-- `OBJ_WORKOUTTYPE_T`'s transcription (RC-38) and PHASE PROTO.
+- RC-32, RC-33, RC-34, RC-35, RC-36 — real, queued, independently reviewable.
+- RC-38's transcription and PHASE PROTO.
