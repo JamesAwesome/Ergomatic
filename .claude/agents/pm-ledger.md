@@ -3065,3 +3065,65 @@ this spec's close).
   nothing; on a project that has cut 26 tags, that is two release windows with
   empty notes, and it is how the invisible-but-necessary wave gets skipped. Fold
   them into a visible wave rather than releasing them alone.
+
+## Ad-hoc gate, 2026-08-28 (MACHINE CONFIRMED has never rendered on hardware)
+
+- **A feature can have three green gates and never have worked, when every
+  gate enters the pipe downstream of the break.** `FromTheLog.test.tsx:1203`
+  mocks the API row with `machineWorkSeconds: 124`; `LogSession.test.tsx:3617`
+  seeds a `MonitorRun` already carrying `summaryTotals` before render;
+  `screenshots.spec.ts:2421` seeds the API row and says so in its own comment.
+  Each CAN go red; none can go red on THIS defect. Not recurring failure 21
+  ("a gate that cannot go red") but its sibling: **both halves well tested,
+  the seam between them tested by nobody.** The tell was in the suite's own
+  words — a test titled "renders NO block when all three machine fields are
+  null (**the common case, old rows**)" named production reality and blamed
+  legacy data. **At any gate, ask which test STARTS upstream of the producer,
+  not which tests are green.**
+- **"Verified on hardware" needs the LAYER named, and a walk table's column
+  heading is not the layer.** RC exit (a) closed on `walk-2026-08-24`'s exit-7
+  table, whose column reads "App stored (WIRE→record)" and whose cell reads
+  "`summaryTotals` elapsed 124s (**ring seq 61**)" — a driver ring entry, not
+  a record. The walk ran on v0.21.0 build 738; the storage columns (#190) and
+  the block (#192) both shipped the NEXT DAY. **A criterion cannot be verified
+  on a build where its code does not exist**, and nobody noticed because the
+  walk and the ship were 24 hours apart. Recurring failure 19, verbatim.
+- **Criterion (e) passed at the wrong end of the pipe.** "If 0x003F turns out
+  not to fire… the verification branch is closed on the record rather than
+  left hoped-for" was met as written (it fires) and missed the failure
+  entirely (it never reaches a row). **When a criterion is written about an
+  INPUT arriving, ask what it would say if the input arrived and the output
+  never appeared.**
+- **A capability the release notes have already promised is not register
+  work.** The register is for items that are "real and unscheduled". An
+  announced capability that does not exist is a live false claim with a
+  disclosure clock, and it goes in a wave. Pairs with the 2026-08-13 "no new
+  phase for work that finishes an existing one" (which refused a bugfix phase
+  here) and the 2026-08-28 "a shipped producer with no consumer is unfinished
+  work".
+- **Prefer the free instrument to the built one, and say which is decisive.**
+  The dispatch proposed a one-line receipt log shipped standalone so James
+  could walk it in one row. The mechanism was already established by reading
+  (`LogSession.tsx:1487` snapshots at mount; `useMonitorSession.test.ts:2601`
+  states the production ordering verbatim), so the log would have cost a build
+  and a day to confirm what a client test proves in an hour and then guards
+  forever. **Order: count the data, then write the failing test, then ship the
+  log inside the fix.** An instrument that answers a settled question is
+  ceremony.
+- **A missing UI block can be a NUMBER defect wearing a display defect's
+  clothes.** `storedSummary.ts:617-621` gates tier A on the same two columns
+  the block does, so "the box never appears" and "every hero is our
+  arithmetic, not the erg's" are one bug. The second is what makes it TRIAD.
+  **Before sizing a missing-surface report, grep the other readers of the
+  field it renders.**
+- **Release-note corrections compound, and the register entry rots with
+  them.** v0.22.0's clause is now wrong for TWO independent reasons — RC-5
+  falsified "meant to differ", this defect falsified "your saved rows can now
+  show" — and only the first was filed. The filed row's line number was
+  already stale. **A falsified-note register row cites the CLAUSE, never the
+  line number, and is re-read before the correction is written.**
+- **Release call: no tag, and hold the correction for the fix if it is
+  close.** Eight commits above v0.26.0, two tester-visible and both tiny. A
+  correction shipped alone reads "we told you something that was never true"
+  with no remedy; the same correction behind the fix reads as a repair.
+  **Ruling: hold up to ~2 weeks, then ship the correction regardless.**
