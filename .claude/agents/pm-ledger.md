@@ -2888,3 +2888,59 @@ this spec's close).
   shipped note (`releaseNotes.ts:96`, "keeps the headline it was saved with"),
   written in the NEW version's entry, plus a from-this-build-forward clause —
   old link-lost rows stay rest-fused forever.
+
+## Adversarial pass, 2026-08-28 (accepting Phase RC exit (c)'s known-false cohort)
+
+- **Before accepting an exception, check whether the CUT FIX would even have
+  reached it.** The proposal traded exit criterion (c) against the `endedBy`
+  relabel a YAGNI pass had just cut, framing the cut as the cost. It was not:
+  the relabel changes how FUTURE rows close, and the fused-hero cohort is rows
+  ALREADY SAVED in a closed window (2026-08-22, `ended_by` ships in #160 →
+  2026-08-25, RC-5 ships in #194). Only a backfill reaches them, and none was
+  proposed. **The strongest reason to accept was that the "cost" was
+  imaginary — and nobody had said it.** Generalises: an accept-the-defect
+  proposal that names a rejected fix must show the fix lands on the same rows.
+- **A criterion restated is not the criterion, and the restatement is usually
+  the kinder one.** The dispatch described (c) as heroes-versus-interval-rows
+  (742 vs 500). The ROADMAP says "the three heroes on one stored row reconcile
+  with EACH OTHER." Judged literally the cohort is worse: 742 m / 4:04 /
+  2:18.8 implies 2:44.4 by hand — the three heroes disagree by 25.6 s/500 m.
+  **At any accept-the-defect gate, quote the criterion and re-run its own
+  arithmetic before accepting an exception to somebody's summary of it.**
+- **One named exception is a tell that the criterion is unsatisfiable.** (c) is
+  ALSO false for every row carrying a recorded null-index actual — DISTANCE/TIME
+  count it, AVG SPLIT excludes it by construction, and `storedSummary.ts` says
+  so in its own words ("Null-index/warm-up parity DOES NOT HOLD"): 9.9 s/500 m
+  on the branch's own post-RC-5 fixture, on FINISHED rows too. Plus tier A's
+  designed truncation gap. **Ruling: (c) gets a TOLERANCE and a POPULATION, not
+  an exception list** — a criterion no build has ever met cannot go red.
+- **"Never observed" carries near-zero weight for a silent number defect, and
+  it did not need to.** A rower never reports "my three numbers disagree"; they
+  assume they misremembered. But this cohort is defined by a DATE RANGE, not a
+  rare event, so it is enumerable by inspection rather than by waiting. **When a
+  cohort is date-bounded, replace "never observed" with a 60-second look at the
+  data.** DONE THE SAME DAY: James photographed five consecutive rows spanning
+  22-27 August; hand arithmetic gives a worst-case delta of 0.1 s/500 m against
+  a ~26 s cohort signature, and every row carries the `plus N m coasting in
+  rest` clause an incomplete close cannot have. Cohort empty, twice over.
+- **Check the shipped release notes before calling a contradiction
+  undisclosed.** v0.23.0 item 1 uses this exact cohort's numbers (742/4:04) as
+  its picture of the SOLVED problem — but item 5 already carves it out in the
+  tester's own vocabulary ("ended early, or one whose link dropped, keeps the
+  headline it was saved with"). It under-discloses (silent on the numbers still
+  contradicting) rather than contradicts. **The in-app disclosure was also real
+  and nobody had traced it:** `FromTheLog.tsx:450-451` renders `LINK LOST · …`
+  directly ABOVE the heroes — but for `link-lost` only, never
+  `interrupted`/`program-failed`/burst-less-`rower`.
+- **The contradiction a rower can see without arithmetic is the one that
+  matters.** Not 742-vs-500 (needs addition) — AVG SPLIT 2:18.8 sitting above
+  interval rows of 2:15.8 and 1:52.2, an average outside the range of its own
+  inputs. **When judging a visible-wrongness question, look for the assertion
+  that needs no computation.**
+- **Verdict: ACCEPTED WITH THE CONDITION MET.** (c) rewritten with a
+  1.0 s/500 m tolerance and three named populations; population (i) verified
+  empty by inspection. No code, no migration, no user-facing note owed.
+- **Flagged and now answered: Phase RC's ~30 unchecked items.** A same-day YAGNI
+  triage closed 12 on evidence, found 5 already done, and moved 5 to other
+  phases. (a)-(e) IS the gate; the checkbox count was filing-as-deferral, and
+  the triage is what made the close honest rather than declared.

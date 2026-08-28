@@ -4774,11 +4774,69 @@ work and rest as separate quantities, and its work-only distance and time
 equal the monitor's own for the same piece; (b) the monitor's log entry
 date/time is decoded and logged from a real finish, with the
 seconds-resolution question answered either way; (c) the three heroes on
-one stored row reconcile with each other by hand arithmetic; (d) a row
-posted to the Concept2 sandbox comes back through `export/` matching what
-we stored, or the reason it cannot is documented; (e) if 0x003F turns out
+one stored row reconcile with each other by hand arithmetic
+**[REWRITTEN 2026-08-28 — see (c) below, which the original could not
+survive]**; (d) a row posted to the Concept2 sandbox comes back through
+`export/` matching what we stored, or the reason it cannot is documented
+**[DISCHARGED BY THE DOCUMENTED REASON — see (d) below]**; (e) if 0x003F turns out
 not to fire on our firmware, DEVIATIONS carries the row saying so and the
 verification branch is closed on the record rather than left hoped-for.
+
+**(c) REWRITTEN AND MET, 2026-08-28.** The original sentence — "the three
+heroes on one stored row reconcile with each other by hand arithmetic" —
+**has never been true of any build of this app**, in three distinct ways, so
+it could not go red. An adversarial PM pass established all three. Rewritten
+with a tolerance and a named population:
+
+> On a stored row whose close is `finished` and whose intervals carry no
+> null-index actual, DISTANCE, TIME and AVG SPLIT reconcile by hand
+> arithmetic to within **1.0 s/500 m** (tier A's designed truncation gap —
+> the PM5 truncates, we round). Three populations are exempt, named:
+> **(i)** rows with an INCOMPLETE close saved 2026-08-22..2026-08-25, between
+> `ended_by` shipping (#160) and RC-5 shipping (#194), which render the fused
+> stored columns and disagree by up to ~26 s/500 m — **closed, non-growing,
+> and unreachable by the `endedBy` relabel** (that changes how FUTURE rows
+> close; only a backfill touches these, and none is planned). Pre-disclosed
+> to testers at v0.23.0's item 5.
+> **(ii)** any row carrying a RECORDED null-index actual — DISTANCE/TIME
+> include it, AVG SPLIT excludes it by construction (`storedSummary.ts`,
+> "Null-index/warm-up parity DOES NOT HOLD"), ~10 s/500 m. Ongoing, affects
+> `finished` rows too, observed in zero committed rings.
+> **(iii)** tier A, where the machine's own avg pace can disagree with its
+> own totals (walk-2026-08-20, 901 vs 899).
+
+**MET, and population (i) VERIFIED EMPTY by inspection (James, 2026-08-28).**
+He photographed five consecutive stored rows spanning the window — Ground Fog
+(22 Aug), Comma Cloud (24th), Corona (25th), Line Squall (26th), Ice Fog
+(27th). Hand arithmetic on each, `TIME / DISTANCE * 500`:
+
+| row | time | distance | implied | shown | delta |
+| --- | --- | --- | --- | --- | --- |
+| Ice Fog | 1800 s | 6574 m | 2:16.9 | 2:16.9 | 0.0 |
+| Line Squall | 868 s | 3500 m | 2:04.0 | 2:03.9 | 0.1 |
+| Corona | 1072 s | 4000 m | 2:14.0 | 2:14.1 | 0.1 |
+| Comma Cloud | 1260 s | 4937 m | 2:07.6 | 2:07.6 | 0.0 |
+| Ground Fog | 1680 s | 6192 m | 2:15.7 | 2:15.7 | 0.0 |
+
+Worst case **0.1 s/500 m**, an order of magnitude inside the tolerance; the
+exempt cohort would be off by ~26 s. **Second, independent confirmation in the
+same photographs:** every row carries a `plus N m coasting in rest` clause,
+which is precisely what an incomplete close CANNOT have (it keeps the fused
+headline and gains no rest line) — so all five are complete closes rendering
+work-only heroes. **No user-facing note is owed**, because the cohort is
+empty.
+
+**(d) DISCHARGED BY THE DOCUMENTED REASON, 2026-08-28 (James: "we can open
+the logbook Saturday").** The criterion's own wording permits this: *"or the
+reason it cannot is documented."* The reason: **the Concept2 logbook
+cross-connect is real work that deserves its own phase, not the last item
+holding a phase open.** It is the first oracle OUTSIDE our own definitions —
+Concept2 stores work only, so agreement there means something that agreeing
+with our own accumulator never did (recurring failure #11's "an oracle that
+shares your definition is a mirror"). What is already recorded and carries
+forward: the dev API key lives in the repo-root `.env` and its VALUE is never
+read into a transcript or a committed file; the `weight_class` gate; and the
+ErgData-dedup question. **Opens as its own phase, 2026-08-29.**
 
 ## Phase WU — The warm-up leaves
 
