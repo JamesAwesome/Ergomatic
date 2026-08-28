@@ -164,10 +164,30 @@ gets its own rendered comparison with contrast computed.
 
 ## Exit criteria
 
-1. Menu at READY ends the session, with the `armed` gate and both constants.
-2. Zero false detections across the healthy corpus.
-3. End terminates the machine even when the link is believed lost.
-4. Gate 0 approved.
+1. Menu at READY exits to `WorkoutDetail`, with the `armed` gate and both
+   structure constants.
+2. The nudged targets are still on that screen. Pinned.
+3. Zero false detections across the healthy corpus.
+4. End terminates the machine even when the link is believed lost.
+5. **[R5] A WALK GATES THE MERGE (James, 2026-08-27: "Gate on a walk for this
+   too").** Replay proves the detector against captures we already own; only
+   an erg proves it against a machine nobody has scripted. Three legs, and
+   the second is the one that matters:
+
+   | leg | proves | rowing |
+   | --- | --- | --- |
+   | Menu at READY | the ruled behaviour end to end — the app exits, the workout and its nudges are still there, Connect re-sends | **none** |
+   | a rest-bearing piece, rowed through | **the detector stays SILENT through a real session** — boundaries, rests and the ephemeral transition states are exactly where a structure comparator would misfire | one short piece |
+   | End mid-piece | the one-line fix: the erg actually stops | rides the second leg |
+
+   **The second leg is the gate.** A detector that fires on a real rest
+   boundary is worse than the bug it fixes: it would end a session the rower
+   is mid-way through. The corpus says 300 armed frames with zero mismatches,
+   but every one of those captures is laptop/Chrome, and we have exactly one
+   observation of the positive.
+
+   Nudge a target before the first leg, so criterion 2 is observed rather
+   than inferred.
 
 ## Deferred, with the reason
 
