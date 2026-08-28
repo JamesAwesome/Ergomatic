@@ -1,9 +1,15 @@
 # Deploying Ergomatic
 
-Push to main → CI (root-hooks, app, docker, deploy-script) → `deploy` job on the
-self-hosted runner SSHes the commit SHA to the host → a forced command runs
-`scripts/deploy.sh <sha>` → compose rebuilds and waits for health → on failure,
-automatic rollback to the previous commit.
+Push to main → CI → `deploy` job on the self-hosted runner SSHes the commit SHA
+to the host → a forced command runs `scripts/deploy.sh <sha>` → compose rebuilds
+and waits for health → on failure, automatic rollback to the previous commit.
+
+CI's jobs are `changes`, `root-hooks`, `app`, `docker`, `e2e`, `scripts` and
+`deploy`. **`changes` runs first and decides whether the code jobs run at all**
+(`scripts/ci-changes.sh`): a push touching only `docs/`, `.claude/` or root
+markdown skips `app`, `docker` and `e2e`. Every uncertainty — a bad SHA, an
+empty diff, an unrecognised path, the script itself failing — resolves to
+running them.
 
 ## One-time host setup (same host as nataliesawacritter.info)
 
@@ -55,8 +61,32 @@ automatic rollback to the previous commit.
 
 ## Rollback
 
-Automatic on failed health gate. Manual: `ssh` to the host,
-`cd ~/Ergomatic && git checkout <good-sha> && docker compose up -d --build --wait`.
+> **CHECK THE FLOOR FIRST. `docs/RELEASING.md` § "Rollback constraints" names a
+> version you must never roll back past — today v0.16.0.** Crossing it makes the
+> seed DELETE renamed global rows and null every `session_logs.workout_id` that
+> pointed at them. That is unrecoverable link loss, and rolling forward again
+> does not bring the links back. **Recovery is a database backup, and no backup
+> script exists in this repo yet** (roadmap Wave B). Read that section before
+> typing a rollback command, not after.
+
+**Automatic**, on a failed health gate: `deploy.sh` traps the error and checks
+out `PREV`, which is **the host checkout's HEAD when the deploy started** — not
+"the last known-good deploy". If the previous deploy left the host on a bad
+commit, that is what it returns to.
+
+**Manual**: `ssh` to the host, then
+
+```bash
+cd ~/Ergomatic && git checkout <good-sha> && docker compose up -d --build --wait
+```
+
+Two things that bite here:
+
+- **`deploy.sh` refuses to run on a dirty checkout** (`exit 3`), and a
+  hand-rolled rollback is the most likely way to leave one dirty. Check
+  `git status --porcelain` on the host before letting CI deploy again.
+- **A rollback is only safe above the floor.** If the good SHA is below it,
+  restoring the database comes first.
 
 ## Google sign-in (one-time)
 
@@ -80,6 +110,11 @@ Notes:
   does not sign out an existing account. To off-board someone, delete their
   row in `users` (sessions cascade):
   `docker exec -it ergomatic-postgres psql -U ergomatic -c "delete from users where email='x@y.com'"`.
+  **The container name is not fixed:** `compose.yml` names it
+  `${ERGO_STACK:-ergomatic}-postgres`, and `app/scripts/stack-env.sh` derives a
+  per-worktree `ERGO_STACK` for local e2e stacks. The line above is correct on
+  the production host, where `ERGO_STACK` is unset. Anywhere else, run
+  `docker ps` first.
 - `ALLOWED_EMAILS` changes take effect on container recreate, not live.
 - If sign-in breaks after a deploy, check the app logs for the boot warning
   about missing Google env before debugging anything else.
@@ -88,4 +123,12 @@ Notes:
 
 See `docs/RELEASING.md` for the complete process: when to release, versioning
 discipline (tag-driven, never hand-edit), and step-by-step cutting a release.
-First-time iOS build machine setup lives there as well (Task-7 activation).
+
+**First-time iOS build machine setup is NOT written down anywhere.** This file
+used to say it lived in RELEASING.md and RELEASING.md said it lived here; it
+lives in neither, and both pointers were wrong for as long as they existed.
+What is missing is everything between a fresh Mac and a working `pnpm
+ios:release`: Xcode and command-line tools, the signing certificate and
+provisioning profile, the App Store Connect API key `xcodebuild -exportArchive`
+authenticates with, and the Google iOS OAuth client. Whoever sets up the next
+build Mac writes this section as they go.

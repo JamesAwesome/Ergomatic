@@ -22,7 +22,14 @@ release notes** (James, 2026-08-09) — the News tab's Releases screen,
 written in the app's own voice, covering what testers actually get rather
 than what merged. The notes PR merges BEFORE the tag: the screen names the
 version they are about to receive, and three e2e pins force a deliberate
-touch when it changes. v0.8.0 and v0.9.0 both went out this way.
+touch when it changes.
+
+The usual shape is a separate notes PR merged just before the tag (v0.8.0 and
+v0.9.0 both went out that way). **It is not the only shape:** v0.26.0's tag
+points at the phase PR that introduced its own notes, with no separate notes
+PR. Either is fine. What matters is that the notes are in the tagged commit —
+a tag cut ahead of its notes ships a Releases screen that does not name the
+build the tester just received.
 
 **Standing rule:** after every merge to main, Claude posts an explicit
 recommendation — "TestFlight release recommended: <reasons>" or "No release
@@ -85,8 +92,18 @@ Regenerating anywhere else produces a 90-file diff that means nothing.
 ## Cutting a release (~10 min, on the build Mac, fully CLI)
 
 1. `git checkout main && git pull`
-2. `git tag -a vX.Y.Z -m "<one-line summary>" && git push origin vX.Y.Z`
-3. `cd app && pnpm ios:release`
+2. **Account for every commit since the last tag** before writing the notes —
+   `git log $(git tag --list --sort=-v:refname | head -1)..main --oneline` —
+   and give each one a note or a stated reason it needs none. Parallel sessions
+   make "my branch is the release" wrong more often than right: v0.13.0 was one
+   command from shipping with notes covering only one session's phase while a
+   delete button from another session rode along unmentioned.
+   **`--sort=-v:refname` is load-bearing.** A bare `git tag --list` sorts
+   lexically and reports `v0.9.0` as the newest tag when the real head is
+   `v0.26.0`. **Do not add `--merges`** — main is squash-merged and has no merge
+   commits, so it returns empty.
+3. `git tag -a vX.Y.Z -m "<one-line summary>" && git push origin vX.Y.Z`
+4. `cd app && pnpm ios:release`
 
 That's the whole thing (first proven on v0.10.0, 2026-08-17). The script
 (`scripts/ios-release.sh`) refuses to run unless HEAD is exactly the
@@ -108,8 +125,13 @@ Fallback (GUI, if the CLI upload ever breaks): `pnpm ios:build` then
 TestFlight (internal).
 
 Notes: internal builds expire after 90 days — re-upload (no new tag needed;
-BUILD increments with any new commit). First-time setup lives in
-docs/deploy.md ("iOS build machine" section, Task-7 activation).
+BUILD increments with any new commit).
+
+**First-time iOS build machine setup is not written down.** This line used to
+point at a "iOS build machine" section of `docs/deploy.md`; that section does
+not exist, and deploy.md pointed back here. See deploy.md's TestFlight section
+for what such a section would have to cover — and write it there the first time
+a new Mac needs it.
 
 ## Rollback constraints
 

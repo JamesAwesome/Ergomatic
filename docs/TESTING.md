@@ -45,7 +45,7 @@ opening the file.
 **Bad:** `it("works", ...)`, `it("test 2", ...)`, `it("calls the store",
 ...)` — none of these say what breaking would mean.
 
-**Good:** `it("treats the wu/restMinutes upper bounds as inclusive, not
+**Good:** `it("treats the r/restMinutes upper bounds as inclusive, not
 exclusive", ...)` (from `domain/validate.test.ts`) — a maintainer reading
 just the name knows exactly what regressed if it fails, with no need to read
 the assertions to find out.
@@ -97,14 +97,30 @@ the guard and confirm the listener test goes red before trusting it.
 `server/stores/**`, `server/routes/**`): flips small pieces of source
 (a `<` to `<=`, a `&&` to `||`, a boolean literal) and reruns the suite. A
 mutant that **survives** — the suite stayed green despite the code changing
-— is source code no test actually protects. This is on-demand (phase
-close-out gate today, not per-PR — see §7 for why), and the review question
-it exists to answer is: **"do any mutants survive in the files this PR
-changed?"** A survivor in a changed file is either a real gap (write the
-killing test) or genuinely equivalent code (document why, per the examples
-in §3.1) — never silently ignored.
+— is source code no test actually protects. It is on-demand, never per-PR
+(see §7 for why), and the review question it exists to answer is: **"do any
+mutants survive in the files this PR changed?"** A survivor in a changed file
+is either a real gap (write the killing test) or genuinely equivalent code
+(document why, per the examples in §3.1) — never silently ignored.
 
-### 3.1 Baseline (run 2026-07-29, `pnpm mutate`, full scope — see `.superpowers/sdd/task-7-report.md` for the complete run)
+> **This document used to call mutation testing "a phase close-out gate". It is
+> not one, and calling it one was worse than saying nothing** — a gate nobody
+> runs retires the suspicion that would have found the bug. There is no evidence
+> of a run since the 2026-07-29 baseline below, across roughly fifteen phases:
+> Stryker appears only in this file, CLAUDE.md and two 2026-07-28 planning docs,
+> and `app/reports/` (the workflow's artifact path) does not exist. **Running a
+> mutation probe on the specific assertion you are adding is still the standing
+> rule** (see §3 and CLAUDE.md's recurring failure 21) — that is a per-change
+> discipline, not a phase gate. Making the full run a real gate again, or
+> dropping the claim, is a live roadmap item (Wave D).
+
+### 3.1 Baseline (run 2026-07-29, `pnpm mutate`, full scope)
+
+> **STALE, knowingly.** Never refreshed since. It scores **7** domain modules;
+> `app/domain/` now holds **29** non-test modules, so roughly three quarters of
+> today's scope has never been measured. **Do not read a number here as
+> current.** The original full run was written under `.superpowers/`, which is
+> git-excluded and unreachable — this table is all that survives of it.
 
 | Scope | Mutation score | Killed | Timeout | Survived | No coverage |
 |---|---|---|---|---|---|
@@ -261,8 +277,9 @@ also adding the case.
 - **No per-PR mutation testing.** Stryker's full scope takes ~1.5 minutes
   locally but is genuinely expensive to run on every push at CI scale, and
   most PRs don't touch enough domain/store/route logic to justify it.
-  Mutation testing is an on-demand, phase-close-out gate
-  (`workflow_dispatch`, `.github/workflows/mutation.yml`) with baseline
+  Mutation testing is on-demand only (`workflow_dispatch`,
+  `.github/workflows/mutation.yml`) — **not the phase-close-out gate this
+  document used to claim; see the note in §3** — with baseline
   scores tracked here (§3.1) — not a blocking check on every commit.
 
 ## 8. Structural design assertions
@@ -289,10 +306,22 @@ aesthetics" split in enforceable form.
 
 **New screens must register in `design.spec.ts`** — a new screen with no
 entry here is a screen the a11y/tap-target/token rules aren't actually
-checking. `app/e2e/screenshots.spec.ts` capturing that screen into
-`docs/screenshots/` (embedded in the phase PR body) is part of the same
-requirement: **both together are part of each UI phase's definition of
-done**, not an optional nice-to-have tacked on afterward.
+checking. This is the hard half of the requirement, and `design.spec.ts` runs
+in CI.
+
+`app/e2e/screenshots.spec.ts` is the soft half, and **two James rulings scope
+it more narrowly than this section used to imply:**
+
+- **Captures are documentation, not a CI gate** (2026-08-27: *"We honestly
+  don't need to run these in ci. It can be part of the release skill and maybe
+  a scheduled reup."*). `playwright.config.ts:33` carries
+  `testIgnore: "**/screenshots.spec.ts"`, and CI runs `--project=chromium`
+  only. A missing capture does not turn CI red and is not supposed to.
+- **Captures are for LAYOUT or STRUCTURE changes, never wording-only ones**
+  (2026-08-23). A copy diff gets no screenshot.
+
+So: registering in `design.spec.ts` is part of a UI change's definition of
+done. Capturing is part of it when the change moves pixels.
 
 ## 9. Fixture realism
 
@@ -304,7 +333,7 @@ codebase has shipped were fixture failures, not logic failures:
   seeded an *empty* library, so four consecutive seeds produced four different
   names. Against the real 35-workout library — whose titles occupy the front
   of the generator's own word list — every seed collapsed onto the same
-  first-free slot. The fix's regression test imports `STARTER_WORKOUTS` and
+  first-free slot. The fix's regression test imports `LIBRARY_WORKOUTS` and
   asserts four seeds give four distinct names.
 - **A whole rendering branch shipped with a WCAG Level A violation** because
   every unit test and every `design.spec.ts` sweep built `kind: "w"` rows. The

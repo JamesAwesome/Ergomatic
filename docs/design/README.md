@@ -1,5 +1,12 @@
 # Handoff: Erg Log — rowing workout tracker & planner (mobile)
 
+> **READ THIS FIRST. The whole document is a frozen handoff record, not a
+> description of the shipped app.** The freeze note used to sit only over
+> `## Screens`, which left the tab bar, the token table, the file list and the
+> asset list reading as binding — and all four had gone stale.
+> **`docs/design/DEVIATIONS.md` is the current-state authority** wherever this
+> prose and the app disagree. Known corrections are called out inline below.
+
 ## Overview
 Erg Log is a mobile-first tracker/planner for indoor rowing (erg) workouts built around
 "The Erg Book" model: a library of numbered workouts whose targets are expressed as
@@ -9,9 +16,16 @@ baselines every time a workout is opened, walks the rower through the workout wi
 phase timer, and **freezes the resolved splits into the log** at the moment a session is
 saved so history stays truthful as fitness improves.
 
-Nine screens: Today, Library, Workout detail, Confirm targets, Countdown, Live timer
-(portrait + landscape), Log session, Plan, Progress, You (account + baselines +
-preferences), New workout builder.
+Eleven screens (this line said "nine" and then listed eleven; `## Screens`
+numbers them §1-§11): Today, Library, Workout detail, Confirm targets,
+Countdown, Live timer (portrait + landscape), Log session, Plan, Progress, You
+(account + baselines + preferences), New workout builder.
+
+**Progress never shipped as its own screen** — there is no `/progress` or
+`/trend` route, and its charts were folded onto You (DEVIATIONS row 63). It is
+deferred on the roadmap as Phase PS. **The News tab, Reader and Release notes
+screens postdate this document entirely** and have their own authority at
+`docs/design/handoffs/2026-08-07-news-tab/`.
 
 ## About the Design Files
 The files in this bundle are **design references created in HTML** — a working prototype
@@ -127,7 +141,7 @@ random other member of `pool`. Changing the preference chips clears `todayPick`.
 | ink | `#1b1a17` | primary text, strong rules, badges |
 | ink-2 | `#3f3c35` | secondary text |
 | ink-3 | `#57544c` | supporting text, inactive chip labels (AA at 11px) |
-| ink-4 | `#8a8478` | mono labels ≥11px only |
+| ink-4 | `#8a8478` **(shipped: `#6f6a5f` — DEVIATIONS row 16)** | mono labels ≥11px only |
 | ink-5 | `#a09a8c` | completed/disabled text |
 | rule | `#d8d3c4` | card borders |
 | rule-2 | `#ded8c9` | dividers, bar tracks |
@@ -180,7 +194,8 @@ Accent red (`--accent`) means exactly four things, no more:
 
 1. The level-1 primary action.
 2. A resolved split or duration — always the single exact value, never a
-   range (see `DEVIATIONS.md`, "exact targets").
+   range. (This cited `DEVIATIONS.md`, "exact targets"; no such phrase appears
+   in that file. The rule stands on its own.)
 3. A destructive control (level 4's outline, or its armed solid fill).
 4. The active tab mark.
 
@@ -363,7 +378,10 @@ Pace ref accepts `2k`, `6k`, `6k-2`, `2k+4` (regex `^(2k|6k)\s*([+-]?\d+(\.\d+)?
 ---
 
 ## Interactions & behaviour
-- **Navigation**: bottom tabs TODAY · LIBRARY · PLAN · TREND · YOU (10px mono labels,
+- **Navigation**: bottom tabs **as shipped are TODAY · NEWS · LIBRARY · PLAN ·
+  YOU** (`src/shell/TabBar.tsx:38-44`) — TREND was replaced by NEWS in Phase 6H
+  and its charts moved onto You. The handoff's own wording, kept for the
+  record: TODAY · LIBRARY · PLAN · TREND · YOU (10px mono labels,
   16×3px accent mark above the active label). Detail/confirm/timer/log map to TODAY,
   builder to LIBRARY. Detail, confirm, log and builder have a "← BACK" link backed by a
   history stack. Tabs are **hidden** during countdown and timer.
@@ -391,14 +409,38 @@ Two configurable design props exist in the prototype: `paceTolerance` (0–3 s, 
 and `accentColor` (default `#b5341f`). Treat both as settings, not hard-coded values.
 
 ## Assets
-None. No images, no icon set, no SVG illustration — every graphic (badges, bars, calendar
-marks, ruler ticks, avatar) is a colored rectangle or text. Fonts are Google Fonts:
-Newsreader, Archivo, IBM Plex Mono. Glyphs used as icons: ↻ ▲ ▼ ◀ ▶ − + × ✓ → ‹ ›.
+**In the SCREEN designs: none.** No images, no icon set, no SVG illustration —
+every graphic (badges, bars, calendar marks, ruler ticks, avatar) is a colored
+rectangle or text. Fonts are Google Fonts: Newsreader, Archivo, IBM Plex Mono.
+Glyphs used as icons: ↻ ▲ ▼ ◀ ▶ − + × ✓ → ‹ ›.
+
+**One image does sit in this directory, and it is not a source of truth.**
+`icon-source.png` (1.8 MB) is AI-generated raster art. Opened and checked
+2026-08-28: the monitor in it is labelled **PMS**, not PM5; the Concept2
+logotype is garbled; and the arc wordmark's final glyph is ambiguous between C
+and O. The shipped app icon derived from it carries a third-party brand
+wordmark on the erg rail that App Review would reject. **Do not treat this file
+as an icon source** — redrawing the icon is a live roadmap item (Wave C).
 
 ## Files
-- `Erg Log.dc.html` — the full interactive prototype (all screens). Open in a browser;
-  the logic class at the bottom of the file contains the pace math, phase expansion,
-  suggestion engine and plan definitions.
-- `Erg Log v1 explorations.dc.html` — the earlier exploration: the same app in a dark
-  "erg monitor" treatment (1a) next to the first paper Today screen (1b). Reference only;
-  the paper direction was chosen.
+This directory holds more than the two prototypes this section used to list.
+
+- `README.md` — this document. A frozen handoff record; see the note at the top.
+- **`DEVIATIONS.md` — the CURRENT-STATE authority.** Where this README and the
+  shipped app disagree, that file wins. It is the one document here that is
+  maintained rather than frozen.
+- `Erg Log.dc.html` — the full interactive prototype (all screens). Open in a
+  browser; the logic class at the bottom of the file contains the pace math,
+  phase expansion, suggestion engine and plan definitions.
+- `Erg Log v1 explorations.dc.html` — the earlier exploration: the same app in a
+  dark "erg monitor" treatment (1a) next to the first paper Today screen (1b).
+  Reference only; the paper direction was chosen.
+- `support.js` — shared prototype runtime for the `.dc.html` files.
+- `icon-source.png` — see § Assets. Not a source of truth.
+- `baseline-onboarding/` — 11 artboards for Phase BL's three doors.
+- `builder-redesign/` — the accordion builder's own handoff (Phase 5E).
+- `handoffs/` — seven dated packets, each the design authority for the phase
+  that commissioned it and each NEWER than this README:
+  `2026-08-03-ui-fix`, `2026-08-05-connected-mode`, `2026-08-07-news-tab`,
+  `2026-08-11-connected-revamp`, `2026-08-12-post-workout`,
+  `2026-08-15-connected-v2`, `2026-08-18-avg-split-and-meters`.

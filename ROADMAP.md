@@ -697,6 +697,22 @@ Each needs erg time or a deliberate recording session.
   (`expect(typeof driver.program).toBe("function")`) against an object the test
   itself built, in the directory pinned at 100%. This is the exact pattern
   `docs/TESTING.md` §3 and §11 ban by name.
+- **Migrate `DEVIATIONS.md`'s first table to stable IDs.** The 2026-08-28 docs
+  audit found eight rows describing code that no longer matches them and about
+  fifteen "see row N" cross-references pointing at the wrong rows — some of them
+  in code comments and test names, not just in the file. **The cause is
+  structural:** rows are identified by POSITION, so every insertion invalidates
+  every reference above it. The file's SECOND table already uses stable IDs
+  (`IMP-2`, `IMP-6`) and has not rotted. A one-off renumbering rots again at the
+  next insert; the migration is the fix. The eight broken rows are listed in the
+  file's own audit note. **M**
+- **The iOS build-machine first-time setup does not exist.** `RELEASING.md` and
+  `deploy.md` pointed at each other for it; both pointers were corrected to say
+  so plainly. What is missing is everything between a fresh Mac and a working
+  `pnpm ios:release`: Xcode and command-line tools, the signing certificate and
+  provisioning profile, the App Store Connect API key, and the Google iOS OAuth
+  client. **Trigger: the next time a build Mac is set up — write it while doing
+  it.**
 - **Dead `--pain-ramp-1..5` tokens** — zero consumers anywhere
   (`theme/tokens.css:146-150`), while `docs/design/DEVIATIONS.md` and
   `app/src/index.css:1142` both assert `LogSession.tsx` is a live one. Delete
