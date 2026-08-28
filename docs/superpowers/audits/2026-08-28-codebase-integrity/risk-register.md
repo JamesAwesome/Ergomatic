@@ -21,15 +21,15 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 ### AUD-003 — The repository has no current measurement of mutation strength
 
 - Category: circular proof
-- Severity / confidence: P2 / Hypothesis
+- Severity / confidence: P3 / Confirmed
 - User impact: tests may stay green while important decisions are corrupted, allowing a wrong number, lost record, or broken recovery to ship.
 - Expected authority: a current mutation run over decision-relevant source with each survivor adjudicated; mutation establishes assertion bite, not product truth.
 - Actual behavior: `docs/TESTING.md:106-123` says there is no evidence of a run since 2026-07-29; Stryker runs unit tests only and excludes contracts, client, integration, native, and radio paths.
-- Independent disproof: Task 9 runs prioritized mutants selected from Lane A–D risk, records killed/survived/no-coverage, and separately verifies each expected value's authority. A deliberately corrupted protected decision must make its named test fail.
+- Independent disproof: Task 9 mapped each promoted candidate to the exact corruption its regression must kill. The candidate reproductions entered the missing branches while the ordinary suite stayed green; no aggregate score was needed to establish those concrete gaps.
 - Scope: `domain/**`, `server/stores/**`, `server/routes/**`, plus high-risk paths outside configured mutation scope.
 - Existing coverage gap: the old aggregate score covered only seven of the then-current domain modules and cannot describe this baseline.
-- Verification required after a fix: current scoped report and explicit dispositions for decision-relevant survivors/no-coverage paths.
-- Status: deferred to Task 9.
+- Verification required after a fix: candidate fixes carry their own documented red mutation. Refresh the aggregate report only if it becomes a real scheduled gate rather than a historical score.
+- Status: Task 9 confirmed the stale measurement, but it is not a separate product candidate. The repository already labels it stale, and candidate-specific regressions own the demonstrated user risks.
 
 ### AUD-004 — Permissive machine-summary persistence lacks an established semantic contract
 
@@ -45,18 +45,18 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Status: Tasks 6–7 found no independent installed-client field contract; the
   first consumers are mapped, but the claim remains quarantined for Task 10.
 
-### AUD-005 — Harmful import cycles may be invisible to existing gates
+### AUD-005 — No harmful production import cycle exists at this baseline
 
 - Category: circular proof
-- Severity / confidence: P2 / Hypothesis
+- Severity / confidence: P3 / Cleared
 - User impact: a cycle-sensitive initialization path could block startup or a screen only under a different entrypoint or import order while current lint, typecheck, and build remain green.
 - Expected authority: ESM initialization semantics plus the repository's declared domain/server/client and adapter-layer boundaries; Task 9 must establish the exact violated rule before promotion.
-- Actual behavior: at the baseline, package, ESLint, and TypeScript configuration contains no `madge`, dependency-cruiser, `import/no-cycle`, or equivalent graph analyser. This proves only an enforcement gap, not that a harmful cycle exists.
-- Independent disproof: run an explicit import-graph analyser over production modules, inspect every strongly connected component, and execute any affected entrypoint without importing production values as the expected result. A deliberately introduced known cycle must be reported by the probe.
+- Actual behavior: at the baseline, package, ESLint, and TypeScript configuration contains no `madge`, dependency-cruiser, `import/no-cycle`, or equivalent graph analyser. A TypeScript-AST graph over 217 production runtime modules and 489 relative value-import edges found zero strongly connected components.
+- Independent disproof: a disposable two-module runtime cycle inside the scanned graph produced exactly one SCC; after removal the same probe returned zero. Type-only and external-package edges were excluded deliberately.
 - Scope: production TypeScript/ESM imports, dynamic monitor seams, adapter boundaries, and all application/server entrypoints.
 - Existing coverage gap: lint, typecheck, tests, and build consume the current graph but do not reject a cycle merely because it exists.
-- Verification required after a fix: zero unexplained production strongly connected components and a red calibration against a disposable known cycle.
-- Status: deferred to Task 9.
+- Verification required after a fix: none at this baseline. If a persistent gate is later added, retain the disposable red calibration.
+- Status: cleared by Task 9. Missing continuous enforcement is P3 process debt, not evidence of a current architecture defect.
 
 ### AUD-007 — A shorter reprogram may leave undetected stale PM5 intervals
 
@@ -118,9 +118,9 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   or physical recording crosses it.
 - Verification required after a fix: a primary-bound limit plus boundary tests
   below/at/above it; physical evidence only if Task 12 finds it decision-relevant.
-- Status: Task 8 found no primary source or capture crossing interval 50.
-  Deferred to Task 9's factual-claim pass, then Task 12 only if still
-  ranking-relevant.
+- Status: Task 9 confirmed the cited source is silent on the required general
+  variable-interval attribute. The product consequence remains unknown, so
+  this stays quarantined for Task 12 only if it can change ranking.
 
 ### AUD-009 — Zero pace is assumed to mean no PM5 target
 
@@ -183,32 +183,6 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Status: Task 8 confirmed the two-frame capture never reached its later-frame
   interval, so retention remains unproved. Deferred to Task 12's ranking-based
   hardware decision.
-
-### AUD-016 — Monitor-run persistence failure may erase the later log door
-
-- Category: brittleness
-- Severity / confidence: P2 / Hypothesis
-- User impact: a connected session can continue in memory after its best-effort
-  storage write fails, but the later log route may have no completed monitor
-  record to save.
-- Expected authority: Lane C's active-session recovery outcome; the intended
-  behavior after monitor persistence loss is not otherwise specified.
-- Actual behavior: `saveMonitorRun` deliberately returns void and swallows both
-  storage attempts (`app/src/monitor/monitorRun.ts:449-491`), while monitor-mode
-  logging requires a stored matching completed record
-  (`app/src/session/LogSession.tsx:260-304`).
-- Independent disproof: pending a mounted connected-session write-failure probe
-  that continues through finish and the real log hand-off. It must observe the
-  user surface without treating the in-memory run as proof that storage exists.
-- Scope: connected run writers, teardown, navigation, monitor-mode gate, and
-  saved log recovery.
-- Existing coverage gap: unit tests prove best-effort swallowing and log-door
-  validation separately, not the cross-route consequence.
-- Verification required after a fix: storage failure during open, boundary,
-  finish, and teardown; then the real log door and retry/recovery outcome.
-- Status: Task 8 mapped the joined failure path but found no mounted
-  connected-session failure-through-log probe. Remains quarantined for Task 9's
-  gate/probe pass; no candidate promotion.
 
 ### AUD-017 — Ambiguous committed responses can duplicate a log and plan advance
 

@@ -328,6 +328,60 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   that ignores the boolean and restores the Today bounce.
 - Status: candidate; P1 requires fresh high-end Lane C validation.
 
+### AUD-016 — Connected storage loss leaves a finished workout outside the log door
+
+- Category: brittleness
+- Severity / confidence: P1 / Probable
+- User impact: a connected workout can keep collecting measured intervals and
+  finish normally in memory, then arrive at the Log screen with no monitor
+  record. The rower receives the manual form instead of the measured session;
+  reload and the existing recovery row have nothing to recover.
+- Expected authority: the locked offline decision says an active session
+  persists in localStorage and reload or a dropped connection never loses a
+  workout (`ROADMAP.md:47-52`). The approved series-capture design also says a
+  storage failure “must never cost the run,” but later acknowledges that the
+  smaller retry can fail and is not a guarantee
+  (`docs/superpowers/specs/2026-08-19-series-capture-design.md:62-71`). That
+  conflict leaves the desired response to a genuinely unavailable origin
+  incomplete, which is why confidence is Probable rather than Confirmed.
+- Actual behavior: at baseline
+  `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`, `saveMonitorRun` swallows a
+  failed write and returns no durability result; its comment says downstream
+  readers see the caller's in-memory copy
+  (`app/src/monitor/monitorRun.ts:449-490`). The connected Log route instead
+  calls `loadMonitorRun()` and rejects a missing record
+  (`app/src/session/LogSession.tsx:323-345`). A calibrated temporary client
+  probe built the real “Filling Low” workout, denied only
+  `MONITOR_RUN_KEY`, recorded a 2,000 m interval, and finished. The returned
+  record retained the interval and completion stamp, while both
+  `loadMonitorRun()` and the real `monitorModeRun(?from=monitor)` returned
+  `null`; the full client suite passed 150 files / 4,033 tests.
+- Independent disproof: the probe derived its workout through the real
+  compiler but supplied the storage failure and measured interval literally;
+  it observed the persisted read and log gate, not the caller's in-memory
+  object, as the downstream consequence. With the storage fault disabled, the
+  same probe failed at the expected-null assertion and printed the complete
+  stored record. An earlier fixture accidentally omitted `workoutId`; its
+  fault-off control stayed green, so that false confirmation was rejected and
+  corrected before this evidence was accepted.
+- Scope: every monitor-record writer, the hook's durability knowledge,
+  connected end navigation, Today recovery, monitor-mode Log initialization,
+  quota/private-mode/disabled-storage behavior, and trace-sacrifice retry.
+- Existing coverage gap: monitor-run tests prove swallowed writes and Log
+  tests prove the stored-record gate separately. No persistent test joins a
+  failed open/boundary/close write to the actual cross-route hand-off.
+- Smallest safe fix: make monitor persistence report durability and make the
+  connected workflow own that result through completion. The log hand-off must
+  either receive the completed in-memory record through an explicit safe
+  contract or hold a recoverable storage-error state before navigation. Do not
+  silently substitute the manual form or add a second durable store without a
+  product decision.
+- Verification required after a fix: failing cases first for storage denial at
+  open, boundary, series retry, and close; real connected finish → Log and
+  Today recovery; reload/exit behavior stated explicitly; successful storage
+  control; and a deliberate mutation restoring the void/swallow hand-off.
+- Status: candidate promoted by Task 9; fresh P1 validation remains required.
+
 ## Record contract
 
 ### AUD-### — short user-outcome statement

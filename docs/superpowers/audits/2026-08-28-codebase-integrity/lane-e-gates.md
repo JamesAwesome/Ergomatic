@@ -2,61 +2,124 @@
 
 Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
-Status: IN_PROGRESS — PASS 1 COMPLETE; biting probes remain Task 9
+Status: PASS 2 COMPLETE — semantic review pending
 
-Scope: Vitest/coverage boundaries, real/fake contracts, fixture provenance,
-PM5 recordings and fake, Playwright/design gates, mutation scope, production
-bundle exclusion, compose health, deploy rollback, import-cycle enforcement,
-and factual comments that operate as test premises.
+Lane E found that the shipped gates are broad and currently green, but they do
+not enter the fault boundaries behind any of the eight promoted candidates.
+That is incomplete evidence, not circular proof: each candidate was reproduced
+with an external fault or independently shaped input. A calibrated joined probe
+also promoted AUD-016 after proving that a connected workout can finish in
+memory while storage loss leaves the real monitor log door empty.
 
-Authorities: executable configuration and production paths at the baseline;
-PostgreSQL/HTTP/platform/protocol/design authority only where independently
-identified. Repository comments are testimony.
+## Gate map
 
-Claims tested:
+| Gate                 | Input path                                                                                      | Oracle                                                                              | Blind spot                                                                                                                           | Biting control and result                                                                                                                |
+| -------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit/client Vitest   | Three configured projects; client runs jsdom                                                    | Test-authored values and rendered/returned consequences                             | Native modules and radio adapters are excluded; normal fixtures do not deny storage or malformed successful HTTP bodies              | Task 3 passed; temporary candidate probes entered the named external faults while the other 4,032 client tests stayed green              |
+| Coverage             | V8 over configured projects                                                                     | Entry counts and repo-wide 90% thresholds                                           | A new or risky branch can be absent while aggregate coverage stays green; it says nothing about expected-value authority             | Per-file evidence is required with each fix; no aggregate score is used as candidate evidence                                            |
+| Mutation             | Unit-only Vitest over `domain/**`, routes, and stores                                           | A test fails after source is changed                                                | The surviving 2026-07-29 score covers seven then-current domain modules and excludes client, integration, native, and radio behavior | No full run: its stale aggregate could not change priority; each candidate instead names the exact corruption its regression must kill   |
+| Real store contracts | Fake and PostgreSQL implementations run one shared contract                                     | The real implementation is the contract authority declared by the suite             | Parity is one oracle, not two; ordinary JS writers cannot create every database-valid malformed JSONB value                          | AUD-013 used raw `1e1000` in real PostgreSQL and observed mounted HTTP status                                                            |
+| Playwright E2E       | Real compose stack; production Vite build with build-time fake monitor                          | Browser-visible flows and structural assertions                                     | The monitor is fake and native/radio branches remain unreachable                                                                     | Task 3 passed 420 tests; this is evidence for browser composition only                                                                   |
+| Production build     | TypeScript plus Vite                                                                            | Successful emitted artifact                                                         | A green build does not prove a module or literal is absent                                                                           | Fresh build passed: 235 modules, 578.23 kB main JS (176.26 kB gzip), with the existing >500 kB warning                                   |
+| `dist:grep`          | Fresh `app/dist`                                                                                | Five stable dev-only literals absent                                                | A green-only exclusion probe could be looking for ineffective needles                                                                | Fresh green; adding `fake transport` to a disposable emitted file made the gate fail and name it; deletion restored green                |
+| CI path selection    | Synthetic changed-path sets                                                                     | Docs-only skips; code, workflow, unknown, and every uncertainty run code jobs       | It tests the selector, not GitHub's hosted execution                                                                                 | All 15 persistent shell cases passed, including bad-SHA, empty-diff, and script-failure fail-safe cases                                  |
+| Compose readiness    | Rendered base/e2e compose plus Task 3's real stack                                              | PostgreSQL health → API `/api/health` → nginx `/api/health`                         | Configuration does not prove every future image remains healthy; the e2e fake build differs deliberately from production             | Rendered configs preserved the chain; e2e alone had `TEST_AUTH_SECRET`, `SITE_URL`, and `VITE_ENABLE_FAKE_MONITOR=1`; base/prod had none |
+| Deploy rollback      | Shell harness with fake git/Docker                                                              | Reject bad SHA/dirty tree; on unhealthy deploy restore `PREV` and invoke `up` again | Does not prove an old real image remains available or healthy on a host                                                              | All persistent cases passed, including unhealthy rollback to `PREV` and the second `up`                                                  |
+| Runtime import graph | TypeScript AST over production relative value imports, including re-exports and dynamic imports | Tarjan strongly connected components                                                | No persistent repository gate; type-only and external-package edges are intentionally outside the question                           | Disposable `a.ts ↔ b.ts` produced one SCC; removal produced 217 files, 489 edges, zero SCCs                                              |
 
-- The three Vitest projects and all coverage exclusions were re-opened from
-  `app/vitest.config.ts:6-88`.
-- Real/fake store contracts were classified as one shared parity oracle, not
-  independent confirmation (`storeContracts.ts:11-17`).
-- The E2E compose stack builds the production Vite artifact and separately
-  arms the fake through `VITE_ENABLE_FAKE_MONITOR=1`.
-- All 14 committed PM5 recording headers were enumerated: all are web captures;
-  one carries `program` metadata.
-- The production bundle gate checks five stable literals; Task 3 proved its
-  green direction at this baseline.
-- `/api/health` and compose readiness traverse DB → API → nginx; deploy rollback
-  snapshots the pre-deploy checkout HEAD.
-- The mutation record explicitly says its 2026-07-29 score is stale and Stryker
-  runs unit tests only.
-- No configured import-cycle analyser was found.
+No test, container, server, or hardware process remains from these checks. The
+bundle marker, cycle pair, and joined storage test were removed, and the product
+diff returned to empty before their evidence was accepted.
 
-Cleared probes:
+## Candidate gate independence
 
-- Baseline lint, format, typecheck, unit, client, build, dist-grep, coverage,
-  integration, and 420-test E2E gates passed in Task 3.
-- The inventory re-opened every promoted row rather than relying on the scout's
-  report or historical prose.
-- Capture-header census and configuration searches were executed directly.
+| Candidate | Existing persistent evidence                                                      | Why it misses                                                                                          | Required regression discriminator                                                                                                                               |
+| --------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AUD-002   | Hook tests mock successful arrays; list tests mock the hook with realistic titles | No successful malformed body crosses HTTP → hook → list                                                | Literal `200 {}` must render the bounded load error; deleting the array check must fail                                                                         |
+| AUD-006   | Seed sweep and display tests                                                      | No seeded workout has leading or adjacent rest; isolated tests accept the projection's deliberate drop | Independently sum accepted raw rest and require Today, Library, and TOTAL to account for it; omitting either rest must fail                                     |
+| AUD-011   | Realistic run round trips and malformed JSON tests                                | They begin after a usable `Storage` object exists and assume cleanup after 201 cannot fail             | Denied getter must leave real routes usable; selective cleanup failure after 201 must still yield one POST and visible success                                  |
+| AUD-012   | Seed concurrency integration test                                                 | It begins after migrations rather than launching two full entrypoints on an empty database             | Both processes must reach health with source-derived seed/journal counts; removing migration serialization must fail                                            |
+| AUD-013   | Mounted routes, fake/real store contracts, JSON-type cases                        | Writers use ordinary finite JS numbers; type checks do not bound the SQL cast                          | Raw PostgreSQL `1e1000` beside a healthy row must not turn the list into 500; restoring the direct cast must fail                                               |
+| AUD-014   | Mocked successful native sign-out                                                 | Coverage excludes native and no case rejects transport before Keychain wipe                            | Reject only the request and require local token deletion; moving deletion below the await must fail                                                             |
+| AUD-015   | `saveRun` unit failure plus normal Countdown fixture                              | The caller test assumes persistence succeeds and Timer reads storage on a separate route               | Selective `RUN_KEY` failure must hold a recoverable error rather than reach Today; ignoring the boolean must fail                                               |
+| AUD-016   | Monitor persistence unit cases and monitor log-gate cases separately              | One proves swallowed writes; the other receives an already-stored completed fixture                    | Deny only `MONITOR_RUN_KEY`, finish a realistic measured run, and require the log hand-off to retain a safe recovery; restoring the void/swallow path must fail |
 
-Candidates: none. Pass 1 maps evidence and unknowns; it does not issue defect
-verdicts.
+The ordinary green suites are incomplete, not self-confirming. Candidate probes
+do not import their expected outcomes from production: storage, transport, SQL,
+and response-shape cases inject literal external conditions; AUD-006 sums raw
+authored seconds; AUD-012 observes independent process and database outcomes.
 
-Unknowns:
+## AUD-016 joined-path probe
 
-- Current mutation strength and the red calibration of the bundle grep.
-- Harmful runtime import cycles, if any.
-- Native BLE/lifecycle truth, malformed-success API handling, permissive
-  machine-summary meaning, and the coverage of important E2E states.
-- Whether any test oracle shares the wrong PM5 quantity with production; Lane A
-  and Lane D must discriminate before Lane E can judge it.
+A temporary client test built the production “Filling Low” workout through
+`buildDraft` → `buildRun` → `compileProgram`, denied only writes to
+`MONITOR_RUN_KEY`, then used the real record writers to open, record a 2,000 m
+interval, and finish. The returned in-memory record retained the measurement
+and completion stamp, while `loadMonitorRun()` and
+`monitorModeRun(?from=monitor)` both returned `null`. The client suite passed
+150 files / 4,033 tests with that expected reproduction.
 
-Contradictions with the brief:
+The probe's first version accidentally passed an undefined workout ID from a
+draft shape. Disabling the injected storage failure stayed green, correctly
+invalidating that evidence: the serialized record omitted `workoutId`, so the
+loader discarded it for an unrelated reason. After the fixture used the
+literal authored ID, fault-on passed and fault-off failed at `loadMonitorRun()`
+with the complete stored record. That red calibration is why the joined result
+is accepted and the earlier apparent confirmation is not.
 
-- The E2E stack is not a development build. It is a production Vite build with
-  a specific build-time fake seam.
-- The real/fake store suites are not two independent oracles. Their own contract
-  says real behavior is the specification.
-- A green coverage gate cannot be described as native/radio coverage because
-  native modules and both radio adapters are explicitly excluded.
-- A current mutation score cannot be reported; the surviving record is stale.
+The approved series-capture design explicitly acknowledges that a second,
+smaller storage write can also fail and does not guarantee recovery
+(`2026-08-19-series-capture-design.md:63-72`). The reproduced consequence is
+therefore **Probable**, not Confirmed against a complete product authority: the
+failure is real and loses the connected log hand-off, but the desired behavior
+under a genuinely unavailable origin needs a product decision.
+
+## Artifact and operational verdicts
+
+- The E2E stack is a production Vite build with one explicit fake-monitor build
+  argument, not a development build.
+- The production artifact passed a calibrated exclusion check. Configuration
+  alone was not used to make that claim.
+- Compose renders one real readiness chain from database through nginx. Task 3
+  exercised it; Lane E did not start a redundant second stack.
+- Deploy tests prove checkout/rollback command mechanics, not real-host image
+  availability. No broader availability claim is made.
+- CI selection has persistent red-path and uncertainty-path controls. Hosted CI
+  execution remains a separate artifact, not inferred from the shell test.
+- AUD-005 is cleared at this baseline: the calibrated production graph found no
+  runtime SCC. The lack of a persistent cycle gate is P3 process debt, not a
+  harmful-cycle candidate.
+- AUD-003 is a real measurement gap but not a separate product candidate. The
+  repository already labels the score stale, and the eight concrete missing
+  regressions are more actionable than refreshing an aggregate score.
+
+## Load-bearing prose sample
+
+| Lane | Claim and needed attribute                                                             | Verdict                                                                                                                                                                  |
+| ---- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A    | The general variable-workout interval count, not Table 19's generated split count      | The source is silent on the needed attribute. AUD-008 remains P2 Hypothesis because the message rejects a rower's program, but validity of interval 51 is still unknown. |
+| B    | The `localStorage` property getter itself may throw `SecurityError`, before `getItem`  | The cited WHATWG line supports exactly the injected AUD-011 boundary.                                                                                                    |
+| C    | “Realistic fixtures” in `HistoryList` means production-shaped titles/types             | Accurate but bounded: the file mocks `useLogHistory`, so it is not an HTTP or response-shape oracle.                                                                     |
+| D    | Bluetooth LE 8.3.0 defines a 10-second connection timeout and supplies it to `connect` | Tag-pinned plugin source supports that bound only; it says nothing about callback ordering, buffering, or native delivery.                                               |
+| E    | The production deploy omits the fake-monitor build argument                            | Accurate configuration claim; only the calibrated built-artifact check establishes exclusion.                                                                            |
+
+No sampled comment, test name, or spec created an additional fix candidate.
+The unsupported “PM5 supports at most 50” claim remains quarantined because its
+primary-source mismatch is established but the device's actual general limit
+is not.
+
+## Quarantined Task 8 hypotheses
+
+- AUD-018 remains P2 Hypothesis. The two terminate captures disagree about a
+  retained partial, and neither supplies a general product rule. Replaying the
+  exact orders may describe current policy but cannot decide which PM5 outcome
+  is authoritative.
+- AUD-019 remains P2 Hypothesis. Code establishes web/native write differences
+  and an absent default acknowledgement timeout; it does not establish dropped
+  browser delivery. A lost-chunk browser control can test bounded application
+  recovery, not physical Web Bluetooth semantics.
+- AUD-008 remains P2 Hypothesis as above. A primary general-count statement or
+  physical interval-51 result is still required.
+
+No hardware work was performed. Device-only unknowns remain for Task 12, where
+they will be priced only if they can change the final ranking.
