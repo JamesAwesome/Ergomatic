@@ -3371,3 +3371,86 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   probing what the test actually rendered. The shipped test measures the
   element against ITS OWN line box, which is this pass's own lesson applied
   to its own fix.
+
+## Phase RC YAGNI triage, 2026-08-27 (an audit's own findings, re-audited)
+
+- **"Of the eight committed recordings exactly ONE carries a 0x0039, and it is
+  the only one with ZERO rest frames" (RC-9(b), and repeated verbatim in
+  `avgPaceVerdict.replay.test.ts`'s header).** FALSE as of two walks ago. A
+  census of all twelve committed recordings — `gzcat | jq` over `dir==="rx"`,
+  bucketing by characteristic — gives **four** with a 0x0039
+  (`walk-2026-08-23/keystone`, `walk-2026-08-25/rests-finished`,
+  `walk-2026-08-25/smoke-terminated`, `walk-2026-08-27/boundaries-terminated`),
+  and `rests-finished` is rest-bearing, reaches 0x0039, and won on the split
+  rather than `filled-from-summary`, so it is not tautological either. The
+  ROADMAP contradicted itself on the same page: W11's own entry already said
+  the blocker had lifted. **Technique: never take a corpus claim from prose.
+  Census the capture directory yourself, by characteristic, and print the
+  table. Corpus facts here have expiry dates and the document stating one is
+  always older than the walk that killed it.**
+
+- **"Two consumers already opted out individually, so the source is wrong"
+  (RC-36) — a code-smell argument, not a harm argument.** The genuinely wrong
+  arm (`intervalIndex === null` while an interval is current) **already has its
+  own instrument**: `driver.ts:2497` logs
+  `"has no corresponding interval in a N-interval program"`. Grepping every
+  committed capture, ring and walk README for that literal returns **zero**.
+  The other arm is deliberate, with the reason in the code
+  (`"needed there so the hero targets always show SOMETHING"`).
+  **Technique: before pricing a fix for an unobserved defect, grep for the
+  defect's OWN log line across the capture corpus. An instrument that already
+  exists and has never fired is the cheapest possible close — and this repo
+  keeps filing items whose instrument is already shipped and silent.**
+
+- **"F2b's clean sweep is VACUOUS" (RC-32) had nothing to ship.** The vacuity
+  is not a discovery: `continuity.ts`'s own doc records the decision as
+  "KEPT", and `continuity.test.ts:974` asserts `nonSuppressedPairs === 0`
+  deliberately, citing recurring failure #21 by name. **Technique: when an
+  audit reports a gate as vacuous, read the gate's own test before filing —
+  if the test already asserts the vacuity on purpose, the finding is the
+  test's, and the remedy is a capture, not a PR.**
+
+- **"The series recorder's absent-key arm rests on a false premise" (RC-35) —
+  the premise is the ITEM's, not the code's.** `seriesRecorder.ts:325-336`
+  opens with an explicit, documented ABSENT arm ("ABSENT continues the last
+  key … it never starts a register"). What is actually wrong is one adjacent
+  sentence. **Technique: when an audit says code "assumes X is present", read
+  the branch that handles X being absent before believing it. Three of this
+  audit's eight queued items were the audit reading a deliberate design as an
+  oversight.**
+
+- **"Terminate ⇒ 0x0039's avgStrokeRate reads exactly double" (RC-16), from
+  two captures.** Falsified by the third: walk-2026-08-27's terminated piece
+  reads 25 against the PM5's own screen reading 25. The suppression the item
+  asked for would have been WRONG on the newest capture, and the field is
+  rendered nowhere. **Technique: a rule inferred from two observations of the
+  same state gets re-checked against every later capture in that state before
+  it is built. Two points define a line and also define a coincidence.**
+
+- **"A different assertion failing each time means shared state or ordering"
+  (RC-19).** An inference presented as a conclusion, excluding a producer
+  nobody ruled out: vitest's default 5000 ms timeout under a combined-project
+  run, against a file posting 1 MB bodies and 14,400-sample series. Both
+  producers predict "a different test each time". **Technique: for any flake,
+  the first evidence is the FAILURE MESSAGE, not a theory. `Test timed out in
+  5000ms` and an assertion diff are one line apart and point at opposite
+  fixes.**
+
+- **Attacked and NOT broken (Phase RC's vetted ground for its close):** the
+  exit criteria at `ROADMAP.md:4759` are real, falsifiable, and four of five
+  are met with committed evidence; RC-30's mechanism is genuine (`terminate()`
+  keyed on our derived `phase`, not `frame.state`) though its ROADMAP entry
+  doubles the window — the code is 5 frames at ~500 ms in the stuck-byte case
+  only, not "~5 s at 1 Hz"; RC-13's cancel-not-drain at `driver.ts:5773-5774`
+  is exactly as described; and the C' rider at `useMonitorSession.ts:2049` is
+  real, on a close path the distance-goal suppression makes near-unreachable.
+
+- **The structural lesson, worth more than any single item.** A derivation
+  audit's output is a list of SHAPES, and shapes are hypotheses. Eight items
+  were queued "ranked by cost"; re-audited against captures and the code's own
+  instruments, **one earns a build, one is half-fixed by the PR already open,
+  and six close** — one of them (RC-31) already falsified at the erg the same
+  day. **Technique: an audit's findings get the same evidence bar as a spec's
+  premises. Ask of each: has this ever happened, and does an instrument for it
+  already exist and sit silent? Run that pass BEFORE the items enter the
+  ROADMAP, not after they have been ranked and sequenced.**
