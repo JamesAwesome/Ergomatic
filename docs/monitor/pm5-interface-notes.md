@@ -4801,8 +4801,8 @@ BLE doc p.21):**
 
 | Offset | Field                | Scale                                                                                                                                                                                                                                                                                              |
 | ------ | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0-1    | Log Entry Date         | Lo/Hi, no bit-packing format stated on this page — **UNCERTAIN**, not needed by `parseEndOfWorkoutSummary`'s field list below (walk item 1)                                                                                                                                                       |
-| 2-3    | Log Entry Time         | Lo/Hi, no bit-packing format stated on this page — **UNCERTAIN**, not needed by `parseEndOfWorkoutSummary`'s field list below (walk item 1)                                                                                                                                                       |
+| 0-1    | Log Entry Date         | Lo/Hi. **DECODED AND WALK-VERIFIED — walk item 1 is CLOSED.** The bit-packing is stated on no C2 page; it was read off the wire against the monitor's own screen (walk-2026-08-23 W3) and shipped as `parseSummaryLogStamp` (`parse.ts`): `year = 2000 + (date >> 9)`, `month = date & 0x0f`, `day = (date >> 4) & 0x1f` |
+| 2-3    | Log Entry Time         | Lo/Hi, same walk, same parser: `hours = time >> 8`, `minutes = time & 0xff`. **The wire carries NO SECONDS** — settled, not a resolution we chose |
 | 4-6    | Elapsed Time           | 0.01 sec/lsb (explicitly annotated). **Whole-workout-total reading CONFIRMED on the wire, and WORK-ONLY — see §27.1, which supersedes this row's original UNCONFIRMED flag and walk item 2.** The flag was raised by analogy to 0x0031's identically-scaled, identically-named field, which hardware walk 4 proved is PER-INTERVAL (§10 above); the analogy does not carry — `walk-2026-08-25/rests-finished-recording.jsonl.gz` reads 254.8 s against three intervals summing to exactly 254.8 s, over a program carrying 120 s of rest it excludes entirely. Pinned by `app/src/monitor/oracleCorpusReplay.test.ts` |
 | 7-9    | Distance               | 0.1 m/lsb (explicitly annotated). Same as Elapsed Time above and settled with it — 935 m against three intervals summing to 935 m, §27.1                                                                                                                                                           |
 | 10     | Average Stroke Rate    | strokes/min, whole (unannotated — §10's general rule for un-annotated fields)                                                                                                                                                                                                                       |
@@ -4820,8 +4820,8 @@ BLE doc p.21):**
 
 | Offset | Field                | Scale                                                                                                                                             |
 | ------ | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0-1    | Log Entry Date         | Lo/Hi, same field as 0x0039 offset 0-1, format **UNCERTAIN** on this page (walk item 1)                                                             |
-| 2-3    | Log Entry Time         | Lo/Hi, same field as 0x0039 offset 2-3, format **UNCERTAIN** on this page (walk item 1)                                                             |
+| 0-1    | Log Entry Date         | Lo/Hi, same field as 0x0039 offset 0-1 — DECODED, see that table and `parseSummaryLogStamp`                                                         |
+| 2-3    | Log Entry Time         | Lo/Hi, same field as 0x0039 offset 2-3 — DECODED, see that table and `parseSummaryLogStamp`                                                         |
 | 4      | Split/Interval Type    | enum. Footnote on this page, quoted: "This value will change depending on where you are in the interval when the workout is terminated. Use workout type to determine whether the intervals are time or distance intervals" — the same base ambiguity §15 #1 already flags for Split/Interval Type/Number elsewhere |
 | 5-6    | Split/Interval Size    | Lo/Hi, "(meters or seconds)" per the doc's own note — unit depends on Split/Interval Type (offset 4), whole units, no lsb scale given                |
 | 7      | Split/Interval Count   | whole; same base (0- vs 1-based) ambiguity as 0x0033 offset 3 / 0x0037 offset 17 (§10, §15 #1)                                                       |
@@ -4838,10 +4838,12 @@ subscribed for observability/enrichment only (receipt logged, `summary-half`,
 same as 0x0039) and has no dedicated parser in this task; a later task adds
 one only if the reconciliation gate ever needs one of its fields. Neither
 characteristic's Log Entry Date/Time (offsets 0-3 of both) is decoded by
-`parseEndOfWorkoutSummary` — the bit-packing format is not stated on either
-page, and this file follows its own established practice (`workoutDurationRaw`
-in `parse.ts`, §10 above) of reporting a field unscaled/omitted rather than
-guessing a format no document states.
+`parseEndOfWorkoutSummary` itself — but **that is now a division of labour,
+not an open question**: RC-2 shipped `parseSummaryLogStamp` for exactly those
+four bytes, and walk-2026-08-23 W3 verified its output against the monitor's
+own screen. The bit-packing is still stated on no C2 page; it was read off the
+wire. This paragraph originally justified LEAVING it undecoded, which is no
+longer the situation it describes.
 
 `parseEndOfWorkoutSummary` reuses `parse.ts`'s own `heartRate()` helper
 (255-and-0-both-null, D5's field-independent reasoning above) for ALL FIVE
@@ -4855,9 +4857,14 @@ this parser touches, documented sentinel or analogy alike.
 folded into that numbered runsheet since this pair has never been on this
 project's wire):
 
-1. Log Entry Date/Time's bit-packing format (0x0039 offsets 0-3, 0x003A
+1. ~~Log Entry Date/Time's bit-packing format (0x0039 offsets 0-3, 0x003A
    offsets 0-3) — irrelevant to `parseEndOfWorkoutSummary`'s current field
-   list, but any future consumer needs it decoded first.
+   list, but any future consumer needs it decoded first.~~ **CLOSED by
+   RC-2 and walk-2026-08-23 W3** — `parseSummaryLogStamp` decodes it and
+   the walk checked it against the machine's own screen. Left struck rather
+   than deleted because the "any future consumer needs it decoded first"
+   sentence is what the Concept2 logbook phase would otherwise read on its
+   first day and re-derive.
 2. Whether 0x0039's Elapsed Time/Distance are genuinely whole-workout
    cumulative totals, or could exhibit some other reset the way 0x0031's
    identically-scaled, identically-named fields surprised hardware walk 4

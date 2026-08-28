@@ -2976,6 +2976,20 @@ note's fallback wording is no longer needed.**
 close-out's own checklist item said so. The criteria themselves are
 unchanged except where each says it was rewritten or discharged.
 
+**WHAT THIS PHASE ACTUALLY BUILT, said plainly at its close (PM gate,
+2026-08-28), because the phase's own name will not say it.** Every oracle
+Phase RC shipped reads a DIFFERENT REGISTER OF THE SAME PM5 — 0x0032's
+cumulative average pace, 0x003A's Total Rest Distance, 0x0039's
+end-of-workout totals. That is a real class upgrade over the only check
+this project had before (the app against itself, and the TWD "verdict"
+that turned out to be our own accumulator compared with our own decode of
+the same odometer — RC-9c retired it for exactly that). It is NOT the
+external authority "the row Concept2 would recognise" promises: **no row
+of ours has ever been to Concept2.** RC closes having proven consistency
+inside one erg. Criterion (d) below is where that gap is discharged, and
+the successor phase carries (d)'s own sentence into its exit block on the
+day it opens.
+
 **Exit — written so it can go red.** (a) A row rowed on a real PM5 stores
 work and rest as separate quantities, and its work-only distance and time
 equal the monitor's own for the same piece; (b) the monitor's log entry
@@ -3006,9 +3020,23 @@ with a tolerance and a named population:
 > close; only a backfill touches these, and none is planned). Pre-disclosed
 > to testers at v0.23.0's item 5.
 > **(ii)** any row carrying a RECORDED null-index actual — DISTANCE/TIME
-> include it, AVG SPLIT excludes it by construction (`storedSummary.ts`,
-> "Null-index/warm-up parity DOES NOT HOLD"), ~10 s/500 m. Ongoing, affects
-> `finished` rows too, observed in zero committed rings.
+> include it, AVG SPLIT excludes it by construction, ~10 s/500 m. Ongoing,
+> affects `finished` rows too, observed in zero committed rings.
+> **CITATION CORRECTED at the PM close gate, 2026-08-28 — the exemption
+> stands, the line it pointed at did not support it.** It cited
+> `storedSummary.ts`'s "Null-index/warm-up parity DOES NOT HOLD" paragraph,
+> which sits inside **TIER B2**'s description and ends "now genuinely
+> bounded, because the `endedBy` gate above confines this branch to the
+> provably-historical population" — i.e. that paragraph says the opposite
+> of "ongoing", and reading only the heading is recurring failure 16's
+> second corollary happening inside the fix for it. The exemption is
+> nonetheless REAL, and its evidence is **TIER B1**'s own paragraph three
+> above: on any post-RC-1 `finished` monitor row, DISTANCE/TIME come from
+> RC-1's work pair, which counts a null-index actual ("with no null-index
+> or warm-up exclusion"), while AVG SPLIT comes from
+> `tierBAvgSplitSeconds(row.steps)`, which cannot see it because a
+> null-index actual never becomes a step. Two different consequences of one
+> gap, in two different tiers; (ii) is the B1 one.
 > **(iii)** tier A, where the machine's own avg pace can disagree with its
 > own totals (walk-2026-08-20, 901 vs 899).
 
@@ -3059,6 +3087,35 @@ pre-row lock (reproduced on the 2026-08-28 walk, deliberately NOT claimed
 in v0.26.0's notes). **The Concept2 logbook opens as its own phase on
 2026-08-29** — that is exit criterion (d)'s documented reason, not an
 omission.
+
+**WHERE THE SECTION'S 22 STILL-OPEN ITEMS GO (PM close gate, 2026-08-28 —
+"moves out of the phase" is not a disposal, and a section headed CLOSED
+over live items is the same pattern with a nicer label).** They stay
+written HERE, under this header, because their evidence is here and
+moving them would break every citation; the destination is the OWNER, and
+each is named:
+- **The Concept2 logbook phase (opens 2026-08-29):** the logbook
+  cross-connect itself, **RC-10** (the sandbox as a test oracle), and
+  **RC-9's live (b) verdict** — all three want the same key and the same
+  sitting.
+- **PHASE PROTO, a wire-semantics audit:** **RC-38**
+  (`OBJ_WORKOUTTYPE_T`, read one row deep) and the axis-quantity question.
+  PROTO is itself an unopened phase and stays that way until James opens
+  it.
+- **Phase LM (lifecycle):** the pre-row lock, now filed in LM's own list
+  with its walk evidence rather than living in this paragraph.
+- **The next PR that touches `app/domain/` or `app/server/`:**
+  **RC-12's** two remaining sites, **RC-7**, **RC-18** (paired with the
+  `door` column, wants the next stored-shape change).
+- **The next connected-surface PR:** **RC-17**, **RC-11**, **RC-8** (the
+  fake's contradictions), the C' rider, PR 1's residual capture-rate gap.
+- **Their own decisions, needing James, not a queue:** **RC-29** and
+  **RC-30** (both send or suppress a wire command — the triad line),
+  **RC-13** and **RC-14** (two distinct zero-fires), the
+  PARTIAL-on-an-abandoned-piece complaint, the "run it again" log-screen
+  idea, and the two remaining owed walk legs.
+No item is closed by this paragraph; it exists so that nothing here reads
+as finished because the header above it does.
 
 *Previously:* OPEN, mid-phase (updated 2026-08-24, exit-7 walk PASSED).
 The storage-spine spec (`2026-08-23-storage-spine-design.md`) is FULLY
@@ -3804,10 +3861,25 @@ that needs no erg, and it can run in a test.
       an ALL, leaving the bar and EST LEFT built partly on zeros; and
       nothing asserting `FINISH_HANDOFF_HOLD_MS > FINISH_GRACE_MS` despite
       the comment requiring it (the cheapest missing gate in the audit).
-- [ ] **RC — CROSS-CONNECT TO THE CONCEPT2 LOGBOOK. Belongs to this phase;
-      DEFERRED to Saturday by James (2026-08-27: "we also haven't
-      cross-connected to logbook yet, which should be in phase RC but can
-      wait until we have more tokens on saturday").**
+- [ ] **CROSS-CONNECT TO THE CONCEPT2 LOGBOOK — ITS OWN PHASE, OPENING
+      2026-08-29.** No longer "belongs to this phase": it is exit criterion
+      (d)'s documented reason, settled by James on 2026-08-28 ("we can open
+      the logbook Saturday").
+      **BINDING ON THE DAY THAT PHASE OPENS (PM close gate, 2026-08-28):
+      it carries exit criterion (d)'s EXACT SENTENCE into its own exit
+      block** — *"a row posted to the Concept2 sandbox comes back through
+      `export/` matching what we stored, or the reason it cannot is
+      documented."* That transcription is the receipt that makes (d) a
+      discharge rather than a deferral wearing one; without it the criterion
+      evaporates on the rename. **And the thing to say plainly there:** every
+      oracle Phase RC shipped is a different register of the SAME PM5
+      (0x0032's average pace, 0x003A's rest distance, 0x0039's totals). That
+      is a real class upgrade over checking the app against itself — it is
+      what killed the TWD mirror — but no row of ours has ever been to
+      Concept2. That is the gap this phase exists to close.
+      **The original item:** DEFERRED to Saturday by James (2026-08-27: "we
+      also haven't cross-connected to logbook yet, which should be in phase
+      RC but can wait until we have more tokens on saturday").
       Not yet scoped. Note when it is opened that RC-9's own retirement of
       the TWD mirror turned on exactly this distinction — Concept2's
       logbook stores WORK ONLY, while TWD is work plus rest-coast metres,
@@ -3880,8 +3952,22 @@ that needs no erg, and it can run in a test.
       of the app's own END button mid-piece, on both the web and native
       arms, now that PR 1's four gates make production actually listen
       for the burst on that path.
-- [ ] **Owed walk item: the pocketed-phone leg (James, 2026-08-24, tester
-      report, verbatim mechanism unconfirmed).** A tester connected,
+- [x] **WALKED 2026-08-28, leg 4 — the mechanism is no longer INFERENCE, and
+      the defect it found is now filed in Phase LM ("The pre-row lock").**
+      `docs/monitor/sessions/walk-2026-08-28/README.md:72-125`. Locked the
+      phone BEFORE the first pull: `app-lifecycle resume gap=27886ms
+      silent=true latched=true`, `resume-frames phase=ready
+      framesWhileHidden=1 rowingActive=false`, and the machine's own frame
+      putting the rower **24.7 s and 52.6 m into interval 1** while the app
+      sat at `phase=ready` with no record open. The tester's report,
+      reproduced to the frame. The same leg found RC-37's signature
+      occurring naturally after a 67 s background, and three more
+      reproductions (a `pause-declared` at 66 spm while he was rowing, TWD
+      going 52 -> 0 -> 64 m, `rowing-active-fallback` leaving
+      `rowingActive` stuck false). **Checked off at the phase close,
+      2026-08-28** — a walk item whose walk happened is the single likeliest
+      thing to leave with a closing phase.
+      **The original item, kept for the questions it asked:** A tester connected,
       programmed, reached "show me the numbers", pocketed/locked the
       phone, rowed the piece to completion, and unlocked to find the app
       still in the pre-row state with no record — END silently discarded
@@ -4355,7 +4441,11 @@ that needs no erg, and it can run in a test.
       made it blocking. **That is the whole lesson — the "flake" was a race
       whose odds any nearby edit could change, and three sessions of re-running
       it green were three sessions of not looking.**
-- [ ] **v0.24.0's notes owe the v0.17.0 correction IN FULL, and the
+- [x] **PAID — `releaseNotes.ts:98`, shipped in the 2026-08-26 notes**, and
+      it carries both falsified clauses by name ("cannot flicker at you" and
+      the phone call). Checked off at the phase close, 2026-08-28; it had
+      been done and left unchecked. **The original item:
+      v0.24.0's notes owe the v0.17.0 correction IN FULL, and the
       cause-free rule must be scoped when briefing whoever writes them.**
       Moved here at the PM re-gate because it had been living only in a dated
       design spec — a record of a decision, not a queue (RF#14's newest
@@ -6952,6 +7042,43 @@ gate.
       that reports transitions again. Until then a synthesised transition
       drives the same production handler through the same seam, which is what
       the gate needs — see `lifecycleReplay.test.ts`.
+- [ ] **THE PRE-ROW LOCK — a whole piece rowed and nothing kept. REPRODUCED
+      ON HARDWARE 2026-08-28, still unfixed, and filed here (not in RC) at
+      the RC close gate because it is a lifecycle defect, not a
+      number-meaning one.**
+      Connect, program, tap "show me the numbers", lock the phone BEFORE the
+      first pull, row, unlock. The app is still `phase=ready`, has opened no
+      record, and End silently discards the row — the never-rowed path has
+      no save door.
+      **The evidence, from `docs/monitor/sessions/walk-2026-08-28/README.md`
+      (leg 4, iPhone, v0.25.0 build 759, PRODUCTION):**
+      ```
+      app-lifecycle   resume gap=27886ms  silent=true latched=true
+      resume-frames   phase=ready  framesWhileHidden=1  rowingActive=false
+      twd-sample      machineTotal=52m at elapsed=24.71s distance=52.6m workoutState=4
+      ```
+      The machine had him 24.7 s and 52.6 m into interval 1 while we sat at
+      `ready`. **This is a tester's own report, reproduced to the frame** —
+      the same report Phase LM opened on, whose walk item Phase RC had been
+      carrying as owed and is now discharged (RC's pocketed-phone item).
+      **Deliberately NOT claimed in v0.26.0's notes**, because it is not
+      fixed.
+      **RC-37 does NOT cover it.** RC-37 catches the OTHER case the same leg
+      found — a long background where the erg drops the program — and returns
+      the rower to the workout screen. This case has the program intact and
+      the machine rowing; nothing tells us so.
+      **Three siblings from the same leg, same window, same root:** a
+      `pause-declared … d=64.2 split=297.56 spm=66` while he was rowing (the
+      freeze predicate calling a pause, and the source of the 4:57.6 split
+      and 66 spm James asked about — wire readings from the confused
+      post-unlock window, not our arithmetic); TWD going non-monotonic
+      52 -> 0 -> 64 m across three samples; and `rowing-active-fallback`
+      firing, so `rowingActive` was stuck false throughout.
+      **Recurring failure 19 is the frame to design in:** the trigger enters
+      ABOVE the transport seam, so every instrument we own is blind to it
+      unless the fix builds one. `RecordedEvent`'s `lifecycle` member and
+      `transports/replay.ts`'s lifecycle emission exist for exactly this and
+      are the starting ground. **M**
 - [ ] **LM PR 2 — correct resume**, per James's 2026-08-20 ruling ("CORRECT
       RESUME, not a background mode"). **UNBLOCKED 2026-08-26 — and it was
       blocked on an event that will never happen.** This row used to read "do
