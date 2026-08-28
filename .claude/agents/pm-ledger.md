@@ -3010,3 +3010,58 @@ this spec's close).
   comments, one operator diagnostic string, and ROADMAP. Nothing a tester
   receives. Next tag states the reason this merge needs no clause (RF#15) rather
   than passing over it in silence.
+
+## Roadmap rebalance gate, 2026-08-28 (north star = "strangers can use it")
+
+- **A phase named for a destination is not evidence the destination is
+  covered.** Phase PROD was titled "the last phase before strangers" and its 11
+  items are a SUBMISSION checklist: icon, sign-in, store metadata, audits, three
+  developer instruments. Four things a stranger actually needs were on no
+  roadmap in any form — an open sign-up policy (`ALLOWED_EMAILS` is
+  deny-by-default; `auth/signin.ts:33` returns `denied` and `SignIn.tsx:6`
+  renders the dead end), in-app account deletion, a database backup, and any
+  telemetry at all from a device we do not hold. **At any phase-open gate for a
+  phase named after an OUTCOME, enumerate the outcome's requirements
+  independently, then diff against the item list.** The phase's own items answer
+  "what did we remember", never "what does it take".
+- **A document naming a recovery mechanism is not the mechanism.**
+  `docs/RELEASING.md` says "Recovery is a DB backup, not a redeploy" for a
+  documented unrecoverable rollback. `ls scripts/` has no backup script and
+  `compose.yml:102` is a bare volume. The sentence had read as true for weeks.
+  **When a doc names an operational safety net, run the command or list the file
+  before treating the risk as covered** — the same evidence bar recurring
+  failure 13 applies to operator instructions.
+- **"No demand has been observed" in a phase's own text is a kill, not a
+  defer.** Three phases carried that exact sentence (8C, UR, and LQ's rating
+  item, which additionally pre-wrote its own failure mode: "a second rating
+  control that means almost-but-not-quite the same is worse than none"). A phase
+  that argues against itself has already been decided; leaving it "not started"
+  is filing-as-deferral with better prose. **Killed 2026-08-28 with James's
+  approval: 8C, UR, Phase 10, LQ — 11 items, no named party disappointed.**
+- **A shipped PRODUCER with no CONSUMER is unfinished work, and it outranks new
+  work.** Phase BL shipped `test_history` (v0.19.0); Phase 8B held the only read
+  path, unbuilt, so the app collects test results no rower can ever see — and
+  that is a line on the App Privacy questionnaire, not just a gap. Pairs with
+  the standing "no new phase for work that finishes an existing one". **Ask at
+  every rebalance: which stored shape has a writer and no reader?**
+- **The archive step is where RF#14 goes to scale.** 40 of 90 open items lived
+  inside CLOSED phase bodies (RC 29, LL 6, CM 3, WU 2, CS 2, 7D/BL/FF/CR 1
+  each). RC's own close-gate disposition paragraph said the items must STAY in
+  place "because their evidence is here", which directly blocked archiving that
+  body. **James ruled: open items move, and their evidence blocks move with
+  them.** A citation into `docs/history/` is correct for a settled question and
+  wrong for a live one.
+- **Counted: 90 unchecked on main (39e9430)** — up from 84 at the RC close gate
+  six days earlier, 67 at RC open, 24 on 2026-08-13. The count has never
+  reversed. Two "phases" (PS, UR) carried ZERO checkboxes.
+- **Sequencing call, a deliberate departure from the stated ranking axis:** the
+  lifecycle fix (LM's hardware-reproduced pre-row lock) ships BEFORE the front
+  door, because opening the door to strangers while a pocketed phone silently
+  discards a rowed piece is worse than opening it a week later. **When a north
+  star ranks work, say out loud which item you are ranking against it and why** —
+  an unexplained departure reads as the axis not being used.
+- **Two invisible waves back to back is a bad slate even when correctly
+  ordered.** Backups/telemetry and the developer toolbox each ship a tester
+  nothing; on a project that has cut 26 tags, that is two release windows with
+  empty notes, and it is how the invisible-but-necessary wave gets skipped. Fold
+  them into a visible wave rather than releasing them alone.
