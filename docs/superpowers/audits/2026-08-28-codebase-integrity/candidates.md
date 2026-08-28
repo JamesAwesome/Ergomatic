@@ -333,12 +333,14 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Category: brittleness
 - Severity / confidence: P1 / Probable
 - User impact: a connected workout can keep collecting measured intervals and
-  finish normally in memory, then arrive at the Log screen with no monitor
-  record. The rower receives the manual form instead of the measured session;
-  reload and the existing recovery row have nothing to recover.
+  finish normally in memory, while the next route has no monitor record. The
+  directly observed log gate returns no run; code tracing and an existing
+  gate-miss E2E establish that this selects the manual form instead of the
+  measured session. Reload and the existing recovery row have nothing to
+  recover.
 - Expected authority: the locked offline decision says an active session
   persists in localStorage and reload or a dropped connection never loses a
-  workout (`ROADMAP.md:47-52`). The approved series-capture design also says a
+  workout (`ROADMAP.md:50`). The approved series-capture design also says a
   storage failure “must never cost the run,” but later acknowledges that the
   smaller retry can fail and is not a guarantee
   (`docs/superpowers/specs/2026-08-19-series-capture-design.md:62-71`). That
@@ -355,7 +357,12 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   `MONITOR_RUN_KEY`, recorded a 2,000 m interval, and finished. The returned
   record retained the interval and completion stamp, while both
   `loadMonitorRun()` and the real `monitorModeRun(?from=monitor)` returned
-  `null`; the full client suite passed 150 files / 4,033 tests.
+  `null`; the full client suite passed 150 files / 4,033 tests. The probe did
+  not mount the Log component. `LogSession` initializes from that gate and
+  selects the manual branch (`app/src/session/LogSession.tsx:1487-1489,
+1673-1679,1916-2051`), while a persistent mismatched-record E2E separately
+  proves a gate miss renders the plain manual door
+  (`app/e2e/session.spec.ts:1472-1565`).
 - Independent disproof: the probe derived its workout through the real
   compiler but supplied the storage failure and measured interval literally;
   it observed the persisted read and log gate, not the caller's in-memory
@@ -366,7 +373,8 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   corrected before this evidence was accepted.
 - Scope: every monitor-record writer, the hook's durability knowledge,
   connected end navigation, Today recovery, monitor-mode Log initialization,
-  quota/private-mode/disabled-storage behavior, and trace-sacrifice retry.
+  selective `setItem`/quota-like write failure, and trace-sacrifice retry.
+  Denial of the storage getter belongs to AUD-011 and is not evidence here.
 - Existing coverage gap: monitor-run tests prove swallowed writes and Log
   tests prove the stored-record gate separately. No persistent test joins a
   failed open/boundary/close write to the actual cross-route hand-off.
