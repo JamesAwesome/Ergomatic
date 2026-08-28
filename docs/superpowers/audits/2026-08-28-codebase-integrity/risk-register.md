@@ -134,16 +134,19 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - User impact: effort-only intervals could display or enforce an unintended
   target even though the app presents them as untargeted effort.
 - Expected authority: Concept2's defined representation and user-visible
-  behavior for an interval without target pace. The rev. 0.27 worked examples
-  always send a real pace and do not define zero as a sentinel.
+  behavior for an individual untargeted variable interval. Rev. 0.27 examples
+  containing `0x06` use nonzero pace, while several no-target fixed/JustRow
+  examples omit `0x06`; none defines zero as a sentinel.
 - Actual behavior: at baseline, null target compiles to raw zero
   (`app/domain/monitor/pm5/commands.ts:62-68,181-202`). A 2026-08-17 physical
   program accepted zero and ran, but the evidence did not establish what the
   target field displayed or enforced.
-- Independent disproof: arm an effort-only program, observe both PM5 target
-  presentation and pace behavior, and compare them with a real-target control.
-  The probe must not infer meaning from ack acceptance, the browser fake, or the
-  app's own label; a displayed/enforced zero target must make it fail.
+- Independent disproof: arm an effort-only variable program using zero, compare
+  it with an otherwise equivalent omitted-`0x06` probe and a real-target
+  control, and observe PM5 target presentation and pace behavior. The probe
+  must not infer meaning from ack acceptance, the browser fake, or the app's
+  own label; any semantic difference from a genuinely untargeted interval must
+  make it fail.
 - Scope: effort reference resolution, compiler null target, PM5 encoder,
   connected target presentation, and rower instruction.
 - Existing coverage gap: encoder tests prove only that zero was sent; physical
@@ -152,29 +155,32 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   and a real-device effort-versus-target control.
 - Status: deferred to Task 8 and Task 12's hardware decision.
 
-### AUD-010 — Programs beyond two PM5 frames lack independent retention evidence
+### AUD-010 — Programming beyond the first PM5 frame lacks retention evidence
 
 - Category: brittleness
 - Severity / confidence: P1 / Hypothesis
 - User impact: a long workout such as Sea Smoke could arm and begin normally but
   omit or reorder late intervals that were sent only in later frames.
 - Expected authority: Concept2 multi-frame configuration retention semantics or
-  a physical trace that reaches a uniquely fingerprinted final-frame interval.
+  a physical trace that reaches a uniquely fingerprinted later-frame interval.
   The primary protocol defines frame size and command boundaries but not
   cross-frame workout transaction behavior.
 - Actual behavior: at baseline, Sea Smoke's 24 intervals are emitted locally in
   order over six ack-gated frames (`app/domain/monitor/pm5/commands.ts:235-317`,
-  `app/domain/monitor/pm5/commands.test.ts:105-185`). A physical five-interval
-  capture clears two-frame retention only. Structural verification observes
-  interval zero, so later-frame loss can still pass.
-- Independent disproof: send a long workout with a unique interval only in the
-  last frame, then reach and correlate that interval on the PM5 and app. The
+  `app/domain/monitor/pm5/commands.test.ts:105-185`). The 2026-08-17 physical
+  five-interval capture acknowledges both frames, but its only second-frame
+  interval is index 4 and the run ends after indices 0–3
+  (`docs/monitor/sessions/walk-2026-08-17/step-3-ring.json`, seq. 15–18, 54).
+  Structural verification observes interval zero, so later-frame loss can pass.
+- Independent disproof: send a workout with a unique interval only in a later
+  frame, then reach and correlate that interval on the PM5 and app. The
   expected sequence must come from the raw authored fingerprint, not
   `buildProgrammingSequence`; dropping or reordering the last frame must fail.
 - Scope: frame grouping, BLE write/ack order, PM5 configuration retention,
   structural verification, interval identity, and finish persistence.
 - Existing coverage gap: local reassembly asserts that Ergomatic emitted its
-  own output; no committed recording proves device retention beyond frame two.
+  own output; no committed recording enters an interval configured outside the
+  first frame.
 - Verification required after a fix: a final-frame physical fingerprint across
   repeated arms, plus a replayable raw trace for every observable field.
 - Status: deferred to Task 8 and Task 12's hardware decision.
