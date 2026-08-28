@@ -4138,7 +4138,9 @@ that needs no erg, and it can run in a test.
       #13's own canned-block story).
       **Trigger:** the next connected-surface phase, or the RC close-out
       derivation audit, which is looking for exactly this shape. **S**
-- [ ] **The `log-detail` screenshot is RED on main, and nothing gates it.**
+- [x] **The `log-detail` screenshot is RED on main, and nothing gates it.
+      FIXED in #207 (the fixture had drifted out of realism), and the CI
+      question RULED by James — see BOTH SETTLED below.**
       Found 2026-08-27 across three RC-24 rounds and RC-27, each time
       reported as "pre-existing, unrelated" and each time correctly so — it
       asserts a `summaryModel.ts` rest-coasting total line those diffs
@@ -4203,9 +4205,11 @@ that needs no erg, and it can run in a test.
       diff that means nothing. If that ever needs to change, the fix is to
       pin the renderer (a container used by EVERYONE, host included), not
       to add a job.
-- [ ] **RC-27 — the LIVE tab's big split shows the COASTING flywheel's split
-      during a rest, judged against the work target. BUILT, on branch
-      `rest-hero`, in review. Found 2026-08-27 while James was reviewing
+- [x] **RC-27 — the LIVE tab's big split shows the COASTING flywheel's split
+      during a rest. SHIPPED, merged as #206 on 2026-08-27 (this entry said
+      "in review" until 2026-08-27 — a stale checkbox caught while listing
+      Phase RC's open work). UNRELEASED: it merged AFTER v0.25.0's own notes
+      PR, so the next tag owes it a note. Found 2026-08-27 while James was reviewing
       RC-24's captures; deliberately kept OUT of RC-24's scope by him.**
       **CORRECTION, from RC-27's own review:** this entry's "judged against
       the work target" is WRONG for the ordinary case, and the mockup that
