@@ -3365,13 +3365,22 @@ that needs no erg, and it can run in a test.
       (`docs/monitor/sessions/walk-2026-08-26/`). Phase LM fixed the
       LIFECYCLE producer of that silence; the WATCHDOG producer is
       untouched, and no test pins the false-positive direction. **M**
-- [ ] **RC-30 — teardown can terminate a live piece.**
+- [ ] **RC-30 — teardown can terminate a live piece. DEFERRED 2026-08-27,
+      and this entry's own numbers were wrong.**
       `useMonitorSession.ts:2513-2522` sends TERMINATE keyed on our derived
-      `phase === "ready"`, not on `frame.state`. While that gate lags (a
-      stuck Inactive byte, up to ~5 s at the 1 Hz cadence) any unmount kills
-      the rower's piece on the erg. No test covers the lagging gate. **The
-      only finding in the audit that reaches out and changes the
-      machine.** **S**
+      `phase === "ready"`, not on `frame.state`.
+      **CORRECTION (YAGNI pass, 2026-08-27):** this entry said the gate lags
+      "up to ~5 s at the 1 Hz cadence". The gate's own comment
+      (`useMonitorSession.ts:1203-1210`) says 5 frames at the OBSERVED 2 Hz =
+      **~2.5 s**, half the claimed figure — and the `declared` path fires on
+      the FIRST rowing frame, so the window only opens when `rowingActive` is
+      stuck unset AND the rower unmounts inside it. Highest per-incident cost
+      in the audit (metres destroyed forever), **never observed in the
+      field**, and narrower than written.
+      **Its fix also LOSES coverage:** gating teardown on `frame.state` drops
+      DEVIATIONS row 70 (the abandoned arm — the next rower finds someone
+      else's intervals). That trade deserves its own decision, not a
+      sub-clause of a larger spec. Re-derive the trigger before building. **S**
 - [x] **RC-31 — FALSIFIED at the erg, 2026-08-27. The trigger does not
       exist. Do not build the fix.** The audit predicted the
       resting-with-no-rest-phase fallthrough fires "for a tick at every

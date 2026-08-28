@@ -3466,3 +3466,64 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   corpus filtered by the predicate's OWN guard before writing the finding. The guard is
   usually the reason the shipped code was safe, and the spec's real defect is failing to
   say the guard must stay.**
+
+## Phase RC — link-authority YAGNI pass (2026-08-27)
+
+- **CLAIM (spec outcome 1, headline): "nine LOST THE MONITOR banners in 288 s"
+  is the harm this spec fixes. FALSIFIED AS CURRENT.** Phase LM shipped
+  `decideResumeLatch` (v0.24.0) and the production ring from the NEXT day
+  (`walk-2026-08-27/lock-phone-ring.json`, v0.25.0 build 759) shows ONE latch
+  for one 39.4 s lock, with `silent=true` — the watchdog firing correctly over
+  a stream that genuinely stopped, exactly as v0.24.0's own release note
+  promised testers. **Technique: read the spec's motivating capture, then read
+  the NEWEST capture from the same directory and diff the behaviour.** A spec
+  written days after its evidence inherits a defect the fix already closed.
+  Sibling of recurring failure 16's "corpus facts have expiry dates" — this
+  time the stale fact was OUR OWN BUG, not a wire observation.
+
+- **CLAIM: relabelling `endedBy: "link-lost"` -> `"rower"` lets a saved row
+  show what was rowed. FALSE.** `isReconstructableClose` (`storedSummary.ts:472`)
+  admits only `"finished" || null`, so `"rower"` lands in FALLBACK too. The
+  relabel buys exactly TIER A eligibility, and the spec's own walk shows TIER A
+  can render SMALLER than the rower rowed (500 m vs 559.8 m). **Technique: for
+  any "this change makes X display better", find the predicate that gates the
+  display and read its literal members — not the enum, the GATE.** The spec
+  reasoned from the value's name, never from the function that reads it.
+
+- **CLAIM (RC-37): the structural mismatch is a deterministic signal, not a
+  heuristic. HELD, and verified independently of the spec.** Decoded 0x0031
+  bytes 6/14-16/17 directly out of `menu-at-ready-recording.jsonl.gz`: all
+  THREE `expectedArmedStructure` fields diverge together and hold 112
+  consecutive frames / 56.4 s. Across four healthy captures, **300 armed
+  frames, ZERO mismatches** — stronger than the 447/2 figure in circulation.
+  **Technique: decode the committed capture yourself rather than accept the
+  README's transcription; count the NEGATIVE corpus (healthy armed frames)
+  before believing a detector.** A false-positive rate is evidence; a single
+  positive observation is not.
+
+- **TECHNIQUE, general — the brittleness axis separates the cheap work from
+  the expensive work.** Ask of every mechanism: does the machine TELL us this,
+  or are we inferring it from a coincidence? Here it split the spec cleanly:
+  RC-37 compares a readback against a value we ourselves sent (deterministic);
+  `explained-quiet` infers causation from a lifecycle event near a silence,
+  over `SILENCE_THRESHOLD_MS`, whose own comment concedes *"Native's own
+  inter-frame gap distribution is UNMEASURED… necessary-and-not-sufficient
+  evidence, not proof, for the platform it exists to protect"*
+  (`liveness.ts:126`). The axis inverted the spec's own priority ranking:
+  its outcome 6 was the one worth building, its outcome 1 was a copy change.
+  **James supplied the axis** ("I don't want to invent brittle heuristics to
+  catch something that we're not told about in a deterministic way").
+
+- **TECHNIQUE — distinguish a REPORTED harm from an AUDIT-PREDICTED one before
+  ranking.** The only user-reported loss in this whole area was the pre-row
+  lock (`ROADMAP.md:6455-6474`: record never opened, row saved LOGGED BY HAND),
+  and v0.24.0 shipped its fix. RC-29 and RC-30 have never been observed in the
+  field. A spec that ranks by predicted severity and never asks "has anyone hit
+  this" will build the rare thing first.
+
+- **CORRECTION TO THE RECORD:** `ROADMAP.md`'s RC-30 entry sizes the ready-gate
+  lag at "up to ~5 s at the 1 Hz cadence". The gate's own comment
+  (`useMonitorSession.ts:1203-1210`) says 5 frames at the observed **2 Hz** =
+  ~2.5 s, and the `declared` path fires on the FIRST rowing frame, so the
+  window only opens when `rowingActive` is stuck unset. The ROADMAP number is
+  double, and its trigger is narrower than the entry implies.
