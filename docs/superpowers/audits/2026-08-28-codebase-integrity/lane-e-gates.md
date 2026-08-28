@@ -2,7 +2,7 @@
 
 Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
-Status: PASS 2 COMPLETE — semantic review pending
+Status: COMPLETE — fresh Sol-high semantic review approved after corrections
 
 Lane E found that the shipped gates are broad and currently green, but they do
 not enter the fault boundaries behind any of the eight promoted candidates.
