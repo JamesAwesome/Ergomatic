@@ -197,17 +197,23 @@ silently.
       - **No backfill exists.** `LogPatch` (`server/stores/logs.ts:222-227`)
         is thumbs/held/pain/notes only and the columns are write-once at
         create, so every row saved since v0.22.0 is permanently tier B.
-      - **Do these two BEFORE designing the fix, in order.** (1)
-        `select count(*) from session_logs where machine_work_seconds is not
-        null;` on the host — turns "never once" into a counted fact, and the
-        note correction's wording depends on whether the answer is 0 or a
-        handful. (2) A client test that mounts `LogSession` WITHOUT
-        `summaryTotals`, lands the late write, then saves: red today, needs no
-        erg and no build, and becomes the permanent gate.
-      - **The fix itself is a spec question, deliberately not decided here:**
-        re-read at save, or hold the hand-off for the burst as well as the
-        split. Different tester-visible costs — a slower hand-off, versus a
-        row that gains numbers after the screen is already up.
+      - **COUNTED ON PRODUCTION, 2026-08-28: 0 of 16.** Sixteen connected rows
+        (`device_name is not null`), and **not one** carries
+        `machine_work_seconds`. "Never once" is now a measured fact, not an
+        inference from one screenshot — so the note corrections say *never*,
+        without hedging, and there is no partial-success case to explain.
+      - **Still owed before the fix is designed:** a client test that mounts
+        `LogSession` WITHOUT `summaryTotals`, lands the late write, then
+        saves. Red today, needs no erg and no build, and becomes the permanent
+        gate.
+      - **THE SHAPE IS DECIDED (James, 2026-08-28): HOLD THE HAND-OFF for the
+        burst as well as the split.** The rejected alternative was re-reading
+        storage at save time, which keeps the navigation instant but lets a
+        row gain its numbers a moment after the screen is already up. His
+        reasoning: waiting is *more correct*, and ~0.3 s on the connected
+        screen is an acceptable price. **The spec designs the hold, not the
+        choice** — how long to wait, what happens when the burst never comes,
+        and whether the rower sees anything during it.
       - **Owed with it:** the three note corrections in the register row
         below, and a receipt entry in the hook's handler, so the one link in
         this chain with no instrument finally gets one. **M/L**

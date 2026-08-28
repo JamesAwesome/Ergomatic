@@ -628,6 +628,36 @@ often they recur.
     better-informed one losing silently, which no assertion about the new
     control will ever notice.
 
+24. **Every test seeding PAST the producer, so no gate can go red on the one
+    defect that matters.** Item 21 covers a gate that can never fail at all.
+    This is its sibling and it is harder to see: each gate CAN fail, they are
+    all green, and none of them can fail on this bug — because every one of
+    them enters the pipe downstream of the break. **Measured cost: a headline
+    feature that shipped having never once worked.**
+    `MACHINE CONFIRMED · WORK ONLY` and the PM5 verification code reached
+    **zero of sixteen** production rows (counted on the prod DB, 2026-08-28)
+    while three gates stayed green — `FromTheLog.test.tsx` mocks the API row
+    with `machineWorkSeconds: 124`, `LogSession.test.tsx` seeds a `MonitorRun`
+    already carrying `summaryTotals` before it renders, and
+    `screenshots.spec.ts` seeds the API row and says so in its own comment.
+    Two replay suites DO drive the real driver, hook and localStorage over
+    real walk bytes, and both stop at `loadMonitorRun()`. **Nothing mounted
+    the reader before the producer wrote.** The break was one line: a
+    mount-time `useState` snapshot that never re-read.
+    **The check is not "are the gates green" — it is "which test STARTS
+    upstream of the producer?"** For any A-writes-then-B-reads seam, one test
+    must begin before A and assert after B. Both halves being well tested is
+    exactly the condition that hides a broken seam.
+    **Two tells, both present here and both missed:** a test whose own name
+    explains the production symptom away as legacy (this suite had one titled
+    "renders NO block when all three machine fields are null — **the common
+    case, old rows**"), and a phase criterion verified at the wrong LAYER —
+    a walk table's column read "App stored (WIRE→record)" while the cell
+    under it cited a driver ring entry, on a build shipped the day BEFORE the
+    storage code existed. **A criterion cannot be verified on a build where
+    its code does not exist**, and "verified on hardware" means nothing until
+    the layer is named.
+
 
 ## Commands
 
