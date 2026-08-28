@@ -67,6 +67,118 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Verification required after a fix: zero unexplained production strongly connected components and a red calibration against a disposable known cycle.
 - Status: deferred to Task 9.
 
+### AUD-007 — A shorter reprogram may leave undetected stale PM5 intervals
+
+- Category: brittleness
+- Severity / confidence: P1 / Hypothesis
+- User impact: after selecting a shorter workout, a rower could continue into
+  intervals left from the previous program while Ergomatic reports that the new
+  workout armed successfully.
+- Expected authority: the selected workout's complete ordered interval sequence
+  is the product contract; full replacement on a PM5 must be established by
+  primary protocol semantics or independent physical observation, neither of
+  which Task 5 found.
+- Actual behavior: at baseline, `buildProgrammingSequence` sends only the new
+  intervals and has no documented clear/truncate operation
+  (`app/domain/monitor/pm5/commands.ts:319-359`). `verifyArmed` predicts and
+  reads only workout type plus interval-zero duration/type
+  (`app/domain/monitor/pm5/commands.ts:368-432`,
+  `app/src/monitor/driver.ts:5156-5180,5312-5343,5367-5380`). Reprogramming five
+  intervals to a shorter program with an identical first interval can therefore
+  pass the existing check without observing the tail.
+- Independent disproof: on a real PM5, program a five-interval fingerprint,
+  then a shorter same-first-interval fingerprint, and advance past the intended
+  endpoint while correlating command writes, PM5 screen, and app interval. The
+  probe must not use `expectedArmedStructure` or synthetic status frames; a
+  retained old interval must make it fail.
+- Scope: compiler, programming sequence, ack-gated driver, structural readback,
+  connected interval attribution, finish behavior, and stored actuals.
+- Existing coverage gap: the primary worked examples program one workout; the
+  physical two-frame capture does not perform long-to-short replacement; local
+  tests can prove only which bytes Ergomatic sends.
+- Verification required after a fix: long-to-short and short-to-long real-device
+  sequences with distinct late intervals, plus replayable evidence if the
+  device exposes a sufficient full-program readback.
+- Status: deferred to Task 8 and Task 12's hardware decision.
+
+### AUD-008 — The general 50-interval rejection lacks primary support
+
+- Category: hallucinated claim
+- Severity / confidence: P2 / Hypothesis
+- User impact: Ergomatic may refuse a long but valid workout and tell the rower
+  the PM5 cannot support it when the cited specification does not say that.
+- Expected authority: Concept2's ordinary variable-interval count limit. In the
+  official rev. 0.27 specification, Table 19's 50 applies to splits generated
+  by a split duration, and the separate “up to a maximum of 50 intervals” text
+  describes fixed-interval undefined-rest programming. Neither names the
+  needed attribute: the general variable-interval count.
+- Actual behavior: at baseline, `compileProgram` rejects interval 51 and states
+  “The PM5 supports at most 50” (`app/domain/monitor/program.ts:458-463`).
+- Independent disproof: obtain a primary Concept2 statement for the general
+  variable count or program a 51-interval fingerprint whose last interval is
+  unique and reach it on a PM5. The probe must not treat the code constant,
+  compile error, or byte-sized index as authority; acceptance through interval
+  51 must falsify the current message.
+- Scope: validation's 100-step ceiling, repeat expansion, PM5 compilation,
+  long-workout authoring, user error copy, and device behavior.
+- Existing coverage gap: unit tests assert the chosen constant; no cited source
+  or physical recording crosses it.
+- Verification required after a fix: a primary-bound limit plus boundary tests
+  below/at/above it; physical evidence only if Task 12 finds it decision-relevant.
+- Status: deferred to Tasks 8–9.
+
+### AUD-009 — Zero pace is assumed to mean no PM5 target
+
+- Category: hallucinated claim
+- Severity / confidence: P2 / Hypothesis
+- User impact: effort-only intervals could display or enforce an unintended
+  target even though the app presents them as untargeted effort.
+- Expected authority: Concept2's defined representation and user-visible
+  behavior for an interval without target pace. The rev. 0.27 worked examples
+  always send a real pace and do not define zero as a sentinel.
+- Actual behavior: at baseline, null target compiles to raw zero
+  (`app/domain/monitor/pm5/commands.ts:62-68,181-202`). A 2026-08-17 physical
+  program accepted zero and ran, but the evidence did not establish what the
+  target field displayed or enforced.
+- Independent disproof: arm an effort-only program, observe both PM5 target
+  presentation and pace behavior, and compare them with a real-target control.
+  The probe must not infer meaning from ack acceptance, the browser fake, or the
+  app's own label; a displayed/enforced zero target must make it fail.
+- Scope: effort reference resolution, compiler null target, PM5 encoder,
+  connected target presentation, and rower instruction.
+- Existing coverage gap: encoder tests prove only that zero was sent; physical
+  evidence proves only that the PM5 accepted the program.
+- Verification required after a fix: primary-defined sentinel/omission behavior
+  and a real-device effort-versus-target control.
+- Status: deferred to Task 8 and Task 12's hardware decision.
+
+### AUD-010 — Programs beyond two PM5 frames lack independent retention evidence
+
+- Category: brittleness
+- Severity / confidence: P1 / Hypothesis
+- User impact: a long workout such as Sea Smoke could arm and begin normally but
+  omit or reorder late intervals that were sent only in later frames.
+- Expected authority: Concept2 multi-frame configuration retention semantics or
+  a physical trace that reaches a uniquely fingerprinted final-frame interval.
+  The primary protocol defines frame size and command boundaries but not
+  cross-frame workout transaction behavior.
+- Actual behavior: at baseline, Sea Smoke's 24 intervals are emitted locally in
+  order over six ack-gated frames (`app/domain/monitor/pm5/commands.ts:235-317`,
+  `app/domain/monitor/pm5/commands.test.ts:105-185`). A physical five-interval
+  capture clears two-frame retention only. Structural verification observes
+  interval zero, so later-frame loss can still pass.
+- Independent disproof: send a long workout with a unique interval only in the
+  last frame, then reach and correlate that interval on the PM5 and app. The
+  expected sequence must come from the raw authored fingerprint, not
+  `buildProgrammingSequence`; dropping or reordering the last frame must fail.
+- Scope: frame grouping, BLE write/ack order, PM5 configuration retention,
+  structural verification, interval identity, and finish persistence.
+- Existing coverage gap: local reassembly asserts that Ergomatic emitted its
+  own output; no committed recording proves device retention beyond frame two.
+- Verification required after a fix: a final-frame physical fingerprint across
+  repeated arms, plus a replayable raw trace for every observable field.
+- Status: deferred to Task 8 and Task 12's hardware decision.
+
 `Smallest safe fix` is forbidden here until a risk reaches Confirmed or Probable confidence.
 
 ## Record contract
