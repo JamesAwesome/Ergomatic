@@ -146,8 +146,23 @@ describe("MonitorEvent", () => {
   });
 });
 
+// THE COMPILER IS THE ASSERTION IN BOTH BLOCKS BELOW, not `expect`.
+//
+// They used to end in `expect(typeof driver.program).toBe("function")` and
+// nine siblings — each one checking an object literal the test itself had
+// just written with `program: async () => {}` on the line above. That passes
+// whether or not the interface still declares the member, so it asserted the
+// FIXTURE and never the TYPE. It is the pattern docs/TESTING.md §3 and §11
+// ban by name, and it was living in the one directory pinned at 100%.
+//
+// `@ts-expect-error` is the version that can fail: if the surface it pins
+// stops being an error, tsc reports the directive as unused and
+// `pnpm typecheck` goes red. The idiom, and the reasoning for preferring it
+// to a runtime check, come from `src/monitor/connectedAxes.test.ts`'s own
+// tenth-phase pin.
+
 describe("MonitorDriver", () => {
-  it("has no start() — program()/terminate()/events/reconcile()/disconnect only", () => {
+  it("requires program/terminate/events/reconcile/disconnect, and rejects start()", () => {
     const driver: MonitorDriver = {
       capabilities: {
         canProgram: true,
@@ -158,21 +173,38 @@ describe("MonitorDriver", () => {
       program: async () => {},
       terminate: async () => {},
       events: () => () => {},
+      // Task 7 (CR2 spec 2a): the reconcile step teardown calls BEFORE it
+      // unsubscribes, so a still-pending summary-gate deadline reaches a
+      // live listener instead of an empty one.
       reconcile: () => {},
       disconnect: async () => {},
     };
-    expect("start" in driver).toBe(false);
-    expect(typeof driver.program).toBe("function");
-    expect(typeof driver.terminate).toBe("function");
-    // Task 7 (CR2 spec 2a): the reconcile step teardown calls BEFORE it
-    // unsubscribes, so a still-pending summary-gate deadline reaches a
-    // live listener instead of an empty one.
-    expect(typeof driver.reconcile).toBe("function");
+
+    // `reconcile` is the member that matters most here: it arrived late, and
+    // making it optional would silently reinstate the teardown-ordering bug
+    // the comment above records. Dropping it must not type-check.
+    // @ts-expect-error — `reconcile` is missing, so this is not a MonitorDriver
+    const missingReconcile: MonitorDriver = {
+      capabilities: driver.capabilities,
+      program: driver.program,
+      terminate: driver.terminate,
+      events: driver.events,
+      disconnect: driver.disconnect,
+    };
+
+    // A driver is programmed and terminated, never started. Excess-property
+    // checking on a fresh literal is what rejects `start`.
+    // @ts-expect-error — `start` is not a member of MonitorDriver
+    const withStart: MonitorDriver = { ...driver, start: async () => {} };
+
+    // The two bindings exist only to carry their directives; referencing them
+    // keeps no-unused-vars quiet without a second suppression.
+    expect([missingReconcile, withStart]).toHaveLength(2);
   });
 });
 
 describe("Transport / DiscoveredMonitor", () => {
-  it("a minimal implementation satisfies the shape", () => {
+  it("requires all six transport methods, and a DiscoveredMonitor carries id and name", () => {
     const discovered: DiscoveredMonitor = { id: "device-1", name: "PM5 12345" };
     const transport: Transport = {
       scan: async () => [discovered],
@@ -182,8 +214,24 @@ describe("Transport / DiscoveredMonitor", () => {
       disconnect: async () => {},
       onDisconnect: () => () => {},
     };
-    expect(typeof transport.scan).toBe("function");
-    expect(typeof transport.subscribe).toBe("function");
-    expect(typeof transport.onDisconnect).toBe("function");
+
+    // `onDisconnect` is the one worth pinning: it is the seam every
+    // link-loss path in the app hangs off, and an optional one would let a
+    // transport ship that can never report a drop.
+    // @ts-expect-error — `onDisconnect` is missing, so this is not a Transport
+    const missingOnDisconnect: Transport = {
+      scan: transport.scan,
+      connect: transport.connect,
+      write: transport.write,
+      subscribe: transport.subscribe,
+      disconnect: transport.disconnect,
+    };
+
+    // Both fields of a DiscoveredMonitor are required — an id with no name
+    // is what the picker would render as a blank row.
+    // @ts-expect-error — `name` is missing, so this is not a DiscoveredMonitor
+    const nameless: DiscoveredMonitor = { id: "device-2" };
+
+    expect([missingOnDisconnect, nameless]).toHaveLength(2);
   });
 });
