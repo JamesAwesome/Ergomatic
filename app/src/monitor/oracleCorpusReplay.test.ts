@@ -1,11 +1,31 @@
-// PHASE RC CLOSE-OUT — THE ORACLE CORPUS. Zero product code: every
-// committed wire recording this repo holds is replayed through the real
+// PHASE RC CLOSE-OUT — THE ORACLE CORPUS. Zero product code: ten of the
+// fourteen committed wire recordings are replayed through the real
 // `createPm5Driver`, and the two oracles RC-9 shipped are asserted on each
 // one — either the verdict and its numbers, or the exact reason it refused
 // to compare. Until now both oracles were pinned on ONE capture each
 // (`avgPaceVerdict.replay.test.ts`'s session-2, `driver.test.ts:11443`'s
 // synthetic 2-interval program), and everything else we know about them
 // came from reading a ring by hand after a walk.
+//
+// THE FOUR RECORDINGS THIS FILE DOES NOT REPLAY, and why — counted with
+// `find docs/monitor/sessions -name "*.jsonl*"`, not asserted (the exit
+// pass caught an earlier version of this header claiming "every committed
+// recording", which was 8 of 14; a coverage headline is a countable claim
+// and this is the count):
+//   - `walk-2026-08-16/session-2-wu-4unequal.jsonl` — replayed already, by
+//     `avgPaceVerdict.replay.test.ts`, which is RC-9a's own flagship
+//     assertion. Replaying it here too would duplicate, not extend.
+//   - `walk-2026-08-17/step-1-...` — carries ZERO rx frames. Nothing to
+//     replay.
+//   - `walk-2026-08-17/step-3-...` — the run reaches 2 of its 5 programmed
+//     intervals, so no oracle can speak. It is the ONLY committed capture
+//     whose header carries a `program` object outright, and the only one
+//     carrying a legacy `type: "warmup"` interval — the population
+//     `recordAvgPaceVerdict`'s own doc comment calls unreachable
+//     post-Phase-WU. Worth a test the day someone wants that arm
+//     exercised; it cannot be exercised from this capture.
+//   - `walk-2026-08-17/step-4-...` — no boundary is ever recorded, so
+//     there is no "our side" to compare.
 //
 // WHAT EACH ORACLE MEASURES, stated before any of it is trusted (recurring
 // failure #11's second half — "an oracle that shares your definition is a
@@ -293,7 +313,41 @@ const REST_BOUNDARY_PROGRAM: WorkoutProgram = {
   ],
 };
 
+/** BOTH `walk-2026-08-16/session-1-keystone-2x250r0.jsonl` and
+ *  `walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl` — added at
+ *  the exit pass, which found them omitted from a corpus whose header
+ *  claimed to hold everything. Their `ce060021` programming frames are
+ *  BYTE-IDENTICAL to each other (seq 14-17 of both), decoded here the same
+ *  way as `REST_BOUNDARY_PROGRAM`: two slots of
+ *  `03 05 80 00 00 00 fa` = duration id DISTANCE / 250, `04 02 00 00` =
+ *  rest 0 on both, `06 04 00 00 32 64` = 12900 centiseconds = 129.0 s/500 m.
+ *  Note this is NOT `KEYSTONE_PROGRAM` above — same 2x250 r0 shape, a
+ *  different target pace (129.0 against 122.5), which is why it is its own
+ *  constant rather than a reuse. */
+const KEYSTONE_2X250_R0_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "distance",
+      value: 250,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 250,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+  ],
+};
+
 const RESTS_FINISHED = "walk-2026-08-25/rests-finished-recording.jsonl.gz";
+const SESSION_1_KEYSTONE = "walk-2026-08-16/session-1-keystone-2x250r0.jsonl";
+const STEP_2 = "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl";
 const SMOKE_TERMINATED = "walk-2026-08-25/smoke-terminated-recording.jsonl.gz";
 const BOUNDARIES_TERMINATED =
   "walk-2026-08-27/boundaries-terminated-recording.jsonl.gz";
@@ -503,6 +557,39 @@ describe("the two shipped oracles, replayed across every committed capture (Phas
     expect(rest[0]).toContain("was not yet recorded when 0x003A arrived");
   });
 
+  it(`${SESSION_1_KEYSTONE}: the oldest capture in the corpus still agrees — 0x0032 138.09 vs our 137.90 s/500m`, async () => {
+    const outcome = await replayThroughDriver(
+      SESSION_1_KEYSTONE,
+      KEYSTONE_2X250_R0_PROGRAM,
+    );
+    expect(outcome.divergences).toStrictEqual([]);
+
+    const avg = detailsOf(outcome, "avg-pace-verdict");
+    expect(avg).toHaveLength(1);
+    expect(avg[0]).toContain("machine(0x0032)=138.09s/500m");
+    expect(avg[0]).toContain("ours=137.90s/500m");
+    expect(avg[0]).toContain("agree");
+
+    // No 0x003A rx frame in this capture (it predates the subscription),
+    // so the rest oracle stays silent rather than inventing a zero.
+    expect(detailsOf(outcome, "rest-distance-verdict")).toStrictEqual([]);
+  });
+
+  it(`${STEP_2}: the same program a day later — 0x0032 138.92 vs our 139.00 s/500m`, async () => {
+    const outcome = await replayThroughDriver(
+      STEP_2,
+      KEYSTONE_2X250_R0_PROGRAM,
+    );
+    expect(outcome.divergences).toStrictEqual([]);
+
+    const avg = detailsOf(outcome, "avg-pace-verdict");
+    expect(avg).toHaveLength(1);
+    expect(avg[0]).toContain("machine(0x0032)=138.92s/500m");
+    expect(avg[0]).toContain("ours=139.00s/500m");
+    expect(avg[0]).toContain("agree");
+    expect(detailsOf(outcome, "rest-distance-verdict")).toStrictEqual([]);
+  });
+
   it(`${MENU_AT_READY}: armed and abandoned without a stroke — neither oracle speaks at all`, async () => {
     const outcome = await replayThroughDriver(
       MENU_AT_READY,
@@ -524,7 +611,15 @@ describe("the two shipped oracles, replayed across every committed capture (Phas
     // EXACTLY still catches a mis-transcribed program — that would produce
     // a different or an additional entry, and the shortened timeout does
     // not change which barriers match, only how long the one that cannot
-    // waits.
+    // waits. VERIFIED at the exit pass by replaying both captures at 250 /
+    // 500 / 2000 / 4000 ms: byte-identical divergence sets at 16x the
+    // timeout, and both pinned barriers are the LAST `tx` in their capture,
+    // so a timed-out barrier cannot cascade into a mismatch on the next.
+    // Worth knowing while reading this: `tx#839` is not the last EVENT —
+    // the 0x0039 (seq 844) and 0x003A (seq 845) that drive both oracles
+    // arrive AFTER it, so everything this test and the RC-9(b) block assert
+    // about this capture is downstream of that barrier releasing by
+    // timeout.
     const outcome = await replayThroughDriver(
       REST_BOUNDARY,
       REST_BOUNDARY_PROGRAM,
@@ -567,8 +662,22 @@ describe("RC-9(b) — 0x0039's own end-of-workout totals against the sum of the 
   // recorded 0x0039 bytes, ours by summing the `intervalComplete` events
   // this driver emitted from 0x0037/0x0038. Different registers, same
   // quantity — work only, rest excluded — which is exactly what makes the
-  // agreement mean something and is itself asserted below, since a
-  // rest-INCLUSIVE 0x0039 would read `recorded + programmed rest`.
+  // agreement mean something and is itself asserted below (first in each
+  // case, so it is the assertion that reports), since a rest-INCLUSIVE
+  // 0x0039 would read `recorded + the rest actually taken`.
+  //
+  // ONE RESIDUAL MIRROR PATH, named here because the guard against it is
+  // not the one the code makes obvious (exit pass). `sumRecordedActuals`
+  // excludes `index === null` — but a `deriveFinalIntervalFromSummary`
+  // FILL carries a REAL index and would be counted, which would be
+  // 0x0039 against 0x0039. It never happens on these four captures, and
+  // what prevents it is `finalFilledFromSummary`'s ORDERING rather than
+  // the `fromSummary` count: `rests-finished` asserts `split-won`
+  // directly (the split stayed authoritative); `boundaries-terminated`
+  // and `rest-boundary` assert "never recorded", a branch reached only
+  // AFTER the fill check; and `keystone`'s protection lives in the other
+  // `describe`, where its avg-pace verdict reads `agree` — impossible if
+  // the fill had fired, since that suppresses.
 
   it(`${RESTS_FINISHED}: 254.8 s / 935 m on both sides, across a program carrying 120 s of rest`, async () => {
     const outcome = await replayThroughDriver(
@@ -592,14 +701,19 @@ describe("RC-9(b) — 0x0039's own end-of-workout totals against the sum of the 
     // No summary-derived actual on this run at all, so neither side of the
     // comparison touched 0x0039 twice.
     expect(ours.fromSummary).toBe(0);
+    // REST-EXCLUSIVITY FIRST, deliberately (exit pass, finding I-2): this
+    // is the assertion carrying the block's headline claim, and running it
+    // ahead of the equalities is what makes it the one that REPORTS when a
+    // rest-inclusive 0x0039 is simulated. All three intervals completed, so
+    // both programmed 60 s rests actually elapsed; a rest-inclusive reading
+    // would be 374.8 s against this bound's 373.8. (Programmed and taken
+    // coincide here; where they do not, the bound uses TAKEN — see the
+    // rest-boundary case.)
+    expect(machine.elapsedSeconds).toBeLessThan(ours.seconds + 120 - 1);
     expect(machine.elapsedSeconds).toBeCloseTo(ours.seconds, 1);
     expect(machine.meters).toBeCloseTo(ours.meters, 1);
     expect(machine.elapsedSeconds).toBe(254.8);
     expect(machine.meters).toBe(935);
-    // Rest-EXCLUSIVE, stated as a falsifiable difference rather than left
-    // implicit: this program carried 120 s of programmed rest, and the
-    // machine's own elapsed is nowhere near the rest-inclusive figure.
-    expect(machine.elapsedSeconds).toBeLessThan(ours.seconds + 120 - 1);
   });
 
   it(`${BOUNDARIES_TERMINATED}: 132.5 s / 500 m on both sides — and the 59.8 m partial the rower rowed into interval 3 is in NEITHER`, async () => {
@@ -614,13 +728,15 @@ describe("RC-9(b) — 0x0039's own end-of-workout totals against the sum of the 
     const ours = sumRecordedActuals(outcome);
     expect(ours.count).toBe(2);
     expect(ours.fromSummary).toBe(0);
+    // Rest-exclusivity first, same reason as above. One 60 s rest was
+    // programmed and taken (after interval 1 only).
+    expect(machine.elapsedSeconds).toBeLessThan(ours.seconds + 60 - 1);
     expect(machine.elapsedSeconds).toBeCloseTo(ours.seconds, 1);
     expect(machine.meters).toBeCloseTo(ours.meters, 1);
-    expect(machine.meters).toBe(500);
     // 500 m is intervals 1 and 2 exactly (250 + 250); the partial third
     // interval appears on neither side, which is walk-2026-08-27's own
     // finding 7 reproduced off the bytes.
-    expect(machine.elapsedSeconds).toBeLessThan(ours.seconds + 60 - 1);
+    expect(machine.meters).toBe(500);
   });
 
   it(`${REST_BOUNDARY}: 60 s / 198 m against our 60 s / 197 m — one metre apart, the corpus's widest 0x0039 gap`, async () => {
@@ -636,14 +752,22 @@ describe("RC-9(b) — 0x0039's own end-of-workout totals against the sum of the 
     const ours = sumRecordedActuals(outcome);
     expect(ours.count).toBe(1);
     expect(ours.fromSummary).toBe(0);
+    // Rest-exclusivity first, same reason as above, and see the bound's own
+    // note below for why it is 60 and not 120.
+    expect(machine.elapsedSeconds).toBeLessThan(ours.seconds + 60 - 1);
     expect(machine.elapsedSeconds).toBe(60);
     expect(ours.seconds).toBe(60);
     expect(machine.meters).toBe(198);
     expect(ours.meters).toBe(197);
     expect(Math.abs(machine.meters - ours.meters)).toBeLessThanOrEqual(1);
-    // 120 s of programmed rest, one completed interval: rest-exclusive
-    // again, and this is the capture whose absence RC-9(b) was queued on.
-    expect(machine.elapsedSeconds).toBeLessThan(ours.seconds + 120 - 1);
+    // THE BOUND ABOVE IS THE REST ACTUALLY TAKEN, not the program's total.
+    // CORRECTED at the exit pass, which found the earlier version vacuous:
+    // this run ended in interval 2, so exactly ONE of the two programmed
+    // 60 s rests elapsed (the walk's own trace: interval 1 ends t=76.49,
+    // interval 2 begins t=136.70 — 60.2 s). A rest-INCLUSIVE 0x0039 would
+    // therefore have read ~120.2 s here, which clears a 120 s-based bound
+    // comfortably and would have PASSED. Against the rest actually taken it
+    // does not.
   });
 
   it(`${KEYSTONE}: 138.7 s / 500 m against our 138.8 s / 500 m on an r0 program`, async () => {

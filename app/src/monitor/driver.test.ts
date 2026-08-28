@@ -10224,11 +10224,13 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(detail).toContain("filled-from-summary");
     expect(detail).toContain("360s");
     expect(detail).toContain("This program's own rest totals 120s");
-    // And the clause spells out the losing answer's own consequence: under
-    // a rest-counting 0x0039 the true final interval is 360 - 120 = 240s,
-    // which is this piece's programmed work exactly. The reader compares a
-    // printed number against the program instead of doing the subtraction.
-    expect(detail).toContain("the true final interval would read 240s");
+    // And the clause spells out the losing answer's own consequence as an
+    // UPPER BOUND on the error, naming the derived figure it applies to.
+    // It is deliberately not a point value: `programmedRestSeconds` counts
+    // the final interval's own trailing rest, which never elapses, so a
+    // subtraction would under-state the answer and can print a negative
+    // duration on a real seeded shape (exit pass, finding M-1).
+    expect(detail).toContain("this 360s would be too long by up to that much");
   });
 
   it("A REST-FREE MULTI-INTERVAL PROGRAM says so: with no rest to mis-count, the entry states that instead of a warning it cannot justify", async () => {
@@ -11503,6 +11505,48 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
     expect(entries[0]!.detail).toContain("ours=150.00s/500m");
     expect(entries[0]!.detail).toContain("delta=0.00s");
     expect(entries[0]!.detail).toContain("agree");
+  });
+
+  it("DIFFERS, naming both numbers, when the machine's own average disagrees with our quotient beyond the 1.0s band — the alarm arm, which nothing asserted before", async () => {
+    // Added at Phase RC's antagonist exit pass (finding M-2): a repo-wide
+    // grep for `toContain("DIFFER")` returned exactly ONE hit, and it was
+    // the REST-distance oracle. `recordAvgPaceVerdict`'s false arm had no
+    // positive assertion anywhere — the corpus replay pins only `agree`
+    // and `suppressed`, because no committed capture disagrees. A band
+    // that has never been seen to bite is the shape recurring failure 21
+    // exists to refuse, even when a mutation shows it can.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    // The machine says 160.00 s/500m; our own single actual (60s/200m)
+    // quotients to 150.00. A 10s gap — the lost-interval shape, ten times
+    // the band, not noise.
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(160.0));
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+
+    const entries = avgPaceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).not.toContain("suppressed");
+    expect(entries[0]!.detail).toContain("machine(0x0032)=160.00s/500m");
+    expect(entries[0]!.detail).toContain("ours=150.00s/500m");
+    expect(entries[0]!.detail).toContain("delta=10.00s");
+    expect(entries[0]!.detail).toContain("DIFFER");
+    expect(entries[0]!.detail).not.toContain("agree");
+    // And it names the band it judged against, so a walk reading this line
+    // knows what "DIFFER" cost rather than only that it fired.
+    expect(entries[0]!.detail).toContain("band 1.0s");
   });
 
   it("suppresses, naming the reason, when a recorded actual measured under MIN_MEASURABLE_ELAPSED_SECONDS — mirrors summaryModel.ts's monitorAvgSplit exclusion", async () => {

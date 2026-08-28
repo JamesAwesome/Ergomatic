@@ -3934,12 +3934,23 @@ export function createPm5Driver(
       // THE REST NUMBER IS PART OF THE ANSWER, not decoration. It used to
       // print as an UNVERIFIED PREMISE because nothing on the wire had
       // shown whether 0x0039 counts rest; §27.1 settled that it does not
-      // (this function's own doc comment, premise 2), so the entry now
-      // states the same number as the CHECK a walk can run in one
-      // subtraction rather than as a caveat on the result.
+      // (this function's own doc comment, premise 2), so the entry states
+      // the same number as the CHECK a walk can run rather than as a caveat
+      // on the result.
+      //
+      // AN UPPER BOUND, NOT A POINT VALUE, and the distinction is load-
+      // bearing (exit pass, finding M-1). An earlier version of this string
+      // printed `elapsedSeconds - programmedRestSeconds` as "the true final
+      // interval". `programmedRestSeconds` reduces over EVERY interval's
+      // `restSeconds`, including the final interval's own trailing rest,
+      // which by construction never elapses — and 161 of 300 seeded
+      // workouts carry one (`recordRestDistanceVerdict`'s own note above,
+      // citing `domain/monitor/program.ts:281-286`). On `rests-finished`'s
+      // committed shape that subtraction prints -60s: a negative duration,
+      // in a diagnostic whose whole job is to be read at an erg.
       how: `0x0039's totals (${summary.elapsedSeconds}s/${summary.meters}m) MINUS ${priors.length} recorded prior interval(s) (${priorElapsed}s/${priorMeters}m) = ${elapsedSeconds}s/${distanceMeters}m${
         programmedRestSeconds > 0
-          ? `. Both sides are work-only (interface-notes §27.1, settled on the wire 2026-08-25), so this subtraction is like-for-like. This program's own rest totals ${programmedRestSeconds}s: on a machine where §27.1 did NOT hold this elapsed would be that much too long, i.e. the true final interval would read ${elapsedSeconds - programmedRestSeconds}s, and no guard here could tell`
+          ? `. Both sides are work-only (interface-notes §27.1, settled on the wire 2026-08-25), so this subtraction is like-for-like. This program's own rest totals ${programmedRestSeconds}s, of which the final interval's own trailing rest never elapses: on a machine where §27.1 did NOT hold, this ${elapsedSeconds}s would be too long by up to that much and no guard here could tell`
           : ". This program has no programmed rest, so the work-only question (interface-notes §27.1) cannot bite on this run either way"
       }`,
     };

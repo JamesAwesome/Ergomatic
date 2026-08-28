@@ -3054,16 +3054,55 @@ He photographed five consecutive stored rows spanning the window — Ground Fog
 | Ground Fog | 1680 s | 6192 m | 2:15.7 | 2:15.7 | 0.0 |
 
 Worst case **0.1 s/500 m**, an order of magnitude inside the tolerance; the
-exempt cohort would be off by ~26 s. **Second, independent confirmation in the
-same photographs:** every row carries a `plus N m coasting in rest` clause,
-which is precisely what an incomplete close CANNOT have (it keeps the fused
-headline and gains no rest line) — so all five are complete closes rendering
-work-only heroes. **No user-facing note is owed**, because the cohort is
-empty.
+exempt cohort would be off by ~26 s.
 
-**(d) DISCHARGED BY THE DOCUMENTED REASON, 2026-08-28 (James: "we can open
-the logbook Saturday").** The criterion's own wording permits this: *"or the
-reason it cannot is documented."* The reason: **the Concept2 logbook
+**THE TOLERANCE IS DISTANCE-DEPENDENT, AND EVERY VERIFYING ROW IS LONG
+(antagonist exit pass, 2026-08-28 — recorded on the criterion rather than
+left for the next reader to hit).** 1.0 s/500 m is a RATE, but the rounding
+noise it absorbs scales as `500 / distance`: one second of displayed-time
+rounding moves the implied split by 0.076-0.14 s/500 m on the five rows
+above (3500-6574 m), by **1.0 s/500 m on a 500 m row**, and by **2.0 on a
+250 m row** — the keystone shape this phase rows constantly. So the
+criterion has only ever been exercised where its own tolerance is loose by
+tenfold, and on a short row it can go red on arithmetic rounding with
+nothing wrong. **The criterion therefore applies to stored rows of 1000 m
+or more**, where one second of rounding stays under 0.5 s/500 m; a shorter
+row needs the tolerance restated as a function of its own distance before
+it can be judged by this clause. Naming the bound is the point — an
+unstated one would have been discovered by a red build on a keystone. **AND THE ORDER OF THESE TWO IS BACKWARDS — corrected at the exit pass,
+2026-08-28.** The load-bearing evidence is not the table; it is that every
+photographed row carries a `plus N m coasting in rest` clause, which is
+precisely what an incomplete close CANNOT have. The table alone cannot
+exclude the cohort, because the criterion's own figure for population (i)
+is *"up to ~26 s/500 m"* — an UPPER bound, so a population-(i) row with
+little rest coast would reconcile to 0.1 too.
+**Why the coasting clause does the work, traced through two files (nobody
+had written this down, and it is the reason to believe the row):**
+`monitorRun.ts`'s writer refuses RC-1's four fields for any `endedBy` other
+than `"finished"` ("no attempt beats no number"), so `storedSummary.ts`'s
+`buildStoredRest` rung 1 cannot fire on an incomplete close; and rung 2 is
+gated on `isReconstructableClose`, which admits only `"finished"` or
+`null`. A rest clause on the row therefore PROVES a complete close. All
+five are complete closes rendering work-only heroes. **No user-facing note
+is owed**, because the cohort is empty.
+
+**(d) CARRIED FORWARD — corrected from "DISCHARGED" at the antagonist exit
+pass, 2026-08-28, and the correction is the honest word.** The clause reads
+*"or the reason it **cannot** is documented"*, and what was offered was a
+reason it **was not done**: "it deserves its own phase", quoted beside
+James's *"we can open the logbook Saturday"* — which is affirmative evidence
+that it CAN be. Scheduling is not impossibility, and this is the only
+criterion in the block that reaches outside our own definitions, so
+retiring it by rename would be the most expensive place in the record to be
+loose with a word.
+**What makes CARRIED FORWARD real rather than a nicer label for the same
+thing:** the receiving phase carries THIS SENTENCE into its own exit block
+on the day it opens — *"a row posted to the Concept2 sandbox comes back
+through `export/` matching what we stored, or the reason it cannot is
+documented"* — and that requirement is written into the logbook item below,
+not just into this paragraph. The criterion survives the rename or the
+close was not honest.
+**Why it is carried rather than held:** **the Concept2 logbook
 cross-connect is real work that deserves its own phase, not the last item
 holding a phase open.** It is the first oracle OUTSIDE our own definitions —
 Concept2 stores work only, so agreement there means something that agreeing
@@ -3484,7 +3523,13 @@ that needs no erg, and it can run in a test.
       recording that carries a program is replayed through the real
       `createPm5Driver`, and both shipped oracles are asserted on each one
       — the verdict and its numbers, or the exact reason it refused to
-      compare. Eight captures, thirteen assertions, zero product code.
+      compare. TEN of the fourteen committed recordings, fifteen cases,
+      zero product code — and the four it leaves out are named in the file
+      with the reason for each (an earlier version of its header claimed
+      "every committed recording" and was caught by the exit pass at 8 of
+      14; two of the six then-missing captures turned out to replay clean
+      and now carry full agreeing verdicts, `session-1-keystone` at 138.09
+      vs 137.90 and `step-2` at 138.92 vs 139.00).
       **Why it exists:** before it, each oracle was pinned on ONE capture
       (RC-9a on session-2, RC-9d on a synthetic 2-interval program) and
       everything else we believed about them came from reading a ring by
@@ -3507,7 +3552,28 @@ that needs no erg, and it can run in a test.
       decode scale (`/10` -> `/100`, five red), a one-byte program
       transcription (rest 60 -> 30, three red on the divergence pin), and
       an unconditional probe entry to prove the "neither oracle speaks"
-      assertions can go red at all (all eight red).
+      assertions can go red at all (all eight red), and — **added at the
+      exit pass, which found this class covered by none of the first six**
+      — a rest-INCLUSIVE 0x0039 simulated by `+ 120` on the decode, which
+      turns the three rest-exclusivity bounds red and reports through them
+      (`expected 374.8 to be less than 373.8`, `252.5 < 191.5`,
+      `180 < 119`). That last one is the fix as well as the proof: the
+      bound used to be built from the program's TOTAL rest rather than the
+      rest actually TAKEN, so a rest-inclusive reading of ~120.2 s cleared
+      it and the assertion could not falsify the hypothesis it exists for.
+      **Two more repairs the exit pass earned, both in `driver.ts`'s own
+      diagnostics rather than in the corpus:** the reconciled `how` string
+      had gained a DERIVED point value ("the true final interval would read
+      Ns") built by subtracting the program's TOTAL rest — which counts the
+      final interval's own trailing rest, the one that never elapses — so on
+      `rests-finished`'s own committed shape it would have printed
+      `-60s` at an erg; it states an upper bound again. And
+      `recordAvgPaceVerdict`'s DIFFER arm had no positive assertion anywhere
+      in the repo (a grep for `toContain("DIFFER")` returned one hit, on the
+      REST oracle) — a band nothing has been seen to bite. It now has one,
+      mutation-proved by forcing `agrees = true`
+      (`expected 'machine(0x0032)=160.00s/500m ours=150…' to contain
+      'DIFFER'`).
 - [x] **Phase RC CLOSE-OUT: a derivation audit — RUN 2026-08-27.**
       `docs/superpowers/audits/2026-08-27-derivation-audit.md` plus three
       per-file tables beside it. 133 sites classified across ~7,000 lines by
@@ -4801,8 +4867,14 @@ that needs no erg, and it can run in a test.
       to produce the verdict); the driver's response to it (identical
       ring, up to the gap); ring eviction (73 entries, seq 0..72, against
       `eventLog`'s 500-entry capacity); and "the walk's build predated the
-      oracle" (the SAME PR's `rest-distance-verdict` sits at seq 69 of the
-      walked ring). Both call sites of `reconcileSummary` are followed
+      oracle" — **that last one is PROVABLE rather than inferential, and the
+      exit pass supplied the proof: `git log -S` returns the SAME single
+      commit (`c219ee0`, #196) for BOTH `recordAvgPaceVerdict` and
+      `recordRestDistanceVerdict`, so the seq-69 `rest-distance-verdict` in
+      the walked ring cannot come apart from the avg-pace half; and the
+      walked ring's own `summary-log-stamp` reads
+      `wall=2026-08-25T21:42:03.110Z`, fourteen minutes after that commit's
+      own timestamp.** Both call sites of `reconcileSummary` are followed
       immediately by `recordAvgPaceVerdict`, and every branch of that
       function records before returning — so on the walked run it either
       threw, or something outside the driver dropped the entry between

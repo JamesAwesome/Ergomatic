@@ -3609,3 +3609,125 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   premises. Ask of each: has this ever happened, and does an instrument for it
   already exist and sit silent? Run that pass BEFORE the items enter the
   ROADMAP, not after they have been ranked and sequenced.**
+
+## Phase RC exit pass, 2026-08-28 — the oracle corpus and the close-out claims
+
+- **"Every committed wire recording this repo holds is replayed" (the corpus
+  test's own header; ROADMAP softened it to "that carries a program").** FALSE
+  both ways: `find docs/monitor/sessions -name "*.jsonl*"` returns **14**, the
+  file replayed **8**, and the ONLY recording whose header carries a `program`
+  object (`walk-2026-08-17/step-3`) was one of the six omitted. Two of the
+  omitted (`session-1-keystone`, `step-2`) replay clean and produce full
+  agreeing avg-pace verdicts (delta 0.19 / 0.08) off a program identical to one
+  already transcribed — free coverage, since added. **Technique: for any
+  "every X" claim about a corpus, run the `find` yourself and diff the count
+  against the literals in the file. A coverage headline is a countable claim,
+  and it is the cheapest one in any exit pass to check.**
+
+- **"Every assertion class was mutation-proved" (recurring failure 21's own
+  discipline, claimed).** FALSE for one class: none of the six listed mutations
+  touched the rest-exclusivity assertions, and the `/10`->`/100` decode mutation
+  leaves them GREEN (`25.48 < 373.8`). One of the three was VACUOUS: its bound
+  was the program's TOTAL programmed rest (120 s) while only ONE rest was taken,
+  so a rest-INCLUSIVE 0x0039 would read ~120.2 s and `120.2 < 179` passes — the
+  assertion could not distinguish the hypothesis it exists to falsify. Fixed by
+  rebuilding the bound from the rest actually TAKEN and hoisting the class ahead
+  of the equality pins so it is the assertion that REPORTS; a `+120` decode
+  mutation now turns all three red (`374.8 < 373.8`, `252.5 < 191.5`,
+  `180 < 119`). **Technique: walk the mutation LIST against the assertion list
+  and find the assertions no mutation names. Then, for each survivor, compute
+  what the losing hypothesis would actually have printed and check the
+  inequality by hand — a bound built from PROGRAMMED quantities instead of
+  OBSERVED ones is the usual way a discriminator goes vacuous. And an assertion
+  that only ever fires AFTER a stricter neighbour is an assertion whose
+  mutation evidence belongs to the neighbour.**
+
+- **"Or the reason it CANNOT is documented" used to discharge a criterion that
+  CAN be met.** Exit (d)'s documented reason was "it deserves its own phase",
+  quoted beside James's "we can open the logbook Saturday" — affirmative
+  evidence of feasibility. Scheduling is not impossibility, and (d) was the only
+  criterion reaching outside our own definitions. Repaired to CARRIED FORWARD,
+  with the sentence transcribed into the receiving phase's exit block as the
+  receipt. **Technique: read a criterion's escape clause LITERALLY and ask
+  whether the reason offered is the KIND of reason the clause admits. "Not
+  done" and "cannot be done" are one word apart and a phase apart.**
+
+- **A tolerance stated in s/500 m is distance-dependent, and every verifying row
+  was long.** (c)'s rewritten 1.0 s/500 m band absorbs rounding noise that
+  scales as `500/distance`: 0.076-0.14 s/500 m on the five photographed rows
+  (3500-6574 m), but **1.0 on a 500 m row and 2.0 on a 250 m row** — the
+  keystone shape this phase rows constantly. The criterion had only ever been
+  exercised where its own tolerance is loose by 10x, and would go red on
+  arithmetic rounding on a short row with nothing wrong. Now bounded to rows of
+  1000 m or more, in the criterion itself. **Technique: for any tolerance
+  expressed as a RATE, compute it at the smallest member of the population
+  before believing the verifying sample.**
+
+- **A derived figure added to a diagnostic string can print an impossible
+  number.** The reconciled `how` string printed
+  `elapsedSeconds - programmedRestSeconds`, where the subtrahend reduces over
+  EVERY interval's `restSeconds` including the final interval's trailing rest,
+  which never elapses. On `rests-finished`'s own committed program a dropped
+  final split makes the ring print `the true final interval would read -60s`,
+  and 161 of 300 seeded workouts carry a final trailing rest, so the figure was
+  biased low across the library. The old string said "up to Ns too long"; the
+  new one asserted a point value, and its pinning test used the one fixture
+  where it landed tidily on 240. **Technique: when a diagnostic gains a DERIVED
+  figure, evaluate it on a real committed program rather than the test's
+  fixture, and check the sign. Replacing "up to" with an equals sign is a claim
+  upgrade that needs the same evidence as any other.**
+
+- **A shipped verdict's ALARM arm had no positive assertion anywhere.**
+  `grep -rn 'toContain("DIFFER")' src/` returned exactly one hit — the REST
+  oracle's. `recordAvgPaceVerdict`'s false arm was pinned by nothing, and the
+  new corpus could not add one because no committed capture disagrees. A
+  mutation showing the band CAN bite is not the same as a test saying what the
+  alarm says. Now has one, mutation-proved by forcing `agrees = true`.
+  **Technique: for every verdict that has two arms, grep for a positive
+  assertion on the arm the corpus never exercises. "No capture disagrees" is
+  exactly why nobody writes it.**
+
+- **Attacked and NOT broken (Phase RC's exit ground):** the barrier-timeout pin
+  (identical divergence sets at 250/500/2000/4000 ms, and both pinned barriers
+  are the LAST `tx` in their capture so a timeout cannot cascade — though the
+  0x0039/0x003A that drive both oracles arrive AFTER it, seq 844/845 vs tx#839,
+  now said in the comment); the walk-2026-08-28 hand-decode, re-derived byte by
+  byte from the `ce060021` chunks (three slots, TIME/6000, rest 60/60/0, target
+  15200) with the two captures' programming frames confirmed byte-identical;
+  RC-9(b)'s corpus-expiry claim, censused independently as exactly
+  six-of-fourteen with three rest-bearing (`rests-finished` 235,
+  `boundaries-terminated` 118, `rest-boundary` 119 workoutState-3 frames — and
+  THIS LEDGER'S OWN "four of twelve" from 2026-08-27 is itself now expired,
+  which is that entry's own point); the mirror analysis, traced through
+  `finalFilledFromSummary` and `restPairComplete` rather than the prose; and
+  §27.1's support for the reconciled `driver.ts` comment, quoted verbatim.
+  **RC-14's four eliminations all hold, and the build one is provable rather
+  than inferential: `git log -S` returns the SAME single commit (c219ee0, #196)
+  for both `recordAvgPaceVerdict` and `recordRestDistanceVerdict`, so the seq-69
+  `rest-distance-verdict` cannot come apart from the avg-pace half — and the
+  walked ring's own `summary-log-stamp` wall clock is 14 minutes after that
+  commit's timestamp.** Technique worth keeping: **`git log -S <symbol>` on BOTH
+  halves of a "same PR shipped it" argument settles in one line what a ring-line
+  argument only makes plausible.**
+
+- **A prospective finding that DEFUSED, worth recording because the defusal is
+  the technique.** Exemption (ii) claims a recorded null-index actual is
+  "observed in zero committed rings", while the same PR's corpus test asserts
+  `smoke-terminated` emits exactly one. Not a contradiction: the walked ring's
+  seq 29 reads `record-actual index=null … -> REFUSED (the record returned
+  unchanged)`. **Technique: a driver-level EMIT is not a stored actual. Before
+  reporting a corpus claim as contradicted by a test's event stream, find the
+  ring line where the RECORD accepts or refuses it.**
+
+- **And the (i)-verified-empty inference holds, for a reason the ROADMAP never
+  stated — now written down so nobody re-derives it.** "Every photographed row
+  carries a `plus N m coasting in rest` clause, which an incomplete close CANNOT
+  have" is true, via two files: `monitorRun.ts`'s writer refuses RC-1's four
+  fields for any `endedBy` other than `"finished"` ("no attempt beats no
+  number"), so `storedSummary.ts`'s `buildStoredRest` rung 1 cannot fire; and
+  rung 2 is gated on `isReconstructableClose`, which admits only `"finished" ||
+  null`. The hand-arithmetic table, offered first, does NOT do this work — the
+  criterion's own "up to ~26 s/500 m" is an UPPER bound, so a low-rest
+  population-(i) row would reconcile too. **Technique: when an exit block offers
+  a primary and a "second, independent confirmation", check which one is
+  actually load-bearing. Here they were in the wrong order.**
