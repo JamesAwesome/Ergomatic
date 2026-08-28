@@ -197,13 +197,15 @@ silently.
       - **No backfill exists.** `LogPatch` (`server/stores/logs.ts:222-227`)
         is thumbs/held/pain/notes only and the columns are write-once at
         create, so every row saved since v0.22.0 is permanently tier B.
-      - **Do these two BEFORE designing the fix, in order.** (1)
-        `select count(*) from session_logs where machine_work_seconds is not
-        null;` on the host — turns "never once" into a counted fact, and the
-        note correction's wording depends on whether the answer is 0 or a
-        handful. (2) A client test that mounts `LogSession` WITHOUT
-        `summaryTotals`, lands the late write, then saves: red today, needs no
-        erg and no build, and becomes the permanent gate.
+      - **COUNTED ON PRODUCTION, 2026-08-28: 0 of 16.** Sixteen connected rows
+        (`device_name is not null`), and **not one** carries
+        `machine_work_seconds`. "Never once" is now a measured fact, not an
+        inference from one screenshot — so the note corrections say *never*,
+        without hedging, and there is no partial-success case to explain.
+      - **Still owed before the fix is designed:** a client test that mounts
+        `LogSession` WITHOUT `summaryTotals`, lands the late write, then
+        saves. Red today, needs no erg and no build, and becomes the permanent
+        gate.
       - **THE SHAPE IS DECIDED (James, 2026-08-28): HOLD THE HAND-OFF for the
         burst as well as the split.** The rejected alternative was re-reading
         storage at save time, which keeps the navigation instant but lets a
