@@ -2,7 +2,7 @@
 
 Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
-Status: COMPLETE pending fresh high-end semantic review.
+Status: COMPLETE — fresh high-end semantic review approved after corrections.
 
 ## Scope and authorities
 
@@ -58,13 +58,13 @@ other 4,032 client tests passed.
 
 ## Saved-log truth trace
 
-| Door / tier     | Stored source                                                                                                       | Display truth disposition                                                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Manual          | Prescribed targets only; no hero scalars are posted (`app/src/session/logDraft.ts:525`, `LogSession.tsx:1956`).     | No measured hero is invented.                                                                                                          |
-| Phone timer     | Stopwatch actuals plus wall-clock session time; hero scalars are posted (`logDraft.ts:441`, `LogSession.tsx:1359`). | Detail normally reuses stored hero scalars, so that display is not an independent check (`log/storedSummary.ts:705-711`).              |
-| PM5 Tier A      | Machine totals/detail copied from monitor observations (`monitorRun.ts:1085`, `LogSession.tsx:1750`).               | Time, distance, and average pace are labelled machine observations, not app recomputations (`storedSummary.ts:624-641`).               |
-| PM5 Tier B      | Per-step PM5 actuals plus stored work/rest sums (`logDraft.ts:834`, `monitorRun.ts:756`).                           | Average pace is recomputed from stored step actuals; the stored work pair supplies time/distance (`storedSummary.ts:507-518,663-699`). |
-| Legacy fallback | Old saved hero scalars.                                                                                             | Values may be stale/fused by design and are presented as stored legacy fallback, not revalidated truth (`storedSummary.ts:705-711`).   |
+| Door / tier     | Stored source                                                                                                                                                                                                  | Display truth disposition                                                                                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manual          | Prescribed targets only; no hero scalars are posted (`app/src/session/logDraft.ts:525`, `LogSession.tsx:1956`).                                                                                                | No measured hero is invented.                                                                                                                                              |
+| Phone timer     | Stored rows include prescribed target copies; only distance-step stopwatch actuals can feed average pace. Time is wall-clock and distance hero is absent (`summaryModel.ts:1040-1140`, `LogSession.tsx:1359`). | Detail normally reuses the posted average/time scalars, so that display is not an independent check (`log/storedSummary.ts:705-711`).                                      |
+| PM5 Tier A      | Machine totals/detail copied from monitor observations (`monitorRun.ts:1085`, `LogSession.tsx:1750`).                                                                                                          | Time, distance, and average pace are labelled machine observations, not app recomputations (`storedSummary.ts:624-641`).                                                   |
+| PM5 Tier B      | Per-step PM5 actuals plus stored work/rest sums (`logDraft.ts:834`, `monitorRun.ts:756`).                                                                                                                      | B1 uses the stored work pair for time/distance; B2 uses guarded step sums. Both derive average pace from qualifying stored PM5 steps (`storedSummary.ts:507-518,663-699`). |
+| Legacy fallback | Old saved hero scalars.                                                                                                                                                                                        | Values may be stale/fused by design and are presented as stored legacy fallback, not revalidated truth (`storedSummary.ts:705-711`).                                       |
 
 Manual and timer log builders omit rest rows, so Lane A's preview-rest defect
 does not create a second saved-number contradiction here. Whether saved logs
@@ -73,7 +73,7 @@ AUD-006's design gate.
 
 ## API and stored-shape probes
 
-- **AUD-002 promoted to P2 / Confirmed for History.** `useLogHistory` casts a
+- **AUD-002 promoted to P2 / Probable for initial History.** `useLogHistory` casts a
   successful body directly to an array and enters ready state
   (`app/src/log/useLogHistory.ts:58-68`); `HistoryList` then calls `.map`
   (`HistoryList.tsx:180-199`). A temporary mounted probe supplied `[]` and
@@ -114,10 +114,12 @@ Lane D/client-server integration check rather than a clearance claim.
 ## Cleared probes and unknowns
 
 - Active target baselines are frozen once at run construction.
-- Normal active-state writes are guarded; convenience storage is best-effort.
+- Storage functions catch writes; caller recovery is cleared except for
+  AUD-015 and the AUD-016 monitor hypothesis. Convenience storage remains
+  best-effort.
 - Timers/listeners clean up on React unmount in browser execution.
 - Saved PM5 Tier B average pace has a distinct stored-step derivation, while
-  Tier A and legacy hero displays correctly remain copied observations.
+  Tier A and legacy hero displays remain copied observations.
 - Native Timer background delivery, installed-client machine-summary field
   compatibility, ambiguous-response idempotency, and the complete 302-row
   client/device path remain unknown or assigned to later lanes.

@@ -5,16 +5,16 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 ### AUD-002 — A malformed successful history response crashes the History surface
 
 - Category: brittleness
-- Severity / confidence: P2 / Confirmed
+- Severity / confidence: P2 / Probable
 - User impact: if a successful history response is not an array, the History
   screen enters ready state and fails while rendering instead of showing a
   bounded load error with Retry.
-- Expected authority: the audit's API contract requires independently shaped
-  mounted responses, and Lane C's outcome explicitly puts network response
-  bodies and stale server responses inside recovery testing
-  (`docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md:66-71,197-227`).
-  The expected outcome is a deliberate error boundary, not whatever a local
-  TypeScript cast claims the body contains.
+- Expected authority: the intended rower outcome is a bounded History load
+  failure rather than a render crash, but no independent baseline server path
+  or version-compatibility contract produces the injected body. The audit
+  control requires this probe while explicitly denying that the control
+  document itself proves product correctness
+  (`docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md:54,66-71,174-186`).
 - Actual behavior: at baseline `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`,
   `useLogHistory` casts the successful body to `RecentLog[]`, reads `.length`,
   and enters ready state (`app/src/log/useLogHistory.ts:58-68`). `HistoryList`
@@ -27,22 +27,20 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   `RecentLog`, the client hook's state type, a server serializer, or a server
   fixture. Changing the top-level response from array to object is the named
   corruption that makes it fail.
-- Scope: initial and paginated history responses, `useRecentLogs`, the other
-  successful-body readers enumerated by Lane B, and every screen that trusts a
-  ready-state cast. Only the initial History array consequence is confirmed;
-  other readers must not be called defective without their own first-consumer
-  probe.
+- Scope: only the initial `useLogHistory` → `HistoryList` response and render
+  path is evidenced. Pagination, `useRecentLogs`, and every other successful
+  body reader remain hypotheses until their first real consumers are probed.
 - Existing coverage gap: happy-path mocks mirror the local array interface;
   rejection and non-2xx cases test transport failure, not a successful body
   whose consumed type is wrong.
-- Smallest safe fix: add minimal runtime validation at each successful response
-  boundary and enter that hook's existing error/retry state when a consumed
-  field is invalid. Do not introduce a second generated contract system or
-  reject additive unknown fields.
-- Verification required after a fix: failing initial and load-more History
-  cases first for empty body, object, and malformed elements; additive unknown
-  fields and older optional omissions stay accepted; then probe each remaining
-  reader at its first real consumer and retain mounted-server happy paths.
+- Smallest safe fix: validate that the initial History body is an array before
+  entering ready state and use the hook's existing error/retry state otherwise.
+  Do not introduce a generated contract system or reject additive unknown
+  fields as part of this candidate.
+- Verification required after a fix: failing initial History cases first for
+  empty body and object, plus valid empty/populated arrays; separately probe
+  malformed elements, load-more, and every other reader before expanding the
+  fix scope; retain mounted-server happy paths.
 - Status: candidate; final adjudication is Task 10.
 
 ### AUD-006 — Workout previews hide accepted rest that the timer retains
@@ -134,7 +132,11 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   first access inside the existing guard is the named change that makes the
   three calibrated cases and mounted Today pass. `loadTodayPick` shares the
   same pre-guard access and remains a required fourth direct case rather than a
-  second finding.
+  second finding. The separate cleanup probe supplied an independently shaped
+  201, made only `DRAFT_KEY` removal fail, and observed retained keys plus POST
+  count without importing product serializers or session-state helpers. That
+  selective `removeItem` throw is a branch discriminator for the absorbed
+  cleanup consequence, not the exact getter failure defined by WHATWG.
 - Scope: the four loaders, three clear helpers, default Today, every
   synchronous initializer/route guard calling them, cancel/abandon/discard,
   post-save cleanup, active phone/timer recovery, monitor-log recovery, and
@@ -205,9 +207,9 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
 - Category: brittleness
 - Severity / confidence: P2 / Confirmed
-- User impact: one application-invalid machine-summary value on one owned log
-  makes the entire history-list request return 500, hiding otherwise healthy
-  sessions until the row is repaired.
+- User impact: one database-valid machine-summary number that the list
+  projection cannot convert to `double precision` makes the entire request
+  return 500, hiding otherwise healthy sessions until the row is repaired.
 - Expected authority: the audit requires every persisted malformed record to
   read safely or reject deliberately and explicitly requires raw JSONB probes
   rather than inferring safety from normal route validation
@@ -226,17 +228,16 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   store, server serializer, client type, or stored-summary renderer to build
   its expectation. Changing one nested number from ordinary range to `1e1000`
   is the named corruption that changes a healthy 200 to 500.
-- Scope: `session_logs.machine_summary`, history list projection, every healthy
-  row owned by the same user, raw repair/import/legacy paths, and any future
-  JSON numeric field cast inside SQL. Other raw JSONB columns remain
-  unconfirmed until their mounted first-consumer probes run.
+- Scope: this exact `session_logs.machine_summary.avgPaceSecondsPer500m`
+  history-list projection, every healthy row owned by the same user, and raw
+  repair/import/legacy paths. Other JSON numeric projections and raw JSONB
+  columns remain unconfirmed until their own mounted probes run.
 - Existing coverage gap: POST tests enter through a JS/route writer and use
   ordinary finite values. The JSON-type guard has tests for wrong JSON types,
   but no database-valid number outside the SQL target type's range.
-- Smallest safe fix: make the list projection treat non-finite/out-of-range or
-  otherwise unconvertible nested values as `null` instead of casting the whole
-  query into failure. Keep the blob available on detail for diagnosis; do not
-  rewrite or delete the stored row silently.
+- Smallest safe fix: make conversion failure yield `null` for the list scalar
+  without rewriting or deleting the stored row. Do not claim the detail path
+  preserves the original exponent until that path is separately proved.
 - Verification required after a fix: failing real-Postgres case first with one
   healthy and one corrupt row; normal, null, wrong-type, boundary, and extreme
   numeric values; mounted list/detail responses; and a red calibration proving
@@ -292,13 +293,12 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - User impact: after the draft is safely stored, a quota or storage write
   failure during Countdown appears to start the workout but immediately sends
   the rower back to Today. There is no error, retry, or usable Timer session.
-- Expected authority: Lane C's approved outcome is that the rower does not lose
-  an active session and that every storage `setItem` failure has a named
-  recovery behavior
-  (`docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md:197-227`).
-  The existing `saveRun(): boolean` contract independently establishes that a
-  caller must distinguish persistence success from failure; it is the subject,
-  not the probe's oracle.
+- Expected authority: the locked product invariant says, “Active session
+  (timer state, in-progress log) persists in localStorage; reload or dropped
+  connection never loses a workout” (`ROADMAP.md:50`). WHATWG defines the
+  platform attribute the argument needs: `setItem` throws `QuotaExceededError`
+  when a value cannot be stored, including quota exhaustion or disabled storage
+  ([Web Storage §12.2.1](https://html.spec.whatwg.org/multipage/webstorage.html#the-storage-interface)).
 - Actual behavior: at baseline `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`,
   Countdown builds a run, ignores `saveRun`'s boolean, commits its local clock,
   and navigates to Timer (`app/src/session/Countdown.tsx:219-227,338-343`).
