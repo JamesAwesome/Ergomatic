@@ -1485,7 +1485,7 @@ test("you-derive-offer-accepted", async ({ page }) => {
   await accepted6k.pressSequentially("230");
   await page.getByRole("button", { name: "Apply baselines" }).click();
   await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
-  await page.getByText("ESTIMATED · TYPE TO ADJUST").waitFor();
+  await page.getByText("ESTIMATED").waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you-derive-offer-accepted.png"),
   });
