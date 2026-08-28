@@ -287,10 +287,12 @@ field once—do not pay for a repeated whole-lane scan.
 
 - [ ] **Step 4: Tear the audit stack down with its volume**
 
-  From `app/`:
+  From the worktree root. `stack-env.sh` requires `REPO_ROOT`; sourcing it from
+  `app/` without that value derives the wrong project. Compose also validates
+  the e2e environment while tearing down:
 
   ```bash
-  bash -lc 'source scripts/stack-env.sh; docker compose -p "$COMPOSE_PROJECT_NAME" down -v'
+  bash -lc 'REPO_ROOT="$PWD"; source app/scripts/stack-env.sh; POSTGRES_PASSWORD=devpass TEST_AUTH_SECRET=e2e-secret APP_VERSION=e2e docker compose -p "$COMPOSE_PROJECT_NAME" -f compose.yml -f compose.e2e.yml down -v'
   ```
 
   Record the resolved compose project name and confirm its containers and
