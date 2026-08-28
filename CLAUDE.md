@@ -1,8 +1,13 @@
 # Ergomatic
 
 Mobile-first rowing (erg) workout tracker/planner around The Erg Book model.
-Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/`
-(high-fidelity; 44px hit targets and WCAG AA are hard requirements).
+Roadmap: `ROADMAP.md` — **rebalanced 2026-08-28 and now forward-looking only**:
+the live slate (six waves, ranked against the north star "a stranger can use
+this"), an open-item register for work with no wave, a deferred section, and a
+one-line ledger row per completed phase. **Finished phases live in
+`docs/history/` and are a RECORD — never cite one for a live question.** Design
+reference: `docs/design/` (high-fidelity; 44px hit targets and WCAG AA are hard
+requirements).
 
 ## Layout
 
@@ -19,17 +24,32 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
 - `pnpm lint` · `pnpm format` / `pnpm format:check` · `pnpm typecheck` · `pnpm test` ·
   `pnpm test:coverage` (90% gate) · `pnpm build`
-- Single Vitest project: `pnpm test --project unit|client|integration`
+- Single Vitest project: `pnpm test --project unit|client|integration`.
+  `integration` needs Docker. **Two footguns:**
+  `pnpm test --project client -- <pattern>` **silently runs the full suite**
+  (pnpm swallows the scoped flag), and the obvious workaround
+  `pnpm exec vitest run --project client <file>` runs client files OUTSIDE
+  jsdom — 89 false failures against a green HEAD.
+- `pnpm dist:grep` — the production-bundle gate. CI runs it in the `app` job
+  right after `pnpm build`; it proves named dev-only seams are absent from
+  `dist/`.
 - `pnpm e2e` — Playwright flows + structural design assertions against the real
-  compose stack (boots it if not running). `pnpm screenshots` — captures
-  `docs/screenshots/*.png` the same way. `pnpm mutate` — Stryker mutation testing,
-  on-demand (see docs/TESTING.md §3); minutes, not part of the push/CI gate.
+  compose stack. `pnpm screenshots` — captures `docs/screenshots/*.png` the
+  same way. **Both `up -d --build --wait` unconditionally** (a rebuild every
+  invocation, not "boots it if not running") **and leave the stack UP
+  afterwards** — `E2E_KEEP` defaults to `1`.
+- `pnpm mutate` — Stryker mutation testing, on-demand (see docs/TESTING.md §3);
+  minutes, not part of the push/CI gate.
 - Local dev DB: `docker run --rm -d --name erg-dev-pg -p 5433:5432 -e POSTGRES_PASSWORD=dev postgres:18.4`
   then `DATABASE_URL=postgres://postgres:dev@localhost:5433/postgres pnpm dev:server`.
   The server refuses to start without `DATABASE_URL` (no dotenv — real env only).
-- Local OAuth: set `SITE_URL=http://localhost:5173` when running `dev:server`
-  (redirect URI derives from it; without it Google errors redirect_uri_mismatch):
-  `DATABASE_URL=... SITE_URL=http://localhost:5173 GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... ALLOWED_EMAILS=you@gmail.com pnpm dev:server`
+- Local OAuth: `DATABASE_URL=... GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... ALLOWED_EMAILS=you@gmail.com pnpm dev:server`.
+  **`SITE_URL` is NOT needed locally** — `server/index.ts:60` already defaults it
+  to `http://localhost:5173`, which is the exact redirect URI `docs/deploy.md`
+  tells you to register. This bullet used to say that omitting it makes Google
+  error `redirect_uri_mismatch`; that failure cannot occur, and setting the
+  variable locally is a no-op. Set it only when you genuinely need a different
+  origin.
 
 ## Rules
 
@@ -54,8 +74,11 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   `git status` on the main checkout** before removing the worktree; stray
   writes there have happened four times and are only cheap to fix while the
   branch still exists. **Teardown also downs the worktree's compose stack**
-  (`docker compose -p <its ergomatic-NNNNN name> down -v`, or run the gate
-  once with `E2E_KEEP=0`) — per-worktree stacks outlive their worktrees
+  with `docker compose -p <its ergomatic-NNNNN name> down -v`. **`E2E_KEEP=0`
+  is NOT an equivalent** — `e2e.sh:31` and `screenshots.sh:31` both run
+  `docker compose ... down` with no `-v`, so the per-worktree `pgdata` volume
+  survives; only the explicit form reclaims it — per-worktree stacks outlive
+  their worktrees
   otherwise; `app/scripts/stack-reap.sh` reaps forgotten ones at the next
   e2e/screenshots boot, but four orphaned stacks (twelve containers) had
   accumulated before it existed, so don't rely on the net alone.
@@ -610,5 +633,9 @@ often they recur.
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;
   derives `GOOGLE_IOS_CLIENT_ID` from Info.plist — docs/RELEASING.md),
-  `pnpm ios:build` (bundle+sync only; needs `GOOGLE_IOS_CLIENT_ID` env),
+  `pnpm ios:build` (bundle+sync only). **`GOOGLE_IOS_CLIENT_ID` does not fail
+  loudly if unset** — `package.json:26` defaults it to empty, so the build
+  SUCCEEDS and produces a bundle whose native Google sign-in is silently dead
+  (`src/native/signin.ts:8` receives `""`). Export it, or use `ios:release`,
+  which derives it from Info.plist,
   `pnpm ios:open` (Xcode, GUI fallback).
