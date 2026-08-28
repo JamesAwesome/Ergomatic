@@ -1,5 +1,8 @@
 # The machine has left — RC-37, and one line for the End button
 
+**REVISION 5 (2026-08-27): RC-37's behaviour ruled — exit to the workout,
+no banner, keep the nudges. See [R5] below. Revision 4's cut stands.**
+
 **REVISION 4 (2026-08-27). Roughly 80% of revision 3 is CUT.** James:
 *"How much of this is even really important to do. We were pretty okay with
 the behavior before."* He was right. A YAGNI pass agreed and found the reason
@@ -87,18 +90,28 @@ across four healthy captures, **300 armed frames, ZERO mismatches**.
     `expectedArmedStructure(p)` already does. We have read one row of
     `OBJ_WORKOUTTYPE_T`; the check does not need to know what `1` means.
 - **`app/src/monitor/useMonitorSession.ts` (~20 lines).** Consume it: end the
-  session, **send no terminate** (the machine has already left), and write **no
-  row if none was opened** — a pre-row session opens no record.
-- **`app/src/workout/ConnectedSurface.tsx` (~10 lines).** One line of copy,
-  Gate 0 below.
-- **Tests (~80 lines).** Replay `menu-at-ready-recording.jsonl.gz`, already
-  committed. `header.program` is absent (true of every real capture), so
-  hardcode the program, as `lifecycleReplay.test.ts` already does.
+  session and **exit, exactly the way Cancel already does**.
 
-**Honest caveat for the PR:** 300 armed frames is a small corpus, all four
-healthy captures are laptop/Chrome, and we have exactly **one** observation of
-the positive. That clears the bar for an observed premise rather than an
-inferred one, but it goes in the PR body rather than being discovered.
+**[R5] THE BEHAVIOUR, RULED BY JAMES 2026-08-27: `session.cancel();
+onExit();` and NOTHING ELSE.** His words: *"Loose any new banners. Just take
+it back here and remember any nudges."*
+
+- **No banner, on any screen.** Two earlier drafts proposed one — over the
+  dead READY screen (a lie plus a correction printed under it), then on the
+  destination. Both cut. The rower pressed Menu; they know why they are back.
+- **The destination is `WorkoutDetail`** — the screen carrying **Connect**,
+  the last-used PM5 and the block with its targets. `onExit()` already lands
+  there (`WorkoutDetail.tsx:281`, `handleInterstitialExit`), which is why
+  this is a two-line change and not a screen.
+- **Nudges survive, and this is VERIFIED rather than promised.** They live in
+  `useState` on `WorkoutDetailView`, keyed `key={workout.id}` so the reset
+  fires only on a workout SWITCH (`WorkoutDetail.tsx:123-126`). Exiting the
+  interstitial is `setConnecting(null)`; the component stays mounted and the
+  nudged targets are still on screen. **Pin it with a test anyway** — it is
+  the half of James's ruling that a future refactor could silently break.
+- **No copy anywhere.** Which also means **there is nothing for Gate 0 to
+  approve on RC-37**; the design gate now has only the `LOST THE MONITOR`
+  question, if James opens it.
 
 ### 2. End always terminates the machine. One line.
 
@@ -112,29 +125,18 @@ throws into the existing catch, which is already best-effort by design.
 
 Plus two tests. This is the whole of RC-29 worth building today.
 
-### 3. The banner's word — James's call, at Gate 0
+## GATE 0 — one question, and only if James opens it
 
-`LOST THE MONITOR` reads false on a phone that was merely asleep. This is the
-highest-frequency item on the board and the cheapest to change, and it is
-**pure design, not engineering**.
+**[R5] RC-37 no longer needs a gate.** Its ruled behaviour adds no copy and
+no new screen, so there is nothing rendered to approve.
 
-It also re-litigates a one-day-old decision: v0.24.0 kept the title identical
-in both branches deliberately (`ConnectedSurface.tsx:709-712`). So it is
-presented and stopped on, not assumed.
-
-## GATE 0 — rendered, not described
-
-Per CLAUDE.md's standing design-gate rule. Two things only:
-
-1. **RC-37's line**, on the connected screen at READY:
-   **`THE ERG CLEARED IT`** · `Send it again.` — with the re-send affordance
-   actually present, in the banner's title-plus-four-words grammar
-   (`ConnectedSurface.tsx:691-693`), both orientations.
-2. **The `LOST THE MONITOR` question**, if James wants it opened: today's
-   title against any alternative, with the v0.24.0 ruling it would reverse
-   stated beside it.
-
-Contrast ratios computed and stated as numbers, re-derived from `tokens.css`.
+What remains, entirely optional: **should `LOST THE MONITOR` change?** On a
+phone that was merely asleep, that title blames the erg for our own
+suspension — the highest-frequency wrong thing on the board and the cheapest
+to fix. **But it reverses a one-day-old v0.24.0 ruling** which kept the title
+identical in both branches deliberately, and the shipped release note tells
+testers to expect exactly those words. Not assumed either way. If opened, it
+gets its own rendered comparison with contrast computed.
 
 ## Constraints
 
