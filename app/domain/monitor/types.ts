@@ -454,7 +454,22 @@ export type MonitorEvent =
         avgPaceSecondsPer500m: number;
       };
       verificationBytes?: readonly number[];
-    };
+    }
+  // RC-37 (design spec 2026-08-27-link-authority-design.md §1, [R5]): the
+  // PM5 silently dropped the program we armed and returned to its
+  // unprogrammed shape while `workoutState` never moved — a Menu press at
+  // READY is the confirmed trigger (walk-2026-08-27), but the detector
+  // (`src/monitor/driver.ts`, the general-status structure comparator) is
+  // keyed on the readback disagreeing with what WE sent, not on any
+  // particular cause. Emitted AT MOST ONCE per run — the driver clears its
+  // own watch state the instant it fires, and the next legitimate armed
+  // reading belongs to the NEXT `program()`. No payload: the ring's own
+  // `structure-left` entry (this same commit) carries the expected/
+  // observed structure, the streak and the window for anyone who needs the
+  // detail: this event exists only to tell a consumer WHEN to stop, not
+  // WHY (`useMonitorSession.ts`'s own handler exits the same way Cancel
+  // does — [R5], no banner, no stored verdict).
+  | { kind: "programDropped" };
 
 export interface MonitorDriver {
   readonly capabilities: MonitorCapabilities;

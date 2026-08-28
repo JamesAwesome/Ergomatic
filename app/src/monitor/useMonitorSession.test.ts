@@ -3,10 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
+  WORKOUTSTATE_REARM,
   WORKOUTSTATE_TERMINATE,
+  WORKOUTSTATE_WAITTOBEGIN,
   WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
 import { buildTerminate } from "../../domain/monitor/pm5/commands.js";
+import { buildGeneralStatusBytes } from "../../domain/monitor/pm5/statusFrames.js";
+import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
 import {
   ADDITIONAL_STATUS_1_UUID,
   GENERAL_STATUS_UUID,
@@ -3365,6 +3369,342 @@ describe('Whole-branch review B1: End under a watchdog-fired banner (phase still
     expect(loadMonitorRun()).toMatchObject({
       endedBy: "link-lost",
     });
+  });
+
+  // RC-29 (design spec 2026-08-27-link-authority-design.md §2): `|| linkGone`
+  // deleted from `endSession`'s own terminate guard. A FALSE latch (the
+  // stream is merely suspect, never confirmed gone — the exact case this
+  // whole describe block builds) used to skip the terminate outright: the
+  // rower presses End, the record closes, and the erg keeps running while
+  // they are standing at it. Attended human intent (a press, right now) is
+  // not a verdict about the link.
+  it("End terminates the machine even with frameSilence latched (RC-29 — the fix, in the direction it was broken)", async () => {
+    vi.useFakeTimers();
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    const transport = spyTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(transport, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    act(() => {
+      fake.tick(100);
+      vi.advanceTimersByTime(100);
+    });
+    expect(result.current.phase).toBe("live");
+    // Same watchdog trip as the test above — real time alone, no dropped
+    // link, `phase` stays "live" throughout.
+    act(() => {
+      vi.advanceTimersByTime(2600);
+    });
+    expect(result.current.frameSilence).toBe(true);
+    expect(result.current.phase).toBe("live");
+
+    const before = transport.wireWrites;
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    // THE ERG ACTUALLY STOPS — a real wire write happened, not merely a
+    // best-effort attempt swallowed by the guard this task deletes.
+    expect(transport.wireWrites).toBeGreaterThan(before);
+  });
+
+  it("the existing link-up behaviour is unchanged: End with the link genuinely up (frameSilence false) still terminates, same as before this task", async () => {
+    const { result, fake, transport } = harness({
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    expect(result.current.frameSilence).toBe(false);
+
+    const before = transport.wireWrites;
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("user");
+    expect(loadMonitorRun()).toMatchObject({ endedBy: "rower" });
+    expect(transport.wireWrites).toBeGreaterThan(before);
+  });
+});
+
+// RC-37 ([R5], design spec 2026-08-27-link-authority-design.md §1): the
+// consumer's own defensive guard — `if (phase !== "programming" && phase
+// !== "ready") return;` — for a `programDropped` event arriving OUTSIDE the
+// two phases Cancel itself is valid from. The driver's OWN `armed` gate
+// (`driver.test.ts`'s own pin) makes this genuinely hard to trigger through
+// an ordinary session — the structure watch only ever runs while the
+// machine reports "armed", which live/resting/rowing never is — but it is
+// not unreachable: a run that goes live, ends, and then the SAME machine
+// re-arms (Appendix E's own auto-cycle) holding a stale/different structure
+// is a real shape (this session's driver never replaces `armedProgram()`
+// just because the hook moved on), and there is no fake-transport script
+// hook for it (`FakeStatusEvent` carries no structure fields at all — the
+// fake derives them honestly from whatever program is armed). A hand-rolled
+// stub transport, mirroring `driver.test.ts`'s own `stubTransport`, is what
+// drives it here.
+describe("RC-37: the programDropped consumer guard, outside programming/ready", () => {
+  /** A minimal hand-rolled `Transport` — NOT `transports/fake.ts`'s honest
+   *  protocol simulator, which cannot be scripted into reporting a
+   *  structure the armed program did not send. Mirrors `driver.test.ts`'s
+   *  own `stubTransport`/`statusWithStructure` idiom (this file's own
+   *  per-test-file convention: no cross-file test imports). */
+  function rawTransport(): Transport & {
+    notify(uuid: string, bytes: Uint8Array): void;
+    writes: { uuid: string; bytes: Uint8Array }[];
+  } {
+    const subs = new Map<string, Set<(bytes: Uint8Array) => void>>();
+    const writes: { uuid: string; bytes: Uint8Array }[] = [];
+    return {
+      writes,
+      scan: () => Promise.resolve([{ id: "stub", name: "PM5 STUB" }]),
+      connect: () => Promise.resolve(),
+      write(uuid, bytes) {
+        writes.push({ uuid, bytes });
+        return Promise.resolve();
+      },
+      subscribe(uuid, cb) {
+        let set = subs.get(uuid);
+        if (!set) {
+          set = new Set();
+          subs.set(uuid, set);
+        }
+        set.add(cb);
+        return () => set!.delete(cb);
+      },
+      disconnect: () => Promise.resolve(),
+      onDisconnect: () => () => undefined,
+      notify(uuid, bytes) {
+        for (const cb of subs.get(uuid) ?? []) cb(bytes);
+      },
+    };
+  }
+
+  const RAW_MINIMAL_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+
+  /** Session 4a's confirmed armed readback for `RAW_MINIMAL_PROGRAM` — a
+   *  TIME interval 0 reads `value * 100` at duration identifier 0
+   *  (`pm5/commands.ts#expectedArmedStructure`'s own doc comment carries
+   *  the hardware confirmation). */
+  function armedStatus(): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+  }
+
+  /** A DIFFERENT armed structure — the same "empty arm" shape
+   *  `driver.test.ts`'s own `EMPTY_ARM` fixture carries. */
+  function wrongArmedStatus(): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 1,
+      intervalType: 1,
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 128,
+      dragFactor: 130,
+    });
+  }
+
+  function rearmStatus(): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_REARM,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+  }
+
+  async function waitUntil(check: () => boolean, maxTicks = 50): Promise<void> {
+    for (let i = 0; i < maxTicks && !check(); i += 1) {
+      await Promise.resolve();
+    }
+  }
+
+  /** A hand-advanced ms clock for `DriverOptions.now` — `STRUCTURE_MISMATCH_
+   *  WINDOW_MS` (2000ms) needs REAL elapsed time between ticks, not three
+   *  notifications landing in the same synchronous burst (`driver.test.ts`'s
+   *  own `manualClock`, redeclared here per this project's per-test-file
+   *  convention). */
+  function manualClock(startMs = 0): {
+    now: () => number;
+    advance(by: number): void;
+  } {
+    let ms = startMs;
+    return {
+      now: () => ms,
+      advance(by: number): void {
+        ms += by;
+      },
+    };
+  }
+
+  it("a structural mismatch reported once the session has already ENDED does nothing — phase stays 'ended', programDropped stays false, the record already closed is left alone", async () => {
+    const transport = rawTransport();
+    const clock = manualClock();
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: clock.now,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // Ack-gated writes counted on `RECEIVE_CHARACTERISTIC_UUID` alone
+    // (`driver.test.ts`'s own `programViaStub`'s `sent()` helper) — the
+    // driver also writes `SAMPLE_RATE_UUID` at connect, which must not be
+    // confused with the programming sequence's own chunks. The prepare
+    // step (a best-effort `buildTerminate()`, `sendPrepare`'s own doc
+    // comment — ANY non-disconnect answer is swallowed, `frameStatus:
+    // "reject"` included) first, then the real programming send's own
+    // `"ok"` ack, then generous microtask drain (the exact
+    // `programViaStub` sequence, reproduced here per this file's own "no
+    // cross-file test imports" convention), THEN a fresh armed readback
+    // for `verifyArmed` to observe.
+    const sentCount = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const prepareChunkCount = buildTerminate()[0]!.length;
+    await act(async () => {
+      const start = sentCount();
+      const pending = result.current.program(RAW_MINIMAL_PROGRAM, TWO_IDENTITY);
+      await waitUntil(() => sentCount() > start);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "reject" }),
+      );
+      await waitUntil(() => sentCount() > start + prepareChunkCount);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "ok" }),
+      );
+      for (let i = 0; i < 50; i += 1) await Promise.resolve();
+      transport.notify(GENERAL_STATUS_UUID, armedStatus());
+      await pending;
+    });
+    expect(result.current.phase).toBe("ready");
+
+    // End, straight from READY — `endSession()`'s own guard is only
+    // `phase === "ended"` (idempotence), never a "must be live first" rule,
+    // and it deliberately does NOT unsubscribe from the driver (its own
+    // doc comment: only `teardown()`/`cancel()` do that), so the hook is
+    // still listening afterward.
+    //
+    // End's own terminate needs its own ack — `settleTicks: 0` skips the
+    // wait AFTER it, not the ack itself.
+    await act(async () => {
+      const start = sentCount();
+      const pending = result.current.endSession();
+      await waitUntil(() => sentCount() > start);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "ok" }),
+      );
+      await pending;
+    });
+    expect(result.current.phase).toBe("ended");
+
+    // The machine cycles back through REARM to WaitToBegin holding a
+    // DIFFERENT structure — three consecutive stable mismatched armed
+    // ticks, exactly RC-37's own threshold, with the guard's own
+    // reasoning: `armedProgram()` still points at `RAW_MINIMAL_PROGRAM`
+    // (nothing has replaced it — no second `program()` call happened), so
+    // the driver's watch has every reason to fire.
+    act(() => {
+      transport.notify(GENERAL_STATUS_UUID, rearmStatus());
+    });
+    act(() => {
+      clock.advance(1000);
+      transport.notify(GENERAL_STATUS_UUID, wrongArmedStatus());
+    });
+    act(() => {
+      clock.advance(1000);
+      transport.notify(GENERAL_STATUS_UUID, wrongArmedStatus());
+    });
+    act(() => {
+      clock.advance(1000); // three ticks spanning 2000ms — both thresholds
+      transport.notify(GENERAL_STATUS_UUID, wrongArmedStatus());
+    });
+
+    // THE GUARD: phase is still "ended", not reset to "idle" — the event
+    // reached the handler and was deliberately ignored. `endedBy` stays
+    // "user" (End's own verdict, never overwritten) — a pre-row End opens
+    // no record at all (Phase LM's own finding), so `loadMonitorRun()`
+    // being `null` here is the correct baseline, unperturbed by the
+    // mismatch.
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("user");
+    expect(result.current.programDropped).toBe(false);
+    expect(loadMonitorRun()).toBeNull();
   });
 });
 

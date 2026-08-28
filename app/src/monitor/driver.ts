@@ -1651,6 +1651,34 @@ export function createPm5Driver(
      *  branch on; it must not depend on a logging decision. */
     sawArmedMismatch: boolean;
   } | null = null;
+  /** RC-37 (design spec 2026-08-27-link-authority-design.md §1, [R5]): the
+   *  general-status structure comparison, extended past `verifyArmed`'s own
+   *  fixed-tick verify window — for as long as the machine keeps reporting
+   *  `"armed"`, not only during the one program() call that just verified.
+   *  **A NEW comparator, not a lifetime extension of `pendingVerify`'s
+   *  own** — that state is scoped to a single verify phase and nulled the
+   *  instant it resolves (its own doc comment), so this watch needs its
+   *  own persistent streak/window state, compared against
+   *  `expectedArmedStructure(armedProgram())` computed fresh each tick (a
+   *  pure function of the program `armedProgram()` already retains — no
+   *  separate cached copy to keep in sync). Reset to this same shape
+   *  whenever a NEW program() succeeds (`program()`'s own per-run reset
+   *  block, alongside `session`/`refusedKeysLogged` et al.) — a fresh arm's
+   *  leftover streak from the OUTGOING program would otherwise misread the
+   *  incoming one's own settling reads as a continuation of somebody
+   *  else's mismatch. */
+  let armedWatch: {
+    lastMismatch: ArmedStructure | null;
+    mismatchStreak: number;
+    mismatchSince: number | null;
+  } = { lastMismatch: null, mismatchStreak: 0, mismatchSince: null };
+  /** Guards `armedWatch` from firing a second `"programDropped"` off stale
+   *  notifications that arrive between the detector's own emit and the
+   *  consumer actually tearing the transport down (best-effort, not
+   *  synchronous) — reset alongside `armedWatch` at the next successful
+   *  program(), same "per-run state" lifecycle as every other flag in that
+   *  block. */
+  let armedWatchFired = false;
   /** Registered while `terminate()`'s post-ack settle wait (design spec
    *  §7, interface-notes.md §19.6) is counting — `null` whenever no
    *  `terminate()` call is currently in that phase. A single slot, same
@@ -4843,6 +4871,101 @@ export function createPm5Driver(
             );
           }
         }
+      } else if (!armedWatchFired) {
+        // RC-37's own watch (`armedWatch`'s doc comment) — runs on every
+        // tick OUTSIDE a verify phase, for as long as a program has ever
+        // armed. Skipped entirely while `pendingVerify` owns the tick
+        // above: a re-arm in flight makes `armedProgram()` still return the
+        // OUTGOING program until the new one's own `verifyArmed` resolves,
+        // and comparing the machine's mid-transition readback against that
+        // stale expectation would be exactly the false positive the
+        // `armed` gate exists to prevent.
+        const armedWorkout = armedProgram();
+        const armed = toMonitorFrame(raw as RawPm5Status).state === "armed";
+        if (armedWorkout !== null) {
+          if (!armed) {
+            // Left "armed" (rowing/resting/finished/terminated/idle) with
+            // no verdict reached — the rower pulled, or the machine cycled
+            // on its own. Not itself suspicious (the `armed` gate's own
+            // reason, `verifyArmed`'s comment: the structural quadruple
+            // legitimately moves mid-session outside "armed"); a streak
+            // that had started is the NEAR-MISS worth a ring line.
+            if (armedWatch.mismatchStreak > 0) {
+              log.record(
+                "structure-mismatch-recovered",
+                `${armedWatch.mismatchStreak} consecutive armed tick(s) over ${now() - armedWatch.mismatchSince!}ms reporting the wrong structure, then the machine left "armed" before either threshold — ${describeStructureMismatch(armedWatch.lastMismatch!, expectedArmedStructure(armedWorkout))}`,
+              );
+              armedWatch = {
+                lastMismatch: null,
+                mismatchStreak: 0,
+                mismatchSince: null,
+              };
+            }
+          } else {
+            const expected = expectedArmedStructure(armedWorkout);
+            if (sameStructure(structure, expected)) {
+              // The common case, every armed tick once a program has
+              // settled: no allocation unless there was a streak to close
+              // out (the near-miss, same reasoning as the `!armed` branch
+              // above — a healthy arm whose first tick or two lagged the
+              // PM5's own two-step structure update, `STRUCTURE_MISMATCH_
+              // WINDOW_MS`'s own doc comment, self-corrects here).
+              if (armedWatch.mismatchStreak > 0) {
+                log.record(
+                  "structure-mismatch-recovered",
+                  `${armedWatch.mismatchStreak} consecutive armed tick(s) over ${now() - armedWatch.mismatchSince!}ms reporting the wrong structure, then a matching armed tick arrived before either threshold — ${describeStructureMismatch(armedWatch.lastMismatch!, expected)}`,
+                );
+                armedWatch = {
+                  lastMismatch: null,
+                  mismatchStreak: 0,
+                  mismatchSince: null,
+                };
+              }
+            } else {
+              // The N-consecutive-STABLE-mismatch rule, identical to
+              // `pendingVerify`'s own above (`STRUCTURE_MISMATCH_TICKS`'s
+              // doc comment carries the hardware facts): a payload that
+              // keeps changing is a machine still settling, not a machine
+              // holding the wrong workout, so only a REPEATED identical
+              // wrong reading extends the streak.
+              const continues =
+                armedWatch.lastMismatch !== null &&
+                sameStructure(structure, armedWatch.lastMismatch);
+              const mismatchStreak = continues
+                ? armedWatch.mismatchStreak + 1
+                : 1;
+              const mismatchSince = continues
+                ? armedWatch.mismatchSince!
+                : now();
+              const heldMs = now() - mismatchSince;
+              // BOTH halves, never one alone (`STRUCTURE_MISMATCH_WINDOW_
+              // MS`'s own doc comment — the false economy an antagonist
+              // pass already caught in an earlier revision of this spec).
+              if (
+                mismatchStreak >= STRUCTURE_MISMATCH_TICKS &&
+                heldMs >= STRUCTURE_MISMATCH_WINDOW_MS
+              ) {
+                log.record(
+                  "structure-left",
+                  `${mismatchStreak} consecutive armed tick(s) over ${heldMs}ms reporting a structure that does not match the sent program — ${describeStructureMismatch(structure, expected)}`,
+                );
+                armedWatch = {
+                  lastMismatch: null,
+                  mismatchStreak: 0,
+                  mismatchSince: null,
+                };
+                armedWatchFired = true;
+                emit({ kind: "programDropped" });
+              } else {
+                armedWatch = {
+                  lastMismatch: structure,
+                  mismatchStreak,
+                  mismatchSince,
+                };
+              }
+            }
+          }
+        }
       }
     },
   );
@@ -5763,6 +5886,15 @@ export function createPm5Driver(
         // a fact about THIS run, and a re-arm's own summary has not arrived
         // yet just because the outgoing run's did.
         summarySeen = false;
+        // RC-37 (`armedWatch`'s own doc comment): the outgoing program's
+        // leftover mismatch streak says nothing about the incoming one —
+        // same per-run reset discipline as every field in this block.
+        armedWatch = {
+          lastMismatch: null,
+          mismatchStreak: 0,
+          mismatchSince: null,
+        };
+        armedWatchFired = false;
         // A reconcile deadline still standing belongs to the run being
         // replaced, and is cancelled here for the same reason a pending
         // boundary half is dropped above (fast-follow Task 2): both are

@@ -153,6 +153,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     frozen: false,
     runOpen: false,
     frameSilence: false,
+    programDropped: false,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
@@ -1185,6 +1186,88 @@ describe("state 7: ready", () => {
     expect(
       screen.getByRole("navigation", { name: "Connected panes" }),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RC-37 ([R5], design spec 2026-08-27-link-authority-design.md §1): Menu at
+// READY. The hook's own `programDropped` handler already ran Cancel's exit
+// itself (minus the terminate — `useMonitorSession.test.ts` proves that
+// half); the ONE thing it cannot do from inside the hook is call `onExit`,
+// since that prop never reaches it. This is the wiring pin for the other
+// half: this screen's own effect watches the flag and calls `onExit`
+// directly — never through `session.cancel()`, which would attempt exactly
+// the terminate [R5] rules out.
+// ---------------------------------------------------------------------------
+
+describe("RC-37 ([R5]): session.programDropped exits like Cancel, without calling it", () => {
+  it("flips true -> onExit fires exactly once, and session.cancel() is never called", () => {
+    const first = renderInterstitial({
+      phase: "ready",
+      deviceName: DEVICE_NAME,
+      programDropped: false,
+    });
+    expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
+    expect(first.onExit).not.toHaveBeenCalled();
+
+    // The hook's own handler already reset phase away from "ready"/
+    // "programming" (`useMonitorSession.ts`'s `INITIAL_STATE` spread) in
+    // the SAME `update()` that flips this flag — this rerender reproduces
+    // both together, the way one real `update()` call actually renders.
+    const next = session({
+      phase: "idle",
+      deviceName: null,
+      programDropped: true,
+    });
+    mockUseMonitorSession.mockReturnValue(next);
+    first.rerender(
+      <ConnectedInterstitial
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={first.onExit}
+        onRowInstead={first.onRowInstead}
+        onEnded={first.onEnded}
+      />,
+    );
+
+    expect(first.onExit).toHaveBeenCalledTimes(1);
+    // THE [R5] CONSTRAINT: no terminate. If this screen's effect called
+    // `session.cancel()` (Cancel's own path) instead of `onExit` directly,
+    // this would be a false negative for the whole design's own ruling —
+    // `cancel()` unconditionally attempts a terminate from `"ready"`.
+    expect(next.cancel).not.toHaveBeenCalled();
+  });
+
+  it("does nothing extra once already false-then-false — no phantom onExit on an ordinary render with the flag unset", () => {
+    const first = renderInterstitial({
+      phase: "ready",
+      deviceName: DEVICE_NAME,
+      programDropped: false,
+    });
+
+    const next = session({
+      phase: "ready",
+      deviceName: DEVICE_NAME,
+      programDropped: false,
+    });
+    mockUseMonitorSession.mockReturnValue(next);
+    first.rerender(
+      <ConnectedInterstitial
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={first.onExit}
+        onRowInstead={first.onRowInstead}
+        onEnded={first.onEnded}
+      />,
+    );
+
+    expect(first.onExit).not.toHaveBeenCalled();
   });
 });
 

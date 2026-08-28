@@ -8409,6 +8409,269 @@ describe("createPm5Driver: walk 5 — the structure gate forgives the PM5 its ow
   });
 });
 
+describe("createPm5Driver: RC-37 — the armed-state structure watch, past verifyArmed's own window (design spec 2026-08-27-link-authority-design.md §1, [R5])", () => {
+  /** A wrong structure, distinct from `MINIMAL_PROGRAM`'s own armed reading
+   *  (`healthyArmedStructureFor` — workoutType=8, durationRaw=6000,
+   *  durationType=0) — the same session-4a "empty arm" shape the fix-3
+   *  block's own `EMPTY_ARM` fixture carries, redeclared here per this
+   *  file's own per-describe-block scoping (module-level constants are
+   *  shared; fixtures built FROM them are not). */
+  const WRONG_STRUCTURE = {
+    workoutType: 1,
+    workoutDurationRaw: 0,
+    workoutDurationType: 128,
+  };
+  const ANOTHER_WRONG_STRUCTURE = {
+    workoutType: 8,
+    workoutDurationRaw: 0,
+    workoutDurationType: 128,
+  };
+
+  function structureLeftEntries(log: ReturnType<typeof createEventLog>) {
+    return log.entries().filter((e) => e.kind === "structure-left");
+  }
+
+  function recoveredEntries(log: ReturnType<typeof createEventLog>) {
+    return log
+      .entries()
+      .filter((e) => e.kind === "structure-mismatch-recovered");
+  }
+
+  /** Programs `MINIMAL_PROGRAM` to a clean resolve (a healthy, matching
+   *  armed readback) and returns the driver/transport/log/events trio every
+   *  test below starts from — the post-verify watch this describe block is
+   *  about only ever begins running once `program()` has already
+   *  succeeded. */
+  async function armed(): Promise<{
+    transport: ReturnType<typeof stubTransport>;
+    log: ReturnType<typeof createEventLog>;
+    clock: ReturnType<typeof manualClock>;
+    driver: ReturnType<typeof createPm5Driver>;
+    events: MonitorEvent[];
+  }> {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, { now: clock.now });
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    return { transport, log, clock, driver, events };
+  }
+
+  it("pins the armed gate: a structural change while the machine reports ROWING never fires, however long it persists — the quadruple legitimately moves outside armed (verifyArmed's own reason for the same gate)", async () => {
+    const { transport, log, clock, events } = await armed();
+
+    // Six consecutive, STABLE, wrong-structure ticks, each 1000ms apart —
+    // both thresholds (3 ticks, 2000ms) are comfortably cleared BY THE
+    // NUMBERS. The only thing standing between this and a false "the
+    // machine dropped the program" is the `armed` gate: every tick below
+    // reports "rowing", not "armed".
+    for (let i = 0; i < 6; i += 1) {
+      clock.advance(1000);
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        statusWithStructure(WRONG_STRUCTURE, WORKOUTSTATE_INTERVALWORKTIME),
+      );
+    }
+    await flushMicrotasks();
+
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+    expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
+  });
+
+  it("pins BOTH constants (1 of 2): three consecutive stable mismatches INSIDE the 2000ms window never fires — the PM5's own two-step post-program transition (STRUCTURE_MISMATCH_WINDOW_MS's own doc comment) can recur on any fresh arm this watch keeps running through", async () => {
+    const { transport, log, clock, events } = await armed();
+
+    // Three consecutive, stable, wrong-structure ARMED ticks — the tick
+    // count alone is satisfied — but only 300ms apart, well under the
+    // 2000ms window.
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(300);
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        statusWithStructure(WRONG_STRUCTURE),
+      );
+    }
+    await flushMicrotasks();
+
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+    expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
+  });
+
+  it("pins BOTH constants (2 of 2): held past the 2000ms window but never 3 CONSECUTIVE identical stable ticks never fires — an alternating payload is a machine still settling, not one holding the wrong workout", async () => {
+    const { transport, log, clock, events } = await armed();
+
+    // Five armed ticks, ALTERNATING between two different wrong structures,
+    // spanning 5000ms — the window is cleared by a wide margin, but no
+    // THREE consecutive ticks ever agree, so the streak never reaches 3.
+    const sequence = [
+      WRONG_STRUCTURE,
+      ANOTHER_WRONG_STRUCTURE,
+      WRONG_STRUCTURE,
+      ANOTHER_WRONG_STRUCTURE,
+      WRONG_STRUCTURE,
+    ];
+    for (const structure of sequence) {
+      clock.advance(1000);
+      transport.notify(GENERAL_STATUS_UUID, statusWithStructure(structure));
+    }
+    await flushMicrotasks();
+
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+    expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
+  });
+
+  // Self-mutation found this gap (report): "pins BOTH constants (2 of 2)"
+  // above does NOT discriminate a tick-count-removed mutant — an
+  // ALTERNATING payload resets `mismatchSince` on every tick (a changed
+  // payload is a new claim, `mismatchSince`'s own doc comment), so `heldMs`
+  // never clears the window regardless of whether the tick-count half is
+  // even checked. This test isolates the OTHER shape: the SAME wrong
+  // structure, held long enough to clear the window on its own, but never
+  // reaching 3 consecutive ticks.
+  it("pins BOTH constants (3 of 3): the SAME wrong structure held well past the 2000ms window on just 2 ticks never fires — the window alone is not a verdict either", async () => {
+    const { transport, log, clock, events } = await armed();
+
+    clock.advance(1500);
+    transport.notify(GENERAL_STATUS_UUID, statusWithStructure(WRONG_STRUCTURE));
+    // Tick 2, 2500ms after tick 1 — `heldMs` alone already clears the
+    // 2000ms window, but the streak is only 2.
+    clock.advance(2500);
+    transport.notify(GENERAL_STATUS_UUID, statusWithStructure(WRONG_STRUCTURE));
+    await flushMicrotasks();
+
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+    expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
+  });
+
+  it("fires 'structure-left' and emits programDropped exactly once both thresholds are met (RC-37's own trigger, walk-2026-08-27: 112 consecutive frames over 56.4s)", async () => {
+    const { transport, log, clock, events } = await armed();
+
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1000); // three ticks spanning 3000ms — both thresholds
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        statusWithStructure(WRONG_STRUCTURE),
+      );
+    }
+    await flushMicrotasks();
+
+    const entries = structureLeftEntries(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("3 consecutive armed tick(s)");
+    // mismatchSince is stamped on tick 1 (now=1000); tick 3 arrives at
+    // now=3000, so the streak has held for 2000ms — not 3000, the raw sum
+    // of the three 1000ms gaps advanced.
+    expect(entries[0]!.detail).toContain("2000ms");
+    expect(entries[0]!.detail).toContain(
+      "observed workoutType=1 durationRaw=0 durationType=128",
+    );
+    expect(entries[0]!.detail).toContain(
+      "expected workoutType=8 durationRaw=6000 durationType=0",
+    );
+    const fired = events.filter((e) => e.kind === "programDropped");
+    expect(fired).toHaveLength(1);
+
+    // IDEMPOTENT (the `armedWatchFired` guard): more of the identical wrong
+    // structure keeps arriving — a real radio does not stop notifying just
+    // because the app decided to leave — and it must not double-fire.
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1000);
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        statusWithStructure(WRONG_STRUCTURE),
+      );
+    }
+    await flushMicrotasks();
+    expect(structureLeftEntries(log)).toHaveLength(1);
+    expect(events.filter((e) => e.kind === "programDropped")).toHaveLength(1);
+  });
+
+  it("the near-miss (1 of 2): a mismatch that reaches the tick count and then SELF-CORRECTS before the window logs 'structure-mismatch-recovered', never 'structure-left' — the near-miss the design spec's own §1b calls out as the entry that matters most", async () => {
+    const { transport, log, clock, events } = await armed();
+
+    // Three consecutive stable wrong ticks, 300ms apart (well under the
+    // window)...
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(300);
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        statusWithStructure(WRONG_STRUCTURE),
+      );
+    }
+    // ...then the CORRECT structure arrives before the window ever closes.
+    clock.advance(300);
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(MINIMAL_PROGRAM));
+    await flushMicrotasks();
+
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+    expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
+    const recovered = recoveredEntries(log);
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]!.detail).toContain("3 consecutive armed tick(s)");
+    expect(recovered[0]!.detail).toContain("a matching armed tick arrived");
+  });
+
+  it("the near-miss (2 of 2): a mismatch streak that ends because the machine LEFT armed (the rower pulled) logs 'structure-mismatch-recovered' too — distinguishing 'stayed silent' from 'got lucky on the thresholds' needs both exits covered", async () => {
+    const { transport, log, clock, events } = await armed();
+
+    clock.advance(300);
+    transport.notify(GENERAL_STATUS_UUID, statusWithStructure(WRONG_STRUCTURE));
+    clock.advance(300);
+    transport.notify(GENERAL_STATUS_UUID, statusWithStructure(WRONG_STRUCTURE));
+    // The rower pulls before the third tick ever arrives.
+    clock.advance(300);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME),
+    );
+    await flushMicrotasks();
+
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+    expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
+    const recovered = recoveredEntries(log);
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]!.detail).toContain("2 consecutive armed tick(s)");
+    expect(recovered[0]!.detail).toContain('left "armed"');
+  });
+
+  it("a fresh program() resets this watch — a leftover streak from the OUTGOING program, old enough that its own window is already spent, must not combine with the incoming program's first mismatched tick to fire early", async () => {
+    const { transport, log, clock, driver, events } = await armed();
+
+    // Two mismatched ticks under the FIRST program, 2500ms then 100ms
+    // apart — the streak (2) is short of the 3-tick bar on its own, so
+    // nothing fires. `mismatchSince` now reads 2500 (the streak's own
+    // start), deliberately left FAR enough in the past that, if it ever
+    // survived a re-arm uncleared, the very next mismatched tick would
+    // already clear `STRUCTURE_MISMATCH_WINDOW_MS` against it.
+    clock.advance(2500);
+    transport.notify(GENERAL_STATUS_UUID, statusWithStructure(WRONG_STRUCTURE));
+    clock.advance(100);
+    transport.notify(GENERAL_STATUS_UUID, statusWithStructure(WRONG_STRUCTURE));
+    await flushMicrotasks();
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+
+    // A SECOND program() succeeds — a clean re-arm, no reconnect (matches
+    // `program()`'s own per-run reset block, `armedWatch`'s doc comment).
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    // A single mismatched tick under the NEW arm, well clear of
+    // STRUCTURE_MISMATCH_WINDOW_MS relative to the OLD streak's own
+    // `mismatchSince` (2500 -> now 5100, a 2600ms gap — comfortably past
+    // 2000ms). A correctly-reset watch reads this as tick 1 of a FRESH
+    // streak (short of the 3-tick bar, so no fire regardless of timing). A
+    // watch that failed to reset would read it as tick 3 of the OLD one,
+    // held for 2600ms — BOTH thresholds met, firing on the wrong program's
+    // history.
+    clock.advance(2500);
+    transport.notify(GENERAL_STATUS_UUID, statusWithStructure(WRONG_STRUCTURE));
+    await flushMicrotasks();
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+    expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
+  });
+});
+
 describe("createPm5Driver: walk 5 — the last split always lands (the end-of-workout split race)", () => {
   /** The walk's own workout: a single 1:00 interval, rowed to completion.
    *  The PM5 delivered 0x0037 and 0x0038 at the finish, 1 ms apart

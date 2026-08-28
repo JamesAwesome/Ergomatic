@@ -321,6 +321,22 @@ export default function ConnectedInterstitial({
     if (session.deviceName !== null) saveLastDevice(session.deviceName);
   }, [session.deviceName]);
 
+  // RC-37 ([R5], design spec 2026-08-27-link-authority-design.md §1): the
+  // hook already ran Cancel's own exit (minus the terminate — the machine
+  // already left, so there is nothing of ours left to terminate) the
+  // instant its driver reported the mismatch; this is the one step it
+  // cannot do itself, since `onExit` is a prop `useMonitorSession` never
+  // sees. `onExit` is deliberately NOT in the deps array: it is a fresh
+  // closure every render from `WorkoutDetail.tsx`'s own `setConnecting`
+  // call, and depending on it would refire this effect on every render
+  // that happens to hand down a new reference, not on the one flip that
+  // actually matters (the same reasoning the mount-once connect() effect
+  // above already applies to its own deps).
+  useEffect(() => {
+    if (session.programDropped) onExit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.programDropped]);
+
   // F1 (cohort-unlock spec §1): `disconnected` joins `failed` here. The
   // failure JSX below has two call sites — `failed` (always had a working
   // retry) and the `disconnected`-no-run branch (`:644-646`), which reused
