@@ -15,7 +15,7 @@ No risks recorded.
 - User impact: what a rower, operator, or account holder experiences.
 - Expected authority: source, exact quoted rule, and what it measures.
 - Actual behavior: baseline SHA, exact code/capture/build evidence, and trigger.
-- Independent disproof: probe used; why it does not share the product's logic.
+- Independent disproof: probe used; why it does not share the product's implementation, premise, source, or quantity; production fields it does not read; and a corruption that makes it fail.
 - Scope: writers, readers, stored shapes, and paths affected.
 - Existing coverage gap: why current tests did not or could not catch it.
 - Verification required after a fix: test/capture/build/hardware proof.

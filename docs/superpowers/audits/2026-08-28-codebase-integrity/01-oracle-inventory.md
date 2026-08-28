@@ -6,8 +6,8 @@ Status: NOT_STARTED
 
 ## Behavior-to-oracle map
 
-| Behavior or claim | Production path | Existing gate | Input origin | Expected authority | Independent? | Blind spot | Disposition |
-| ----------------- | --------------- | ------------- | ------------ | ------------------ | ------------ | ---------- | ----------- |
+| Behavior or claim | Expected authority | Production path | Probe medium | Input origin | Shared premise/source/quantity? | Product fields not read | Corruption that must fail | Blind spot | Disposition |
+| ----------------- | ------------------ | --------------- | ------------ | ------------ | ------------------------------- | ----------------------- | ------------------------- | ---------- | ----------- |
 
 ## Fixture-origin map
 

@@ -9,7 +9,7 @@ the current product, not a refactor exercise: the output is a ranked, evidenced
 fix list James can hand to Claude Code without turning guesses or historical
 notes into work.
 
-**Status:** approved audit design; execution has not started.
+**Status:** approved audit design; execution is in progress at Task 2.
 
 ## Goal and definition of done
 
@@ -41,8 +41,12 @@ enter; it is never a blanket disposition.
 - **Excluded:** untracked files in the main checkout, generated outputs,
   `node_modules`, and proposed code changes.
 - **Read-only rule:** audit agents do not modify source, tests, fixtures,
-  documentation, data, or Git state. A reproducer may exist only in its own
-  worktree and is discarded unless James explicitly asks to make it a fix.
+  documentation, data, or Git state. The controller may apply a bounded,
+  temporary mutation in the audit worktree only when a biting probe can change
+  prioritization: it records the exact mutation and entered branch, never
+  stages it, reverses it with `apply_patch`, and proves the product diff is
+  empty before accepting the result. Stryker's own disposable sandbox is
+  preferred. No reproducer becomes a fix unless James separately asks for it.
 - **Rebase rule:** if `main` changes materially during execution, record the
   first affected SHA and re-run only the affected probes. Never silently blend
   evidence from two baselines.
@@ -58,17 +62,18 @@ is still re-read or re-executed at this baseline.
 
 ### Authority before implementation
 
-Each behavior has one authority. The task must name it before reading code:
+Each behavior must separate the expected authority from the production subject
+and the probe medium before code is judged:
 
-| Behavior                         | Authority to test against                                                                                                | Insufficient substitute                           |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
-| Workout shape and bounds         | Product rules encoded at the server boundary; `validateSteps()` rejects invalid shapes (`app/domain/validate.ts:65-150`) | TypeScript types or builder controls alone        |
-| Resolved targets and estimates   | Independently calculated Erg Book math and real authored workouts                                                        | A UI rendering of the same `phases()` result      |
-| SQL constraints and transactions | Real Postgres and committed migration history                                                                            | In-memory store fake                              |
-| API behavior                     | Validated request/response contract over the mounted server                                                              | A hook mock or an unchecked `as` cast             |
-| PM5 bytes and program semantics  | Primary Concept2 interface definition plus committed raw recordings or PM5 screen evidence                               | Fake events, decoded old logs, or driver comments |
-| iOS lifecycle and BLE delivery   | Apple/Capacitor/plugin primary documentation and a native capture                                                        | Web Bluetooth or Playwright behavior              |
-| Rendering and interaction        | Real browser/native surface with realistic stored data                                                                   | Component existence or a shallow render           |
+| Behavior                         | Expected authority                                                                       | Production path under audit                                      | Probe medium                                                      | Insufficient substitute                           |
+| -------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------- |
+| Workout shape and bounds         | Approved workout grammar and product rules; unresolved rules remain unknown              | `validateSteps()` and every authoring/import boundary            | Boundary table over seeded, stored, and hand-authored workouts    | TypeScript types or builder controls alone        |
+| Resolved targets and estimates   | Independently calculated Erg Book math and real authored workouts                        | Domain target, phase, estimate, and log derivations              | Hand calculations and independently authored fixtures             | A UI rendering of the same `phases()` result      |
+| SQL constraints and transactions | PostgreSQL 18 semantics plus the approved durable-data invariant                         | Committed migrations, schema, and real stores                    | Real Postgres migration, constraint, race, and rollback probes    | In-memory store fake                              |
+| API behavior                     | Explicit client/server product contract plus HTTP and auth semantics                     | Validation, mounted routes, middleware, serializers, and clients | Real mounted-server requests with independently shaped responses  | A hook mock or an unchecked `as` cast             |
+| PM5 bytes and program semantics  | Primary Concept2 interface definition and the quantity shown by independent PM5 evidence | Codec, compiler, driver, transport, and consumers                | Raw recordings, hand decode, structural readback, or PM5 screen   | Fake events, decoded old logs, or driver comments |
+| iOS lifecycle and BLE delivery   | Apple/Capacitor/plugin primary documentation and observed native behavior                | Native adapter, plugin calls, liveness, and recovery             | Native capture correlated with lifecycle and PM5 evidence         | Web Bluetooth or Playwright behavior              |
+| Rendering and interaction        | Approved design, WCAG/platform convention, and the intended rower outcome                | Browser/native component and state flow                          | Real surface with realistic stored data and computed measurements | Component existence or a shallow render           |
 
 When no independent authority exists, the report says so. For example, the
 2026-08-27 PM5 walk records, “Interval 3 — 59.8 m rowed before the Menu
@@ -81,29 +86,35 @@ turn a convenient proxy into proof.
 Every conclusion gets both a severity and an evidence grade. Do not collapse
 them into one score.
 
-| Grade                 | Meaning                                                                                                                      | May become a proposed fix?           |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| **Confirmed**         | A reproducible behavior contradicts an independent authority or a stated invariant.                                          | Yes                                  |
-| **Probable**          | Code and a discriminating probe show a realistic failure, but the external authority or production occurrence is incomplete. | Yes, marked as conditional           |
-| **Hypothesis**        | A suspicious path, stale claim, or unentered branch needs a discriminating probe.                                            | No; it remains an audit task         |
-| **Cleared**           | The probe passed against an independent authority at this baseline.                                                          | No                                   |
-| **Unknown by design** | The system cannot observe the fact; the product must expose or bound that uncertainty.                                       | Only as an explicit product decision |
+| Grade                 | Meaning                                                                                                                           | May become a proposed fix?           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| **Confirmed**         | A reproducible behavior contradicts an independent authority or a stated invariant whose provenance is independently established. | Yes                                  |
+| **Probable**          | Code and a discriminating probe show a realistic failure, but the external authority or production occurrence is incomplete.      | Yes, marked as conditional           |
+| **Hypothesis**        | A suspicious path, stale claim, or unentered branch needs a discriminating probe.                                                 | No; it remains an audit task         |
+| **Cleared**           | The probe passed against an independent authority at this baseline.                                                               | No                                   |
+| **Unknown by design** | The system cannot observe the fact; the product must expose or bound that uncertainty.                                            | Only as an explicit product decision |
 
 Code comments, prior audit prose, and a test that constructs both sides from
-the same helper are testimony, not independent evidence. A source citation
-must point to the line that could falsify the claim, and a document citation
-must quote the relevant sentence.
+the same helper are testimony, not independent evidence. A repository-stated
+invariant cannot promote a finding until its product, protocol, platform, or
+data-contract provenance is established. A source citation must point to the
+line that could falsify the claim, and a document citation must quote the
+relevant sentence.
 
 ### The no-circular-proof rule
 
-A probe is rejected when changing one shared implementation could leave both
-the product and the oracle agreeing. Common failures to check for are:
+A probe is rejected when product and oracle share an implementation, premise,
+source, or measured quantity such that the same corruption could leave both
+agreeing. Each accepted oracle names the production fields it does not read and
+one corruption that must make it fail. Common failures to check for are:
 
 - a fake emitting values by calling the same transformation the production
   parser/driver uses;
 - expected bytes built with the production encoder;
 - an expected UI total calculated with the same accumulator used by the UI;
 - client and server tests sharing a malformed fixture or type cast;
+- separately written decoders copying the same scale, optionality assumption,
+  or quantity definition;
 - an audit conclusion copied from a prior report without re-running its
   discriminating case.
 
@@ -228,18 +239,20 @@ This lane is trace-led because its two main owners are already unusually large:
 the baseline sources end at `driver.ts:6082` and `useMonitorSession.ts:3322`.
 Review them as interacting state machines rather than as two long files.
 
-| Trace                             | Must prove end-to-end                                                                    | Primary disproof                                                                           |
-| --------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Program and readback              | Authored phase → encoded program → PM5 structural readback → user state                  | A valid-looking program that is not what the PM5 reports armed                             |
-| Live measurement and attribution  | Raw bytes → parser → driver attribution → live surface → saved actual                    | A value assigned to the wrong interval, source, or authority                               |
-| Silence, background, and recovery | Lifecycle/radio event → transport → liveness/axes → user-facing state → persisted reason | A healthy background gap labelled link loss, or a real loss rendered live                  |
-| Finish, terminate, and logging    | Boundary/summary/termination → held finish → record → log/summary                        | A missing/duplicated final interval or a command sent after the product declared it unsafe |
+| Trace                             | Must prove end-to-end                                                                                                                                        | Primary disproof                                                                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Connection and readiness          | Connect intent → platform selection → initialization/permission/radio → retrieval or picker → connection → service/notification subscription → ready/program | A permission, retrieval, picker, connection, or subscription failure that prevents later traces from beginning |
+| Program and readback              | Authored phase → encoded program → PM5 structural readback → user state                                                                                      | A valid-looking program that is not what the PM5 reports armed                                                 |
+| Live measurement and attribution  | Raw bytes → parser → driver attribution → live surface → saved actual                                                                                        | A value assigned to the wrong interval, source, or authority                                                   |
+| Silence, background, and recovery | Lifecycle/radio event → transport → liveness/axes → user-facing state → persisted reason                                                                     | A healthy background gap labelled link loss, or a real loss rendered live                                      |
+| Finish, terminate, and logging    | Boundary/summary/termination → held finish → record → log/summary                                                                                            | A missing/duplicated final interval or a command sent after the product declared it unsafe                     |
 
-**Required probes:** raw replay with separately recorded program metadata;
-transition tables that include impossible paths; negative fake mutations;
-real PM5 screen comparisons using the quantity that screen actually reports;
-and scheduled native hardware walks for background, radio-off, Menu,
-disconnect, finish-grace, and rest cases. Browser tests cannot clear native
+**Required probes:** connection/readiness failure tables; raw replay with
+separately recorded program metadata; transition tables that include impossible
+paths; bounded controller-owned negative mutations; real PM5 screen comparisons
+using the quantity that screen actually reports; and separately approved native
+hardware walks for background, radio-off, Menu, disconnect, finish-grace, and
+rest cases. Browser tests cannot clear native
 behavior: `defaultTransport()` selects Capacitor BLE only when `isNative()`
 (`app/src/adapters/monitorTransport.ts:38-91`), and native lifecycle selection
 is equally unreachable from Playwright.
@@ -251,8 +264,10 @@ background/state-restoration documentation, Capacitor App documentation, and
 the exact installed BLE plugin source. No hardware action is scheduled by this
 spec; it becomes a separate James-approved walk.
 
-**Exit:** each trace has a list of supported transitions, known unobservable
-states, input provenance, and authority-specific oracle. A web/fake pass is
+**Exit:** each of the five traces has a list of supported transitions, known
+unobservable states, input provenance, and authority-specific oracle; a
+controller-owned composition matrix also proves the shared state passed between
+traces. A web/fake pass is
 never recorded as a native/hardware pass.
 
 ### E. Tests, build/deploy paths, and documentation truth
@@ -331,7 +346,9 @@ Every candidate is recorded in this form before prioritization:
 - User impact: what a rower, operator, or account holder experiences.
 - Expected authority: source, exact quoted rule, and what it measures.
 - Actual behavior: baseline SHA, exact code/capture/build evidence, and trigger.
-- Independent disproof: probe used; why it does not share the product's logic.
+- Independent disproof: probe used; why it does not share the product's
+  implementation, premise, source, or quantity; production fields it does not
+  read; and a corruption that makes it fail.
 - Scope: writers, readers, stored shapes, and paths affected.
 - Existing coverage gap: why current tests did not or could not catch it.
 - Smallest safe fix: a bounded direction, not an untested rewrite.

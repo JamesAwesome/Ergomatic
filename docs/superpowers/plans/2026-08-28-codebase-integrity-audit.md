@@ -31,20 +31,31 @@ documentation, Markdown audit records.
 - Audit agents are read-only. They do not modify code, tests, fixtures,
   documentation, data, Git state, or external systems.
 - The controller is the only writer of audit artifacts and the only committer.
-  It runs `git rev-parse --show-toplevel` immediately before every commit.
+  It runs `git rev-parse --show-toplevel` immediately before every commit. For
+  a prioritization-changing biting probe only, the controller may apply a
+  temporary product mutation in the audit worktree, record the exact change and
+  entered branch, never stage it, reverse it with `apply_patch`, and prove the
+  product diff is empty before accepting the result. Prefer Stryker's own
+  disposable sandbox.
 - Every subagent reads `.claude/agent-briefing.md` before its task brief.
 - Every conclusion carries a separate severity and evidence grade. A
   hypothesis never appears in the Claude fix list.
-- A test/fake is not an independent oracle when changing shared production
-  logic could leave both sides agreeing.
+- A test/fake is not an independent oracle when product and oracle share an
+  implementation, premise, source, or measured quantity that could leave both
+  sides agreeing. Every accepted oracle names fields it does not read and a
+  corruption that makes it fail.
 - Any P0/P1, number-meaning, stored-shape, auth, or device-command candidate
   receives an independent high-end validation pass.
 - No hardware walk, external write, merge, PR close, or worktree removal occurs
   without James’s explicit approval.
-- Run the expensive whole-repo gates once at baseline and once at finalization;
-  lane agents use read-only inspection and narrow existing probes.
+- Run the expensive whole-repo product gates once at baseline. Finalization
+  reruns product tests only if tracked product/test/config files changed; it
+  always reruns documentation, type, lint, and format gates.
 - One PR carries the spec, execution plan, audit record, and final report unless
   a validated triad fix must be split into its own later PR.
+- This audit is a read-only overlay and does not displace Wave F's known P1
+  lifecycle work. The reproduced pre-row lock is context and an existing
+  ROADMAP item, not a finding the audit can rediscover or duplicate.
 
 ## Artifact Structure
 
@@ -99,7 +110,7 @@ field once—do not pay for a repeated whole-lane scan.
 **Files:**
 
 - Create: all files listed under **Artifact Structure**.
-- Read: spec, this plan, `.claude/agent-briefing.md`, `AGENTS.md`, `ROADMAP.md`,
+- Read: spec, this plan, `.claude/agent-briefing.md`, `CLAUDE.md`, `ROADMAP.md`,
   `docs/TESTING.md`.
 
 **Interfaces:**
@@ -251,8 +262,8 @@ field once—do not pay for a repeated whole-lane scan.
   pnpm lint
   pnpm format:check
   pnpm typecheck
-  pnpm test
-  pnpm test:coverage
+  pnpm test --project unit
+  pnpm test --project client
   pnpm build
   pnpm dist:grep
   ```
@@ -265,12 +276,14 @@ field once—do not pay for a repeated whole-lane scan.
   From `app/`:
 
   ```bash
-  pnpm test --project integration
+  pnpm test:coverage
   pnpm e2e
   ```
 
-  Record Docker availability, test counts, failures, retries, and any path not
-  entered. Do not interpret a green browser run as native evidence.
+  `pnpm test:coverage` runs the complete Vitest workspace, including the
+  integration project, exactly once. Record Docker availability, per-project
+  test counts, failures, retries, and any path not entered. Do not interpret a
+  green browser run as native evidence.
 
 - [ ] **Step 4: Tear the audit stack down with its volume**
 
@@ -519,10 +532,10 @@ field once—do not pay for a repeated whole-lane scan.
 
 ---
 
-### Task 8: Audit the Connected Monitor as Four Traces (Lane D)
+### Task 8: Audit the Connected Monitor as Five Traces (Lane D)
 
 **Owner/model:** Two investigators, `gpt-5.6-terra` high, in parallel:
-`program_and_live` and `lifecycle_and_finish`.
+`connect_program_live` and `lifecycle_and_finish`.
 
 **Files:**
 
@@ -535,15 +548,18 @@ field once—do not pay for a repeated whole-lane scan.
 **Interfaces:**
 
 - Consumes: Lane A compiler disposition, Lane C log trace, and oracle inventory.
-- Produces: four transition/evidence tables, capture coverage matrix, native
-  evidence gap list, and candidate records.
+- Produces: five transition/evidence tables, a controller-owned cross-trace
+  composition matrix, capture coverage matrix, native evidence gap list, and
+  candidate records.
 
-- [ ] **Step 1: Dispatch program/readback and live-attribution traces**
+- [ ] **Step 1: Dispatch connection/readiness, program/readback, and live-attribution traces**
 
-  Require raw-byte provenance, independently supplied program metadata,
-  interval-index/reset boundaries, source/quantity naming, and every downstream
-  consumer. The agent must state what each PM5 oracle measures before comparing
-  it to the app.
+  Require Connect intent, platform selection, permission/radio state,
+  retrieval/picker, connection, service/notification subscription, and the
+  transition to ready/program. Then require raw-byte provenance, independently
+  supplied program metadata, interval-index/reset boundaries, source/quantity
+  naming, and every downstream consumer. The agent must state what each PM5
+  oracle measures before comparing it to the app.
 
 - [ ] **Step 2: Dispatch background/recovery and finish/persistence traces**
 
@@ -565,7 +581,15 @@ field once—do not pay for a repeated whole-lane scan.
   command, or chooses an interval receives a candidate/disproof record even if
   it is ultimately cleared.
 
-- [ ] **Step 5: Reconcile and commit Lane D**
+- [ ] **Step 5: Build the cross-trace composition matrix**
+
+  The controller joins at least `phase`, `driverRef`, `frameSilence`, interval
+  identity/attribution, `endedBy`, terminate eligibility, summary totals, and
+  saved actuals. Each shared field names its writers, readers, transition
+  ordering, and a combination that would make individually correct traces
+  disagree. Deduplicate joined symptoms before promotion.
+
+- [ ] **Step 6: Reconcile and commit Lane D**
 
   Prior audit conclusions are leads only. Quote the current source/capture that
   supports each accepted row, format, verify worktree, and commit:
@@ -605,8 +629,10 @@ artifact checks.
 
   Use existing Stryker results when current; run a scoped Stryker probe only
   where it can alter prioritization. For client gates outside Stryker scope,
-  identify the exact corruption that must turn the named test red and use a
-  disposable validation worktree if execution is necessary. Commit no mutation.
+  identify the exact corruption that must turn the named test red. The
+  controller may apply it temporarily under the Global Constraints mutation
+  exception, must prove the intended branch changed, and must reverse it and
+  prove a clean product diff before recording the result. Commit no mutation.
 
 - [ ] **Step 3: Re-test artifact claims from the artifact**
 
@@ -690,6 +716,14 @@ artifact checks.
   git commit -am "docs: triage codebase audit candidates"
   ```
 
+- [ ] **Step 7: Put a ceiling on validation spend**
+
+  Count mandatory validators, optional P2 validators, expected model/effort,
+  and which result could change ordering. P3 receives no further probe unless
+  it unblocks a P0–P2 decision. If any paid validator dispatch remains, present
+  the committed count and estimate to James and mark the task
+  `BLOCKED_ON_JAMES`; Task 11 starts only after explicit approval of that batch.
+
 ---
 
 ### Task 11: Independently Validate the Priority Slate
@@ -719,7 +753,8 @@ candidate’s original author.
 
   Validate a P2 when its fix would touch a high-risk seam, its evidence conflicts
   with another lane, or it would otherwise be ranked above a validated item.
-  Leave low-impact hypotheses in the risk register.
+  Leave low-impact hypotheses in the risk register. Do not validate P3 unless
+  its result is necessary to decide a P0–P2 item.
 
 - [ ] **Step 3: Controller reproduce each accepted verdict**
 
@@ -795,7 +830,8 @@ candidate’s original author.
 **Files:**
 
 - Modify: `claude-fix-list.md`, `final-report.md`, `findings.md`,
-  `risk-register.md`, `00-dashboard.md`.
+  `risk-register.md`, `00-dashboard.md`, and `ROADMAP.md` when a promoted fix
+  lacks an existing live owner.
 
 **Interfaces:**
 
@@ -815,7 +851,14 @@ candidate’s original author.
   Keep dependency order when one fix is needed to validate another. Explain
   why each top-ten item outranks the next.
 
-- [ ] **Step 3: Write `claude-fix-list.md`**
+- [ ] **Step 3: Revalidate promoted findings against current `main`**
+
+  Record the final-main SHA and diff it against the fixed baseline for each
+  finding's scope. Mark the finding `still present`, `superseded`, or
+  `NEEDS_REVALIDATION`; never blend later-main evidence into the baseline
+  reproduction. A superseded item does not enter the fix list.
+
+- [ ] **Step 4: Write `claude-fix-list.md`**
 
   For every Confirmed/Probable P0–P2 include:
 
@@ -827,18 +870,22 @@ candidate’s original author.
   - affected files/shapes/auth/device interfaces;
   - test/capture/build/hardware verification required;
   - dependencies and reasons not to bundle unrelated triad work.
+  - baseline reproduction SHA and current-main disposition;
+  - one existing or newly added live ROADMAP owner;
+  - gate class and any remaining James/design approval.
 
   Exclude P3-only cleanup from the main fix queue; group it under the next
-  relevant owner.
+  relevant owner. The fix list is an execution view of ROADMAP-owned work, not
+  a second backlog.
 
-- [ ] **Step 4: Write `final-report.md`**
+- [ ] **Step 5: Write `final-report.md`**
 
   Open with what the audit established and why it matters. Include the priority
   table, coverage/disposition table by lane, strongest cleared claims, risk
   register link, method limitations, credit/model summary, and next decision
   required from James.
 
-- [ ] **Step 5: Arithmetic and source self-check**
+- [ ] **Step 6: Arithmetic and source self-check**
 
   Recompute every reported count from the lane registers. Open every P0–P2
   citation. Search for unsupported certainty words and for candidates presented

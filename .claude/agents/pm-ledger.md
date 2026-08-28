@@ -411,7 +411,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   sibling PR (#104) had merged one minute after this branch's closing commit.
   Nothing in the branch was wrong; the gate would still have waved through a
   merge with no CI run against real main. Run `gh pr view --json
-  mergeable,statusCheckRollup` before reading anything else.
+mergeable,statusCheckRollup` before reading anything else.
 
 - **The propose-don't-write ledger rule has a predictable collision cost:** two
   concurrent PRs each carrying a proposed ledger entry conflict in the ledger
@@ -558,7 +558,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **"The old code was missing X" is a claim about a DELETED file — `git show` it
   before building the fix on it.** The CS slate's central hypothesis was that the
   pre-spec-3 swipe failed for want of `touch-action`. `git show
-  3dc3b06^:app/src/index.css:6041` has `touch-action: pan-y` on the pane
+3dc3b06^:app/src/index.css:6041` has `touch-action: pan-y` on the pane
   container, with a comment stating the exact rationale the spec proposed to
   introduce. The antagonist ledger said touch-action was UNTESTED; the spec read
   that as absent. The real candidate was in the same commit — the handler was
@@ -580,7 +580,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   contract, a session — for a failure a PM5 cannot influence, with the criterion
   itself hedged "on the phone IF a phone pass is scheduled". The instrument was
   already ruled on at CR2's close: `VITE_ENABLE_FAKE_MONITOR=1 pnpm ios:build &&
-  pnpm ios:open` (build-time flag at `monitor/transports/index.ts:251`;
+pnpm ios:open` (build-time flag at `monitor/transports/index.ts:251`;
   `ios:build` = `vite build && cap sync`) puts the real surface in WKWebView with
   no erg, no TestFlight, no build number. **Probe on device BEFORE building the
   ladder when the mystery is unexplained** — and attach Safari Web Inspector to
@@ -591,14 +591,14 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **A new display builder must enumerate the union it renders, not the examples
   the request mentioned.** CS item B specified four forms (distance work, time
   work, rest, FINISH) against `expand.ts:12`'s `"warmup" | "work" | "rest" |
-  "test"` — omitting WARM-UP, which this very surface flags deliberately per a
+"test"` — omitting WARM-UP, which this very surface flags deliberately per a
   checked-off James requirement (`ROADMAP.md:1697-1700`). Third occurrence of the
   property-table lesson (spec 3's frames, 2a's READY word). **Exit criteria for a
   string builder are a table over the type union × its optional fields.**
 
 - **Re-deriving a value the domain already resolved is a second source of truth.**
   Item B proposed recomputing the split from `targetSplit` + `targetKind ===
-  "split"` when `EnginePhase.label` already carries exactly that set, and
+"split"` when `EnginePhase.label` already carries exactly that set, and
   `expand.ts:42` documents these builders as reading `label` straight through.
   **Before adding fields to a display string, check whether the existing composer
   already holds the semantics you are about to re-encode.**
@@ -631,11 +631,12 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **Backlog count at this gate: 24 unchecked items** — identical to the
   2026-08-13 audit. CS is executed, not filed, so this is not filing-as-deferral;
   but nothing has come off the pile in four days either.
+
 ## Phase-open gate, 2026-08-17 (Phase PW, post-workout summary — spec 1)
 
 - **A nullable-ing migration is a CROSS-VERSION break, and this repo has no
   error boundary to soften it.** `grep -rn "ErrorBoundary|componentDidCatch|
-  getDerivedStateFromError" src/` returns zero. `Today.tsx:1464` renders
+getDerivedStateFromError" src/` returns zero. `Today.tsx:1464` renders
   `{log.held.toUpperCase()}`, so the first null-`held` row white-screens the
   app's home screen on every installed build. The web deploys on merge and iOS
   ships on tags, so the exposure window is "until the next tag", not "until the
@@ -922,6 +923,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   shipped phases missing from the file. (Controller's note, same day: CS and
   CM sections were added to ROADMAP.md at this gate's direction; a fourth
   occurrence graduates this to CLAUDE.md's recurring-failures list.)
+
 ## Final-PR gate, 2026-08-18 (PR #124, log-delete — triad: first DELETE + a counter write)
 
 - **A gap named in a spec is not disclosed until it is in the NOTES.** The
@@ -1088,7 +1090,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **"Should we pull the build" is usually the wrong axis — ask first whether the
   build OWNS the bug.** v0.14.0 was cut hours before a link-loss brick was found
   on it, and `git diff --stat v0.13.0 v0.14.0 -- app/src/monitor/transports/
-  app/src/adapters/` is EMPTY: the native BLE arm is unchanged since v0.10.0.
+app/src/adapters/` is EMPTY: the native BLE arm is unchanged since v0.10.0.
   Rolling back would have shipped the same defect minus five notes clauses. Run
   that one command before any pull/hotfix conversation. Second half of the same
   point: expiring an internal TestFlight build stops NEW installs and does
@@ -1112,7 +1114,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   boundary resets.** The force-quit-surviving residue remains UNESTABLISHED and
   is most likely iOS-side.
 - **A screen that "never changed" can be a PROOF, not a mystery.** `1 OF 3 ·
-  READY` is structurally impossible once `phase === "disconnected"`
+READY` is structurally impossible once `phase === "disconnected"`
   (`surfaceModel.ts:787`; `ConnectedSurface.tsx:404-410`;
   `connectedAxes.ts:145-146`), so its persistence proves the phase never moved.
   When a surface is state-derived and exhaustive, read the derivation backwards
@@ -1240,7 +1242,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **A phase with two exit lists closes against the wrong one.** ROADMAP
   Phase WU exit (b) still carried "every whole-session number that moved
   moved by exactly the warm-up's own contribution" while spec §8 called
-  that clause *not evaluable* (DISTANCE and TIME cannot move; AVG SPLIT is
+  that clause _not evaluable_ (DISTANCE and TIME cannot move; AVG SPLIT is
   a re-weighting). Close gates read ROADMAP. **Ruling: when a spec writes
   numbered exit criteria, ROADMAP's exit becomes a POINTER to them, never
   a second copy.**
@@ -1476,6 +1478,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   never stored; self-reported cardio frequency would otherwise be this
   repo's first Health-and-Fitness field, and no privacy declaration exists
   yet anywhere (Phase PROD owes it).
+
 ## Final-PR gate, 2026-08-22 (Phase LL link-truth, PR #160 — TRIAD: stored shape + when live numbers freeze)
 
 - **When a PR body and the branch's own source comment disagree about a
@@ -1503,9 +1506,9 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   paragraph in the implementation PR, not the close PR.** #160 flipped four
   in-scope items to `[x]` and left the header reading "NEXT AND UNBLOCKED
   … This phase is the next work". Post-merge that is wrong in both
-  directions at once. The state to write is explicit: *implementation
+  directions at once. The state to write is explicit: _implementation
   merged in #N; phase OPEN on clauses (a)-(e) + W5-W8 + 9a; owner: the
-  next erg visit.* (Two prior phases closed with no ROADMAP section at
+  next erg visit._ (Two prior phases closed with no ROADMAP section at
   all; this is the same failure wearing a checkmark.)
 - **Coupling the banner to the stored close reason couples a FALSE
   POSITIVE to a FALSE RECORD.** LL's B1 ruling ("whatever fires the banner
@@ -1535,7 +1538,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   visible cause and `app/server/routes/data.ts` (+22/-6 from Phase 8A on
   main) was the one that mattered — the same file the stored-shape change
   edits. Migration indices were clean (main 0011, LL 0012). `gh pr view
-  --json mergeable,statusCheckRollup` stays the first command; the second
+--json mergeable,statusCheckRollup` stays the first command; the second
   is `git log <base>..origin/main -- <the files the PR touches>`.
 - **Release call:** tag **v0.17.0 MINOR** on merge. Not optional
   bookkeeping — exit clauses (a)-(d) specify a Release build and
@@ -1576,7 +1579,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   spec: `test_history` rows are written without consent (the decouple ruling,
   correct), survive log deletion by design (FK SET NULL), have no delete
   route, and anchor the next test's `deltaSeconds`. The review filed it as an
-  8B design *input*, which is the deferral the precedent refuses. **A gate's
+  8B design _input_, which is the deferral the precedent refuses. **A gate's
   job includes grepping this ledger for a precedent the PR's own class already
   triggered.** Discharged via James's R1 ruling above.
 - **A phase's STATUS paragraph went stale in an implementation PR again —
@@ -1614,6 +1617,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   nowhere to see it yet, and not yet removable." RELEASING.md needs no new
   rollback floor — 0014 is additive, no backfill, no seed rename; checked so
   the next stored-shape gate does not re-derive it.
+
 ## Phase-open gate, 2026-08-22 (Phase RC slate: the held-open finish, evidence-first)
 
 - **A dev instrument that "keeps capturing" can still be unreadable, because
@@ -1734,7 +1738,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   that auto-merged clean — `LogSession.tsx` (+170 on main from #165),
   its test (+338), `index.css` (+61) — are where the branch's gate evidence
   silently stopped applying. Mechanical step: `git diff --stat
-  $(git merge-base HEAD origin/main)..origin/main` and intersect with the
+$(git merge-base HEAD origin/main)..origin/main` and intersect with the
   PR's own file list; then require e2e AND screenshots on the merged tree,
   never the pre-merge numbers in the body.
 - **A tagged release invalidates every walk card that pins a build.**
@@ -1742,7 +1746,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   v0.18.0 had been tagged the previous day — and v0.18.0 puts a NEW SCREEN
   (BL's post-test prompt) in the finish path the card describes. Generalises
   RF13: **at any gate touching a walk card, `git tag --sort=-creatordate |
-  head -1` and check every version the card names.** The product argument,
+head -1` and check every version the card names.** The product argument,
   not just the bookkeeping one: proving a phase's exit on a build no tester
   runs proves it on a build nobody has.
 - **A struck-through `[x]` is where a narrowed-off half goes to die.** RC-6
@@ -1938,6 +1942,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **Backlog: third consecutive net-negative delta** (63 main → 61 branch).
 - **The 30-second rule is 0-for-11.** Still James's to re-set or retire in
   CLAUDE.md.
+
 ## Final-PR gate, 2026-08-23 (Phase RC, F2a PR #174 — TRIAD: when a rowing record closes)
 
 - **When a branch's own antagonist ledger says "cannot is the wrong word", the
@@ -1961,7 +1966,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   same PR.** RF16's dangling-citation corollary in a new costume.
 - **The status-paragraph check has now fired three gates running (#165, #167,
   #174).** Phase RC's Status still read pre-walk after the walk ran and its
-  record merged. The step promoted at #165 works; it is the *fixing* that keeps
+  record merged. The step promoted at #165 works; it is the _fixing_ that keeps
   not happening. Consider it a standing condition on any PR that ticks a box in
   a phase whose status it does not touch.
 - **The right way to hand a traded-away property to a successor spec, worth
@@ -2045,7 +2050,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   worse: the ROADMAP paragraph is what the successor spec's implementer reads.
   **At any gate on a PR with a post-review fix wave, diff the fix commit's file
   list against the durable records the earlier commits wrote to** (`git show
-  <fix> --stat | grep -i roadmap`) — a fix that touches only code and comments is
+<fix> --stat | grep -i roadmap`) — a fix that touches only code and comments is
   the tell.
 - **Transcribed capture hex is checkable in one grep, and the check is the whole
   value of the oracle.** #182's work/rest pin hand-transcribes five 0x0037 frames
@@ -2432,7 +2437,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   of in-frame arithmetic, never by a summary of it.
 - **The arithmetic check was run on the relationship that already existed.** The
   PR body said "hero arithmetic recomputed (478s/2000m → 1:59.5 ✓)" — true, and
-  the AVG-SPLIT identity predates this PR. The relationship #192 *introduces*
+  the AVG-SPLIT identity predates this PR. The relationship #192 _introduces_
   (block vs hero) went unchecked. **At a gate, recompute the pairing the PR ADDS,
   not the one the screen already had.**
 - **A mitigation sentence must point AT the object the ruling names.** James's
@@ -2630,7 +2635,7 @@ this spec's close).
   must be told absence is a finding.**
 - **A walk README's evidence table labelled a DERIVATION as a screen reading.**
   `walk-2026-08-24/README.md:52` scored `DISTANCE hero | 742 TWD (500+147+95) |
-  742 | MATCH` under a column headed **PM5 (SCREEN)**. The PM5 never displayed
+742 | MATCH` under a column headed **PM5 (SCREEN)**. The PM5 never displayed
   742; the cell is hand-summed, and both sides are the same work+rest-coast
   quantity — the mirror #196 exists to retire, scored green in the phase's own
   PASS record. **Read every cell in a SCREEN column and ask whether a camera
@@ -2922,7 +2927,7 @@ this spec's close).
   data.** DONE THE SAME DAY: James photographed five consecutive rows spanning
   22-27 August; hand arithmetic gives a worst-case delta of 0.1 s/500 m against
   a ~26 s cohort signature, and every row carries the `plus N m coasting in
-  rest` clause an incomplete close cannot have. Cohort empty, twice over.
+rest` clause an incomplete close cannot have. Cohort empty, twice over.
 - **Check the shipped release notes before calling a contradiction
   undisclosed.** v0.23.0 item 1 uses this exact cohort's numbers (742/4:04) as
   its picture of the SOLVED problem — but item 5 already carves it out in the
@@ -3065,3 +3070,12 @@ this spec's close).
   nothing; on a project that has cut 26 tags, that is two release windows with
   empty notes, and it is how the invisible-but-necessary wave gets skipped. Fold
   them into a visible wave rather than releasing them alone.
+
+## Phase-open gate, 2026-08-28 (codebase-integrity audit)
+
+- **A whole-codebase audit is an overlay, not a seventh product wave.** It does
+  not displace a known P1, and its output is not a second backlog: every
+  promoted fix is rechecked against current `main` and assigned one live
+  ROADMAP owner before handoff. Broad discovery may close with explicit
+  deferred lanes; validation spend stops for James's approval once the
+  candidate count is known.
