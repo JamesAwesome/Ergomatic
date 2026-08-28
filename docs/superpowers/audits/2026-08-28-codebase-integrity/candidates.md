@@ -156,8 +156,8 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   under denied access, the existing malformed/versioned recovery matrix,
   cancel/abandon/discard under throwing removal, and a 201-after-cleanup-fault
   test proving one POST and a successful visible result.
-- Status: candidate; Task 7 completed the direct-access census and reproduced
-  the post-commit cleanup consequence; fresh high-end Lane C review is pending.
+- Status: candidate; Task 7 completed the direct-access census, reproduced the
+  post-commit cleanup consequence, and passed fresh high-end Lane C review.
 
 ### AUD-012 — The booting-replica safety claim fails before the seed lock
 

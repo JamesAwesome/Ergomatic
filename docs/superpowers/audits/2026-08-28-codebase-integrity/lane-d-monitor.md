@@ -1,11 +1,164 @@
-# Lane D — Connected Monitor Traces
+# Lane D — Connected Monitor as Five Traces
 
-Baseline: 39460c6514c14ab3133cb5ce8a59ba8625aeef4a
-Status: NOT_STARTED
-Scope:
-Authorities:
-Claims tested:
-Cleared probes:
-Candidates:
-Unknowns:
-Contradictions with the brief:
+Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
+
+Status: COMPLETE PENDING FRESH HIGH-END SEMANTIC REVIEW.
+
+## Scope and evidence discipline
+
+Lane D traced connection/readiness, programming/readback, live attribution,
+silence/background/recovery, and finish/terminate/logging across the compiler,
+web and Capacitor transports, driver, hook, connected surfaces, durable monitor
+record, saved-log door, committed captures, and PM5 screen comparisons. Two
+Terra-high read-only investigators covered the five traces; the controller
+joined their shared state and attacked every durable timing or attribution
+heuristic.
+
+The lane distinguishes four evidence classes throughout:
+
+- deterministic application rules establish only what Ergomatic does;
+- raw web recordings establish bytes and event order on the web transport;
+- native rings establish events observed by the production phone app but are
+  not independent PM5 wire captures;
+- PM5 screens establish only the quantity visibly reported by the monitor.
+
+An acknowledged command is not treated as proof that the PM5 retained or
+executed it. App-produced diagnostics are not treated as independent PM5
+authority. Browser or fake execution is not treated as native delivery
+evidence.
+
+## Trace 1 — connection and readiness
+
+| Transition                       | Writer → reader                                                                                                                                                                                                                         | Guard / cleanup                                                                                                | Evidence disposition                                                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Connect intent                   | `ConnectAction` → `WorkoutDetail.handleConnectProceed` (`app/src/monitor/ConnectAction.tsx:60-103`, `app/src/workout/WorkoutDetail.tsx:221-275`)                                                                                        | Baseline/compile failure stops before radio work; one frozen `EnginePhase[]` builds both program and log seed. | Deterministic client path. The complete 302-workout client-to-real-PM5 path is not mounted evidence.                  |
+| Platform selection               | `defaultTransport()` chooses Capacitor only when native, otherwise web/fake; both receive liveness (`app/src/adapters/monitorTransport.ts:77-91`).                                                                                      | Missing transport becomes a typed failure.                                                                     | Browser tests cannot enter the native arm.                                                                            |
+| Native initialization and picker | Capacitor initializes, retrieves a held peripheral, checks radio state, then presents the plugin device list (`app/src/monitor/transports/capacitorBle.ts:428-496`).                                                                    | A 35 s whole-pipeline timeout and typed permission/radio/cancel errors bound known failures.                   | Code and adapter tests only for plugin/OS ordering; committed native evidence does not expose raw calls.              |
+| Web picker and connection        | Web Bluetooth requests a filtered device; the hook connects the first result and creates the driver (`app/src/monitor/transports/webBluetooth.ts:267-297`, `app/src/monitor/useMonitorSession.ts:2895-2951`).                           | Empty scan and thrown connection failures clean up best-effort.                                                | The 2026-08-23 recording proves one real web scan/connect instance, not native behavior.                              |
+| Characteristic subscriptions     | Driver requests CSAFE, status, split, summary, and verification feeds (`app/src/monitor/driver.ts:1838-1848,2012-2053,5033-5088`).                                                                                                      | Native CSAFE subscription failure is fatal; other feed failures degrade.                                       | The web recording proves subscription requests. No transport-level acknowledgement proves every feed remained active. |
+| Ready/program gate               | A paired session with a device name triggers one program call; only structural verification emits `armed`, which the hook maps to `ready` (`app/src/workout/ConnectedInterstitial.tsx:288-315`, `app/src/monitor/driver.ts:5992-6006`). | Hook guards duplicate connect/program entry.                                                                   | Deterministic sequencing; readiness is narrower than “all native notifications are healthy.”                          |
+
+## Trace 2 — program, acknowledgement, and readback
+
+| Transition                   | Writer → reader                                                                                                                                            | What is proved                                                                            | What remains unproved                                                                                                        |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Authored phases → program    | `compileProgram` bounds and freezes the interval program (`app/domain/monitor/program.ts:458-463`).                                                        | Ergomatic's selected ordered program.                                                     | The general 50-interval PM5 limit remains unsupported by a source naming that attribute (AUD-008).                           |
+| Program → bytes              | Encoder writes null pace as zero, groups interval units into CSAFE frames, and chunks them to the BLE size (`app/domain/monitor/pm5/commands.ts:181-365`). | Exact bytes Ergomatic emits.                                                              | Zero-target semantics and cross-frame PM5 retention/execution (AUD-009/AUD-010).                                             |
+| Prepare and acknowledgements | Driver sends prepare/terminate, writes one complete frame, awaits one parsed response, then advances (`app/src/monitor/driver.ts:5569-5802`).              | Command receipt and parsed response status.                                               | Acknowledgement does not establish that the command was performed; the default acknowledgement wait has no separate timeout. |
+| Structural readback          | `verifyArmed` compares workout type plus interval-zero duration type/value after the final frame (`app/src/monitor/driver.ts:5367-5380,5825-5888`).        | A useful narrow disproof of the wrong first interval structure.                           | Tail removal, later frames, targets, rest, order, and scale beyond interval zero.                                            |
+| Armed watch                  | Repeated wrong structural triples before rowing emit `programDropped` (`app/src/monitor/driver.ts:4930-5029`).                                             | The 2026-08-28 capture independently shows an armed program later leaving that structure. | It still observes only the same narrow triple.                                                                               |
+
+The 2026-08-17 physical session establishes two emitted frames, parsed
+acknowledgements, and a matching interval-zero structural triple. It does not
+establish that the PM5 retained the second frame: the run ended before its sole
+second-frame interval. Likewise, no committed session performs a longer to
+shorter reprogram whose first interval is unchanged. AUD-007, AUD-009, and
+AUD-010 therefore remain hypotheses rather than code findings.
+
+## Trace 3 — live measurement and attribution
+
+| Transition                       | Writer → reader                                                                                                                                                                                                | Quantity / authority                                                                  | Failure boundary                                                                                                                               |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Notification → decoded status    | Guarded 0x0031/32/33 decoders merge a frame; malformed fields remain diagnostic (`app/src/monitor/driver.ts:2012-2053`).                                                                                       | Raw bytes establish arrival; hand decode or PM5 screen is needed to test the decoder. | Missing required feeds can suppress frame emission without proving a physical link loss.                                                       |
+| Status → live interval identity  | Driver applies state-dependent normalization and preserves raw interval count/divergence (`app/src/monitor/driver.ts:2089-2100,2476-2553`, `app/src/monitor/intervalIndex.ts:116-190`).                        | Rest-forward 0x0033 attribution has capture support.                                  | Extending the mapping to 0x0037/38 boundaries remains an explicit inference; unexplained identity becomes `null` instead of an invented index. |
+| Split pair → actual              | Paired 0x0037/38 halves produce a completed interval actual and retain raw/index diagnostics (`app/src/monitor/driver.ts:4389-4561`).                                                                          | PM5 completed-split work values and optional rest readback.                           | Out-of-run or duplicate boundaries are refused; a false normalization can omit a real actual.                                                  |
+| First rowing frame → open record | `ready` plus rowing-mapped state, active declaration, and interval distance opens `MonitorRun`; a bounded multi-frame fallback handles a stuck active byte (`app/src/monitor/useMonitorSession.ts:1841-1984`). | Observed PM5 frame values open the durable session.                                   | The fallback is a heuristic; missing frames can delay or prevent the record from opening.                                                      |
+| Actual → durable record → log    | `recordActual` persists the accepted boundary; `buildMonitorLogSteps` later maps non-null indexed actuals (`app/src/monitor/monitorRun.ts:785-857`, `app/src/session/logDraft.ts:834-865`).                    | Exact accepted PM5 split values, subject to storage success.                          | The persistence writer returns no success signal and swallows failures (AUD-016).                                                              |
+
+0x0039 is a work-only cumulative summary, 0x003A provides rest-total evidence,
+and 0x003F provides PM5 verification-code bytes. Total Work Distance is not a
+work-only log oracle: the accepted rest-bearing capture shows it includes
+rest-coast distance. Lane D therefore retains the independent screen
+comparisons only where both sides name the same quantity.
+
+## Trace 4 — silence, background, and recovery
+
+| Input / transition                        | State join                                                                                                                                                                                                                                                                                                                             | User and durable outcome                                                                                                         | Evidence disposition                                                                                                                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Native pause/resume                       | Capacitor pause/resume → lifecycle adapter → measured gap from last 0x0031 arrival; latch only when already silent or gap ≥2.5 s (`app/src/native/appLifecycle.ts:14-38`, `app/src/monitor/useMonitorSession.ts:2979-3079`).                                                                                                           | `frameSilence` renders link lost while `phase` remains ready/live; lifecycle alone does not close the record.                    | A production phone lock recorded a 39.4 s gap, remained live, and recovered. It proves one outcome, not callback ordering or gap distribution.                                             |
+| Browser lifecycle                         | Production web registration deliberately no-ops (`app/src/adapters/appLifecycle.ts:42-97`).                                                                                                                                                                                                                                            | No browser visibility event enters monitor lifecycle.                                                                            | Browser visibility tests cannot clear native behavior.                                                                                                                                     |
+| Bluetooth disabled / transport disconnect | Capacitor reports disabled radio while holding a device; driver settles pending operations and emits disconnected only for an open run; hook disposes subscriptions and nulls `driverRef` (`app/src/monitor/transports/capacitorBle.ts:386`, `app/src/monitor/driver.ts:1882-1957`, `app/src/monitor/useMonitorSession.ts:2396-2450`). | Phase becomes disconnected, record remains open, recovery is End→log or a fresh connection.                                      | A native radio-off ring proves the plugin event was observed during rowing; it does not prove the later saved row.                                                                         |
+| Healthy frame after silence               | Continuity check decides whether the stream belongs to the same run; healthy recovery retracts the banner after 10 s (`app/src/monitor/useMonitorSession.ts:353-381,1985-2050`).                                                                                                                                                       | A measurable continuity reset closes as link-lost; otherwise the record stays open.                                              | Hysteresis is UI policy, not a device fact.                                                                                                                                                |
+| User End                                  | The link is considered gone when phase is disconnected or frame silence is latched; close happens synchronously before any terminate await (`app/src/monitor/useMonitorSession.ts:3184-3221`).                                                                                                                                         | `endedBy` is `rower` when link is believed present and `link-lost` otherwise; terminate is still attempted when a driver exists. | Silence is inbox absence, not proof of physical disconnection. A lock followed by End before recovery could therefore misclassify the persisted reason; no committed capture exercises it. |
+
+The driver can observe a reconnection, but the hook deliberately does not resume
+a disconnected session. That is a known product limitation, not an audit
+candidate. Native plugin event ordering, notification buffering during
+suspension, and frame-gap distribution remain unknown.
+
+## Trace 5 — finish, terminate, and logging
+
+| Event / join        | Ordering and guard                                                                                                                                                                                                                                             | Stored/logged result                                                                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Natural finish      | Driver opens a 3 s finish grace and summary reconcile before emitting completion; hook closes as `finished` and holds navigation only if the final actual is missing (`app/src/monitor/driver.ts:2682`, `app/src/monitor/useMonitorSession.ts:2153-2200`).     | `completedAt`, `terminated:false`, `endedBy:"finished"`, and measured work/rest sums are persisted.                                                   |
+| Late final boundary | Only the missing last interval of a naturally closed run can pass; storage is re-read by `startedAt`, sums are recomputed, and the handoff releases (`app/src/monitor/driver.ts:4320-4519`, `app/src/monitor/monitorRun.ts:785-857`).                          | No other closed-run boundary can mutate the record.                                                                                                   |
+| Summary burst       | Driver emits separately measured work-only totals/detail/hash; writer fresh-loads the matching completed run, admits only finished or rower-ended records, and writes once (`app/src/monitor/driver.ts:3960-4050`, `app/src/monitor/monitorRun.ts:1002-1111`). | A late burst cannot resurrect a cleared or replacement record.                                                                                        |
+| PM5/Menu terminate  | No final-boundary grace; summary observations may still land during a 2 s eligible linger.                                                                                                                                                                     | The partial interval is not synthesized. Observed PM5 memory likewise omitted the unfinished interval.                                                |
+| Teardown            | Reconcile → handoff release → diagnostic stash → unsubscribe → disconnect (`app/src/monitor/useMonitorSession.ts:2461-2744`).                                                                                                                                  | The log door later requires monitor intent, a matching completed record, matching workout, and valid seed (`app/src/session/LogSession.tsx:260-304`). |
+
+The strongest committed finish evidence is a production phone plus PM5 screen:
+the terminal event preceded the final split by about 92 ms and the summary
+burst by about 361 ms. This supports that observed ordering, not a universal
+latency guarantee. Its PM5 work total (124 s / 500 m) agrees with the app's
+work-only `summaryTotals`; the PM5 Total Time (244 s) separately agrees with the
+app's work-plus-rest time. Those are two valid comparisons of separately named
+quantities.
+
+## Durable heuristic attack table
+
+| Decision                                             | Durable consequence                                              | False-positive / false-negative attack                                                                                         | Disposition                                                                          |
+| ---------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| 35 s native scan bound                               | Suppresses a late selection and reports failure.                 | A valid late picker result is deliberately dropped; real iOS timing distribution is unmeasured.                                | Policy, UNKNOWN native rate; no candidate without a reproduced user consequence.     |
+| Ack-gated programming with optional ack timeout      | Advances to later frames only after parsed OK.                   | An OK can be queued/no-op; an up-but-silent response can wait without a default bound.                                         | Ack never promoted to execution evidence. Negative readiness probe routed to Task 9. |
+| 30-tick + 2 s stable structural mismatch             | Accepts/rejects the armed program.                               | Avoids measured transient mismatch, but any wrong program sharing interval zero is a false negative.                           | AUD-007/AUD-010 remain hypotheses; physical fingerprint required.                    |
+| Interval normalization                               | Chooses which durable actual/log row receives a split.           | Conservative `null` prevents fabrication but can omit a real boundary; 0x0037/38 mapping has less direct evidence than 0x0033. | Task 9 mutation/replay target; no observed misattribution.                           |
+| First-row active fallback                            | Opens and persists a monitor run.                                | Stuck inactive bytes need recovery; missing/late frames can still prevent open.                                                | Instrumented heuristic, no independent failing capture.                              |
+| 2.5 s silence + 10 s recovery hysteresis             | Influences persisted `endedBy` if End occurs while latched.      | Healthy suspension can look lost; a short or callback-less real loss can look live.                                            | AUD-001 remains; lock→End discriminator reserved for Task 12 if ranking-relevant.    |
+| 3 s finish grace / 3.5 s hold / 2 s burst linger     | Admits or declines final actual/summary and controls navigation. | Late evidence is intentionally declined; exact run/index/write-once guards bound false acceptance.                             | Observed phone timings fit; portability remains UNKNOWN.                             |
+| 1 s average-pace and 1 m rest-distance verdict bands | Records diagnostic agreement/disagreement.                       | Pace agreement cannot detect an interval at the mean; structural population checks are independently required.                 | Diagnostic only; not used as a sole persistence/log authority.                       |
+
+## Controller cross-trace composition matrix
+
+| Shared field             | Writers → readers and ordering                                                                                                               | Individually correct traces can still disagree when…                                        | Result                                                                                 |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `phase`                  | Hook connect/program/frame/terminal/disconnect handlers → interstitial, surface, End. Terminal phase changes after synchronous record close. | A native callback is missing/reordered even though every state transition is locally valid. | Native delivery remains AUD-001.                                                       |
+| `driverRef`              | Set only after connection/driver creation; read by program/End/cancel/teardown; cleared before disconnect cleanup.                           | `phase=disconnected` retained a stale driver or a retry silently reused it.                 | Current disconnect path nulls it before best-effort disconnect; cleared at code level. |
+| `frameSilence`           | Liveness timeout or measured resume gap → link axes and End's `linkGone`.                                                                    | A healthy suspended inbox is called physical link loss, or a true short loss never latches. | It is suspicion, not physical truth; persisted reason remains a native discriminator.  |
+| Interval identity        | Status normalizer and split normalizer → pane selection, `recordActual`, log rows.                                                           | Status and boundary characteristics apply different reset semantics at the same transition. | Divergence/null diagnostics exist; replay mutation remains Task 9.                     |
+| `endedBy` / `terminated` | Machine terminal, attended End, continuity reset, or program failure → summary admission and log/result copy.                                | Silence supplies `link-lost` while a live driver still accepts terminate.                   | Command remains attempted; reason may be misclassified under healthy suspension.       |
+| Terminate eligibility    | End/cancel/teardown plus live `driverRef` → PM5 command.                                                                                     | UI link suspicion suppresses a needed command or a stale driver receives one.               | End attempts terminate despite silence; disconnected path has no driver.               |
+| Summary totals           | 0x0039/3A/3F → driver event → guarded, identity-keyed append → saved summary.                                                                | A machine work total is compared with app work-plus-rest or TWD.                            | Quantities are separated; mirror comparison retired.                                   |
+| Saved actuals            | Split pair → normalized actual → storage writer → monitor log door.                                                                          | In-memory acceptance succeeds while storage fails silently.                                 | AUD-016 remains a P2 hypothesis; no joined mounted failure-through-log probe exists.   |
+
+## Capture coverage and native evidence gaps
+
+| Question                      | Web/raw evidence                   | Native production evidence                         | Independent PM5 evidence               | Status                                                   |
+| ----------------------------- | ---------------------------------- | -------------------------------------------------- | -------------------------------------- | -------------------------------------------------------- |
+| Scan/connect/subscriptions    | Raw Aug-23 web recording           | Rings/screens only                                 | None                                   | Native plugin ordering UNKNOWN.                          |
+| Multi-frame program retention | Aug-17 two-frame writes/acks       | None reaching the later-frame interval             | None                                   | AUD-010 open.                                            |
+| Long→short replacement        | None                               | None                                               | None                                   | AUD-007 open.                                            |
+| Zero target semantics         | Zero accepted and run              | No target-screen control                           | None                                   | AUD-009 open.                                            |
+| Background/resume             | Browser arm is not applicable      | Lock and pre-row-lock rings show selected outcomes | PM5 state visible in walk notes        | Callback order, buffering, and gap distribution UNKNOWN. |
+| Radio off                     | No native relevance                | Production phone observed disabled radio mid-piece | Later saved record not correlated      | AUD-001 narrowed, not cleared.                           |
+| Natural finish                | Raw web plus production phone ring | Terminal/final-boundary/summary ordering           | Same-frame PM5 screen quantities       | Cleared for observed device/session only.                |
+| Menu terminate                | Web/raw and phone walk evidence    | Production phone summary behavior                  | PM5 memory omitted unfinished interval | Cleared narrowly for observed session.                   |
+| Storage failure → log         | Unit seams only                    | None                                               | Not applicable                         | AUD-016 open.                                            |
+
+The missing native facts are: frame-gap distribution, plugin callback order,
+notification buffering while suspended, permission/picker/subscription failure
+ordering, raw native BLE recordings, and behavior across firmware/device
+variants. They remain `UNKNOWN`; no hardware work is scheduled in this task.
+
+## Candidate disposition and next probes
+
+No new candidate was promoted. AUD-001, AUD-007, AUD-008, AUD-009, AUD-010,
+and AUD-016 remain quarantined hypotheses. The highest-discrimination probes
+are a long→short same-first-interval PM5 fingerprint, a unique later-frame
+interval reached on the PM5, a native connection-failure matrix, a zero versus
+omitted target control, a lock→End-before-recovery case, and a connected
+storage-failure-through-log case. Task 9 can exercise replay/mutation and
+readiness/storage seams; only Task 12 may request device work, and only if it
+would change the final ranking.
+
+No contradiction with accepted Lane A–C evidence was found. No product files
+were changed and no hardware operation was performed.

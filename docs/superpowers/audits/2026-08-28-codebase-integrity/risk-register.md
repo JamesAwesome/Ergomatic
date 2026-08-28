@@ -13,7 +13,10 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Scope: native transport selection, plugin delivery, lifecycle, liveness, recovery, and diagnostic capture.
 - Existing coverage gap: Vitest excludes `src/native/**` and both radio adapters; Playwright runs Chromium with the fake-injection seam.
 - Verification required after a fix: native capture or hardware walk only if Task 12 finds it can change the ranking, plus replayable regression evidence where possible.
-- Status: deferred to Task 8.
+- Status: Task 8 found production-phone evidence for selected lock, radio-off,
+  finish, and terminate outcomes, but no raw native transport trace or portable
+  plugin/lifecycle contract. The hypothesis is narrowed and deferred to Task
+  12's ranking-based hardware decision.
 
 ### AUD-003 — The repository has no current measurement of mutation strength
 
@@ -87,7 +90,9 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Verification required after a fix: long-to-short and short-to-long real-device
   sequences with distinct late intervals, plus replayable evidence if the
   device exposes a sufficient full-program readback.
-- Status: deferred to Task 8 and Task 12's hardware decision.
+- Status: Task 8 confirmed that acknowledgements plus interval-zero structural
+  readback cannot settle tail replacement. Deferred to Task 12's ranking-based
+  hardware decision.
 
 ### AUD-008 — The general 50-interval rejection lacks primary support
 
@@ -113,7 +118,9 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   or physical recording crosses it.
 - Verification required after a fix: a primary-bound limit plus boundary tests
   below/at/above it; physical evidence only if Task 12 finds it decision-relevant.
-- Status: deferred to Tasks 8–9.
+- Status: Task 8 found no primary source or capture crossing interval 50.
+  Deferred to Task 9's factual-claim pass, then Task 12 only if still
+  ranking-relevant.
 
 ### AUD-009 — Zero pace is assumed to mean no PM5 target
 
@@ -141,7 +148,9 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   evidence proves only that the PM5 accepted the program.
 - Verification required after a fix: primary-defined sentinel/omission behavior
   and a real-device effort-versus-target control.
-- Status: deferred to Task 8 and Task 12's hardware decision.
+- Status: Task 8 confirmed only that raw zero was emitted and accepted; no
+  target-display or enforcement control exists. Deferred to Task 12's
+  ranking-based hardware decision.
 
 ### AUD-010 — Programming beyond the first PM5 frame lacks retention evidence
 
@@ -171,7 +180,9 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   first frame.
 - Verification required after a fix: a final-frame physical fingerprint across
   repeated arms, plus a replayable raw trace for every observable field.
-- Status: deferred to Task 8 and Task 12's hardware decision.
+- Status: Task 8 confirmed the two-frame capture never reached its later-frame
+  interval, so retention remains unproved. Deferred to Task 12's ranking-based
+  hardware decision.
 
 ### AUD-016 — Monitor-run persistence failure may erase the later log door
 
@@ -195,7 +206,9 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   validation separately, not the cross-route consequence.
 - Verification required after a fix: storage failure during open, boundary,
   finish, and teardown; then the real log door and retry/recovery outcome.
-- Status: deferred to Task 8's connected trace.
+- Status: Task 8 mapped the joined failure path but found no mounted
+  connected-session failure-through-log probe. Remains quarantined for Task 9's
+  gate/probe pass; no candidate promotion.
 
 ### AUD-017 — Ambiguous committed responses can duplicate a log and plan advance
 
