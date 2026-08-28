@@ -695,10 +695,6 @@ Each needs erg time or a deliberate recording session.
   spelling FOREVER, so the trigger is about the workouts table only.
 - **The e2e stack-reap race** — a sibling worktree boot once produced 117
   ECONNREFUSED; `stack-reap.sh` racing `git worktree list` is the suspicion.
-- **`domain/monitor/types.test.ts:164-187`** — ten pure existence assertions
-  (`expect(typeof driver.program).toBe("function")`) against an object the test
-  itself built, in the directory pinned at 100%. This is the exact pattern
-  `docs/TESTING.md` §3 and §11 ban by name.
 - **Migrate `DEVIATIONS.md`'s first table to stable IDs.** The 2026-08-28 docs
   audit found eight rows describing code that no longer matches them and about
   fifteen "see row N" cross-references pointing at the wrong rows — some of them
