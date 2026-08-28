@@ -28,7 +28,13 @@ const CHECKPOINT_INDICES = [6, 34, 62] as const;
 // Each plan pins its own instrument (rulings, 2026-08-12): the sprint plan
 // re-tests the 2k (AN — the ceiling every AN/TR pace resolves against),
 // the head plan the 6k (AT — the threshold every AT/O2 pace resolves
-// against). Refs are authored as ONBOARDING_TITLES constants, never string
+// against). That parenthetical is a claim about the LIBRARY, not about this
+// file: nothing here branches on a WorkoutType, and `SplitRef.base` is
+// authored per step, so the convention lives entirely in the corpus. It is
+// checked by `server/seed/library/library.test.ts`'s "resolves each type
+// against its own baseline" — zero crossings across all 300 workouts. If that
+// test ever goes red, this sentence is what it is defending.
+// Refs are authored as ONBOARDING_TITLES constants, never string
 // literals, so the seam has zero dependency on the titles' later rename
 // (gate ruling, 2026-08-22). The reason ships WITH the prescription so no
 // consumer invents one.

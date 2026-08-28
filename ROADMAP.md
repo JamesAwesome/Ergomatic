@@ -676,12 +676,6 @@ Each needs erg time or a deliberate recording session.
 - **Harden the post-save offer against the library-loading race** — on a slow
   real device it can eat a real rower's offer. **Product-shaped, not a test
   tweak.** **S/M**
-- **Pin the type-to-baseline convention with a test.** `plans.ts:29-30` says in
-  prose that AN and TR resolve against the 2k while AT and O2 resolve against
-  the 6k — the entire reason the sprint plan re-tests the 2k. **The code does
-  not implement it** (zero behavioural branches on a `WorkoutType` literal), but
-  the corpus obeys it perfectly: 286/286 and 399/399, zero crossings across all
-  300. About eight lines. **S**
 - **Retire `LEGACY_TITLE_RENAMES`** once every deployed environment has booted
   past the rename. Scope correction: `session_logs.workout_title` keeps the old
   spelling FOREVER, so the trigger is about the workouts table only.
