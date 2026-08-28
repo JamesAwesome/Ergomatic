@@ -579,6 +579,32 @@ often they recur.
     take anything with it. `git stash` is not the alternative here — the
     stash stack is shared with other sessions (agent briefing).
 
+23. **Adding an affordance to a surface that already offers the same
+    thing, and killing the better offer with it.** Queued as a lesson by
+    James on 2026-08-24 alongside item 22; the case is PR #189's baseline
+    round, and `you/BaselineEditor.tsx`'s `seedFor` comment
+    (lines 165-186) is the full account. The round added `[−][+]` steppers
+    to the 2K/6K fields. Those fields ALREADY carried a derivation offer
+    beneath them, and the two suggestion mechanisms disagreed: the
+    placeholder showed the generic table seed (2:25.0) while the button
+    offered a derivation from the rower's OWN rowed 6k (2:23.0). The new
+    stepper materialised the generic seed, which made
+    `draftValue !== offer.value` — the predicate `DeriveSlot` renders on —
+    so **the better estimate vanished in ONE TAP**, and Apply then stored
+    the generic seed as `manual`. The fix was to make the offer's value BE
+    that side's seed, so all three paths name one number.
+    **No test caught it, and the reason generalises:** every existing test
+    reached that field through the offer button or by typing, because
+    those were the only ways in when they were written. A new entry path
+    is a new way to reach every state the old paths reached, and the
+    suite's coverage of that surface is silently scoped to the old ones.
+    **Before adding an affordance, enumerate everything else on that
+    surface that already offers, suggests, or writes the same value, and
+    write a test driving the NEW affordance against each.** The smell is
+    two mechanisms proposing one field's value; the failure is the
+    better-informed one losing silently, which no assertion about the new
+    control will ever notice.
+
 
 ## Commands
 
