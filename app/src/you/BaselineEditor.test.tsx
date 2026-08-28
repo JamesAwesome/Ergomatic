@@ -354,9 +354,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       // The slot resolves to its already-applied state instead of
       // vanishing: before the fix this tap left the slot empty and the
       // estimate unreachable.
-      expect(
-        screen.getByText("ESTIMATED · TYPE TO ADJUST"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("ESTIMATED")).toBeInTheDocument();
 
       await userEvent.click(
         screen.getByRole("button", { name: /apply baselines/i }),
@@ -909,9 +907,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       // its child (button -> inert line), so the reserved box never leaves
       // the layout even for a single frame.
       expect(slotAfter).toBe(slotBefore);
-      expect(
-        screen.getByText("ESTIMATED · TYPE TO ADJUST"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("ESTIMATED")).toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
       ).not.toBeInTheDocument();
@@ -924,9 +920,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       await userEvent.click(
         screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
       );
-      expect(
-        screen.getByText("ESTIMATED · TYPE TO ADJUST"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("ESTIMATED")).toBeInTheDocument();
 
       await typeSplit("2k split", "154");
 
