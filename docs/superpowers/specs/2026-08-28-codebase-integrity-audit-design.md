@@ -9,7 +9,7 @@ the current product, not a refactor exercise: the output is a ranked, evidenced
 fix list James can hand to Claude Code without turning guesses or historical
 notes into work.
 
-**Status:** approved audit design; Task 4 evidence is complete and awaiting fresh review.
+**Status:** approved audit design; execution is advancing to Task 5.
 
 ## Goal and definition of done
 
