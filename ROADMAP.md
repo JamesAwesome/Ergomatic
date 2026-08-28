@@ -3401,6 +3401,24 @@ that needs no erg, and it can run in a test.
       a capture, and is now unwitnessed with evidence against. **One
       capture cannot prove impossibility**; the code path stays, the
       priority does not.
+      **WALK PASSED 2026-08-28, AND THE WALK UPGRADED THIS ITEM.**
+      Legs: Menu at READY exits to `WorkoutDetail` with the nudge intact
+      (both halves of James's ruling, on hardware); the detector stayed
+      SILENT across a real rest boundary with **zero near-misses** —
+      `workoutType` held at 8 while `intervalType` moved 0->2->0, and no
+      `structure-left` or `structure-mismatch-recovered` entry exists in the
+      ring; End terminated the machine (`ws=11`).
+      **THE UPGRADE: RC-37's signature occurred NATURALLY, with no Menu
+      press.** On the phone leg, after a 67 s background,
+      `structure workoutType=1 durationRaw=0 durationType=128` with
+      `state=armed` — the machine dropped the program by itself.
+      **This item was scoped from James's own words ("rare, and not that
+      annoying to have to exit"), which was true of the trigger he KNEW
+      about.** The detector keys on the readback disagreeing with what we
+      sent, not on Menu, so it also catches a program dropped after a long
+      background — the case that actually costs a session. **Do not
+      re-scope this item down to its original trigger.**
+      Evidence: `docs/monitor/sessions/walk-2026-08-28/`.
 - [ ] **RC-37 — Menu at READY: the machine drops the program, keeps
       streaming, and we never look. CONFIRMED AT THE ERG 2026-08-27, wire
       captured** (`walk-2026-08-27/menu-at-ready-recording.jsonl.gz`).

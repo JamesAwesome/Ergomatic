@@ -1,0 +1,15 @@
+[
+ {"seq":21,"kind":"armed","detail":"programmed 2 interval(s)"},
+ {"seq":23,"kind":"liveness-silence","detail":"frame stream silent for 2500ms"},
+ {"seq":24,"kind":"app-lifecycle","detail":"resume gap=27886ms threshold=2500ms silent=true latched=true"},
+ {"seq":25,"kind":"resume-frames","detail":"phase=ready framesWhileHidden=1 rowingActive=false distanceIncreased=false"},
+ {"seq":27,"kind":"twd-sample","detail":"machineTotal=52m at elapsed=24.71s distance=52.6m workoutState=4"},
+ {"seq":28,"kind":"frame","detail":"state=rowing elapsed=24.71 distance=52.6 rowingActive=false spm=0"},
+ {"seq":29,"kind":"rowing-active-fallback","detail":"state=rowing elapsed=43.04 distance=53.2 rowingActive=false spm=27"},
+ {"seq":30,"kind":"twd-sample","detail":"machineTotal=0m at elapsed=43.72s distance=54.3m workoutState=4  <-- TWD non-monotonic"},
+ {"seq":32,"kind":"pause-declared","detail":"frames=4 hold=4 pulled=true d=64.2 split=297.56 spm=66"},
+ {"seq":34,"kind":"app-lifecycle","detail":"resume gap=67296ms threshold=2500ms silent=true latched=true"},
+ {"seq":35,"kind":"resume-frames","detail":"phase=live framesWhileHidden=0 rowingActive=false distanceIncreased=true"},
+ {"seq":37,"kind":"structure","detail":"workoutType=1 durationRaw=0 durationType=128  <-- RC-37's SIGNATURE, no Menu press"},
+ {"seq":39,"kind":"frame","detail":"state=armed elapsed=50.81 distance=64.2 rowingActive=false spm=66"}
+]
