@@ -2,6 +2,49 @@
 
 Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
+### AUD-002 — A malformed successful history response crashes the History surface
+
+- Category: brittleness
+- Severity / confidence: P2 / Confirmed
+- User impact: if a successful history response is not an array, the History
+  screen enters ready state and fails while rendering instead of showing a
+  bounded load error with Retry.
+- Expected authority: the audit's API contract requires independently shaped
+  mounted responses, and Lane C's outcome explicitly puts network response
+  bodies and stale server responses inside recovery testing
+  (`docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md:66-71,197-227`).
+  The expected outcome is a deliberate error boundary, not whatever a local
+  TypeScript cast claims the body contains.
+- Actual behavior: at baseline `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`,
+  `useLogHistory` casts the successful body to `RecentLog[]`, reads `.length`,
+  and enters ready state (`app/src/log/useLogHistory.ts:58-68`). `HistoryList`
+  then calls `.map` (`app/src/log/HistoryList.tsx:180-199`). A calibrated
+  temporary mounted probe returned `[]` and rendered the normal empty History,
+  then returned `{}` and reached the real render failure; the other 4,032
+  client tests passed.
+- Independent disproof: the probe supplied literal response text and observed
+  only the rendered result behind a test-only error catcher. It did not import
+  `RecentLog`, the client hook's state type, a server serializer, or a server
+  fixture. Changing the top-level response from array to object is the named
+  corruption that makes it fail.
+- Scope: initial and paginated history responses, `useRecentLogs`, the other
+  successful-body readers enumerated by Lane B, and every screen that trusts a
+  ready-state cast. Only the initial History array consequence is confirmed;
+  other readers must not be called defective without their own first-consumer
+  probe.
+- Existing coverage gap: happy-path mocks mirror the local array interface;
+  rejection and non-2xx cases test transport failure, not a successful body
+  whose consumed type is wrong.
+- Smallest safe fix: add minimal runtime validation at each successful response
+  boundary and enter that hook's existing error/retry state when a consumed
+  field is invalid. Do not introduce a second generated contract system or
+  reject additive unknown fields.
+- Verification required after a fix: failing initial and load-more History
+  cases first for empty body, object, and malformed elements; additive unknown
+  fields and older optional omissions stay accepted; then probe each remaining
+  reader at its first real consumer and retain mounted-server happy paths.
+- Status: candidate; final adjudication is Task 10.
+
 ### AUD-006 — Workout previews hide accepted rest that the timer retains
 
 - Category: correctness
@@ -78,7 +121,13 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   failed with `SecurityError` while the other 4,032 client tests passed. A
   separate temporary case mounted the real Today component with ready,
   realistic hook data; Today rejected at `loadRun`, while the other 4,032
-  client tests passed.
+  client tests passed. Lane C completed the census: `clearRun`, `clearDraft`,
+  and `clearMonitorRun` also call `removeItem` without guards
+  (`app/src/session/run.ts:147-149`, `draft.ts:151-153`,
+  `monitor/monitorRun.ts:519-521`). A temporary real Log Session probe returned
+  201, made only the draft clear throw, observed a false save error with both
+  records retained, then restored storage and observed a retry send a second
+  POST while the other 4,032 client tests passed.
 - Independent disproof: the probe supplied only the standards-defined platform
   failure and asserted a bounded return. It did not read the stored payload,
   product validator, phase, program, actuals, or recovery output. Moving the
@@ -86,21 +135,27 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   three calibrated cases and mounted Today pass. `loadTodayPick` shares the
   same pre-guard access and remains a required fourth direct case rather than a
   second finding.
-- Scope: the four loaders, the default Today route, every synchronous React
-  initializer or route guard calling them, active phone/timer recovery,
-  monitor-log recovery, and storage denial in browser/web fallback
-  environments. Bare clear and diagnostic paths remain deferred to Task 7.
+- Scope: the four loaders, three clear helpers, default Today, every
+  synchronous initializer/route guard calling them, cancel/abandon/discard,
+  post-save cleanup, active phone/timer recovery, monitor-log recovery, and
+  storage denial in browser/web fallback environments. Session-storage UX
+  helpers and diagnostic production reads were cleared; the one unguarded
+  hold-open stash is dev/E2E-only instrumentation.
 - Existing coverage gap: write-failure and malformed-JSON tests begin after a
-  usable `Storage` object exists. None denies the getter/read boundary itself.
+  usable `Storage` object exists. None denies the getter/read boundary, and
+  successful-save tests assume cleanup cannot throw after the server commit.
 - Smallest safe fix: put the initial read and any attempted cleanup inside a
-  storage-access guard in all four loaders and return `null` when storage is
-  unavailable; do not clear other session keys.
+  storage-access guard in all four loaders and all three clear helpers. Return
+  `null` when reads are unavailable, make clears idempotent/best-effort, and do
+  not turn a committed server save back into a retryable failure merely because
+  local cleanup failed. Do not clear other session keys.
 - Verification required after a fix: failing direct tests first for all four
   loaders, then the mounted default Today route and Timer/Countdown/Log Session
-  under denied access, plus the existing malformed/versioned recovery matrix
-  and a census of bare clear/diagnostic callers.
-- Status: candidate; high-end Task 6 review confirmed P1 scope, with the
-  remaining direct-access census assigned to Task 7.
+  under denied access, the existing malformed/versioned recovery matrix,
+  cancel/abandon/discard under throwing removal, and a 201-after-cleanup-fault
+  test proving one POST and a successful visible result.
+- Status: candidate; Task 7 completed the direct-access census and reproduced
+  the post-commit cleanup consequence; fresh high-end Lane C review is pending.
 
 ### AUD-012 — The booting-replica safety claim fails before the seed lock
 
@@ -146,6 +201,48 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Status: candidate; final adjudication must decide whether this is a docs-only
   correction or scheduled code work based on the deployment roadmap.
 
+### AUD-013 — One out-of-range stored summary number breaks the whole History list
+
+- Category: brittleness
+- Severity / confidence: P2 / Confirmed
+- User impact: one application-invalid machine-summary value on one owned log
+  makes the entire history-list request return 500, hiding otherwise healthy
+  sessions until the row is repaired.
+- Expected authority: the audit requires every persisted malformed record to
+  read safely or reject deliberately and explicitly requires raw JSONB probes
+  rather than inferring safety from normal route validation
+  (`docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md:174-195`).
+  PostgreSQL JSON validity is not Ergomatic field validity.
+- Actual behavior: at baseline `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`,
+  the history-list projection checks only that
+  `avgPaceSecondsPer500m` is a JSON number, then casts its text to PostgreSQL
+  `double precision` (`app/server/stores/logs.ts:269-294`). In a temporary real
+  PostgreSQL 18.4 integration case, two healthy owned logs listed with 200.
+  Raw-updating one row to the database-valid JSON number `1e1000` made the
+  mounted `GET /api/logs` return 500. The exact file passed 12/12 with the
+  discriminator present; Testcontainers removed the database afterward.
+- Independent disproof: the probe wrote raw SQL after the normal create path
+  and observed only HTTP status. It did not call the route validator, fake
+  store, server serializer, client type, or stored-summary renderer to build
+  its expectation. Changing one nested number from ordinary range to `1e1000`
+  is the named corruption that changes a healthy 200 to 500.
+- Scope: `session_logs.machine_summary`, history list projection, every healthy
+  row owned by the same user, raw repair/import/legacy paths, and any future
+  JSON numeric field cast inside SQL. Other raw JSONB columns remain
+  unconfirmed until their mounted first-consumer probes run.
+- Existing coverage gap: POST tests enter through a JS/route writer and use
+  ordinary finite values. The JSON-type guard has tests for wrong JSON types,
+  but no database-valid number outside the SQL target type's range.
+- Smallest safe fix: make the list projection treat non-finite/out-of-range or
+  otherwise unconvertible nested values as `null` instead of casting the whole
+  query into failure. Keep the blob available on detail for diagnosis; do not
+  rewrite or delete the stored row silently.
+- Verification required after a fix: failing real-Postgres case first with one
+  healthy and one corrupt row; normal, null, wrong-type, boundary, and extreme
+  numeric values; mounted list/detail responses; and a red calibration proving
+  removal of the safe conversion returns the whole-list 500.
+- Status: candidate; stored-shape triad review is required before Task 10.
+
 ### AUD-014 — Offline native sign-out leaves the bearer in Keychain
 
 - Category: correctness
@@ -185,8 +282,51 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   successful and HTTP-5xx server responses; Keychain-delete failure remains
   visible; mounted You-screen completion; offline then online `useMe` behavior;
   and a device check only if Task 12 finds it can change priority.
-- Status: candidate; surrounding UI recovery is assigned to Task 7 before final
-  adjudication.
+- Status: candidate; Task 7 confirmed the surrounding `useMe`/You ownership and
+  found no reason to change the P2 rank; final adjudication is Task 10.
+
+### AUD-015 — A failed run-state write silently cancels workout start
+
+- Category: correctness
+- Severity / confidence: P1 / Confirmed
+- User impact: after the draft is safely stored, a quota or storage write
+  failure during Countdown appears to start the workout but immediately sends
+  the rower back to Today. There is no error, retry, or usable Timer session.
+- Expected authority: Lane C's approved outcome is that the rower does not lose
+  an active session and that every storage `setItem` failure has a named
+  recovery behavior
+  (`docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md:197-227`).
+  The existing `saveRun(): boolean` contract independently establishes that a
+  caller must distinguish persistence success from failure; it is the subject,
+  not the probe's oracle.
+- Actual behavior: at baseline `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`,
+  Countdown builds a run, ignores `saveRun`'s boolean, commits its local clock,
+  and navigates to Timer (`app/src/session/Countdown.tsx:219-227,338-343`).
+  Timer reloads storage and redirects to Today when the run is absent
+  (`app/src/session/Timer.tsx:354-361,456-458`). A calibrated temporary test
+  saved a real library draft, made only `RUN_KEY` writes throw, mounted the real
+  zero-countdown → Timer route, and observed Today with no run; the other 4,032
+  client tests passed.
+- Independent disproof: the probe injected only the platform write failure and
+  observed route plus stored-key state. It did not mock `saveRun`, build an
+  expected run, inspect Countdown's local state, or call Timer's redirect logic
+  as an oracle. Throwing only for `RUN_KEY` is the named corruption that turns a
+  normal usable Timer hand-off into the Today bounce.
+- Scope: Countdown with zero or nonzero delay, `saveRun` callers, Timer reload,
+  quota/private-mode/storage exhaustion after a draft fits but the larger run
+  does not, and repeated Start attempts.
+- Existing coverage gap: `run.test.ts` proves `saveRun` returns false, while
+  Countdown tests assume it returns true. No existing test composes the caller's
+  ignored result with Timer's fresh storage read.
+- Smallest safe fix: Countdown must branch on `saveRun` failure, remain on a
+  recoverable screen, and show an actionable storage error/retry instead of
+  entering a Timer route that cannot reload. Do not treat its in-memory run as
+  durable unless Timer receives an explicit, reload-safe ownership contract.
+- Verification required after a fix: failing real Countdown → Timer case first
+  for zero and nonzero countdown; retry after storage becomes writable; reload
+  during error; existing StrictMode one-write pin; and a deliberate mutation
+  that ignores the boolean and restores the Today bounce.
+- Status: candidate; P1 requires fresh high-end Lane C validation.
 
 ## Record contract
 

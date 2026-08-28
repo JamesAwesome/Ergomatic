@@ -15,19 +15,6 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Verification required after a fix: native capture or hardware walk only if Task 12 finds it can change the ranking, plus replayable regression evidence where possible.
 - Status: deferred to Task 8.
 
-### AUD-002 — Successful malformed API responses may enter client ready states
-
-- Category: brittleness
-- Severity / confidence: P2 / Hypothesis
-- User impact: an old or partially deployed client/server pair could render broken data or throw instead of offering a recoverable error.
-- Expected authority: explicit version-compatible client/server response contract; Tasks 6–7 must establish it.
-- Actual behavior: baseline readers including `app/src/api/useRecentLogs.ts:86-102` and `app/src/builder/BulkImport.tsx:72-87` cast successful `res.json()` values to local interfaces without runtime validation.
-- Independent disproof: return a successful independently hand-shaped payload missing or corrupting a consumed field; the probe must assert the user-visible consequence without importing the client interface or server serializer. Removing a required field or changing its type must fail the probe.
-- Scope: all successful JSON response readers, server serializers, installed-client compatibility, and UI error boundaries.
-- Existing coverage gap: mocked happy-path payloads can mirror local interfaces; a TypeScript cast generates no runtime check.
-- Verification required after a fix: malformed-success contract tests plus real mounted-server happy and backward-compatible responses.
-- Status: deferred to Tasks 6–7.
-
 ### AUD-003 — The repository has no current measurement of mutation strength
 
 - Category: circular proof
@@ -52,7 +39,8 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Scope: log POST validation, jsonb storage, list/detail projection, installed clients, and summary rendering.
 - Existing coverage gap: field-by-field tests can confirm current permissiveness without establishing whether it is the intended durable contract.
 - Verification required after a fix: real-Postgres round trips, mounted API tests, old/new client compatibility cases, and consumer rendering.
-- Status: Task 6 found no independent contract; consumer consequence is deferred to Task 7 and final adjudication in Task 10.
+- Status: Tasks 6–7 found no independent installed-client field contract; the
+  first consumers are mapped, but the claim remains quarantined for Task 10.
 
 ### AUD-005 — Harmful import cycles may be invisible to existing gates
 
@@ -185,40 +173,54 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   repeated arms, plus a replayable raw trace for every observable field.
 - Status: deferred to Task 8 and Task 12's hardware decision.
 
-### AUD-013 — Raw application-invalid JSONB has no universal read boundary
+### AUD-016 — Monitor-run persistence failure may erase the later log door
 
 - Category: brittleness
 - Severity / confidence: P2 / Hypothesis
-- User impact: a legacy, interrupted, manually repaired, or otherwise malformed
-  database row could pass PostgreSQL's JSON syntax check and later break a
-  workout, log, preference, or client renderer instead of being rejected at one
-  deliberate boundary.
-- Expected authority: the approved audit requires every persisted malformed
-  record to read safely or reject deliberately and says JSONB safety must not be
-  inferred from normal route validation
-  (`docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md:174-195`).
-  PostgreSQL validates JSON syntax, not Ergomatic's application union.
-- Actual behavior: baseline route writers validate normal values, but reads cast
-  `workouts.steps`, `session_logs.steps`, `session_logs.series`, and
-  `preferences.difficulties` from JSONB without one universal application-shape
-  guard. This establishes exposure only; no raw malformed row was carried
-  through a mounted real consumer in Task 6.
-- Independent disproof: Task 7 must raw-update one owned row per shape in real
-  Postgres, then use the mounted API and first actual client consumer. The probe
-  must not call the write validator, fake store, server serializer, or local
-  TypeScript interface to create its expectation. Replacing an array with a
-  plain object or a sample with `null` must alter the observed result.
-- Scope: SQL JSONB columns, upgraded/legacy/manual rows, store casts, route
-  serialization, workout and log consumers, preference initialization, and
-  error recovery.
-- Existing coverage gap: real migration tests use known legacy shapes and route
-  tests enter through validated writers. Fake/real parity can reproduce the
-  same unchecked cast.
-- Verification required after a fix: independently corrupted real rows,
-  mounted API results, first rendered consumers, normal/legacy compatibility,
-  and proof that one bad owned row cannot poison unrelated records.
-- Status: deferred to Task 7; no fix direction until a user-visible consequence
-  is independently reproduced.
+- User impact: a connected session can continue in memory after its best-effort
+  storage write fails, but the later log route may have no completed monitor
+  record to save.
+- Expected authority: Lane C's active-session recovery outcome; the intended
+  behavior after monitor persistence loss is not otherwise specified.
+- Actual behavior: `saveMonitorRun` deliberately returns void and swallows both
+  storage attempts (`app/src/monitor/monitorRun.ts:449-491`), while monitor-mode
+  logging requires a stored matching completed record
+  (`app/src/session/LogSession.tsx:260-304`).
+- Independent disproof: pending a mounted connected-session write-failure probe
+  that continues through finish and the real log hand-off. It must observe the
+  user surface without treating the in-memory run as proof that storage exists.
+- Scope: connected run writers, teardown, navigation, monitor-mode gate, and
+  saved log recovery.
+- Existing coverage gap: unit tests prove best-effort swallowing and log-door
+  validation separately, not the cross-route consequence.
+- Verification required after a fix: storage failure during open, boundary,
+  finish, and teardown; then the real log door and retry/recovery outcome.
+- Status: deferred to Task 8's connected trace.
+
+### AUD-017 — Ambiguous committed responses can duplicate a log and plan advance
+
+- Category: brittleness
+- Severity / confidence: P1 / Hypothesis
+- User impact: if the server commits a log but the response is lost, a normal
+  retry can create another row and may advance the active plan twice.
+- Expected authority: no durable session identity or retry-idempotency product
+  contract has yet been approved; intentional same-workout repeated logs must
+  remain possible.
+- Actual behavior: client failure recovery retains the session and invites
+  retry (`app/src/session/LogSession.tsx:702-781`); each server create inserts a
+  new row and resolves plan position transactionally without a client operation
+  key (`app/server/stores/logs.ts:598-675`).
+- Independent disproof: abort a mounted response after the real transaction
+  commits, retry once, and inspect log rows plus `plan_state`. The probe must use
+  an independently assigned operation identity rather than title/time guesses.
+- Scope: phone and monitor save, network/proxy loss after commit, log store,
+  plan advancement, and manual duplicate-log intent.
+- Existing coverage gap: client tests model rejection or status, while server
+  tests always deliver the created id; neither creates an ambiguous outcome.
+- Verification required after a fix: commit-then-abort, retry, deliberate second
+  session, plan and no-plan saves, and backward compatibility for installed
+  clients without an operation key.
+- Status: requires a product identity decision before promotion.
 
 `Smallest safe fix` is forbidden here until a risk reaches Confirmed or Probable confidence.
 
