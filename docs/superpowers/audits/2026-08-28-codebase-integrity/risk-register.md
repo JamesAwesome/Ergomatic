@@ -54,6 +54,19 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Verification required after a fix: real-Postgres round trips, mounted API tests, old/new client compatibility cases, and consumer rendering.
 - Status: deferred to Task 6.
 
+### AUD-005 — Harmful import cycles may be invisible to existing gates
+
+- Category: circular proof
+- Severity / confidence: P2 / Hypothesis
+- User impact: a cycle-sensitive initialization path could block startup or a screen only under a different entrypoint or import order while current lint, typecheck, and build remain green.
+- Expected authority: ESM initialization semantics plus the repository's declared domain/server/client and adapter-layer boundaries; Task 9 must establish the exact violated rule before promotion.
+- Actual behavior: at the baseline, package, ESLint, and TypeScript configuration contains no `madge`, dependency-cruiser, `import/no-cycle`, or equivalent graph analyser. This proves only an enforcement gap, not that a harmful cycle exists.
+- Independent disproof: run an explicit import-graph analyser over production modules, inspect every strongly connected component, and execute any affected entrypoint without importing production values as the expected result. A deliberately introduced known cycle must be reported by the probe.
+- Scope: production TypeScript/ESM imports, dynamic monitor seams, adapter boundaries, and all application/server entrypoints.
+- Existing coverage gap: lint, typecheck, tests, and build consume the current graph but do not reject a cycle merely because it exists.
+- Verification required after a fix: zero unexplained production strongly connected components and a red calibration against a disposable known cycle.
+- Status: deferred to Task 9.
+
 `Smallest safe fix` is forbidden here until a risk reaches Confirmed or Probable confidence.
 
 ## Record contract
