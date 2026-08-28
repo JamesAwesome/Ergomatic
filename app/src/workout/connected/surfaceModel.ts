@@ -1368,6 +1368,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       liveHr: hr,
       numbering,
       armed: armedMirror,
+      stale,
       resting,
       restSeconds: frame.restSeconds,
     }),
@@ -1441,16 +1442,29 @@ export function buildGridModel(args: {
    *  frame case, same guard `remaining` shares) keeps that cell the house
    *  dash; anything else replaces it, per `accruedDisplayFor` below. */
   accrued: MonitorFrame["intervalAccrued"];
-  /** THERE IS NO `stale` PARAMETER, deliberately (task-7 review, M2). The
-   *  active row's judged cells arrive already judged, as the SAME
-   *  `JudgedValue` objects panes A and B show — so the stale greying reaches
-   *  them through the one path that decided it, and no second caller here
-   *  can disagree. Completed rows hold closed records, which the stale
-   *  question does not apply to at all. Nothing in this function needs to
-   *  know. */
+  /** THE JUDGED CELLS NEED NO `stale` (task-7 review, M2, and this half
+   *  still holds). The active row's judged cells arrive already judged, as
+   *  the SAME `JudgedValue` objects panes A and B show — so the stale
+   *  greying reaches them through the one path that decided it, and no
+   *  second caller here can disagree. Completed rows hold closed records,
+   *  which the stale question does not apply to at all.
+   *
+   *  RC-33: BUT THE RAW FRAME FIELDS DO. This comment used to end "nothing
+   *  in this function needs to know", and that was true until RC-24 handed
+   *  this function two RAW readings (`resting`, `restSeconds`) that no
+   *  `JudgedValue` had already resolved staleness for. A lost link mid-rest
+   *  then left pane C sunken and gold with a FROZEN countdown while pane B
+   *  correctly reverted — "a countdown frozen at its last value is a false
+   *  claim of motion", the hero's own guard comment, which the grid was
+   *  shipped without. `stale` below is for the raw pair ONLY; adding it did
+   *  not reopen the judged-cell question above. */
   livePace: JudgedValue;
   liveRate: JudgedValue;
   liveHr: JudgedValue;
+  /** RC-33: `SurfaceModelInput.linkLost`, the single fact that decides WHEN
+   *  a reading is stale — the same value the hero's own countdown guard
+   *  reads. Consumed ONLY by `restingNow` below. */
+  stale: boolean;
   /** Connected-revamp Task 5 (design spec §5b): `intervalNumbering`'s own
    *  output, READ not re-derived — `buildSurfaceModel` computes it once and
    *  hands it to both the header caption and this function, so a row's `#`
@@ -1523,7 +1537,10 @@ export function buildGridModel(args: {
       // rest, where this field reads 0.00 and there is nothing to count.
       // Flashing a rest mark for that frame IS the false "something is
       // counting" claim this whole change exists to prevent.
-      const restingNow = !armed && resting && restSeconds > 0;
+      // RC-33: `!stale` is the fourth term, and it is the one RC-24
+      // shipped without. Identical to the hero's guard by construction —
+      // the agreement test pins both directions, rendering AND suppressing.
+      const restingNow = !armed && !args.stale && resting && restSeconds > 0;
       return {
         index,
         ordinal,

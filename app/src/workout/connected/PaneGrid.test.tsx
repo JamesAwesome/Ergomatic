@@ -1105,6 +1105,11 @@ describe("distance intervals (handoff §3's distance rules)", () => {
         liveHr: NO_READING,
         numbering: intervalNumbering(intervals),
         armed: false,
+        // RC-33: this caption fixture is not resting, so `stale` cannot
+        // reach the rest countdown either way — passed explicitly rather
+        // than defaulted so the guard's four terms stay visible at every
+        // call site.
+        stale: false,
         resting: false,
         restSeconds: 0,
       }).caption;

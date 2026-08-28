@@ -923,6 +923,34 @@ describe("RC-27: the LIVE split hero counts a running rest", () => {
     expect(m.nowLabel).toBe("LAST SEEN");
   });
 
+  it("RC-33: a lost link beats a running rest ON THE GRID TOO — pane C cannot keep a frozen countdown while pane B reverts", () => {
+    const m = model({
+      linkLost: true,
+      frame: frame({ state: "resting", restSeconds: 59.91, intervalIndex: 1 }),
+    });
+    // The hero already did this (the test above). The grid did NOT: RC-24
+    // shipped `restingNow` without a `!stale` term, so a link lost mid-rest
+    // left pane C sunken and gold with a FROZEN `R 0:59` while pane B
+    // correctly read LAST SEEN — verbatim the "false claim of motion" the
+    // hero's own guard comment exists to prevent.
+    const active = m.grid.rows[m.grid.activeIndex]!;
+    expect(active.restCountdown).toBeNull();
+    expect(active.countdown).not.toBe("rest");
+  });
+
+  it("RC-33: the two surfaces agree under a LOST LINK, not only under a healthy one", () => {
+    const m = model({
+      linkLost: true,
+      frame: frame({ state: "resting", restSeconds: 59.91, intervalIndex: 1 }),
+    });
+    // The healthy-case agreement test below proves they match when both
+    // RENDER. This proves they match when both SUPPRESS, which is the half
+    // RC-24 got wrong and no test covered.
+    expect(m.restCountdown).toBe(
+      m.grid.rows[m.grid.activeIndex]!.restCountdown,
+    );
+  });
+
   it("formatRestCountdown floors, never rounds (59.91 -> 0:59, the value round would give is 1:00)", () => {
     expect(formatRestCountdown(59.91)).toBe("0:59");
     expect(formatRestCountdown(60)).toBe("1:00");
