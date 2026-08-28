@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { estimateMinutes } from "../../../domain/expand.js";
-import type { Difficulty, WorkoutType } from "../../../domain/types.js";
+import type {
+  Difficulty,
+  PaceBase,
+  WorkoutType,
+} from "../../../domain/types.js";
 import { validateWorkoutInput } from "../../../domain/validate.js";
 import patterns from "../../../domain/generation/patterns.json";
 import { debtRegressions } from "../../../scripts/library-balance.js";
@@ -219,6 +223,44 @@ describe("LIBRARY_WORKOUTS", () => {
           `${w.title}: 6k+${off}`,
         ).toBe(true);
       });
+    }
+  });
+
+  it("resolves each type against its own baseline — AN/TR off the 2k, AT/O2 off the 6k", () => {
+    // `domain/plans.ts` states this convention in PROSE and nothing checked
+    // it: "the sprint plan re-tests the 2k (AN — the ceiling every AN/TR pace
+    // resolves against), the head plan the 6k (AT — the threshold every
+    // AT/O2 pace resolves against)". That sentence is the entire reason each
+    // plan pins the instrument it does, and the code has ZERO behavioural
+    // branches on a WorkoutType literal — `SplitRef.base` is authored per
+    // step, so nothing but this test stops a workout resolving off the wrong
+    // measurement. Measured at authoring time: 286 conforming steps in the
+    // 2k family (AN 68, TR 218), 399 in the 6k family (O2 206, AT 193), and
+    // zero crossings across all 300 workouts.
+    //
+    // ABSOLUTE, not a ratchet, and not float-exempt (James, 2026-08-28). The
+    // neighbouring 6k+12 test contemplates a slow 6k RECOVERY FLOAT inside a
+    // hard session, which under this rule an AN or TR workout cannot carry.
+    // Nothing in the library does that today; if a future one wants to, it
+    // hits this test and the exception gets argued rather than absorbed.
+    //
+    // EFFORT REFS ARE EXEMPT BY CONSTRUCTION, not by choice: `{effort:"max"}`
+    // carries no `base` to check. That is not a rounding error — 88 work
+    // steps are effort refs, 82 of them AN, which is most of AN's own work.
+    const BASE_FOR_TYPE: Record<WorkoutType, PaceBase> = {
+      AN: "2k",
+      TR: "2k",
+      AT: "6k",
+      O2: "6k",
+    };
+    for (const w of LIBRARY_WORKOUTS) {
+      for (const s of w.steps) {
+        if (s.k !== "w" || !("base" in s.ref)) continue;
+        expect(
+          [w.title, s.ref.base],
+          `${w.title} is ${w.type}, so it resolves against ${BASE_FOR_TYPE[w.type]}`,
+        ).toStrictEqual([w.title, BASE_FOR_TYPE[w.type]]);
+      }
     }
   });
 
