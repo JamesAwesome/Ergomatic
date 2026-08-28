@@ -2971,7 +2971,192 @@ note's fallback wording is no longer needed.**
 
 ## Phase RC — The row Concept2 would recognise
 
-**Status:** OPEN, mid-phase (updated 2026-08-24, exit-7 walk PASSED).
+**MOVED HERE AT THE PHASE CLOSE (2026-08-28).** This block used to sit
+~1,940 lines below this header, which is why nobody could find it — the
+close-out's own checklist item said so. The criteria themselves are
+unchanged except where each says it was rewritten or discharged.
+
+**WHAT THIS PHASE ACTUALLY BUILT, said plainly at its close (PM gate,
+2026-08-28), because the phase's own name will not say it.** Every oracle
+Phase RC shipped reads a DIFFERENT REGISTER OF THE SAME PM5 — 0x0032's
+cumulative average pace, 0x003A's Total Rest Distance, 0x0039's
+end-of-workout totals. That is a real class upgrade over the only check
+this project had before (the app against itself, and the TWD "verdict"
+that turned out to be our own accumulator compared with our own decode of
+the same odometer — RC-9c retired it for exactly that). It is NOT the
+external authority "the row Concept2 would recognise" promises: **no row
+of ours has ever been to Concept2.** RC closes having proven consistency
+inside one erg. Criterion (d) below is where that gap is discharged, and
+the successor phase carries (d)'s own sentence into its exit block on the
+day it opens.
+
+**Exit — written so it can go red.** (a) A row rowed on a real PM5 stores
+work and rest as separate quantities, and its work-only distance and time
+equal the monitor's own for the same piece; (b) the monitor's log entry
+date/time is decoded and logged from a real finish, with the
+seconds-resolution question answered either way; (c) the three heroes on
+one stored row reconcile with each other by hand arithmetic
+**[REWRITTEN 2026-08-28 — see (c) below, which the original could not
+survive]**; (d) a row posted to the Concept2 sandbox comes back through
+`export/` matching what we stored, or the reason it cannot is documented
+**[DISCHARGED BY THE DOCUMENTED REASON — see (d) below]**; (e) if 0x003F turns out
+not to fire on our firmware, DEVIATIONS carries the row saying so and the
+verification branch is closed on the record rather than left hoped-for.
+
+**(c) REWRITTEN AND MET, 2026-08-28.** The original sentence — "the three
+heroes on one stored row reconcile with each other by hand arithmetic" —
+**has never been true of any build of this app**, in three distinct ways, so
+it could not go red. An adversarial PM pass established all three. Rewritten
+with a tolerance and a named population:
+
+> On a stored row whose close is `finished` and whose intervals carry no
+> null-index actual, DISTANCE, TIME and AVG SPLIT reconcile by hand
+> arithmetic to within **1.0 s/500 m** (tier A's designed truncation gap —
+> the PM5 truncates, we round). Three populations are exempt, named:
+> **(i)** rows with an INCOMPLETE close saved 2026-08-22..2026-08-25, between
+> `ended_by` shipping (#160) and RC-5 shipping (#194), which render the fused
+> stored columns and disagree by up to ~26 s/500 m — **closed, non-growing,
+> and unreachable by the `endedBy` relabel** (that changes how FUTURE rows
+> close; only a backfill touches these, and none is planned). Pre-disclosed
+> to testers at v0.23.0's item 5.
+> **(ii)** any row carrying a RECORDED null-index actual — DISTANCE/TIME
+> include it, AVG SPLIT excludes it by construction, ~10 s/500 m. Ongoing,
+> affects `finished` rows too, observed in zero committed rings.
+> **CITATION CORRECTED at the PM close gate, 2026-08-28 — the exemption
+> stands, the line it pointed at did not support it.** It cited
+> `storedSummary.ts`'s "Null-index/warm-up parity DOES NOT HOLD" paragraph,
+> which sits inside **TIER B2**'s description and ends "now genuinely
+> bounded, because the `endedBy` gate above confines this branch to the
+> provably-historical population" — i.e. that paragraph says the opposite
+> of "ongoing", and reading only the heading is recurring failure 16's
+> second corollary happening inside the fix for it. The exemption is
+> nonetheless REAL, and its evidence is **TIER B1**'s own paragraph three
+> above: on any post-RC-1 `finished` monitor row, DISTANCE/TIME come from
+> RC-1's work pair, which counts a null-index actual ("with no null-index
+> or warm-up exclusion"), while AVG SPLIT comes from
+> `tierBAvgSplitSeconds(row.steps)`, which cannot see it because a
+> null-index actual never becomes a step. Two different consequences of one
+> gap, in two different tiers; (ii) is the B1 one.
+> **(iii)** tier A, where the machine's own avg pace can disagree with its
+> own totals (walk-2026-08-20, 901 vs 899).
+
+**MET, and population (i) VERIFIED EMPTY by inspection (James, 2026-08-28).**
+He photographed five consecutive stored rows spanning the window — Ground Fog
+(22 Aug), Comma Cloud (24th), Corona (25th), Line Squall (26th), Ice Fog
+(27th). Hand arithmetic on each, `TIME / DISTANCE * 500`:
+
+| row | time | distance | implied | shown | delta |
+| --- | --- | --- | --- | --- | --- |
+| Ice Fog | 1800 s | 6574 m | 2:16.9 | 2:16.9 | 0.0 |
+| Line Squall | 868 s | 3500 m | 2:04.0 | 2:03.9 | 0.1 |
+| Corona | 1072 s | 4000 m | 2:14.0 | 2:14.1 | 0.1 |
+| Comma Cloud | 1260 s | 4937 m | 2:07.6 | 2:07.6 | 0.0 |
+| Ground Fog | 1680 s | 6192 m | 2:15.7 | 2:15.7 | 0.0 |
+
+Worst case **0.1 s/500 m**, an order of magnitude inside the tolerance; the
+exempt cohort would be off by ~26 s.
+
+**THE TOLERANCE IS DISTANCE-DEPENDENT, AND EVERY VERIFYING ROW IS LONG
+(antagonist exit pass, 2026-08-28 — recorded on the criterion rather than
+left for the next reader to hit).** 1.0 s/500 m is a RATE, but the rounding
+noise it absorbs scales as `500 / distance`: one second of displayed-time
+rounding moves the implied split by 0.076-0.14 s/500 m on the five rows
+above (3500-6574 m), by **1.0 s/500 m on a 500 m row**, and by **2.0 on a
+250 m row** — the keystone shape this phase rows constantly. So the
+criterion has only ever been exercised where its own tolerance is loose by
+tenfold, and on a short row it can go red on arithmetic rounding with
+nothing wrong. **The criterion therefore applies to stored rows of 1000 m
+or more**, where one second of rounding stays under 0.5 s/500 m; a shorter
+row needs the tolerance restated as a function of its own distance before
+it can be judged by this clause. Naming the bound is the point — an
+unstated one would have been discovered by a red build on a keystone. **AND THE ORDER OF THESE TWO IS BACKWARDS — corrected at the exit pass,
+2026-08-28.** The load-bearing evidence is not the table; it is that every
+photographed row carries a `plus N m coasting in rest` clause, which is
+precisely what an incomplete close CANNOT have. The table alone cannot
+exclude the cohort, because the criterion's own figure for population (i)
+is *"up to ~26 s/500 m"* — an UPPER bound, so a population-(i) row with
+little rest coast would reconcile to 0.1 too.
+**Why the coasting clause does the work, traced through two files (nobody
+had written this down, and it is the reason to believe the row):**
+`monitorRun.ts`'s writer refuses RC-1's four fields for any `endedBy` other
+than `"finished"` ("no attempt beats no number"), so `storedSummary.ts`'s
+`buildStoredRest` rung 1 cannot fire on an incomplete close; and rung 2 is
+gated on `isReconstructableClose`, which admits only `"finished"` or
+`null`. A rest clause on the row therefore PROVES a complete close. All
+five are complete closes rendering work-only heroes. **No user-facing note
+is owed**, because the cohort is empty.
+
+**(d) CARRIED FORWARD — corrected from "DISCHARGED" at the antagonist exit
+pass, 2026-08-28, and the correction is the honest word.** The clause reads
+*"or the reason it **cannot** is documented"*, and what was offered was a
+reason it **was not done**: "it deserves its own phase", quoted beside
+James's *"we can open the logbook Saturday"* — which is affirmative evidence
+that it CAN be. Scheduling is not impossibility, and this is the only
+criterion in the block that reaches outside our own definitions, so
+retiring it by rename would be the most expensive place in the record to be
+loose with a word.
+**What makes CARRIED FORWARD real rather than a nicer label for the same
+thing:** the receiving phase carries THIS SENTENCE into its own exit block
+on the day it opens — *"a row posted to the Concept2 sandbox comes back
+through `export/` matching what we stored, or the reason it cannot is
+documented"* — and that requirement is written into the logbook item below,
+not just into this paragraph. The criterion survives the rename or the
+close was not honest.
+**Why it is carried rather than held:** **the Concept2 logbook
+cross-connect is real work that deserves its own phase, not the last item
+holding a phase open.** It is the first oracle OUTSIDE our own definitions —
+Concept2 stores work only, so agreement there means something that agreeing
+with our own accumulator never did (recurring failure #11's "an oracle that
+shares your definition is a mirror"). What is already recorded and carries
+forward: the dev API key lives in the repo-root `.env` and its VALUE is never
+read into a transcript or a committed file; the `weight_class` gate; and the
+ErgData-dedup question. **Opens as its own phase, 2026-08-29.**
+
+**Status:** CLOSING — the close-out PR is open (2026-08-28). All five exit
+criteria are MET or DISCHARGED on the record; the block is at the top of
+this section. What the close-out PR carries: the oracle corpus test (every
+committed capture replayed through the real driver, both shipped oracles
+asserted, and RC-9(b)'s comparison finally made), RC-12's comment and
+diagnostic-string reconciliations, and the checkbox/bookkeeping repairs
+below. **What stays OPEN and moves out of the phase**, unchanged in
+priority: RC-7, RC-8, RC-10, RC-11, RC-13, RC-14, RC-17, RC-18, RC-29,
+RC-30, RC-38, RC-9's live (b) verdict, RC-12's two remaining
+domain/server sites, the PARTIAL-on-an-abandoned-piece complaint, and the
+pre-row lock (reproduced on the 2026-08-28 walk, deliberately NOT claimed
+in v0.26.0's notes). **The Concept2 logbook opens as its own phase on
+2026-08-29** — that is exit criterion (d)'s documented reason, not an
+omission.
+
+**WHERE THE SECTION'S 22 STILL-OPEN ITEMS GO (PM close gate, 2026-08-28 —
+"moves out of the phase" is not a disposal, and a section headed CLOSED
+over live items is the same pattern with a nicer label).** They stay
+written HERE, under this header, because their evidence is here and
+moving them would break every citation; the destination is the OWNER, and
+each is named:
+- **The Concept2 logbook phase (opens 2026-08-29):** the logbook
+  cross-connect itself, **RC-10** (the sandbox as a test oracle), and
+  **RC-9's live (b) verdict** — all three want the same key and the same
+  sitting.
+- **PHASE PROTO, a wire-semantics audit:** **RC-38**
+  (`OBJ_WORKOUTTYPE_T`, read one row deep) and the axis-quantity question.
+  PROTO is itself an unopened phase and stays that way until James opens
+  it.
+- **Phase LM (lifecycle):** the pre-row lock, now filed in LM's own list
+  with its walk evidence rather than living in this paragraph.
+- **The next PR that touches `app/domain/` or `app/server/`:**
+  **RC-12's** two remaining sites, **RC-7**, **RC-18** (paired with the
+  `door` column, wants the next stored-shape change).
+- **The next connected-surface PR:** **RC-17**, **RC-11**, **RC-8** (the
+  fake's contradictions), the C' rider, PR 1's residual capture-rate gap.
+- **Their own decisions, needing James, not a queue:** **RC-29** and
+  **RC-30** (both send or suppress a wire command — the triad line),
+  **RC-13** and **RC-14** (two distinct zero-fires), the
+  PARTIAL-on-an-abandoned-piece complaint, the "run it again" log-screen
+  idea, and the two remaining owed walk legs.
+No item is closed by this paragraph; it exists so that nothing here reads
+as finished because the header above it does.
+
+*Previously:* OPEN, mid-phase (updated 2026-08-24, exit-7 walk PASSED).
 The storage-spine spec (`2026-08-23-storage-spine-design.md`) is FULLY
 EXECUTED — PR 1 (#180), PR 2 (#182, RC-1 storage), PR 3 (#183, F2b
 count bound) — **and hardware-verified: the exit-7 walk on production
@@ -3320,15 +3505,75 @@ that needs no erg, and it can run in a test.
       rower's own words, "if I stare at that chart for ten seconds I'll
       be back to 'does this app know what happened or not,'" are sharper
       once nothing else on the screen still disagrees with them.**
-- [ ] **Flaky test on file: `App.test.tsx`/`RetestShortcut.tsx` unhandled
-      async error, seen 2-of-5 full-suite runs (series-truth branch,
-      2026-08-25), never touching that diff's files.** Pre-existing;
-      will bite CI on future PRs until diagnosed. Capture the failure,
-      don't re-run to green (the standing flake rule).
+- [x] **SUPERSEDED BY RC-21, and it was never a flake** (reconciled at the
+      phase close, 2026-08-28). This item said: "Flaky test on file:
+      `App.test.tsx`/`RetestShortcut.tsx` unhandled async error, seen
+      2-of-5 full-suite runs (series-truth branch, 2026-08-25) ... Capture
+      the failure, don't re-run to green." The standing flake rule did its
+      job: RC-21 below captured it instead of re-running, and it turned out
+      to be an unvalidated cast at a trust boundary that could crash the
+      You screen in production. Fixed 2026-08-26. Two open items for one
+      defect is how a fixed bug stays on a list.
 - [ ] **C' rider for the RC-2/RC-3 wave: the continuity-reset close
       skips the backward-bucket ring entry** (`useMonitorSession.ts`
       ~1809 stops the recorder without reading the count) — the one
       close where the diagnostic dies silently; final review minor 2.
+- [x] **Phase RC CLOSE-OUT: the oracle corpus — BUILT 2026-08-28.**
+      `app/src/monitor/oracleCorpusReplay.test.ts`. Every committed wire
+      recording that carries a program is replayed through the real
+      `createPm5Driver`, and both shipped oracles are asserted on each one
+      — the verdict and its numbers, or the exact reason it refused to
+      compare. TEN of the fourteen committed recordings, fifteen cases,
+      zero product code — and the four it leaves out are named in the file
+      with the reason for each (an earlier version of its header claimed
+      "every committed recording" and was caught by the exit pass at 8 of
+      14; two of the six then-missing captures turned out to replay clean
+      and now carry full agreeing verdicts, `session-1-keystone` at 138.09
+      vs 137.90 and `step-2` at 138.92 vs 139.00).
+      **Why it exists:** before it, each oracle was pinned on ONE capture
+      (RC-9a on session-2, RC-9d on a synthetic 2-interval program) and
+      everything else we believed about them came from reading a ring by
+      hand after a walk.
+      **What it found, none of which was reachable from a spec:**
+      (1) RC-9(b)'s stated blocker had expired — see its row; the
+      comparison is made and green on four captures, two of them
+      rest-bearing. (2) RC-14's silence is NOT in the wire traffic: the
+      walk's own recording, through the walk's own build, produces the
+      verdict the walk never logged — see its row. (3) The mirror trap in
+      (b) is real and sits inside our own event stream: a terminate
+      synthesizes an actual FROM 0x0039, so summing it into "our side"
+      would compare 0x0039 with itself. The test excludes null-index
+      actuals and keeps `smoke-terminated` in the corpus as the capture
+      that proves the trap exists.
+      **Every assertion class was mutation-proved** (recurring failure
+      21): the avg-pace quotient (`500 *` -> `505 *`, three tests red), the
+      rest-distance sum (`restDistanceMeters` -> `restSeconds`, one red),
+      the suppression guard (final index -> index 0, two red), the 0x0039
+      decode scale (`/10` -> `/100`, five red), a one-byte program
+      transcription (rest 60 -> 30, three red on the divergence pin), and
+      an unconditional probe entry to prove the "neither oracle speaks"
+      assertions can go red at all (all eight red), and — **added at the
+      exit pass, which found this class covered by none of the first six**
+      — a rest-INCLUSIVE 0x0039 simulated by `+ 120` on the decode, which
+      turns the three rest-exclusivity bounds red and reports through them
+      (`expected 374.8 to be less than 373.8`, `252.5 < 191.5`,
+      `180 < 119`). That last one is the fix as well as the proof: the
+      bound used to be built from the program's TOTAL rest rather than the
+      rest actually TAKEN, so a rest-inclusive reading of ~120.2 s cleared
+      it and the assertion could not falsify the hypothesis it exists for.
+      **Two more repairs the exit pass earned, both in `driver.ts`'s own
+      diagnostics rather than in the corpus:** the reconciled `how` string
+      had gained a DERIVED point value ("the true final interval would read
+      Ns") built by subtracting the program's TOTAL rest — which counts the
+      final interval's own trailing rest, the one that never elapses — so on
+      `rests-finished`'s own committed shape it would have printed
+      `-60s` at an erg; it states an upper bound again. And
+      `recordAvgPaceVerdict`'s DIFFER arm had no positive assertion anywhere
+      in the repo (a grep for `toContain("DIFFER")` returned one hit, on the
+      REST oracle) — a band nothing has been seen to bite. It now has one,
+      mutation-proved by forcing `agrees = true`
+      (`expected 'machine(0x0032)=160.00s/500m ours=150…' to contain
+      'DIFFER'`).
 - [x] **Phase RC CLOSE-OUT: a derivation audit — RUN 2026-08-27.**
       `docs/superpowers/audits/2026-08-27-derivation-audit.md` plus three
       per-file tables beside it. 133 sites classified across ~7,000 lines by
@@ -3381,6 +3626,18 @@ that needs no erg, and it can run in a test.
       DEVIATIONS row 70 (the abandoned arm — the next rower finds someone
       else's intervals). That trade deserves its own decision, not a
       sub-clause of a larger spec. Re-derive the trigger before building. **S**
+      **CONSIDERED AND DECLINED AT THE PHASE CLOSE (2026-08-28).** It was
+      scoped into the close-out PR as a one-line rider and taken back out
+      before it was written, for two reasons that both point the same way.
+      (1) It fails the fast path's own fifth check on its face: a wrong
+      version produces a WRONG DEVICE INTERACTION (a TERMINATE sent at a
+      rower mid-piece, or withheld from an abandoned arm), which CLAUDE.md
+      names as disqualifying in those words — so it cannot ride a PR whose
+      entire risk is otherwise words and tests. (2) This row already says
+      the fix LOSES coverage and that the trade needs its own decision;
+      shipping it as a rider would be making that decision by not making
+      it. Stays open, unchanged in priority — still never observed in the
+      field, still the highest per-incident cost in the audit.
 - [x] **RC-31 — FALSIFIED at the erg, 2026-08-27. The trigger does not
       exist. Do not build the fix.** The audit predicted the
       resting-with-no-rest-phase fallthrough fires "for a tick at every
@@ -3419,7 +3676,17 @@ that needs no erg, and it can run in a test.
       background — the case that actually costs a session. **Do not
       re-scope this item down to its original trigger.**
       Evidence: `docs/monitor/sessions/walk-2026-08-28/`.
-- [ ] **RC-37 — Menu at READY: the machine drops the program, keeps
+- [x] **RC-37 — SHIPPED 2026-08-27 in PR #211** (link-authority design
+      spec `2026-08-27-link-authority-design.md`; released in v0.26.0,
+      build 766). The structure watch re-verifies the armed program per
+      tick and treats a `workoutType` change under an open armed run as the
+      machine leaving, returning the rower to `WorkoutDetail` with their
+      nudges intact. Gated on hardware by the 2026-08-28 walk: the detector
+      stayed silent through a real rest boundary with ZERO near-misses, and
+      `ws=11` at End proved the `armed` gate on the wire.
+      **Checkbox reconciled at the phase close, 2026-08-28** — the row
+      below is the original finding, kept for its wire evidence.
+      **Menu at READY: the machine drops the program, keeps
       streaming, and we never look. CONFIRMED AT THE ERG 2026-08-27, wire
       captured** (`walk-2026-08-27/menu-at-ready-recording.jsonl.gz`).
       James: *"if you hit 'menu' to end the workout while the app is on the
@@ -3522,8 +3789,14 @@ that needs no erg, and it can run in a test.
       were compared** (`continuity.test.ts:974`). The gate reports clean
       because it never ran. **Recurring failure #21's third instance in two
       days**, after RC-24 shipped two. **S**
-- [ ] **RC-33 — the grid's rest countdown ignores a lost link. Shipped by
-      RC-24 on 2026-08-26; found by this audit the next day.**
+- [x] **RC-33 — FIXED 2026-08-27 in PR #212** ("A lost link suppresses the
+      grid's rest countdown"; released in v0.26.0, build 766).
+      `buildGridModel` now takes the staleness it was missing, so a link
+      lost mid-rest no longer leaves pane C counting down.
+      **Checkbox reconciled at the phase close, 2026-08-28.**
+      **The original finding — the grid's rest countdown ignores a lost
+      link. Shipped by RC-24 on 2026-08-26; found by this audit the next
+      day.**
       `surfaceModel.ts:1526`: `restingNow` has no `!stale` term and
       `buildGridModel` takes no `stale` parameter — its comment "nothing in
       this function needs to know" predates RC-24 handing it two raw frame
@@ -3553,10 +3826,21 @@ that needs no erg, and it can run in a test.
       every early close or only some (a machine-finished session presumably
       does not want it); beside the save actions or after them, given it
       competes with the save the rower came to make. **S**
-- [ ] **PHASE RC CLOSE — the two rulings only James can make (2026-08-27).**
+- [x] **PHASE RC CLOSE — the two rulings only James can make (2026-08-27).
+      BOTH MADE, 2026-08-28.** (c) was REWRITTEN with a tolerance and three
+      named exempt populations after an adversarial PM pass found the
+      original had never been true of any build, then verified against five
+      photographed rows (worst case 0.1 s/500 m against a 1.0 s bound, and
+      the exempt cohort verified EMPTY). (d) was DISCHARGED by its own "or
+      the reason it cannot is documented" clause — the Concept2 logbook
+      opens as its own phase on 2026-08-29. Both are written out in full in
+      the exit block, now moved up beside the phase header. The original
+      item follows.
       The exit criteria are real and live at `ROADMAP.md`'s Phase RC exit
       section, **1,787 lines below the phase header**, which is why they were
       hard to find. **Move them adjacent to the header when this closes.**
+      (DONE — the block sits under the phase header now; this sentence is
+      the original item, kept as written.)
       Four of five are met with committed evidence: (a) work/rest stored
       separately, walk-2026-08-24 exit-7 digit-for-digit; (b) log-entry
       date/time decoded, walk-2026-08-23 W3, the wire carries no seconds;
@@ -3643,10 +3927,25 @@ that needs no erg, and it can run in a test.
       an ALL, leaving the bar and EST LEFT built partly on zeros; and
       nothing asserting `FINISH_HANDOFF_HOLD_MS > FINISH_GRACE_MS` despite
       the comment requiring it (the cheapest missing gate in the audit).
-- [ ] **RC — CROSS-CONNECT TO THE CONCEPT2 LOGBOOK. Belongs to this phase;
-      DEFERRED to Saturday by James (2026-08-27: "we also haven't
-      cross-connected to logbook yet, which should be in phase RC but can
-      wait until we have more tokens on saturday").**
+- [ ] **CROSS-CONNECT TO THE CONCEPT2 LOGBOOK — ITS OWN PHASE, OPENING
+      2026-08-29.** No longer "belongs to this phase": it is exit criterion
+      (d)'s documented reason, settled by James on 2026-08-28 ("we can open
+      the logbook Saturday").
+      **BINDING ON THE DAY THAT PHASE OPENS (PM close gate, 2026-08-28):
+      it carries exit criterion (d)'s EXACT SENTENCE into its own exit
+      block** — *"a row posted to the Concept2 sandbox comes back through
+      `export/` matching what we stored, or the reason it cannot is
+      documented."* That transcription is the receipt that makes (d) a
+      discharge rather than a deferral wearing one; without it the criterion
+      evaporates on the rename. **And the thing to say plainly there:** every
+      oracle Phase RC shipped is a different register of the SAME PM5
+      (0x0032's average pace, 0x003A's rest distance, 0x0039's totals). That
+      is a real class upgrade over checking the app against itself — it is
+      what killed the TWD mirror — but no row of ours has ever been to
+      Concept2. That is the gap this phase exists to close.
+      **The original item:** DEFERRED to Saturday by James (2026-08-27: "we
+      also haven't cross-connected to logbook yet, which should be in phase
+      RC but can wait until we have more tokens on saturday").
       Not yet scoped. Note when it is opened that RC-9's own retirement of
       the TWD mirror turned on exactly this distinction — Concept2's
       logbook stores WORK ONLY, while TWD is work plus rest-coast metres,
@@ -3719,8 +4018,22 @@ that needs no erg, and it can run in a test.
       of the app's own END button mid-piece, on both the web and native
       arms, now that PR 1's four gates make production actually listen
       for the burst on that path.
-- [ ] **Owed walk item: the pocketed-phone leg (James, 2026-08-24, tester
-      report, verbatim mechanism unconfirmed).** A tester connected,
+- [x] **WALKED 2026-08-28, leg 4 — the mechanism is no longer INFERENCE, and
+      the defect it found is now filed in Phase LM ("The pre-row lock").**
+      `docs/monitor/sessions/walk-2026-08-28/README.md:72-125`. Locked the
+      phone BEFORE the first pull: `app-lifecycle resume gap=27886ms
+      silent=true latched=true`, `resume-frames phase=ready
+      framesWhileHidden=1 rowingActive=false`, and the machine's own frame
+      putting the rower **24.7 s and 52.6 m into interval 1** while the app
+      sat at `phase=ready` with no record open. The tester's report,
+      reproduced to the frame. The same leg found RC-37's signature
+      occurring naturally after a 67 s background, and three more
+      reproductions (a `pause-declared` at 66 spm while he was rowing, TWD
+      going 52 -> 0 -> 64 m, `rowing-active-fallback` leaving
+      `rowingActive` stuck false). **Checked off at the phase close,
+      2026-08-28** — a walk item whose walk happened is the single likeliest
+      thing to leave with a closing phase.
+      **The original item, kept for the questions it asked:** A tester connected,
       programmed, reached "show me the numbers", pocketed/locked the
       phone, rowed the piece to completion, and unlocked to find the app
       still in the pre-row state with no record — END silently discarded
@@ -4055,17 +4368,37 @@ that needs no erg, and it can run in a test.
     not a suppression reason, whenever the next piece is armed within
     3 s of the previous one's finish — the walk's own ordinary rhythm
     between pieces, not a rare edge.
-  - **(b) QUEUED, not shipped — oracle-blind today.** 0x0039's totals
-    vs. Σ`recordedActuals` needs a rest-bearing capture that SURVIVES to
-    a 0x0039: of the eight committed recordings exactly ONE carries a
+  - **(b) — ITS BLOCKER IS GONE, AND THE COMPARISON IS NOW MADE AND
+    GREEN (phase close, 2026-08-28). What stays open is narrower than
+    this row was.** The original text read: "0x0039's totals vs
+    Σ`recordedActuals` needs a rest-bearing capture that survives to a
+    0x0039: of the eight committed recordings exactly ONE carries a
     0x0039 at all, and it is the ONLY one of the eight with ZERO rest
-    frames — so a rest-inclusion bug in either side would be silent on
-    the one capture that could exercise it. It is also TAUTOLOGICAL on
-    any run where `deriveFinalIntervalFromSummary` fired, since that
-    path builds our own side FROM 0x0039 — comparing them then proves
-    only that a value equals itself. **Unblocking condition: a
-    rest-bearing capture that survives to 0x0039** — the hardware-walk
-    item already owed (RC-9's own exit-7 walk).
+    frames." **That corpus fact expired.** Listing
+    `docs/monitor/sessions/` and counting rx frames per characteristic:
+    FOURTEEN recordings, SIX carrying a 0x0039, three of those six
+    rest-bearing. The unblocking condition this row named was met by
+    `walk-2026-08-25/rests-finished-recording.jsonl.gz` — committed the
+    same day this row was written — and again by
+    `walk-2026-08-28/rest-boundary-recording.jsonl.gz`.
+    **The comparison, run:** `app/src/monitor/oracleCorpusReplay.test.ts`
+    decodes each capture's own 0x0039 bytes with
+    `parseEndOfWorkoutSummary` and compares them against the interval
+    actuals the driver assembled from 0x0037/0x0038. Rests-finished:
+    **254.8 s / 935 m against 254.8 s / 935 m**, over a program carrying
+    120 s of rest — exact, and rest-exclusive on both sides.
+    Boundaries-terminated: 132.5 s / 500 m against 132.5 s / 500 m over
+    60 s of rest. Rest-boundary: 60 s / 198 m against 60 s / 197 m.
+    Keystone (r0): 138.7 s against 138.8 s.
+    **The tautology this row warned about is real, and is now guarded
+    rather than avoided**: on a terminate the driver synthesizes an actual
+    FROM 0x0039 itself (`index: null`, RC-3's observation), so the test
+    excludes null-index actuals from our side and asserts there were none
+    on every capture it compares. `walk-2026-08-25/smoke-terminated` is
+    kept in the file precisely as the capture that sets that trap.
+    **STILL OPEN, and this is all that is:** a LIVE ring verdict for this
+    comparison, the way (a) and (d) have one. A corpus check is a
+    regression pin; it cannot speak at a walk.
   - **(c) SHIPPED, and CORRECTED, not merely "switched off."** The old
     framing here — "the TWD verdict is switched off for the whole
     session by any distance interval; all seven committed captures
@@ -4134,6 +4467,13 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
+      **NOT COVERED by the phase close's oracle corpus
+      (`oracleCorpusReplay.test.ts`), and the reason is a corpus gap worth
+      recording:** the trigger is a `program()` landing inside a finished
+      run's 3000 ms grace, and no committed capture contains one. The
+      closest — the two pieces of walk-2026-08-25 — are 148.1 s apart.
+      Reproducing this needs either a synthetic driver test or a walk that
+      deliberately re-arms within 3 s of a finish.
 - [x] **RC-21 — FIXED 2026-08-26 (ultrareview round). The "RetestShortcut flake" was not a flake. It is an
       unvalidated cast at a trust boundary, and it can crash the You screen
       in production.** Found 2026-08-26 while dismissing it for the third
@@ -4167,7 +4507,11 @@ that needs no erg, and it can run in a test.
       made it blocking. **That is the whole lesson — the "flake" was a race
       whose odds any nearby edit could change, and three sessions of re-running
       it green were three sessions of not looking.**
-- [ ] **v0.24.0's notes owe the v0.17.0 correction IN FULL, and the
+- [x] **PAID — `releaseNotes.ts:98`, shipped in the 2026-08-26 notes**, and
+      it carries both falsified clauses by name ("cannot flicker at you" and
+      the phone call). Checked off at the phase close, 2026-08-28; it had
+      been done and left unchecked. **The original item:
+      v0.24.0's notes owe the v0.17.0 correction IN FULL, and the
       cause-free rule must be scoped when briefing whoever writes them.**
       Moved here at the PM re-gate because it had been living only in a dated
       design spec — a record of a decision, not a queue (RF#14's newest
@@ -4505,6 +4849,37 @@ that needs no erg, and it can run in a test.
       `docs/monitor/sessions/walk-2026-08-25/`. Note what this costs: the
       oracle shipped one PR ago (#196) and has now been walked once, on
       exactly the shape it exists to check, and said nothing.
+      **REPLAYED AT THE PHASE CLOSE (2026-08-28), AND THE SEARCH AREA IS
+      NOW MUCH SMALLER.** This capture was replayed through the real
+      `createPm5Driver` — at current main AND, separately, with
+      `driver.ts` checked out at `c219ee0`, the exact commit the walk's own
+      laptop lab ran — and BOTH produce the verdict:
+      `machine(0x0032)=136.02s/500m ours=136.26s/500m delta=0.24s — agree`.
+      The replayed ring matches the walked ring entry for entry
+      (`summary-half` -> `summary-log-stamp` -> `summary-totals` ->
+      `summary-reconciled buffered` -> `summary-half` ->
+      `rest-distance-verdict` -> `verification-received` ->
+      `summary-reconciled split-won`) and then records the verdict in
+      exactly the gap where the walked ring goes straight to
+      `disconnect-requested`. Pinned by
+      `app/src/monitor/oracleCorpusReplay.test.ts`.
+      **What that eliminates:** the wire traffic (sufficient, on its own,
+      to produce the verdict); the driver's response to it (identical
+      ring, up to the gap); ring eviction (73 entries, seq 0..72, against
+      `eventLog`'s 500-entry capacity); and "the walk's build predated the
+      oracle" — **that last one is PROVABLE rather than inferential, and the
+      exit pass supplied the proof: `git log -S` returns the SAME single
+      commit (`c219ee0`, #196) for BOTH `recordAvgPaceVerdict` and
+      `recordRestDistanceVerdict`, so the seq-69 `rest-distance-verdict` in
+      the walked ring cannot come apart from the avg-pace half; and the
+      walked ring's own `summary-log-stamp` reads
+      `wall=2026-08-25T21:42:03.110Z`, fourteen minutes after that commit's
+      own timestamp.** Both call sites of `reconcileSummary` are followed
+      immediately by `recordAvgPaceVerdict`, and every branch of that
+      function records before returning — so on the walked run it either
+      threw, or something outside the driver dropped the entry between
+      `log.record` and the persisted `ergomatic:last-rowed-log`. Those two
+      are the survivors; start there, not at the call site.
 - [x] **RC-15 — 0x003A's Interval Rest Time is the LAST interval's.
       SETTLED by the walk itself (2026-08-25, W-9); no experiment
       owed.** The field read 0 for the third capture running, this time
@@ -4575,25 +4950,51 @@ that needs no erg, and it can run in a test.
       what Concept2 can hold for us.
 - [ ] **RC-12 — Documentation reconciliations**, each a defect by this
       repo's own rule; fold into the PRs above rather than a sweep.
-      `driver.ts:2801-2870` and `pm5-interface-notes.md:4640-4657` still
-      call `deriveFinalIntervalFromSummary`'s two premises UNCONFIRMED
-      when a capture settled BOTH five days after they were written
-      (`walk-2026-08-15/session-c-rewalk-row1.json` seq 35 prints its own
-      three-way decision rule then reads 120 == 120 — cumulative AND
-      rest-exclusive; ORM's writer independently agrees).
-      `pm5-interface-notes.md:4393` says 0x0037's work-only status is
-      "still open" while `state-architecture-review.md:1310` says PROVEN
-      — the review is right. ~~§20 items 17 and 24 are contradicted by
-      the captures that settle RC-4.~~ **DONE, folded into RC-4's PR** —
-      both items rewritten to the 0.01 s/lsb, dimension-conditional
-      semantic. `driver.ts:2094-2099` says "no capture
-      or existing test evidences" state 9; one committed two days later
-      does. `types.ts:429-433` claims `onDisconnect` covers the Bluetooth
-      stack resetting and iOS backgrounding — it covers neither.
-      `connectedAxes.ts:38-41` declares the link axis is "never invented"
-      then returns `"up"` from `phase` alone. `schema.ts:165-167` calls
+      **FOUR OF SIX DONE at the phase close (2026-08-28); the two that
+      remain are named at the bottom, with why they were left.**
+      - ~~`driver.ts` and `pm5-interface-notes.md` still call
+        `deriveFinalIntervalFromSummary`'s two premises UNCONFIRMED when a
+        capture settled BOTH.~~ **DONE.** Both premises now read SETTLED,
+        each citing interface-notes §27.1 and the capture behind it, and
+        the notes' own 0x0039 table rows (Elapsed Time, Distance) no longer
+        contradict §27.1 four hundred lines further down. The two
+        `driver.test.ts` assertions that pinned the old wording moved with
+        it.
+      - ~~The runtime `how` string prints `UNVERIFIED PREMISE (§23 walk
+        item 4)` on every summary-derived fill.~~ **DONE, and this was the
+        one that mattered** — it is not a comment, it is a diagnostic a
+        walk reads at the erg, and it was telling its reader a settled
+        question was open. It now states that both sides are work-only per
+        §27.1 and prints what the number WOULD read on a machine where that
+        failed, so the erg-side check is a comparison rather than a caveat.
+      - ~~`connectedAxes.ts` declares the link axis is "never invented"
+        then returns `"up"` from `phase` alone.~~ **DONE.** The claim was
+        aspirational and `deriveLink` never met it (`up` covers the whole
+        `pairing`..`live` group, and `pairing` spans the connect settle
+        itself). Rewritten to state what the axis actually promises: the
+        DIRECTION of its uncertainty, `"lost"` being the conservative
+        answer.
+      - ~~§20 items 17 and 24 are contradicted by the captures that settle
+        RC-4.~~ **DONE, folded into RC-4's PR.**
+      - ~~`driver.ts` says "no capture or existing test evidences" state
+        9.~~ **ALREADY DONE before this close** — series-truth reconciled
+        it in place and the comment now cites `walk-2026-08-24/
+        phone-exit7-ring.json` seq 27/28. Recorded here because this row
+        still listed it as owed, which is the same drift the row exists to
+        catch.
+      - ~~`pm5-interface-notes.md` says 0x0037's work-only status is "still
+        open" while `state-architecture-review.md` says PROVEN.~~ **ALREADY
+        DONE** — notes item 22 reads "SETTLED work-only (state-architecture
+        review §7, then RC-5 hero-truth)".
+      **STILL OWED, and deliberately not in the close-out PR:**
+      `types.ts:429-433` claims `onDisconnect` covers the Bluetooth stack
+      resetting and iOS backgrounding — it covers neither (Phase LM's
+      lifecycle work is the evidence). `schema.ts:165-167` calls
       `distance_meters` "the machine's whole-meter total" when it is our
-      sum, work+rest+warm-up.
+      sum, work + rest. Both sit under `app/domain/` and `app/server/`,
+      which the close-out PR holds at ZERO files by the fast path's own
+      first check — a comment-only edit there is still a file there. They
+      ride the next PR that touches either directory.
 
 ### The warm-up question, reframed 2026-08-21 (James)
 
@@ -4911,75 +5312,6 @@ cleanup and can trail anything.
 **What this does NOT reorder:** the PM gate's phase order (LT close → LL
 → CL2 → LQ → PROD) stands. WU inserts ahead of LL only because it is
 small, independent and collides with it; RC as a whole sits after LL.
-
-**Exit — written so it can go red.** (a) A row rowed on a real PM5 stores
-work and rest as separate quantities, and its work-only distance and time
-equal the monitor's own for the same piece; (b) the monitor's log entry
-date/time is decoded and logged from a real finish, with the
-seconds-resolution question answered either way; (c) the three heroes on
-one stored row reconcile with each other by hand arithmetic
-**[REWRITTEN 2026-08-28 — see (c) below, which the original could not
-survive]**; (d) a row posted to the Concept2 sandbox comes back through
-`export/` matching what we stored, or the reason it cannot is documented
-**[DISCHARGED BY THE DOCUMENTED REASON — see (d) below]**; (e) if 0x003F turns out
-not to fire on our firmware, DEVIATIONS carries the row saying so and the
-verification branch is closed on the record rather than left hoped-for.
-
-**(c) REWRITTEN AND MET, 2026-08-28.** The original sentence — "the three
-heroes on one stored row reconcile with each other by hand arithmetic" —
-**has never been true of any build of this app**, in three distinct ways, so
-it could not go red. An adversarial PM pass established all three. Rewritten
-with a tolerance and a named population:
-
-> On a stored row whose close is `finished` and whose intervals carry no
-> null-index actual, DISTANCE, TIME and AVG SPLIT reconcile by hand
-> arithmetic to within **1.0 s/500 m** (tier A's designed truncation gap —
-> the PM5 truncates, we round). Three populations are exempt, named:
-> **(i)** rows with an INCOMPLETE close saved 2026-08-22..2026-08-25, between
-> `ended_by` shipping (#160) and RC-5 shipping (#194), which render the fused
-> stored columns and disagree by up to ~26 s/500 m — **closed, non-growing,
-> and unreachable by the `endedBy` relabel** (that changes how FUTURE rows
-> close; only a backfill touches these, and none is planned). Pre-disclosed
-> to testers at v0.23.0's item 5.
-> **(ii)** any row carrying a RECORDED null-index actual — DISTANCE/TIME
-> include it, AVG SPLIT excludes it by construction (`storedSummary.ts`,
-> "Null-index/warm-up parity DOES NOT HOLD"), ~10 s/500 m. Ongoing, affects
-> `finished` rows too, observed in zero committed rings.
-> **(iii)** tier A, where the machine's own avg pace can disagree with its
-> own totals (walk-2026-08-20, 901 vs 899).
-
-**MET, and population (i) VERIFIED EMPTY by inspection (James, 2026-08-28).**
-He photographed five consecutive stored rows spanning the window — Ground Fog
-(22 Aug), Comma Cloud (24th), Corona (25th), Line Squall (26th), Ice Fog
-(27th). Hand arithmetic on each, `TIME / DISTANCE * 500`:
-
-| row | time | distance | implied | shown | delta |
-| --- | --- | --- | --- | --- | --- |
-| Ice Fog | 1800 s | 6574 m | 2:16.9 | 2:16.9 | 0.0 |
-| Line Squall | 868 s | 3500 m | 2:04.0 | 2:03.9 | 0.1 |
-| Corona | 1072 s | 4000 m | 2:14.0 | 2:14.1 | 0.1 |
-| Comma Cloud | 1260 s | 4937 m | 2:07.6 | 2:07.6 | 0.0 |
-| Ground Fog | 1680 s | 6192 m | 2:15.7 | 2:15.7 | 0.0 |
-
-Worst case **0.1 s/500 m**, an order of magnitude inside the tolerance; the
-exempt cohort would be off by ~26 s. **Second, independent confirmation in the
-same photographs:** every row carries a `plus N m coasting in rest` clause,
-which is precisely what an incomplete close CANNOT have (it keeps the fused
-headline and gains no rest line) — so all five are complete closes rendering
-work-only heroes. **No user-facing note is owed**, because the cohort is
-empty.
-
-**(d) DISCHARGED BY THE DOCUMENTED REASON, 2026-08-28 (James: "we can open
-the logbook Saturday").** The criterion's own wording permits this: *"or the
-reason it cannot is documented."* The reason: **the Concept2 logbook
-cross-connect is real work that deserves its own phase, not the last item
-holding a phase open.** It is the first oracle OUTSIDE our own definitions —
-Concept2 stores work only, so agreement there means something that agreeing
-with our own accumulator never did (recurring failure #11's "an oracle that
-shares your definition is a mirror"). What is already recorded and carries
-forward: the dev API key lives in the repo-root `.env` and its VALUE is never
-read into a transcript or a committed file; the `weight_class` gate; and the
-ErgData-dedup question. **Opens as its own phase, 2026-08-29.**
 
 ## Phase WU — The warm-up leaves
 
@@ -6782,6 +7114,43 @@ gate.
       that reports transitions again. Until then a synthesised transition
       drives the same production handler through the same seam, which is what
       the gate needs — see `lifecycleReplay.test.ts`.
+- [ ] **THE PRE-ROW LOCK — a whole piece rowed and nothing kept. REPRODUCED
+      ON HARDWARE 2026-08-28, still unfixed, and filed here (not in RC) at
+      the RC close gate because it is a lifecycle defect, not a
+      number-meaning one.**
+      Connect, program, tap "show me the numbers", lock the phone BEFORE the
+      first pull, row, unlock. The app is still `phase=ready`, has opened no
+      record, and End silently discards the row — the never-rowed path has
+      no save door.
+      **The evidence, from `docs/monitor/sessions/walk-2026-08-28/README.md`
+      (leg 4, iPhone, v0.25.0 build 759, PRODUCTION):**
+      ```
+      app-lifecycle   resume gap=27886ms  silent=true latched=true
+      resume-frames   phase=ready  framesWhileHidden=1  rowingActive=false
+      twd-sample      machineTotal=52m at elapsed=24.71s distance=52.6m workoutState=4
+      ```
+      The machine had him 24.7 s and 52.6 m into interval 1 while we sat at
+      `ready`. **This is a tester's own report, reproduced to the frame** —
+      the same report Phase LM opened on, whose walk item Phase RC had been
+      carrying as owed and is now discharged (RC's pocketed-phone item).
+      **Deliberately NOT claimed in v0.26.0's notes**, because it is not
+      fixed.
+      **RC-37 does NOT cover it.** RC-37 catches the OTHER case the same leg
+      found — a long background where the erg drops the program — and returns
+      the rower to the workout screen. This case has the program intact and
+      the machine rowing; nothing tells us so.
+      **Three siblings from the same leg, same window, same root:** a
+      `pause-declared … d=64.2 split=297.56 spm=66` while he was rowing (the
+      freeze predicate calling a pause, and the source of the 4:57.6 split
+      and 66 spm James asked about — wire readings from the confused
+      post-unlock window, not our arithmetic); TWD going non-monotonic
+      52 -> 0 -> 64 m across three samples; and `rowing-active-fallback`
+      firing, so `rowingActive` was stuck false throughout.
+      **Recurring failure 19 is the frame to design in:** the trigger enters
+      ABOVE the transport seam, so every instrument we own is blind to it
+      unless the fix builds one. `RecordedEvent`'s `lifecycle` member and
+      `transports/replay.ts`'s lifecycle emission exist for exactly this and
+      are the starting ground. **M**
 - [ ] **LM PR 2 — correct resume**, per James's 2026-08-20 ruling ("CORRECT
       RESUME, not a background mode"). **UNBLOCKED 2026-08-26 — and it was
       blocked on an event that will never happen.** This row used to read "do

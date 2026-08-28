@@ -3817,41 +3817,50 @@ export function createPm5Driver(
   /**
    * DERIVATION, AND ITS TWO PREMISES (design spec §5's B3 ruling).
    *
+   * **BOTH PREMISES ARE NOW SETTLED ON THE WIRE (RC-12, Phase RC
+   * close-out).** This comment described them as unobserved for as long as
+   * every committed 0x0039 came off a zero-rest piece. That stopped being
+   * true on 2026-08-25, and the reconciliation lives in
+   * `docs/monitor/pm5-interface-notes.md` §27.1, which supersedes §23's
+   * walk items 2 and 4.
+   *
    * **PREMISE 1: 0x0039's Elapsed Time and Distance are WHOLE-WORKOUT
-   * CUMULATIVE totals** — `docs/monitor/pm5-interface-notes.md` §23's walk
-   * item 2, which records the premise as UNCONFIRMED ON THE WIRE: "whether
-   * 0x0039's Elapsed Time/Distance are genuinely whole-workout cumulative
-   * totals, or could exhibit some other reset the way 0x0031's
-   * identically-scaled, identically-named fields surprised hardware walk
-   * 4". The parser's own field names stay neutral
-   * (`elapsedSeconds`/`meters`, not `total*`) for exactly this reason.
+   * CUMULATIVE totals — HELD.**
+   * `walk-2026-08-25/rests-finished-recording.jsonl.gz`'s 0x0039 reads
+   * 254.8 s / 935 m against three recorded intervals summing to exactly
+   * 254.8 s / 935 m — cumulative, not the last interval's own — and
+   * `walk-2026-08-28/rest-boundary-recording.jsonl.gz` reproduces the
+   * shape (60 s / 198 m against one recorded interval). Pinned by
+   * `oracleCorpusReplay.test.ts`'s RC-9(b) block, which decodes 0x0039
+   * straight off the capture's bytes and compares it against the actuals
+   * this driver assembled from 0x0037/0x0038. The parser's own field names
+   * stay neutral (`elapsedSeconds`/`meters`, not `total*`): renaming them
+   * is a larger change than this reconciliation, and cautious names cost
+   * nothing.
    *
    * **PREMISE 2: 0x0039's totals and 0x0037's per-interval values MEASURE
-   * THE SAME SPAN with respect to REST** — §23 walk item 4. The
-   * subtraction below is `summary_total − Σ(recorded per-interval
-   * values)`, which is only arithmetic if both sides either include each
-   * interval's trailing rest or both exclude it. A MISMATCH (0x0039
-   * counting rest while 0x0037's Split/Interval Time does not, or the
-   * reverse) makes the derived final interval wrong by the workout's whole
-   * rest allowance. §23 item 4 records why it is plausible either way: the
-   * fact that 0x003A carries Total Rest Distance and Interval Rest Time as
-   * SEPARATE fields argues 0x0039's numbers are work-only, and nothing on
-   * the wire has confirmed it.
+   * THE SAME SPAN with respect to REST — HELD, and both are WORK-ONLY.**
+   * The subtraction below is `summary_total − Σ(recorded per-interval
+   * values)`, which is only arithmetic if both sides treat each interval's
+   * trailing rest the same way. The same capture settles it: its program
+   * carried 120 s of programmed rest and 0x0039 excludes every second of
+   * it (a rest-inclusive reading would have read 374.8 s). §27.2 closes
+   * the loop from the other side — 935 m of work plus 0x003A's own 274 m
+   * of rest is exactly the 1209 m Total Work Distance the same stream
+   * reported.
    *
-   * **WHY PREMISE 2 IS THE MORE DANGEROUS OF THE TWO.** Premise 1 fails
-   * LOUDLY: under a per-interval reading the summary carries the last
-   * interval's own (smaller) numbers, the subtraction goes non-positive,
-   * and the guard below declines with the premise named. Premise 2 fails
-   * QUIETLY: a rest-inclusive total over rest-exclusive priors yields a
-   * final interval that is too LONG by the total rest — positive,
-   * plausible, and invisible to that guard. That is precisely the
-   * "plausible-looking, wrong, and silent" shape B3 exists to refuse, so
-   * it is answered the only way an unobserved premise can be: the `how`
-   * string below states the program's own rest allowance, so the erg
-   * stash shows the exact number the fill would be wrong by, and the walk
-   * settles it by rowing a MULTI-INTERVAL piece WITH REST (§23 item 4 says
-   * so in the notes; the driver tests carry both readings of the same
-   * fixture, one as the pin and one as the documented discriminator).
+   * **WHY PREMISE 2 WAS THE MORE DANGEROUS OF THE TWO**, kept because it
+   * is why the guard below is shaped as it is, and because it would matter
+   * again on firmware that answers differently. Premise 1 fails LOUDLY:
+   * under a per-interval reading the summary carries the last interval's
+   * own (smaller) numbers, the subtraction goes non-positive, and the
+   * guard below declines with the premise named. Premise 2 fails QUIETLY:
+   * a rest-inclusive total over rest-exclusive priors yields a final
+   * interval that is too LONG by the total rest — positive, plausible, and
+   * invisible to that guard. That asymmetry is why the `how` string below
+   * still names the program's own rest allowance beside its result: it
+   * costs a clause, and it keeps an erg-side hand-check to one
+   * subtraction.
    *
    * **THIS FUNCTION IS THE ONLY PLACE EITHER PREMISE IS USED. If the walk
    * falsifies either, this function alone changes** — the caller below
@@ -3881,9 +3890,10 @@ export function createPm5Driver(
    * function could make it so.
    *
    * `programmedRestSeconds` is the ARMED PROGRAM's own total rest, not a
-   * wire reading — it never enters the arithmetic (adding or subtracting
-   * it would be picking a side of premise 2 on no evidence) and exists
-   * solely so the `how` string can name it.
+   * wire reading — it never enters the arithmetic (premise 2 holds, so
+   * there is nothing to add or subtract, and a machine that broke it
+   * would need a wire reading rather than the program's own figure) and
+   * exists solely so the `how` string can name it.
    */
   function deriveFinalIntervalFromSummary(
     summary: WorkoutSummary,
@@ -3904,7 +3914,7 @@ export function createPm5Driver(
         ok: true,
         elapsedSeconds: summary.elapsedSeconds,
         distanceMeters: summary.meters,
-        how: `the SINGLE interval's own totals, taken from 0x0039 verbatim (elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m) — with one interval there is no prior to subtract and no prior rest to mis-count, so this arm holds whatever §23 walk items 2 and 4 find`,
+        how: `the SINGLE interval's own totals, taken from 0x0039 verbatim (elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m) — with one interval there is no prior to subtract and no prior rest to mis-count, so this arm holds under either reading of interface-notes §27.1's two premises`,
       };
     }
     const priorElapsed = priors.reduce((a, p) => a + p.elapsedSeconds, 0);
@@ -3914,23 +3924,34 @@ export function createPm5Driver(
     if (elapsedSeconds <= 0 || distanceMeters < 0) {
       return {
         ok: false,
-        why: `the subtraction produced elapsed=${elapsedSeconds}s distance=${distanceMeters}m, which is not a workout anyone rowed — 0x0039's totals (${summary.elapsedSeconds}s/${summary.meters}m) do not exceed the ${priors.length} recorded prior interval(s) (${priorElapsed}s/${priorMeters}m). The cumulative premise (interface-notes.md §23 walk item 2) may not hold on this machine`,
+        why: `the subtraction produced elapsed=${elapsedSeconds}s distance=${distanceMeters}m, which is not a workout anyone rowed — 0x0039's totals (${summary.elapsedSeconds}s/${summary.meters}m) do not exceed the ${priors.length} recorded prior interval(s) (${priorElapsed}s/${priorMeters}m). The cumulative premise (interface-notes.md §27.1, settled on the wire 2026-08-25 and pinned by oracleCorpusReplay.test.ts) does not hold on this machine`,
       };
     }
     return {
       ok: true,
       elapsedSeconds,
       distanceMeters,
-      // THE REST NUMBER IS PART OF THE ANSWER, not decoration (§23 walk
-      // item 4). Premise 2 cannot be checked by this code, so it is
-      // checked by the reader: if 0x0039 counts rest and 0x0037 does not,
-      // this fill is exactly `restSeconds` too long, and the entry states
-      // that number beside the result so an erg-side hand-check is one
-      // subtraction rather than a trip back to the program.
+      // THE REST NUMBER IS PART OF THE ANSWER, not decoration. It used to
+      // print as an UNVERIFIED PREMISE because nothing on the wire had
+      // shown whether 0x0039 counts rest; §27.1 settled that it does not
+      // (this function's own doc comment, premise 2), so the entry states
+      // the same number as the CHECK a walk can run rather than as a caveat
+      // on the result.
+      //
+      // AN UPPER BOUND, NOT A POINT VALUE, and the distinction is load-
+      // bearing (exit pass, finding M-1). An earlier version of this string
+      // printed `elapsedSeconds - programmedRestSeconds` as "the true final
+      // interval". `programmedRestSeconds` reduces over EVERY interval's
+      // `restSeconds`, including the final interval's own trailing rest,
+      // which by construction never elapses — and 161 of 300 seeded
+      // workouts carry one (`recordRestDistanceVerdict`'s own note above,
+      // citing `domain/monitor/program.ts:281-286`). On `rests-finished`'s
+      // committed shape that subtraction prints -60s: a negative duration,
+      // in a diagnostic whose whole job is to be read at an erg.
       how: `0x0039's totals (${summary.elapsedSeconds}s/${summary.meters}m) MINUS ${priors.length} recorded prior interval(s) (${priorElapsed}s/${priorMeters}m) = ${elapsedSeconds}s/${distanceMeters}m${
         programmedRestSeconds > 0
-          ? `. UNVERIFIED PREMISE (§23 walk item 4): this program's own rest totals ${programmedRestSeconds}s — if 0x0039's Elapsed Time counts rest and 0x0037's Split/Interval Time does not, this elapsed is up to ${programmedRestSeconds}s too long and no guard here can tell`
-          : ". This program has no programmed rest, so §23 walk item 4's rest premise cannot bite on this run"
+          ? `. Both sides are work-only (interface-notes §27.1, settled on the wire 2026-08-25), so this subtraction is like-for-like. This program's own rest totals ${programmedRestSeconds}s, of which the final interval's own trailing rest never elapses: on a machine where §27.1 did NOT hold, this ${elapsedSeconds}s would be too long by up to that much and no guard here could tell`
+          : ". This program has no programmed rest, so the work-only question (interface-notes §27.1) cannot bite on this run either way"
       }`,
     };
   }

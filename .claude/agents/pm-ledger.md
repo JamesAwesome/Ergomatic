@@ -2944,3 +2944,69 @@ this spec's close).
   triage closed 12 on evidence, found 5 already done, and moved 5 to other
   phases. (a)-(e) IS the gate; the checkbox count was filing-as-deferral, and
   the triage is what made the close honest rather than declared.
+
+## Phase-close gate, 2026-08-28 (Phase RC — closed with conditions)
+
+- **"It deserves its own phase" discharges a criterion that says "or the reason
+  it cannot is documented" — but only with a receipt.** RC's (d) (a row posted
+  to the C2 sandbox) closed on James's word plus a dated successor phase. What
+  made it a discharge rather than filing-as-deferral: the ROADMAP had asked him
+  the question IN ADVANCE, in the criterion's own item ("Do the logbook, or
+  write the reason?"), and the successor had a date. What makes it a precedent
+  worth bounding: workload is a reason it WON'T, not a reason it CANNOT, and if
+  that stands unqualified every future exit criterion is dischargeable by
+  filing. **Ruling: a criterion discharged into a successor phase carries its
+  EXACT SENTENCE into that phase's own exit block on the day it opens.** The
+  transcription is the receipt; without it the criterion evaporates on the
+  rename.
+- **A phase can close having replaced "we verify against ourselves" with "we
+  verify against one machine" — say so, because the name will not.** Every
+  oracle RC shipped is a different register of the same PM5 (0x0032 avg pace,
+  0x003A rest distance, 0x0039 totals). That is a real class upgrade from the
+  TWD mirror RC-9c retired, and it is NOT the external authority the phase's own
+  name promised. **At any close, ask what CLASS of check the phase actually
+  built, not whether its checks passed** — "Phase RC — The row Concept2 would
+  recognise, CLOSED" with zero Concept2 contact is roadmap-outruns-reality in
+  the most durable place there is.
+- **A rewritten criterion's EXEMPTIONS need the same evidence bar as the
+  criterion.** (c)'s rewrite survived re-attack: it still fails the defect RC-5
+  fixed (24-40 s/500 m) and was checked POSITIVELY on five photographed rows at
+  0.1 s/500 m against a 1.0 s bound. Its exemption (ii) did not: it cited
+  `storedSummary.ts`'s "Null-index/warm-up parity DOES NOT HOLD" heading, whose
+  own paragraph ends "now genuinely bounded ... provably-historical population"
+  — the opposite of the exemption's "Ongoing". **Resolved at the gate, and the
+  resolution is the lesson:** the exemption is REAL but lives in a DIFFERENT
+  TIER than the paragraph quoted (tier B1's work pair counts a null-index
+  actual while `tierBAvgSplitSeconds` cannot see it; tier B2's Σ-steps
+  under-count is the bounded one). One gap, two consequences, two tiers.
+  **When an exemption cites a source, read the source's own scope sentence —
+  and check whether the mechanism it describes is even the one you mean.**
+- **A close-out PR corrects the doc rows its own work touched and leaves the
+  rows above them.** RC-12 fixed 0x0039's Elapsed Time and Distance rows;
+  Log Entry Date/Time rows 0-1 and 2-3 of the SAME table still read UNCERTAIN
+  five days after walk-2026-08-23 decoded them against the screen and RC-2
+  SHIPPED the decoder. Four sites total. **The successor phase opening the next
+  day was the exact "future consumer" the stale line tells to go re-derive it.**
+  Generalises: at a phase close, grep the notes for the phase's own settled
+  questions, not just for the lines the last task edited.
+- **RF#14, sixth consecutive gate — and the near-miss is instructive.** RC-14's
+  eliminated hypotheses, RC-12's two remaining sites, and RC-30's decline all
+  reached ROADMAP rows: the commit message was a presentation OF the record, not
+  the record. The one that did not was the biggest: the pre-row lock (locked
+  phone before the first pull, whole piece rowed, no record kept — tester report
+  REPRODUCED on hardware) survived only as prose in the closing phase's Status
+  paragraph. **A defect discovered by a phase's own closing walk is the single
+  likeliest thing to leave with it.** Check the walk item the walk discharged,
+  and open the fix item in the same edit.
+- **Counted: 84 unchecked repo-wide (88 on main), the highest recorded here** —
+  67 at RC open, 71 at 8A close, 60 at WU open, 37 at LL open, 24 on 2026-08-13.
+  RC's own section still holds 22 unchecked AFTER its YAGNI triage, while its
+  Status paragraph named 14 as moving out and named no destination for any of
+  them. **"Moves out of the phase" is not a disposal; a section header saying
+  CLOSED over live items is the pattern with a nicer label.** Answered at this
+  gate by a disposition paragraph naming the OWNER of each of the 22 in six
+  groups — not by closing any of them.
+- **Release call: NO tag.** `v0.26.0..main` empty; the close-out PR is a test,
+  comments, one operator diagnostic string, and ROADMAP. Nothing a tester
+  receives. Next tag states the reason this merge needs no clause (RF#15) rather
+  than passing over it in silence.

@@ -563,6 +563,22 @@ often they recur.
     **When a bound justifies a decision, name the layer that enforces it
     and check whether a NARROWER one sits downstream.**
 
+22. **`git checkout -- <file>` to revert a mutation probe, on a file that
+    also holds uncommitted work.** Queued as a lesson by James on
+    2026-08-24 and never landed; it then happened again on 2026-08-28,
+    during the very PR that was landing it. Reverting a one-line mutation
+    with `git checkout -- app/src/monitor/driver.ts` also destroyed an
+    unrelated, uncommitted comment fix in the same file — silently, because
+    checkout does not warn and the suite went green either way (the fix was
+    a comment). Caught by `git status`, which is luck rather than a gate.
+    **Before reverting anything with `git checkout`, run `git status` and
+    check whether the file you are about to restore carries work you have
+    not committed.** The cheap habit that removes the class entirely:
+    **commit the real change BEFORE running any mutation probe**, so every
+    probe's revert is a no-op against a clean file, and the probe can never
+    take anything with it. `git stash` is not the alternative here — the
+    stash stack is shared with other sessions (agent briefing).
+
 
 ## Commands
 
