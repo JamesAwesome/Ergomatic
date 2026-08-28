@@ -312,40 +312,80 @@ async function replayThroughDriver(
 }
 
 describe("createPm5Driver: RC-37's negative corpus — five healthy captures, zero false detections across their armed frames", () => {
+  // `armedFrameCount` is PINNED exactly (fix round 1, finding 4 —
+  // "recurring failure #14: prose numbers are silent when they drift"), not
+  // merely asserted positive: a capture swap, a re-record, or a
+  // `WORKOUTSTATE_TO_STATE` edit changes one of these numbers, and an exact
+  // pin makes that a red test instead of a quiet prose mismatch with the
+  // task report. Every count below was read off THIS test's own passing run
+  // (`outcome.armedFrameCount`, itself an independent oracle — computed
+  // directly off each capture's raw 0x0031 bytes, never off anything the
+  // driver under test decided) and cross-checked against a standalone
+  // decode script outside this suite before being pinned here.
+  //
+  // WHAT THIS CORPUS DOES NOT PROVE (fix round 1, finding 3): every armed
+  // run in every one of these six captures (five negative, one positive)
+  // is a SINGLE CONTIGUOUS block at the very head — index `[0..N-1]` of
+  // that capture's own General Status stream — and zero armed frames occur
+  // at or after the first rest state in any of them (verified this session
+  // by walking each capture's own decoded state sequence). So "zero false
+  // detections at a rest boundary" is proved by the `armed` GATE and its
+  // own dedicated mutation (`driver.test.ts`'s "pins the armed gate" test,
+  // which fabricates a rest-boundary-shaped mismatch directly and confirms
+  // the gate suppresses it) — never by this corpus, which never puts an
+  // armed frame anywhere near a rest boundary to sweep. This is exactly
+  // why the design spec's own exit criterion 5, leg 2 (a rest-bearing
+  // piece, ROWED, not replayed) exists as the actual gate; overstating what
+  // replay evidence covers would make that walk leg look redundant when it
+  // is the one thing this suite structurally cannot stand in for.
+  //
+  // Also worth naming (inherited from `verifyArmed`, not introduced by RC-
+  // 37): `WORKOUTSTATE_TO_STATE` admits BOTH ordinal 0 (WaitToBegin) and
+  // ordinal 2 (COUNTDOWNPAUSE) as `"armed"`. COUNTDOWNPAUSE appears in
+  // NONE of the six captures in this corpus (verified this session) — an
+  // unobserved armed sub-state, not a gap this task opened.
   const HEALTHY_CAPTURES: {
     name: string;
     path: string;
     program: WorkoutProgram;
+    /** Independently verified — see this `describe` block's own header
+     *  comment. */
+    armedFrameCount: number;
   }[] = [
     {
       name: "walk-2026-08-25/rests-finished (natural finish, two real rests)",
       path: "walk-2026-08-25/rests-finished-recording.jsonl.gz",
       program: RESTS_FINISHED_PROGRAM,
+      armedFrameCount: 68,
     },
     {
       name: "walk-2026-08-25/smoke-terminated (Menu terminate mid-piece)",
       path: "walk-2026-08-25/smoke-terminated-recording.jsonl.gz",
       program: SMOKE_TERMINATED_PROGRAM,
+      armedFrameCount: 31,
     },
     {
       name: "walk-2026-08-27/boundaries-terminated (Menu terminate mid-interval-3, one real rest)",
       path: "walk-2026-08-27/boundaries-terminated-recording.jsonl.gz",
       program: BOUNDARIES_TERMINATED_PROGRAM,
+      armedFrameCount: 181,
     },
     {
       name: "walk-2026-08-23/keystone (natural finish, laptop keystone)",
       path: "walk-2026-08-23/keystone-pm5-recording-1787491974452.jsonl.gz",
       program: KEYSTONE_PROGRAM,
+      armedFrameCount: 27,
     },
     {
       name: "walk-2026-08-18-metrics/pyramid (natural finish, two real rests, distinct targets, 1087 frames)",
       path: "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
       program: PYRAMID_PROGRAM,
+      armedFrameCount: 167,
     },
   ];
 
   for (const capture of HEALTHY_CAPTURES) {
-    it(`${capture.name}: zero 'structure-left' entries, zero programDropped events`, async () => {
+    it(`${capture.name}: ${capture.armedFrameCount} armed frames, zero 'structure-left' entries, zero programDropped events`, async () => {
       const outcome = await replayThroughDriver(capture.path, capture.program);
 
       // Bug-independent sanity FIRST (this project's own convention
@@ -353,12 +393,7 @@ describe("createPm5Driver: RC-37's negative corpus — five healthy captures, ze
       // is wrong, THIS fails, never the assertion below it.
       expect(outcome.divergences).toStrictEqual([]);
 
-      // Reported (per James's reinforcement), not just asserted — see the
-      // task report's own per-capture table for every number below,
-      // including any `structure-mismatch-recovered` near-misses, which
-      // are not failures but ARE the measurement that tells a hardware
-      // walk whether the thresholds are comfortable or merely lucky.
-      expect(outcome.armedFrameCount).toBeGreaterThan(0);
+      expect(outcome.armedFrameCount).toBe(capture.armedFrameCount);
       expect(
         outcome.entries.filter((e) => e.kind === "structure-left"),
       ).toStrictEqual([]);
@@ -367,6 +402,14 @@ describe("createPm5Driver: RC-37's negative corpus — five healthy captures, ze
       ).toStrictEqual([]);
     });
   }
+
+  it("the negative corpus totals 474 armed frames, zero of them past any rest boundary — see this describe block's own header for what that does and does not prove", () => {
+    const total = HEALTHY_CAPTURES.reduce(
+      (sum, c) => sum + c.armedFrameCount,
+      0,
+    );
+    expect(total).toBe(474);
+  });
 });
 
 describe("createPm5Driver: RC-37's own positive capture — walk-2026-08-27/menu-at-ready", () => {
@@ -377,6 +420,12 @@ describe("createPm5Driver: RC-37's own positive capture — walk-2026-08-27/menu
     );
 
     expect(outcome.divergences).toStrictEqual([]);
+
+    // Pinned exactly (fix round 1, finding 4) — 156 armed frames, the
+    // capture's own full WaitToBegin run, all contiguous at the head
+    // (this file's negative-corpus `describe` block carries the full
+    // reasoning for why that matters).
+    expect(outcome.armedFrameCount).toBe(156);
 
     const fired = outcome.entries.filter((e) => e.kind === "structure-left");
     expect(fired).toHaveLength(1);

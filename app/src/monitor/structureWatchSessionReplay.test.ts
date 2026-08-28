@@ -94,6 +94,16 @@ interface SessionReplayOutcome {
    *  carries no terminate tx at all, since Menu was pressed ON THE DEVICE,
    *  never through our own command. */
   totalWireWrites: number;
+  /** `sessionStorage["ergomatic:last-monitor-log"]` AFTER unmounting the
+   *  hook (fix round 1, finding 5) — the RC-37 consumer handler
+   *  deliberately does NOT call `teardown()` itself (`useMonitorSession
+   *  .ts`'s own `programDropped` branch only unsubscribes/disconnects), so
+   *  the stash this walk's whole readout depends on is reached ONLY via
+   *  the unmount cleanup (`useEffect(() => teardown, [teardown])`) that
+   *  follows `onExit()` unmounting the interstitial — a boundary no
+   *  earlier test in this file crossed. `null` if the key was never
+   *  written at all. */
+  stashedLog: string | null;
 }
 
 async function runReplay(): Promise<SessionReplayOutcome> {
@@ -128,7 +138,7 @@ async function runReplay(): Promise<SessionReplayOutcome> {
   const { useMonitorSession: freshUseMonitorSession } =
     await import("./useMonitorSession");
 
-  const { result } = renderHook(() =>
+  const { result, unmount } = renderHook(() =>
     freshUseMonitorSession({
       now: () => FIXED_NOW,
       driverOptions: {
@@ -152,12 +162,26 @@ async function runReplay(): Promise<SessionReplayOutcome> {
     await pending;
   });
 
+  const programDropped = result.current.programDropped;
+  const phase = result.current.phase;
+  const runOpen = result.current.runOpen;
+
+  // The boundary fix round 1 (finding 5) exists to cross: the consumer
+  // handler itself never calls `teardown()` — only the unmount that
+  // follows `onExit()` (which this replay does not drive, since it renders
+  // the hook directly, not `ConnectedInterstitial`) does. `unmount()` here
+  // stands in for that later, real unmount.
+  act(() => {
+    unmount();
+  });
+
   return {
     divergences: replayResult.divergences,
-    programDropped: result.current.programDropped,
-    phase: result.current.phase,
-    runOpen: result.current.runOpen,
+    programDropped,
+    phase,
+    runOpen,
     totalWireWrites: wireWrites,
+    stashedLog: sessionStorage.getItem("ergomatic:last-monitor-log"),
   };
 }
 
@@ -175,10 +199,12 @@ describe("useMonitorSession, replayed against walk-2026-08-27/menu-at-ready: RC-
     vi.resetModules();
     vi.restoreAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it("exits to idle with no terminate sent and no record opened — [R5]: 'take it back here', no banner, nothing to save", async () => {
     localStorage.clear();
+    sessionStorage.clear();
     const out = await runReplay();
 
     // Bug-independent sanity first, same convention every replay harness in
@@ -196,5 +222,24 @@ describe("useMonitorSession, replayed against walk-2026-08-27/menu-at-ready: RC-
     // program of ours left to terminate — total wire writes equal exactly
     // what the capture itself recorded, not one write more.
     expect(out.totalWireWrites).toBe(RECORDED_RECEIVE_TX_COUNT);
+  });
+
+  // Fix round 1, finding 5: the ring's whole readout at a hardware walk
+  // depends on the stash reaching storage AFTER the consumer's own
+  // deliberately-`teardown()`-skipping handler runs — via the unmount that
+  // follows `onExit()`, never the handler itself. This is the one test in
+  // this file that crosses that boundary.
+  it("the 'structure-left' ring entry reaches sessionStorage's 'ergomatic:last-monitor-log' AFTER unmount, even though the programDropped handler itself never calls teardown()", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    const out = await runReplay();
+
+    expect(out.divergences).toStrictEqual([]);
+    expect(out.programDropped).toBe(true);
+
+    expect(out.stashedLog).not.toBeNull();
+    const entries = JSON.parse(out.stashedLog!) as { kind: string }[];
+    const fired = entries.filter((e) => e.kind === "structure-left");
+    expect(fired).toHaveLength(1);
   });
 });

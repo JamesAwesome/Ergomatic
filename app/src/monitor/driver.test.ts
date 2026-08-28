@@ -8670,6 +8670,126 @@ describe("createPm5Driver: RC-37 — the armed-state structure watch, past verif
     expect(structureLeftEntries(log)).toStrictEqual([]);
     expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
   });
+
+  // MUST-FIX, fix round 1 (spec-compliance review): `pendingVerify` is
+  // non-null only during `verifyArmed`, the LAST of `program()`'s four
+  // phases (`sendPrepare` -> `waitForPrepareSettle` -> `sendSequence` ->
+  // `verifyArmed`, `driver.ts:5793-5807`). Through the first three,
+  // `pendingVerify` is null and `armedProgram()` still returns the
+  // OUTGOING program (`activeRun` is replaced only at the very end of the
+  // success path) — so a re-arm in flight used to run straight into this
+  // watch, comparing the machine's own Terminate -> Rearm -> WaitToBegin
+  // unprogrammed default (`sendPrepare`'s own Terminate causes exactly
+  // this cycle) against the OUTGOING program's expectation. That default
+  // is workoutType=1/durationRaw=0/durationType=128 — RC-37's own positive
+  // shape — held stably while the real `sendSequence` send is still in
+  // flight. Guarded by `!programInFlight` (true across all four phases,
+  // reset in `program()`'s own `finally`).
+  it("MUST-FIX: a re-arm in flight (a SECOND program() call, before its own verifyArmed resolves) never fires on the OUTGOING program's now-stale expectation — the machine's own Terminate/Rearm/WaitToBegin unprogrammed default is RC-37's own positive shape, and it recurs on every re-arm", async () => {
+    const { transport, log, clock, driver, events } = await armed();
+
+    // A genuinely DIFFERENT incoming program — so a reader can see the
+    // interim readback (WRONG_STRUCTURE) mismatches BOTH the outgoing
+    // program's own structure AND the incoming one's, not merely happening
+    // to coincide with either.
+    const DIFFERENT_PROGRAM: WorkoutProgram = {
+      intervals: [
+        {
+          type: "work",
+          kind: "distance",
+          value: 500,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+
+    const sent = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const start = sent();
+    const pending = driver.program(DIFFERENT_PROGRAM);
+    await waitUntil(() => sent() > start);
+    // The prepare's own Terminate, acked (swallowed regardless of the
+    // answer — `sendPrepare`'s own doc comment).
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+    await waitUntil(() => sent() > start + prepareChunkCount);
+    // `sendSequence` has now sent DIFFERENT_PROGRAM's own first chunk and
+    // is awaiting ITS ack — `pendingVerify` is still null, `verifyArmed`
+    // has not even been called yet. This is exactly the window fix round
+    // 1 found unguarded: the Terminate -> Rearm -> WaitToBegin cycle
+    // reporting its unprogrammed default, three consecutive stable ticks
+    // over the full window.
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1000);
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        statusWithStructure(WRONG_STRUCTURE),
+      );
+    }
+    await flushMicrotasks();
+
+    // MUST NOT have fired — this is normal re-programming, not RC-37.
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+    expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
+
+    // Let the re-arm actually finish clean, so this test proves the guard
+    // is scoped to the IN-FLIGHT window only, not a permanent suppression:
+    // once DIFFERENT_PROGRAM genuinely arms, the watch must resume.
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    for (let i = 0; i < 50; i += 1) await Promise.resolve();
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(DIFFERENT_PROGRAM));
+    await pending;
+
+    // Post-resolve, the watch runs again: three more of the SAME stable
+    // wrong structure, now compared against DIFFERENT_PROGRAM's own
+    // expectation, over the window — fires normally.
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1000);
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        statusWithStructure(WRONG_STRUCTURE),
+      );
+    }
+    await flushMicrotasks();
+    expect(structureLeftEntries(log)).toHaveLength(1);
+    expect(events.filter((e) => e.kind === "programDropped")).toHaveLength(1);
+  });
+
+  // Fix round 1, finding 2 (spec-compliance review): a bouncing wire — one
+  // mismatched tick, then a matching one, repeated — produces one
+  // streak-CYCLE per pair of ticks. Uncapped, that is one
+  // `"structure-mismatch-recovered"` entry roughly every second at the
+  // real ~2Hz cadence, into a 500-entry ring. `STRUCTURE_RECOVERED_LOG_CAP`
+  // (5, `driver.ts`) bounds it per run.
+  it("caps 'structure-mismatch-recovered' entries at 5 per run — a bouncing wire (8 mismatch/recover cycles) logs only the first 5, never all 8", async () => {
+    const { transport, log, clock, events } = await armed();
+
+    const CYCLES = 8;
+    for (let i = 0; i < CYCLES; i += 1) {
+      clock.advance(300);
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        statusWithStructure(WRONG_STRUCTURE),
+      ); // mismatch: streak=1
+      clock.advance(300);
+      transport.notify(GENERAL_STATUS_UUID, armedStatusFor(MINIMAL_PROGRAM)); // matches: closes the streak, logs "recovered"
+    }
+    await flushMicrotasks();
+
+    // Never fired — every streak is 1 tick, nowhere near either threshold.
+    expect(structureLeftEntries(log)).toStrictEqual([]);
+    expect(events.filter((e) => e.kind === "programDropped")).toStrictEqual([]);
+    // 8 genuine cycles occurred; only the cap's worth reached the ring.
+    expect(recoveredEntries(log)).toHaveLength(5);
+  });
 });
 
 describe("createPm5Driver: walk 5 — the last split always lands (the end-of-workout split race)", () => {
