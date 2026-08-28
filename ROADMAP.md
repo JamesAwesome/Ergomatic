@@ -3716,6 +3716,8 @@ that needs no erg, and it can run in a test.
       The exit criteria are real and live at `ROADMAP.md`'s Phase RC exit
       section, **1,787 lines below the phase header**, which is why they were
       hard to find. **Move them adjacent to the header when this closes.**
+      (DONE — the block sits under the phase header now; this sentence is
+      the original item, kept as written.)
       Four of five are met with committed evidence: (a) work/rest stored
       separately, walk-2026-08-24 exit-7 digit-for-digit; (b) log-entry
       date/time decoded, walk-2026-08-23 W3, the wire carries no seconds;
