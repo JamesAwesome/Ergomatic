@@ -795,6 +795,24 @@ const STRUCTURE_MISMATCH_TICKS = 3;
  *  and nothing bounds them together. */
 const STRUCTURE_MISMATCH_WINDOW_MS = 2000;
 
+/** How many `"structure-mismatch-recovered"` entries `armedWatch` may log
+ *  per RUN (RC-37 fix round 1, finding 2). The spec's own instruction is
+ *  "log the START of a streak and its RESOLUTION, never per tick" — this
+ *  file already does that (one entry per streak-CYCLE, not per tick) — but
+ *  a wire that keeps bouncing between the sent structure and a wrong one
+ *  produces one streak cycle every couple of ticks, and nothing bounded
+ *  how many CYCLES one run could log. A pathological run could otherwise
+ *  fill a meaningful fraction of the 500-entry ring with near-misses alone,
+ *  evicting the evidence the design spec's own §1b instruction exists to
+ *  preserve (whether a rest-bearing piece's near-misses read as
+ *  "comfortable" or "lucky"). Five is enough to answer that question —
+ *  more entries would not change the verdict, only crowd the ring — and
+ *  matches this file's own "log a representative sample, not everything"
+ *  idiom (`refusedKeysLogged`/`clampedKeysLogged`'s per-key dedup is the
+ *  same instinct applied to a different axis: bounding WHAT gets logged
+ *  rather than HOW MANY times). */
+const STRUCTURE_RECOVERED_LOG_CAP = 5;
+
 /** How long after a natural finish a boundary still belongs to the run that
  *  just ended — the FINISH GRACE's own clock (`activeRun.finishGraceUntil`).
  *
@@ -1651,6 +1669,39 @@ export function createPm5Driver(
      *  branch on; it must not depend on a logging decision. */
     sawArmedMismatch: boolean;
   } | null = null;
+  /** RC-37 (design spec 2026-08-27-link-authority-design.md §1, [R5]): the
+   *  general-status structure comparison, extended past `verifyArmed`'s own
+   *  fixed-tick verify window — for as long as the machine keeps reporting
+   *  `"armed"`, not only during the one program() call that just verified.
+   *  **A NEW comparator, not a lifetime extension of `pendingVerify`'s
+   *  own** — that state is scoped to a single verify phase and nulled the
+   *  instant it resolves (its own doc comment), so this watch needs its
+   *  own persistent streak/window state, compared against
+   *  `expectedArmedStructure(armedProgram())` computed fresh each tick (a
+   *  pure function of the program `armedProgram()` already retains — no
+   *  separate cached copy to keep in sync). Reset to this same shape
+   *  whenever a NEW program() succeeds (`program()`'s own per-run reset
+   *  block, alongside `session`/`refusedKeysLogged` et al.) — a fresh arm's
+   *  leftover streak from the OUTGOING program would otherwise misread the
+   *  incoming one's own settling reads as a continuation of somebody
+   *  else's mismatch. */
+  let armedWatch: {
+    lastMismatch: ArmedStructure | null;
+    mismatchStreak: number;
+    mismatchSince: number | null;
+  } = { lastMismatch: null, mismatchStreak: 0, mismatchSince: null };
+  /** Guards `armedWatch` from firing a second `"programDropped"` off stale
+   *  notifications that arrive between the detector's own emit and the
+   *  consumer actually tearing the transport down (best-effort, not
+   *  synchronous) — reset alongside `armedWatch` at the next successful
+   *  program(), same "per-run state" lifecycle as every other flag in that
+   *  block. */
+  let armedWatchFired = false;
+  /** How many `"structure-mismatch-recovered"` entries THIS run has already
+   *  logged (`STRUCTURE_RECOVERED_LOG_CAP`'s own doc comment) — reset
+   *  alongside `armedWatch`/`armedWatchFired` at the next successful
+   *  program(), same per-run lifecycle as every field in that block. */
+  let armedWatchRecoveredLogged = 0;
   /** Registered while `terminate()`'s post-ack settle wait (design spec
    *  §7, interface-notes.md §19.6) is counting — `null` whenever no
    *  `terminate()` call is currently in that phase. A single slot, same
@@ -4843,6 +4894,118 @@ export function createPm5Driver(
             );
           }
         }
+      } else if (!armedWatchFired && !programInFlight) {
+        // RC-37's own watch (`armedWatch`'s doc comment) — runs on every
+        // tick OUTSIDE a verify phase, for as long as a program has ever
+        // armed.
+        //
+        // **`!programInFlight` is NOT redundant with the `pendingVerify`
+        // check above (fix round 1, MUST-FIX — an earlier version of this
+        // comment claimed the re-arm window was already covered; it was
+        // not, and the claim itself was the worse half of the bug).**
+        // `pendingVerify` is non-null only during `verifyArmed`, the LAST
+        // of `program()`'s four phases (`sendPrepare` ->
+        // `waitForPrepareSettle` -> `sendSequence` -> `verifyArmed`).
+        // Through the first three, `pendingVerify` is null and
+        // `armedProgram()` still returns the OUTGOING program —
+        // `activeRun` is replaced only on the success path, after
+        // `verifyArmed` resolves. Left ungated, a re-arm in flight ran
+        // straight into this watch: `sendPrepare()`'s own Terminate drives
+        // the machine through Terminate -> Rearm -> WaitToBegin (state 0,
+        // "armed") holding its UNPROGRAMMED default
+        // (workoutType=1/durationRaw=0/durationType=128 — RC-37's OWN
+        // POSITIVE SHAPE), stably, for as long as the real `sendSequence`
+        // send takes — comparing that against the OUTGOING program's
+        // now-stale expectation fires a false `structure-left` mid-arm,
+        // tearing the driver down while the rower is watching "SENDING THE
+        // WORKOUT". `programInFlight` (already used to gate re-entrant
+        // `program()` calls, `:5782`/`:5934`) is true across all four
+        // phases and false only once `program()`'s own `finally` runs, so
+        // gating on it closes the window `pendingVerify` alone does not.
+        const armedWorkout = armedProgram();
+        const armed = toMonitorFrame(raw as RawPm5Status).state === "armed";
+        if (armedWorkout !== null) {
+          if (!armed) {
+            // Left "armed" (rowing/resting/finished/terminated/idle) with
+            // no verdict reached — the rower pulled, or the machine cycled
+            // on its own. Not itself suspicious (the `armed` gate's own
+            // reason, `verifyArmed`'s comment: the structural quadruple
+            // legitimately moves mid-session outside "armed"); a streak
+            // that had started is the NEAR-MISS worth a ring line.
+            if (armedWatch.mismatchStreak > 0) {
+              recordArmedWatchRecovered(
+                `${armedWatch.mismatchStreak} consecutive armed tick(s) over ${now() - armedWatch.mismatchSince!}ms reporting the wrong structure, then the machine left "armed" before either threshold — ${describeStructureMismatch(armedWatch.lastMismatch!, expectedArmedStructure(armedWorkout))}`,
+              );
+              armedWatch = {
+                lastMismatch: null,
+                mismatchStreak: 0,
+                mismatchSince: null,
+              };
+            }
+          } else {
+            const expected = expectedArmedStructure(armedWorkout);
+            if (sameStructure(structure, expected)) {
+              // The common case, every armed tick once a program has
+              // settled: no allocation unless there was a streak to close
+              // out (the near-miss, same reasoning as the `!armed` branch
+              // above — a healthy arm whose first tick or two lagged the
+              // PM5's own two-step structure update, `STRUCTURE_MISMATCH_
+              // WINDOW_MS`'s own doc comment, self-corrects here).
+              if (armedWatch.mismatchStreak > 0) {
+                recordArmedWatchRecovered(
+                  `${armedWatch.mismatchStreak} consecutive armed tick(s) over ${now() - armedWatch.mismatchSince!}ms reporting the wrong structure, then a matching armed tick arrived before either threshold — ${describeStructureMismatch(armedWatch.lastMismatch!, expected)}`,
+                );
+                armedWatch = {
+                  lastMismatch: null,
+                  mismatchStreak: 0,
+                  mismatchSince: null,
+                };
+              }
+            } else {
+              // The N-consecutive-STABLE-mismatch rule, identical to
+              // `pendingVerify`'s own above (`STRUCTURE_MISMATCH_TICKS`'s
+              // doc comment carries the hardware facts): a payload that
+              // keeps changing is a machine still settling, not a machine
+              // holding the wrong workout, so only a REPEATED identical
+              // wrong reading extends the streak.
+              const continues =
+                armedWatch.lastMismatch !== null &&
+                sameStructure(structure, armedWatch.lastMismatch);
+              const mismatchStreak = continues
+                ? armedWatch.mismatchStreak + 1
+                : 1;
+              const mismatchSince = continues
+                ? armedWatch.mismatchSince!
+                : now();
+              const heldMs = now() - mismatchSince;
+              // BOTH halves, never one alone (`STRUCTURE_MISMATCH_WINDOW_
+              // MS`'s own doc comment — the false economy an antagonist
+              // pass already caught in an earlier revision of this spec).
+              if (
+                mismatchStreak >= STRUCTURE_MISMATCH_TICKS &&
+                heldMs >= STRUCTURE_MISMATCH_WINDOW_MS
+              ) {
+                log.record(
+                  "structure-left",
+                  `${mismatchStreak} consecutive armed tick(s) over ${heldMs}ms reporting a structure that does not match the sent program — ${describeStructureMismatch(structure, expected)}`,
+                );
+                armedWatch = {
+                  lastMismatch: null,
+                  mismatchStreak: 0,
+                  mismatchSince: null,
+                };
+                armedWatchFired = true;
+                emit({ kind: "programDropped" });
+              } else {
+                armedWatch = {
+                  lastMismatch: structure,
+                  mismatchStreak,
+                  mismatchSince,
+                };
+              }
+            }
+          }
+        }
       }
     },
   );
@@ -4993,6 +5156,19 @@ export function createPm5Driver(
     expected: ArmedStructure,
   ): string {
     return `observed workoutType=${observed.workoutType} durationRaw=${observed.workoutDurationRaw} durationType=${observed.workoutDurationType}; expected workoutType=${expected.workoutType} durationRaw=${expected.workoutDurationRaw} durationType=${expected.workoutDurationType} (the sent program's interval 0)`;
+  }
+
+  /** Logs one `armedWatch` near-miss, capped at
+   *  `STRUCTURE_RECOVERED_LOG_CAP` per run (fix round 1, finding 2) — the
+   *  two call sites (self-correction, leaving "armed") share this so the
+   *  cap can never drift between them. The CALLER still resets `armedWatch`
+   *  unconditionally regardless of whether the cap was already hit: the cap
+   *  bounds what gets WRITTEN to the ring, never the detector's own state
+   *  machine. */
+  function recordArmedWatchRecovered(detail: string): void {
+    if (armedWatchRecoveredLogged >= STRUCTURE_RECOVERED_LOG_CAP) return;
+    armedWatchRecoveredLogged += 1;
+    log.record("structure-mismatch-recovered", detail);
   }
 
   /** Settles `pendingVerify` with a typed rejection: the general-status
@@ -5763,6 +5939,19 @@ export function createPm5Driver(
         // a fact about THIS run, and a re-arm's own summary has not arrived
         // yet just because the outgoing run's did.
         summarySeen = false;
+        // RC-37 (`armedWatch`'s own doc comment): the outgoing program's
+        // leftover mismatch streak says nothing about the incoming one —
+        // same per-run reset discipline as every field in this block.
+        armedWatch = {
+          lastMismatch: null,
+          mismatchStreak: 0,
+          mismatchSince: null,
+        };
+        armedWatchFired = false;
+        // Fix round 1, finding 2: the near-miss log cap is per-run state
+        // too, same reset discipline as `armedWatch`/`armedWatchFired`
+        // immediately above.
+        armedWatchRecoveredLogged = 0;
         // A reconcile deadline still standing belongs to the run being
         // replaced, and is cancelled here for the same reason a pending
         // boundary half is dropped above (fast-follow Task 2): both are

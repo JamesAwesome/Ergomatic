@@ -3372,6 +3372,161 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   element against ITS OWN line box, which is this pass's own lesson applied
   to its own fix.
 
+## Phase LA anchor pass (TRIAD), 2026-08-27 — "the link authority"
+
+- **"`withLiveness` is the one seam that sees all three inputs — it already accepts a
+  `LivenessLifecycleEvent`."** FALSE, and the whole design was drawn on it.
+  `grep -rn LivenessLifecycleEvent src/ domain/ server/` returns FOUR hits, all inside
+  `liveness.ts`: it is the decorator's OWN event-record type and its `kind` union is
+  `connect|write|disconnect|link-drop|silence|recovery` — no lifecycle member. App
+  lifecycle is registered in `useMonitorSession.ts:2962` and reaches the decorator only
+  via `markSuspect()`, which by a Phase LM exit criterion **refuses to carry a cause**
+  ("Names WHO, never WHY"). **Technique: a type whose NAME matches the concept you need
+  is the cheapest false premise in a codebase this heavily commented. Grep the type name
+  repo-wide and read its member list before writing "already accepts" — a producer of a
+  record type is not a consumer of an input.**
+
+- **"There is exactly one user-visible consumer of `endedBy === 'link-lost'`."** False,
+  and the misses change stored NUMBERS. `"rower"` sits on the admitted side of two
+  `{finished, rower}` allowlists the enumeration never opened: `burstEligible`
+  (`useMonitorSession.ts:2630`) makes teardown LINGER 2000 ms for the summary burst, and
+  `appendSummaryObservations` (`monitorRun.ts:1096`) then WRITES `summaryTotals`, which
+  becomes `machine_work_*` and flips the saved row onto `storedSummary.ts:618`'s TIER A —
+  a different derivation of the headline split/distance. **Technique: for any spec that
+  RELABELS an enum value, do not grep the OLD value's readers. Grep the NEW value's
+  readers, and specifically every allowlist the new value is a MEMBER of. A relabel moves
+  a row across every predicate that partitions the enum, and the interesting ones name the
+  destination, never the source.**
+
+- **A new licensing rule can switch off shipped code nobody listed.**
+  `applyContinuityCheck` (`useMonitorSession.ts:585`) opens `if (!frameSilence) return`,
+  and its only writing exit is `completeContinuityReset` → stored `endedBy: "link-lost"`.
+  The spec's "only `down` or `quiet` may change what is stored" therefore disables the
+  continuity door for lifecycle-explained resumes — the exact case it was built for
+  (RULED F1/I1: "the close with the STRONGEST evidence"). **Technique: for any rule of the
+  form "only verdict X may write field F", grep every WRITER of F and check what gates it.
+  A writer gated on the same flag the new verdict re-classifies is silently inside the
+  rule's blast radius, and specs enumerate readers, never writers.**
+
+- **"A wrong verdict now costs a terminate on an already-finished piece."** The safety
+  argument assumes the machine did nothing during a blind window the same walk measured at
+  39.4 s. Rower backgrounds mid-session, finishes at the erg, starts a cool-down, unlocks,
+  presses End → the spec's rule sends a terminate into a LIVE new piece. No safety net at
+  the machine: `pm5-interface-notes.md:1598-1602` records a standalone idle terminate
+  acking slaveState READY — "**An ACCEPT, not a reject**", retracting the earlier
+  "the PM refuses a terminate when nothing is loaded" as a misparse. And a terminated
+  partial leaves NO trace in PM5 memory (walk-2026-08-27 finding 7). **Technique: for any
+  "the safe direction" claim about a wire command, ask what the machine could have done
+  during the window that produced the wrong verdict. A blind window long enough to cause
+  the misclassification is long enough for the state the argument assumes away.**
+
+- **A ring is not a recording, and the difference kills replay gates.**
+  `walk-2026-08-26/phone-ring.json` and `walk-2026-08-27/lock-phone-ring.json` are
+  event-log rings (`{seq,kind,detail}`), zero bytes; the spec called the first "real wire
+  data". Further: `grep -c '"kind":"lifecycle"'` returns **0 across all six committed
+  `.jsonl.gz`**, and none can ever carry one — the byte recorder is web/dev-only
+  (`adapters/monitorTransport.ts` header) while the web lifecycle arm is a deliberate
+  no-op (Phase LL minor 9). The platform with the signal has no recorder; the platform
+  with the recorder has no signal. The runnable substitute already exists:
+  `lifecycleReplay.test.ts` SPLICES synthetic lifecycle events into a real capture.
+  **Technique: before citing a walk directory as a replay fixture, `ls` it and check the
+  extension. `*-ring.json` and `*-recording.jsonl.gz` are different instruments; then grep
+  the recordings for the literal event kind the gate needs, and ask which PLATFORM can
+  produce it.**
+
+- **Reusing one half of a two-part verdict is a false economy the code warns about.**
+  The spec reused `STRUCTURE_MISMATCH_TICKS`'s N=3 "rather than invent a second constant".
+  That constant's own comment: "**NO LONGER SUFFICIENT ON ITS OWN** (hardware walk 5)…
+  this count now carries only the STABILITY half; `STRUCTURE_MISMATCH_WINDOW_MS` carries
+  the DURATION half… and a rejection needs both." Reusing BOTH invents nothing. Measured
+  for free: the RC-37 mismatch holds 112 frames / 56.4 s, so no aggressive threshold is
+  needed. **Technique: when a spec proposes reusing a constant, read the constant's doc
+  comment for a sibling. This repo splits verdicts across paired constants and records the
+  hardware that forced the split, in the comment of the half you were about to reuse
+  alone.**
+
+- **Attacked and NOT broken (Phase LA's vetted ground):** every `file:line` citation in
+  the spec resolves to its subject (11 of 11, including the `endedBy` doc-comment quote
+  and the driver's "one entry per verify phase" note, both verbatim); every walk figure
+  reproduces from the committed artifacts (re-decoded `menu-at-ready-recording.jsonl.gz`
+  independently — `wt 8→1` at t=29.05, 156 frames, median 540 ms spacing, plus a
+  two-step arm at t=6.63→7.17 the README omits); the stored shape follows `0012`/`0013`
+  exactly (new pgEnum + additive nullable column, no default, no backfill) and the API
+  stays additive (GET selects columns explicitly, no analytics/CSV/export path exists
+  anywhere in `src/` or `server/`); RC-37's fold-in is ROADMAP-directed
+  (`ROADMAP.md:3430`, "Mirror of RC-30 … design them together"), not scope creep; and
+  RC-38's binding is already how `verifyArmed` works (`expectedArmedStructure(p)` =
+  "the sent program's interval 0", never a literal 8).
+  **One self-correction worth keeping:** the pass first measured that the structural
+  quadruple MOVES mid-session in healthy captures (`rests-finished` durRaw 6000→500 with
+  durType 0→128; `pyramid` 300→700→300) and called the always-on comparator fatal. It is
+  not — the existing `armed` (ws==0) gate excludes every one of them: filtered to armed
+  frames across four healthy captures, 447 frames, only 2 mismatch, both single-tick
+  arming transitions. **Technique: when a per-tick comparison looks unsafe, re-run the
+  corpus filtered by the predicate's OWN guard before writing the finding. The guard is
+  usually the reason the shipped code was safe, and the spec's real defect is failing to
+  say the guard must stay.**
+
+## Phase RC — link-authority YAGNI pass (2026-08-27)
+
+- **CLAIM (spec outcome 1, headline): "nine LOST THE MONITOR banners in 288 s"
+  is the harm this spec fixes. FALSIFIED AS CURRENT.** Phase LM shipped
+  `decideResumeLatch` (v0.24.0) and the production ring from the NEXT day
+  (`walk-2026-08-27/lock-phone-ring.json`, v0.25.0 build 759) shows ONE latch
+  for one 39.4 s lock, with `silent=true` — the watchdog firing correctly over
+  a stream that genuinely stopped, exactly as v0.24.0's own release note
+  promised testers. **Technique: read the spec's motivating capture, then read
+  the NEWEST capture from the same directory and diff the behaviour.** A spec
+  written days after its evidence inherits a defect the fix already closed.
+  Sibling of recurring failure 16's "corpus facts have expiry dates" — this
+  time the stale fact was OUR OWN BUG, not a wire observation.
+
+- **CLAIM: relabelling `endedBy: "link-lost"` -> `"rower"` lets a saved row
+  show what was rowed. FALSE.** `isReconstructableClose` (`storedSummary.ts:472`)
+  admits only `"finished" || null`, so `"rower"` lands in FALLBACK too. The
+  relabel buys exactly TIER A eligibility, and the spec's own walk shows TIER A
+  can render SMALLER than the rower rowed (500 m vs 559.8 m). **Technique: for
+  any "this change makes X display better", find the predicate that gates the
+  display and read its literal members — not the enum, the GATE.** The spec
+  reasoned from the value's name, never from the function that reads it.
+
+- **CLAIM (RC-37): the structural mismatch is a deterministic signal, not a
+  heuristic. HELD, and verified independently of the spec.** Decoded 0x0031
+  bytes 6/14-16/17 directly out of `menu-at-ready-recording.jsonl.gz`: all
+  THREE `expectedArmedStructure` fields diverge together and hold 112
+  consecutive frames / 56.4 s. Across four healthy captures, **300 armed
+  frames, ZERO mismatches** — stronger than the 447/2 figure in circulation.
+  **Technique: decode the committed capture yourself rather than accept the
+  README's transcription; count the NEGATIVE corpus (healthy armed frames)
+  before believing a detector.** A false-positive rate is evidence; a single
+  positive observation is not.
+
+- **TECHNIQUE, general — the brittleness axis separates the cheap work from
+  the expensive work.** Ask of every mechanism: does the machine TELL us this,
+  or are we inferring it from a coincidence? Here it split the spec cleanly:
+  RC-37 compares a readback against a value we ourselves sent (deterministic);
+  `explained-quiet` infers causation from a lifecycle event near a silence,
+  over `SILENCE_THRESHOLD_MS`, whose own comment concedes *"Native's own
+  inter-frame gap distribution is UNMEASURED… necessary-and-not-sufficient
+  evidence, not proof, for the platform it exists to protect"*
+  (`liveness.ts:126`). The axis inverted the spec's own priority ranking:
+  its outcome 6 was the one worth building, its outcome 1 was a copy change.
+  **James supplied the axis** ("I don't want to invent brittle heuristics to
+  catch something that we're not told about in a deterministic way").
+
+- **TECHNIQUE — distinguish a REPORTED harm from an AUDIT-PREDICTED one before
+  ranking.** The only user-reported loss in this whole area was the pre-row
+  lock (`ROADMAP.md:6455-6474`: record never opened, row saved LOGGED BY HAND),
+  and v0.24.0 shipped its fix. RC-29 and RC-30 have never been observed in the
+  field. A spec that ranks by predicted severity and never asks "has anyone hit
+  this" will build the rare thing first.
+
+- **CORRECTION TO THE RECORD:** `ROADMAP.md`'s RC-30 entry sizes the ready-gate
+  lag at "up to ~5 s at the 1 Hz cadence". The gate's own comment
+  (`useMonitorSession.ts:1203-1210`) says 5 frames at the observed **2 Hz** =
+  ~2.5 s, and the `declared` path fires on the FIRST rowing frame, so the
+  window only opens when `rowingActive` is stuck unset. The ROADMAP number is
+  double, and its trigger is narrower than the entry implies.
 ## Phase RC YAGNI triage, 2026-08-27 (an audit's own findings, re-audited)
 
 - **"Of the eight committed recordings exactly ONE carries a 0x0039, and it is

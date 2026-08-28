@@ -5,6 +5,36 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.26.0 (2026-08-28): range v0.25.0..main = 7 merges, each accounted
+    // per RF15. #206 (RC-27) and #212 (RC-33) are items 1 and 2 — #206 is
+    // the one this range OWED, having merged AFTER v0.25.0's own notes PR.
+    // #211 is RC-37, item 3, plus the End fix in item 4. #207/#208/#209/#210
+    // are captures, a spec, ledgers and an audit — nothing a tester receives.
+    //
+    // ITEM 3 IS DELIBERATELY NOT ABOUT PRESSING MENU. James's own report was
+    // a Menu press and he called it "rare and not that annoying". The
+    // 2026-08-28 walk then produced the SAME wire signature with no Menu
+    // press at all, after a 67 s background — the machine dropped the
+    // program by itself. The note is written for that case, because that is
+    // the one that costs a session, and a note about a menu button would
+    // teach a tester the wrong shape.
+    //
+    // NOT WRITTEN, deliberately: the pre-row lock is still not fixed. The
+    // walk reproduced it (phone locked before the first pull, machine 24.7 s
+    // and 52.6 m in, app still holding READY with no record). Item 3 helps
+    // only once the machine has ALSO dropped the program. Promising more
+    // than that would be the over-claim v0.24.0's own correction exists to
+    // stop, so the notes stay silent and the ROADMAP carries the gap.
+    version: "v0.26.0",
+    date: "2026-08-28",
+    items: [
+      "The big split at the top of the LIVE tab no longer counts while you rest. It used to keep reporting a pace as the flywheel slowed, which was nobody's pace, in the largest number on the screen. It shows a dash now until you pull again.",
+      "Lose the connection during a rest and the countdown on the grid stops too. It could freeze mid-rest and sit there like it was still counting, while the pane beside it correctly said the monitor was lost.",
+      "If the erg throws away the workout, the app now notices and takes you back to it. This can happen without you doing anything, after your phone has been in a pocket for a while. Before, the app carried on showing a live screen for a workout the erg no longer had, and a pull after that got filed against nothing. You land back on the workout with your nudged targets still there, ready to send again.",
+      "END now always stops the erg. If the app thought it had lost the monitor, it used to close your session and walk away while the machine kept counting in front of you.",
+    ],
+  },
+  {
     // v0.25.0 (2026-08-27): range v0.24.0..main = 2 merges, each accounted
     // per RF15. #204 (RC-24) is the whole entry. #203 (Phase UR, undefined
     // rest) is ROADMAP-only — 74 lines, one file, a phase filed and its

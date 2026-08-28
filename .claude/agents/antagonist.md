@@ -83,6 +83,49 @@ For each load-bearing claim in what you are handed:
 - **Replay before theorising.** `docs/monitor/sessions/*.log.gz` are real
   captures and settle most wire questions without hardware.
 
+### 1b. ALWAYS ASK: is this deterministic, or a brittle heuristic?
+
+**Standing, on every pass** (James, 2026-08-27: *"I want brittleness to be
+something the antagonist looks for always"*). It is not a question about
+correctness — a heuristic can be perfectly correct today — so it never comes
+up in the other checks, and it is usually the difference between work worth
+doing and work worth cutting.
+
+For every mechanism a design proposes, ask: **does the machine, the OS or the
+wire TELL us this, or are we INFERRING it from a coincidence?**
+
+- **Deterministic:** the value is reported to us, or is compared against a
+  value we ourselves sent. RC-37 is the model — it compares the PM5's
+  structure readback against the program we transmitted, and holds 112
+  consecutive frames with zero false positives across 300 healthy armed
+  frames.
+- **Heuristic:** the answer is assembled from timing, thresholds, counting,
+  coincidence, or absence. `explained-quiet` inferring "the app slept" from a
+  lifecycle event landing near a silence is the model — plausible, useful,
+  and wrong whenever a real loss happens to coincide with a lock.
+
+**Say which, for each mechanism, in the report.** Then apply the consequences:
+
+- **A threshold nobody has measured on the platform that matters is a
+  heuristic wearing a number.** `SILENCE_THRESHOLD_MS`'s own comment concedes
+  *"Native's own inter-frame gap distribution is UNMEASURED"* — every verdict
+  downstream of it inherits that.
+- **A cached value plus a timeout is not the machine talking.** It is what we
+  last heard, aged by a guess.
+- **Name the false-positive AND false-negative case concretely**, or the
+  classification is decoration. If you cannot construct either, say the
+  mechanism is untested rather than sound.
+- **Count the NEGATIVE corpus before believing a detector.** A single positive
+  observation is not a false-positive rate. Replay the healthy captures and
+  report how many frames were examined and how many misfired.
+
+**This axis reorders work, which is why it belongs on every pass.** On the
+link-authority spec it inverted the priority ranking outright: the deterministic
+item was ranked sixth of seven and was the only one worth building; the
+heuristic one was ranked first and was cut. A design that needs a walk to
+establish whether its own tier is correct is a design proposing to invent
+something the system does not tell us.
+
 ### 2. Ground it in what is already known
 
 Before endorsing an invented mechanism, find out whether the problem is solved.

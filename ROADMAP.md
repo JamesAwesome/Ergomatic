@@ -3365,13 +3365,22 @@ that needs no erg, and it can run in a test.
       (`docs/monitor/sessions/walk-2026-08-26/`). Phase LM fixed the
       LIFECYCLE producer of that silence; the WATCHDOG producer is
       untouched, and no test pins the false-positive direction. **M**
-- [ ] **RC-30 — teardown can terminate a live piece.**
+- [ ] **RC-30 — teardown can terminate a live piece. DEFERRED 2026-08-27,
+      and this entry's own numbers were wrong.**
       `useMonitorSession.ts:2513-2522` sends TERMINATE keyed on our derived
-      `phase === "ready"`, not on `frame.state`. While that gate lags (a
-      stuck Inactive byte, up to ~5 s at the 1 Hz cadence) any unmount kills
-      the rower's piece on the erg. No test covers the lagging gate. **The
-      only finding in the audit that reaches out and changes the
-      machine.** **S**
+      `phase === "ready"`, not on `frame.state`.
+      **CORRECTION (YAGNI pass, 2026-08-27):** this entry said the gate lags
+      "up to ~5 s at the 1 Hz cadence". The gate's own comment
+      (`useMonitorSession.ts:1203-1210`) says 5 frames at the OBSERVED 2 Hz =
+      **~2.5 s**, half the claimed figure — and the `declared` path fires on
+      the FIRST rowing frame, so the window only opens when `rowingActive` is
+      stuck unset AND the rower unmounts inside it. Highest per-incident cost
+      in the audit (metres destroyed forever), **never observed in the
+      field**, and narrower than written.
+      **Its fix also LOSES coverage:** gating teardown on `frame.state` drops
+      DEVIATIONS row 70 (the abandoned arm — the next rower finds someone
+      else's intervals). That trade deserves its own decision, not a
+      sub-clause of a larger spec. Re-derive the trigger before building. **S**
 - [x] **RC-31 — FALSIFIED at the erg, 2026-08-27. The trigger does not
       exist. Do not build the fix.** The audit predicted the
       resting-with-no-rest-phase fallthrough fires "for a tick at every
@@ -3392,6 +3401,24 @@ that needs no erg, and it can run in a test.
       a capture, and is now unwitnessed with evidence against. **One
       capture cannot prove impossibility**; the code path stays, the
       priority does not.
+      **WALK PASSED 2026-08-28, AND THE WALK UPGRADED THIS ITEM.**
+      Legs: Menu at READY exits to `WorkoutDetail` with the nudge intact
+      (both halves of James's ruling, on hardware); the detector stayed
+      SILENT across a real rest boundary with **zero near-misses** —
+      `workoutType` held at 8 while `intervalType` moved 0->2->0, and no
+      `structure-left` or `structure-mismatch-recovered` entry exists in the
+      ring; End terminated the machine (`ws=11`).
+      **THE UPGRADE: RC-37's signature occurred NATURALLY, with no Menu
+      press.** On the phone leg, after a 67 s background,
+      `structure workoutType=1 durationRaw=0 durationType=128` with
+      `state=armed` — the machine dropped the program by itself.
+      **This item was scoped from James's own words ("rare, and not that
+      annoying to have to exit"), which was true of the trigger he KNEW
+      about.** The detector keys on the readback disagreeing with what we
+      sent, not on Menu, so it also catches a program dropped after a long
+      background — the case that actually costs a session. **Do not
+      re-scope this item down to its original trigger.**
+      Evidence: `docs/monitor/sessions/walk-2026-08-28/`.
 - [ ] **RC-37 — Menu at READY: the machine drops the program, keeps
       streaming, and we never look. CONFIRMED AT THE ERG 2026-08-27, wire
       captured** (`walk-2026-08-27/menu-at-ready-recording.jsonl.gz`).
@@ -4226,7 +4253,9 @@ that needs no erg, and it can run in a test.
       #13's own canned-block story).
       **Trigger:** the next connected-surface phase, or the RC close-out
       derivation audit, which is looking for exactly this shape. **S**
-- [ ] **The `log-detail` screenshot is RED on main, and nothing gates it.**
+- [x] **The `log-detail` screenshot is RED on main, and nothing gates it.
+      FIXED in #207 (the fixture had drifted out of realism), and the CI
+      question RULED by James — see BOTH SETTLED below.**
       Found 2026-08-27 across three RC-24 rounds and RC-27, each time
       reported as "pre-existing, unrelated" and each time correctly so — it
       asserts a `summaryModel.ts` rest-coasting total line those diffs
@@ -4291,9 +4320,11 @@ that needs no erg, and it can run in a test.
       diff that means nothing. If that ever needs to change, the fix is to
       pin the renderer (a container used by EVERYONE, host included), not
       to add a job.
-- [ ] **RC-27 — the LIVE tab's big split shows the COASTING flywheel's split
-      during a rest, judged against the work target. BUILT, on branch
-      `rest-hero`, in review. Found 2026-08-27 while James was reviewing
+- [x] **RC-27 — the LIVE tab's big split shows the COASTING flywheel's split
+      during a rest. SHIPPED, merged as #206 on 2026-08-27 (this entry said
+      "in review" until 2026-08-27 — a stale checkbox caught while listing
+      Phase RC's open work). UNRELEASED: it merged AFTER v0.25.0's own notes
+      PR, so the next tag owes it a note. Found 2026-08-27 while James was reviewing
       RC-24's captures; deliberately kept OUT of RC-24's scope by him.**
       **CORRECTION, from RC-27's own review:** this entry's "judged against
       the work target" is WRONG for the ordinary case, and the mockup that
@@ -4886,11 +4917,69 @@ work and rest as separate quantities, and its work-only distance and time
 equal the monitor's own for the same piece; (b) the monitor's log entry
 date/time is decoded and logged from a real finish, with the
 seconds-resolution question answered either way; (c) the three heroes on
-one stored row reconcile with each other by hand arithmetic; (d) a row
-posted to the Concept2 sandbox comes back through `export/` matching what
-we stored, or the reason it cannot is documented; (e) if 0x003F turns out
+one stored row reconcile with each other by hand arithmetic
+**[REWRITTEN 2026-08-28 — see (c) below, which the original could not
+survive]**; (d) a row posted to the Concept2 sandbox comes back through
+`export/` matching what we stored, or the reason it cannot is documented
+**[DISCHARGED BY THE DOCUMENTED REASON — see (d) below]**; (e) if 0x003F turns out
 not to fire on our firmware, DEVIATIONS carries the row saying so and the
 verification branch is closed on the record rather than left hoped-for.
+
+**(c) REWRITTEN AND MET, 2026-08-28.** The original sentence — "the three
+heroes on one stored row reconcile with each other by hand arithmetic" —
+**has never been true of any build of this app**, in three distinct ways, so
+it could not go red. An adversarial PM pass established all three. Rewritten
+with a tolerance and a named population:
+
+> On a stored row whose close is `finished` and whose intervals carry no
+> null-index actual, DISTANCE, TIME and AVG SPLIT reconcile by hand
+> arithmetic to within **1.0 s/500 m** (tier A's designed truncation gap —
+> the PM5 truncates, we round). Three populations are exempt, named:
+> **(i)** rows with an INCOMPLETE close saved 2026-08-22..2026-08-25, between
+> `ended_by` shipping (#160) and RC-5 shipping (#194), which render the fused
+> stored columns and disagree by up to ~26 s/500 m — **closed, non-growing,
+> and unreachable by the `endedBy` relabel** (that changes how FUTURE rows
+> close; only a backfill touches these, and none is planned). Pre-disclosed
+> to testers at v0.23.0's item 5.
+> **(ii)** any row carrying a RECORDED null-index actual — DISTANCE/TIME
+> include it, AVG SPLIT excludes it by construction (`storedSummary.ts`,
+> "Null-index/warm-up parity DOES NOT HOLD"), ~10 s/500 m. Ongoing, affects
+> `finished` rows too, observed in zero committed rings.
+> **(iii)** tier A, where the machine's own avg pace can disagree with its
+> own totals (walk-2026-08-20, 901 vs 899).
+
+**MET, and population (i) VERIFIED EMPTY by inspection (James, 2026-08-28).**
+He photographed five consecutive stored rows spanning the window — Ground Fog
+(22 Aug), Comma Cloud (24th), Corona (25th), Line Squall (26th), Ice Fog
+(27th). Hand arithmetic on each, `TIME / DISTANCE * 500`:
+
+| row | time | distance | implied | shown | delta |
+| --- | --- | --- | --- | --- | --- |
+| Ice Fog | 1800 s | 6574 m | 2:16.9 | 2:16.9 | 0.0 |
+| Line Squall | 868 s | 3500 m | 2:04.0 | 2:03.9 | 0.1 |
+| Corona | 1072 s | 4000 m | 2:14.0 | 2:14.1 | 0.1 |
+| Comma Cloud | 1260 s | 4937 m | 2:07.6 | 2:07.6 | 0.0 |
+| Ground Fog | 1680 s | 6192 m | 2:15.7 | 2:15.7 | 0.0 |
+
+Worst case **0.1 s/500 m**, an order of magnitude inside the tolerance; the
+exempt cohort would be off by ~26 s. **Second, independent confirmation in the
+same photographs:** every row carries a `plus N m coasting in rest` clause,
+which is precisely what an incomplete close CANNOT have (it keeps the fused
+headline and gains no rest line) — so all five are complete closes rendering
+work-only heroes. **No user-facing note is owed**, because the cohort is
+empty.
+
+**(d) DISCHARGED BY THE DOCUMENTED REASON, 2026-08-28 (James: "we can open
+the logbook Saturday").** The criterion's own wording permits this: *"or the
+reason it cannot is documented."* The reason: **the Concept2 logbook
+cross-connect is real work that deserves its own phase, not the last item
+holding a phase open.** It is the first oracle OUTSIDE our own definitions —
+Concept2 stores work only, so agreement there means something that agreeing
+with our own accumulator never did (recurring failure #11's "an oracle that
+shares your definition is a mirror"). What is already recorded and carries
+forward: the dev API key lives in the repo-root `.env` and its VALUE is never
+read into a transcript or a committed file; the `weight_class` gate; and the
+ErgData-dedup question. **Opens as its own phase, 2026-08-29.**
 
 ## Phase WU — The warm-up leaves
 

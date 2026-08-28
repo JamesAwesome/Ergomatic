@@ -810,6 +810,15 @@ export interface MonitorSession {
    *  armed surface can report the loss without ceasing to be armed — but
    *  not what produces it, which is still this field and this axis. */
   frameSilence: boolean;
+  /** RC-37 ([R5], design spec 2026-08-27-link-authority-design.md §1):
+   *  `true` for the one render between the driver's `programDropped` event
+   *  and this hook's own `onExit`-triggering effect unmounting the caller.
+   *  The PM5 silently dropped the program it was holding (confirmed
+   *  trigger: Menu at READY) — `phase` is reset to `"idle"` in the SAME
+   *  `update()` that sets this, so a caller watching it fires exactly once,
+   *  never sticks, and never needs clearing back to `false` itself (the
+   *  component it's read from unmounts right after). */
+  programDropped: boolean;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
@@ -1274,6 +1283,11 @@ interface SessionState {
    *  Published for `connectedAxes.ts`'s `frameSilence` axis input, the
    *  same publish-a-boolean shape `frozen`/`runOpen` already establish. */
   frameSilence: boolean;
+  /** `MonitorSession.programDropped`'s own doc comment carries the full
+   *  reasoning — mirrored here as internal state for the same "the ref is
+   *  truth, `state` is what React reads" split every other field in this
+   *  interface already follows. */
+  programDropped: boolean;
 }
 
 const INITIAL_STATE: SessionState = {
@@ -1287,6 +1301,7 @@ const INITIAL_STATE: SessionState = {
   frozen: false,
   runOpen: false,
   frameSilence: false,
+  programDropped: false,
 };
 
 /** Everything a rejected `program()` can throw, mapped onto the typed
@@ -2292,6 +2307,49 @@ export function useMonitorSession(
         endByMachine(true);
         return;
       }
+      if (event.kind === "programDropped") {
+        // RC-37 ([R5], design spec 2026-08-27-link-authority-design.md §1):
+        // the detector fired — the PM5 already left the program it was
+        // holding (confirmed trigger: Menu at READY). Meaningful only
+        // pre-live, the same states Cancel itself is valid from
+        // (`cancel()`'s own `armed` check just below in this file) — a
+        // structural mismatch reported once a run is already live or ended
+        // is outside this task's own scope (the walk's trigger is READY,
+        // never a live session) and is left alone rather than guessed at.
+        const phase = stateRef.current.phase;
+        if (phase !== "programming" && phase !== "ready") return;
+        // [R5], James's own words: "Loose any new banners. Just take it
+        // back here and remember any nudges." Exit exactly like Cancel
+        // (`cancel()`'s own body, below), MINUS the terminate — the machine
+        // has already left, so there is no program of ours left to
+        // terminate, and sending one anyway is the one thing this ruling
+        // rules out. No row: a pre-row session opens no record at all
+        // (`createMonitorRun`'s single call site is gated on
+        // `phase === "ready"` — Phase LM's own finding), so there is
+        // nothing here to save or discard. Nudges survive for free: they
+        // live on `WorkoutDetailView`, keyed only by a workout SWITCH
+        // (`WorkoutDetail.tsx`), and this exit just unmounts the
+        // interstitial sitting on top of it — the identical reason
+        // Cancel's own exit already preserves them.
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
+        degradedUnsubRef.current?.();
+        degradedUnsubRef.current = null;
+        if (lifecycleAttemptRef.current !== null) {
+          lifecycleAttemptRef.current.cancelled = true;
+        }
+        lifecycleUnsubRef.current?.();
+        lifecycleUnsubRef.current = null;
+        driverRef.current = null;
+        bestEffort(driver.disconnect());
+        identityRef.current = NO_IDENTITY;
+        freezeRef.current = NO_FREEZE;
+        rowingStreakRef.current = null;
+        lastContinuityRef.current = null;
+        runRef.current = null;
+        update({ ...INITIAL_STATE, programDropped: true });
+        return;
+      }
       if (event.kind === "summary-observations") {
         // THE MACHINE'S OWN FINISH, FOLDED ONTO THE RECORD (storage-spine
         // design spec §2, PR 1 Task 3). `driver.ts`'s own doc comment on
@@ -3152,7 +3210,16 @@ export function useMonitorSession(
     closeRecord(true, linkGone ? "link-lost" : "rower");
     update({ phase: "ended", endedBy: "user", runOpen: false });
     const driver = driverRef.current;
-    if (driver === null || linkGone) return;
+    // RC-29 (design spec 2026-08-27-link-authority-design.md §2): `linkGone`
+    // dropped from this guard on PURPOSE — it used to skip the terminate
+    // whenever `frameSilence` was latched, but a FALSE latch means the
+    // rower is standing at a machine that is still running while the app
+    // has already closed the record out from under them. Attended human
+    // intent (the rower is pressing a button, right now) is not the same
+    // claim as a verdict about the link, and only the button gets to skip
+    // this. If the link genuinely IS gone, `terminate()` throws straight
+    // into the catch below, which was already best-effort by design.
+    if (driver === null) return;
     try {
       // With its settle (spec §2): the ack means QUEUED, not done.
       await driver.terminate();
@@ -3245,6 +3312,7 @@ export function useMonitorSession(
     frozen: state.frozen,
     runOpen: state.runOpen,
     frameSilence: state.frameSilence,
+    programDropped: state.programDropped,
     connect,
     program,
     endSession,

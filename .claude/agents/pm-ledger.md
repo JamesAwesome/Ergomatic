@@ -2818,3 +2818,129 @@ this spec's close).
   wrote the words and you're hiding them" -- that four analytical passes had
   not said plainly. **Worth repeating: put a naive user in front of the real
   captures early; it reorders the findings.**
+
+## Phase-open gate, 2026-08-27 (the link-authority spec, rev 2 — TRIAD: a number's meaning + a stored shape)
+
+- **Suppressing a wire command can delete the event that produces the data the
+  other half of the same spec depends on.** The spec's terminate rule ("stale
+  state, do not send") and its relabel ("now writes the machine's own totals")
+  were designed independently and interact: if we decline to terminate, the
+  machine never ends the workout, so 0x0039 never fires, so `summaryTotals` is
+  null and TIER A is unreachable. **At a gate on any spec with a wire half and a
+  stored half, trace whether the wire half is the PRODUCER of the stored half's
+  input.** The spec's headline claim ("the same physical session renders
+  different numbers") survived, but only for a cohort three conditions narrower
+  than it stated.
+- **The dangerous-window argument applies to WRITES as well as SENDS, and specs
+  apply it only to sends.** The same 39 s blind window that made a terminate
+  unsafe (the machine may have started a cool-down) makes the machine's summary
+  possibly a DIFFERENT workout's. The identity oracle was free and already
+  parsed: 0x0039 carries its own `workoutType`, read today only inside a log
+  template (`driver.ts:2565`). **When a spec refuses to trust the machine's
+  STATE across a window, ask why it trusts the machine's NUMBERS across the same
+  window.**
+- **A stored column with no reader is an unfalsifiable claim — give it one in
+  the same PR.** `max_stream_gap_ms` was specced write-only, on a branch whose
+  own thesis is that our instruments were blind (RF#19). Its reader is the saved
+  row's honest gap line, which is also the replacement for the `LINK LOST` line
+  the spec deletes. One decision solved both.
+- **Deleting a false disclosure without replacing it converts an under-claim
+  into an over-claim.** Dropping `LINK LOST · …` from a locked-phone row while
+  the same change makes that row eligible for `MACHINE CONFIRMED · WORK ONLY`
+  leaves a row asserting confirmation over 39 s nobody watched. Extends the
+  2026-08-25 (#198) prefer-the-false-negative ruling: **check what the row GAINS
+  in the same change before ruling a removal safe.**
+- **A disclosure floor is owed whenever a transient signal becomes a durable
+  one.** v0.24.0 promised testers the banner stopped firing on a Control Centre
+  swipe; stamping a permanent row line for a 3 s background blip re-breaks that
+  promise in a more durable place. Named constant, own comment, sanity-checked
+  at the walk.
+- **Copy rulings (James's tone rule + the banner's title-plus-four-words gate,
+  `ConnectedSurface.tsx:691-693`):** live, `THE APP WAS ASLEEP` / `39s missed.`;
+  saved row, `ASLEEP · 39s the app did not see`; a declined terminate says
+  `STILL RUNNING ON THE ERG · press Menu to stop it` when we know it is live and
+  `WE COULD NOT STOP THE ERG · check the monitor` when the state is stale; RC-37
+  says `THE ERG CLEARED IT` / `Send it again.` with the re-send affordance
+  present. **Naming ourselves does not violate the banner's no-cause rule** —
+  that rule forbids inventing a cause for the ERG's behaviour, and here the
+  cause is us and it is measured.
+- **The app had ZERO post-end copy about the machine's state.** Every "the erg
+  is still counting" string in the repo is a retired or rejected draft quoted in
+  a comment. A spec that makes "we left the erg running" more common must add
+  the first one; trading a silent destructive failure for a silent
+  non-destructive one is the same disease.
+- **Shape: two PRs, ordered, and the ordering is load-bearing.** Terminate
+  gating + RC-37 first (no stored shape); the verdict/relabel/columns second
+  (triad, alone). Today `linkGone` suppresses the terminate, so the relabel
+  UN-suppresses it — shipped first, it sends a derived-verdict terminate into a
+  possibly-live piece, the exact failure the spec exists to prevent. **Generalises:
+  when a relabel moves rows across an allowlist, check whether the OLD label was
+  also suppressing a side effect.**
+- **"Phase LA" does not exist in the ROADMAP.** Both spec commits touched one
+  file. RC-29/30/37 are already Phase RC items, so the 2026-08-13 "no new phase
+  for work that finishes an existing one" principle applies: keep
+  `link-authority` as a spec codename, file the conditions as checkboxes under
+  Phase RC. Discharges RF#17 and #198's checkbox condition at zero cost.
+- **Release call: one MINOR (`v0.26.0`) after BOTH PRs and the walk; no tag
+  between them.** Independently owed: `v0.25.0..main` already carries #206 (the
+  LIVE hero counts the rest, RC-27) — tester-visible, merged AFTER v0.25.0's own
+  notes PR, currently un-noted. Also owed: an explicit correction to v0.23.0's
+  shipped note (`releaseNotes.ts:96`, "keeps the headline it was saved with"),
+  written in the NEW version's entry, plus a from-this-build-forward clause —
+  old link-lost rows stay rest-fused forever.
+
+## Adversarial pass, 2026-08-28 (accepting Phase RC exit (c)'s known-false cohort)
+
+- **Before accepting an exception, check whether the CUT FIX would even have
+  reached it.** The proposal traded exit criterion (c) against the `endedBy`
+  relabel a YAGNI pass had just cut, framing the cut as the cost. It was not:
+  the relabel changes how FUTURE rows close, and the fused-hero cohort is rows
+  ALREADY SAVED in a closed window (2026-08-22, `ended_by` ships in #160 →
+  2026-08-25, RC-5 ships in #194). Only a backfill reaches them, and none was
+  proposed. **The strongest reason to accept was that the "cost" was
+  imaginary — and nobody had said it.** Generalises: an accept-the-defect
+  proposal that names a rejected fix must show the fix lands on the same rows.
+- **A criterion restated is not the criterion, and the restatement is usually
+  the kinder one.** The dispatch described (c) as heroes-versus-interval-rows
+  (742 vs 500). The ROADMAP says "the three heroes on one stored row reconcile
+  with EACH OTHER." Judged literally the cohort is worse: 742 m / 4:04 /
+  2:18.8 implies 2:44.4 by hand — the three heroes disagree by 25.6 s/500 m.
+  **At any accept-the-defect gate, quote the criterion and re-run its own
+  arithmetic before accepting an exception to somebody's summary of it.**
+- **One named exception is a tell that the criterion is unsatisfiable.** (c) is
+  ALSO false for every row carrying a recorded null-index actual — DISTANCE/TIME
+  count it, AVG SPLIT excludes it by construction, and `storedSummary.ts` says
+  so in its own words ("Null-index/warm-up parity DOES NOT HOLD"): 9.9 s/500 m
+  on the branch's own post-RC-5 fixture, on FINISHED rows too. Plus tier A's
+  designed truncation gap. **Ruling: (c) gets a TOLERANCE and a POPULATION, not
+  an exception list** — a criterion no build has ever met cannot go red.
+- **"Never observed" carries near-zero weight for a silent number defect, and
+  it did not need to.** A rower never reports "my three numbers disagree"; they
+  assume they misremembered. But this cohort is defined by a DATE RANGE, not a
+  rare event, so it is enumerable by inspection rather than by waiting. **When a
+  cohort is date-bounded, replace "never observed" with a 60-second look at the
+  data.** DONE THE SAME DAY: James photographed five consecutive rows spanning
+  22-27 August; hand arithmetic gives a worst-case delta of 0.1 s/500 m against
+  a ~26 s cohort signature, and every row carries the `plus N m coasting in
+  rest` clause an incomplete close cannot have. Cohort empty, twice over.
+- **Check the shipped release notes before calling a contradiction
+  undisclosed.** v0.23.0 item 1 uses this exact cohort's numbers (742/4:04) as
+  its picture of the SOLVED problem — but item 5 already carves it out in the
+  tester's own vocabulary ("ended early, or one whose link dropped, keeps the
+  headline it was saved with"). It under-discloses (silent on the numbers still
+  contradicting) rather than contradicts. **The in-app disclosure was also real
+  and nobody had traced it:** `FromTheLog.tsx:450-451` renders `LINK LOST · …`
+  directly ABOVE the heroes — but for `link-lost` only, never
+  `interrupted`/`program-failed`/burst-less-`rower`.
+- **The contradiction a rower can see without arithmetic is the one that
+  matters.** Not 742-vs-500 (needs addition) — AVG SPLIT 2:18.8 sitting above
+  interval rows of 2:15.8 and 1:52.2, an average outside the range of its own
+  inputs. **When judging a visible-wrongness question, look for the assertion
+  that needs no computation.**
+- **Verdict: ACCEPTED WITH THE CONDITION MET.** (c) rewritten with a
+  1.0 s/500 m tolerance and three named populations; population (i) verified
+  empty by inspection. No code, no migration, no user-facing note owed.
+- **Flagged and now answered: Phase RC's ~30 unchecked items.** A same-day YAGNI
+  triage closed 12 on evidence, found 5 already done, and moved 5 to other
+  phases. (a)-(e) IS the gate; the checkbox count was filing-as-deferral, and
+  the triage is what made the close honest rather than declared.

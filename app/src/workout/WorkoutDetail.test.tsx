@@ -1759,3 +1759,101 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// RC-37 ([R5], design spec 2026-08-27-link-authority-design.md §1): the
+// nudged targets on THIS screen survive the interstitial exiting under a
+// dropped program — "Pin it with a test anyway", the design spec's own
+// words, because it is the half of James's ruling a future refactor could
+// silently break. `useMonitorSession` is mocked ONLY in this describe block
+// (`vi.doMock` + `vi.doUnmock` in `afterEach`, the same scoped idiom
+// `useMonitorSession.test.ts`'s own B1 describe and `lifecycleReplay.test.ts`
+// use) so every other describe in this file keeps exercising the REAL hook
+// unaffected — a global `vi.mock` here would silently turn every
+// `transport-missing` assertion elsewhere in this file into a lie.
+// ---------------------------------------------------------------------------
+
+describe("RC-37 ([R5]): the nudge survives Menu-at-READY, the same way it survives Cancel", () => {
+  afterEach(() => {
+    vi.doUnmock("../monitor/useMonitorSession");
+    vi.resetModules();
+  });
+
+  it("nudges a step, reaches READY, the driver drops the program — back on Workout detail, the nudge is still there", async () => {
+    const actual = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    type Session = ReturnType<typeof actual.useMonitorSession>;
+    let currentSession: Session;
+    const mockUseMonitorSession = vi.fn(() => currentSession);
+    function baseSession(overrides: Partial<Session>): Session {
+      return {
+        phase: "idle",
+        error: null,
+        deviceName: null,
+        frame: null,
+        actuals: [],
+        endedBy: null,
+        handoffHeld: false,
+        frozen: false,
+        runOpen: false,
+        frameSilence: false,
+        programDropped: false,
+        connect: vi.fn().mockResolvedValue(undefined),
+        program: vi.fn().mockResolvedValue(undefined),
+        endSession: vi.fn().mockResolvedValue(undefined),
+        cancel: vi.fn().mockResolvedValue(undefined),
+        exportLog: vi.fn().mockReturnValue("[]"),
+        ...overrides,
+      };
+    }
+    currentSession = baseSession({});
+    vi.doMock("../monitor/useMonitorSession", () => ({
+      ...actual,
+      useMonitorSession: mockUseMonitorSession,
+    }));
+    vi.resetModules();
+
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    const { default: WorkoutDetail } = await import("./WorkoutDetail");
+    const view = render(
+      <MemoryRouter initialEntries={["/library/w3"]}>
+        <Routes>
+          <Route path="/library/:id" element={<WorkoutDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Nudge the (only) work step one press faster (-1s) BEFORE connecting —
+    // "the nudge survives" only means something if a real one is on record.
+    await userEvent.click(screen.getByRole("button", { name: "Nudge faster" }));
+    expect(screen.getByText(/nudged −1s/)).toBeInTheDocument();
+
+    // READY: the driver has already armed (`useMonitorSession.ts`'s own
+    // "armed" event handler sets exactly this phase), device name shown.
+    currentSession = baseSession({
+      phase: "ready",
+      deviceName: "PM5 432331249",
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(await screen.findByText("Ready when you pull")).toBeInTheDocument();
+
+    // Menu at READY: the driver's structure watch fires, the hook exits —
+    // phase reset, no row opened, `programDropped` true — in the SAME
+    // `update()` call (`useMonitorSession.ts`'s own handler).
+    currentSession = baseSession({ phase: "idle", programDropped: true });
+    view.rerender(
+      <MemoryRouter initialEntries={["/library/w3"]}>
+        <Routes>
+          <Route path="/library/:id" element={<WorkoutDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Back on Workout detail (not the interstitial, not a log/summary
+    // screen), and the nudge is still on record.
+    expect(screen.queryByText("Ready when you pull")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(screen.getByText(/nudged −1s/)).toBeInTheDocument();
+  });
+});
