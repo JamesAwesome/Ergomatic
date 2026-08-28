@@ -113,6 +113,39 @@ it back here and remember any nudges."*
   approve on RC-37**; the design gate now has only the `LOST THE MONITOR`
   question, if James opens it.
 
+### 1b. THE RING ENTRIES — build the instrument in the same change **[R5]**
+
+James, 2026-08-27: *"Make sure if we need to add anything to monitor log to
+make debugging easy we do."* Recurring failure #19's rule: for a new
+machine-sourced input, ask which instrument catches it when it is wrong, and
+if the answer is none, build it now.
+
+Three entries. **The second is the one that matters, and without it the
+walk's gate leg is unfalsifiable.**
+
+1. **`structure-left`** — the detector fired. Carries what we EXPECTED and
+   what we OBSERVED (all four fields), the streak length, and the elapsed
+   window. Enough to reconstruct the decision without the recording.
+2. **`structure-mismatch-recovered`** — a mismatch that started and then
+   went away WITHOUT reaching both thresholds. **This is the near-miss.**
+   Without it, "the detector stayed silent through the piece" cannot be
+   told apart from "it mismatched twice at every rest boundary and got
+   lucky on the thresholds" — the first is a passing gate, the second is a
+   warning that we are one firmware quirk from ending live sessions. Carries
+   the streak reached and the elapsed window, so the margin is readable.
+3. The existing **`structure`** entry already logs on CHANGE and needs no
+   work — it is what caught RC-37 in the first place.
+
+**Throttle, because the ring is 500 entries and status ticks arrive at
+~2 Hz.** Log the START of a mismatch streak and its RESOLUTION (fired or
+recovered), never per tick — the same idiom `refusedKeysLogged` and the
+stale-count rest clamp already use in this file, and for the same reason.
+
+**Read the near-miss count at the walk.** If a rest-bearing piece produces
+`structure-mismatch-recovered` entries at all, say so in the walk record even
+though the gate passed: it is the measurement that decides whether the
+thresholds are comfortable or lucky.
+
 ### 2. End always terminates the machine. One line.
 
 `useMonitorSession.ts:3155` — delete `|| linkGone` from
