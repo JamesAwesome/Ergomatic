@@ -51,10 +51,25 @@
 
 import type { ConnectedPhase } from "./useMonitorSession";
 
-/** Is the radio link to the monitor available right now? Never invented —
- *  `"up"` only where a transport connection is known (or, at `failed`,
- *  reported by the caller) to exist; `"lost"` is the CONSERVATIVE answer
- *  whenever that is not established. */
+/** Is the radio link to the monitor available right now?
+ *
+ *  **WHAT THIS AXIS ACTUALLY READS, corrected by RC-12's comment audit.**
+ *  It used to say "never invented — `up` only where a transport connection
+ *  is KNOWN to exist", and `deriveLink` below does not do that: `up` is
+ *  returned for the whole `pairing`/`programming`/`ready`/`live` group
+ *  from the PHASE plus the frame-silence watchdog, and `pairing` spans the
+ *  transport-connect settle itself, so `up` can be answered a moment
+ *  before a connection is established. The claim was aspirational, and a
+ *  comment that overstates its own guarantee is worse than none — this
+ *  file's whole reason for existing is that a collapsed link axis once
+ *  cost a workout (see the header).
+ *
+ *  What IS true, and is the property callers depend on: `"lost"` is the
+ *  CONSERVATIVE answer — every path that cannot establish a live link
+ *  lands there rather than on `up`, including a connected driver whose
+ *  frames have gone quiet past the watchdog. The direction of the
+ *  uncertainty is what this axis promises, not omniscience about the
+ *  radio. */
 export type LinkAxis = "none" | "connecting" | "up" | "lost";
 
 /** Where the workout program stands, relative to the machine. */

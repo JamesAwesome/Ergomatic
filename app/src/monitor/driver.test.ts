@@ -10164,16 +10164,24 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(detail).toContain("1150");
     // ...and the entry NAMES the program's own rest, so an erg-side reader
     // can hand-check the premise this arm asserts rather than trusting it
-    // (review Important-1, leg 3).
+    // (review Important-1, leg 3). The premise is no longer unobserved —
+    // interface-notes §27.1 settled it on the wire, RC-12 reconciled the
+    // string — so the citation moved with it and the number stayed.
     expect(detail).toContain("120s");
-    expect(detail).toContain("§23 walk item 4");
+    expect(detail).toContain("§27.1");
   });
 
   it("(c2) THE WALK'S DISCRIMINATOR: read the SAME piece rest-inclusively and the fill is 120s too long — positive, plausible, and past every guard", async () => {
     // This test does not assert desired behaviour. It PINS THE EXPOSURE, so
-    // that the day the wire settles §23 walk item 4 the consequence of the
-    // losing answer is already written down and already measured (review
-    // Important-1, leg 4).
+    // that the consequence of the losing answer is written down and
+    // measured (review Important-1, leg 4).
+    //
+    // THE WIRE HAS SINCE ANSWERED (interface-notes §27.1, RC-12): on this
+    // firmware 0x0039 is work-only, so the losing branch is not what our
+    // machine does. The test stays, and stays named a discriminator,
+    // because the exposure is a property of the SUBTRACTION and not of the
+    // firmware: nothing in this driver would notice a machine that answered
+    // the other way, which is exactly what the assertion below records.
     //
     // Same program, same recorded priors, same meters — the ONLY change is
     // the summary's Elapsed Time, read as work-plus-rest (900) instead of
@@ -10215,8 +10223,12 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     const detail = verdicts(g.log)[0]!.detail;
     expect(detail).toContain("filled-from-summary");
     expect(detail).toContain("360s");
-    expect(detail).toContain("this program's own rest totals 120s");
-    expect(detail).toContain("too long and no guard here can tell");
+    expect(detail).toContain("This program's own rest totals 120s");
+    // And the clause spells out the losing answer's own consequence: under
+    // a rest-counting 0x0039 the true final interval is 360 - 120 = 240s,
+    // which is this piece's programmed work exactly. The reader compares a
+    // printed number against the program instead of doing the subtraction.
+    expect(detail).toContain("the true final interval would read 240s");
   });
 
   it("A REST-FREE MULTI-INTERVAL PROGRAM says so: with no rest to mis-count, the entry states that instead of a warning it cannot justify", async () => {
@@ -11134,11 +11146,13 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(verdicts(g.log)[0]!.detail).toContain("no 0x0039 arrived");
   });
 
-  it("A NEGATIVE SUBTRACTION DECLINES: the one cheap on-wire test of the cumulative premise (§23 walk item 2), and it refuses rather than files nonsense", async () => {
-    // If 0x0039's Elapsed Time/Distance turn out to be PER-INTERVAL (the
-    // trap 0x0031 sprang on walk 4) rather than whole-workout totals, a
-    // multi-interval subtraction goes negative — and this is the arm that
-    // fires. It is deliberately a DECLINE plus a log entry, not a clamp:
+  it("A NEGATIVE SUBTRACTION DECLINES: the one cheap on-wire test of the cumulative premise (interface-notes §27.1), and it refuses rather than files nonsense", async () => {
+    // If 0x0039's Elapsed Time/Distance are PER-INTERVAL (the trap 0x0031
+    // sprang on walk 4) rather than whole-workout totals, a multi-interval
+    // subtraction goes negative — and this is the arm that fires. Our own
+    // machine answered CUMULATIVE on the wire (§27.1, RC-12), so this arm
+    // now guards a firmware difference rather than an open question; it
+    // stays for exactly that reason. It is deliberately a DECLINE plus a log entry, not a clamp:
     // the walk needs the evidence, and the rower must not get a fabricated
     // interval either way.
     //
@@ -11159,7 +11173,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     const detail = verdicts(g.log)[0]!.detail;
     expect(detail).toContain("declined");
     expect(detail).toContain("cumulative");
-    expect(detail).toContain("§23 walk item 2");
+    expect(detail).toContain("§27.1");
   });
 
   it("A LINK DROP INSIDE THE GRACE cancels the WAIT, not a verdict already in hand: a summary that already arrived still fills (F7)", async () => {
