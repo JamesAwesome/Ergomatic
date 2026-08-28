@@ -12,6 +12,7 @@ import { structureLine } from "../../../domain/display/stepDetail.js";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index.js";
 import { ConnectTheMonitorBody } from "./bodies/connectTheMonitor";
 import { PyramidFigure } from "./bodies/PyramidFigure";
+import { TYPE_WORDS } from "../../components/typeWords";
 
 describe("article body components", () => {
   it("WorkoutTypesBody renders with distinctive text, the sentence surviving intact across the inline O2 chip that now splits it", () => {
@@ -216,13 +217,67 @@ describe("PyramidFigure (item 5)", () => {
     render(<PyramidFigure />);
 
     const figure = screen.getByRole("img", {
-      name: /wide O2 general endurance base carries an AT threshold band, a TR hard intervals band, and a small AN speed tip/,
+      name: /wide O2 low and slow base carries an AT comfortably hard band, a TR hard intervals band, and a small AN speed work band at the top/,
     });
     expect(figure).toBeInTheDocument();
     expect(figure.tagName.toLowerCase()).toBe("svg");
 
     for (const label of ["AN", "TR", "AT", "O2"]) {
       expect(screen.getByText(label, { selector: "text" })).toBeInTheDocument();
+    }
+  });
+
+  // TL-2. The figure used to carry its OWN copy of the plain-word vocabulary
+  // and three of the four words disagreed with `typeWords.ts` (O2 read
+  // GENERAL ENDURANCE, AT read THRESHOLD — the exact coach jargon the
+  // disclosure work exists to replace — and AN read SPEED). Since the
+  // pyramid lives in the workout-types explainer it is the FIRST place a
+  // rower meets these words, so it was teaching a vocabulary no chip in the
+  // app ever repeats. This asserts the figure reads from the shared source
+  // rather than that it happens to spell four particular strings today: a
+  // word changed in `typeWords.ts` must change here with it.
+  it("prints TYPE_WORDS' own phrase in every band, and prints it in the aria-label too", () => {
+    render(<PyramidFigure />);
+
+    const figure = screen.getByRole("img");
+    for (const [type, word] of Object.entries(TYPE_WORDS)) {
+      expect(
+        screen.getByText(word, { selector: "text" }),
+        `${type}'s band must print TYPE_WORDS.${type} ("${word}")`,
+      ).toBeInTheDocument();
+      // "&" is spoken as a word rather than a symbol in the accessible name.
+      expect(
+        figure.getAttribute("aria-label")?.toLowerCase(),
+        `the accessible name must name ${type} with the same phrase`,
+      ).toContain(word.toLowerCase().replace("&", "and"));
+    }
+  });
+
+  // TL-3. The four plain words shipped at `fontSize="7"`, which is not 7 CSS
+  // px: the figure is a 320-unit viewBox rendered into `.reader-figure svg`'s
+  // 340px max-width (index.css), so every authored unit is multiplied by
+  // 340/320 and the words landed at 7.44px against the house 10px mono floor
+  // (--size-label, tokens.css). This pins the AUTHORED sizes; the rendered
+  // outcome — the number that would change if that max-width or the viewBox
+  // ever moved — is pinned in e2e/design.spec.ts, which can measure it.
+  it("sets no label below the 10px floor once the viewBox's own scale is applied", () => {
+    const { container } = render(<PyramidFigure />);
+
+    const svg = container.querySelector("svg")!;
+    const viewBoxWidth = Number(svg.getAttribute("viewBox")!.split(/\s+/)[2]);
+    // index.css:5350-5356 — `.reader-figure svg { width: 100%; max-width: 340px }`.
+    const RENDERED_WIDTH_PX = 340;
+    const scale = RENDERED_WIDTH_PX / viewBoxWidth;
+
+    const texts = [...svg.querySelectorAll("text")];
+    expect(texts.length).toBe(8); // four codes, four words
+
+    for (const text of texts) {
+      const authored = Number(text.getAttribute("font-size"));
+      expect(
+        authored * scale,
+        `"${text.textContent}" renders at ${(authored * scale).toFixed(2)}px`,
+      ).toBeGreaterThanOrEqual(10);
     }
   });
 });

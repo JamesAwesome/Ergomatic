@@ -404,12 +404,14 @@ and stated as a number — before any implementation task starts.
     (`index.css:982-987`). It looks correct in captures only because O2 happens
     to be first. **If Option A is close, this retires itself; if the design pass
     slips, fix it standalone.**
-  - **Absorbs TL-2:** two plain-word vocabularies ship at once. `typeWords.ts`
-    says AT = `COMFORTABLY HARD`; `PyramidFigure.tsx:57` says `THRESHOLD` and
-    `:63` says `GENERAL ENDURANCE`, importing no `TYPE_WORDS`. The figure a
-    rower meets FIRST uses different words from every chip afterwards, and one
-    of them is the exact jargon this work exists to replace. **Independent of
-    the redesign: fix now. S**
+  - **~~Absorbs TL-2~~ — DONE, 2026-08-28.** Two plain-word vocabularies shipped
+    at once: `typeWords.ts` said AT = `COMFORTABLY HARD` while `PyramidFigure`
+    said `THRESHOLD`, plus `GENERAL ENDURANCE` for O2 and `SPEED` for AN, all
+    hardcoded. The figure now imports `TYPE_WORDS` and builds its `aria-label`
+    from the same source, so a second vocabulary cannot reappear; a client test
+    iterates `TYPE_WORDS` rather than pinning four strings. **This did not wait
+    for the redesign, and TL-1 still does** — it is the one of the three that
+    Option A would retire on its own.
   - **Copy note, separable and NOT decided:** the rank breaks at position four.
     `LOW & SLOW` → `COMFORTABLY HARD` → `HARD INTERVALS` climbs cleanly;
     `SPEED WORK` reads as a different CATEGORY and is itself coach jargon.
@@ -426,11 +428,23 @@ and stated as a number — before any implementation task starts.
       is a release gate, not household polish, and every phase that has shipped
       since has added surfaces it has never covered. **Depends on Wave D's
       simulator.** **M**
-  - **Absorbs TL-3:** the pyramid's plain words render at **7.44 px**, a quarter
-    below the house 10 px floor (`PyramidFigure.tsx:44,50,56,62` are all
-    `fontSize="7"`). The persona's *"this taught me the whole thing in two
-    seconds"* reaction was to text the design system forbids. The tightest band
-    has about five units of slack, so `fontSize="10"` fits. **S**
+  - **~~Absorbs TL-3~~ — DONE, 2026-08-28**, and its sizing claim was WRONG.
+    The words did render at 7.44 px against the house 10 px floor. But this
+    entry's *"the tightest band has about five units of slack, so
+    `fontSize="10"` fits"* was never measured and is false: at 10 units
+    `SPEED WORK` is 67.99 units wide (measured in Chromium against the shipped
+    IBM Plex Mono woff2, at the figure's own 0.08em letter-spacing) against a
+    pointed tip's 26.2 units of half-width — **7.82 units of OVERFLOW per side,
+    not five of slack.** Nor was it fixable by resizing: the figure is
+    width-capped at 340 px, so a bigger pyramid raises the floor's unit cost in
+    exact step, and a pointed apex with four equal bands cannot hold the word at
+    any proportion. It took a design gate (James, 2026-08-28) and a truncated
+    apex — a 32-unit flat top — which costs the band-area progression, moving it
+    from 1:3:5:7 to 1:2.0:3.1:4.1. **The lesson, for the next entry that sizes a
+    fix by eye: the figure's authored units are not CSS px, and a font size that
+    "fits" has to be measured against the shape at the label's ink top, not its
+    baseline.** Guarded by `design.spec.ts`'s two pyramid tests (rendered px in
+    both orientations, and each word measured against its own band's edges).
 - [ ] **Calm-motion pass** — no animation beyond the timer tick and the progress
       bars. `prefers-reduced-motion` is an accessibility expectation, not a
       nicety. **S**

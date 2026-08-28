@@ -5753,6 +5753,182 @@ test.describe("reader screen (/news/baselines, mixed read state)", () => {
   });
 });
 
+// The training pyramid (workout-types article) — TL-3's own gate.
+//
+// The client test pins the AUTHORED font sizes; only a real browser can say
+// what they RENDER at, and that is the number the defect was about. The
+// figure is a 320-unit viewBox inside `.reader-figure svg`'s 340px
+// max-width, so a change to either — the CSS cap, the viewBox, or a
+// `fontSize` — moves every label's real size at once. It shipped at 7.44px
+// against the house 10px mono floor.
+//
+// Both orientations run because the figure's width is set by a DIFFERENT
+// constraint in each: portrait 390 by `.screen`'s own width (390 - 40px
+// padding = 350, capped to 340), landscape 844 by `.screen`'s 480px
+// max-width (480 - 40 = 440, capped to 340). They agree today; a change to
+// either bound would break only one of them.
+test.describe("workout-types article, the training pyramid", () => {
+  for (const viewport of [
+    { width: 390, height: 844, label: "portrait" },
+    { width: 844, height: 390, label: "landscape" },
+  ] as const) {
+    test(`every pyramid label renders at or above the 10px mono floor — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
+      await signInViaBackdoor(page, {
+        email: `design-pyramid-floor-${viewport.label}@e2e.test`,
+        name: "Design Pyramid Tester",
+      });
+      await page.goto("/news/workout-types");
+      await page.locator(".reader-figure svg").waitFor();
+      await page.evaluate(() => document.fonts.ready);
+
+      const measured = await page.evaluate(() => {
+        const svg = document.querySelector(".reader-figure svg")!;
+        // NOT `getComputedStyle(text).fontSize` — inside an SVG that returns
+        // the AUTHORED value (a mutation to `fontSize="7"` read back as
+        // "7px", not the 7.44px it actually painted), so it is blind to the
+        // half of this defect that lives in CSS. The rendered size is the
+        // authored size times the viewBox scale, and the scale is the box
+        // the browser gave the svg over the viewBox's own width.
+        const laidOutWidth = svg.getBoundingClientRect().width;
+        const viewBoxWidth = Number(
+          svg.getAttribute("viewBox")!.trim().split(/\s+/)[2],
+        );
+        const scale = laidOutWidth / viewBoxWidth;
+        return {
+          laidOutWidth,
+          scale,
+          labels: [...svg.querySelectorAll("text")].map((t) => ({
+            text: t.textContent!.trim(),
+            renderedPx: Number(t.getAttribute("font-size")) * scale,
+          })),
+        };
+      });
+
+      expect(measured.labels.length).toBe(8); // four type codes, four words
+      // The scale is load-bearing above, so pin it rather than trusting it:
+      // 340px of figure over a 320-unit viewBox. If `.reader-figure svg`'s
+      // max-width or the viewBox moves, this says so directly instead of
+      // letting every label's px silently drift.
+      expect(measured.laidOutWidth).toBe(340);
+      expect(measured.scale).toBeCloseTo(1.0625, 4);
+      for (const label of measured.labels) {
+        expect(
+          label.renderedPx,
+          `"${label.text}" renders at ${label.renderedPx.toFixed(2)}px`,
+        ).toBeGreaterThanOrEqual(10);
+      }
+    });
+  }
+
+  // The other half of the same change, and the reason the apex is
+  // truncated: raising the words to the floor made SPEED WORK wider than a
+  // pointed tip could hold. This measures each word against the band it
+  // sits in, so it fails if a longer word arrives in `typeWords.ts`, if the
+  // geometry narrows, or if a font size rises again — the three ways this
+  // can silently clip.
+  test("every plain word fits inside its own band, measured against the band's edges", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-pyramid-fit@e2e.test",
+      name: "Design Pyramid Fit Tester",
+    });
+    await page.goto("/news/workout-types");
+    await page.locator(".reader-figure svg").waitFor();
+    await page.evaluate(() => document.fonts.ready);
+
+    const fits = await page.evaluate(() => {
+      const svg = document.querySelector(".reader-figure svg")!;
+      const bands = [...svg.querySelectorAll("polygon")].map((p) => {
+        const pts = p
+          .getAttribute("points")!
+          .trim()
+          .split(/\s+/)
+          .map((pair) => pair.split(",").map(Number) as [number, number]);
+        const ys = [...new Set(pts.map(([, y]) => y))].sort((a, b) => a - b);
+        // Each band is a trapezoid with a horizontal top and bottom edge, so
+        // its half-width is linear in y between the two.
+        const halfAt = (edgeY: number) => {
+          const xs = pts.filter(([, y]) => y === edgeY).map(([x]) => x);
+          return (Math.max(...xs) - Math.min(...xs)) / 2;
+        };
+        const top = ys[0];
+        const bottom = ys[ys.length - 1];
+        return {
+          top,
+          bottom,
+          halfTop: halfAt(top),
+          halfBottom: halfAt(bottom),
+        };
+      });
+
+      // Cap height of IBM Plex Mono, measured in this same browser rather
+      // than assumed: the words are all-caps, so their ink reaches this far
+      // above the baseline, and THAT row is the narrowest part of the band
+      // the word crosses.
+      const canvas = document.createElement("canvas");
+      canvas.width = 400;
+      canvas.height = 300;
+      const cx = canvas.getContext("2d")!;
+      cx.fillStyle = "#fff";
+      cx.fillRect(0, 0, 400, 300);
+      cx.fillStyle = "#000";
+      cx.font = "400 100px 'IBM Plex Mono'";
+      cx.textBaseline = "alphabetic";
+      cx.fillText("SPEEDWORK", 10, 200);
+      const px = cx.getImageData(0, 0, 400, 300).data;
+      let inkTopRow = 300;
+      for (let y = 0; y < 300 && inkTopRow === 300; y++) {
+        for (let x = 0; x < 400; x++) {
+          if (px[(y * 400 + x) * 4] < 128) {
+            inkTopRow = y;
+            break;
+          }
+        }
+      }
+      const capHeightEm = (200 - inkTopRow) / 100;
+
+      return [...svg.querySelectorAll("text")]
+        .filter((t) => t.getAttribute("letter-spacing") !== null) // the words
+        .map((t) => {
+          const size = Number(t.getAttribute("font-size"));
+          const baseline = Number(t.getAttribute("y"));
+          const inkTop = baseline - capHeightEm * size;
+          const band = bands.find(
+            (b) => baseline > b.top && baseline <= b.bottom,
+          )!;
+          const half =
+            band.halfTop +
+            ((band.halfBottom - band.halfTop) * (inkTop - band.top)) /
+              (band.bottom - band.top);
+          return {
+            text: t.textContent!.trim(),
+            capHeightEm,
+            // 1 unit for the polygon's own centred 2-unit --page stroke.
+            clearanceEachSide: half - 1 - t.getComputedTextLength() / 2,
+          };
+        });
+    });
+
+    expect(fits.length).toBe(4);
+    // A sanity floor on the measurement itself: a cap height that came back
+    // as 0 would make every clearance look generous.
+    expect(fits[0].capHeightEm).toBeGreaterThan(0.5);
+    for (const fit of fits) {
+      expect(
+        fit.clearanceEachSide,
+        `"${fit.text}" clears its band edge by ${fit.clearanceEachSide.toFixed(2)} units`,
+      ).toBeGreaterThan(0);
+    }
+  });
+});
+
 test.describe("releases screen (/news/releases)", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {
