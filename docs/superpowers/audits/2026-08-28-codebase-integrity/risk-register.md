@@ -185,6 +185,41 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   repeated arms, plus a replayable raw trace for every observable field.
 - Status: deferred to Task 8 and Task 12's hardware decision.
 
+### AUD-013 — Raw application-invalid JSONB has no universal read boundary
+
+- Category: brittleness
+- Severity / confidence: P2 / Hypothesis
+- User impact: a legacy, interrupted, manually repaired, or otherwise malformed
+  database row could pass PostgreSQL's JSON syntax check and later break a
+  workout, log, preference, or client renderer instead of being rejected at one
+  deliberate boundary.
+- Expected authority: the approved audit requires every persisted malformed
+  record to read safely or reject deliberately and says JSONB safety must not be
+  inferred from normal route validation
+  (`docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md:174-195`).
+  PostgreSQL validates JSON syntax, not Ergomatic's application union.
+- Actual behavior: baseline route writers validate normal values, but reads cast
+  `workouts.steps`, `session_logs.steps`, `session_logs.series`, and
+  `preferences.difficulties` from JSONB without one universal application-shape
+  guard. This establishes exposure only; no raw malformed row was carried
+  through a mounted real consumer in Task 6.
+- Independent disproof: Task 7 must raw-update one owned row per shape in real
+  Postgres, then use the mounted API and first actual client consumer. The probe
+  must not call the write validator, fake store, server serializer, or local
+  TypeScript interface to create its expectation. Replacing an array with a
+  plain object or a sample with `null` must alter the observed result.
+- Scope: SQL JSONB columns, upgraded/legacy/manual rows, store casts, route
+  serialization, workout and log consumers, preference initialization, and
+  error recovery.
+- Existing coverage gap: real migration tests use known legacy shapes and route
+  tests enter through validated writers. Fake/real parity can reproduce the
+  same unchecked cast.
+- Verification required after a fix: independently corrupted real rows,
+  mounted API results, first rendered consumers, normal/legacy compatibility,
+  and proof that one bad owned row cannot poison unrelated records.
+- Status: deferred to Task 7; no fix direction until a user-visible consequence
+  is independently reproduced.
+
 `Smallest safe fix` is forbidden here until a risk reaches Confirmed or Probable confidence.
 
 ## Record contract
