@@ -50,7 +50,7 @@
 // top level — which renders portrait phones at landscape type sizes — also
 // left 22/22 green. Both mutations now fail.
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   commentStrippedSource,
@@ -425,5 +425,63 @@ describe("the --c-size-* connected-only scale (index.css, on .connected-surface)
         expect.not.stringContaining("var(--size-"),
       ]);
     }
+  });
+});
+
+// The two censuses above prove no dead name inside their own scales. This one
+// generalises the same rule to EVERY token tokens.css defines, because the
+// gap between them is where `--pain-ramp-1..5` lived.
+//
+// WHAT IT COST TO NOT HAVE THIS: the ramp outlived its only consumer by
+// weeks, and THREE separate comments — `index.css`, `ClassificationCard.tsx`
+// and `docs/design/DEVIATIONS.md` — each asserted `LogSession.tsx` was still
+// using it. Nothing was. This is recurring failure 5's fourth instance
+// (`.col-*`, `.set-toggle`, `.field-dur`/`.field-spm`, then the ramp), and it
+// is the one variant no existing gate could see: a defined-but-unread custom
+// property is invisible to tsc, to eslint, and to every runtime assertion in
+// the suite, because it neither breaks nor renders.
+//
+// SCOPE, and why it is wider than `indexCss`: four `--type-*` tokens are read
+// only from `PyramidFigure.tsx`, so an index.css-only census would call them
+// dead. It reads `src/` and `e2e/` — everywhere a token can actually be
+// consumed — off comment-stripped source, so a prose mention of a name (which
+// is exactly what the ramp had three of) cannot keep it alive.
+const CONSUMER_ROOTS = ["src", "e2e"];
+
+function sourceFilesUnder(dir: string, acc: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name === "dist") continue;
+    const full = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) sourceFilesUnder(full, acc);
+    else if (/\.(ts|tsx|css|html)$/.test(entry.name)) acc.push(full);
+  }
+  return acc;
+}
+
+describe("the token palette as a whole", () => {
+  it("defines no token that nothing reads — a dead token is invisible to every other gate", () => {
+    const defined = [
+      ...new Set(
+        [...PORTRAIT_ROOT.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((m) => m[1]),
+      ),
+    ];
+
+    // Not decoration: if the parse ever stops matching, `dead` is empty and
+    // the real assertion passes vacuously — the "gate that cannot go red"
+    // shape this repo has shipped twice (recurring failure 21).
+    expect(defined.length).toBeGreaterThan(20);
+
+    const haystack = CONSUMER_ROOTS.flatMap((root) =>
+      sourceFilesUnder(thisDirPath(`../../${root}`)),
+    )
+      .map((file) => commentStrippedSource(readFileSync(file, "utf-8")))
+      .join("\n");
+
+    // `var(--x)` and `var(--x, fallback)` both count as a read.
+    const dead = defined.filter(
+      (token) => !new RegExp(`var\\(\\s*${token}\\s*[,)]`).test(haystack),
+    );
+
+    expect(dead).toStrictEqual([]);
   });
 });

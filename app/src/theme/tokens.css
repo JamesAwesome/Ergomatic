@@ -132,22 +132,18 @@
   --on-color: #fffdf7;
   --pain-empty: #e0dacb;
 
-  /* Classification-card pain ramp (docs/design/builder-redesign/README.md
-     §3) — the sole pain palette left after Phase 5E Task 5 retired
-     PainPicker.tsx (deleted; its own --pain-N/--pain-N-fill family, the
-     face-illustration ramp, went with it — nothing else ever referenced
-     those tokens). ClassificationCard.tsx is the only remaining consumer.
-     Computed (not eyeballed) contrast of on-color text (#fffdf7) against
-     each fill: ramp-1 5.68:1, ramp-2 5.09:1, ramp-3 5.53:1, ramp-4 5.85:1,
-     ramp-5 5.94:1 — all clear the 4.5:1 WCAG AA floor. ramp-2 (#6e7040) is
-     the tightest of the five (the handoff's own estimate put it closer to
-     4.6:1; measured against this exact on-color value it's 5.09:1, but
-     still the ramp's minimum) — per the handoff, DO NOT lighten it. */
-  --pain-ramp-1: #5b6b46;
-  --pain-ramp-2: #6e7040;
-  --pain-ramp-3: #8a5f18;
-  --pain-ramp-4: #a3491f;
-  --pain-ramp-5: #b5341f;
+  /* THE PAIN RAMP IS GONE (2026-08-28). `--pain-ramp-1..5` lived here after
+     their last consumer left: the ui-fix round moved the selected PAIN chip
+     onto the same plain ink fill as DIFFICULTY, and nothing has read the ramp
+     since. Three comments — this file's, index.css's and
+     ClassificationCard.tsx's — each said LogSession.tsx was still a consumer.
+     It never was. Deleted with the palette census in tokens.test.ts, which
+     now fails on any token nothing reads.
+
+     Kept because two live documents cite them: ramp-3 was #8a5f18, BYTE-
+     IDENTICAL to --type-at, which is why a mid-level pain selection could
+     read as an AT-type mark (DEVIATIONS' own row); and ramp-5 was #b5341f,
+     the same red as --accent. */
 
   /* Today card piece region (2026-08-10 workout-step-detail spec §2/§4):
      three tints for the rows list, the tinted peak row, and the summary

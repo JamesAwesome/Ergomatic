@@ -9,7 +9,26 @@
 #
 # Every value derives deterministically from the worktree's absolute path,
 # so the same checkout always reuses its own stack (E2E_KEEP=1 iteration
-# still works) and two checkouts can never share one:
+# still works).
+#
+# TWO MODULI, AND THEY ARE NOT THE SAME WIDTH — read this before trusting
+# "two checkouts can never share one", which is what this comment used to
+# say flatly. Names use `% 100000`; ports use `% 400`, because the port
+# range is deliberately narrow (8100-8499 / 15100-15499) to stay clear of
+# prod, dev-pg and the legacy shared stack. So two worktrees whose path
+# hashes differ by a multiple of 400 get DISTINCT project names and
+# IDENTICAL host ports. With a handful of worktrees the odds are around a
+# percent, and it has not been observed here.
+#
+# What happens if it does: `docker compose up` cannot bind the port and
+# fails outright ("port is already allocated"), so the second gate STOPS
+# rather than silently serving the first worktree's bundle. The
+# ~70-phantom-failure disaster above needs one SHARED PROJECT, and the name
+# modulus does prevent that — the residual risk here is a confusing bind
+# error, never a wrong green. If you hit it, export APP_PORT and
+# POSTGRES_PORT; every assignment below is `:-` guarded for exactly that.
+#
+# The values:
 #   - COMPOSE_PROJECT_NAME  → per-worktree project (networks, volumes —
 #     including the pgdata volume, so fixtures stop bleeding across
 #     sessions)

@@ -112,6 +112,12 @@ which is the exact bug that made `--type-tr` an alias of `--ink`
 distinct reds (`--accent`, `--judge-slower`, `--pain-ramp-5`), and
 **`--pain-ramp-3` #8a5f18 is byte-identical to `--type-at`**, a collision
 that has already been misread as a type once (`ClassificationCard.tsx:47-51`).
+**Note for anyone grepping: `--pain-ramp-1..5` were DELETED on 2026-08-28**,
+having had no consumer for weeks. The argument above is unchanged — the app
+still carries `--accent` and `--judge-slower` as distinct reds, and `--accent`
+is itself `#b5341f`, the value ramp-5 held — but the token names no longer
+resolve, and the ramp-3/`--type-at` collision is now history rather than a
+live hazard. `tokens.css` keeps a comment recording both hex values.
 The "black reads as disabled" complaint is real but is a convention read, not
 a contrast failure: TR measures **17.11:1**, the best of the four. The word
 fixes the read; no disabled control says HARD INTERVALS.

@@ -1139,9 +1139,10 @@ button:disabled {
    ramp colour (DESIGN.md: "Builder's gold pain selection goes") onto the
    SAME plain ink fill as DIFFICULTY — ClassificationCard.tsx no longer sets
    any inline style for a selected PAIN chip at all, so this is now the
-   pain group's own version of the rule immediately above. --pain-ramp-1..5
-   (tokens.css) stay defined — LogSession.tsx (Phase 6C, outside this
-   round's touched screens) is still a live consumer of that ramp. */
+   pain group's own version of the rule immediately above. This comment used
+   to add that --pain-ramp-1..5 stayed defined because LogSession.tsx was
+   still a consumer; it was not, the ramp had no consumer at all, and the
+   tokens were deleted 2026-08-28. */
 .classification-chip-pain[aria-pressed="true"] {
   background: var(--ink);
   border-color: var(--ink);
@@ -1750,8 +1751,9 @@ button.back-link:disabled,
    the accent fill (not --surface) rather than another --surface card like
    .today-card below it. --on-color on --accent throughout is the same
    pairing .type-badge/.button-primary already use — computed 5.94:1
-   (tokens.css's own --pain-ramp-5 comment; identical hex value), clearing
-   the 4.5:1 AA floor. */
+   (#fffdf7 on #b5341f), clearing the 4.5:1 AA floor. This used to cite the
+   --pain-ramp-5 comment for that ratio; those tokens were deleted
+   2026-08-28, so the measurement is stated directly rather than borrowed. */
 .today-resume-card {
   display: flex;
   flex-direction: column;
