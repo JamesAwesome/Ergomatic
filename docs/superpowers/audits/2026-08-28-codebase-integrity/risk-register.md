@@ -235,6 +235,75 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   clients without an operation key.
 - Status: requires a product identity decision before promotion.
 
+### AUD-018 — A PM5-retained terminated partial can disappear from saved steps
+
+- Category: correctness
+- Severity / confidence: P2 / Hypothesis
+- User impact: after a Menu-terminated workout, the saved summary can include
+  work from a partial interval while the interval list omits the PM5-retained
+  row, leaving two parts of the same log describing different work.
+- Expected authority: the PM5 memory row for the same terminated session and an
+  approved product rule for partial work. Two physical captures establish that
+  PM5 behavior is not uniform enough to infer the rule from one session.
+- Actual behavior: at baseline, the hook closes synchronously on `terminated`
+  and the record admits a late boundary only after natural finish
+  (`app/src/monitor/useMonitorSession.ts:2153-2200,2302-2308`,
+  `app/src/monitor/monitorRun.ts:618-674`). The Aug-24 raw web capture delivered
+  a 24.26 s / 75.6 m partial split after terminal and the PM5 retained it
+  (`docs/monitor/sessions/walk-2026-08-24/README.md:102-131`); the Aug-27 phone
+  session's PM5 memory omitted a 59.8 m partial
+  (`docs/monitor/sessions/walk-2026-08-27/README.md:122-130`). Summary totals may
+  still feed heroes, while submitted monitor steps come only from accepted
+  actuals (`app/src/session/logDraft.ts:834-867`,
+  `app/src/log/storedSummary.ts:624-653`).
+- Independent disproof: replay the exact Aug-24 terminal-then-partial sequence
+  through the mounted hook and real monitor log door, then replay Aug-27's
+  no-partial sequence. The expected rows come from the independently recorded
+  PM5 memory outcomes, not the driver's boundary policy or app summary.
+- Scope: terminate event order, late-boundary admission, summary observations,
+  monitor storage, submitted steps, and saved detail heroes/rows.
+- Existing coverage gap: tests assert the selected no-terminate-grace policy;
+  no mounted replay uses the real post-terminal partial capture, and the two
+  physical sessions disagree.
+- Verification required after a fix: both captured sequences, natural finish,
+  app End, duplicate terminal/boundary orderings, PM5 memory comparison, and a
+  saved log whose heroes and rows name the same measured work.
+- Status: quarantined for Task 9 replay and Task 10 product-rule adjudication;
+  no fix is prescribed while the device behaviors remain unresolved.
+
+### AUD-019 — Web chunk writes lack delivery evidence for large programs
+
+- Category: brittleness
+- Severity / confidence: P2 / Hypothesis
+- User impact: a desktop/web rower could receive a successful-looking arm for a
+  long workout whose later chunks or intervals never reached the PM5 intact.
+- Expected authority: independently observed intact delivery and execution of a
+  decisive multi-chunk web program. Native acknowledged writes and narrow
+  interval-zero readback do not establish browser delivery.
+- Actual behavior: at baseline, web prefers
+  `writeValueWithoutResponse`, while Capacitor uses an acknowledged write
+  (`app/src/monitor/transports/webBluetooth.ts:341-359`,
+  `app/src/monitor/transports/capacitorBle.ts:534-545`). The installed-plugin
+  source reviewed by the repo reports no backpressure for its own
+  without-response path, while the ecosystem uses acknowledged CSAFE writes
+  (`docs/monitor/pm5-ble-ecosystem-review.md:354-360,388,455-466`). Committed
+  web sessions observed no dropped-chunk symptom but explicitly lacked a
+  decisive stress case (`docs/monitor/pm5-interface-notes.md:1371-1384,2497-2500`).
+- Independent disproof: send a uniquely fingerprinted, large multi-chunk web
+  program repeatedly and independently correlate raw authored chunks, PM5
+  display/execution, later-frame boundaries, and saved rows. Dropping or
+  reordering one tail chunk must make the probe fail.
+- Scope: Web Bluetooth write mode, CSAFE chunk ordering, frame response,
+  structural readback, later intervals, and saved attribution.
+- Existing coverage gap: encoder and driver tests prove local order; parsed
+  responses and interval-zero readback are circular or too narrow to prove
+  tail delivery. Native physical evidence uses a different write mode.
+- Verification required after a fix: a red calibrated dropped-tail control,
+  repeated decisive web hardware runs, response-error behavior, full later-
+  interval execution, and unchanged native programming.
+- Status: quarantined for Task 9's gate/factual-claim pass and Task 12 only if
+  physical web evidence would change the final ranking.
+
 `Smallest safe fix` is forbidden here until a risk reaches Confirmed or Probable confidence.
 
 ## Record contract
