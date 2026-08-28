@@ -239,6 +239,25 @@ function ReadyEditor({
       // agree (a value that changed by definition, since the offer only
       // exists for a server-null side) — and `manual` for every other
       // real change.
+      //
+      // THE VALUE-IDENTITY COLLISION, AND JAMES'S RULING ON IT
+      // (asked directly, 2026-08-24; queued then, landed here). This
+      // predicate keys on the VALUE, not on which control the rower
+      // touched, so it has one collision: a stored 6k of exactly 2:32
+      // derives a 2k of 2:25, which is ALSO the estimate table's own modal
+      // seed. A rower who materialised the placeholder with a stepper and
+      // never read the offer still stores `derived`.
+      // **Ruled FINE.** Under the ORIGIN ruling a source records where the
+      // NUMBER came from, not what the rower intended, and in that
+      // collision it genuinely came from both — the two mechanisms agree
+      // on the figure, which is exactly the state `seedFor` above works to
+      // produce rather than an accident.
+      // **So do not "fix" this into intent-tracking** (a touched-by-which-
+      // control flag, a stepper-vs-offer discriminator) without asking
+      // James again. It would add state whose only job is to disagree with
+      // the number, and it would make `sourceFor` and `DeriveSlot` — which
+      // deliberately share one predicate so the stored source matches what
+      // the rower saw — able to diverge.
       const sourceFor = (which: "k2" | "k6"): "manual" | "derived" =>
         offer?.which === which && state.draft[which] === offer.value
           ? "derived"
