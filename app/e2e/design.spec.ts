@@ -3227,7 +3227,9 @@ test.describe("builder screen", () => {
     const painBg = await painChip.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
-    expect(painBg).toBe("rgb(27, 26, 23)"); // --ink, not --pain-ramp-4
+    // --ink. The alternative this rules out was the old per-level pain ramp
+    // (--pain-ramp-4, #a3491f), deleted 2026-08-28 once nothing read it.
+    expect(painBg).toBe("rgb(27, 26, 23)");
 
     const hardChip = page.getByRole("button", { name: "HARD", exact: true });
     await hardChip.click();

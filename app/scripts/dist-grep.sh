@@ -10,7 +10,7 @@
 # record/replay stage A) — because a single gate that only ever grows is
 # easier to trust than several that might drift apart.
 #
-# Four needles, four different reasons — and every needle is a STRING
+# FIVE needles, five different reasons — and every needle is a STRING
 # LITERAL from the source, deliberately never a function/variable
 # identifier: `vite build` minifies the production bundle, which renames
 # every identifier it can (verified empirically this task — grepping for
@@ -25,10 +25,14 @@
 #   opens with (`processWrite`'s `InvalidStateError`/unexpected-target
 #   throws, the fake's own device-name default `"PM5 (fake)"`'s sibling
 #   strings). THE ONE THIS TASK EXISTS TO PROVE: `fake.ts` is reached only
-#   by `transports/index.ts`'s `import.meta.env.DEV`-gated dynamic
-#   `import()` (that file's own header comment explains the dead-code-
-#   elimination mechanism), so this string appearing anywhere in a
-#   PRODUCTION build means that gate failed silently — a DEV check that
+#   by `transports/index.ts`'s dynamic `import()`, gated on
+#   `import.meta.env.DEV` **OR** `VITE_ENABLE_FAKE_MONITOR` — both are
+#   build-time constants Vite inlines, so both fold. (This comment used to
+#   say `DEV`-gated alone; that is the pre-correction mechanism, and
+#   `transports/index.ts`'s own header documents why the second door had to
+#   exist: `DEV` is `false` in every bundle this repo's Dockerfile has ever
+#   produced, e2e's compose stack included.) So this string appearing in a
+#   PRODUCTION build means that gate failed silently — a check that
 #   stopped being statically-`false`-foldable, or a new caller that
 #   bypassed the seam entirely and called `createFakeTransport` from
 #   somewhere reachable unconditionally.
@@ -111,4 +115,8 @@ if [ "$FAILED" -ne 0 ]; then
   exit 1
 fi
 
-echo "dist-grep: OK — no dev-only monitor tooling (fake/lab/bridge/recording) found in $DIST."
+# Names the needles it actually checked, derived from NEEDLES rather than
+# retyped: the hand-written list said "fake/lab/bridge/recording" for weeks
+# after `hold-open window (instrument)` became a fifth needle, so the gate
+# under-reported its own coverage every time it passed.
+echo "dist-grep: OK — none of the ${#NEEDLES[@]} dev-only markers found in $DIST."

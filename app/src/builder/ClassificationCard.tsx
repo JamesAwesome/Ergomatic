@@ -45,11 +45,11 @@ const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
  *    rule fills accent), and neither selected chip carries an inline style
  *    at all — the ink fill lives entirely in two CSS rules that never
  *    reference --accent (see index.css). PAIN's own per-level ramp colour
- *    (`--pain-ramp-1..5`, tokens.css) is no longer used here at all — it was
- *    DESIGN.md's own "Builder's gold pain selection goes" finding, since
- *    ramp-3 IS the AT type colour and briefly made a pain level read as a
- *    type. LogSession.tsx (a different, untouched-this-round screen) is
- *    still a live consumer of that same ramp.
+ *    (`--pain-ramp-1..5`) is no longer used here at all — it was DESIGN.md's
+ *    own "Builder's gold pain selection goes" finding, since ramp-3 IS the AT
+ *    type colour and briefly made a pain level read as a type. This comment
+ *    used to add that LogSession.tsx was still a consumer of that ramp; it
+ *    was not, nothing was, and the tokens were deleted 2026-08-28.
  *
  *  Also, PAIN drops the ink-stroke face graphics from the deleted
  *  PainPicker.tsx — numerals only, with the current level's word

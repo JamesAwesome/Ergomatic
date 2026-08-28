@@ -687,12 +687,6 @@ Each needs erg time or a deliberate recording session.
   spelling FOREVER, so the trigger is about the workouts table only.
 - **The e2e stack-reap race** — a sibling worktree boot once produced 117
   ECONNREFUSED; `stack-reap.sh` racing `git worktree list` is the suspicion.
-- **`stack-env.sh`'s port collision** — `% 400` at `:30` against `% 100000` at
-  `:32`. Verified real.
-- **`dist-grep.sh`'s header is stale** — it says "Four needles" while `NEEDLES`
-  at `:94` has five, and it describes the fake seam as `import.meta.env.DEV`-gated
-  when it is `DEV || VITE_ENABLE_FAKE_MONITOR`. The gate works; its own header
-  describes the pre-correction mechanism.
 - **`domain/monitor/types.test.ts:164-187`** — ten pure existence assertions
   (`expect(typeof driver.program).toBe("function")`) against an object the test
   itself built, in the directory pinned at 100%. This is the exact pattern
@@ -713,10 +707,6 @@ Each needs erg time or a deliberate recording session.
   provisioning profile, the App Store Connect API key, and the Google iOS OAuth
   client. **Trigger: the next time a build Mac is set up — write it while doing
   it.**
-- **Dead `--pain-ramp-1..5` tokens** — zero consumers anywhere
-  (`theme/tokens.css:146-150`), while `docs/design/DEVIATIONS.md` and
-  `app/src/index.css:1142` both assert `LogSession.tsx` is a live one. Delete
-  the tokens and both comments. **Fourth instance of recurring failure 5.**
 
 ---
 
