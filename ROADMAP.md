@@ -3507,7 +3507,16 @@ that needs no erg, and it can run in a test.
       source document rather than our transcription of it — the notes cite
       Appendix A by page, so the doc was in hand at some point; confirm we
       can still reach it before scoping the work. **L**
-- [ ] **RC-32 — F2b's clean sweep is VACUOUS.** `continuity.ts`'s F2b count
+- [x] **RC-32 — CLOSED UNBUILT 2026-08-27 — nothing to ship.**
+      `continuity.ts`'s own doc records the suppression decision as KEPT, and
+      `continuity.test.ts:974` already asserts `nonSuppressedPairs === 0`
+      DELIBERATELY, citing recurring failure #21 by name. The vacuity is the
+      test's own stated finding, not a discovery.
+      **Cheap instrument if it returns:** one TIME-ONLY program on a walk (no
+      distance interval anywhere) is the only thing in existence that can
+      make the sweep non-vacuous.
+      **(original entry below, kept for the reasoning trail)**
+       — F2b's clean sweep is VACUOUS.** `continuity.ts`'s F2b count
       bound writes `completedAt` + `endedBy: "link-lost"` and seals the
       record. Its sweep excludes all six committed captures, so **zero pairs
       were compared** (`continuity.test.ts:974`). The gate reports clean
@@ -3525,13 +3534,81 @@ that needs no erg, and it can run in a test.
       (*"a countdown frozen at its last value is a false claim of motion"*)
       a day after shipping RC-24 without it, and neither review caught the
       asymmetry. The lost-link test at `:917` asserts only the hero. **S**
-- [ ] **RC-34 — `acceptableFinalBoundary` re-derives the driver's own
+- [ ] **THE "RUN IT AGAIN" LOG-SCREEN IDEA (James, 2026-08-27) — FILED
+      PROPERLY THIS TIME.** His words: *"You could put a resend in the log
+      screen when it's exited early like this."*
+      **This was told to James as filed on 2026-08-27 and was NOT** — the
+      commit was interrupted and never redone, and the triage found zero hits
+      for it across ROADMAP, specs, both ledgers and every walk README.
+      Recurring failure #14 with the controller as the cause: a finding that
+      lives only in conversation is a finding that dies there.
+      **Scope, corrected when first filed:** it does NOT apply to RC-37 — a
+      Menu-at-READY exit opens no record, so there is no log screen in that
+      path, and `onExit()` already returns to `WorkoutDetail` where Connect
+      sits. **Where it applies** is a session that produced a row and ended
+      early: that lands on the log screen, which today offers `Log against
+      plan`, `Save without logging`, `DISCARD WITHOUT SAVING` and the
+      diagnostics copy, and **nothing that offers to do the workout again**.
+      **Open questions for its own brainstorm:** whole workout or remainder;
+      every early close or only some (a machine-finished session presumably
+      does not want it); beside the save actions or after them, given it
+      competes with the save the rower came to make. **S**
+- [ ] **PHASE RC CLOSE — the two rulings only James can make (2026-08-27).**
+      The exit criteria are real and live at `ROADMAP.md`'s Phase RC exit
+      section, **1,787 lines below the phase header**, which is why they were
+      hard to find. **Move them adjacent to the header when this closes.**
+      Four of five are met with committed evidence: (a) work/rest stored
+      separately, walk-2026-08-24 exit-7 digit-for-digit; (b) log-entry
+      date/time decoded, walk-2026-08-23 W3, the wire carries no seconds;
+      (e) 0x003F fires, byte order settled walk-2026-08-23 W4.
+      **OWED FROM JAMES — (c):** "three heroes on one stored row reconcile by
+      hand arithmetic" is true for reconstructable closes, but for
+      `link-lost`/`interrupted` rows the ROADMAP records a DELIBERATELY
+      reintroduced contradiction (rows sum 500 m, hero shows 742 m, no rest
+      clause). Accepted as a named exception, or not met?
+      **OWED FROM JAMES — (d):** the Concept2 logbook, the only real blocker.
+      Its own wording is *"or the reason it cannot is documented"* — so
+      moving the logbook out of RC is a PARAGRAPH, not a phase. The dev key,
+      the `weight_class` gate and the ErgData-dedup question are all already
+      recorded. Do the logbook, or write the reason?
+- [x] **RC-34 — NOT A DEFECT — CLOSED 2026-08-27 by investigation.**
+      **Three factual errors in this entry, each falsified from the code.**
+      (1) A flagged boundary can NEVER carry `index: null`: both vouching
+      sites structurally guarantee a number (`driver.ts:4455-4457`'s vouch is
+      a ternary on `graceIndex === null`; `:4326-4330` refuses to compute a
+      grace index from a null raw byte). The terminate hypothesis is refuted
+      twice — a terminated close never opens a grace, and `toActualIndex`
+      returns null outside rowing/resting. `walk-2026-08-25/smoke-terminated`
+      shows it on hardware: a 0x0037 pair 180 ms after TERMINATE takes the
+      out-of-run path, UNFLAGGED.
+      (2) "No test drives this" is FALSE — `monitorRun.test.ts:753-765` does
+      exactly that and asserts the refusal.
+      (3) The check is **stricter than the driver's, not a duplicate**.
+      `finishGraceIndex` never checks the index is the program's last;
+      `monitorRun.ts:625` is the ONLY thing bounding the grace to the final
+      interval. **Deleting it would be actively wrong.** The
+      `driver.ts:4218` comment this entry generalised refers only to the
+      already-recorded check.
+      Zero flagged boundaries the record would refuse across all six
+      captures. The CONSEQUENCES were described correctly; there is no
+      trigger.
+      **(original entry below, kept for the reasoning trail)**
+       — `acceptableFinalBoundary` re-derives the driver's own
       vouch.** `monitorRun.ts:618-627` recomputes `finalBoundary` from
       `index === intervals.length - 1`. A wrong refusal drops the final
       interval's actual FOREVER, short-summing all four RC-1 fields and
       rendering `N-1 OF N INTERVALS MEASURED`. No test drives a flagged
       final boundary with `index: null` through it. **S**
-- [ ] **RC-35 — the series recorder's absent-key arm rests on a false
+- [x] **RC-35 — CLOSED UNBUILT 2026-08-27 — the premise was the ITEM's, not the code's.**
+      `seriesRecorder.ts:325-336` opens with an explicit, documented ABSENT
+      arm — *"ABSENT continues the last key … it never starts a register"*.
+      It does not assume presence. What is actually wrong is ONE adjacent
+      comment sentence ("a driver-emitted frame with an open run always
+      carries this field"), which a terminated frame contradicts.
+      **Cheap instrument:** correct that sentence on the next touch of the
+      file. No code, no test.
+      **(original entry below, kept for the reasoning trail)**
+       — the series recorder's absent-key arm rests on a false
       premise.** `seriesRecorder.ts:333-358` assumes
       `attributedIntervalIndex` is present; `driver.ts:2175-2229` leaves it
       undefined on `terminated`/`idle`/`armed`, and a terminated frame DOES
@@ -3540,7 +3617,19 @@ that needs no erg, and it can run in a test.
       bucket drop). Same file folds the driver's register map a second time
       (`driver.ts:2462-2469` sums it differently) writing `series[].t/d`,
       with no test comparing the two. **S**
-- [ ] **RC-36 — `frame.intervalIndex ?? 0` collapses a deliberate null.**
+- [x] **RC-36 — CLOSED UNBUILT 2026-08-27 — its instrument already exists and has never fired.**
+      The genuinely wrong arm (`intervalIndex === null` while an interval is
+      current) already logs its own divergence: `driver.ts:2497`,
+      *"has no corresponding interval in a N-interval program"*. Grepping
+      every committed capture, ring and walk README for that literal returns
+      **ZERO hits**. The terminal-state arm is deliberate — *"needed there so
+      the hero targets always show SOMETHING"* — with two documented opt-outs.
+      The filed reasoning ("two consumers opted out, so the source is wrong")
+      is a code-smell argument, not a harm argument.
+      **Cheap instrument: already shipped and silent.** Reopen only when that
+      divergence line appears in a walk log.
+      **(original entry below, kept for the reasoning trail)**
+       — `frame.intervalIndex ?? 0` collapses a deliberate null.**
       `surfaceModel.ts:860`. The driver's `null` also means "a real interval
       is current but diverged"; `?? 0` turns that into interval 0, so the
       surface says `1 OF 4`, marks grid row 1 active and shows row 1's
@@ -4133,7 +4222,15 @@ that needs no erg, and it can run in a test.
       the rule reads itself will generate work that changes nothing. Check
       what the rule forbids, then check whether the reader would behave
       differently — if neither answer moves, the item is invalid, not small.
-- [ ] **RC-28 — the r0 case: a rest the app cannot see, where the coast IS
+- [x] **RC-28 — CLOSED UNBUILT 2026-08-27 — trigger unwitnessed, with evidence against.**
+      walk-2026-08-27: `t=294.71  249.9 -> 1.6  ws=5->5` — a zero-rest
+      boundary produces NO state change at all, so the machine never reports
+      `resting` there. The code path stays; the item does not.
+      **Cheap instrument:** a one-line divergence when `frame.state ===
+      "resting"` resolves to a WORK phase — the same shape as RC-36's line,
+      which is already earning its keep by staying quiet.
+      **(original entry below, kept for the reasoning trail)**
+       — the r0 case: a rest the app cannot see, where the coast IS
       still judged. Found at RC-27's review, 2026-08-27; correctly outside
       that brief, filed here because it existed only in a review report.**
       An interval with ZERO programmed rest never gets a `"rest"` phase at
@@ -4289,7 +4386,14 @@ that needs no erg, and it can run in a test.
       change (the W-4 delta was measured on a TERMINATE, not a rest boundary,
       so it does not settle this), or a rower complaint about the live movement
       itself rather than about the settling.
-- [ ] **RC-22 — `ergomatic:last-session-log` is never cleared either, so a
+- [x] **RC-22 — CLOSED UNBUILT 2026-08-27.**
+      A diagnostic ring with one reader, reachable only from a deliberately
+      stale URL with no teardown behind it; every real walk path writes it
+      fresh (`useMonitorSession.ts:2560`, unconditional).
+      **Cheap instrument:** if a walk's `MONITOR LOG · COPY` ever shows a
+      previous session's entries, it is this. Until then, nothing.
+      **(original entry below, kept for the reasoning trail)**
+       — `ergomatic:last-session-log` is never cleared either, so a
       STALE-URL arrival still copies a previous session's ring.** Residual of
       the ultrareview's bug_002, found at its scoped review (2026-08-26). The
       flagship case is genuinely fixed: a session that just ended wrote that
@@ -4304,7 +4408,18 @@ that needs no erg, and it can run in a test.
       floor the door-miss merge now uses, or a per-arrival freshness marker.
       Do NOT fix it by clearing at connect — that was tried for bug_002 and
       broke the by-hand recovery path.
-- [ ] **RC-19 — `server/routes/data.test.ts` flakes under the combined
+- [x] **RC-19 — CLOSED UNBUILT 2026-08-27 — the inference excluded a producer nobody ruled out.**
+      "A different assertion failing each time means shared state or
+      ordering" is an inference presented as a conclusion. An equally good
+      producer: vitest's default 5000 ms timeout under a combined-project
+      run, against a file posting 1 MB bodies and 14,400-sample series. Both
+      predict "a different test each time".
+      **Cheap instrument: PASTE THE FAILURE MESSAGE next time it goes red.**
+      `Test timed out in 5000ms` convicts the harness and closes this;
+      an assertion diff convicts shared state and reopens it. One line of
+      evidence, zero code.
+      **(original entry below, kept for the reasoning trail)**
+       — `server/routes/data.test.ts` flakes under the combined
       `--project unit --project client` run, and it is NOT one flaky test.**
       Observed four times across three sessions on 2026-08-25, and the
       interesting part is that it fails a DIFFERENT test each time: once
@@ -4404,7 +4519,17 @@ that needs no erg, and it can run in a test.
       does not); the value is now EXPLAINED rather than merely
       distrusted. A rest-final program would only confirm this, so the
       planned experiment is dropped rather than carried.
-- [ ] **RC-16 — Suppress 0x0039's average stroke rate on a terminated
+- [x] **RC-16 — CLOSED UNBUILT 2026-08-27 — PREMISE FALSIFIED by our own walk.**
+      "Terminate implies 0x0039's avgStrokeRate reads exactly double" came
+      from two captures. The third refutes it: walk-2026-08-27's terminated
+      piece reads **25 against a PM5 screen reading 25**. So the rule is
+      2-of-3, and the field is rendered NOWHERE (no file reads
+      `summaryDetail.avgStrokeRate`). **The suppression this item asked for
+      would have been WRONG on the newest capture.**
+      **Cheap instrument:** re-file as a WARNING for the first surface that
+      ever displays the field (Phase PS), not as a build item.
+      **(original entry below, kept for the reasoning trail)**
+       — Suppress 0x0039's average stroke rate on a terminated
       piece** (walk 2026-08-25, W-3). On a Menu-terminate the field reads
       exactly DOUBLE: 46 against the PM5 View Detail screen's own `23
       s/m` and against 0x0038's per-split 23. The previously committed
