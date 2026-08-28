@@ -46,13 +46,13 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - Category: hallucinated claim
 - Severity / confidence: P2 / Hypothesis
 - User impact: malformed or invented summary fields could be stored and later interpreted as machine truth, or stricter validation could wrongly break compatible installed clients.
-- Expected authority: the approved stored-shape and installed-client compatibility contract, including which fields are defined and optional; Task 6 must quote the load-bearing rule.
-- Actual behavior: `app/server/routes/data.ts:648-706` accepts any plain object under 2048 UTF-16 code units and validates only `verificationBytes`; the adjacent comment says nine detail fields ride verbatim but cites repository design prose.
-- Independent disproof: independently construct unknown, wrong-typed, old-client, and future-additive payloads; verify persistence/readback and every consumer without using the route validator as the oracle. Corrupt a consumed field's type and require the relevant contract probe to fail.
+- Expected authority: an independent installed-client compatibility contract naming which fields are defined and optional. Task 6 found no such contract; repository design prose and interfaces remain testimony.
+- Actual behavior: `app/server/routes/data.ts:648-706` accepts any plain object under 2048 UTF-16 code units and validates only `verificationBytes`; the adjacent comment says nine detail fields ride verbatim but cites repository design prose. Lane B confirmed the absence of a stronger field contract without claiming a user consequence.
+- Independent disproof: Task 7 must independently construct unknown, wrong-typed, old-client, and future-additive payloads; verify persistence/readback and the first real consumer without using the route validator as the oracle. Corrupt a consumed field's type and require the relevant contract probe to fail.
 - Scope: log POST validation, jsonb storage, list/detail projection, installed clients, and summary rendering.
 - Existing coverage gap: field-by-field tests can confirm current permissiveness without establishing whether it is the intended durable contract.
 - Verification required after a fix: real-Postgres round trips, mounted API tests, old/new client compatibility cases, and consumer rendering.
-- Status: deferred to Task 6.
+- Status: Task 6 found no independent contract; consumer consequence is deferred to Task 7 and final adjudication in Task 10.
 
 ### AUD-005 — Harmful import cycles may be invisible to existing gates
 
