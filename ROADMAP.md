@@ -204,10 +204,14 @@ silently.
         handful. (2) A client test that mounts `LogSession` WITHOUT
         `summaryTotals`, lands the late write, then saves: red today, needs no
         erg and no build, and becomes the permanent gate.
-      - **The fix itself is a spec question, deliberately not decided here:**
-        re-read at save, or hold the hand-off for the burst as well as the
-        split. Different tester-visible costs — a slower hand-off, versus a
-        row that gains numbers after the screen is already up.
+      - **THE SHAPE IS DECIDED (James, 2026-08-28): HOLD THE HAND-OFF for the
+        burst as well as the split.** The rejected alternative was re-reading
+        storage at save time, which keeps the navigation instant but lets a
+        row gain its numbers a moment after the screen is already up. His
+        reasoning: waiting is *more correct*, and ~0.3 s on the connected
+        screen is an acceptable price. **The spec designs the hold, not the
+        choice** — how long to wait, what happens when the burst never comes,
+        and whether the rower sees anything during it.
       - **Owed with it:** the three note corrections in the register row
         below, and a receipt entry in the hook's handler, so the one link in
         this chain with no instrument finally gets one. **M/L**
