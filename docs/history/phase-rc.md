@@ -3,6 +3,36 @@
 > This is the phase as it was written while it ran. It is a RECORD: nothing
 > here is scheduled, and its open items were lifted into `ROADMAP.md`'s live
 > slate before this file was created. Do not cite it for a live question.
+>
+> ---
+>
+> **ANNOTATED 2026-08-28, the evening of the close. The phase is NOT reopened
+> — but one of its exit criteria did not hold, and reading this file without
+> knowing that would mislead you.**
+>
+> **`MACHINE CONFIRMED · WORK ONLY` has never rendered on a saved row on real
+> hardware.** The machine's own totals and the verification code reach the
+> driver and are emitted, then are never stored, because
+> `LogSession.tsx:1487` snapshots the run at mount and never re-reads. Since
+> `storedSummary.ts:617-621` gates tier A on the same two columns, **every
+> stored connected row's three heroes are our own arithmetic rather than the
+> erg's** — the opposite of what this phase's name promises. Evidence:
+> `docs/monitor/sessions/walk-2026-08-28/summary-never-stored-ring.json`. The
+> fix is a named TRIAD item in `ROADMAP.md`'s Wave F.
+>
+> **Why the exit passed anyway, and this is the part worth learning:**
+> criterion (a) was verified against the `walk-2026-08-24` exit-7 table, whose
+> column is headed *"App stored (WIRE→record)"* while the cell beneath it
+> cites a **driver ring entry** — the wire end, not the record. That walk ran
+> on **v0.21.0 build 738**; the storage columns (#190) and the block itself
+> (#192) shipped the NEXT DAY in v0.22.0. **A criterion cannot be verified on
+> a build where its code does not exist.** Criterion (e) has the sibling
+> defect: it asked whether 0x003F fires, was true as written, and could never
+> have noticed that the byte does not reach a row.
+>
+> Five hardware walks ran after the block shipped and none mentions it —
+> `grep -rl "MACHINE CONFIRMED" docs/monitor/` was empty until the
+> 2026-08-28 capture was filed.
 
 ## Phase RC — The row Concept2 would recognise
 

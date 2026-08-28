@@ -123,3 +123,65 @@ Recorded so nobody re-scopes RC-37 downward from its original trigger.
 **All three gating legs passed.** Leg 2 passed with zero near-misses, which
 is the strongest available reading. Leg 4 was not a gate and found the most
 valuable thing in the walk.
+
+---
+
+# Leg 5, added the same evening: MACHINE CONFIRMED has never worked
+
+`summary-never-stored-ring.json` — iPhone, **PRODUCTION TestFlight**, a
+2-interval "Multi-test" row at 17:38. Not part of #211's gate. It is here
+because James went looking for the verification code on a saved row, found no
+`MACHINE CONFIRMED · WORK ONLY` block at all, and said he had never seen one
+on a real row — only in our tests.
+
+## What the ring proves, and what it kills
+
+**The wire half is finished. Every earlier theory about it is dead.**
+
+| seq | entry | reading |
+| --- | --- | --- |
+| 51 | `summary-half` 0x0039 received | the summary ARRIVES |
+| 53 | `summary-totals` decoded: elapsed=120s distance=358m | it DECODES |
+| 55 | `summary-half` 0x003A received | so does the additional summary |
+| 57 | `verification-received` 0x003F, 19 real bytes | **the verification hash arrives** |
+| 58 | `summary-reconciled: split-won … a 0x0039 was held; its totals are recorded as observations` | the driver EMITS `summary-observations` (`driver.ts:4181`) |
+
+So this is NOT a subscription failure, NOT a firmware gap, and NOT the
+capture-rate gap the register had filed. A hypothesis that the native BLE arm
+never subscribed to 0x0039/0x003F was raised on 2026-08-28 and **falsified by
+this file** — the bytes are right there.
+
+## Where it actually breaks
+
+Above the driver, in the reader:
+
+- `LogSession.tsx:1487` snapshots the run with `useState(() => monitorModeRun(...))`
+  at MOUNT, with no setter and no refresh.
+- The burst lands at `atMs …108175`-`…108177`, **270 ms after** the hand-off
+  released for navigation at `…107905` (seq 50, on its `final-boundary`
+  condition — the final SPLIT, not the summary).
+- The late write to `localStorage` succeeds. The reader had already read.
+
+**The ordering is fixed, not racy**, which is why it is "never once" rather
+than "sometimes": navigation is what STARTS teardown and its linger, so the
+log screen has always mounted and snapshotted before the burst can arrive.
+
+## Why it matters more than one missing box
+
+`storedSummary.ts:617-621` gates tier A on the same two columns the save
+omits, so **every stored connected row falls back to our own arithmetic,
+including its AVG SPLIT** — while v0.23.0's own release note told testers
+"those three numbers come straight from the erg… We show the monitor's, not
+ours."
+
+## The instrument lesson this leg is really about
+
+The driver records that it EMITTED. **Nothing records whether the record was
+updated.** That link is the only one in the chain with no instrument, which is
+why five walks and a phase close ran straight past it. `grep -rl
+"MACHINE CONFIRMED" docs/monitor/` returned nothing before this file existed.
+
+And the ring itself is unreachable once a row is saved: the triple-tap opens it
+only during the connected session, `MonitorLogRow` renders only on the SAVE
+screen, and `session_logs` has no diagnostics column. James captured this only
+because he looked before saving.

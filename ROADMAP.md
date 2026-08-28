@@ -172,6 +172,45 @@ silently.
       since `parse.ts:608`'s strict `rowingState === 1` makes any non-1 read
       `false` and the next occurrence still will not say which. No behaviour
       change proposed. **S**
+- [ ] **The machine's own totals have NEVER reached a saved row. TRIAD — a
+      change to what a stored number MEANS, and it lands alone.** Found by
+      James on production TestFlight 2026-08-28; the ring is
+      `docs/monitor/sessions/walk-2026-08-28/summary-never-stored-ring.json`
+      and that walk's README §"Leg 5" carries the full reading.
+      - **The wire half is finished.** 0x0039, 0x003A and 0x003F all arrive
+        and decode, and `driver.ts:4181`'s `split-won` branch emits
+        `summary-observations` carrying the verification bytes. **A theory
+        that the native BLE arm never subscribed was raised and FALSIFIED by
+        that capture** — do not re-derive it.
+      - **The break is the READER.** `LogSession.tsx:1487` snapshots the run
+        with `useState(() => monitorModeRun(...))` at mount — no setter, never
+        refreshed. The burst's localStorage write lands ~270 ms later and
+        succeeds; nothing reads it again. **The ordering is FIXED, not racy** —
+        navigation is what starts teardown and its linger — which is why this
+        is "never once" rather than "sometimes".
+      - **It is not a missing box, it is a wrong number.**
+        `storedSummary.ts:617-621` gates tier A on the same two columns the
+        POST omits, so **every stored connected row's three heroes are our own
+        arithmetic, including AVG SPLIT** — while v0.23.0's note told testers
+        "those three numbers come straight from the erg… We show the
+        monitor's, not ours."
+      - **No backfill exists.** `LogPatch` (`server/stores/logs.ts:222-227`)
+        is thumbs/held/pain/notes only and the columns are write-once at
+        create, so every row saved since v0.22.0 is permanently tier B.
+      - **Do these two BEFORE designing the fix, in order.** (1)
+        `select count(*) from session_logs where machine_work_seconds is not
+        null;` on the host — turns "never once" into a counted fact, and the
+        note correction's wording depends on whether the answer is 0 or a
+        handful. (2) A client test that mounts `LogSession` WITHOUT
+        `summaryTotals`, lands the late write, then saves: red today, needs no
+        erg and no build, and becomes the permanent gate.
+      - **The fix itself is a spec question, deliberately not decided here:**
+        re-read at save, or hold the hand-off for the burst as well as the
+        split. Different tester-visible costs — a slower hand-off, versus a
+        row that gains numbers after the screen is already up.
+      - **Owed with it:** the three note corrections in the register row
+        below, and a receipt entry in the hook's handler, so the one link in
+        this chain with no instrument finally gets one. **M/L**
 
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 
@@ -342,6 +381,19 @@ for a stranger — no backup, and no idea when their app breaks.
       trigger enters above every seam we own is invisible to every gate we
       have. Carries its own privacy answer, and that answer changes what Wave C
       declares. **M**
+      **A worked example arrived 2026-08-28, and this item owns it.** The
+      monitor's connection-log ring is reachable ONLY by an undocumented
+      triple-tap during the live session (`ConnectedSurface.tsx:315`), and
+      `MonitorLogRow` renders only on the SAVE screen gated on
+      `?from=monitor`. `session_logs` has no diagnostics column, so once a row
+      is saved its diagnostics are gone forever. That is why the Wave F
+      summary defect survived five hardware walks and a phase close: a rower
+      can never report it, and James caught it only by looking before saving.
+      **The evidence already survives the process kill** —
+      `useMonitorSession.ts:2617` writes `ergomatic:last-session-log` to
+      localStorage unconditionally, its own comment citing "no console on
+      iOS". It has no reader. **Whatever this item builds, a rower must be
+      able to send a saved row's diagnostics without knowing a gesture.**
 - [ ] **An in-app "something went wrong" that reaches a human.** Pairs with the
       reporter above, and with the support URL the store surface will owe. **S**
 
@@ -611,10 +663,24 @@ new.
 - **Build-738-era rows** — an unsaved run carried across an update renders two
   heroes rather than three, permanently and silently, and declines its baseline
   offer. **A release-note clause is owed and unwritten.** (`phase-rc.md`)
-- **Two falsified release notes** — `releaseNotes.ts:270` (v0.11.0) and `:22`
-  (v0.22.0) both give instructions RC-5 falsifies. Owed a correction in a
-  SUCCESSOR note, never edited in place; v0.23.0 through v0.26.0 were checked
-  and none carries it. (`phase-rc.md`)
+- **THREE falsified release notes, not two.** Corrections go in a SUCCESSOR
+  note, never edited in place; v0.23.0 through v0.26.0 were checked and none
+  carries any of them. **Cited by CLAUSE, not line number — this row already
+  rotted once by citing `:22`, which has since moved.**
+  1. **v0.11.0** — the instruction RC-5 falsified. (`phase-rc.md`)
+  2. **v0.22.0, "Your saved rows can now show what the erg itself reported…
+     plus its CODE"** — now wrong for TWO independent reasons, and only the
+     first was ever filed: RC-5 falsified its "meant to differ" clause, and
+     the Wave F defect above falsifies "can now show" outright. It never has.
+  3. **v0.23.0, "those three numbers come straight from the erg, including
+     its own average split… We show the monitor's, not ours."** **Newly found
+     2026-08-28 and the most serious of the three** — a claim about what three
+     displayed numbers MEAN, false on every row ever saved, because tier A has
+     never once been reachable.
+  **Sequencing (PM ruling, 2026-08-28): hold these to ship BEHIND the fix.**
+  A correction alone reads "we told you something that was never true" with no
+  remedy; the same words behind a working feature read as a repair. Ship them
+  regardless if the fix slips past roughly two weeks.
 - **The log-delete accepted gap** — a session with a wrong number has exactly
   one remedy, delete and re-log by hand, and `logged_at` is a DB default rather
   than settable, so a mistake found the next day cannot be re-dated onto its own
@@ -645,11 +711,17 @@ Each needs erg time or a deliberate recording session.
 - **A lab capture of `2×Nm rNN`** — the series-truth regression fixture is
   SYNTHETIC; no committed recording exercises distance-work-with-rest-between.
   (`phase-rc.md`)
-- **The PR-1 capture-rate gap** — the 0x0039 burst is not caught 100% of the
-  time, and the EARLY admission check cannot buffer a 0x0039 beating the first
-  0x0033. #183 delivered `rawIntervalCount` but the check does not consume it.
-  **Its named successor owner has already shipped, so this is now ownerless.**
-  (`phase-rc.md`)
+- **The PR-1 capture-rate gap** — the EARLY admission check cannot buffer a
+  0x0039 beating the first 0x0033. #183 delivered `rawIntervalCount` but the
+  check does not consume it. (`phase-rc.md`)
+  **CORRECTED AND DOWNGRADED 2026-08-28.** This row sat under "owed captures
+  and walk items" saying the burst "is not caught 100% of the time", implying
+  it needed erg time to characterise. The 2026-08-28 production ring shows the
+  burst caught, decoded and emitted perfectly — **the loss is entirely
+  downstream, in the reader, and Wave F owns it.** The rate at the wire is
+  fine; the rate at the ROW was 0%. What survives here is only the narrow
+  admission-check edge, which still wants no erg: it is reachable from a
+  replay.
 - **The C′ rider** — the continuity-reset close skips the backward-bucket ring
   entry, the one close where the diagnostic dies silently. (`phase-rc.md`)
 - **The BLE backlog probe** — a backlog may already exist twice over: Apple
