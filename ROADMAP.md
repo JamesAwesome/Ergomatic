@@ -669,16 +669,28 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **The derive slot's inert line** reads `ESTIMATED · TYPE TO ADJUST` — true,
-  but half the story now that the field nudges. Words only.
-  `src/you/BaselineEditor.tsx:136`; assertions at
-  `BaselineEditor.test.tsx:358,913,928`, `screenshots.spec.ts:1488`,
-  `design.spec.ts:3716,3755`.
 - **Door 1's adjust step shows a PROPOSED number with no provenance eyebrow of
   its own.** Revisit if that step becomes reachable without passing the offer.
-- **`today.png`'s unexplained onboarding read-marker diff** (2026-08-18) —
-  reverted where it surfaced, never explained. **The next Today-capture pass
-  explains it or fixes it before committing that capture.**
+- **19 of the 90 committed captures no longer reproduce, and one is
+  nondeterministic.** This was filed on 2026-08-18 as `today.png`'s
+  "unexplained onboarding read-marker diff", reverted where it surfaced and
+  never explained. **Measured 2026-08-28 and it is far wider than one file.**
+  A bare `pnpm screenshots` on a clean branch regenerates 19 files that differ
+  from what is committed: `today*.png` (5), `log-*` (4), `post-workout-*` (3),
+  `you*.png` (6), `releases.png`. **Run as a control on a second worktree
+  whose branch touched none of those screens, the SAME 19 moved** — so the
+  drift is environmental, not anything a PR did.
+  **And `you.png` differs run-to-run against the same stack on the same day**
+  (two consecutive `pnpm screenshots` invocations, differing md5), while
+  `today.png`, `releases.png` and `log-history.png` were stable across those
+  same two runs. So there are two distinct problems here: 18 captures that are
+  merely stale, and at least one that is genuinely nondeterministic.
+  **Why it matters beyond tidiness:** captures are the PR's visual record and
+  a reviewer's only look at a screen. Right now any PR that regenerates them
+  ships 19 files of noise that bury the one real change, which is exactly what
+  makes a wrong capture survive review (recurring failure 7). **The
+  nondeterministic one is the half to chase first** — a capture that changes
+  without the app changing cannot be a record of anything. **S/M**
 - **A read is lost if you leave an article before its read-state GET lands.**
   Prose renders instantly, read state waits on a network GET, and BACK in that
   window drops the read permanently. Reproduced: `7 UNREAD` held against an
