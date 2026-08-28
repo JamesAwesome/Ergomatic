@@ -5787,21 +5787,40 @@ test.describe("workout-types article, the training pyramid", () => {
       await page.locator(".reader-figure svg").waitFor();
       await page.evaluate(() => document.fonts.ready);
 
-      const labels = await page.evaluate(() => {
+      const measured = await page.evaluate(() => {
         const svg = document.querySelector(".reader-figure svg")!;
-        return [...svg.querySelectorAll("text")].map((t) => ({
-          text: t.textContent!.trim(),
-          // The computed style is the rendered size: it already carries the
-          // viewBox scale, so this reads px on the rower's screen.
-          renderedPx: parseFloat(getComputedStyle(t).fontSize),
-        }));
+        // NOT `getComputedStyle(text).fontSize` — inside an SVG that returns
+        // the AUTHORED value (a mutation to `fontSize="7"` read back as
+        // "7px", not the 7.44px it actually painted), so it is blind to the
+        // half of this defect that lives in CSS. The rendered size is the
+        // authored size times the viewBox scale, and the scale is the box
+        // the browser gave the svg over the viewBox's own width.
+        const laidOutWidth = svg.getBoundingClientRect().width;
+        const viewBoxWidth = Number(
+          svg.getAttribute("viewBox")!.trim().split(/\s+/)[2],
+        );
+        const scale = laidOutWidth / viewBoxWidth;
+        return {
+          laidOutWidth,
+          scale,
+          labels: [...svg.querySelectorAll("text")].map((t) => ({
+            text: t.textContent!.trim(),
+            renderedPx: Number(t.getAttribute("font-size")) * scale,
+          })),
+        };
       });
 
-      expect(labels.length).toBe(8); // four type codes, four plain words
-      for (const label of labels) {
+      expect(measured.labels.length).toBe(8); // four type codes, four words
+      // The scale is load-bearing above, so pin it rather than trusting it:
+      // 340px of figure over a 320-unit viewBox. If `.reader-figure svg`'s
+      // max-width or the viewBox moves, this says so directly instead of
+      // letting every label's px silently drift.
+      expect(measured.laidOutWidth).toBe(340);
+      expect(measured.scale).toBeCloseTo(1.0625, 4);
+      for (const label of measured.labels) {
         expect(
           label.renderedPx,
-          `"${label.text}" renders at ${label.renderedPx}px`,
+          `"${label.text}" renders at ${label.renderedPx.toFixed(2)}px`,
         ).toBeGreaterThanOrEqual(10);
       }
     });
