@@ -2,7 +2,7 @@
 
 Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
-Status: COMPLETE PENDING FRESH HIGH-END SEMANTIC REVIEW.
+Status: COMPLETE — fresh high-end semantic review approved after corrections.
 
 ## Scope and evidence discipline
 
