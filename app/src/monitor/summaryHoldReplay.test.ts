@@ -2,18 +2,17 @@
 // "the permanent gate: RF24 — start upstream of the producer") — Wave F PR
 // 1's own permanent gate, and this file is its LEG 1 (Menu terminate).
 //
-// RED TODAY, ON PURPOSE. `useMonitorSession.ts:2201` hardcodes
-// `held = false` on the `terminated` branch (§1's own diagnosis: "on a
-// Menu terminate, useMonitorSession.ts:2201 hardcodes held = false; ...
-// on every arm navigation fires with the burst still in flight"). This
-// test mounts `LogSession` over a REPLAYED wire capture — never a
-// storage-seeded fixture — because a storage-seeded test starts
-// downstream of the break and can never go red on it (§6's own binding
-// condition). Task 3 implements the hold this test is waiting for; per
-// the controller's resolution this commit is NOT `test.fails` (pre-commit
-// hooks run format/lint/typecheck only, so a red test commits plainly) —
-// every assertion this file cannot yet satisfy carries a
-// `// RED until Task 3 (the hold)` comment instead.
+// GREEN SINCE TASK 3, RED BEFORE IT — the diagnosis this gate exists to
+// pin. `useMonitorSession.ts:2201` used to hardcode `held = false` on the
+// `terminated` branch (§1's own diagnosis: "on a Menu terminate,
+// useMonitorSession.ts:2201 hardcodes held = false; ... on every arm
+// navigation fires with the burst still in flight"), which is exactly the
+// mutation this file's own test bodies name and Task 6's close-out
+// re-ran fresh against this gate (not merely the unit suite) — see each
+// `it()`'s own "MUTATION EVIDENCE" comment. This test mounts `LogSession`
+// over a REPLAYED wire capture — never a storage-seeded fixture — because
+// a storage-seeded test starts downstream of the break and can never go
+// red on it (§6's own binding condition).
 //
 // The capture: `docs/monitor/sessions/walk-2026-08-25/smoke-terminated-
 // recording.jsonl.gz` (§6: "raw bytes of a Menu-killed piece whose burst
@@ -124,12 +123,14 @@
 // UNMODIFIED capture, the same fact leg 1's header now documents — no
 // synthetic trailing event here either.
 //
-// RED expectation, same shape as leg 1: `endSession`'s own `ended` patch
-// (`update({phase: "ended", endedBy: "user", runOpen: false})`) sets no
-// `handoffHeld` key at all, so it reads today's `INITIAL_STATE` default
+// Before Task 3, same shape as leg 1: `endSession`'s own `ended` patch
+// (`update({phase: "ended", endedBy: "user", runOpen: false})`) set no
+// `handoffHeld` key at all, so it read `INITIAL_STATE`'s default
 // (`false`) at the very first `ended` render — spec §2: "user End in the
 // app — endSession ...: opened in its `ended` patch, which today opens
-// nothing."
+// nothing." Task 3 opens the burst hold in this patch; Task 6's own
+// mutation evidence (below) reverts that and confirms leg 2 goes red on
+// it again.
 
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
@@ -733,7 +734,7 @@ afterEach(() => {
 });
 
 describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spine design spec §6)", () => {
-  it("holds the ended hand-off across a Menu terminate until the burst's write attempt lands, then posts the machine's own numbers (RED until Task 3 — the hold)", async () => {
+  it("holds the ended hand-off across a Menu terminate until the burst's write attempt lands, then posts the machine's own numbers", async () => {
     localStorage.clear();
 
     // --- assertion (1): AT THE ENDED FLIP, handoffHeld is true ----------
@@ -759,15 +760,20 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
     expect(truncated.record!.endedBy).toBe("rower");
     expect(truncated.record!.completedAt).not.toBeNull();
 
-    // THE RED ASSERTION. Today, `useMonitorSession.ts:2201` computes
-    // `const held = terminated ? false : openHandoffHold();` — the
-    // `terminated` branch NEVER opens a hold, so this reads `false` from
-    // the very first `ended` render. RED until Task 3 (the hold).
+    // THE PINNING ASSERTION. Before Task 3, `useMonitorSession.ts:2201`
+    // computed `const held = terminated ? false : openHandoffHold();` —
+    // the `terminated` branch never opened a hold, so this read `false`
+    // from the very first `ended` render. MUTATION EVIDENCE (Task 6
+    // close-out, run fresh against this gate): restoring that exact line
+    // — `const burstOpened = terminated ? false : openBurstHold();` in
+    // `endByMachine` — fails this assertion again
+    // (`expected false to be true`); reverted, see task-6-report.md.
     expect(truncated.handoffHeld).toBe(true);
 
     // --- assertion (2): the burst's write attempt precedes release ------
-    // Unreached while (1) fails. The full, UNMODIFIED capture replayed to
-    // completion — `handoffHeld` must flip false only AFTER
+    // A fresh, SEPARATE replay call (assertion (1)'s truncated run above
+    // stopped before the burst on purpose). The full, UNMODIFIED capture
+    // replayed to completion — `handoffHeld` must flip false only AFTER
     // `summaryTotals` is written, matching the recording's own decoded
     // 0x0039 pair exactly (31.5 s / 110 m — this file's header cites the
     // raw bytes). No synthetic trailing event needed: 0x003F (seq 296,
@@ -784,10 +790,11 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
     expect(full.record).not.toBeNull();
     const fullRecord = full.record!;
 
-    // RED until Task 3 (the hold): today, nothing ever opened a hold on
-    // this arm, so `handoffHeld` is already `false` before the burst is
-    // even in play — this assertion cannot distinguish "released
-    // correctly" from "never held" until (1) above is fixed.
+    // Before Task 3, nothing ever opened a hold on this arm, so
+    // `handoffHeld` read `false` before the burst was even in play — this
+    // assertion could not distinguish "released correctly" from "never
+    // held" until (1) above was fixed; it can now, since (1) pins the
+    // hold actually opening.
     expect(full.handoffHeld).toBe(false);
     expect(fullRecord.summaryTotals).toStrictEqual({
       workElapsedSeconds: 31.5,
@@ -819,8 +826,9 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
     // handler ran its statements in (proven: moving
     // `resolveHandoffCondition("burst", "burst-heard")` above
     // `appendSummaryObservations` inside the hook did not fail either leg
-    // — see this file's own header, "Mutations", for the reproduced run).
-    // `writeIdx` now pins to `summary-recorded` — the HOOK's OWN receipt
+    // — see `task-3-report.md`'s own "Mutation run" section for the
+    // reproduced run, and this file's own updated pin below). `writeIdx`
+    // now pins to `summary-recorded` — the HOOK's OWN receipt
     // (storage-spine design spec §5), logged by the exact statement that
     // calls `appendSummaryObservations` — so this assertion can actually
     // go red on that reordering. The driver-side `summary-reconciled`
@@ -840,15 +848,18 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
     const releaseIdx = entries.findIndex((e) => e.kind === "handoff-released");
     expect(driverWriteIdx).toBeGreaterThanOrEqual(0);
     expect(writeIdx).toBeGreaterThanOrEqual(0);
-    expect(releaseIdx).toBeGreaterThanOrEqual(0); // RED until Task 3 (the hold)
+    expect(releaseIdx).toBeGreaterThanOrEqual(0);
     expect(releaseIdx).toBeGreaterThanOrEqual(writeIdx);
 
     // --- assertion (3): the log door posts the machine's own numbers ----
-    // Unreached while (1)/(2) fail. A FRESH `LogSession` mount over the
-    // storage the full replay actually wrote (`monitorModeRun`'s own four
-    // conditions, all satisfied: `from=monitor`, a completed run, a
-    // matching `workoutId`, and a length-1 `logSeed` aligned with
-    // `SMOKE_TERMINATED_PROGRAM`'s own single interval).
+    // A FRESH `LogSession` mount over the storage the full replay actually
+    // wrote (`monitorModeRun`'s own four conditions, all satisfied:
+    // `from=monitor`, a completed run, a matching `workoutId`, and a
+    // length-1 `logSeed` aligned with `SMOKE_TERMINATED_PROGRAM`'s own
+    // single interval). MUTATION EVIDENCE (Task 6 close-out): dropping
+    // `machineWorkSeconds` from `LogSession.tsx`'s save-body construction
+    // fails `body.machineWorkSeconds` below (`expected undefined to be
+    // 31.5`); reverted, see task-6-report.md.
     const { body } = await mountLogSessionAndSave(
       SMOKE_WORKOUT_ID,
       "Walk Smoke",
@@ -864,7 +875,7 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
 });
 
 describe("the summary hold's permanent gate, leg 2: user End (storage-spine design spec §6)", () => {
-  it("holds the ended hand-off across an app-initiated End until the burst's write attempt lands, then posts the machine's own numbers (RED until Task 3 — the hold)", async () => {
+  it("holds the ended hand-off across an app-initiated End until the burst's write attempt lands, then posts the machine's own numbers", async () => {
     localStorage.clear();
 
     // --- assertion (1): AT THE ENDED FLIP, handoffHeld is true ----------
@@ -887,17 +898,21 @@ describe("the summary hold's permanent gate, leg 2: user End (storage-spine desi
     expect(truncated.record!.endedBy).toBe("rower");
     expect(truncated.record!.completedAt).not.toBeNull();
 
-    // THE RED ASSERTION. Today, `endSession`'s own `ended` patch
-    // (`update({phase: "ended", endedBy: "user", runOpen: false})`) sets
-    // no `handoffHeld` key at all — it opens nothing (spec §2's own
-    // words, this file's header) — so this reads `false`, `INITIAL_
-    // STATE`'s own default, from the very first `ended` render. RED
-    // until Task 3 (the hold).
+    // THE PINNING ASSERTION. Before Task 3, `endSession`'s own `ended`
+    // patch (`update({phase: "ended", endedBy: "user", runOpen: false})`)
+    // set no `handoffHeld` key at all — it opened nothing (spec §2's own
+    // words, this file's header) — so this read `false`, `INITIAL_
+    // STATE`'s own default, from the very first `ended` render. MUTATION
+    // EVIDENCE (Task 6 close-out, run fresh against this gate): removing
+    // `endSession`'s own `const held = openBurstHold();` (replacing it
+    // with `const held = false;`) fails this assertion again
+    // (`expected false to be true`); reverted, see task-6-report.md.
     expect(truncated.handoffHeld).toBe(true);
 
     // --- assertion (2): the burst's write attempt precedes release ------
-    // Unreached while (1) fails. The full, UNMODIFIED capture replayed to
-    // completion — `handoffHeld` must flip false only AFTER
+    // A fresh, SEPARATE replay call (assertion (1)'s truncated run above
+    // stopped before the burst on purpose). The full, UNMODIFIED capture
+    // replayed to completion — `handoffHeld` must flip false only AFTER
     // `summaryTotals` is written, matching THIS recording's own decoded
     // 0x0039 pair exactly (8.5 s / 15 m — this file's header cites the
     // raw bytes). No synthetic trailing event needed: 0x003F (seq 88,
@@ -915,10 +930,10 @@ describe("the summary hold's permanent gate, leg 2: user End (storage-spine desi
     expect(full.record).not.toBeNull();
     const fullRecord = full.record!;
 
-    // RED until Task 3 (the hold): today, nothing ever opened a hold on
-    // this arm, so `handoffHeld` is already `false` before the burst is
-    // even in play — this assertion cannot distinguish "released
-    // correctly" from "never held" until (1) above is fixed.
+    // Before Task 3, nothing ever opened a hold on this arm, so
+    // `handoffHeld` read `false` before the burst was even in play — this
+    // assertion could not distinguish "released correctly" from "never
+    // held" until (1) above was fixed; it can now.
     expect(full.handoffHeld).toBe(false);
     expect(fullRecord.summaryTotals).toStrictEqual({
       workElapsedSeconds: 8.5,
@@ -961,14 +976,14 @@ describe("the summary hold's permanent gate, leg 2: user End (storage-spine desi
     const releaseIdx = entries.findIndex((e) => e.kind === "handoff-released");
     expect(driverWriteIdx).toBeGreaterThanOrEqual(0);
     expect(writeIdx).toBeGreaterThanOrEqual(0);
-    expect(releaseIdx).toBeGreaterThanOrEqual(0); // RED until Task 3 (the hold)
+    expect(releaseIdx).toBeGreaterThanOrEqual(0);
     expect(releaseIdx).toBeGreaterThanOrEqual(writeIdx);
 
     // --- assertion (3): the log door posts the machine's own numbers ----
-    // Unreached while (1)/(2) fail. A FRESH `LogSession` mount over the
-    // storage the full replay actually wrote (`monitorModeRun`'s own four
-    // conditions, all satisfied: `from=monitor`, a completed run, a
-    // matching `workoutId`, and a length-3 `logSeed` aligned with
+    // A FRESH `LogSession` mount over the storage the full replay actually
+    // wrote (`monitorModeRun`'s own four conditions, all satisfied:
+    // `from=monitor`, a completed run, a matching `workoutId`, and a
+    // length-3 `logSeed` aligned with
     // `END_ON_INTERVAL_1_PROGRAM`'s own three intervals).
     const { body } = await mountLogSessionAndSave(
       END_WORKOUT_ID,
