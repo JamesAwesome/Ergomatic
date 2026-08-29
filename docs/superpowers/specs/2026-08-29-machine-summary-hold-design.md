@@ -273,13 +273,32 @@ backstop is intentionally its exit.
 
 ## §4 What the rower sees, and Gate 0
 
-Nothing new. The `ended` frame — the rower's own final numbers, already
-rendered the instant the machine finishes — persists ~0.3–0.6 s longer in
-the typical case, up to 2.0 s on a burst timeout (3.5 s ceiling unchanged
-on the machine-finish worst case). No spinner, no copy change, no layout
-change: a wait under a second on a frame the rower is reading anyway does
-not earn a UI element, and the existing hold already spends up to 3.5 s on
-this exact frame without one.
+The `ended` frame persists ~0.3–0.6 s in the typical case, up to 2.0 s on
+a burst timeout (3.5 s ceiling unchanged on the machine-finish worst
+case) — and it now says what it is waiting for. Two copy changes, both
+REDIRECTED IN and approved by James at the gate (2026-08-29, "Perfect" on
+the rendered frame; the first draft's "nothing new" did not survive his
+review):
+
+- **The headline: `Wrapping up` replaces `That is the session`**, on ALL
+  ended states including today's one-render flash. His words: "it reads
+  oddly." The replacement joins the surface's own present-progressive
+  serif-line family ("Connecting", "Sending the workout", "Ready when you
+  pull") and is honest whether or not a hold is open.
+- **The body line, while `handoffHeld` is true:
+  `Getting the monitor's own numbers.`** It names the wait's reason, says
+  "monitor" never "PM5" (RC-18 standing rule), and fixes a dishonesty the
+  hold would otherwise create — today's `Your numbers are kept.` would be
+  claiming exactly the thing the hold is still waiting on. When the hold
+  releases, the existing three-way line (kept / machine-finished / no
+  numbers) renders for the non-held instant, so the zero-measured honesty
+  branch survives untouched.
+
+No spinner, no layout change. Both lines reuse `.connected-serif-line` /
+`.connected-body-line` and their tokens — contrast 9.74:1 (`--ink-2`
+#3f3c35 on `--page` #f4f1e8) computed, not inherited. The committed
+fixture snapshot (`e2e/fixtures/connected-ended.html`) and the
+`connected-ended` captures regenerate with the change.
 
 **Gate 0, before any implementation task (binding).** James approves the
 rendered thing:
@@ -420,8 +439,8 @@ downstream of the break and can never go red on it.
 - **Backfill** for the 16 permanently-tier-B rows — impossible by design
   (write-once columns), disclosed in the note correction instead.
 - **Any reader change** — the mount snapshot stays; tier gating
-  (`storedSummary.ts`) unchanged; no copy or layout changes outside the
-  Gate 0 renders.
+  (`storedSummary.ts`) unchanged; no copy or layout changes beyond §4's
+  two approved lines on the ended frame.
 
 ## Process
 
