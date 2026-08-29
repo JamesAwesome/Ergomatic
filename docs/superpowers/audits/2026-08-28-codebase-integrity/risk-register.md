@@ -17,6 +17,21 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   cleanup/retry behavior has a distinct trigger, authority, fix boundary, and
   regression.
 
+## Task 11 disposition
+
+- Four fresh blind passes validated all nine preliminary findings. Eight are
+  Confirmed; AUD-002 is Probable because no real malformed-success producer or
+  compatibility trigger is established.
+- AUD-013 moved from P2 to P1 after a real boundary matrix proved one owned row
+  blocks the entire History surface without rower recovery.
+- AUD-016 and AUD-020 moved from Probable to Confirmed after mounted
+  finish-to-Log and real-PostgreSQL duplicate/plan-cardinality probes.
+- AUD-014 remains P2 despite a validator's P1 recommendation: rejected logout
+  never reports success and does not bypass server authorization, so it does
+  not meet the fixed P1 definition.
+- No quarantined hypothesis was promoted or cleared by these passes. Task 12
+  still owns only the decision value of external/hardware evidence.
+
 ### AUD-001 — Native monitor failures can remain invisible to automated evidence
 
 - Category: brittleness

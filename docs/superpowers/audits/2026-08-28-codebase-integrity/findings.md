@@ -1,28 +1,30 @@
-# Preliminary Validation Slate
+# Validated Audit Findings
 
 Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
-These nine findings passed controller adjudication but are not independently
-validated. Task 11 may confirm, downgrade, clear, or defer each one. Validators
-receive only the blind briefs below, not the candidate conclusions or proposed
-fixes.
+Eight findings are Confirmed and one is Probable after four fresh, blind,
+high-effort validation passes. No validator authored its candidate. The
+controller reproduced every accepted discriminator before dispatch and
+reconciled each independent result against the fixed severity definitions.
 
-| ID      | Preliminary rank | Why this rank, not the adjacent one                                                | Validation pass         |
-| ------- | ---------------- | ---------------------------------------------------------------------------------- | ----------------------- |
-| AUD-011 | P1 / Confirmed   | Default entry can fail under a standards-defined storage denial; no data loss.     | V1 storage lifecycle    |
-| AUD-015 | P1 / Confirmed   | A started workout is silently cancelled; the draft remains recoverable.            | V1 storage lifecycle    |
-| AUD-016 | P1 / Probable    | Measured work can miss the log hand-off; final mounted consequence is inferred.    | V1 storage lifecycle    |
-| AUD-020 | P1 / Probable    | A committed save can invite a duplicate retry; real-store duplication is unproved. | V1 storage lifecycle    |
-| AUD-002 | P2 / Probable    | One screen crashes on an injected producer breach; no real producer is known.      | V3 auth/client response |
-| AUD-006 | P2 / Confirmed   | Previews misstate accepted rest, while the timer still retains it.                 | V4 workout projection   |
-| AUD-012 | P2 / Confirmed   | Concurrent empty-database boot fails, but the supported deploy is single-replica.  | V2 PostgreSQL/startup   |
-| AUD-013 | P2 / Confirmed   | One corrupt summary hides History; it neither changes nor deletes stored data.     | V2 PostgreSQL/startup   |
-| AUD-014 | P2 / Confirmed   | Offline native sign-out retains a bearer, but the UI does not claim success.       | V3 auth/client response |
+| ID      | Final rank     | Validation verdict | Why this rank, not the adjacent one                                                       |
+| ------- | -------------- | ------------------ | ----------------------------------------------------------------------------------------- |
+| AUD-011 | P1 / Confirmed | CONFIRMED          | Standards-defined denial blocks the default screen; no data is destroyed.                 |
+| AUD-015 | P1 / Confirmed | CONFIRMED          | Starting silently loses the active run; the draft alone is not safe recovery.             |
+| AUD-016 | P1 / Confirmed | CONFIRMED          | Connected measured work reaches a manual Log door with no recovery record.                |
+| AUD-020 | P1 / Confirmed | CONFIRMED          | A false retry error duplicates a durable log and can advance a plan twice.                |
+| AUD-013 | P1 / Confirmed | CONFIRMED          | One database-valid scalar blocks all History with no rower recovery path.                 |
+| AUD-002 | P2 / Probable  | DOWNGRADED         | The crash is certain, but no real producer or compatibility trigger is established.       |
+| AUD-006 | P2 / Confirmed | CONFIRMED          | Scan surfaces misstate accepted rest; downstream execution retains it.                    |
+| AUD-012 | P2 / Confirmed | CONFIRMED          | Overlapping empty boot fails, but the supported deployment is single-replica.             |
+| AUD-014 | P2 / Confirmed | CONFIRMED          | Native logout violates its wipe contract, but no successful logout or auth escape occurs. |
 
 No item meets P0. The audit found no validated security escape, destructive
 data path, unsafe operator command, or silently wrong durable number requiring
 an immediate stop. P1 is reserved here for blocked or lost active work and a
-credible durable-duplicate path without safe recovery.
+credible durable-duplicate path without safe recovery. AUD-020 is P1 rather
+than P0 because the retry action is explicit and no immutable wrong record,
+security escape, data destruction, or unsafe device command was demonstrated.
 
 ## Adjudication rulings
 
@@ -40,7 +42,93 @@ credible durable-duplicate path without safe recovery.
 - AUD-003 remains P3 process debt and AUD-005 remains cleared, so neither
   consumes another validation pass.
 
-## Blind validation briefs
+## Independent validation verdicts
+
+### AUD-011 — CONFIRMED, P1
+
+The fresh validator denied the actual `window.localStorage` property getter,
+not a usable Storage double. All four loaders threw `SecurityError`, and real
+Today rejected during its `loadRun` initializer; empty and malformed-value
+controls remained bounded. This independently reproduces the controller's
+Task 6 getter and mounted-Today probes.
+
+### AUD-015 — CONFIRMED, P1
+
+With only the active-run key rejecting writes, real Countdown ignored
+`saveRun`'s false result and real Timer redirected to Today without an error or
+Retry. Restoring writes reached Timer with persisted state. This independently
+reproduces the controller's Task 7 composed route probe.
+
+### AUD-016 — CONFIRMED, P1
+
+A real compiled connected workout retained a literal `2:20.0` measured actual
+in memory through five rejected monitor writes. Real finish-to-Log rendered
+`NO MONITOR READING`; persisting the same closed run restored `2:20.0`. This
+settles the screen consequence that remained inferred after Task 9.
+
+### AUD-020 — CONFIRMED, P1
+
+Both Log doors converted a real 201 followed by selective cleanup failure into
+a retryable save error and sent a second POST. A separate real-PostgreSQL probe
+observed distinct created IDs, two rows for the no-plan case, and `doneN:2` for
+the advancing-plan case. This independently extends the controller's Task 7
+mounted POST-count probe to durable cardinality.
+
+### AUD-013 — CONFIRMED, promoted to P1
+
+A real authenticated History request listed nine boundary/control rows, then
+returned 500 after raw SQL added valid JSONB number `1e1000`; deleting only that
+row restored 200. Three direct overflow/underflow casts failed while finite
+boundaries passed. One owned row therefore blocks the entire History surface,
+which meets P1's blocked-rower definition rather than P2's recoverable display.
+This independently repeats the controller's Task 7 real-PostgreSQL probe with a
+broader boundary matrix.
+
+### AUD-002 — DOWNGRADED to P2 / Probable
+
+Literal `200 {}` reached ready state and crashed at `.map`; empty content used
+the existing error/Retry path, and empty/populated arrays rendered normally.
+The behavior is reproduced, but neither controller nor validator found a real
+producer or compatibility path for the malformed success body, so Confirmed is
+not supportable under the audit's evidence-grade definition.
+
+### AUD-006 — CONFIRMED, P2
+
+Both accepted authored shapes independently total one minute work plus three
+minutes rest. Today and Library displayed only one rest minute, while detail
+retained both rests and Timer ran 240 seconds. The compiler coherently rejected
+leading rest and compiled consecutive rest as 180 seconds. The user harm is a
+wrong scan-surface prescription, not wrong execution.
+
+### AUD-012 — CONFIRMED, P2
+
+Across three fresh PostgreSQL 18.4 trials, two simultaneous production-built
+servers produced exactly one healthy process and one migration `23505`; a
+serial control made both healthy. Direct counts matched 17 checked-in journal
+entries and 302 independently derived global seed rows. The live claim is false,
+but current single-replica compose does not enter the trigger.
+
+### AUD-014 — CONFIRMED, retained at P2
+
+Rejected native transport left the bearer in modeled Keychain, did not complete
+the mounted You action, appeared signed out while offline, and reused the same
+bearer when online. Success, HTTP 500, and Keychain-delete failure controls
+isolated the ordering. The validator recommended P1, but the fixed definition
+does not: the UI never reports successful sign-out, server authorization is not
+bypassed, and the demonstrated harm is an auth-contract gap rather than a
+blocked rower, lost active work, or wrong prescription.
+
+## Controller acceptance check
+
+The controller's calibrated Task 6–9 probes predate and are independent of the
+validators: getter denial and mounted Today; Countdown-to-Timer selective write
+failure; connected storage gate; post-201 cleanup retry; malformed History
+body; two-server fresh-database boot; raw `1e1000` History read; rejected native
+sign-out; and raw-authored rest arithmetic across both projections. Each fresh
+validator used its own probe files and controls, reported an empty product diff,
+and removed every temporary file, process, container, and volume it created.
+
+## Validation record: blind briefs issued
 
 ### V1-A — Storage read boundary (AUD-011)
 
