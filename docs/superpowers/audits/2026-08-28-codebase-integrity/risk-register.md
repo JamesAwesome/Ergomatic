@@ -32,6 +32,37 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 - No quarantined hypothesis was promoted or cleared by these passes. Task 12
   still owns only the decision value of external/hardware evidence.
 
+## Task 12 hardware-ranking decision
+
+Decision: `HARDWARE_CAN_CHANGE_RANKING`; approval pending.
+
+One compact native PM5 walk can settle four hypotheses whose bad outcome would
+enter the P1/P2 fix list. It must capture the PM5 and phone in the same frame,
+retain the raw ring/transport log, and compare authored fingerprints rather
+than Ergomatic-derived expectations. The hardware-walk skill must turn this
+matrix into verified operator instructions only after James approves it.
+
+| Included question                                                 | Setup and action                                                                                                                                                                  | Required independent evidence                                                                                                                           | Ranking-changing outcomes                                                                                                                                                             |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AUD-010 later-frame retention plus AUD-007 stale-tail replacement | Arm a multi-frame workout with a uniquely recognizable late interval and reach it; then arm a shorter workout with the same first interval and continue through its intended end. | Authored interval fingerprint; raw programming/notification log; PM5 and app in the same frame at the unique late interval and at the shorter endpoint. | Missing/reordered late interval promotes AUD-010 to P1; an old tail after the shorter endpoint promotes AUD-007 to P1; both correct outcomes clear those exact firmware/device cases. |
+| AUD-009 zero-target meaning                                       | Include one effort-only interval whose product encoding uses zero pace and observe the PM5's target presentation while rowing.                                                    | Same-frame PM5/app view plus raw programmed bytes; an omitted-target or otherwise independently untargeted control if the PM5 display is ambiguous.     | A displayed/enforced pace target promotes a wrong-prescription finding; an independently untargeted presentation clears this exact device/firmware case.                              |
+| AUD-001 native interruption-to-save                               | During a measured native interval, enter one already supported interruption path, then use the app's offered End/recovery route and save.                                         | Same-frame PM5/app measurement before interruption; raw native ring; final saved row compared with PM5 memory for the same work.                        | Lost measured work or an unrecoverable native route promotes a P1; a correct saved row narrows, but does not globally clear, native callback-order uncertainty.                       |
+
+Excluded from this walk:
+
+- AUD-008 needs a primary general interval-limit statement or a long 51-interval
+  execution. Its possible P2 result cannot reorder the five validated P1s, so
+  the operator cost is not justified now.
+- AUD-018 already has two conflicting real PM5 outcomes. A third sample cannot
+  establish a general partial-work rule; replay and a product decision come
+  before more hardware.
+- AUD-019 is a missing bounded-recovery control. Injected browser chunk loss can
+  test that locally; an ordinary successful hardware run cannot disprove the
+  unbounded wait.
+
+No walk card, test build, device command, or operator instruction is authorized
+until James separately approves this exact three-row matrix.
+
 ### AUD-001 — Native monitor failures can remain invisible to automated evidence
 
 - Category: brittleness

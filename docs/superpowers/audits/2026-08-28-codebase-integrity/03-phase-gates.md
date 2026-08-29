@@ -60,7 +60,11 @@ All six were plan/spec defects; none is promoted as a product finding.
 
 ## Hardware-ranking decision
 
-Pending Task 12.
+Task 12 found that one compact native PM5 walk can change the ranking for
+AUD-001, AUD-007, AUD-009, and AUD-010. The proposed three-row matrix is in
+`risk-register.md`; AUD-008, AUD-018, and AUD-019 are excluded because another
+walk would not efficiently produce decisive evidence. Status:
+`BLOCKED_ON_JAMES`; no hardware action is authorized yet.
 
 ## Phase-close antagonist exit gate
 
