@@ -288,7 +288,7 @@ export class ProgramRejectionError extends Error implements ProgramRejection {
  * PM5 (contrast `ProgramRejectionError`'s own `"PM5 <verb>"` phrasing).
  */
 export class ProgramBusyError extends Error {
-  readonly name = "ProgramBusyError";
+  override readonly name = "ProgramBusyError";
 
   constructor() {
     super(
