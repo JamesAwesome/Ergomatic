@@ -258,6 +258,23 @@ rower's work silently.
       and whether the rower sees anything during it. - **Owed with it:** the three note corrections in the register row
       below, and a receipt entry in the hook's handler, so the one link in
       this chain with no instrument finally gets one. **M/L**
+      - **FIX IMPLEMENTED AND GATED, 2026-08-29 (Wave F PR 1, not yet
+        merged/released).** Spec:
+        `docs/superpowers/specs/2026-08-29-machine-summary-hold-design.md`.
+        The hold now owes two independent conditions (split, burst) across
+        all three burst-eligible `ended` arms (machine finish, Menu
+        terminate, user End) and releases only when neither remains owed;
+        the burst's own receipt (`summary-recorded` /
+        `summary-append-rejected` / `summary-no-run`) is the instrument
+        this item asked for. Gated by `summaryHoldReplay.test.ts`'s three
+        permanent-gate legs (Menu terminate, user End, timeout — each
+        replaying a real committed wire capture through the real driver
+        into the real hook, never a storage-seeded fixture) plus
+        `useMonitorSession.test.ts`'s receipt-instrument unit tests. **What
+        this does NOT close:** the note-corrections row below stays OPEN on
+        its own clock, and the 0-of-16 production re-count is PR-gate work,
+        not done here — both still owed before this item as a whole is
+        struck.
 
 - [ ] **Audit AUD-016 — measured connected work survives storage failure.** A
       completed PM5 interval retained in memory can reach Log as
