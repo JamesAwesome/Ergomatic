@@ -1009,11 +1009,17 @@ describe("state 7: ready", () => {
   // tells the rower after the workout is already gone, and this screen is
   // where they stand in the seconds before they pocket the phone.
   //
-  // FOUR WORDS, and the count is the point, not a coincidence — Gate 0
+  // FIVE WORDS, and the count is the point, not a coincidence — Gate 0
   // rejected longer copy outright ("This is a workout app people aren't
   // going to read a fucking novel of warnings"). The assertions below pin
   // the exact string AND the word count, so a future task that "helpfully"
   // appends an explanatory sentence goes red rather than shipping.
+  //
+  // WHICH SCREEN, named (James, 2026-08-29, from tester feedback). It was
+  // four words — `KEEP THE SCREEN ON` — and testers read "the screen" as
+  // the PM5's, which is the one screen the rower cannot control and the
+  // one this warning is not about. "YOUR PHONE" is the whole change: it
+  // costs one word and removes the only ambiguity the copy had.
   //
   // IT NAMES NO CAUSE, deliberately (spec, "What we do NOT know"): three
   // producers of the silence are undistinguished — iOS/WebKit delivering no
@@ -1023,14 +1029,18 @@ describe("state 7: ready", () => {
   // in shipped copy, in the same PR whose probe exists to decide between
   // them.
   describe("the keep-the-screen-on warning (Phase LM, Gate 0)", () => {
-    it("shows exactly the four words, under the first-stroke line", () => {
+    it("shows exactly the five words, under the first-stroke line", () => {
       renderInterstitial({ phase: "ready", deviceName: DEVICE_NAME });
-      const warning = screen.getByText("KEEP THE SCREEN ON");
+      const warning = screen.getByText("KEEP YOUR PHONE SCREEN ON");
       expect(warning).toBeInTheDocument();
-      // FOUR WORDS. Asserted as a count, not merely by the literal above:
+      // FIVE WORDS. Asserted as a count, not merely by the literal above:
       // the literal alone would still pass if a second element were added
       // beside it carrying the sentence Gate 0 cut.
-      expect(warning.textContent!.trim().split(/\s+/)).toHaveLength(4);
+      expect(warning.textContent!.trim().split(/\s+/)).toHaveLength(5);
+      // The word PHONE gets no assertion of its own, on purpose: the
+      // literal above already pins it, and a second check reading the same
+      // string could never go red independently of the first — that is
+      // decoration reading as evidence (recurring failure #21).
       // AFTER the body line, per Gate 0's placement ("under 'The monitor
       // starts the clock on your first stroke.'") — `compareDocumentPosition`
       // rather than a child-index read, so a wrapper element added between
@@ -1065,10 +1075,10 @@ describe("state 7: ready", () => {
       // Rendered twice from a clean store: Gate 0's ruling is "every
       // session", so nothing may remember having shown it once.
       renderInterstitial({ phase: "ready", deviceName: DEVICE_NAME });
-      expect(screen.getByText("KEEP THE SCREEN ON")).toBeInTheDocument();
+      expect(screen.getByText("KEEP YOUR PHONE SCREEN ON")).toBeInTheDocument();
       cleanup();
       renderInterstitial({ phase: "ready", deviceName: DEVICE_NAME });
-      expect(screen.getByText("KEEP THE SCREEN ON")).toBeInTheDocument();
+      expect(screen.getByText("KEEP YOUR PHONE SCREEN ON")).toBeInTheDocument();
     });
 
     it("wears the sunken strip and its --marker rule (the tokens Gate 0 approved)", () => {

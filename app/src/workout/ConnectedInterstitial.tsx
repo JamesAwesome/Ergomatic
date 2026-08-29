@@ -668,16 +668,28 @@ export default function ConnectedInterstitial({
               phone, which makes it the one place a warning can still change
               the outcome.
 
-              FOUR WORDS, every session, quiet. The length is the ruling,
+              FIVE WORDS, every session, quiet. The length is the ruling,
               not a stylistic preference — Gate 0 rejected the longer copy
               in as many words ("This is a workout app people aren't going
               to read a fucking novel of warnings"), and
               `ConnectedInterstitial.test.tsx` pins the WORD COUNT as well
               as the string so an appended explanatory sentence goes red.
               Every session rather than once-per-device because the rower
-              who forgets is exactly the rower this exists for, and four
+              who forgets is exactly the rower this exists for, and five
               quiet words on a screen they pass through anyway cost nothing
               to skip.
+
+              IT SAYS WHICH SCREEN (James, 2026-08-29, from tester
+              feedback). It read `KEEP THE SCREEN ON` for four words, and
+              testers took "the screen" for the PM5's — the one screen in
+              the room the rower cannot keep on, and the one this warning
+              is not about. Naming the phone buys the fifth word and
+              removes the only ambiguity the line carried. This does NOT
+              reopen RC-26 (2026-08-27, "the string stays, do not
+              reopen"): that ruling refused a rewrite to `DON'T LOCK YOUR
+              PHONE`, on the ground that both strings asked for the same
+              behaviour. This changes WHICH DEVICE the instruction points
+              at, which is the one thing neither candidate there settled.
 
               IT NAMES NO CAUSE, and that is a hard constraint, not an
               omission (spec, "What we do NOT know"): three producers of the
@@ -689,7 +701,7 @@ export default function ConnectedInterstitial({
               incoming call or a WebContent process kill background the app
               with no rower action at all, so this asks for the one thing
               the rower CAN do rather than claiming it is enough. */}
-          <p className="connected-keep-on">KEEP THE SCREEN ON</p>
+          <p className="connected-keep-on">KEEP YOUR PHONE SCREEN ON</p>
         </div>
         <div className="action-stack connected-interstitial-actions">
           <button
