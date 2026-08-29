@@ -86,7 +86,7 @@ and the fix list displaced the live Wave F slate.
 | AUD-012 violated the audit's P3 definition             | ACCEPTED. Dual startup fails, but supported deployment is serial/single-replica. Downgraded P2 → P3; docs correction rides the next deployment-doc PR.               |
 | Seven audit chunks displaced current Wave F            | ACCEPTED. The list is now audit-relative only; actual owners live in Wave F, Wave A, and the open register. Wave F phase-open sequences existing and audit P1s.      |
 | Stale lane dispositions contradicted final validation  | ACCEPTED. Lane C/D/E now identify themselves as evidence snapshots and point to `findings.md` as authoritative.                                                      |
-| Hardware wording claimed an unrecorded firmware case   | ACCEPTED. Exact clearances now say this PM5 in the observed runs and state firmware was not recorded.                                                                |
+| Hardware wording implied firmware-specific clearance   | ACCEPTED. Exact clearances now say this PM5 in the observed runs and state firmware was not recorded.                                                                |
 | History bundle remained over-broad after AUD-013 moved | ACCEPTED. AUD-002 is now an independent History response-boundary chunk.                                                                                             |
 
 Correction re-gate: `PASS`. The antagonist confirmed every blocker was

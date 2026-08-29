@@ -4,7 +4,7 @@ Baseline reproduction: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
 Current-main check: `fd4d06a57581e1e814ecd06f74274a30bffce6ee`
 
-Status: PHASE_CLOSE_PASSED; FINAL_VERIFICATION_IN_PROGRESS
+Status: FINAL
 
 ## What and why
 

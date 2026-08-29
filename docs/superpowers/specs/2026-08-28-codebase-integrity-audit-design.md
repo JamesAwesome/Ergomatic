@@ -9,8 +9,7 @@ the current product, not a refactor exercise: the output is a ranked, evidenced
 fix list James can hand to Claude Code without turning guesses or historical
 notes into work.
 
-**Status:** approved audit design; all phase gates passed and final verification
-is in progress.
+**Status:** complete; all phase gates and final verification passed.
 
 ## Goal and definition of done
 

@@ -104,9 +104,8 @@ pocket silently eats a rowed piece is worse than opening it a week later.
 
 ## Active audit overlay — Codebase integrity
 
-**Status:** PHASE CLOSE PASSED; final verification remains. Read-only overlay;
-it is not a seventh product wave and does not displace Wave F. The fixed-baseline
-audit is governed by the
+**Status:** COMPLETE. Read-only overlay; it is not a seventh product wave and
+does not displace Wave F. The fixed-baseline audit is governed by the
 [approved spec](docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md)
 and [execution plan](docs/superpowers/plans/2026-08-28-codebase-integrity-audit.md).
 
