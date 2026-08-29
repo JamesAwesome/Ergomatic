@@ -79,6 +79,16 @@ bounded absent/error result. Today currently throws during initialization.
 Today-override loaders). Getter denial made all four throw and real Today reject;
 empty and malformed-value controls remained bounded.
 
+**CORRECTED at the Wave F phase-open anchor (2026-08-28): the fourth loader
+above is wrong.** `loadTodayOverrides` is already guarded — its getter sits
+inside its own try (`app/src/today/todayOverrides.ts:211`). The real unguarded
+set is `loadRun`, `loadDraft`, `loadMonitorRun`, and **`loadTodayPick`**
+(`app/src/today/todayPick.ts:53`). The mounted-Today probe could not see the
+difference because `loadRun` (`Today.tsx:280`) throws first and masks every
+later loader; reaching the `loadTodayPick` call (`Today.tsx:1044`) needs a
+fixture with a plan and a pool. A fix written to the original list guards an
+already-guarded function and ships Today still broken behind a green gate.
+
 **Authority and safe direction.** The WHATWG Web Storage standard permits the
 getter to throw for policy denial. Obtain storage inside each existing guard and
 return the loader's bounded absent result. Do not clear unrelated keys or change

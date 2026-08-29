@@ -3780,3 +3780,84 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
 - **Exact PM5 clearances survived raw-first replay.** Decode boundaries before
   consulting app expectations and state only the quantity/device observed;
   firmware was not recorded, so the clearance does not name it.
+
+### 2026-08-28 — Phase F anchor pass (Wave F, "the app stops losing rows")
+
+- **"The app stayed at `phase=ready` and opened no record" was FALSE, and its
+  own cited ring said so.** Believed because the resume line
+  (`resume-frames phase=ready`) was read as a session-long state rather than
+  an instant. `rowing-active-fallback` has exactly ONE emit site
+  (`useMonitorSession.ts:1909`) and it IS the run opening; a later
+  `resume-frames phase=live` confirmed it. **Technique: for any log line
+  quoted as a STATE, find the single emit site of the NEXT line in the same
+  ring and ask what it proves. A diagnostic names an instant, not a duration.**
+- **"The pre-row lock loses the rower's metres" was FALSE.** Believed because
+  the record opened 43 s late. But the interval actual is the machine's
+  0x0037/0x0038 pair verbatim (`parse.ts:653-676` -> `useMonitorSession.ts:2272`),
+  so a late open still receives the machine's whole-interval numbers; only the
+  1 Hz series trace loses its head. **Technique: before believing a
+  late-start defect costs a NUMBER, find where that number is derived. If it
+  comes off the wire at a boundary, our clock's start time is irrelevant.**
+- **The defect that actually destroyed the row was two lines nobody had
+  listed.** `useMonitorSession.ts:2319-2320` returns on `programDropped`
+  whenever `phase` is not `programming`/`ready` — so a machine that discards
+  the program mid-row is ignored, no boundary ever arrives, and the record
+  closes with zero actuals. Its own comment admits the case was "left alone
+  rather than guessed at", and the test suite covers only the `ended` arm.
+  **Technique: when a symptom has a named owner item, still enumerate every
+  producer. The owner item was the wrong producer.**
+- **A committed walk README carried a false counterfactual.** "The #211 build
+  would have caught it and returned him to the workout screen" — it would not;
+  `phase` was `live` and `phase: "ready"` is only ever set from an `armed`
+  event requiring `verifyArmed` against OUR program. **Technique: a
+  counterfactual about a build needs the guard read, not the feature named.
+  Follow the event to its handler's first `return`.**
+- **An audit's four-item enumeration named the wrong fourth item.**
+  `loadTodayOverrides` is guarded (`todayOverrides.ts:211-212`, getter INSIDE
+  the try); the real unguarded Today loader is `loadTodayPick`
+  (`todayPick.ts:53`). The audit never saw it because `loadRun`
+  (`Today.tsx:280`) throws first and masks it. **Technique: when a probe
+  reports "all N threw", check whether the FIRST throw could mask the rest —
+  and re-derive the set from the code, never from the probe's own count.**
+- **"n = 1, the only 0x0039/0x003F ever captured" was stale by five walks.**
+  EIGHT committed recordings now carry a complete burst, plus one production
+  native ring. Measured terminal->burst: 271-542 ms (web, n=8) and 452 ms
+  (native, n=1). `BURST_LINGER_MS`'s 2000 and its "~1 s terminate lag" both
+  rest on the dead n=1. **Technique: a constant's comment claiming a corpus
+  size has an expiry date. Before designing on it, re-run the count over
+  `docs/monitor/sessions/**` by date — decoding eight gzipped captures took
+  one script.**
+- **A durability fix and an ordering fix at the same reader are NOT one
+  contract.** The hold fixes WHEN the record is read; AUD-016 fixes WHETHER it
+  exists. Holding longer over a rejected write changes nothing. **Technique:
+  for any "these two share a seam" claim, write the failing input for each and
+  check whether the proposed fix consumes both. Same file is not same failure.**
+- **A green gate for the machine-summary fix would be blind to the rejected
+  write.** `storage-persist denied` on the tester's own production iPhone makes
+  eviction a supported producer, so the fix can pass its gate and still fail
+  in the field. **Technique: after fixing an ordering bug, ask what makes the
+  now-correctly-ordered write FAIL — the ordering gate never sees it.**
+- **VETTED GROUND (attacked this pass and held):** AUD-011's standards
+  authority (WHATWG HTML §12.2.3, quoted verbatim) and its three other
+  loaders; AUD-015's exact chain (`Countdown.tsx:220` -> `:343` ->
+  `Timer.tsx:456-458`); AUD-016's chain and its production-observed producer;
+  zero `app/` changes since `fd4d06a`; PR 1 being client-only (a stored-NUMBER
+  TRIAD, not a stored-shape one); the deliberateness of
+  `LogSession.tsx:1487`'s snapshot and why James's hold ruling sidesteps it;
+  the no-backfill claim (`LogPatch` is four keys); door-before-RC-18 via
+  `LogSession.tsx:686-701`'s `delete body.deviceName`; the door column's
+  SECOND consumer (`storedSummary.ts:606`); migration ground (0016 highest,
+  door = 0017); the interval actual's determinism; and AUD-011+AUD-015
+  grouping, conditioned on a composed denial-then-Start test and a non-retry
+  exit on the Retry surface.
+- **Could not establish:** the 0-of-16 prod count (no DB); whether the hold's
+  duration survives native BACKGROUNDING (all eight burst recordings are
+  `transport=web, app=dev`; the one native point is foreground); what leg 4
+  actually stored; and whether a resume-time deterministic ready signal exists
+  (the coast/row-to-begin control does not exist in any capture).
+- **Evidence-integrity note for the phase:** `walk-2026-08-28/pocketed-phone-prerow-ring.json`
+  has six seq gaps against a contiguous-numbering `record()`, so it is a
+  CURATED excerpt, not a capture. The phase's #1 item rests on it.
+  `ergomatic:last-session-log` is localStorage and may still hold the full
+  ring on the phone. **Technique: check a committed ring's seq numbering for
+  gaps before treating an absence in it as evidence.**

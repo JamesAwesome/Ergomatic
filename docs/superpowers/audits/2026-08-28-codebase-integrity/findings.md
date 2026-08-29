@@ -67,6 +67,14 @@ Today rejected during its `loadRun` initializer; empty and malformed-value
 controls remained bounded. This independently reproduces the controller's
 Task 6 getter and mounted-Today probes.
 
+**CORRECTION (2026-08-28, Wave F phase-open anchor): the finding stands but
+its loader enumeration was wrong.** `loadTodayOverrides` is guarded
+(`todayOverrides.ts:211`, getter inside its try); the fourth unguarded loader
+Today actually calls is `loadTodayPick` (`todayPick.ts:53`), invisible to the
+mounted probe because `loadRun` throws first and masks it. The corrected set:
+`loadRun`, `loadDraft`, `loadMonitorRun`, `loadTodayPick`. See
+[claude-fix-list.md](claude-fix-list.md) for the fix-scope consequence.
+
 ### AUD-015 — CONFIRMED, P1
 
 With only the active-run key rejecting writes, real Countdown ignored

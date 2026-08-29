@@ -7,11 +7,11 @@ v0.25.0, which does not.
 
 ## Provenance
 
-| file | leg | device |
-| --- | --- | --- |
-| `end-on-interval-1-recording.jsonl.gz` | first attempt at leg 2; ended on interval 1, so no rest boundary was crossed | laptop, branch build |
-| `rest-boundary-recording.jsonl.gz` | **leg 2, the gate** — 3x1' time-only with 1:00 rests, ended in interval 2 | laptop, branch build |
-| `pocketed-phone-prerow-ring.json` | leg 4 — locked BEFORE the first pull | iPhone, v0.25.0 build 759, PRODUCTION |
+| file                                   | leg                                                                          | device                                |
+| -------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------- |
+| `end-on-interval-1-recording.jsonl.gz` | first attempt at leg 2; ended on interval 1, so no rest boundary was crossed | laptop, branch build                  |
+| `rest-boundary-recording.jsonl.gz`     | **leg 2, the gate** — 3x1' time-only with 1:00 rests, ended in interval 2    | laptop, branch build                  |
+| `pocketed-phone-prerow-ring.json`      | leg 4 — locked BEFORE the first pull                                         | iPhone, v0.25.0 build 759, PRODUCTION |
 
 ## LEG 1 — Menu at READY. PASSED.
 
@@ -83,8 +83,21 @@ twd-sample      machineTotal=52m at elapsed=24.71s distance=52.6m workoutState=4
 ```
 
 The machine had him **24.7 s and 52.6 m into interval 1**; the app was still
-`phase=ready` and had opened no record. He rowed and the app kept nothing —
-the tester's report exactly.
+`phase=ready` and had opened no record — **at that instant. CORRECTED
+2026-08-28 (Wave F anchor pass): this held for the snapshot above, not the
+session.** The ring's own seq 29 (`rowing-active-fallback`, machine elapsed
+43.04 s) IS the record opening — its single emit site sits inside the branch
+that calls `createMonitorRun` (`useMonitorSession.ts:1909`) — and seq 35
+reads `phase=live`. The record opened ~43 s late, which costs the series
+trace's head and nothing else: interval actuals are the machine's own
+0x0037/0x0038 pair stored verbatim. What cost him the row is the NEXT
+finding — the erg dropped its program mid-row and the app ignores
+`programDropped` once live, so no boundary ever arrived and the record
+closed with zero actuals. He rowed and the app kept nothing — the tester's
+OUTCOME exactly, by a different mechanism than this walk first recorded.
+(This committed ring is a curated excerpt — six seq gaps — so what End
+stored is not in it; the full ring may survive in
+`ergomatic:last-session-log` on the phone.)
 
 ### THE FINDING THAT MATTERS: RC-37's signature occurred NATURALLY.
 
@@ -99,14 +112,26 @@ frame           state=armed elapsed=50.81 distance=64.2
 **`workoutType` 8 -> 1 and back to WaitToBegin, with NO Menu press.** The
 machine dropped the program on its own after a long background.
 
-**RC-37 was scoped from James's own words — *"rare, and not that annoying to
-have to exit"* — which was true of the trigger he knew about.** The detector
+**RC-37 was scoped from James's own words — _"rare, and not that annoying to
+have to exit"_ — which was true of the trigger he knew about.** The detector
 keys on the readback DISAGREEING with what we sent, not on Menu, so it also
-catches this. His phone runs v0.25.0 with no detector, so the app carried on
-showing a live surface for a program the erg had discarded. **The #211 build
-would have caught it and returned him to the workout screen.**
+DETECTS this. His phone runs v0.25.0 with no detector, so the app carried on
+showing a live surface for a program the erg had discarded.
 
-Recorded so nobody re-scopes RC-37 downward from its original trigger.
+**CORRECTED 2026-08-28 (Wave F anchor pass) — this section originally ended
+"The #211 build would have caught it and returned him to the workout
+screen." That counterfactual is FALSE.** The phase was `live` at the drop
+(seq 35 `resume-frames phase=live` precedes seq 37's `structure`), and the
+`programDropped` handler returns for any phase other than
+`programming`/`ready` (`useMonitorSession.ts:2319-2320`) — its own comment
+says the live case was "left alone rather than guessed at", and the `live`
+arm has no test. On #211 the driver would have emitted the event and one
+ring line; the screen would NOT have changed, no boundary would ever
+arrive, and the record would still close with zero actuals. Handling
+`programDropped` in `live` is now its own Wave F item.
+
+Recorded so nobody re-scopes RC-37 downward from its original trigger — and
+so nobody credits #211 with covering a case it ignores.
 
 ### Three more, all reproductions
 
@@ -138,13 +163,13 @@ on a real row — only in our tests.
 
 **The wire half is finished. Every earlier theory about it is dead.**
 
-| seq | entry | reading |
-| --- | --- | --- |
-| 51 | `summary-half` 0x0039 received | the summary ARRIVES |
-| 53 | `summary-totals` decoded: elapsed=120s distance=358m | it DECODES |
-| 55 | `summary-half` 0x003A received | so does the additional summary |
-| 57 | `verification-received` 0x003F, 19 real bytes | **the verification hash arrives** |
-| 58 | `summary-reconciled: split-won … a 0x0039 was held; its totals are recorded as observations` | the driver EMITS `summary-observations` (`driver.ts:4181`) |
+| seq | entry                                                                                        | reading                                                    |
+| --- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 51  | `summary-half` 0x0039 received                                                               | the summary ARRIVES                                        |
+| 53  | `summary-totals` decoded: elapsed=120s distance=358m                                         | it DECODES                                                 |
+| 55  | `summary-half` 0x003A received                                                               | so does the additional summary                             |
+| 57  | `verification-received` 0x003F, 19 real bytes                                                | **the verification hash arrives**                          |
+| 58  | `summary-reconciled: split-won … a 0x0039 was held; its totals are recorded as observations` | the driver EMITS `summary-observations` (`driver.ts:4181`) |
 
 So this is NOT a subscription failure, NOT a firmware gap, and NOT the
 capture-rate gap the register had filed. A hypothesis that the native BLE arm
