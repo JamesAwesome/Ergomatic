@@ -164,36 +164,35 @@ permission to generalize either outcome.
 
 ## Capture coverage and native evidence gaps
 
-| Question                      | Web/raw evidence                                                                                    | Native production evidence                         | Independent PM5 evidence                                                                      | Status                                                               |
-| ----------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Scan/connect/subscriptions    | Raw Aug-23 web recording                                                                            | Rings/screens only                                 | None                                                                                          | Native plugin ordering UNKNOWN.                                      |
-| Multi-frame program retention | Aug-17 two-frame writes/acks                                                                        | None reaching the later-frame interval             | None                                                                                          | AUD-010 open.                                                        |
-| Long→short replacement        | None                                                                                                | None                                               | None                                                                                          | AUD-007 open.                                                        |
-| Zero target semantics         | Zero accepted and run                                                                               | No target-screen control                           | None                                                                                          | AUD-009 open.                                                        |
-| Background/resume             | Browser arm is not applicable                                                                       | Lock and pre-row-lock rings show selected outcomes | PM5 state visible in walk notes                                                               | Callback order, buffering, and gap distribution UNKNOWN.             |
-| Radio off                     | No native relevance                                                                                 | Production phone observed disabled radio mid-piece | Later saved record not correlated                                                             | AUD-001 narrowed, not cleared.                                       |
-| Natural finish                | Raw web plus production phone ring                                                                  | Terminal/final-boundary/summary ordering           | Same-frame PM5 screen quantities                                                              | Cleared for observed device/session only.                            |
-| Menu terminate                | Aug-24 raw web capture retained a post-terminal partial; Aug-27 raw web capture omitted its partial | None                                               | Aug-27 has a PM5-memory photo; Aug-24 has a contemporaneous unphotographed memory observation | AUD-018 open; native behavior and a generalized rule remain unknown. |
-| Multi-chunk write recovery    | No observed web symptom; no decisive stress case                                                    | Native uses a different acknowledged-write mode    | Per-frame CSAFE response should reject or wait on loss                                        | AUD-019 open; default wait bound is absent.                          |
-| Storage failure → log         | Unit seams only                                                                                     | None                                               | Not applicable                                                                                | AUD-016 open.                                                        |
+| Question                      | Web/raw evidence                                                                                        | Native production evidence                                                                                     | Independent PM5 evidence                                                                      | Status                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Scan/connect/subscriptions    | Raw Aug-23 web recording                                                                                | Rings/screens only                                                                                             | None                                                                                          | Native plugin ordering UNKNOWN.                                                               |
+| Multi-frame program retention | Aug-28 raw stream reached ordered boundaries 1–6; authored second-frame intervals 5 and 6 both executed | None; programming leg was Web Bluetooth                                                                        | PM5 rest screen identified interval 5's unique 60 s rest; natural finish followed interval 6  | AUD-010 cleared for this PM5/firmware case; no universal claim.                               |
+| Long→short replacement        | Aug-28 immediate six→two same-first replacement emitted only boundaries 1–2 and finished at 200 m       | None; programming leg was Web Bluetooth                                                                        | PM5 endpoint showed interval 2; app log showed 200 m                                          | AUD-007 cleared for this PM5/firmware case; no universal claim.                               |
+| Zero target semantics         | Raw zero accepted and run; PM5 READY showed `:00 /500m`                                                 | No omitted-target control                                                                                      | Screen field was ambiguous between target and current pace                                    | AUD-009 remains open; the required semantic control is still absent.                          |
+| Background/resume             | Browser arm is not applicable                                                                           | Aug-28 native ring: 4.613 s camera gap latched silence, then recovered 34 ms after resume with no disconnect   | PM5 remained in the rest interval                                                             | Confirmed self-recovering false banner for this gap; ordering distribution otherwise UNKNOWN. |
+| Radio off                     | No native relevance                                                                                     | Aug-28 native ring recorded disabled-radio callback after interval 0 was accepted; End/save remained reachable | Saved detail retained the PM5's completed 100 m and omitted the incomplete second interval    | AUD-001 P1 outcome not reproduced; narrowed, not globally cleared.                            |
+| Natural finish                | Raw web plus production phone ring                                                                      | Terminal/final-boundary/summary ordering                                                                       | Same-frame PM5 screen quantities                                                              | Cleared for observed device/session only.                                                     |
+| Menu terminate                | Aug-24 raw web capture retained a post-terminal partial; Aug-27 raw web capture omitted its partial     | None                                                                                                           | Aug-27 has a PM5-memory photo; Aug-24 has a contemporaneous unphotographed memory observation | AUD-018 open; native behavior and a generalized rule remain unknown.                          |
+| Multi-chunk write recovery    | No observed web symptom; no decisive stress case                                                        | Native uses a different acknowledged-write mode                                                                | Per-frame CSAFE response should reject or wait on loss                                        | AUD-019 open; default wait bound is absent.                                                   |
+| Storage failure → log         | Unit seams only                                                                                         | None                                                                                                           | Not applicable                                                                                | AUD-016 open.                                                                                 |
 
-The missing native facts are: frame-gap distribution, plugin callback order,
-notification buffering while suspended, permission/picker/subscription failure
-ordering, raw native BLE recordings, and behavior across firmware/device
-variants. They remain `UNKNOWN`; no hardware work is scheduled in this task.
+The missing native facts are: frame-gap distribution beyond the observed
+camera case, plugin callback order across other losses, notification buffering
+while suspended, permission/picker/subscription failure ordering, raw native
+BLE recordings, and behavior across firmware/device variants. They remain
+`UNKNOWN`.
 
 ## Candidate disposition and next probes
 
-No new candidate was promoted. AUD-001, AUD-007, AUD-008, AUD-009, AUD-010,
-AUD-016, AUD-018, and AUD-019 remain quarantined hypotheses. The
-highest-discrimination probes are a long→short same-first-interval PM5
-fingerprint, a unique later-frame interval reached on the PM5, a native
-connection-failure matrix, a zero versus omitted target control, replay of both
-real terminate sequences, a decisive web multi-chunk stress case, a raw coast
-replay, a lock→End-before-recovery case, and a connected
-storage-failure-through-log case. Task 9 can exercise replay/mutation and
-readiness/storage seams; only Task 12 may request device work, and only if it
-would change the final ranking.
+No ranking-changing candidate was promoted. Task 12 clears AUD-007 and AUD-010
+for the exact PM5/firmware case and narrows AUD-001 after a correct
+interruption-to-save path; none becomes a universal contract. AUD-009 remains
+quarantined because the required omitted-target control was not run. AUD-008,
+AUD-016, AUD-018, and AUD-019 keep their prior dispositions. The incidental
+camera excursion confirms a low-priority, self-recovering false LOST banner;
+it did not lose work or alter the P1 slate.
 
 No contradiction with accepted Lane A–C evidence was found. No product files
-were changed and no hardware operation was performed.
+were changed. Hardware evidence is committed under
+`docs/monitor/sessions/walk-2026-08-28-codebase-audit/`.

@@ -60,11 +60,15 @@ All six were plan/spec defects; none is promoted as a product finding.
 
 ## Hardware-ranking decision
 
-Task 12 found that one compact native PM5 walk can change the ranking for
-AUD-001, AUD-007, AUD-009, and AUD-010. The proposed three-row matrix is in
-`risk-register.md`; AUD-008, AUD-018, and AUD-019 are excluded because another
-walk would not efficiently produce decisive evidence. Status:
-`BLOCKED_ON_JAMES`; no hardware action is authorized yet.
+James approved and completed the compact three-row walk for AUD-001, AUD-007,
+AUD-009, and AUD-010. No P1/P2 finding was promoted. AUD-007 and AUD-010 are
+cleared for PM5 `432331249` and the observed firmware case; AUD-001 is narrowed
+after the completed 100 m survived radio-off through save; AUD-009 remains
+unknown because `:00 /500m` was not an independent untargeted control. The
+incidental camera excursion confirmed a self-recovering false LOST banner, but
+no data loss. Evidence lives in
+`docs/monitor/sessions/walk-2026-08-28-codebase-audit/`. AUD-008, AUD-018, and
+AUD-019 remain excluded for the original decision-value reasons.
 
 ## Phase-close antagonist exit gate
 

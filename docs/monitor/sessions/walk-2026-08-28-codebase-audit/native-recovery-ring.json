@@ -1,0 +1,266 @@
+[
+  {
+    "seq": 0,
+    "atMs": 1787967181524,
+    "kind": "already-connected-guard",
+    "detail": "no already-connected device; scanned normally"
+  },
+  {
+    "seq": 1,
+    "atMs": 1787967181529,
+    "kind": "storage-persist",
+    "detail": "denied (tolerated — design spec §4 S6, not mitigation)"
+  },
+  {
+    "seq": 2,
+    "atMs": 1787967181532,
+    "kind": "write",
+    "detail": "f1 76 04 13 02 01 02 60 f2"
+  },
+  {
+    "seq": 3,
+    "atMs": 1787967181911,
+    "kind": "notify-first",
+    "detail": "0x0032 (17B)"
+  },
+  {
+    "seq": 4,
+    "atMs": 1787967182090,
+    "kind": "notify-first",
+    "detail": "0x0033 (20B)"
+  },
+  {
+    "seq": 5,
+    "atMs": 1787967182451,
+    "kind": "notify-first",
+    "detail": "0x0031 (19B)"
+  },
+  {
+    "seq": 6,
+    "atMs": 1787967182452,
+    "kind": "structure",
+    "detail": "workoutType=8 durationRaw=100 durationType=128 raw=20 0b 00 e8 03 00 08 01 0c 00 04 c8 00 00 64 00 00 80 68"
+  },
+  {
+    "seq": 7,
+    "atMs": 1787967182452,
+    "kind": "twd-sample",
+    "detail": "machineTotal=200m at elapsed=28.48s distance=100m workoutState=12 durationRaw=100 durationType=128"
+  },
+  {
+    "seq": 8,
+    "atMs": 1787967182453,
+    "kind": "frame",
+    "detail": "state=finished elapsed=28.48 distance=100 rowingActive=false spm=27"
+  },
+  {
+    "seq": 9,
+    "atMs": 1787967182454,
+    "kind": "terminal-out-of-run",
+    "detail": "machine reported \"finished\" with no open run — no workoutComplete/terminated event (a run is opened by program() alone, spec §4)"
+  },
+  {
+    "seq": 10,
+    "atMs": 1787967183261,
+    "kind": "ack",
+    "detail": "f1 01 76 01 13 65 f2 slaveState=ready"
+  },
+  {
+    "seq": 11,
+    "atMs": 1787967183261,
+    "kind": "prepare-sent",
+    "detail": "1 frame(s) acked"
+  },
+  {
+    "seq": 12,
+    "atMs": 1787967183263,
+    "kind": "write",
+    "detail": "f1 76 3b 18 01 00 01 01 08 17 01 01 03 05 80 00 00 00 64 04"
+  },
+  {
+    "seq": 13,
+    "atMs": 1787967183350,
+    "kind": "frame",
+    "detail": "state=terminated elapsed=28.48 distance=100 rowingActive=false spm=27"
+  },
+  {
+    "seq": 14,
+    "atMs": 1787967183351,
+    "kind": "terminal-out-of-run",
+    "detail": "machine reported \"terminated\" with no open run — no workoutComplete/terminated event (a run is opened by program() alone, spec §4)"
+  },
+  {
+    "seq": 15,
+    "atMs": 1787967183440,
+    "kind": "write",
+    "detail": "02 00 3c 06 04 00 00 31 9c 14 01 01 18 01 01 17 01 01 03 05"
+  },
+  {
+    "seq": 16,
+    "atMs": 1787967183441,
+    "kind": "structure",
+    "detail": "workoutType=1 durationRaw=0 durationType=128 raw=20 0b 00 e8 03 00 01 01 00 00 04 00 00 00 00 00 00 80 00"
+  },
+  {
+    "seq": 17,
+    "atMs": 1787967183441,
+    "kind": "twd-sample",
+    "detail": "machineTotal=0m at elapsed=28.48s distance=100m workoutState=0 durationRaw=0 durationType=128"
+  },
+  {
+    "seq": 18,
+    "atMs": 1787967183441,
+    "kind": "frame",
+    "detail": "state=armed elapsed=28.48 distance=100 rowingActive=false spm=27"
+  },
+  {
+    "seq": 19,
+    "atMs": 1787967183621,
+    "kind": "write",
+    "detail": "80 00 00 00 64 04 02 00 00 06 04 00 00 32 64 14 01 01 13 02"
+  },
+  {
+    "seq": 20,
+    "atMs": 1787967183820,
+    "kind": "write",
+    "detail": "01 01 92 f2"
+  },
+  {
+    "seq": 21,
+    "atMs": 1787967184071,
+    "kind": "ack",
+    "detail": "f1 81 76 0e 18 01 17 03 04 06 14 18 17 03 04 06 14 13 eb f2 slaveState=ready"
+  },
+  {
+    "seq": 22,
+    "atMs": 1787967184071,
+    "kind": "programmed",
+    "detail": "1 frame(s) acked"
+  },
+  {
+    "seq": 23,
+    "atMs": 1787967184072,
+    "kind": "structure",
+    "detail": "workoutType=8 durationRaw=0 durationType=128 raw=20 0b 00 e8 03 00 08 01 00 00 04 00 00 00 00 00 00 80 00"
+  },
+  {
+    "seq": 24,
+    "atMs": 1787967184072,
+    "kind": "structure-mismatch",
+    "detail": "first sighting — observed workoutType=8 durationRaw=0 durationType=128; expected workoutType=8 durationRaw=100 durationType=128 (the sent program's interval 0) (one entry per verify phase, never per tick; a HEALTHY arm whose first tick lagged leaves exactly this entry and still resolves)"
+  },
+  {
+    "seq": 25,
+    "atMs": 1787967184340,
+    "kind": "structure",
+    "detail": "workoutType=8 durationRaw=100 durationType=128 raw=00 00 00 00 00 00 08 01 00 00 00 00 00 00 64 00 00 80 00"
+  },
+  {
+    "seq": 26,
+    "atMs": 1787967184341,
+    "kind": "armed",
+    "detail": "programmed 2 interval(s)"
+  },
+  {
+    "seq": 27,
+    "atMs": 1787967184342,
+    "kind": "twd-sample",
+    "detail": "machineTotal=0m at elapsed=0s distance=0m workoutState=0 durationRaw=100 durationType=128"
+  },
+  {
+    "seq": 28,
+    "atMs": 1787967209271,
+    "kind": "frame",
+    "detail": "state=rowing elapsed=0.92 distance=2.5 rowingActive=true spm=0"
+  },
+  {
+    "seq": 29,
+    "atMs": 1787967237080,
+    "kind": "twd-sample",
+    "detail": "machineTotal=100m at elapsed=28.74s distance=100m workoutState=9 durationRaw=100 durationType=128"
+  },
+  {
+    "seq": 30,
+    "atMs": 1787967237170,
+    "kind": "frame",
+    "detail": "state=resting elapsed=28.83 distance=100.3 rowingActive=true spm=25"
+  },
+  {
+    "seq": 31,
+    "atMs": 1787967255681,
+    "kind": "liveness-silence",
+    "detail": "frame stream silent for 2500ms"
+  },
+  {
+    "seq": 32,
+    "atMs": 1787967255769,
+    "kind": "app-lifecycle",
+    "detail": "resume gap=4613ms threshold=2500ms silent=true latched=true"
+  },
+  {
+    "seq": 33,
+    "atMs": 1787967255769,
+    "kind": "resume-frames",
+    "detail": "phase=live framesWhileHidden=1 rowingActive=false distanceIncreased=false"
+  },
+  {
+    "seq": 34,
+    "atMs": 1787967255803,
+    "kind": "liveness-recovery",
+    "detail": "frame stream resumed"
+  },
+  {
+    "seq": 35,
+    "atMs": 1787967297110,
+    "kind": "frame",
+    "detail": "state=rowing elapsed=0 distance=0 rowingActive=false spm=25"
+  },
+  {
+    "seq": 36,
+    "atMs": 1787967297202,
+    "kind": "notify-first",
+    "detail": "0x0037 (18B)"
+  },
+  {
+    "seq": 37,
+    "atMs": 1787967297204,
+    "kind": "split-half",
+    "detail": "0x0037 for Split/Interval Number 1 received (run open, state=rowing)"
+  },
+  {
+    "seq": 38,
+    "atMs": 1787967297204,
+    "kind": "notify-first",
+    "detail": "0x0038 (19B)"
+  },
+  {
+    "seq": 39,
+    "atMs": 1787967297204,
+    "kind": "split-half",
+    "detail": "0x0038 for Split/Interval Number 1 received (run open, state=rowing)"
+  },
+  {
+    "seq": 40,
+    "atMs": 1787967297204,
+    "kind": "interval-complete",
+    "detail": "index=0 (machine reported 1)"
+  },
+  {
+    "seq": 41,
+    "atMs": 1787967297205,
+    "kind": "record-actual",
+    "detail": "index=0 finalBoundary=false recordClosed=false -> accepted (actuals 0 -> 1)"
+  },
+  {
+    "seq": 42,
+    "atMs": 1787967309720,
+    "kind": "disconnected",
+    "detail": "capacitorBle: Bluetooth disabled (onEnabledChanged reported false)"
+  },
+  {
+    "seq": 43,
+    "atMs": 1787967309721,
+    "kind": "disconnect-requested",
+    "detail": "caller-initiated"
+  }
+]

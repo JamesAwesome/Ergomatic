@@ -34,19 +34,21 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
 ## Task 12 hardware-ranking decision
 
-Decision: `HARDWARE_CAN_CHANGE_RANKING`; approval pending.
+Decision: `HARDWARE_COMPLETE`; no hypothesis entered the fix list.
 
-One compact native PM5 walk can settle four hypotheses whose bad outcome would
-enter the P1/P2 fix list. It must capture the PM5 and phone in the same frame,
-retain the raw ring/transport log, and compare authored fingerprints rather
-than Ergomatic-derived expectations. The hardware-walk skill must turn this
-matrix into verified operator instructions only after James approves it.
+James approved and completed the compact three-row matrix. The evidence is in
+`docs/monitor/sessions/walk-2026-08-28-codebase-audit/`. The PM5 and app photos
+are correlated pairs rather than same-frame captures; raw Web Bluetooth
+streams establish ordering for the programming legs, and the native ring plus
+saved-detail screenshot establish the interruption-to-save path. That
+substitution is sufficient for AUD-007/AUD-010 and the observed AUD-001 path,
+but not for AUD-009's semantic control.
 
-| Included question                                                 | Setup and action                                                                                                                                                                  | Required independent evidence                                                                                                                           | Ranking-changing outcomes                                                                                                                                                             |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AUD-010 later-frame retention plus AUD-007 stale-tail replacement | Arm a multi-frame workout with a uniquely recognizable late interval and reach it; then arm a shorter workout with the same first interval and continue through its intended end. | Authored interval fingerprint; raw programming/notification log; PM5 and app in the same frame at the unique late interval and at the shorter endpoint. | Missing/reordered late interval promotes AUD-010 to P1; an old tail after the shorter endpoint promotes AUD-007 to P1; both correct outcomes clear those exact firmware/device cases. |
-| AUD-009 zero-target meaning                                       | Include one effort-only interval whose product encoding uses zero pace and observe the PM5's target presentation while rowing.                                                    | Same-frame PM5/app view plus raw programmed bytes; an omitted-target or otherwise independently untargeted control if the PM5 display is ambiguous.     | A displayed/enforced pace target promotes a wrong-prescription finding; an independently untargeted presentation clears this exact device/firmware case.                              |
-| AUD-001 native interruption-to-save                               | During a measured native interval, enter one already supported interruption path, then use the app's offered End/recovery route and save.                                         | Same-frame PM5/app measurement before interruption; raw native ring; final saved row compared with PM5 memory for the same work.                        | Lost measured work or an unrecoverable native route promotes a P1; a correct saved row narrows, but does not globally clear, native callback-order uncertainty.                       |
+| Included question                                                 | Observed evidence                                                                                                                                                                                                      | Disposition                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AUD-010 later-frame retention plus AUD-007 stale-tail replacement | The six-interval raw stream contains ordered 0x0037/38 boundaries 1–6; interval 5 carries the authored 60 s rest. The immediate two-interval replacement contains only boundaries 1–2 and naturally finishes at 200 m. | Clear both hypotheses for PM5 `432331249` and this firmware case. Do not generalize to every PM5/firmware. No finding promoted.                                                                                                      |
+| AUD-009 zero-target meaning                                       | The ring proves raw zero pace; the PM5 READY screen shows `:00 /500m`, but that screen position is also the live/current-pace field. No omitted-pace control was run.                                                  | Remains a P2 hypothesis. Ack, successful rowing, and an ambiguous display do not establish sentinel meaning or target enforcement.                                                                                                   |
+| AUD-001 native interruption-to-save                               | Radio-off after one complete 100 m produced a native disconnect, `1 interval kept`, and a saved 100 m / 0:29 / 2:23.5 row matching the PM5's approximately 28.7 s / 2:23.8 display and boundary ring.                  | No P1 outcome. Narrowed for this exact native path; global callback-order and buffering uncertainty remains. A 4.6 s camera excursion separately produced a self-recovering false LOST banner, recorded as low-priority brittleness. |
 
 Excluded from this walk:
 
@@ -60,8 +62,9 @@ Excluded from this walk:
   test that locally; an ordinary successful hardware run cannot disprove the
   unbounded wait.
 
-No walk card, test build, device command, or operator instruction is authorized
-until James separately approves this exact three-row matrix.
+The walk used eight 100 m intervals plus about ten seconds of a ninth, within
+the approved reduced budget. Bluetooth was restored and the lab was torn down
+after evidence collection.
 
 ### AUD-001 — Native monitor failures can remain invisible to automated evidence
 
@@ -74,10 +77,13 @@ until James separately approves this exact three-row matrix.
 - Scope: native transport selection, plugin delivery, lifecycle, liveness, recovery, and diagnostic capture.
 - Existing coverage gap: Vitest excludes `src/native/**` and both radio adapters; Playwright runs Chromium with the fake-injection seam.
 - Verification required after a fix: native capture or hardware walk only if Task 12 finds it can change the ranking, plus replayable regression evidence where possible.
-- Status: Task 8 found production-phone evidence for selected lock, radio-off,
-  finish, and terminate outcomes, but no raw native transport trace or portable
-  plugin/lifecycle contract. The hypothesis is narrowed and deferred to Task
-  12's ranking-based hardware decision.
+- Status: Task 12 reproduced a native radio-off interruption after one complete
+  interval. The app exposed a recoverable End/save route and persisted the same
+  100 m the PM5/ring measured, so the ranking-changing P1 outcome did not occur.
+  The broad hypothesis remains narrowed, not globally cleared. Separately, a
+  4.613 s camera excursion produced a transient LOST banner with no disconnect
+  and recovered 34 ms after resume; that is confirmed low-priority brittleness,
+  not data loss.
 
 ### AUD-003 — The repository has no current measurement of mutation strength
 
@@ -151,9 +157,11 @@ until James separately approves this exact three-row matrix.
 - Verification required after a fix: long-to-short and short-to-long real-device
   sequences with distinct late intervals, plus replayable evidence if the
   device exposes a sufficient full-program readback.
-- Status: Task 8 confirmed that acknowledgements plus interval-zero structural
-  readback cannot settle tail replacement. Deferred to Task 12's ranking-based
-  hardware decision.
+- Status: Task 12 cleared the stale-tail hypothesis for PM5 `432331249` and the
+  observed firmware: immediately after a six-interval program, a two-interval
+  same-first replacement emitted only split numbers 1 and 2 and naturally
+  finished at 200 m. Cross-device/firmware generalization remains unsupported;
+  no finding is promoted.
 
 ### AUD-008 — The general 50-interval rejection lacks primary support
 
@@ -209,9 +217,11 @@ until James separately approves this exact three-row matrix.
   evidence proves only that the PM5 accepted the program.
 - Verification required after a fix: primary-defined sentinel/omission behavior
   and a real-device effort-versus-target control.
-- Status: Task 8 confirmed only that raw zero was emitted and accepted; no
-  target-display or enforcement control exists. Deferred to Task 12's
-  ranking-based hardware decision.
+- Status: Task 12 photographed `:00 /500m` at READY after raw zero was emitted,
+  but that screen location is also the live/current-pace field. Without the
+  required omitted-pace or real-target control, sentinel meaning and enforcement
+  remain unknown. The P2 hypothesis stays quarantined and does not enter the fix
+  list.
 
 ### AUD-010 — Programming beyond the first PM5 frame lacks retention evidence
 
@@ -241,9 +251,11 @@ until James separately approves this exact three-row matrix.
   first frame.
 - Verification required after a fix: a final-frame physical fingerprint across
   repeated arms, plus a replayable raw trace for every observable field.
-- Status: Task 8 confirmed the two-frame capture never reached its later-frame
-  interval, so retention remains unproved. Deferred to Task 12's ranking-based
-  hardware decision.
+- Status: Task 12 cleared the retention hypothesis for PM5 `432331249` and the
+  observed firmware. The authored second frame contained intervals 5 and 6;
+  the raw stream reached both in order, recorded the unique 60 s rest on
+  interval 5, and naturally finished after interval 6. This is exact-case
+  physical evidence, not a universal firmware contract; no finding is promoted.
 
 ### AUD-017 — Ambiguous committed responses can duplicate a log and plan advance
 
