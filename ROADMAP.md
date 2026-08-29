@@ -156,25 +156,35 @@ rower's work silently.
       `useMonitorSession.ts:1909`; `phase=live` by seq 35), and a late open
       costs only the series trace's head, never the interval actual — that is
       the machine's own 0x0037/0x0038 pair stored verbatim
-      (`parse.ts:653-676`). **What killed the row: the erg dropped its own
-      program mid-row (seq 37, RC-37's readback signature, no Menu press) and
-      the hook ignores `programDropped` whenever `phase` is not
-      `programming`/`ready` (`useMonitorSession.ts:2319-2320`, its own comment
-      conceding the live case was "left alone rather than guessed at") — so no
-      boundary ever arrives and the record closes with zero actuals.** - [ ] **Handle `programDropped` while a run is live.** Small and
-      deterministic — the detector already fires; only the live arm
-      swallows it, and that arm has NO test
-      (`useMonitorSession.test.ts` covers only `ended`). The spec says
-      what the rower sees and what the record keeps. **S** - [ ] Two co-producers from the same window, real and NOT fixed by the
-      item above: `pause-declared` at 66 spm while rowing (the freeze
-      predicate's observed production false positive), and TWD
-      52→0→64 m non-monotonic. Both stay owned by the lifecycle spec. - [ ] **Recover the full ring before the lifecycle spec is written.**
-      The committed `pocketed-phone-prerow-ring.json` is a CURATED
-      excerpt (six seq gaps against a contiguous-numbering `record()`);
-      `ergomatic:last-session-log` on the phone may still hold the
-      whole thing, including what End actually stored — which the
-      excerpt does not show.
-      Deliberately not claimed in v0.26.0's notes. **M**
+      (`parse.ts:653-676`). **The proven chain: the fallback opened the
+      record late; the erg then dropped its own program mid-row (seq 37,
+      RC-37's readback signature, no Menu press); and the hook ignores
+      `programDropped` whenever `phase` is not `programming`/`ready`
+      (`useMonitorSession.ts:2319-2320`, its own comment conceding the live
+      case was "left alone rather than guessed at"). That the ignored drop
+      is what cost the row — no boundary afterwards, zero actuals stored —
+      is the LEADING HYPOTHESIS, not proven: the committed ring is a curated
+      excerpt that omits what End stored, so it cannot prove an absence
+      (James's PR #225 review).** Deliberately not claimed in v0.26.0's
+      notes. Its three work items are the next three entries. **M**
+- [ ] **Handle `programDropped` while a run is live** (from the
+      pocketed-phone re-diagnosis above). Small and deterministic, warranted
+      whatever the full ring says — the detector already fires; only the
+      live arm swallows it, and that arm has NO test
+      (`useMonitorSession.test.ts` covers only `ended`). The spec says what
+      the rower sees and what the record keeps. **S**
+- [ ] **The pocketed-phone window's two co-producers**, real and NOT fixed
+      by the item above: `pause-declared` at 66 spm while rowing (the freeze
+      predicate's observed production false positive), and TWD 52→0→64 m
+      non-monotonic. Both stay owned by the lifecycle spec. **S**
+- [ ] **Recover the full ring before the lifecycle spec is written — it
+      settles the causal hypothesis.** The committed
+      `pocketed-phone-prerow-ring.json` is a CURATED excerpt (six seq gaps
+      against a contiguous-numbering `record()`);
+      `ergomatic:last-session-log` on the phone may still hold the whole
+      thing, including what End actually stored — which the excerpt does not
+      show. **S**
+
 - [ ] **Correct resume** (was LM PR 2). James's ruling, 2026-08-20:
       **"CORRECT RESUME, not a background mode."** **Unblocked 2026-08-26** —
       it was gated on a probe James cancelled, so the probe will never report.

@@ -22,12 +22,13 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     // NOT WRITTEN, deliberately: the pocketed-phone row loss is still not
     // fixed. The walk reproduced the loss (phone locked before the first
     // pull; the record opened ~43 s late, then the erg dropped its own
-    // program and the hook ignores programDropped once live, so the record
-    // closed with zero actuals — the 2026-08-28 anchor pass's re-diagnosis;
-    // the old "app held READY with no record" reading was false). Item 3
-    // helps only at READY, not once live. Promising more than that would be
-    // the over-claim v0.24.0's own correction exists to stop, so the notes
-    // stay silent and the ROADMAP carries the gap.
+    // program and the hook ignores programDropped once live — proven; that
+    // the ignored drop is what left the record empty is the LEADING
+    // HYPOTHESIS of the 2026-08-28 anchor pass's re-diagnosis, pending the
+    // full ring; the old "app held READY with no record" reading was
+    // false). Item 3 helps only at READY, not once live. Promising more
+    // than that would be the over-claim v0.24.0's own correction exists to
+    // stop, so the notes stay silent and the ROADMAP carries the gap.
     version: "v0.26.0",
     date: "2026-08-28",
     items: [

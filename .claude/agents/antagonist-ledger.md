@@ -3798,14 +3798,19 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   1 Hz series trace loses its head. **Technique: before believing a
   late-start defect costs a NUMBER, find where that number is derived. If it
   comes off the wire at a boundary, our clock's start time is irrelevant.**
-- **The defect that actually destroyed the row was two lines nobody had
+- **The leading suspect for the destroyed row was two lines nobody had
   listed.** `useMonitorSession.ts:2319-2320` returns on `programDropped`
   whenever `phase` is not `programming`/`ready` — so a machine that discards
-  the program mid-row is ignored, no boundary ever arrives, and the record
-  closes with zero actuals. Its own comment admits the case was "left alone
-  rather than guessed at", and the test suite covers only the `ended` arm.
+  the program mid-row is ignored; on this reading no later boundary arrives
+  and the record closes with zero actuals. Its own comment admits the case
+  was "left alone rather than guessed at", and the test suite covers only
+  the `ended` arm. **Corrected at James's PR #225 review (2026-08-29): the
+  ignore is PROVEN; the causal link to the lost row is a HYPOTHESIS — the
+  curated ring omits what End stored and cannot prove an absence, which is
+  this very entry's own gap-check technique applied back at it.**
   **Technique: when a symptom has a named owner item, still enumerate every
-  producer. The owner item was the wrong producer.**
+  producer. The owner item was the wrong producer — and the replacement
+  producer's causal role gets the same evidence bar the original failed.**
 - **A committed walk README carried a false counterfactual.** "The #211 build
   would have caught it and returned him to the workout screen" — it would not;
   `phase` was `live` and `phase: "ready"` is only ever set from an `armed`
@@ -3820,13 +3825,17 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   reports "all N threw", check whether the FIRST throw could mask the rest —
   and re-derive the set from the code, never from the probe's own count.**
 - **"n = 1, the only 0x0039/0x003F ever captured" was stale by five walks.**
-  EIGHT committed recordings now carry a complete burst, plus one production
-  native ring. Measured terminal->burst: 271-542 ms (web, n=8) and 452 ms
-  (native, n=1). `BURST_LINGER_MS`'s 2000 and its "~1 s terminate lag" both
-  rest on the dead n=1. **Technique: a constant's comment claiming a corpus
-  size has an expiry date. Before designing on it, re-run the count over
-  `docs/monitor/sessions/**` by date — decoding eight gzipped captures took
-  one script.**
+  EIGHT unique committed web recordings now carry a complete burst, plus TWO
+  production native rings (`walk-2026-08-24/phone-exit7-ring.json` +358 ms;
+  `walk-2026-08-28/summary-never-stored-ring.json` +452 ms) — n=10, not the
+  n=9 this pass first reported (James's PR #225 review caught the missed
+  exit7 ring). Measured positive post-terminal lags: 271-542 ms; two web
+  captures deliver the burst BEFORE the terminal observation. `BURST_LINGER_MS`'s
+  2000 and its "~1 s terminate lag" both rest on the dead n=1. **Technique:
+  a constant's comment claiming a corpus size has an expiry date. Before
+  designing on it, re-run the count over `docs/monitor/sessions/**` by
+  date — decoding the gzipped captures took one script — and count RINGS as
+  well as recordings; the corpus has two shapes.**
 - **A durability fix and an ordering fix at the same reader are NOT one
   contract.** The hold fixes WHEN the record is read; AUD-016 fixes WHETHER it
   exists. Holding longer over a rejected write changes nothing. **Technique:
@@ -3852,7 +3861,7 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   exit on the Retry surface.
 - **Could not establish:** the 0-of-16 prod count (no DB); whether the hold's
   duration survives native BACKGROUNDING (all eight burst recordings are
-  `transport=web, app=dev`; the one native point is foreground); what leg 4
+  `transport=web, app=dev`; both native ring points are foreground); what leg 4
   actually stored; and whether a resume-time deterministic ready signal exists
   (the coast/row-to-begin control does not exist in any capture).
 - **Evidence-integrity note for the phase:** `walk-2026-08-28/pocketed-phone-prerow-ring.json`

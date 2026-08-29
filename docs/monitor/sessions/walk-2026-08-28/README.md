@@ -90,14 +90,16 @@ session.** The ring's own seq 29 (`rowing-active-fallback`, machine elapsed
 that calls `createMonitorRun` (`useMonitorSession.ts:1909`) — and seq 35
 reads `phase=live`. The record opened ~43 s late, which costs the series
 trace's head and nothing else: interval actuals are the machine's own
-0x0037/0x0038 pair stored verbatim. What cost him the row is the NEXT
-finding — the erg dropped its program mid-row and the app ignores
-`programDropped` once live, so no boundary ever arrived and the record
-closed with zero actuals. He rowed and the app kept nothing — the tester's
-OUTCOME exactly, by a different mechanism than this walk first recorded.
-(This committed ring is a curated excerpt — six seq gaps — so what End
-stored is not in it; the full ring may survive in
-`ergomatic:last-session-log` on the phone.)
+0x0037/0x0038 pair stored verbatim. The LEADING HYPOTHESIS for what cost
+him the row is the NEXT finding — the erg dropped its program mid-row and
+the app ignores `programDropped` once live, which would leave no later
+boundary and zero stored actuals. That causal link is NOT proven from this
+artefact: the committed ring is a curated excerpt — six seq gaps — that
+omits what End stored, so it cannot prove an absence. He rowed and the app
+kept nothing — the tester's OUTCOME exactly; the mechanism this walk first
+recorded is corrected above, and its replacement stays a hypothesis until
+the full ring (which may survive in `ergomatic:last-session-log` on the
+phone) is recovered.
 
 ### THE FINDING THAT MATTERS: RC-37's signature occurred NATURALLY.
 
@@ -126,8 +128,9 @@ screen." That counterfactual is FALSE.** The phase was `live` at the drop
 `programming`/`ready` (`useMonitorSession.ts:2319-2320`) — its own comment
 says the live case was "left alone rather than guessed at", and the `live`
 arm has no test. On #211 the driver would have emitted the event and one
-ring line; the screen would NOT have changed, no boundary would ever
-arrive, and the record would still close with zero actuals. Handling
+ring line; the screen would NOT have changed, and nothing in #211 recovers
+a live drop. Whether a boundary could still have arrived afterwards is
+part of the same open hypothesis the curated ring cannot settle. Handling
 `programDropped` in `live` is now its own Wave F item.
 
 Recorded so nobody re-scopes RC-37 downward from its original trigger — and
