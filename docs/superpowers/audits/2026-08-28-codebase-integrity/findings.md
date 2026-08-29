@@ -4,50 +4,56 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
 Current-main revalidation: `fd4d06a57581e1e814ecd06f74274a30bffce6ee`
 
-Eight findings are Confirmed and one is Probable after four fresh, blind,
-high-effort validation passes. No validator authored its candidate. The
-controller reproduced every accepted discriminator before dispatch and
-reconciled each independent result against the fixed severity definitions.
+The phase-close gates accept six actionable P1/P2 findings: five Confirmed and
+one Probable. Three additional reproduced conditions are P3/deferred because
+the audit did not establish a supported producer or current deployment trigger.
+No validator authored its candidate, and the controller re-opened every
+phase-close challenge against production writers and primary standards.
 
-All nine remain present on current `main`. Between the baseline and `fd4d06a`,
-the only `app/` changes are a monitor type test, design/screenshot tests, and
-`BaselineEditor`; none intersects a finding's production scope. The false
-replica-safety design claim is also unchanged. Current-main status is therefore
-`still present` for every row below; later-main code was not blended into the
-baseline reproductions.
+All six actionable paths remain present on current `main`. Between the baseline
+and `fd4d06a`, the only `app/` changes are a monitor type test,
+design/screenshot tests, and `BaselineEditor`; none intersects their production
+scope. Later-main code was not blended into the baseline reproductions. Product
+ordering is separate: current main added a newer Wave F P1, so Wave F's
+phase-open gate—not this audit—sequences its existing work against these owners.
 
 | Rank | ID      | Severity / evidence | Current main  | Why it outranks the next item                                                                   |
 | ---- | ------- | ------------------- | ------------- | ----------------------------------------------------------------------------------------------- |
 | 1    | AUD-016 | P1 / Confirmed      | Still present | It can discard measurements after the rower has completed real connected work.                  |
-| 2    | AUD-020 | P1 / Confirmed      | Still present | It creates durable duplicates and can advance a plan twice, but requires an explicit Retry.     |
-| 3    | AUD-011 | P1 / Confirmed      | Still present | It blocks the default screen under a standards-defined denial, but destroys no data.            |
-| 4    | AUD-015 | P1 / Confirmed      | Still present | It silently cancels Start, but the rower has not yet completed the workout and the draft stays. |
-| 5    | AUD-013 | P1 / Confirmed      | Still present | One valid JSON scalar hides all History, but active rowing and new logging remain available.    |
-| 6    | AUD-006 | P2 / Confirmed      | Still present | It gives a wrong rest prescription on two scan surfaces; execution still retains the rest.      |
-| 7    | AUD-014 | P2 / Confirmed      | Still present | Native local logout is incomplete, but the UI does not claim success and auth is not bypassed.  |
-| 8    | AUD-012 | P2 / Confirmed      | Still present | Concurrent empty boot fails, but current supported deployment is serial and single-replica.     |
-| 9    | AUD-002 | P2 / Probable       | Still present | The render crash is certain for `{}`, but no real producer or compatibility trigger was found.  |
+| 2    | AUD-011 | P1 / Confirmed      | Still present | It blocks the default screen under a standards-defined denial, but destroys no data.            |
+| 3    | AUD-015 | P1 / Confirmed      | Still present | It silently cancels Start, but the rower has not yet completed the workout and the draft stays. |
+| 4    | AUD-006 | P2 / Confirmed      | Still present | It gives a wrong rest prescription on two scan surfaces; execution still retains the rest.      |
+| 5    | AUD-014 | P2 / Confirmed      | Still present | Native local logout is incomplete, but the UI does not claim success and auth is not bypassed.  |
+| 6    | AUD-002 | P2 / Probable       | Still present | The render crash is certain for `{}`, but no real producer or compatibility trigger was found.  |
+
+| ID      | Phase-close disposition       | Why it is not in the P1/P2 fix list                                                                                                                                |
+| ------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AUD-012 | P3 / Confirmed stale claim    | The concurrency failure is real, but the supported deployment is explicitly serial and single-replica; correct the claim with the next deployment-doc PR.          |
+| AUD-013 | P3 / unsupported-trigger debt | Raw SQL can create the failure, but the PM5, route, and Drizzle writers do not preserve the extreme value and no repair/import/legacy producer was established.    |
+| AUD-020 | P3 / unsupported-trigger debt | The duplicate consequence is real if cleanup throws, but the validator fabricated `removeItem` failure and the normative Storage algorithm has no throwing branch. |
 
 No item meets P0. The audit found no validated security escape, destructive
 data path, unsafe operator command, or silently wrong durable number requiring
-an immediate stop. P1 is reserved here for blocked or lost active work and a
-credible durable-duplicate path without safe recovery. AUD-020 is P1 rather
-than P0 because the retry action is explicit and no immutable wrong record,
-security escape, data destruction, or unsafe device command was demonstrated.
+an immediate stop. The disputed raw-database, post-commit cleanup, and
+unsupported-topology results are retained explicitly rather than promoted past
+their triggers.
 
 ## Adjudication rulings
 
-- AUD-002 and AUD-013 stay separate: their triggers, authorities, and safe
-  boundaries are client response validation versus SQL conversion.
+- AUD-002 stays actionable without AUD-013: its client response boundary has a
+  deterministic consequence, while the raw-database producer is unsupported.
 - AUD-011, AUD-015, and AUD-016 stay separate: getter denial, an ignored
   `saveRun` result, and monitor hand-off durability can each pass independently.
-- AUD-020 is split from AUD-011: it begins after a successful server commit and
-  requires cleanup/retry separation, not a storage-read guard.
+- AUD-020 remains separate from AUD-011 but leaves the fix list: Web Storage
+  getter/write failures do not establish a throwable `removeItem` after 201.
 - AUD-017 remains a hypothesis separate from AUD-020: a lost response requires
   operation identity or idempotency; AUD-020 has an observed 201 response.
-- No over-engineering finding is promoted. File size and complexity alone do
-  not establish duplicated authority, unreachable state, a contradictory
-  interface, or measurable change cost; Task 9 found no runtime import cycle.
+- Over-engineering is partially covered. The audit tested runtime import cycles
+  and mapped state/writer/authority seams plus platform/test reachability. It
+  did not perform a repository-wide review of unnecessary extra state,
+  one-consumer abstractions, unused interfaces, production dead branches,
+  duplicated mechanisms, or measurable change amplification. No finding is
+  promoted; those subcategories are deferred, not cleared.
 - AUD-003 remains P3 process debt and AUD-005 remains cleared, so neither
   consumes another validation pass.
 
@@ -75,23 +81,27 @@ in memory through five rejected monitor writes. Real finish-to-Log rendered
 `NO MONITOR READING`; persisting the same closed run restored `2:20.0`. This
 settles the screen consequence that remained inferred after Task 9.
 
-### AUD-020 — CONFIRMED, P1
+### AUD-020 — DOWNGRADED to P3 / unsupported-trigger debt
 
 Both Log doors converted a real 201 followed by selective cleanup failure into
 a retryable save error and sent a second POST. A separate real-PostgreSQL probe
 observed distinct created IDs, two rows for the no-plan case, and `doneN:2` for
-the advancing-plan case. This independently extends the controller's Task 7
-mounted POST-count probe to durable cardinality.
+the advancing-plan case. Phase close re-opened the trigger: every validator
+fabricated a selectively throwing `removeItem`, while the normative Web Storage
+algorithm defines no throwing branch for that method and a previously obtained
+local-storage holder is returned without a new policy decision. The consequence
+is reproduced; a supported throwable post-201 operation is not.
 
-### AUD-013 — CONFIRMED, promoted to P1
+### AUD-013 — DOWNGRADED to P3 / unsupported-trigger debt
 
 A real authenticated History request listed nine boundary/control rows, then
 returned 500 after raw SQL added valid JSONB number `1e1000`; deleting only that
 row restored 200. Three direct overflow/underflow casts failed while finite
-boundaries passed. One owned row therefore blocks the entire History surface,
-which meets P1's blocked-rower definition rather than P2's recoverable display.
-This independently repeats the controller's Task 7 real-PostgreSQL probe with a
-broader boundary matrix.
+boundaries passed. Phase close traced every supported writer: the PM5 source is
+bounded `u16 / 10`, the route parses the extreme to non-finite JavaScript, and
+the Drizzle JSONB encoder serializes it to `null`. No repair, import, legacy, or
+operational writer preserving `1e1000` was found. The raw-SQL hardening gap is
+real, but the audit control document is not product authority for a P1.
 
 ### AUD-002 — DOWNGRADED to P2 / Probable
 
@@ -109,13 +119,15 @@ retained both rests and Timer ran 240 seconds. The compiler coherently rejected
 leading rest and compiled consecutive rest as 180 seconds. The user harm is a
 wrong scan-surface prescription, not wrong execution.
 
-### AUD-012 — CONFIRMED, P2
+### AUD-012 — CONFIRMED, downgraded to P3
 
 Across three fresh PostgreSQL 18.4 trials, two simultaneous production-built
 servers produced exactly one healthy process and one migration `23505`; a
 serial control made both healthy. Direct counts matched 17 checked-in journal
 entries and 302 independently derived global seed rows. The live claim is false,
-but current single-replica compose does not enter the trigger.
+but the supported deployment explicitly forbids concurrent migrators through a
+single-replica serial rollout. Under the audit's own severity table, this is a
+stale claim with no demonstrated current user harm: P3 documentation debt.
 
 ### AUD-014 — CONFIRMED, retained at P2
 
@@ -130,12 +142,12 @@ blocked rower, lost active work, or wrong prescription.
 ## Controller acceptance check
 
 The controller's calibrated Task 6–9 probes predate and are independent of the
-validators: getter denial and mounted Today; Countdown-to-Timer selective write
-failure; connected storage gate; post-201 cleanup retry; malformed History
-body; two-server fresh-database boot; raw `1e1000` History read; rejected native
-sign-out; and raw-authored rest arithmetic across both projections. Each fresh
-validator used its own probe files and controls, reported an empty product diff,
-and removed every temporary file, process, container, and volume it created.
+validators. Phase close then tested the probes' premises, not just their output:
+getter denial, failed run writes, rejected monitor persistence, malformed
+History success, native sign-out, and raw-authored rest retained supported
+triggers; selective `removeItem`, raw-SQL `1e1000`, and concurrent deployment did
+not retain P1/P2 authority. Every temporary probe, process, container, and volume
+was removed, and the product diff stayed empty.
 
 ## Validation record: blind briefs issued
 

@@ -46,7 +46,7 @@ but not for AUD-009's semantic control.
 
 | Included question                                                 | Observed evidence                                                                                                                                                                                                      | Disposition                                                                                                                                                                                                                          |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| AUD-010 later-frame retention plus AUD-007 stale-tail replacement | The six-interval raw stream contains ordered 0x0037/38 boundaries 1–6; interval 5 carries the authored 60 s rest. The immediate two-interval replacement contains only boundaries 1–2 and naturally finishes at 200 m. | Clear both hypotheses for PM5 `432331249` and this firmware case. Do not generalize to every PM5/firmware. No finding promoted.                                                                                                      |
+| AUD-010 later-frame retention plus AUD-007 stale-tail replacement | The six-interval raw stream contains ordered 0x0037/38 boundaries 1–6; interval 5 carries the authored 60 s rest. The immediate two-interval replacement contains only boundaries 1–2 and naturally finishes at 200 m. | Clear both hypotheses for PM5 `432331249` in these observed runs; firmware was not recorded. Do not generalize to other devices or firmware. No finding promoted.                                                                    |
 | AUD-009 zero-target meaning                                       | The ring proves raw zero pace; the PM5 READY screen shows `:00 /500m`, but that screen position is also the live/current-pace field. No omitted-pace control was run.                                                  | Remains a P2 hypothesis. Ack, successful rowing, and an ambiguous display do not establish sentinel meaning or target enforcement.                                                                                                   |
 | AUD-001 native interruption-to-save                               | Radio-off after one complete 100 m produced a native disconnect, `1 interval kept`, and a saved 100 m / 0:29 / 2:23.5 row matching the PM5's approximately 28.7 s / 2:23.8 display and boundary ring.                  | No P1 outcome. Narrowed for this exact native path; global callback-order and buffering uncertainty remains. A 4.6 s camera excursion separately produced a self-recovering false LOST banner, recorded as low-priority brittleness. |
 
@@ -70,16 +70,33 @@ after evidence collection.
 
 Current main: `fd4d06a57581e1e814ecd06f74274a30bffce6ee`.
 
-All five P1 and four P2 findings remain present. The baseline→main `app/` diff
+All six phase-close P1/P2 paths remain present. The baseline→main `app/` diff
 touches only a monitor type test, design/screenshot tests, and
-`BaselineEditor`; none intersects a promoted production scope. The false
-booting-replica design claim is unchanged. Later-main behavior was not used to
-rewrite any baseline reproduction.
+`BaselineEditor`; none intersects an actionable production scope. Later-main
+behavior was not used to rewrite any baseline reproduction.
 
-The nine findings are assigned to seven live ROADMAP chunks. Hypotheses remain
-outside `claude-fix-list.md`; the only hardware dispositions are exact-case
-clearances/narrowing, not universal device claims. AUD-003 remains grouped P3
-process debt and AUD-005 remains cleared.
+The six findings are assigned to five ROADMAP-owned chunks, but current main
+added a newer Wave F P1 and the audit does not impose a global execution order.
+Hypotheses and P3 results remain outside `claude-fix-list.md`; the only hardware
+dispositions are exact-case clearances/narrowing, not universal device claims.
+AUD-003 remains grouped P3 process debt and AUD-005 remains cleared.
+
+## Task 14 phase-close evidence corrections
+
+- **AUD-013:** raw SQL proves a list-cast hardening gap, but supported writers
+  do not preserve `1e1000` and no repair/import/legacy producer was found.
+  Downgraded from P1 to P3 unsupported-trigger debt.
+- **AUD-020:** duplicate rows/plan advancement are real if post-201 cleanup
+  throws, but all probes fabricated a selectively throwing `removeItem`; the
+  normative Storage algorithm defines no such branch. Downgraded from P1 to P3
+  unsupported-trigger debt pending a real throwable operation.
+- **AUD-012:** concurrent empty-database startup really fails, but the supported
+  deployment is explicitly serial and single-replica. Downgraded from P2 to P3
+  stale-claim debt; its docs correction rides the next deployment-doc PR.
+- **Over-engineering:** partially covered. Runtime cycles, state/writer/authority
+  seams, and platform/test reachability were checked. Repository-wide extra
+  state, one-consumer/unused interfaces, production dead branches, duplicate
+  mechanisms, and measurable change amplification remain deferred.
 
 ### AUD-001 — Native monitor failures can remain invisible to automated evidence
 
@@ -124,8 +141,9 @@ process debt and AUD-005 remains cleared.
 - Scope: log POST validation, jsonb storage, list/detail projection, installed clients, and summary rendering.
 - Existing coverage gap: field-by-field tests can confirm current permissiveness without establishing whether it is the intended durable contract.
 - Verification required after a fix: real-Postgres round trips, mounted API tests, old/new client compatibility cases, and consumer rendering.
-- Status: Tasks 6–7 found no independent installed-client field contract; the
-  first consumers are mapped, but the claim remains quarantined for Task 10.
+- Status: Tasks 6–7 mapped the first consumers, and Task 10 found that no code
+  fix is supportable without a product compatibility contract. Deferred as a
+  P2 Hypothesis; no implementation prompt is prescribed.
 
 ### AUD-005 — No harmful production import cycle exists at this baseline
 
@@ -172,8 +190,8 @@ process debt and AUD-005 remains cleared.
 - Verification required after a fix: long-to-short and short-to-long real-device
   sequences with distinct late intervals, plus replayable evidence if the
   device exposes a sufficient full-program readback.
-- Status: Task 12 cleared the stale-tail hypothesis for PM5 `432331249` and the
-  observed firmware: immediately after a six-interval program, a two-interval
+- Status: Task 12 cleared the stale-tail hypothesis for PM5 `432331249` in the
+  observed runs (firmware was not recorded): immediately after a six-interval program, a two-interval
   same-first replacement emitted only split numbers 1 and 2 and naturally
   finished at 200 m. Cross-device/firmware generalization remains unsupported;
   no finding is promoted.
@@ -203,8 +221,8 @@ process debt and AUD-005 remains cleared.
 - Verification required after a fix: a primary-bound limit plus boundary tests
   below/at/above it; physical evidence only if Task 12 finds it decision-relevant.
 - Status: Task 9 confirmed the cited source is silent on the required general
-  variable-interval attribute. The product consequence remains unknown, so
-  this stays quarantined for Task 12 only if it can change ranking.
+  variable-interval attribute. Task 12 excluded an interval-51 hardware probe
+  because it could not change the final ranking. Deferred as a P2 Hypothesis.
 
 ### AUD-009 — Zero pace is assumed to mean no PM5 target
 
@@ -266,8 +284,8 @@ process debt and AUD-005 remains cleared.
   first frame.
 - Verification required after a fix: a final-frame physical fingerprint across
   repeated arms, plus a replayable raw trace for every observable field.
-- Status: Task 12 cleared the retention hypothesis for PM5 `432331249` and the
-  observed firmware. The authored second frame contained intervals 5 and 6;
+- Status: Task 12 cleared the retention hypothesis for PM5 `432331249` in the
+  observed runs; firmware was not recorded. The authored second frame contained intervals 5 and 6;
   the raw stream reached both in order, recorded the unique 60 s rest on
   interval 5, and naturally finished after interval 6. This is exact-case
   physical evidence, not a universal firmware contract; no finding is promoted.
@@ -331,8 +349,9 @@ process debt and AUD-005 remains cleared.
 - Verification required after a fix: both captured sequences, natural finish,
   app End, duplicate terminal/boundary orderings, PM5 memory comparison, and a
   saved log whose heroes and rows name the same measured work.
-- Status: quarantined for Task 9 replay and Task 10 product-rule adjudication;
-  no fix is prescribed while the device behaviors remain unresolved.
+- Status: Task 10 found no authority that chooses between the two recorded PM5
+  outcomes, and Task 12 excluded another replay as non-decisive. Deferred as a
+  P2 Hypothesis; no fix is prescribed while the product rule is unresolved.
 
 ### AUD-019 — Web chunk loss can leave programming unbounded
 
@@ -367,8 +386,9 @@ process debt and AUD-005 remains cleared.
 - Verification required after a fix: a red calibrated lost-chunk control,
   bounded timeout/rejection and retry, a decisive web hardware stress case, and
   unchanged native programming. Full tail retention/execution remains AUD-010.
-- Status: quarantined for Task 9's gate/factual-claim pass and Task 12 only if
-  physical web evidence would change the final ranking.
+- Status: Task 9 confirmed the missing default acknowledgement bound but no
+  supported lost-chunk trigger. Task 12 excluded web hardware because it would
+  not change the final ranking. Deferred as a P2 Hypothesis.
 
 `Smallest safe fix` is forbidden here until a risk reaches Confirmed or Probable confidence.
 

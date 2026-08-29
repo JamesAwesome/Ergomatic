@@ -147,6 +147,10 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
 ### AUD-012 — The booting-replica safety claim fails before the seed lock
 
+**Phase-close disposition:** Confirmed P3 stale-claim debt. The two-server
+failure is real, but the supported deployment is explicitly serial and
+single-replica, so no current user-harm trigger supports P2.
+
 - Category: hallucinated claim
 - Severity / confidence: P2 / Confirmed
 - User impact: if two server instances ever start together on an empty
@@ -192,6 +196,12 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   grouped with the real-Postgres pass.
 
 ### AUD-013 — One out-of-range stored summary number breaks the whole History list
+
+**Phase-close disposition:** P3 unsupported-trigger hardening. Raw SQL proves
+the cast can fail, but every supported producer either bounds the value or
+serializes a non-finite JavaScript number to `null`; no repair/import/legacy
+writer preserving `1e1000` was established. The audit design is a control
+document, not product authority.
 
 - Category: brittleness
 - Severity / confidence: P2 / Confirmed
@@ -383,6 +393,12 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   whether authority is sufficient.
 
 ### AUD-020 — Cleanup failure turns a committed log into a retryable error
+
+**Phase-close disposition:** P3 unsupported-trigger hardening. The duplicate
+consequence is reproduced if cleanup throws, but all probes fabricated a
+throwing `Storage.removeItem`; the normative algorithm defines no throwing
+branch, and no real browser/WebView or other supported post-201 exception was
+observed.
 
 - Category: brittleness
 - Severity / confidence: P1 / Probable

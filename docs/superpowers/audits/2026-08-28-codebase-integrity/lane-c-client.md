@@ -4,6 +4,10 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
 Status: COMPLETE — fresh high-end semantic review approved after corrections.
 
+Evidence snapshot: this lane records Task 7's pre-validation dispositions.
+`findings.md` is authoritative after Tasks 11–14; in particular, AUD-020's
+fabricated cleanup trigger no longer carries a P1/P2 disposition.
+
 ## Scope and authorities
 
 Lane C traced the active phone session, monitor hand-off into logging, saved-log

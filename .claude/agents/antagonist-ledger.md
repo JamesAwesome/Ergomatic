@@ -3762,3 +3762,21 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   fake's real production-helper circularity, explicit native unknowns, lane
   dependency order, and proportional scout/investigator/validator allocation
   all survived direct baseline checks.
+
+### 2026-08-28 — Codebase integrity audit phase-exit corrections
+
+- **“Every promoted finding has an external condition” was false.** AUD-013's
+  only producer was raw SQL, while the supported PM5/route/Drizzle path bounds
+  or serializes the extreme value to `null`. Compare a corruption probe's writer
+  with every supported producer before treating the probe as product authority.
+- **Storage failure semantics are method-specific.** Getter and `setItem`
+  failures were generalized to a throwing `removeItem`, but the normative
+  algorithm has no throwing branch. Read the exact method algorithm before
+  promoting a monkeypatched exception.
+- **A reproduced failure does not choose severity without a supported trigger.**
+  Dual empty-database startup really fails, but the deployment contract is
+  serial/single-replica; comparing the trigger with the severity definition
+  moved AUD-012 from P2 to P3.
+- **Exact PM5 clearances survived raw-first replay.** Decode boundaries before
+  consulting app expectations and state only the quantity/device observed;
+  firmware was not recorded, so the clearance does not name it.

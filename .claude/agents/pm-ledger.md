@@ -3079,3 +3079,11 @@ rest` clause an incomplete close cannot have. Cohort empty, twice over.
   ROADMAP owner before handoff. Broad discovery may close with explicit
   deferred lanes; validation spend stops for James's approval once the
   candidate count is known.
+
+## Phase-close gate, 2026-08-28 (codebase-integrity audit)
+
+- **A current-main CODE check is not a current-main PRODUCT check.** The audit
+  proved its production paths unchanged but missed a newer Wave F TRIAD P1 in
+  the live slate. At audit close, revalidate both code presence and product
+  order; transfer fixes into their actual wave/open-register homes before
+  closing the overlay. A merge conflict is not a sequencing mechanism.

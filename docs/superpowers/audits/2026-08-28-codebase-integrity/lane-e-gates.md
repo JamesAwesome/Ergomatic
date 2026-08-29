@@ -4,6 +4,10 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
 Status: COMPLETE — fresh Sol-high semantic review approved after corrections
 
+Evidence snapshot: this lane records Task 9's pre-validation evidence grades.
+`findings.md` is authoritative after Tasks 11–14, including AUD-016's final
+P1/Confirmed disposition.
+
 Lane E found that the shipped gates are broad and currently green, but they do
 not enter the fault boundaries behind any of the eight promoted candidates.
 That is incomplete evidence, not circular proof: each candidate was reproduced
@@ -145,12 +149,14 @@ is not.
   End/save. A separate 4.613 s camera gap produced a self-recovering false LOST
   banner with no disconnect. Neither case establishes portable callback order,
   buffering, or lifecycle delivery.
-- AUD-007 is cleared for PM5 `432331249` and the observed firmware case. The
+- AUD-007 is cleared for PM5 `432331249` in the observed runs; firmware was not
+  recorded. The
   immediate six→two same-first replacement emitted only boundaries 1–2 and
   naturally finished at 200 m. No universal firmware claim is made.
 - AUD-009 remains P2 Hypothesis. Zero was emitted and accepted, but no primary
   definition or PM5 target-display/enforcement control proves “untargeted.”
-- AUD-010 is cleared for PM5 `432331249` and the observed firmware case. The
+- AUD-010 is cleared for PM5 `432331249` in the observed runs; firmware was not
+  recorded. The
   authored later frame's intervals 5 and 6 both executed in order, including
   interval 5's unique 60 s rest. No universal firmware claim is made.
 - AUD-018 remains P2 Hypothesis. The two terminate captures disagree about a

@@ -2,7 +2,7 @@
 
 Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
-Status: IN_PROGRESS
+Status: PASS
 
 ## Phase-open product-manager gate
 
@@ -62,7 +62,8 @@ All six were plan/spec defects; none is promoted as a product finding.
 
 James approved and completed the compact three-row walk for AUD-001, AUD-007,
 AUD-009, and AUD-010. No P1/P2 finding was promoted. AUD-007 and AUD-010 are
-cleared for PM5 `432331249` and the observed firmware case; AUD-001 is narrowed
+cleared for PM5 `432331249` in the observed runs (firmware was not recorded);
+AUD-001 is narrowed
 after the completed 100 m survived radio-off through save; AUD-009 remains
 unknown because `:00 /500m` was not an independent untargeted control. The
 incidental camera excursion confirmed a self-recovering false LOST banner, but
@@ -72,14 +73,52 @@ AUD-019 remain excluded for the original decision-value reasons.
 
 ## Phase-close antagonist exit gate
 
-Pending Task 14.
+Initial verdict: `FAIL`.
+
+The antagonist re-opened producers and authorities rather than accepting four
+blind validators as sufficient. Three preliminary findings were over-promoted,
+and the fix list displaced the live Wave F slate.
+
+| Blocking finding                                       | Controller disposition                                                                                                                                               |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AUD-013 lacked product authority/supported producer    | ACCEPTED. Raw SQL proves hardening debt; supported PM5/route/Drizzle writers do not preserve `1e1000`. Downgraded P1 → P3 and removed from the fix list.             |
+| AUD-020's cleanup trigger was fabricated               | ACCEPTED. The normative Storage algorithm has no throwing `removeItem` branch; no real post-201 throwable operation was established. Downgraded P1 → P3 and removed. |
+| AUD-012 violated the audit's P3 definition             | ACCEPTED. Dual startup fails, but supported deployment is serial/single-replica. Downgraded P2 → P3; docs correction rides the next deployment-doc PR.               |
+| Seven audit chunks displaced current Wave F            | ACCEPTED. The list is now audit-relative only; actual owners live in Wave F, Wave A, and the open register. Wave F phase-open sequences existing and audit P1s.      |
+| Stale lane dispositions contradicted final validation  | ACCEPTED. Lane C/D/E now identify themselves as evidence snapshots and point to `findings.md` as authoritative.                                                      |
+| Hardware wording claimed an unrecorded firmware case   | ACCEPTED. Exact clearances now say this PM5 in the observed runs and state firmware was not recorded.                                                                |
+| History bundle remained over-broad after AUD-013 moved | ACCEPTED. AUD-002 is now an independent History response-boundary chunk.                                                                                             |
+
+Correction re-gate: `PASS`. The antagonist confirmed every blocker was
+resolved and stated that the six-finding/five-chunk handoff is sound. No new
+product-scope contradiction was found.
 
 ## Phase-close product-manager gate
 
-Pending Task 14.
+Initial verdict: `PASS_WITH_CORRECTIONS`.
+
+| Blocking finding                                 | Controller disposition                                                                                                                                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current-main product order was not revalidated   | ACCEPTED. The newer machine-summary TRIAD P1 is preserved; the audit no longer issues a global execution order.                                                             |
+| ROADMAP ownership lived inside the audit overlay | ACCEPTED. Actionable work moved into Wave F, Wave A, and the open-item register; P3 items ride relevant work or remain risk-register evidence.                              |
+| Over-engineering had no evidenced disposition    | ACCEPTED. A narrow Luna pass found partial coverage only; the report names checked areas and explicitly defers extra state/abstractions/dead branches/change amplification. |
+| Spec/dashboard control records were stale        | ACCEPTED. Spec status, Task 13 counts, baseline-review result, and Task 14 state were reconciled.                                                                           |
+
+Tester impact remains none for this documentation-only audit. TestFlight release
+is not needed and no version bump is warranted. Correction re-gate:
+`PASS_WITH_CORRECTIONS`; the only remaining item was four stale prospective
+status labels in `risk-register.md`, corrected before Task 15. The PM recommends
+accepting the six-finding transfer and opening Wave F's phase-open sequencing
+gate.
 
 ## Corrections and reruns
 
 - 2026-08-28T16:47:32-0400: both `GO_WITH_CHANGES` verdicts were adjudicated;
   all accepted corrections passed Prettier and `git diff --check` before the
   gate record commit.
+- 2026-08-28T22:20:09-0400: initial phase-close PM and antagonist verdicts were
+  adjudicated. All blocking findings were accepted; re-gate remains required
+  before Task 14 can become complete.
+- 2026-08-28T22:36:00-0400: reused-context re-gates accepted the corrected
+  six-finding/five-chunk handoff. Four stale risk-register task labels were
+  rewritten to their final deferred dispositions; Task 14 is complete.
