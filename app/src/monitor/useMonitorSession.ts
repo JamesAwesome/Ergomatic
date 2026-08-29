@@ -734,29 +734,37 @@ const FINISH_HANDOFF_HOLD_MS = 3500;
  * 2000 twice.
  *
  * "Burst-eligible" was "natural-finish" until the summary-record design
- * spec's §1 gate 1 widened it to rower-ended closes as well. The DURATION
- * is unchanged and was not re-derived: the ~5.0× headroom below is
- * modelled on the NATURAL finish's 398 ms worst case, and the terminate's
- * own measured lag is larger — ~1 s from the terminal to the burst
- * (`walk-2026-08-24/lab-terminate-ring.json`, n = 1), plus up to
- * `driver.ts`'s `HASH_SUBWINDOW_MS` if 0x003F never comes. That is ~1.2 s
- * against this 2000, so the terminate path fits with roughly 1.7× margin
- * rather than 5×.
+ * spec's §1 gate 1 widened it to rower-ended closes as well. The corpus
+ * behind the duration was re-measured at the Wave F phase-open anchor
+ * (2026-08-28, corrected at PR #225's review): TEN committed captures now
+ * carry a complete burst — eight unique recordings (web, counting
+ * duplicate `.jsonl`/`.gz` representations once) plus two production
+ * native rings (`walk-2026-08-24/phone-exit7-ring.json` at +358 ms and
+ * `walk-2026-08-28/summary-never-stored-ring.json` at +452 ms). Positive
+ * post-terminal lags run 271–542 ms, worst case 542 ms
+ * (`walk-2026-08-25/smoke-terminated`); two of the web captures deliver
+ * the burst BEFORE our observation of the terminal flip — favourable for
+ * this linger (the burst is already in hand and the write-once append has
+ * taken it), but any hold design must handle that ordering explicitly
+ * rather than assume terminal-first. The earlier "~1 s terminate lag"
+ * read off `walk-2026-08-24/lab-terminate-ring.json` (n = 1) is
+ * contradicted by every later positive measurement and is retired.
  *
  * AND THE REAL BUDGET IS SMALLER STILL, because this clock starts at
- * TEARDOWN, not at the terminal frame: the machine's ~1 s is measured from
- * its own terminate, while these 2000 ms only begin once the hook has
- * flipped to `ended`, the caller has navigated, and the component has
- * unmounted. Whatever that navigate-and-unmount takes comes straight off
- * the top. Stated, not smoothed over: a slower terminate burst — or a
- * slower navigation — is capped here and lost, and the next terminate
- * capture is what would move this number.
+ * TEARDOWN, not at the terminal frame: the lags above are measured from
+ * the machine's own terminal, while these 2000 ms only begin once the
+ * hook has flipped to `ended`, the caller has navigated, and the
+ * component has unmounted. Whatever that navigate-and-unmount takes comes
+ * straight off the top. Stated, not smoothed over: a slower terminate
+ * burst — or a slower navigation — is capped here and lost, and the next
+ * terminate capture is what would move this number.
  *
- * Holds at ~5.0× the modelled worst case (398 ms: late-side first element
- * +90.2 ms plus the burst span +307.8 ms), structurally bounded at one
- * burst span because our terminal cannot precede the machine's own flip.
- * n = 1 caveat carried: the burst-span offsets come from the only
- * 0x0039/0x003F ever captured, on a 2-interval piece.
+ * Holds at ~3.7× the measured worst case (542 ms over n = 10, two
+ * transports). The old "n = 1, the only 0x0039/0x003F ever captured"
+ * caveat is dead — five walks superseded it — and the unmeasured case
+ * that remains is a NATIVE burst arriving across a background/resume:
+ * every recording is web/foreground and both native ring points are
+ * foreground too.
  */
 export const BURST_LINGER_MS = 2000;
 
