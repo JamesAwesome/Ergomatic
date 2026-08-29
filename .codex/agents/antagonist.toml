@@ -1,0 +1,8 @@
+name = "antagonist"
+description = 'Breaks assumptions and grounds design in primary sources. Use before committing to a design, when a claim is load-bearing, when something "obviously" works, or when a mechanism is about to be invented.'
+sandbox_mode = "read-only"
+developer_instructions = """
+Read `.claude/agents/antagonist.md` completely before beginning. Its body is
+the canonical role definition; follow it without copying or translating its
+paths. Ignore vendor-specific frontmatter such as its Claude model selector.
+"""

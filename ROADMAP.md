@@ -102,6 +102,22 @@ outcome is not evidence the outcome is covered.
 the front door on purpose. Opening the door to strangers while a phone in a
 pocket silently eats a rowed piece is worse than opening it a week later.
 
+## Active audit overlay — Codebase integrity
+
+**Status:** COMPLETE. Read-only overlay; it is not a seventh product wave and
+does not displace Wave F. The fixed-baseline audit is governed by the
+[approved spec](docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md)
+and [execution plan](docs/superpowers/plans/2026-08-28-codebase-integrity-audit.md).
+
+- [x] Complete all five audit lanes with an evidence-backed disposition.
+- [x] Revalidate promoted findings against current `main` and assign each fix
+      exactly one live ROADMAP owner before handoff; the audit report is not a
+      second backlog.
+
+The phase-close gate transfers actionable items into Wave F, Wave A, and the
+open-item register below. P3 and unsupported-trigger results stay in the risk
+register or ride the next relevant PR; no unchecked work lives in this overlay.
+
 | Wave | What it is | Size | Tester sees |
 | --- | --- | --- | --- |
 | **F** | Lifecycle: stop losing rows | L | Yes, and it is the most valuable thing here |
@@ -218,6 +234,19 @@ silently.
         below, and a receipt entry in the hook's handler, so the one link in
         this chain with no instrument finally gets one. **M/L**
 
+- [ ] **Audit AUD-016 — measured connected work survives storage failure.** A
+      completed PM5 interval retained in memory can reach Log as
+      `NO MONITOR READING` after rejected monitor-run writes. Preserve the
+      measured actual through one explicit, reload-safe hand-off or hold a
+      recoverable storage state before navigation. The Wave F phase-open gate
+      sequences this against the pre-row lock and machine-summary hand-off;
+      the audit does not. **P1, Confirmed. M**
+- [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
+      Guard getter denial on every persisted loader, and never leave Countdown
+      for Timer unless the active run is durable. One local-storage recovery
+      PR may own both, with separate regression tests; the visible Retry state
+      gets rendered Gate 0 first. **P1, Confirmed. M**
+
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 
 - [ ] **`ALTER TABLE "preferences" DROP COLUMN "warmup";`** — one line, safe
@@ -256,6 +285,12 @@ warns that an empty `ALLOWED_EMAILS` means "nobody can create an account". The
 nobody can sign up (deny by default)."* PROD's old exit promised "a real
 sign-in path for a rower with no Google account" — that is Apple sign-in, and
 it lands the stranger on this same denial.
+
+- [ ] **Audit AUD-014 — native sign-out always attempts the Keychain wipe.**
+      A rejected revocation request currently leaves the bearer available for
+      later reuse. Server revocation remains best-effort, but local deletion is
+      independently required and deletion failure remains visible. AUTH triad;
+      full antagonist spec pass and PM final-PR gate. **P2, Confirmed. S**
 
 - [ ] **Establish what external TestFlight actually binds, with verbatim
       quotes, BEFORE anything else in this wave is specced.** The rebalance
@@ -597,6 +632,20 @@ and unscheduled; it is not a wish.
 promoted into a wave, or it is killed with a reason. "Rides the next PR touching
 X" is a real disposition — most of these are single files.
 
+## Codebase-audit owners
+
+- **AUD-002 — bound History's successful top-level response.** A parseable
+  non-array 200 must enter the existing error/Retry state rather than reaching
+  `.map`. No real producer was found, so this remains P2/Probable and rides the
+  next History API/client boundary PR alone; it is not bundled with raw-database
+  corruption hardening. Evidence:
+  `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`.
+- **AUD-006 — Today and Library state every accepted rest.** Both scan surfaces
+  understate leading/consecutive rest that Timer retains. A displayed-number
+  TRIAD: Gate 0 decides leading-rest validity and renders both orientations
+  before implementation. Evidence:
+  `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`.
+
 ## Needs a decision from James
 
 | Item | What | Evidence |
@@ -746,6 +795,14 @@ Each needs erg time or a deliberate recording session.
   (`representableCentiseconds` has never been sent to a real PM5).
 
 ## Small, queued, rides the next PR in its area
+
+- **AUD-012 — correct the booting-replica claim.** Two complete servers really
+  race before the seed lock on an empty database, but the supported deployment
+  is explicitly serial and single-replica. This is Confirmed P3 documentation
+  debt, not a current rollout defect: correct
+  `2026-08-04-library-converge-design.md` with the next deployment-doc PR, and
+  require a complete two-process gate only before overlapping replicas become
+  supported. Evidence: the codebase-integrity audit's `findings.md`.
 
 - **Door 1's adjust step shows a PROPOSED number with no provenance eyebrow of
   its own.** Revisit if that step becomes reachable without passing the offer.

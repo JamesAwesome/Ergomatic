@@ -2261,6 +2261,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   `0012_amused_wild_child.sql`. Whichever merges second regenerates.
   **Technique: `gh pr diff <n> --name-only | grep drizzle` across every open
   PR is a ten-second check — run it at SPEC time, not implement time.**
+
 ### 2026-08-22 — Phase LL anchor pass (link-truth spec, TRIAD)
 
 - **CLAIM: "no committed capture trips a 2500 ms frame-silence watchdog while healthy" (spec §7 criterion 1). FALSE as written — 6 of 6.**
@@ -2338,7 +2339,6 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   `ended-by-rower` IS knowable at write time (`linkGone`, `useMonitorSession.ts:1651`); two decorators is right
   because `defaultTransport()`'s `import()` sits behind a RUNTIME check; the `initialize()` memo hoist is safe but
   does not survive `webView.reload()`.
-
 
 ## Anchor pass, 2026-08-22 (Phase RC open: the held-open finish spec + decomposition)
 
@@ -2419,7 +2419,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
 - **"0x003F is the verification-code characteristic, and it's in the BLE Interface
   Definition."** Both wrong in a way that would have dangled the phase's first citation.
   Concept2 calls it the **"C2 rowing logged workout characteristic"** (15 bytes, NOTIFY,
-  8-byte *Logged Workout Hash* + log address + size + erg model type); "Workout Verification
+  8-byte _Logged Workout Hash_ + log address + size + erg model type); "Workout Verification
   State" is a byte in the DIFFERENT characteristic 0x003E. And the BLE Interface Definition
   **Rev 1.30 — the revision this repo holds and every `uuids.ts` constant cites** — has no
   0x003F at all; its rowing table ends at 0x003D. Concept2 folded the BLE attribute tables
@@ -2777,7 +2777,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
 - **The repo already held the capture that falsified the claim, from the walk the
   spec cited.** The spec's terminate premise rested on ONE lab capture (web arm,
   hold-open instrument). `docs/monitor/sessions/walk-2026-08-23/ring-phone-3-menu-
-  terminate.json` is a PRODUCTION-arm phone ring of a Menu-terminate, 29 entries,
+terminate.json` is a PRODUCTION-arm phone ring of a Menu-terminate, 29 entries,
   ending at `terminal terminated` with no 0x0039/0x003A/0x003F at all — the
   finished ring from the same era carries all three. **Technique: before accepting
   "one capture supports it", `ls` the whole sessions directory for the same EVENT
@@ -2807,7 +2807,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
 - **The spec under-tagged its own best evidence, and the mis-tag was heading into
   code.** It called the 0x003F-to-verification-code equation "INFERENCE (standing,
   unphotographed)". It is photographed: walk-2026-08-23 `photo-w4-verification-
-  code.jpeg`, 6EF3-D827 5B55-52E1, LE-u32 of `27 d8 f3 6e | e1 52 55 5b`, exact.
+code.jpeg`, 6EF3-D827 5B55-52E1, LE-u32 of `27 d8 f3 6e | e1 52 55 5b`, exact.
   **Technique: check citations in BOTH directions. Recurring failure 16 catches
   premises claiming more evidence than they have; this is the mirror — a premise
   claiming LESS still misleads, and it produced hedged user copy for a settled
@@ -2821,8 +2821,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   descaled unit.**
 
 - **Two captures of the same wire fact are not two samples.** RC-2's date/time
-  packing was tagged "PRIMARY (hardware, 2 captures)"; both are Aug 24 2026, hour
-  15. One date, one hour — the formula is INFERENCE, and §4's boundary tests pin
+  packing was tagged "PRIMARY (hardware, 2 captures)"; both are Aug 24 2026, hour 15. One date, one hour — the formula is INFERENCE, and §4's boundary tests pin
   our own encoder, not the machine. No vendor documentation of the packing exists
   (§23 says "UNCERTAIN"; a web search found nothing authoritative — recorded as a
   result). **Technique: before crediting N captures, check whether they VARY in the
@@ -3306,7 +3305,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
 
 - **Attacked and NOT broken:** the ordinal/grouping semantics really do survive
   a neutral rename mechanically -- `plans.test.ts:49`'s strict `O2 > AT > TR >
-  AN` pyramid, `:71-79`'s `["AN","TR"]`-vs-`["O2","AT"]` partition,
+AN` pyramid, `:71-79`'s `["AN","TR"]`-vs-`["O2","AT"]` partition,
   `library.test.ts:65-79`'s monotone spm/pain bands, and `patterns.json`'s
   quota grid are all expressible over `Type1..Type4`. The case against generic
   names is not that the code breaks; it is that eight invariants stop being
@@ -3506,9 +3505,9 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   or are we inferring it from a coincidence? Here it split the spec cleanly:
   RC-37 compares a readback against a value we ourselves sent (deterministic);
   `explained-quiet` infers causation from a lifecycle event near a silence,
-  over `SILENCE_THRESHOLD_MS`, whose own comment concedes *"Native's own
+  over `SILENCE_THRESHOLD_MS`, whose own comment concedes _"Native's own
   inter-frame gap distribution is UNMEASURED… necessary-and-not-sufficient
-  evidence, not proof, for the platform it exists to protect"*
+  evidence, not proof, for the platform it exists to protect"_
   (`liveness.ts:126`). The axis inverted the spec's own priority ranking:
   its outcome 6 was the one worth building, its outcome 1 was a copy change.
   **James supplied the axis** ("I don't want to invent brittle heuristics to
@@ -3527,6 +3526,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   ~2.5 s, and the `declared` path fires on the FIRST rowing frame, so the
   window only opens when `rowingActive` is stuck unset. The ROADMAP number is
   double, and its trigger is narrower than the entry implies.
+
 ## Phase RC YAGNI triage, 2026-08-27 (an audit's own findings, re-audited)
 
 - **"Of the eight committed recordings exactly ONE carries a 0x0039, and it is
@@ -3588,7 +3588,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   run, against a file posting 1 MB bodies and 14,400-sample series. Both
   producers predict "a different test each time". **Technique: for any flake,
   the first evidence is the FAILURE MESSAGE, not a theory. `Test timed out in
-  5000ms` and an assertion diff are one line apart and point at opposite
+5000ms` and an assertion diff are one line apart and point at opposite
   fixes.**
 
 - **Attacked and NOT broken (Phase RC's vetted ground for its close):** the
@@ -3692,8 +3692,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   are the LAST `tx` in their capture so a timeout cannot cascade — though the
   0x0039/0x003A that drive both oracles arrive AFTER it, seq 844/845 vs tx#839,
   now said in the comment); the walk-2026-08-28 hand-decode, re-derived byte by
-  byte from the `ce060021` chunks (three slots, TIME/6000, rest 60/60/0, target
-  15200) with the two captures' programming frames confirmed byte-identical;
+  byte from the `ce060021` chunks (three slots, TIME/6000, rest 60/60/0, target 15200) with the two captures' programming frames confirmed byte-identical;
   RC-9(b)'s corpus-expiry claim, censused independently as exactly
   six-of-fourteen with three rest-bearing (`rests-finished` 235,
   `boundaries-terminated` 118, `rest-boundary` 119 workoutState-3 frames — and
@@ -3715,7 +3714,7 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   "observed in zero committed rings", while the same PR's corpus test asserts
   `smoke-terminated` emits exactly one. Not a contradiction: the walked ring's
   seq 29 reads `record-actual index=null … -> REFUSED (the record returned
-  unchanged)`. **Technique: a driver-level EMIT is not a stored actual. Before
+unchanged)`. **Technique: a driver-level EMIT is not a stored actual. Before
   reporting a corpus claim as contradicted by a test's event stream, find the
   ring line where the RECORD accepts or refuses it.**
 
@@ -3726,8 +3725,58 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   fields for any `endedBy` other than `"finished"` ("no attempt beats no
   number"), so `storedSummary.ts`'s `buildStoredRest` rung 1 cannot fire; and
   rung 2 is gated on `isReconstructableClose`, which admits only `"finished" ||
-  null`. The hand-arithmetic table, offered first, does NOT do this work — the
+null`. The hand-arithmetic table, offered first, does NOT do this work — the
   criterion's own "up to ~26 s/500 m" is an UPPER bound, so a low-rest
   population-(i) row would reconcile too. **Technique: when an exit block offers
   a primary and a "second, independent confirmation", check which one is
   actually load-bearing. Here they were in the wrong order.**
+
+### 2026-08-28 — Codebase integrity audit phase-open anchor
+
+- **“Authority before implementation” was not independent in four rows.** It
+  was believed because real server, database, and rendered surfaces are
+  stronger than mocks; separating expected authority from the production
+  subject and probe medium showed that the audit could otherwise let the
+  implementation clear itself.
+- **“No shared implementation” was not a sufficient non-circularity test.** It
+  was believed because the repository's known failures share helpers;
+  constructing separate implementations with the same wrong premise or
+  quantity showed that provenance and measured quantity, not symbol sharing,
+  settle independence.
+- **Lane D's four traces did not cover the connected-monitor path.** They were
+  believed complete because they spanned programming through persistence;
+  tracing Connect from platform selection through initialization,
+  retrieval/picker, connection, and notification subscription found a whole
+  pre-program trace with distinct native failure modes.
+- **Parallel trace review did not prove interacting-state-machine behavior.**
+  The split looked efficient because each investigator owned two end-to-end
+  traces; following shared `phase`, `frameSilence`, interval identity,
+  `endedBy`, terminate, and persistence fields across trace boundaries showed
+  that a required composition matrix was missing.
+- **The read-only audit contract could not run its own mutation probes.** “No
+  committed mutation” was treated as equivalent to “no mutation”; comparing
+  the global write prohibition with the disposable-worktree and negative-fake
+  tasks exposed the authorization contradiction. Name an isolated mutation
+  owner and prove the intended branch changed.
+- **VETTED GROUND:** fixed baseline isolation, browser/native separation, the
+  fake's real production-helper circularity, explicit native unknowns, lane
+  dependency order, and proportional scout/investigator/validator allocation
+  all survived direct baseline checks.
+
+### 2026-08-28 — Codebase integrity audit phase-exit corrections
+
+- **“Every promoted finding has an external condition” was false.** AUD-013's
+  only producer was raw SQL, while the supported PM5/route/Drizzle path bounds
+  or serializes the extreme value to `null`. Compare a corruption probe's writer
+  with every supported producer before treating the probe as product authority.
+- **Storage failure semantics are method-specific.** Getter and `setItem`
+  failures were generalized to a throwing `removeItem`, but the normative
+  algorithm has no throwing branch. Read the exact method algorithm before
+  promoting a monkeypatched exception.
+- **A reproduced failure does not choose severity without a supported trigger.**
+  Dual empty-database startup really fails, but the deployment contract is
+  serial/single-replica; comparing the trigger with the severity definition
+  moved AUD-012 from P2 to P3.
+- **Exact PM5 clearances survived raw-first replay.** Decode boundaries before
+  consulting app expectations and state only the quantity/device observed;
+  firmware was not recorded, so the clearance does not name it.
