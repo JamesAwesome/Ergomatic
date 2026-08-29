@@ -3910,3 +3910,90 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   ratchets by deleting or ignoring the whole debt-bearing file, not only by
   removing individual diagnostics, and compare ledger keys with the actual
   lint population.**
+
+### 2026-08-29 — Wave F PR 1 spec pass (machine-summary hold, TRIAD: a stored number's meaning)
+
+- **"Menu terminate opens its hold in `endSession`" was FALSE, and it is the arm
+  the gate replays.** Believed because `MonitorRun.endedBy` is `"rower"` for both
+  a Menu press and the App's End button, so the spec grouped them by the RECORD's
+  close reason. They are different HOOK FUNCTIONS: a Menu terminate arrives as a
+  wire event (`driver.ts:2724` -> `useMonitorSession.ts:2314` -> `endByMachine(true)`,
+  session `endedBy: "machine"`, `held` hardcoded `false` at `:2201`), while End
+  runs `endSession`. The spec's own gate recording
+  (`walk-2026-08-25/smoke-terminated`, its 542 ms worst case) is a Menu terminate
+  — `README.md:15`, "Menu-killed at ~31 s" — and its raw bytes carry NO tx after
+  programming, so nobody presses End in it. Under the spec as written the gate is
+  red today and would STAY red after the fix. **Technique: when a spec groups two
+  cases by a STORED field's value, follow each case's producing EVENT to its own
+  handler and compare the two functions. A shared `endedBy` is not a shared code
+  path — and check the gate recording for the tx that the arm it claims to
+  exercise would have to contain.**
+- **A Gate 0 "before" number was read off the live accumulator, not the stored
+  row.** The spec rendered 375.1 m / 124.9 s -> 358 m / 120.0 s (a 17.1 m drop).
+  The saved row has never shown 375.1: `computeWorkRestSums`
+  (`monitorRun.ts:756-783`) sums the 0x0037/0x0038 actuals into
+  `workSeconds`/`workMeters`, and `storedSummary.ts:660-681` (tier B1) renders
+  those — the ring's own seq 53 says the recorded actuals total **120s/360m**,
+  while 375.1/124.9 is seq 40's `accumulator` (work + rest coast; 358 + 15 rest =
+  373 = seq 38's `machineTotal`). The real change is 360 m -> 358 m with an
+  IDENTICAL clock, plus an unstated third hero (avg split 2:46.7 -> the machine's
+  2:47.5, decoded from seq 51 offsets 18-19 `8b 06` = 167.5 s/500m). ROADMAP:763
+  already registers "live TOTAL METERS is fused, stored is work-only" as a
+  separate defect. **Technique: for any before/after on a SAVED row, find the
+  function the ROW's renderer calls and re-derive the before-number from it —
+  never from a ring entry that happens to carry a number of the right magnitude.
+  A diagnostic entry names the layer that emitted it, and a live accumulator and
+  a stored hero are different layers. Then check ALL the heroes, not the two the
+  spec mentions.**
+- **A backstop anchored at "the ended flip, roughly the terminal observation" is
+  false on the arm the app initiates.** `endSession` flips `ended`
+  (`useMonitorSession.ts:3219`) BEFORE `await driver.terminate()` (`:3233`), so
+  the End arm's clock starts at the button, not the machine. The corpus's only
+  app-End capture — `walk-2026-08-28/end-on-interval-1-recording.jsonl.gz`, the
+  NEWEST walk, uncited by the spec — measures it: terminate tx t=15155.4, ack
+  +106.6, machine terminal +286.3, 0x003F +558.6. So 3.58x, not 3.7x, and the
+  terminate round-trip comes off the top exactly the way navigate-and-unmount
+  does for `BURST_LINGER_MS`. **Technique (RF16 second corollary, applied): when
+  a spec reuses a corpus measured against event X to budget a window anchored at
+  event Y, decode one capture and measure X-to-Y. And list the capture directory
+  by date first — the newest walk held the only measurement of the arm the spec
+  called its worst case.**
+- **A "the condition is never owed" guard that can never be true.** The spec
+  justified the burst-first ordering costing nothing via
+  `run.summaryTotals !== undefined` at the `ended` transition. Both driver arms
+  fold the buffered burst AFTER their terminal emit, deliberately and with
+  comments saying so (`driver.ts:2702-2711`, `:2751-2760`), because
+  `appendSummaryObservations` declines a record whose `completedAt` is still
+  `null` (`monitorRun.ts:1095`). So the field is always `undefined` there; the
+  condition IS owed and resolves synchronously in the same block. **Technique:
+  for a guard keyed on a field another module writes, find that module's WRITE
+  ORDER relative to the event the guard runs on. A guard that reads a field
+  written one line later is decoration.**
+- **A replay gate whose virtual clock stops before its own backstop.**
+  `transports/replay.ts:270` advances the clock only at recorded events and
+  `advanceClock` is module-local (`ReplayClock` exposes `now`/`schedule` only), so
+  a 2000 ms timer armed at the terminal cannot fire on a recording with 544 ms of
+  events left. Separately, `openHandoffHold` schedules through
+  `MonitorSessionDeps.schedule` (`useMonitorSession.ts:1823`), which
+  `burstReplay.test.ts` never binds — so the hold's backstop runs on REAL time in
+  that harness. **Technique: before specifying "fires at N ms on the virtual
+  clock", check (a) how much recorded time remains after the trigger event and
+  (b) which injected scheduler the timer under test actually uses. Two clocks in
+  one harness is the default, not the exception.**
+- **VETTED GROUND (attacked this pass and held):** the two-condition hold has no
+  never-releasing, early-releasing, or double-releasing path; `closeRecord` writes
+  `completedAt`/`endedBy` synchronously before every hold-opening site
+  (`:1728-1732` before `:2201` and `:3219`), so no opening condition reads a stale
+  `runRef`; no path navigates at 2000 ms that today waits 3500 (the split
+  condition is owed exactly when the 3000 ms fill matters, and the burst backstop
+  only adds); `logRef` survives teardown (assigned once at `:2928`, never nulled)
+  so §5's receipts are recordable on every path; End at READY opens no hold
+  (`runRef.current === null`); 542 ms re-derived from `smoke-terminated`'s raw
+  bytes (seq 288 t=52686.2 -> seq 296 t=53228.6 = 542.4 ms); §7's three
+  release-note clauses and the 2026-09-11 clock match `ROADMAP.md:774-790`; the
+  leg-5 evidence citations (270 ms, elapsed=120s/distance=358m, `driver.ts:4181`)
+  are all accurate.
+- **Could not establish:** the 0-of-16 prod count (no DB); native
+  background/resume burst timing (still zero captures); the exact tier-B1 avg
+  split for the leg-5 row (needs the Gate 0 render); whether
+  `end-on-interval-1`'s program transcribes cleanly from its seq 15-19 tx bytes.
