@@ -1830,6 +1830,79 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(result.current.handoffHeld).toBe(false);
   });
 
+  it("BURST_HANDOFF_HOLD_MS is pinned at exactly 2000ms — held at 1999, released at 2000 (PR #228 review finding 2)", async () => {
+    // James's own mutation, PR #228 review: changed `BURST_HANDOFF_HOLD_MS`
+    // 2000 -> 2400 and all 205 scoped monitor tests (including
+    // `summaryHoldReplay.test.ts`'s own leg 3, which imports the constant
+    // and advances the virtual clock past it) stayed GREEN — every
+    // existing check compared production to itself, none pinned the
+    // NUMBER. This test uses two LITERALS (1999, 2000), independent of the
+    // imported constant entirely, so a retune goes red here specifically.
+    //
+    // Real `vi.useFakeTimers()`, not `manualSchedule()`: a manual fake's
+    // `fire()` is triggered by the TEST, not by elapsed time, so it cannot
+    // distinguish "the backstop is due at 1999ms" from "due at 2000ms" —
+    // there is no elapsed-time semantics to violate. `openBurstHold`'s own
+    // DEFAULT fallback (real `setTimeout`, used here by supplying no
+    // `schedule` override at all) is the one seam where an exact
+    // millisecond boundary is a real, testable fact. Not `harness()` (this
+    // file's own header on it: "File-wide `vi.useFakeTimers()` ... is not
+    // usable here ... 19 tests fail under it") — the manual
+    // `createFakeTransport` + `renderHook` composition the two existing
+    // `vi.useFakeTimers()` tests above in this file already use (the
+    // watchdog tests, "a suppressed stream trips the REAL watchdog").
+    vi.useFakeTimers();
+    try {
+      const fake = createFakeTransport({
+        deviceName: DEVICE_NAME,
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 40,
+            distanceMeters: 130,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      });
+      const { result } = renderHook(() =>
+        useMonitorSession({
+          createTransport: () => fake,
+          now: () => t0,
+          driverOptions: {
+            settleTicks: 0,
+            prepareSettleTicks: 0,
+            schedule: () => (): void => undefined,
+          },
+          // No `schedule` override here — this hook-level default
+          // fallback (real `setTimeout`) is the exact seam under test.
+        }),
+      );
+
+      await connect(result);
+      await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+      tick(fake, 100);
+      tick(fake, 100);
+
+      expect(result.current.phase).toBe("ended");
+      expect(result.current.handoffHeld).toBe(true);
+
+      act(() => {
+        vi.advanceTimersByTime(1999);
+      });
+      expect(result.current.handoffHeld).toBe(true); // HELD at 1999ms
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(result.current.handoffHeld).toBe(false); // RELEASED at 2000ms
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("a piece that finished without anyone rowing it holds nothing — there is no record to be missing an actual", async () => {
     // `live` is downstream of the first rowing frame, so a program that
     // armed and then went straight to WORKOUTEND (the rower walked away,

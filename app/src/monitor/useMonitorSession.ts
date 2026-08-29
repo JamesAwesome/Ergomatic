@@ -849,14 +849,21 @@ export interface MonitorSession {
   frame: MonitorFrame | null;
   actuals: IntervalActual[];
   endedBy: "machine" | "user" | null;
-  /** `true` while the ended hand-off is being HELD for the final interval's
-   *  split (`FINISH_HANDOFF_HOLD_MS`, walk day 2). The phase is already
-   *  `"ended"` — the rower sees that frame immediately — but whoever
-   *  navigates away on the ending (`ConnectedSurface`'s `onEnded`) must WAIT
-   *  while this is true: navigating unmounts the interstitial, and unmounting
-   *  tears down the very subscription the boundary still has to arrive on.
-   *  Always `false` unless a machine FINISH left the run missing its last
-   *  interval's actual. */
+  /** `true` while the ended hand-off is being HELD for one or both of two
+   *  independent conditions (storage-spine design spec §2, Task 3): the
+   *  final interval's own SPLIT (`FINISH_HANDOFF_HOLD_MS`, walk day 2 —
+   *  machine finish only, when that run is missing its last interval's
+   *  actual) and the machine's own summary BURST
+   *  (`BURST_HANDOFF_HOLD_MS`) — owed on all THREE burst-eligible `ended`
+   *  arms: a machine finish, a Menu terminate at the erg, and an app End
+   *  with the link up. The phase is already `"ended"` — the rower sees
+   *  that frame immediately — but whoever navigates away on the ending
+   *  (`ConnectedSurface`'s `onEnded`) must WAIT while this is true:
+   *  navigating unmounts the interstitial, and unmounting tears down the
+   *  very subscription either the split or the burst still has to arrive
+   *  on. `false` only once NEITHER condition remains owed — a link-lost
+   *  or program-failed close, or any close whose owed condition(s) have
+   *  already resolved (arrival, write attempt, or backstop). */
   handoffHeld: boolean;
   /** Mirrors `freezeRef` — `isPausedRun(freezeRef.current)` at the instant
    *  of the last `update()`. Published for `connectedAxes.ts`'s `activity`
