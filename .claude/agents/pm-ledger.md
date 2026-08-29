@@ -3233,3 +3233,44 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   gates, and release-with-C rule stay unchanged. The exception is valid only
   when the roadmap names the slice and its exit, rather than claiming the
   whole phase has opened.
+
+## TRIAD final-PR gate, 2026-08-29 (Wave F PR 1 — the machine-summary hold, #228)
+
+- **A Gate 0 that shows a number changing must render what the SAVED ROW shows
+  today, not what the live screen shows.** This spec's before/after opened at
+  375.1 m → 358 m; 375.1 is the live accumulator (work plus rest coast), a
+  figure no stored row has ever rendered, and the honest before was 360 m. The
+  antagonist caught it; the design gate would have approved a delta of 17 m
+  when the real delta is 2 m on an identical clock — which reads as a row that
+  quietly moved rather than as a correction. **At any Gate 0 on a number, name
+  the layer the before-number comes from and cite the function that computes
+  it.** The stale 375 survived into the PM dispatch and the session memory
+  after the spec had corrected it; corpus numbers rot faster than the documents
+  quoting them (RF16's second corollary, applied to our own arithmetic).
+- **Release-note obligations recorded only in this ledger do not reach the
+  person writing the notes.** The 2026-08-28 phase open ruled the notes owe
+  three things (the corrections, the no-backfill sentence naming the 16
+  permanently-ours rows, the new post-End wait). Only the corrections reached
+  the ROADMAP's own notes-owed register row, which is what a note-writer reads.
+  **A ledger release condition is landed in the ROADMAP row it constrains, in
+  the same gate that rules it** — otherwise it is a PR-body finding wearing a
+  ledger's clothes (RF14).
+- **Ship a fix's tag rather than riding it with its successor when a correction
+  clock is running, and count production as an instrument.** Ruled here against
+  holding v0.27.0 for AUD-016: the falsified-note corrections expire ~2026-09-11
+  and read as an apology without the fix in front of them; and the hold's
+  2000 ms backstop has a web/foreground-only corpus, so real phones emitting
+  `burst-timeout` receipts are the only measurement available. **"Wait for the
+  sibling PR" is not free when the sibling is the unmeasured one.**
+- **A hold whose corpus is one platform owes a walk row, not just a risk note.**
+  The native terminate round-trip and background/resume burst timing were the
+  PR's own named unknowns and had no entry in ROADMAP's owed-captures register.
+  A number-defining constant derived from one transport is a hardware question
+  filed at the gate that ships it.
+- **Presentation failed on its own stated test, not on taste.** ~270 words
+  above the fold, ~100 seconds read aloud against a 30-second bar, bullets of
+  2-3 lines against "one line each" — while committing none of the
+  WHAT-without-WHY failure the rule was written for. The fix was one bullet
+  (the permanent gate's mechanics) moved into the Record block. **When a PR
+  misses the budget but not the intent, name the single bullet to move rather
+  than sending the body back for a rewrite.**

@@ -807,6 +807,10 @@ new.
      A correction alone reads "we told you something that was never true" with no
      remedy; the same words behind a working feature read as a repair. Ship them
      regardless if the fix slips past roughly two weeks.
+     **The same notes owe two more things (landed here from the 2026-08-28
+     phase-open ruling at PR #228's PM gate, because the note-writer reads
+     THIS row, not the ledger):** the no-backfill sentence naming the 16
+     permanently-ours rows, and the new post-End wait if perceptible.
 - **The log-delete accepted gap** — a session with a wrong number has exactly
   one remedy, delete and re-log by hand, and `logged_at` is a DB default rather
   than settable, so a mistake found the next day cannot be re-dated onto its own
@@ -834,6 +838,10 @@ Each needs erg time or a deliberate recording session.
 - **A terminate-path SCREEN oracle** (§25's `avgStrokeRate` anomaly), and a real
   capture of the app's own END button mid-piece, on both web and native.
   (`phase-rc.md`)
+- **Native burst lag against `BURST_HANDOFF_HOLD_MS`** — the 2000 ms backstop's
+  corpus is web/foreground only (End-arm round-trip n=1, web; background/resume
+  n=0). The next connected walk reads the ring for `burst-timeout` receipts and
+  the End-arm terminate round-trip on native BLE. (PR #228's PM gate)
 - **A lab capture of `2×Nm rNN`** — the series-truth regression fixture is
   SYNTHETIC; no committed recording exercises distance-work-with-rest-between.
   (`phase-rc.md`)
