@@ -58,6 +58,14 @@ check "$(commit_and_ask .claude/agents/pm-ledger.md)" "false" "agent ledgers onl
 teardown
 
 setup
+check "$(commit_and_ask .codex/agents/product-manager.toml)" "false" "Codex adapters only → skip"
+teardown
+
+setup
+check "$(commit_and_ask .agents/skills/hardware-walk/SKILL.md)" "false" "shared skill adapters only → skip"
+teardown
+
+setup
 check "$(commit_and_ask docs/a.md .claude/b.md README.md)" "false" "mixed documentation → skip"
 teardown
 

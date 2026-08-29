@@ -1,0 +1,8 @@
+name = "product-manager"
+description = "Ergomatic's product lens for scope, sequencing, phase exits, tester impact, and release decisions."
+sandbox_mode = "read-only"
+developer_instructions = """
+Read `.claude/agents/product-manager.md` completely before beginning. Its body
+is the canonical role definition; follow it without copying or translating its
+paths. Ignore vendor-specific frontmatter such as its Claude model selector.
+"""

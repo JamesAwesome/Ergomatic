@@ -16,12 +16,14 @@
 # reinforces this from the other side: its jobs test `!= 'false'`, so a
 # crashed or missing answer still runs them (see .github/workflows/ci.yml).
 #
-# DOCUMENTATION means: anything under docs/ or .claude/, plus markdown at
-# the repo root (README, ROADMAP, CLAUDE). Deliberately NOT .github/ — a
-# workflow edit must exercise the workflow it edits, including this one.
+# DOCUMENTATION means: anything under docs/, .claude/, .codex/, or .agents/,
+# plus markdown at the repo root (README, ROADMAP, CLAUDE, AGENTS). The Codex
+# paths are thin adapters to the canonical .claude content. Deliberately NOT
+# .github/ — a workflow edit must exercise the workflow it edits, including
+# this one.
 set -uo pipefail
 
-DOCS_ONLY_RE='^(docs/|\.claude/|[^/]*\.md$)'
+DOCS_ONLY_RE='^(docs/|\.claude/|\.codex/|\.agents/|[^/]*\.md$)'
 
 run_everything() {
   echo "ci-changes: $1 — running the code jobs" >&2
