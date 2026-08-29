@@ -41,7 +41,8 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   empty body and object, plus valid empty/populated arrays; separately probe
   malformed elements, load-more, and every other reader before expanding the
   fix scope; retain mounted-server happy paths.
-- Status: candidate; final adjudication is Task 10.
+- Status: preliminary finding accepted by Task 10; optional P2 validation is
+  grouped with the auth/client pass because it can change ordering.
 
 ### AUD-006 — Workout previews hide accepted rest that the timer retains
 
@@ -89,7 +90,8 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   TOTAL; detail, timer, stored compatibility, and compiler contract checks;
   both-orientation rendered approval, contrast calculations, `pnpm e2e`, and
   `pnpm screenshots`.
-- Status: candidate; final adjudication is Task 10.
+- Status: preliminary finding accepted by Task 10; number/prescription
+  validation is mandatory before final ranking.
 
 ### AUD-011 — Storage denial blocks Ergomatic's default screen
 
@@ -119,45 +121,29 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   failed with `SecurityError` while the other 4,032 client tests passed. A
   separate temporary case mounted the real Today component with ready,
   realistic hook data; Today rejected at `loadRun`, while the other 4,032
-  client tests passed. Lane C completed the census: `clearRun`, `clearDraft`,
-  and `clearMonitorRun` also call `removeItem` without guards
-  (`app/src/session/run.ts:147-149`, `draft.ts:151-153`,
-  `monitor/monitorRun.ts:519-521`). A temporary real Log Session probe returned
-  201, made only the draft clear throw, observed a false save error with both
-  records retained, then restored storage and observed a retry send a second
-  POST while the other 4,032 client tests passed.
+  client tests passed.
 - Independent disproof: the probe supplied only the standards-defined platform
   failure and asserted a bounded return. It did not read the stored payload,
   product validator, phase, program, actuals, or recovery output. Moving the
   first access inside the existing guard is the named change that makes the
   three calibrated cases and mounted Today pass. `loadTodayPick` shares the
   same pre-guard access and remains a required fourth direct case rather than a
-  second finding. The separate cleanup probe supplied an independently shaped
-  201, made only `DRAFT_KEY` removal fail, and observed retained keys plus POST
-  count without importing product serializers or session-state helpers. That
-  selective `removeItem` throw is a branch discriminator for the absorbed
-  cleanup consequence, not the exact getter failure defined by WHATWG.
-- Scope: the four loaders, three clear helpers, default Today, every
-  synchronous initializer/route guard calling them, cancel/abandon/discard,
-  post-save cleanup, active phone/timer recovery, monitor-log recovery, and
-  storage denial in browser/web fallback environments. Session-storage UX
-  helpers and diagnostic production reads were cleared; the one unguarded
+  second finding.
+- Scope: the four loaders, default Today, every synchronous initializer/route
+  guard calling them, active phone/timer recovery, monitor-log recovery, and
+  storage getter denial in browser/web fallback environments. Session-storage
+  UX helpers and diagnostic production reads were cleared; the one unguarded
   hold-open stash is dev/E2E-only instrumentation.
 - Existing coverage gap: write-failure and malformed-JSON tests begin after a
-  usable `Storage` object exists. None denies the getter/read boundary, and
-  successful-save tests assume cleanup cannot throw after the server commit.
-- Smallest safe fix: put the initial read and any attempted cleanup inside a
-  storage-access guard in all four loaders and all three clear helpers. Return
-  `null` when reads are unavailable, make clears idempotent/best-effort, and do
-  not turn a committed server save back into a retryable failure merely because
-  local cleanup failed. Do not clear other session keys.
+  usable `Storage` object exists. None denies the getter/read boundary.
+- Smallest safe fix: put the initial read inside the storage-access guard in all
+  four loaders and return `null` when the getter or read is unavailable. Do not
+  clear other session keys or alter stored shapes.
 - Verification required after a fix: failing direct tests first for all four
   loaders, then the mounted default Today route and Timer/Countdown/Log Session
-  under denied access, the existing malformed/versioned recovery matrix,
-  cancel/abandon/discard under throwing removal, and a 201-after-cleanup-fault
-  test proving one POST and a successful visible result.
-- Status: candidate; Task 7 completed the direct-access census, reproduced the
-  post-commit cleanup consequence, and passed fresh high-end Lane C review.
+  under denied access, plus the existing malformed/versioned recovery matrix.
+- Status: preliminary P1 finding accepted by Task 10; mandatory fresh
+  validation remains.
 
 ### AUD-012 — The booting-replica safety claim fails before the seed lock
 
@@ -200,8 +186,10 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   independently from the checked-in seed and journal rather than hard-coded
   baseline counts. One deliberate unprotected control must prove the test can
   go red.
-- Status: candidate; final adjudication must decide whether this is a docs-only
-  correction or scheduled code work based on the deployment roadmap.
+- Status: preliminary P2 finding accepted by Task 10. Current deployment is
+  single-replica, so the immediate action is a claim correction; code work is
+  gated on a future overlapping-replica requirement. Optional validation is
+  grouped with the real-Postgres pass.
 
 ### AUD-013 — One out-of-range stored summary number breaks the whole History list
 
@@ -242,7 +230,8 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   healthy and one corrupt row; normal, null, wrong-type, boundary, and extreme
   numeric values; mounted list/detail responses; and a red calibration proving
   removal of the safe conversion returns the whole-list 500.
-- Status: candidate; stored-shape triad review is required before Task 10.
+- Status: preliminary P2 finding accepted by Task 10; stored-shape validation
+  is mandatory before final ranking.
 
 ### AUD-014 — Offline native sign-out leaves the bearer in Keychain
 
@@ -283,8 +272,8 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   successful and HTTP-5xx server responses; Keychain-delete failure remains
   visible; mounted You-screen completion; offline then online `useMe` behavior;
   and a device check only if Task 12 finds it can change priority.
-- Status: candidate; Task 7 confirmed the surrounding `useMe`/You ownership and
-  found no reason to change the P2 rank; final adjudication is Task 10.
+- Status: preliminary P2 finding accepted by Task 10; auth-boundary validation
+  is mandatory before final ranking.
 
 ### AUD-015 — A failed run-state write silently cancels workout start
 
@@ -326,7 +315,8 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   for zero and nonzero countdown; retry after storage becomes writable; reload
   during error; existing StrictMode one-write pin; and a deliberate mutation
   that ignores the boolean and restores the Today bounce.
-- Status: candidate; P1 requires fresh high-end Lane C validation.
+- Status: preliminary P1 finding accepted by Task 10; mandatory fresh
+  validation remains.
 
 ### AUD-016 — Connected storage loss leaves a finished workout outside the log door
 
@@ -388,7 +378,65 @@ Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
   open, boundary, series retry, and close; real connected finish → Log and
   Today recovery; reload/exit behavior stated explicitly; successful storage
   control; and a deliberate mutation restoring the void/swallow hand-off.
-- Status: candidate promoted by Task 9; fresh P1 validation remains required.
+- Status: preliminary P1/Probable finding accepted by Task 10; mandatory fresh
+  validation must decide whether the traced screen consequence holds and
+  whether authority is sufficient.
+
+### AUD-020 — Cleanup failure turns a committed log into a retryable error
+
+- Category: brittleness
+- Severity / confidence: P1 / Probable
+- User impact: the server can create the session log and advance the active
+  plan, then a local cleanup exception makes the app say the save failed. A
+  normal Retry sends the same workout again, which can create a duplicate log
+  and advance the plan a second time.
+- Expected authority: HTTP 201 means the request “has been fulfilled and has
+  resulted in one or more new resources being created”
+  ([RFC 9110 §15.3.2](https://www.rfc-editor.org/rfc/rfc9110.html#name-201-created)).
+  Local cleanup is downstream bookkeeping; it cannot truthfully revoke that
+  committed result. The audit design separately requires storage failure
+  injection at persistence boundaries
+  (`docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md:174-186`).
+- Actual behavior: at baseline
+  `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`, `useLogForm` invokes `onSaved`
+  inside the same `try` that handles the POST, so any cleanup exception reaches
+  the generic retryable save error (`app/src/session/LogSession.tsx:702-780`).
+  The session door's callback calls `clearDraft()` then `clearRun()`
+  (`:1173-1192`); the monitor door calls `clearMonitorRun()` (`:1548-1568`).
+  Those helpers call `removeItem` without guards
+  (`app/src/session/run.ts:147-149`, `draft.ts:151-153`,
+  `monitor/monitorRun.ts:519-521`). A calibrated temporary mounted Log Session
+  probe returned literal 201, made only `DRAFT_KEY` removal throw, observed the
+  false save error with both records retained, then restored storage and
+  observed Retry send a second POST while the other 4,032 client tests passed.
+  The real store inserts a log unconditionally and advances plan state first
+  when requested (`app/server/stores/logs.ts:598-675`).
+- Independent disproof: the probe supplied its own 201 response and selective
+  `removeItem` fault, then counted POSTs and inspected retained keys without
+  importing product serializers or cleanup helpers. Removing only the cleanup
+  fault made the same path complete; retry after restoration changed the count
+  from one to two. A real-store validator must still establish the duplicate
+  row and double plan consequence, so confidence remains Probable.
+- Scope: successful session-door and monitor-door saves, draft/run/monitor
+  cleanup, post-test offer/navigation, retry, session-log creation, and optional
+  plan advancement. Getter denial remains AUD-011; ambiguous lost network
+  responses remain AUD-017 because they require operation identity rather than
+  cleanup separation.
+- Existing coverage gap: successful-save tests assume cleanup cannot throw;
+  storage helper tests exercise failure before the server has committed. No
+  persistent test composes a real 201 with selective cleanup failure and Retry.
+- Smallest safe fix: make a genuine successful POST final for user-visible save
+  state, then perform local cleanup as idempotent best effort. Preserve the
+  server-created ID and do not offer a second POST because cleanup failed. Do
+  not solve AUD-017's ambiguous network outcome by guessing at duplicate rows.
+- Verification required after a fix: failing session and monitor door cases
+  first; real server/real Postgres 201 followed by selective clear failure;
+  exactly one log and one plan advance after Retry attempts; cleanup-success,
+  post-test offer, and navigation controls; and a mutation that moves cleanup
+  back inside the retryable POST failure boundary.
+- Status: split from AUD-011 by Task 10 because its trigger, user outcome, safe
+  fix, and regression can pass independently; preliminary P1/Probable finding
+  requires mandatory fresh validation.
 
 ## Record contract
 

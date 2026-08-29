@@ -2,6 +2,21 @@
 
 Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
+## Task 10 disposition
+
+- No hypothesis was promoted into the preliminary validation slate.
+- AUD-001, AUD-007, AUD-009, and AUD-010 remain device hypotheses for Task
+  12's ranking-based hardware decision; no hardware spend is authorized yet.
+- AUD-004 and AUD-017 require product-contract decisions before a code fix can
+  be prescribed.
+- AUD-008, AUD-018, and AUD-019 require external or device evidence that the
+  existing audit does not possess.
+- AUD-003 is P3 process debt and AUD-005 is cleared at the baseline. Neither
+  consumes Task 11 validation spend.
+- AUD-020 was split from preliminary finding AUD-011 because post-commit
+  cleanup/retry behavior has a distinct trigger, authority, fix boundary, and
+  regression.
+
 ### AUD-001 — Native monitor failures can remain invisible to automated evidence
 
 - Category: brittleness
