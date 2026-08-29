@@ -146,6 +146,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Lint + test the pre-commit hook
+        run: |
+          bash -n .husky/pre-commit
+          bash scripts/pre-commit.test.sh
       - name: Lint + test the deploy script
         run: |
           bash -n scripts/deploy.sh

@@ -4240,6 +4240,9 @@ test.describe("timer screen (landscape, 844x420)", () => {
     const gap = await page.evaluate(() => {
       const controls = document.querySelector(".timer-controls");
       const screen = document.querySelector(".timer-screen");
+      if (!controls || !screen) {
+        throw new Error("timer controls and timer screen must both be present");
+      }
       const controlsBottom = controls.getBoundingClientRect().bottom;
       const screenBottom = screen.getBoundingClientRect().bottom;
       return Math.round(screenBottom - controlsBottom);

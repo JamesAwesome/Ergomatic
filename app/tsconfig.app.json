@@ -12,6 +12,8 @@
     "jsx": "react-jsx",
     "noEmit": true,
     "strict": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,

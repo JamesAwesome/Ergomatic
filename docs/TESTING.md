@@ -427,3 +427,35 @@ Two rules of craft:
   its effort on the seams you didn't look at. That only works if your report
   states each mutation precisely enough to be trusted: what you broke, which
   tests died, that the restore is clean.
+
+## 14. Typed-lint ratchet
+
+`pnpm lint` first applies `app/eslint-suppressions.json` through native ESLint,
+then runs the repository's whole-file membership census. Native ESLint owns
+diagnostics, per-file rule/count ceilings, and within-file stale-suppression
+pruning; the census rejects ledger files that were deleted or newly ignored and
+therefore no longer belong to ESLint's configured population. Run
+`pnpm lint:prune` after removing grandfathered violations: native ESLint first
+removes within-file stale rule/count entries, then the census removes only its
+invalid top-level file entries. Normal lint never writes. There is deliberately
+no command that regenerates the baseline.
+
+Five typed rules apply to production and tests:
+`no-floating-promises`, `no-misused-promises`, `await-thenable`,
+`only-throw-error`, and `prefer-promise-reject-errors`. Four more apply to
+non-test code only: `no-unsafe-assignment`, `no-unsafe-return`,
+`no-unsafe-call`, and `no-unsafe-member-access`. Unsafe server-test response
+bodies are separate Wave D hardening work; they are not hidden behind a
+high-count allowance here.
+
+Every TS/TSX file ESLint checks must belong to a TypeScript Project Service
+project. A project-service/parser failure means omitted coverage and is never
+suppressible debt. `pnpm typecheck` separately checks every E2E source and
+its membership census.
+
+ESLint bulk suppressions count violations by file and rule, not by source
+location. Native pruning plus the census detect both within-file decreases and
+whole ledger files that leave the lint population, but cannot detect one
+same-rule violation replacing another in the same file while the count stays
+equal. That same-count replacement is the sole accepted blind spot;
+`CLAUDE.md` owns the no-growth and campsite policy for it.
