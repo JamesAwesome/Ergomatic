@@ -142,14 +142,24 @@ import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 import type { WorkoutType } from "../../domain/types.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { loadMonitorRun, type MonitorRun } from "./monitorRun";
+import { BURST_HANDOFF_HOLD_MS } from "./useMonitorSession";
 import type { MonitorSession, RunIdentity } from "./useMonitorSession";
-import { parseRecording, type ParsedRecording } from "./transports/recording";
+import {
+  parseRecording,
+  type ParsedRecording,
+  type RecordedEvent,
+} from "./transports/recording";
 import {
   createReplayTransport,
   type ReplayHandle,
   type ReplayResult,
 } from "./transports/replay";
 import { withLiveness } from "./transports/liveness";
+import {
+  END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
+  LOGGED_WORKOUT_UUID,
+} from "../../domain/monitor/pm5/uuids.js";
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
 
@@ -366,6 +376,100 @@ if (END_PRESS_DUE_MS <= lastRxBeforeBarrier.t) {
     `summaryHoldReplay.test.ts: END_PRESS_DUE_MS (${END_PRESS_DUE_MS}) does not exceed the last rx event preceding the barrier (t=${lastRxBeforeBarrier.t}) — END_PRESS_MARGIN_MS needs revisiting for this capture`,
   );
 }
+
+/** Storage-spine design spec §6, Leg 3 (timeout): strips every burst
+ *  notification from a parsed recording's own event list — the SAME
+ *  `stripBurst` idiom `burstReplay.test.ts:177-186` establishes, restated
+ *  here per this project's "no test file in `src/monitor/` imports
+ *  another" convention. Filters by CHARACTERISTIC, not by opcode byte, so
+ *  ALL THREE of 0x0039/0x003A/0x003F are gone — leaving 0x003F in would
+ *  still let the driver's own "CALL SITE 5" (0x003F's subscribe handler,
+ *  `flushTerminateObservations()`) fire on arrival; stripping only the
+ *  summary pair and leaving the hash would be internally incoherent (a
+ *  hash confirming a summary that was never delivered), not merely
+ *  redundant. */
+function stripBurst(events: RecordedEvent[]): RecordedEvent[] {
+  const burstChars: string[] = [
+    END_OF_WORKOUT_SUMMARY_UUID,
+    END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+    LOGGED_WORKOUT_UUID,
+  ];
+  return events.filter(
+    (e) => !("dir" in e && e.dir === "rx" && burstChars.includes(e.char)),
+  );
+}
+
+/** Seq 288's own terminal General Status frame (this file's header, "seq
+ *  288's raw 0x0031 ... is the FIRST general-status frame reading
+ *  workoutState=11"), found by its own bytes rather than a hand-picked
+ *  index — verified this session against the raw (decompressed) capture:
+ *  unique in the file (`grep`-equivalent count of 1), t=52686.2. This is
+ *  what Leg 3's synthetic trailing event below is offset FROM. */
+const SMOKE_TERMINAL_HEX =
+  "38 0c 00 49 04 00 08 00 0b 00 04 00 00 00 70 17 00 00 66";
+/** IIFE, not a plain `const` + guard: a `RecordedEvent | undefined` never
+ *  narrows across the closure boundary into `buildTrailingEvent` below
+ *  (TS keeps the widened union there regardless of an `if (=== undefined)
+ *  throw` sitting between the two), so this returns the ALREADY-narrowed
+ *  value directly — `smokeTerminalEvent`'s own type is the rx member, not
+ *  the whole union, everywhere it is used. */
+const smokeTerminalEvent: Extract<RecordedEvent, { dir: "rx" }> = (() => {
+  const found = SMOKE_CAPTURE.events.find(
+    (e): e is Extract<RecordedEvent, { dir: "rx" }> =>
+      "dir" in e && e.dir === "rx" && e.hex === SMOKE_TERMINAL_HEX,
+  );
+  if (found === undefined) {
+    throw new Error(
+      "summaryHoldReplay.test.ts: SMOKE_CAPTURE carries no terminal General Status frame matching SMOKE_TERMINAL_HEX — the capture's shape changed; leg 3's synthetic trailing event has nothing to offset from",
+    );
+  }
+  return found;
+})();
+
+/**
+ * Storage-spine design spec §6, Leg 3 — the PLANNED synthetic surgery
+ * (unlike Task 1's REMOVED one, this file's header above: that one was
+ * wrong because `driver.ts`'s CALL SITE 5 already carried the clock far
+ * enough; this one is necessary because the burst is GONE, so nothing
+ * else in the capture's own tail can ever advance the clock at all).
+ * `transports/replay.ts`'s own `run()` loop only advances its virtual
+ * clock at recorded events (`replay.ts:270`, "rx: advance the virtual
+ * clock to the event's t" — the module's own header states the binding
+ * semantics), and `SMOKE_CAPTURE`'s last recorded event sits at
+ * t=53230.5 — only ~544 ms after the terminal (t=52686.2) — nowhere near
+ * `BURST_HANDOFF_HOLD_MS` (2000). `offsetMs` past the terminal is what
+ * carries it there: 2500 clears the 2000 ms backstop by a 500 ms margin
+ * without brushing the SPLIT condition's own 3500 ms backstop, which this
+ * arm never opens anyway (`endByMachine`'s `terminated` branch never
+ * calls `openHandoffHold`).
+ *
+ * Reuses `smokeTerminalEvent`'s OWN already-terminal payload verbatim —
+ * never an invented byte string — harmless to redeliver: `endByMachine`'s
+ * own P3b pin (`useMonitorSession.ts`) returns immediately on ANY
+ * terminal event reaching a run whose `completedAt` is already set, the
+ * identical fact "THE WALK DAY 3 SEQUENCE" test
+ * (`useMonitorSession.test.ts`) pins for the machine's own genuine repeat
+ * ticks post-terminal.
+ */
+function buildTrailingEvent(offsetMs: number): RecordedEvent {
+  return {
+    ...smokeTerminalEvent,
+    seq: SMOKE_CAPTURE.events.length,
+    t: smokeTerminalEvent.t + offsetMs,
+  };
+}
+
+/** The real value (RF21 mutation 5, run once with this shrunk to 1500 —
+ *  see task-4-report.md for the run and its output, then restored). 2500
+ *  is `buildTrailingEvent`'s own derivation comment: it clears
+ *  `BURST_HANDOFF_HOLD_MS` (2000) by a 500 ms margin. Deliberately NOT
+ *  guarded by a module-level check against `BURST_HANDOFF_HOLD_MS` the
+ *  way `END_PRESS_DUE_MS`'s lower bound is above: a throw here would fail
+ *  the whole FILE at collection time during the 1500 ms mutation run,
+ *  taking legs 1 and 2 down with it — the mutation's own point is a
+ *  single, specific assertion failure inside THIS leg's `it()` body
+ *  (`full.handoffHeld` staying `true`), not a file-wide crash. */
+const LEG3_TRAILING_OFFSET_MS = 2500;
 
 /**
  * Leg 2's own scheduled action (this file's header, "The End press"):
@@ -877,5 +981,91 @@ describe("the summary hold's permanent gate, leg 2: user End (storage-spine desi
       verificationBytes: Array.from(fullRecord.verificationBytes!),
       ...fullRecord.summaryDetail,
     });
+  });
+});
+
+describe("the summary hold's permanent gate, leg 3: timeout (storage-spine design spec §6)", () => {
+  it("releases the ended hand-off on its own BURST_HANDOFF_HOLD_MS backstop when the burst never arrives at all, with no machine columns anywhere in the saved row", async () => {
+    localStorage.clear();
+
+    // Leg 1's own recording (Menu terminate — the arm whose SPLIT
+    // condition never opens, `endByMachine`'s `terminated` branch), with
+    // its burst stripped and one synthetic trailing event appended (this
+    // file's own header comments on `stripBurst`/`buildTrailingEvent`
+    // carry the full reasoning for both). Everything through the terminal
+    // (seq 288) is byte-identical to leg 1's own full replay; only the
+    // tail differs.
+    const full = await runReplay(
+      {
+        header: SMOKE_CAPTURE.header,
+        events: [
+          ...stripBurst(SMOKE_CAPTURE.events),
+          buildTrailingEvent(LEG3_TRAILING_OFFSET_MS),
+        ],
+      },
+      SMOKE_TERMINATED_PROGRAM,
+      SMOKE_IDENTITY,
+    );
+
+    expect(full.divergences).toStrictEqual([]);
+    expect(full.phase).toBe("ended");
+    expect(full.record).not.toBeNull();
+    const fullRecord = full.record!;
+    expect(fullRecord.endedBy).toBe("rower");
+    expect(fullRecord.completedAt).not.toBeNull();
+
+    // THE ASSERTION THIS LEG EXISTS FOR: the burst never arrives (stripped
+    // above), so the ONLY thing that can free the hand-off is the burst
+    // condition's own backstop — `BURST_HANDOFF_HOLD_MS`, reason
+    // `"burst-timeout"` — reached because the synthetic trailing event
+    // carries the virtual clock past it (this file's own header comment
+    // on `buildTrailingEvent`).
+    expect(full.handoffHeld).toBe(false);
+    expect(fullRecord.summaryTotals).toBeUndefined();
+    expect(fullRecord).not.toHaveProperty("summaryDetail");
+    expect(fullRecord).not.toHaveProperty("verificationBytes");
+
+    const entries = JSON.parse(full.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const released = entries.find((e) => e.kind === "handoff-released");
+    expect(released?.detail).toContain("burst-timeout");
+    // The OPEN entry names the exact backstop duration this leg is about
+    // — a second, independent confirmation that the ring's own record of
+    // "what this hold was waiting up to" matches the constant, not just
+    // that SOMETHING eventually released it.
+    const opened = entries.find((e) => e.kind === "handoff-hold");
+    expect(opened?.detail).toContain(`${BURST_HANDOFF_HOLD_MS}ms`);
+    // §5's receipt instrument stays SILENT here — no write was ever
+    // attempted, because nothing ever arrived to attempt one with
+    // (spec §3's fourth path is "no run identity"; this is its sibling,
+    // "no burst at all" — neither is a write attempt, so neither receipt
+    // kind fires).
+    expect(
+      entries.some((e) =>
+        [
+          "summary-recorded",
+          "summary-append-rejected",
+          "summary-no-run",
+        ].includes(e.kind),
+      ),
+    ).toBe(false);
+
+    // --- the log door posts a row with NO machine columns at all --------
+    // `monitorModeRun`'s own four conditions are satisfied exactly as leg
+    // 1's own assertion (3) — same capture, same program/identity — but
+    // `LogSession.tsx`'s own optional-key spread
+    // (`monitorRun.summaryTotals !== undefined ? {...} : {}`) contributes
+    // NOTHING here, since `summaryTotals` is `undefined`: the three
+    // machine keys are genuinely ABSENT from the POST body, not `null`.
+    const { body } = await mountLogSessionAndSave(
+      SMOKE_WORKOUT_ID,
+      "Walk Smoke",
+    );
+
+    expect(body).not.toHaveProperty("machineWorkSeconds");
+    expect(body).not.toHaveProperty("machineWorkMeters");
+    expect(body).not.toHaveProperty("machineSummary");
   });
 });
