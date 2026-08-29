@@ -147,6 +147,21 @@ describe("eslint suppression census CLI", () => {
     );
   });
 
+  it("normalizes a valid ledger's final newline during prune", async () => {
+    const cwd = await makeFixture();
+    const location = join(cwd, "eslint-suppressions.json");
+    await writeFile(location, JSON.stringify(ledger, null, 2));
+
+    expect(await runCensus(cwd, true)).toStrictEqual({
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+    expect(await readFile(location, "utf8")).toBe(
+      `${JSON.stringify(ledger, null, 2)}\n`,
+    );
+  });
+
   it("fails closed for malformed keys and ledgers without rewriting normal mode", async () => {
     const cwd = await makeFixture();
     const malformed = {

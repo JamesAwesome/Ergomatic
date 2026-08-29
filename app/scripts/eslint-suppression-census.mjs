@@ -143,7 +143,7 @@ async function main() {
     }
   }
 
-  if (invalid.length === 0) {
+  if (invalid.length === 0 && !options.prune) {
     return;
   }
   if (options.prune) {
