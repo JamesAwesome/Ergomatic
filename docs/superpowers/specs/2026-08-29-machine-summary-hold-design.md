@@ -387,7 +387,7 @@ downstream of the break and can never go red on it.
   AUD-016's gate, §3); (3) a fresh `LogSession` mount — jsdom, real
   `monitorModeRun` over the storage the replay actually wrote, mocked
   server — produces a save POST carrying `machineWorkSeconds`,
-  `machineDistanceMeters`, and the verification bytes. **Red today** at
+  `machineWorkMeters`, and the verification bytes. **Red today** at
   (1) on both legs.
 - **Leg 3, timeout.** The replay engine's virtual clock advances only at
   recorded events (`replay.ts:270`), and both recordings end ~545–560 ms
