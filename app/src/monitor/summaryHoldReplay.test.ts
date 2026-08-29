@@ -51,20 +51,17 @@
 // exercises the ordinary "hold spans real wall-clock time" shape, not
 // spec §2's zero-cost burst-first race.
 //
-// SUBTLETY FOUND THIS SESSION, flagged for Task 3 rather than silently
-// worked around: `driver.ts`'s own `HASH_SUBWINDOW_MS` (200) means a
-// summary arriving BEFORE its hash (this capture's own order: 0x0039 at
-// t=53136.5, 0x003F at t=53228.6) always takes the SCHEDULED-wait branch
-// of `noteTerminateObservations`, due at t=53336.5 — but the capture's own
-// last recorded event (disconnect) sits at t=53230.5, and
-// `transports/replay.ts`'s virtual clock only advances at recorded events
-// (`replay.ts:270`, the same fact §6's leg 3 names). Unmodified, this
-// capture's own tail can never reach the due time its own code schedules,
-// which would make assertion (2) below unreachable FOREVER, not merely
-// red-until-Task-3. Fixed the same way §6's leg 3 fixes an analogous gap:
-// one synthetic trailing rx event (a General Status tick, harmless once
-// the run is already closed — `driver.ts`'s own `terminal-out-of-run`
-// branch) appended well past the 53336.5 due time.
+// `driver.ts`'s own `HASH_SUBWINDOW_MS` (200) governs a summary that
+// arrives BEFORE its hash (this capture's own order: 0x0039 at t=53136.5,
+// 0x003F at t=53228.6): `noteTerminateObservations` schedules its emit for
+// t=53336.5, but 0x003F's own subscribe handler (`driver.ts`'s "CALL SITE
+// 5") calls `flushTerminateObservations()` SYNCHRONOUSLY on arrival,
+// cancelling that pending schedule and firing the emit immediately —
+// independent of the timer. 0x003F lands at seq 296 (t=53228.6), before
+// the capture's own last recorded event (disconnect, t=53230.5), so the
+// write completes within the ORIGINAL, unmodified capture; no synthetic
+// trailing event is needed (an earlier draft of this file appended one on
+// a mistaken reading of the scheduled-timer path alone — reviewed out).
 //
 // Composition: the SAME `createReplayTransport` + `vi.doMock("../adapters/
 // monitorTransport")` + `vi.resetModules()` + dynamic re-import idiom
@@ -98,7 +95,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 import type { WorkoutType } from "../../domain/types.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
-import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
 import { loadMonitorRun, type MonitorRun } from "./monitorRun";
 import type { RunIdentity } from "./useMonitorSession";
 import {
@@ -127,26 +123,6 @@ const CAPTURE_FILE = "smoke-terminated-recording.jsonl.gz";
 const SMOKE_CAPTURE: ParsedRecording = parseRecording(
   gunzipSync(readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`)).toString("utf8"),
 );
-
-/** One synthetic trailing event, appended past the capture's own last
- *  recorded byte (disconnect, t=53230.5) — see this file's header
- *  comment ("SUBTLETY FOUND THIS SESSION"): `noteTerminateObservations`'s
- *  own `HASH_SUBWINDOW_MS` (200) schedules its emit for t=53336.5 (200 ms
- *  after the summary at t=53136.5, since the hash follows the summary in
- *  this capture rather than preceding it), and nothing in the capture's
- *  own tail ever advances the virtual clock that far. Reuses seq 291's
- *  own already-terminal General Status payload verbatim — harmless
- *  (`driver.ts`'s own `terminal-out-of-run` branch is what a terminal
- *  frame arriving after the run has already closed produces), its only
- *  job is carrying the clock past 53336.5 so the scheduled callback
- *  fires within THIS replay rather than never. */
-const TRAILING_CLOCK_ADVANCE: RecordedEvent = {
-  seq: SMOKE_CAPTURE.events.length,
-  t: SMOKE_CAPTURE.events[SMOKE_CAPTURE.events.length - 1]!.t + 250,
-  dir: "rx",
-  char: GENERAL_STATUS_UUID,
-  hex: "4a 0c 00 4d 04 00 01 01 0b 00 04 6e 00 00 70 17 00 00 66",
-};
 
 /** HAND-TRANSCRIBED, byte-verified against seq 15/16's own assembled tx
  *  payload this session (never guessed, never carried from another file
@@ -446,15 +422,15 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
     expect(truncated.handoffHeld).toBe(true);
 
     // --- assertion (2): the burst's write attempt precedes release ------
-    // Unreached while (1) fails. The full capture, replayed to
-    // completion (plus the trailing synthetic tick this file's header
-    // explains) — `handoffHeld` must flip false only AFTER
+    // Unreached while (1) fails. The full, UNMODIFIED capture replayed to
+    // completion — `handoffHeld` must flip false only AFTER
     // `summaryTotals` is written, matching the recording's own decoded
     // 0x0039 pair exactly (31.5 s / 110 m — this file's header cites the
-    // raw bytes).
-    const full = await runReplay(
-      SMOKE_CAPTURE.events.concat([TRAILING_CLOCK_ADVANCE]),
-    );
+    // raw bytes). No synthetic trailing event needed: 0x003F (seq 296,
+    // t=53228.6) arrives before the capture's own last event (disconnect,
+    // t=53230.5) and flushes the write synchronously (this file's header,
+    // "CALL SITE 5").
+    const full = await runReplay(SMOKE_CAPTURE.events);
 
     expect(full.divergences).toStrictEqual([]);
     expect(full.record).not.toBeNull();
