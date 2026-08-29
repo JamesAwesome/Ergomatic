@@ -11,11 +11,11 @@ lint debt is grandfathered by ESLint's own suppression mechanism, every
 relevant edit must leave its campsite better, and TypeScript flags are enabled
 only when their debt is genuinely zero.
 
-**Status:** James-approved pre-Wave-D enabling slice; written spec awaiting
-James's approval before implementation planning. This does **not** open Wave D.
+**Status:** James-approved pre-Wave-D enabling slice; approved for
+implementation on 2026-08-29. This does **not** open Wave D.
 James explicitly pulled forward this one repository-enforcement slice on
-2026-08-29; Wave D remains **After A**, its other seven items remain queued, and
-its release remains paired with Wave C. The normal Wave D phase-open PM and
+2026-08-29; Wave D remains **After A**, all other Wave D work remains queued,
+and its release remains paired with Wave C. The normal Wave D phase-open PM and
 antagonist gates remain due before any other Wave D work starts.
 
 Pre-wave review gates: **PM GO_WITH_CHANGES** after the sequencing boundary
@@ -276,9 +276,10 @@ only if a real finding justifies the mostly stylistic churn.
 test executes the real hook with a fake `node -v` returning Node 26 and a fake
 `pnpm` that records invocation order. It proves all three outcomes:
 
-1. lint-staged fails → typecheck is not run and the hook is non-zero;
-2. lint-staged passes, typecheck fails → the hook is non-zero;
-3. both pass → the hook is zero.
+1. lint-staged returns sentinel 17 → typecheck is not run and the hook returns
+   17;
+2. lint-staged passes, typecheck returns sentinel 23 → the hook returns 23;
+3. both pass → the hook returns zero.
 
 The small shell test joins the always-running `scripts` CI job. It protects the
 hook's control-flow contract without staging real files or depending on the
@@ -300,18 +301,20 @@ hook call sequence; a generic non-zero exit caused by the wrong failure does
 not count.
 
 1. add an unsuppressed floating promise in a zero-allowance file → lint fails;
-2. remove one grandfathered violation without pruning → full lint fails for an
+2. exceed a temporary file/rule allowance of one with two violations → both
+   violations fail;
+3. remove one grandfathered violation without pruning → full lint fails for an
    unused suppression; prune → ledger shrinks and lint passes;
-3. replace one grandfathered same-rule violation without changing its count →
+4. replace one grandfathered same-rule violation without changing its count →
    lint passes, recording the known blind spot rather than claiming it is
    fenced;
-4. run the permanent hook test against the current sequential hook → it fails;
+5. run the permanent hook test against the current sequential hook → it fails;
    apply fail-fast control flow → all three cases pass;
-5. reintroduce one E2E nullable dereference → typecheck fails; restore the
+6. reintroduce one E2E nullable dereference → typecheck fails; restore the
    runtime assertion → typecheck passes;
-6. remove `override` after enabling `noImplicitOverride` → typecheck fails;
+7. remove `override` after enabling `noImplicitOverride` → typecheck fails;
    restore it → typecheck passes.
-7. compare every `e2e/**/*.{ts,tsx}` path plus `playwright.config.ts` against
+8. compare every `e2e/**/*.{ts,tsx}` path plus `playwright.config.ts` against
    `tsc --listFilesOnly` → exact set equality; omitting any one E2E file makes
    the census fail.
 
