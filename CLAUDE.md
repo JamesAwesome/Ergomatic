@@ -256,9 +256,17 @@ requirements).
 - Testing policy: docs/TESTING.md governs — the pyramid, naming/assertion-quality
   rules, coverage stance, contract-test rule, and structural design assertions all
   live there. Read it before writing or reviewing tests.
+- **Typed-lint ratchet and campsite rule.** Existing debt in the committed
+  ESLint suppression ledger may only decrease. Never add or regenerate a
+  suppression to make a change pass; adopting a new suppressed rule requires
+  James's explicit approval. When changing code that carries grandfathered
+  debt, remove suppressions for violations in the function, test, or behavior
+  being changed when doing so is safe and local, then run `pnpm lint:prune`.
+  Do not expand a focused change into unrelated cleanup.
 - TDD: failing test first. Domain code gets the heaviest coverage.
-- Hooks: pre-commit = lint-staged + typecheck; pre-push = unit + client tests only
-  (fast, Docker-free — CI runs the full gate incl. integration/e2e). Both hooks fail
+- Hooks: pre-commit runs staged format/lint first and whole-project typecheck
+  second; it is fail-fast. Pre-push runs unit + client tests only (fast,
+  Docker-free — CI runs the full gate incl. integration/e2e). Both hooks fail
   loudly and block if the active Node major is below `.nvmrc`. Don't bypass with
   `--no-verify`; fix the failure.
 - **CI skips the code jobs on documentation-only pushes.** `scripts/ci-changes.sh`

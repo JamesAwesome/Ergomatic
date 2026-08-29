@@ -51,7 +51,7 @@ plan in `docs/superpowers/plans/`) when it starts.
 | Auth              | Google OAuth (authorization code flow) only at launch; self-hosted cookie sessions in Postgres; no auth SaaS. **Sign-up is deny-by-default against `ALLOWED_EMAILS` — Wave A changes this, and it is the single largest gap between this app and a stranger using it**                                    |
 | Deployment        | Full CD: push to main → self-hosted runner → SSH deploy script → health-gated auto-rollback (nataliesawacritter pattern)                                                                                                                                                                                  |
 | Hosting           | Docker Compose (hardened: read_only, cap_drop ALL, non-root) fronted by a Cloudflare tunnel behind a compose profile                                                                                                                                                                                      |
-| Local enforcement | husky + lint-staged — pre-commit: lint + typecheck on staged files; pre-push: unit + client tests (fast, Docker-free)                                                                                                                                                                                     |
+| Local enforcement | husky + lint-staged — pre-commit: staged format/lint, then whole-project typecheck, fail-fast; pre-push: unit + client tests (fast, Docker-free)                                                                                                                                                          |
 | CI                | GitHub Actions: `changes` → `root-hooks`, `app`, `docker`, `e2e`, `scripts`, `deploy`. `changes` decides whether the code jobs run at all — documentation-only pushes skip `app`, `docker` and `e2e`                                                                                                      |
 | Tests             | Vitest three-project setup: unit (node), client (jsdom + Testing Library), integration (Testcontainers Postgres); enforced coverage thresholds                                                                                                                                                            |
 | Time display      | House time format is elastic positional: seconds always shown, an hour group only when nonzero, the leading group never zero-padded — `0:45`, `20:00`, `1:05:00` (`domain/duration.ts`, Phase 5F). Totals stay unit-labelled (`302 MIN`, `302′`), which is what keeps a colon value's meaning unambiguous |
@@ -377,7 +377,8 @@ its data from inside the app.
 ## Wave D — The toolbox
 
 **Status:** After A; **releases with Wave C**, never alone. **M.**
-**Ships a tester nothing** — but three of its items are Wave C's dependencies.
+**Ships a tester nothing** — but two items are Wave C dependencies: simulator
+coverage and native-fake reachability for connected surfaces.
 
 **Goal:** the instruments Wave C's audit needs, and the standing traps retired
 while we are in here.
@@ -400,11 +401,20 @@ while we are in here.
       13 records**, so fixing it retires a standing trap rather than adding a
       feature. Dev and debug builds only, proven absent from the production
       bundle by `dist-grep.sh` in both directions per recurring failure 12. **S**
-- [ ] **`app/e2e/` is not typechecked.** James, 2026-08-23, owner assigned.
-      `tsconfig.app.json:21` includes only `src`, `domain`, `scripts`, and
-      Playwright erases types; a hand-rolled config over `e2e/` surfaced 14
-      pre-existing errors when last tried. Fix the errors, wire the config into
-      `pnpm typecheck`. **S/M**
+- [x] **Pre-Wave-D enabling slice — the lint/type ratchet and `e2e/`
+      typecheck.** James explicitly pulled this one slice forward on
+      2026-08-29. Every linted TS/TSX file now has typed project ownership,
+      `pnpm typecheck` covers `e2e/`, the selected typed rules use a
+      prune-aware no-growth ceiling, and pre-commit is fail-fast. This did
+      **not** open Wave D, advance its other work, or alter D's release-with-C
+      sequencing. Detailed contract and proof:
+      `docs/superpowers/specs/2026-08-29-lint-type-ratchet-design.md`. **M**
+- [ ] **Finish the ordered type-hardening follow-on.** Clear and globally
+      enable `exactOptionalPropertyTypes`, then `noUncheckedIndexedAccess`,
+      then validate unsafe server-test response bodies before reconsidering
+      the four unsafe-`any` rules there. Do not queue
+      `noPropertyAccessFromIndexSignature` without a real failure class; its
+      current volume is mostly access style. **M**
 - [ ] **Hunt the e2e flakes.** James, 2026-08-20: _"post release lets hunt down
       the flake."_ Its trigger ("immediately after v0.15.0 ships") fired
       2026-08-20. Two named flakes remain unresolved: the manual-door
@@ -413,14 +423,11 @@ while we are in here.
       capture for a _third_ flake and produced
       `docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md`. **M**
 - [ ] **Settle the mutation-testing gate, one way or the other.**
-      `docs/TESTING.md` calls `pnpm mutate` a phase close-out gate. There is no
-      evidence of a run since 2026-07-29 across roughly fifteen phases: Stryker
-      appears only in CLAUDE.md, TESTING.md and two 2026-07-28 planning docs;
-      the old ROADMAP never mentioned it; `app/reports/` does not exist. Its
-      §3.1 baseline scores 7 domain modules against today's 29. **Either run it
-      once and refresh the baseline against current scope, or demote the
-      claim.** As written it is a green-by-assertion gate at the process
-      layer — recurring failure 21's shape. **S/M**
+      `docs/TESTING.md` explicitly demoted the full `pnpm mutate` run from an
+      unrun phase gate to an on-demand probe; its only baseline is still
+      2026-07-29 and covers 7 domain modules against today's 29. Either make
+      a current full run a real enforced gate with an owned cadence, or keep
+      it on-demand and retire the stale baseline as evidence. **S/M**
 - [ ] **The 23 dangling `.superpowers/` citations across 11 tracked files.**
       That directory is git-excluded and unreachable to anyone but the session
       that wrote it. _"A dangling citation is worse than no citation, because it
@@ -437,9 +444,11 @@ while we are in here.
       recorder and no gaps while the phone leg had gaps and no recorder. New
       home: a deliberate web-leg capture, or extend the recorder to native. **S**
 
-**Exit:** the accessibility audit can run on real assistive technology, the
-simulator reaches a connected screen, `pnpm typecheck` covers `e2e/`, and no
-tracked file cites a path that does not exist.
+**Exit:** the accessibility audit can run on real assistive technology; the
+simulator reaches a connected screen; the lint/type slice remains green; no
+tracked file cites a path that does not exist; and the named flakes,
+mutation-gate decision, REST-bearing fixture, wire-gap witness, and ordered
+type-hardening follow-on are each completed or explicitly disposed.
 
 ---
 

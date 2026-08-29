@@ -427,3 +427,30 @@ Two rules of craft:
   its effort on the seams you didn't look at. That only works if your report
   states each mutation precisely enough to be trusted: what you broke, which
   tests died, that the restore is clean.
+
+## 14. Typed-lint ratchet
+
+`pnpm lint` applies `app/eslint-suppressions.json` and fails when a selected
+rule appears in a file/rule pair with no allowance, exceeds an existing
+allowance, or leaves an allowance stale after cleanup. Run `pnpm lint:prune`
+after removing grandfathered violations; normal lint must then be green.
+There is deliberately no command that regenerates the baseline.
+
+Five typed rules apply to production and tests:
+`no-floating-promises`, `no-misused-promises`, `await-thenable`,
+`only-throw-error`, and `prefer-promise-reject-errors`. Four more apply to
+non-test code only: `no-unsafe-assignment`, `no-unsafe-return`,
+`no-unsafe-call`, and `no-unsafe-member-access`. Unsafe server-test response
+bodies are separate Wave D hardening work; they are not hidden behind a
+high-count allowance here.
+
+Every TS/TSX file ESLint checks must belong to a TypeScript Project Service
+project. A project-service/parser failure means omitted coverage and is never
+suppressible debt. `pnpm typecheck` separately checks every E2E source and
+its membership census.
+
+ESLint bulk suppressions count violations by file and rule, not by source
+location. They reject a count increase and force pruning after a decrease,
+but cannot detect one same-rule violation replacing another in the same file
+while the count stays equal. `CLAUDE.md` owns the no-growth and campsite
+policy for that honest limitation.

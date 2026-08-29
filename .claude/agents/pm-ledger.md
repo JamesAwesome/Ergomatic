@@ -3223,3 +3223,13 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   naming the 16 permanently-ours rows, the three falsified corrections in full,
   and the new post-End wait if perceptible. The 2026-08-28 correction clock
   expires ~2026-09-11.
+
+## PM ruling, 2026-08-29 (lint/type ratchet)
+
+- **A James-approved pre-wave enabling slice can pull forward one explicitly
+  owned infrastructure item without opening its wave.** The lint/type ratchet
+  is Wave D's `e2e/` typecheck/enforcement item, pulled forward by James before
+  F → A → D completes; Wave D's status, remaining items, normal phase-open
+  gates, and release-with-C rule stay unchanged. The exception is valid only
+  when the roadmap names the slice and its exit, rather than claiming the
+  whole phase has opened.

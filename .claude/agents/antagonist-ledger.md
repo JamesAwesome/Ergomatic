@@ -3870,3 +3870,36 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   `ergomatic:last-session-log` is localStorage and may still hold the full
   ring on the phone. **Technique: check a committed ring's seq numbering for
   gaps before treating an absence in it as evidence.**
+
+### 2026-08-29 — Pre-Wave-D lint/type ratchet pass
+
+- **“109 diagnostics is the typed-lint adoption baseline” was false because
+  86 project-service failures omitted most server, E2E, and config files.**
+  Full ownership exposed 482 additional server-test diagnostics; scoping
+  unsafe-`any` rules away from tests produced the honest candidate: 56
+  diagnostics, zero fatals. **Technique: establish project ownership before
+  counting rule debt; parser failures are omitted populations, not clean files.**
+- **One biting compiler mutation does not prove project membership.** A
+  TSConfig could include the mutated E2E file and omit its fourteen siblings.
+  **Technique: compare the filesystem census with `tsc --listFilesOnly` by
+  exact set equality, then separately mutate a diagnostic. Membership and
+  enforcement are different proofs.**
+- **A hook regression must execute the real hook and control its preamble.**
+  The always-running scripts job lacks Node 26, so an uncontrolled test can
+  fail before reaching sequencing; copied control flow can pass while the
+  hook remains broken. **Technique: run the actual hook with fake Node and
+  recording command boundaries, then assert exit status and invocation order.**
+- **A phase exit must own every item in its slate.** Wave D's first exit
+  omitted flake disposition, mutation-gate disposition, the REST fixture, and
+  the wire-gap witness. **Technique: diff unchecked-item nouns against
+  exit-criterion nouns before calling a phase closable.**
+- **“Nonzero” does not prove exit-status propagation.** When a wrapper
+  promises to return the first failing gate, inject distinct sentinel
+  statuses for each dependency and assert the exact numeric result as well as
+  later-command absence. A test that normalizes every failure to “nonzero”
+  cannot detect wrappers that remap or discard the underlying status.
+- **VETTED GROUND:** ESLint's native suppression ledger enforces file/rule
+  count ceilings and prune-required improvements; Project Service is the
+  correct editor-aligned ownership mechanism; the scoped nine-rule candidate
+  is measured over the complete intended population; E2E membership is 16/16;
+  the near-zero TypeScript flags and real-hook fail-fast proof are deterministic.
