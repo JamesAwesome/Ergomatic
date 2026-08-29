@@ -699,40 +699,72 @@ async function walkSurfaceToLog(
   ).toBeVisible();
   await page.getByRole("button", { name: "Tap again to end" }).click();
 
-  // THE ENDED HAND-OFF FRAME — genuinely a ONE-RENDER flash for a
-  // user-initiated End (`ConnectedSurface.tsx`'s own header: `handoffHeld`
-  // stays `false` for `endedBy: "user"`, so `onEnded()` fires on the very
-  // next render and the caller navigates immediately). A plain
-  // `toBeVisible()` here raced that window under full-suite CPU load
-  // (caught directly investigating this task's own two new
-  // `boundingBox()` round trips just above — 6/6 green in isolation, an
-  // intermittent miss only under the full 279-test parallel run) and is
-  // not this task's frame to make less transient. Whichever of "the frame
-  // painted" or "navigation already landed" happens first is equally good
-  // proof End worked.
+  // THE ENDED HAND-OFF FRAME — NO LONGER a one-render flash for a
+  // user-initiated End (machine-summary hold spec §2, storage-spine
+  // design). A link-up End is now the THIRD burst-eligible arm:
+  // `endSession` opens the burst condition (`openBurstHold()`) the same
+  // way a machine finish or a Menu terminate does, so `handoffHeld` is
+  // briefly `true` and `onEnded()` — and this walk's own navigation — wait
+  // for it to resolve rather than firing on the very next render. Real
+  // hardware resolves this in ≈0.3-0.6s (spec §2's own corpus,
+  // `end-on-interval-1-recording`'s 558.6ms being the measured worst case
+  // for this exact arm).
   //
-  // `Promise.any`, NOT `Promise.race` (task-6 review, I4 — this is a
-  // disclosed retirement-and-restoration, not a silent weakening). The
-  // first version of this raced two promises that each swallowed their own
-  // rejection with `.catch(() => undefined)`, which asserts NOTHING: a race
-  // settles on the first SETTLEMENT, so two timeouts resolved it just as
-  // happily as a painted frame did, and the ended hand-off went unpinned in
-  // this walk. `any` resolves on the first FULFILMENT and rejects with an
-  // `AggregateError` if both fail — so the tolerance for which of the two
-  // wins survives, and a double failure still fails here, on this line,
-  // naming both branches.
-  await Promise.any([
-    page.getByText("That is the session").waitFor({ state: "visible" }),
-    page.waitForURL(/\/library\/[^/]+\/log\?from=monitor$/),
-  ]);
+  // PR #228 review finding 1 (James): the ORIGINAL version of this walk
+  // injected the summary immediately after the second End press, before
+  // ever proving the connected screen was still mounted at that instant —
+  // a `handoffHeld: false` mutation at the exact hook→surface seam
+  // (`ConnectedInterstitial` passing it to `ConnectedSurface`) left every
+  // assertion in this file unchanged, all 4,042 client tests green, and
+  // all 6 connected e2e tests green. "Wrapping up" visible WHILE STILL ON
+  // THE CONNECTED ROUTE — `/library/:id`, no `/log` suffix;
+  // `WorkoutDetail.tsx` hosts `ConnectedInterstitial`/`ConnectedSurface`
+  // with no route change at all until `handleConnectedEnded` navigates —
+  // is what actually proves the hold is open and blocking navigation at
+  // the moment the burst is about to be delivered, not merely that the
+  // words eventually appear somewhere. Scoped to `.connected-serif-line`
+  // (this file's own idiom, e.g. the "Ready when you pull" checks above),
+  // not a bare `getByText`, for the same collision-avoidance reason those
+  // checks already give.
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Wrapping up" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+
+  // NOW deliver the burst — a scripted 0x0039, so the release comes from
+  // `burst-heard`, matching the typical hardware case, rather than from
+  // the hold's own 2000ms backstop (`BURST_HANDOFF_HOLD_MS`) — a real but
+  // much slower path this walk is not testing.
+  await page.evaluate(() => {
+    window.__pm5FakeControls__?.deliverSummary({
+      elapsedSeconds: 100,
+      meters: 500,
+    });
+  });
+
+  // Navigation now follows DETERMINISTICALLY from the burst just
+  // delivered — no more racing "either the frame painted or we already
+  // navigated" (the retired `Promise.any`, task-6 review I4's own
+  // disclosed retirement-and-restoration of a prior `Promise.race`): the
+  // hold is proven open above (the pre-burst checks), so this `toHaveURL`
+  // is asserting the CONSEQUENCE of the burst this walk just sent, not a
+  // coin flip against an unrelated backstop. PR #228 RE-REVIEW fix: an
+  // earlier version of this round deleted this exact assertion while
+  // rewriting the comment above it to describe it — the comment shipped,
+  // the code it described did not, and post-burst navigation was only
+  // ever checked incidentally via the `h1.screen-title` match below.
+  // Restored, naming the concrete URL shape rather than "asserted above"
+  // (nothing above asserts THIS URL — only the pre-burst `/library/:id`,
+  // no `/log`, which is a different pattern).
+  await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
 
   // THE LOG FLOW — `WorkoutDetail.tsx`'s own `handleConnectedEnded`
-  // navigates here, `?from=monitor` appended; a `MonitorRun`, not a phone
-  // `SessionRun`, is what closed, so this is the manual door's own
-  // `/library/:id/log`, not `/session/log`, and the monitor mode (7C spec
-  // §4) is what engages on this exact URL shape.
-  await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
-  // §2A: the summary's title renders bare, no "Log" prefix.
+  // navigated here (asserted immediately above), `?from=monitor`
+  // appended; a `MonitorRun`, not a phone `SessionRun`, is what closed,
+  // so this is the manual door's own `/library/:id/log`, not
+  // `/session/log`, and the monitor mode (7C spec §4) is what engages on
+  // this exact URL shape. §2A: the summary's title renders bare, no "Log"
+  // prefix.
   await expect(page.locator("h1.screen-title")).toHaveText(title);
 
   // THE STASH (hardware walk 2's loss, pinned in a real browser): the
@@ -800,6 +832,9 @@ async function walkSurfaceToLog(
       samples: { t: number; d: number; p: number; spm: number; hr?: number }[];
       truncated?: true;
     } | null;
+    machineWorkSeconds: number | null;
+    machineWorkMeters: number | null;
+    machineSummary: Record<string, unknown> | null;
   };
   const pm5Steps = newest.steps.filter((step) => step.actualSource === "pm5");
   expect(
@@ -809,6 +844,31 @@ async function walkSurfaceToLog(
   for (const step of pm5Steps) {
     expect(typeof step.actualSeconds).toBe("number");
   }
+
+  // PR #228 review finding 1's second half: the saved-row assertion never
+  // checked the machine columns the burst delivered above ends up in
+  // (`LogSession.tsx`'s own optional-key spread off `monitorRun.
+  // summaryTotals`/`summaryDetail`) — the whole point of holding the
+  // hand-off for the burst. `machineWorkSeconds`/`machineWorkMeters` are
+  // exactly the `{elapsedSeconds: 100, meters: 500}` this walk delivered
+  // above; `machineSummary` carries `deliverSummary`'s own
+  // `DEFAULT_SUMMARY_AVERAGES` (`transports/fake.ts`) verbatim — no hash
+  // was ever sent on this arm (`FakeControls.deliverSummary` only writes
+  // 0x0039, never 0x003F), so `verificationBytes` stays absent and
+  // `toStrictEqual` (not `toMatchObject`) is what actually pins that.
+  expect(newest.machineWorkSeconds).toBe(100);
+  expect(newest.machineWorkMeters).toBe(500);
+  expect(newest.machineSummary).toStrictEqual({
+    avgStrokeRate: 24,
+    endingHeartRateBpm: 168,
+    avgHeartRateBpm: 152,
+    minHeartRateBpm: 96,
+    maxHeartRateBpm: 175,
+    dragFactorAverage: 128,
+    recoveryHeartRateBpm: 120,
+    workoutType: 8,
+    avgPaceSecondsPer500m: 125,
+  });
 
   // THE FULL LOOP (series capture spec, Task 4): the fake's own frames
   // already feed `useMonitorSession.ts`'s `SeriesRecorder` (no fake-seam

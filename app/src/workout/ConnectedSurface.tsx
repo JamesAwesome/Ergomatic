@@ -433,13 +433,25 @@ export default function ConnectedSurface({
     return (
       <main className="screen connected-surface connected-surface-ended">
         <p className="connected-status-label">SESSION ENDED</p>
-        <p className="connected-serif-line">That is the session</p>
+        {/* Gate 0 (spec §4, approved 2026-08-29): "Wrapping up" replaces
+         *  "That is the session" on EVERY ended state, held or not — James's
+         *  own words on the retired line were "it reads oddly." Joins the
+         *  surface's own present-progressive serif-line family
+         *  ("Connecting", "Sending the workout", "Ready when you pull") and
+         *  is honest whether or not a hold is open. */}
+        <p className="connected-serif-line">Wrapping up</p>
         <p className="connected-body-line">
-          {kept === 0
-            ? "No numbers to keep."
-            : session.endedBy === "machine"
-              ? "The monitor finished it. Your numbers are kept."
-              : "Your numbers are kept."}
+          {session.handoffHeld
+            ? // While the hold is open the "kept" promise below has not
+              // happened yet — claiming it here would be exactly the
+              // dishonesty the hold exists to avoid. Names the wait's
+              // reason: "monitor", never "PM5" (RC-18 standing rule).
+              "Getting the monitor's own numbers."
+            : kept === 0
+              ? "No numbers to keep."
+              : session.endedBy === "machine"
+                ? "The monitor finished it. Your numbers are kept."
+                : "Your numbers are kept."}
         </p>
       </main>
     );

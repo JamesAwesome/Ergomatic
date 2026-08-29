@@ -3512,6 +3512,23 @@ async function openLogMonitorForm(
   ).toBeVisible();
   await page.getByRole("button", { name: "Tap again to end" }).click();
 
+  // Carried finding from Task 5's review (machine-summary hold spec §2):
+  // a link-up End is now the THIRD burst-eligible arm — `endSession` opens
+  // the burst condition the same way a machine finish or a Menu terminate
+  // does — so without a delivered summary this walk was silently paying
+  // the real `BURST_HANDOFF_HOLD_MS` (2000ms) backstop before navigating,
+  // same shape `connected.spec.ts`'s own End flow already fixed. Totals
+  // are this fixture's own rowed numbers (interval 0's 100m/15s plus
+  // interval 1's in-progress 101m/14s at the last scripted tick above),
+  // not the connected walk's arbitrary 100/500 — realistic for a fixture
+  // this file otherwise takes care to keep non-empty and honest.
+  await page.evaluate(() => {
+    window.__pm5FakeControls__?.deliverSummary({
+      elapsedSeconds: 29,
+      meters: 201,
+    });
+  });
+
   await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 

@@ -2036,9 +2036,15 @@ describe("ended: the surface hands off and unmounts", () => {
     // The ending is on screen regardless — the wait is invisible to the
     // rower, who is reading this frame while it happens.
     expect(screen.getByText("SESSION ENDED")).toBeInTheDocument();
+    // Gate 0 (spec §4, approved 2026-08-29): while the hold is open the
+    // body line names what it is waiting for — the "kept" promise
+    // `session.handoffHeld` would otherwise claim has not happened yet.
     expect(
-      screen.getByText("The monitor finished it. Your numbers are kept."),
+      screen.getByText("Getting the monitor's own numbers."),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText("The monitor finished it. Your numbers are kept."),
+    ).not.toBeInTheDocument();
 
     // The split lands (or the hold's backstop expires) — the hook clears the
     // flag, and the hand-off goes through, once.
@@ -2117,6 +2123,94 @@ describe("ended: the surface hands off and unmounts", () => {
       phase: "ended",
       endedBy: "user",
       actuals: [actualOf(0, 0.4), actualOf(1, 428.4)],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "Your numbers are kept.",
+    );
+  });
+
+  // Gate 0 (spec §4, approved 2026-08-29, James: "Perfect" on the rendered
+  // frame): "Wrapping up" replaces "That is the session" on EVERY ended
+  // state — held or not, whoever ended it, whatever was measured. It reads
+  // oddly (James's own words on the retired line) and joins the surface's
+  // own present-progressive serif-line family ("Connecting", "Sending the
+  // workout", "Ready when you pull").
+  it("the headline reads 'Wrapping up' on every ended state — not held, whoever ended it", () => {
+    const notHeld = renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      handoffHeld: false,
+      actuals: [actualOf(0, 480)],
+    });
+    expect(screen.getByText("Wrapping up")).toBeInTheDocument();
+    expect(screen.queryByText("That is the session")).not.toBeInTheDocument();
+    notHeld.unmount();
+
+    renderSurface({
+      phase: "ended",
+      endedBy: "machine",
+      handoffHeld: false,
+      actuals: [],
+    });
+    expect(screen.getByText("Wrapping up")).toBeInTheDocument();
+  });
+
+  it("the headline reads 'Wrapping up' while the hand-off is held, same as when it is not", () => {
+    renderSurface({
+      phase: "ended",
+      endedBy: "machine",
+      handoffHeld: true,
+      actuals: [actualOf(0, 480)],
+    });
+    expect(screen.getByText("Wrapping up")).toBeInTheDocument();
+    expect(screen.queryByText("That is the session")).not.toBeInTheDocument();
+  });
+
+  it("the held body line names the wait, never 'PM5' (RC-18 standing rule) — and each of the three NOT-held branches still renders when the hold is not open", () => {
+    // Held: the one new branch.
+    const held = renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      handoffHeld: true,
+      actuals: [actualOf(0, 480)],
+    });
+    const heldLine = document.querySelector(
+      ".connected-body-line",
+    )!.textContent!;
+    expect(heldLine).toBe("Getting the monitor's own numbers.");
+    expect(heldLine).not.toMatch(/PM5/);
+    held.unmount();
+
+    // Not held, zero measured — the honest-zero branch survives untouched.
+    const zero = renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      handoffHeld: false,
+      actuals: [],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "No numbers to keep.",
+    );
+    zero.unmount();
+
+    // Not held, machine-finished with something measured.
+    const machine = renderSurface({
+      phase: "ended",
+      endedBy: "machine",
+      handoffHeld: false,
+      actuals: [actualOf(0, 480)],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "The monitor finished it. Your numbers are kept.",
+    );
+    machine.unmount();
+
+    // Not held, user-ended with something measured.
+    renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      handoffHeld: false,
+      actuals: [actualOf(0, 480)],
     });
     expect(document.querySelector(".connected-body-line")!.textContent).toBe(
       "Your numbers are kept.",
