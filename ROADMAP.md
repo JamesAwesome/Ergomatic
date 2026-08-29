@@ -272,9 +272,14 @@ rower's work silently.
         into the real hook, never a storage-seeded fixture) plus
         `useMonitorSession.test.ts`'s receipt-instrument unit tests. **What
         this does NOT close:** the note-corrections row below stays OPEN on
-        its own clock, and the 0-of-16 production re-count is PR-gate work,
-        not done here — both still owed before this item as a whole is
-        struck.
+        its own clock, and the production re-count was **WAIVED as PR #228's
+        merge gate (James, 2026-08-29 — prod access unavailable from the
+        session; "0 of 16" stays the dated 2026-08-28 BASELINE, not a
+        PR-gate count). It must re-run BEFORE the next tag is cut or before
+        any release note repeats "never":**
+        `select count(*) filter (where machine_work_seconds is not null),
+        count(*) from session_logs where device_name is not null;`
+        Both still owed before this item as a whole is struck.
 
 - [ ] **Audit AUD-016 — measured connected work survives storage failure.** A
       completed PM5 interval retained in memory can reach Log as
