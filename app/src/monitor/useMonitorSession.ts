@@ -1840,13 +1840,13 @@ export function useMonitorSession(
 
   /** The burst linger's own timeout canceller (`schedule`'s return value),
    *  or `null` when no linger is currently running. A ref, not a local
-   *  variable inside `teardown`, matching `handoffHoldRef`'s own idiom
-   *  immediately below: `finish` (the linger's completion, defined inside
-   *  `teardown`) needs to cancel this timer from whichever trigger reaches
-   *  it first, and assigning across that boundary through a plain closure
-   *  variable trips `react-hooks/immutability` — the reassignment lands in
-   *  the outer scope after the closure that reads it has already been
-   *  handed off (to `lingerFinishRef.current` above). */
+   *  variable inside `teardown`, matching `splitHoldRef`/`burstHoldRef`'s
+   *  own idiom immediately above: `finish` (the linger's completion,
+   *  defined inside `teardown`) needs to cancel this timer from whichever
+   *  trigger reaches it first, and assigning across that boundary through
+   *  a plain closure variable trips `react-hooks/immutability` — the
+   *  reassignment lands in the outer scope after the closure that reads it
+   *  has already been handed off (to `lingerFinishRef.current` above). */
   const burstLingerCancelRef = useRef<(() => void) | null>(null);
 
   /** Storage-spine design spec §2, Task 3: releases EVERY owed condition
@@ -2778,7 +2778,8 @@ export function useMonitorSession(
       // again. A no-op when nothing is held either way — including every
       // close that was never a natural finish, where the hold was never
       // opened at all — because `releaseHandoff` is itself idempotent
-      // (`handoffHoldRef.current === null` short-circuits it).
+      // (both `splitHoldRef.current` and `burstHoldRef.current` reading
+      // `null` short-circuits it).
       const reconcileAndReleaseHandoff = (): void => {
         driver?.reconcile();
         releaseHandoff("teardown");

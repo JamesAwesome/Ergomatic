@@ -1602,17 +1602,102 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // Nothing else ever comes — no split, no summary, no further tick, no
     // disconnect. Storage-spine design spec §2, Task 3: this natural finish
     // owes BOTH conditions now, so BOTH backstops must fire before the
-    // hand-off is free — firing only the most recent (`pending()`) would
-    // leave the other one still owed.
+    // hand-off is free. Fired ONE AT A TIME (review finding, not
+    // `timer.calls.forEach`, which cannot distinguish "both backstops
+    // needed" from "either one alone releases the hold" — a mutation
+    // letting the burst's own timeout release an owed split would pass a
+    // `forEach` just as well): the burst's own backstop first —
+    // `handoffHeld` must STILL be true, because the split is still owed —
+    // then the split's own.
     expect(timer.calls).toHaveLength(2);
     act(() => {
-      timer.calls.forEach((c) => c.fire());
+      timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)!.fire();
+    });
+    expect(result.current.handoffHeld).toBe(true);
+    act(() => {
+      timer.pendingWithMs(3500)!.fire();
     });
 
     expect(result.current.handoffHeld).toBe(false);
     expect(result.current.phase).toBe("ended");
     // Honest about what was lost: the record is handed over as it stands.
     expect(loadMonitorRun()?.actuals).toHaveLength(0);
+  });
+
+  it("a burst TIMING OUT does not release an owed split — and when the split then genuinely arrives, its own resolution is the ring's release reason 'final-boundary' (Task 3 review finding)", async () => {
+    // Task-3-review finding, recorded here rather than worked around
+    // silently: the reviewer's own framing was "burst-first ARRIVAL —
+    // burst resolves first, split releases last with final-boundary".
+    // Traced exhaustively against `driver.ts` (every `summaryObservations
+    // Event` call site: `noteTerminateObservations`'s `emitTerminate`
+    // (terminate/rower-ended door, no split condition ever exists to
+    // race), `reconcileSummary`'s "split-won, held !== null" branch
+    // (split already resolved earlier, at its own real arrival), and
+    // `reconcileSummary`'s "filled-from-summary" branch (emits
+    // `intervalComplete` — resolving split — immediately before its own
+    // `summaryObservationsEvent`, same synchronous call, `driver.ts:4302`
+    // then `:4308`)), a burst that genuinely ARRIVES cannot resolve before
+    // an open split: every dual-emit site puts the split's own resolution
+    // first by explicit, commented design ("cause event first",
+    // `driver.ts:4536`). What IS reachable, and is what this test proves:
+    // a burst that never arrives at all TIMES OUT (2000ms) well before a
+    // genuinely late split's own window closes (3500ms) — an ordinary
+    // shape spec §2's own timing arithmetic names ("up to 3.5s when the
+    // split condition is also owed"). The burst's timeout resolves ONLY
+    // the burst condition (the hold stays up, split still owed); the
+    // split's own LATER, genuine arrival is what actually releases the
+    // hold, and its reason is `"final-boundary"`.
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+          finalBoundary(300),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+    expect(timer.calls).toHaveLength(2);
+
+    // No summary is ever delivered in this script — the burst's own
+    // backstop is what resolves it, first (2000 < 3500).
+    act(() => {
+      timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)!.fire();
+    });
+    // Resolves ONLY the burst condition: the split is still owed, so the
+    // WHOLE hold stays up and no `handoff-released` entry exists yet.
+    expect(result.current.handoffHeld).toBe(true);
+    const beforeSplit = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      beforeSplit.find((e) => e.kind === "handoff-released"),
+    ).toBeUndefined();
+
+    // The real split finally arrives, still within its own window.
+    tick(fake, 100);
+
+    expect(result.current.actuals).toHaveLength(1);
+    // Burst already resolved (by timeout) — the split's own resolution is
+    // what releases the hold now, and it is the LAST word in the ring.
+    expect(result.current.handoffHeld).toBe(false);
+    const afterSplit = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const released = afterSplit.find((e) => e.kind === "handoff-released");
+    expect(released?.detail).toContain("final-boundary");
   });
 
   it("a further status tick does NOT release the hold (walk day 3): the machine's cadence is not the split's schedule", async () => {
@@ -1841,9 +1926,15 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // Still held — nothing was emitted to release it...
     expect(result.current.handoffHeld).toBe(true);
     // ...and the rower is not stranded on the ended frame either: BOTH
-    // backstops must fire before the hand-off is free.
+    // backstops must fire before the hand-off is free — fired one at a
+    // time (review finding), not `forEach`, which cannot distinguish
+    // "both needed" from "either one alone releases the hold".
     act(() => {
-      timer.calls.forEach((c) => c.fire());
+      timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)!.fire();
+    });
+    expect(result.current.handoffHeld).toBe(true);
+    act(() => {
+      timer.pendingWithMs(3500)!.fire();
     });
     expect(result.current.handoffHeld).toBe(false);
     // The ending stands: a drop AFTER the machine finished does not drag the

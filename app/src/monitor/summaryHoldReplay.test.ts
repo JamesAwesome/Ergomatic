@@ -343,6 +343,31 @@ const END_PRESS_MARGIN_MS = 55.4;
 const END_PRESS_DUE_MS = endTerminateBarrier.t - END_PRESS_MARGIN_MS;
 
 /**
+ * The LOWER bound, checked (the upper bound is structural — `END_PRESS_
+ * DUE_MS` is derived FROM the barrier, so it is always strictly less than
+ * it by construction; only the lower bound could silently drift out of
+ * range). The last rx event recorded before the barrier (seq 74,
+ * t=14633.7) — found the same way the barrier itself is, never hard-
+ * coded, so a re-recording that moves this event moves the check too.
+ */
+const lastRxBeforeBarrier = END_CAPTURE.events
+  .filter(
+    (e): e is Extract<typeof e, { dir: "rx" }> =>
+      "dir" in e && e.dir === "rx" && e.t < endTerminateBarrier.t,
+  )
+  .at(-1);
+if (lastRxBeforeBarrier === undefined) {
+  throw new Error(
+    "summaryHoldReplay.test.ts: no rx event precedes the terminate-tx barrier in END_CAPTURE — nothing to check END_PRESS_DUE_MS's lower bound against",
+  );
+}
+if (END_PRESS_DUE_MS <= lastRxBeforeBarrier.t) {
+  throw new Error(
+    `summaryHoldReplay.test.ts: END_PRESS_DUE_MS (${END_PRESS_DUE_MS}) does not exceed the last rx event preceding the barrier (t=${lastRxBeforeBarrier.t}) — END_PRESS_MARGIN_MS needs revisiting for this capture`,
+  );
+}
+
+/**
  * Leg 2's own scheduled action (this file's header, "The End press"):
  * registers `endSession()` to fire on the replay's virtual clock at
  * `END_PRESS_DUE_MS` — between the last rx event before seq 75's
@@ -681,25 +706,35 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
     );
 
     // Ordering, not just co-occurrence (spec §6: "write ATTEMPT before
-    // release ... this asserts ordering"). `driver.ts`'s own
-    // `noteTerminateObservations` always logs `summary-reconciled` at the
-    // write attempt (this ring entry exists TODAY, independent of Task 3
-    // — the write side of this race already works; only the hold's
-    // release is missing); Task 3's own release fires the existing
-    // `handoff-released` kind (reused from the split condition, per spec
-    // §2: "one `handoffHeld: false` update, one `handoff-released` ring
-    // entry"). RED until Task 3: today's ring carries no `handoff-
-    // released` entry at all on this arm, so `releaseIdx` reads `-1`.
+    // release ... this asserts ordering"). Task-3-review finding: the
+    // ORIGINAL version of this assertion pinned `writeIdx` to
+    // `summary-reconciled` — `driver.ts`'s own `noteTerminateObservations`,
+    // which logs at the write attempt but runs BEFORE the driver ever
+    // emits the `summary-observations` event this hook's handler receives,
+    // so that ordering held REGARDLESS of what order the hook's own
+    // handler ran its statements in (proven: moving
+    // `resolveHandoffCondition("burst", "burst-heard")` above
+    // `appendSummaryObservations` inside the hook did not fail either leg
+    // — see this file's own header, "Mutations", for the reproduced run).
+    // `writeIdx` now pins to `summary-recorded` — the HOOK's OWN receipt
+    // (storage-spine design spec §5), logged by the exact statement that
+    // calls `appendSummaryObservations` — so this assertion can actually
+    // go red on that reordering. The driver-side `summary-reconciled`
+    // entry stays checked too, as a separate presence assertion (it is
+    // real evidence that the write was attempted at the wire layer, just
+    // not evidence of THIS hook's own ordering).
     const entries = JSON.parse(full.exportLog()) as {
       kind: string;
       detail: string;
     }[];
-    const writeIdx = entries.findIndex(
+    const driverWriteIdx = entries.findIndex(
       (e) =>
         e.kind === "summary-reconciled" &&
         e.detail.includes("terminate-observations"),
     );
+    const writeIdx = entries.findIndex((e) => e.kind === "summary-recorded");
     const releaseIdx = entries.findIndex((e) => e.kind === "handoff-released");
+    expect(driverWriteIdx).toBeGreaterThanOrEqual(0);
     expect(writeIdx).toBeGreaterThanOrEqual(0);
     expect(releaseIdx).toBeGreaterThanOrEqual(0); // RED until Task 3 (the hold)
     expect(releaseIdx).toBeGreaterThanOrEqual(writeIdx);
@@ -801,23 +836,26 @@ describe("the summary hold's permanent gate, leg 2: user End (storage-spine desi
       [113, 118, 31, 253, 73, 231, 9, 210],
     );
 
-    // Ordering, not just co-occurrence — same reasoning as leg 1's own
-    // comment: `noteTerminateObservations` always logs `summary-
-    // reconciled` at the write attempt (works today, independent of
-    // Task 3); Task 3's own release is expected to reuse the existing
-    // `handoff-released` kind. RED until Task 3: today's ring carries no
-    // `handoff-released` entry at all on this arm, so `releaseIdx` reads
-    // `-1`.
+    // Ordering, not just co-occurrence — same reasoning and same
+    // Task-3-review fix as leg 1's own comment: `writeIdx` pins to
+    // `summary-recorded` (the HOOK's own receipt, storage-spine design
+    // spec §5), not `summary-reconciled` (the DRIVER's own receipt, which
+    // necessarily precedes the hook's handler regardless of the handler's
+    // own internal statement order, and so could never go red on a
+    // resolve-before-write reordering inside the hook). The driver-side
+    // entry is still checked, as a separate presence assertion.
     const entries = JSON.parse(full.exportLog()) as {
       kind: string;
       detail: string;
     }[];
-    const writeIdx = entries.findIndex(
+    const driverWriteIdx = entries.findIndex(
       (e) =>
         e.kind === "summary-reconciled" &&
         e.detail.includes("terminate-observations"),
     );
+    const writeIdx = entries.findIndex((e) => e.kind === "summary-recorded");
     const releaseIdx = entries.findIndex((e) => e.kind === "handoff-released");
+    expect(driverWriteIdx).toBeGreaterThanOrEqual(0);
     expect(writeIdx).toBeGreaterThanOrEqual(0);
     expect(releaseIdx).toBeGreaterThanOrEqual(0); // RED until Task 3 (the hold)
     expect(releaseIdx).toBeGreaterThanOrEqual(writeIdx);
