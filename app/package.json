@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "lint:prune": "eslint . --prune-suppressions",
     "typecheck": "tsc -b && tsc -p tsconfig.server.json --noEmit && tsc -p e2e/tsconfig.json --noEmit && bash scripts/e2e-typecheck-census.sh",
     "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run",
     "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
