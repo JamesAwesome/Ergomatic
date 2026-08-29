@@ -133,7 +133,15 @@ function DeriveSlot({
           {label}
         </button>
       ) : draftValue === offer.value ? (
-        <p className="baseline-derive-done">ESTIMATED · TYPE TO ADJUST</p>
+        /* Provenance only, no instruction. This read "ESTIMATED · TYPE TO
+           ADJUST" until 2026-08-28, when typing had stopped being the only
+           way in: the baseline round put [−][+] steppers on this same field,
+           so the line named one entry path and hid the other. The field and
+           its steppers are visibly interactive; what a rower cannot see
+           without being told is where the number CAME FROM, and that is the
+           half that stays. Naming no mechanism is also what stops the next
+           entry path from stale-ing it again. */
+        <p className="baseline-derive-done">ESTIMATED</p>
       ) : null}
     </div>
   );

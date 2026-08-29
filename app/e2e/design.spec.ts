@@ -3715,7 +3715,7 @@ test.describe("you screen with the derivation offer visible (task review round, 
     expect(before).not.toBeNull();
 
     await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
-    await page.getByText("ESTIMATED · TYPE TO ADJUST").waitFor();
+    await page.getByText("ESTIMATED").waitFor();
 
     const after = await stableBoundingBox(slot);
     expect(after).not.toBeNull();
@@ -3754,7 +3754,7 @@ test.describe("you screen with the derivation offer visible (task review round, 
     page,
   }) => {
     await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
-    const done = page.getByText("ESTIMATED · TYPE TO ADJUST");
+    const done = page.getByText("ESTIMATED");
     await done.waitFor();
 
     const color = await done.evaluate((el) => getComputedStyle(el).color);
