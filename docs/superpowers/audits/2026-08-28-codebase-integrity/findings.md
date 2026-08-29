@@ -2,22 +2,31 @@
 
 Baseline: `39460c6514c14ab3133cb5ce8a59ba8625aeef4a`
 
+Current-main revalidation: `fd4d06a57581e1e814ecd06f74274a30bffce6ee`
+
 Eight findings are Confirmed and one is Probable after four fresh, blind,
 high-effort validation passes. No validator authored its candidate. The
 controller reproduced every accepted discriminator before dispatch and
 reconciled each independent result against the fixed severity definitions.
 
-| ID      | Final rank     | Validation verdict | Why this rank, not the adjacent one                                                       |
-| ------- | -------------- | ------------------ | ----------------------------------------------------------------------------------------- |
-| AUD-011 | P1 / Confirmed | CONFIRMED          | Standards-defined denial blocks the default screen; no data is destroyed.                 |
-| AUD-015 | P1 / Confirmed | CONFIRMED          | Starting silently loses the active run; the draft alone is not safe recovery.             |
-| AUD-016 | P1 / Confirmed | CONFIRMED          | Connected measured work reaches a manual Log door with no recovery record.                |
-| AUD-020 | P1 / Confirmed | CONFIRMED          | A false retry error duplicates a durable log and can advance a plan twice.                |
-| AUD-013 | P1 / Confirmed | CONFIRMED          | One database-valid scalar blocks all History with no rower recovery path.                 |
-| AUD-002 | P2 / Probable  | DOWNGRADED         | The crash is certain, but no real producer or compatibility trigger is established.       |
-| AUD-006 | P2 / Confirmed | CONFIRMED          | Scan surfaces misstate accepted rest; downstream execution retains it.                    |
-| AUD-012 | P2 / Confirmed | CONFIRMED          | Overlapping empty boot fails, but the supported deployment is single-replica.             |
-| AUD-014 | P2 / Confirmed | CONFIRMED          | Native logout violates its wipe contract, but no successful logout or auth escape occurs. |
+All nine remain present on current `main`. Between the baseline and `fd4d06a`,
+the only `app/` changes are a monitor type test, design/screenshot tests, and
+`BaselineEditor`; none intersects a finding's production scope. The false
+replica-safety design claim is also unchanged. Current-main status is therefore
+`still present` for every row below; later-main code was not blended into the
+baseline reproductions.
+
+| Rank | ID      | Severity / evidence | Current main  | Why it outranks the next item                                                                   |
+| ---- | ------- | ------------------- | ------------- | ----------------------------------------------------------------------------------------------- |
+| 1    | AUD-016 | P1 / Confirmed      | Still present | It can discard measurements after the rower has completed real connected work.                  |
+| 2    | AUD-020 | P1 / Confirmed      | Still present | It creates durable duplicates and can advance a plan twice, but requires an explicit Retry.     |
+| 3    | AUD-011 | P1 / Confirmed      | Still present | It blocks the default screen under a standards-defined denial, but destroys no data.            |
+| 4    | AUD-015 | P1 / Confirmed      | Still present | It silently cancels Start, but the rower has not yet completed the workout and the draft stays. |
+| 5    | AUD-013 | P1 / Confirmed      | Still present | One valid JSON scalar hides all History, but active rowing and new logging remain available.    |
+| 6    | AUD-006 | P2 / Confirmed      | Still present | It gives a wrong rest prescription on two scan surfaces; execution still retains the rest.      |
+| 7    | AUD-014 | P2 / Confirmed      | Still present | Native local logout is incomplete, but the UI does not claim success and auth is not bypassed.  |
+| 8    | AUD-012 | P2 / Confirmed      | Still present | Concurrent empty boot fails, but current supported deployment is serial and single-replica.     |
+| 9    | AUD-002 | P2 / Probable       | Still present | The render crash is certain for `{}`, but no real producer or compatibility trigger was found.  |
 
 No item meets P0. The audit found no validated security escape, destructive
 data path, unsafe operator command, or silently wrong durable number requiring

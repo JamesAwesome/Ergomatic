@@ -140,15 +140,19 @@ is not.
 
 ## Quarantined Task 8 hypotheses
 
-- AUD-001 remains P1 Hypothesis. Production-phone outcomes narrow the concern,
-  but no raw native transport trace establishes callback ordering, buffering,
-  or lifecycle delivery.
-- AUD-007 remains P1 Hypothesis. Acknowledgements and interval-zero readback do
-  not establish that a shorter reprogram removed a previous tail.
+- AUD-001 remains a broad P1 Hypothesis, narrowed by Task 12. Native radio-off
+  after one complete interval preserved that PM5-measured 100 m through
+  End/save. A separate 4.613 s camera gap produced a self-recovering false LOST
+  banner with no disconnect. Neither case establishes portable callback order,
+  buffering, or lifecycle delivery.
+- AUD-007 is cleared for PM5 `432331249` and the observed firmware case. The
+  immediate six→two same-first replacement emitted only boundaries 1–2 and
+  naturally finished at 200 m. No universal firmware claim is made.
 - AUD-009 remains P2 Hypothesis. Zero was emitted and accepted, but no primary
   definition or PM5 target-display/enforcement control proves “untargeted.”
-- AUD-010 remains P1 Hypothesis. Local multi-frame ordering is covered, but no
-  device trace reaches a uniquely fingerprinted later-frame interval.
+- AUD-010 is cleared for PM5 `432331249` and the observed firmware case. The
+  authored later frame's intervals 5 and 6 both executed in order, including
+  interval 5's unique 60 s rest. No universal firmware claim is made.
 - AUD-018 remains P2 Hypothesis. The two terminate captures disagree about a
   retained partial, and neither supplies a general product rule. Replaying the
   exact orders may describe current policy but cannot decide which PM5 outcome
@@ -160,5 +164,6 @@ is not.
 - AUD-008 remains P2 Hypothesis as above. A primary general-count statement or
   physical interval-51 result is still required.
 
-No hardware work was performed. Device-only unknowns remain for Task 12, where
-they will be priced only if they can change the final ranking.
+Task 12's approved hardware evidence is in
+`docs/monitor/sessions/walk-2026-08-28-codebase-audit/`. No ranking-changing
+finding was promoted; AUD-009 and the broader native unknowns remain.

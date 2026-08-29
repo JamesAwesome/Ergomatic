@@ -109,14 +109,41 @@ and does not displace Wave F. The fixed-baseline audit is governed by the
 [approved spec](docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md)
 and [execution plan](docs/superpowers/plans/2026-08-28-codebase-integrity-audit.md).
 
-- [ ] Complete all five audit lanes with an evidence-backed disposition.
-- [ ] Revalidate promoted findings against current `main` and assign each fix
+- [x] Complete all five audit lanes with an evidence-backed disposition.
+- [x] Revalidate promoted findings against current `main` and assign each fix
       exactly one live ROADMAP owner before handoff; the audit report is not a
       second backlog.
 
 Wave F's reproduced pre-row lock remains the known P1 owner. The audit may use
 it as context and test adjacent mechanisms, but may not rediscover or duplicate
 it as a new finding.
+
+**Transferred owners from the audit.** These are the live homes; the audit
+report is evidence, not another queue.
+
+- [ ] **Wave F — storage-failure recovery:** AUD-011, AUD-015, and AUD-016.
+      Guard denied reads; never enter Timer without a durable run; never leave
+      measured connected work outside the Log door. AUD-011 and AUD-015 may
+      share one local-storage PR; AUD-016 keeps its connected hand-off risk
+      separate.
+- [ ] **Wave F — committed saves stay committed:** AUD-020. Once POST returns
+      201, local cleanup cannot offer a second POST or advance a plan twice.
+      This lands separately from ambiguous lost-response/idempotency work.
+- [ ] **History boundary hardening:** AUD-013 then AUD-002, owned by the next
+      History API/client PR. Bound an out-of-range stored summary scalar without
+      hiding healthy rows, then reject a malformed successful top-level body
+      into the existing Retry surface.
+- [ ] **Workout scan-surface truth:** AUD-006, owned by the next Today/Library
+      workout-presentation PR. Gate 0 decides leading-rest validity and renders
+      both orientations before implementation; consecutive rest remains one
+      coherent projection fix.
+- [ ] **Wave A — native sign-out:** AUD-014. Server revocation stays
+      best-effort, but the separately required Keychain wipe is attempted on
+      rejected transport. AUTH triad; it lands alone.
+- [ ] **Deployment contract:** AUD-012, owned by the next deployment-doc or
+      multi-replica PR. Correct the current “serializes booting replicas” claim
+      now; add migration-level locking only before overlapping replicas become
+      supported.
 
 | Wave  | What it is                  | Size | Tester sees                                 |
 | ----- | --------------------------- | ---- | ------------------------------------------- |

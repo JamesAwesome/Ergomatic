@@ -66,6 +66,21 @@ The walk used eight 100 m intervals plus about ten seconds of a ninth, within
 the approved reduced budget. Bluetooth was restored and the lab was torn down
 after evidence collection.
 
+## Task 13 current-main and queue disposition
+
+Current main: `fd4d06a57581e1e814ecd06f74274a30bffce6ee`.
+
+All five P1 and four P2 findings remain present. The baseline→main `app/` diff
+touches only a monitor type test, design/screenshot tests, and
+`BaselineEditor`; none intersects a promoted production scope. The false
+booting-replica design claim is unchanged. Later-main behavior was not used to
+rewrite any baseline reproduction.
+
+The nine findings are assigned to seven live ROADMAP chunks. Hypotheses remain
+outside `claude-fix-list.md`; the only hardware dispositions are exact-case
+clearances/narrowing, not universal device claims. AUD-003 remains grouped P3
+process debt and AUD-005 remains cleared.
+
 ### AUD-001 — Native monitor failures can remain invisible to automated evidence
 
 - Category: brittleness
