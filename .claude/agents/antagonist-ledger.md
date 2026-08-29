@@ -3903,3 +3903,10 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   correct editor-aligned ownership mechanism; the scoped nine-rule candidate
   is measured over the complete intended population; E2E membership is 16/16;
   the near-zero TypeScript flags and real-hook fail-fast proof are deterministic.
+- **“Normal full lint rejects every stale native suppression” is false when
+  the entire debt-bearing file leaves the lint population.** ESLint applies
+  native suppressions only to returned lint results; a deleted file produces
+  no result and therefore no unused-suppression failure. **Technique: test
+  ratchets by deleting or ignoring the whole debt-bearing file, not only by
+  removing individual diagnostics, and compare ledger keys with the actual
+  lint population.**

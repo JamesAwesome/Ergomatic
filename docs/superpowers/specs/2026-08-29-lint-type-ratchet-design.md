@@ -136,8 +136,11 @@ After this change:
    spot in “Honest limitation” below.
 2. Existing selected-rule debt can stay in place, but its suppression ledger
    must not grow without James explicitly approving adoption of a new rule.
-3. Removing a violation makes normal full lint fail until the ledger is
-   pruned, so improvements cannot disappear silently.
+3. Removing a violation makes normal full lint fail until native ESLint prunes
+   the within-file rule/count entry. Deleting or newly ignoring a debt-bearing
+   file also makes normal lint fail: the repository census compares every
+   ledger key with ESLint's configured population and `lint:prune` alone
+   removes invalid top-level file entries.
 4. A focused edit does not owe whole-file cleanup. It does owe safe, local
    cleanup of relevant debt in the function, test, or behavior already being
    changed.
@@ -194,9 +197,10 @@ command would turn the ceiling into a button.
 
 Normal commands are:
 
-- `pnpm lint` — applies the committed ledger and rejects new or stale debt;
-- `pnpm lint:prune` — removes suppressions whose violations were fixed, then
-  leaves normal lint green.
+- `pnpm lint` — runs native ESLint first, then a whole-file census that rejects
+  ledger keys for missing or newly ignored files;
+- `pnpm lint:prune` — runs native `--prune-suppressions` for within-file
+  rule/count cleanup, then prunes only invalid top-level census entries.
 
 Canonical LLM instruction in `CLAUDE.md`:
 
@@ -224,11 +228,13 @@ James's diff review. The spec does not call that boundary mechanical.
 ### Honest limitation
 
 ESLint bulk suppressions are file/rule based. A same-rule violation can replace
-another in the same legacy file without increasing that file's allowance. The
-campsite rule and review constrain that case, but the mechanism does not prove
-line identity. A custom fingerprint engine or mandatory whole-file cleanup
-would close it at much higher complexity; James explicitly chose not to impose
-whole-file cleanup. New files have no allowance and are fully fenced.
+another in the same legacy file without increasing that file's allowance. Native
+ESLint detects within-file decreases and the census detects ledger files that
+leave ESLint's configured population, so same-count replacement is the sole
+accepted blind spot. The campsite rule and review constrain that case, but the
+mechanism does not prove line identity. A custom fingerprint engine would close
+it at much higher complexity; James explicitly chose not to impose it. New
+files have no allowance and are fully fenced.
 
 A scratch probe also settles staged-file behavior: with suppressions in two
 files, linting or pruning only one did not treat the unvisited file as unused

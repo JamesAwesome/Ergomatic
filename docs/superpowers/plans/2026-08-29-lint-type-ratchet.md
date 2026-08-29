@@ -1007,9 +1007,134 @@ Project Service, pnpm 11, Bash, Husky, GitHub Actions.
   no second antagonist pass: it changes no product function and the approved
   pre-wave spec already received both design gates.
 
-- [ ] **Step 5: Create the PR and stop before merge**
+  The first whole-branch review found one confirmed escape: ESLint 10.9 marks
+  stale suppressions only for files present in its lint results. A deleted or
+  newly ignored debt-bearing file therefore leaves normal native lint green.
+  Task 7 closes that escape before the PR is created.
 
-  Push `codex/lint-type-ratchet` and create one PR. Its first line is exactly:
+---
+
+### Task 7: Close the missing-file suppression escape and re-review
+
+**Files:**
+
+- Create: `app/scripts/eslint-suppression-census.mjs`
+- Create: `app/scripts/eslint-suppression-census.test.ts`
+- Modify: `app/package.json`
+- Modify: `docs/TESTING.md`
+- Modify: `docs/superpowers/specs/2026-08-29-lint-type-ratchet-design.md`
+- Modify: `.claude/agents/antagonist-ledger.md`
+- Modify: this plan
+
+**Interfaces:**
+
+- Consumes: ESLint's public `isPathIgnored()` membership decision, the native
+  ledger, and the confirmed final-review finding.
+- Produces: normal-lint rejection and prune-only removal for whole ledger files
+  that leave ESLint's configured population, without duplicating typed lint or
+  replacing ESLint's diagnostic/count semantics.
+
+- [x] **Step 1: Write the real CLI fixture first and watch it fail**
+
+  Add a Node-project Vitest file that executes the real census CLI as a child
+  process against a temporary flat-config workspace. Use a separate
+  `ESLint.lintFiles(["."])` call as the independent membership oracle. Prove:
+
+  - a configured debt-bearing file is in the oracle population and census is
+    green;
+  - deleting that file makes census non-zero and names its ledger path;
+  - an existing file newly ignored by config leaves the oracle population and
+    makes census non-zero;
+  - prune removes only invalid top-level file entries, preserves a valid
+    entry's nested rule/count data, writes deterministic two-space JSON with a
+    final newline, is idempotent, and restores green;
+  - absolute, empty, non-canonical, backslash, and `..`-escaping ledger keys
+    fail closed; a non-object ledger fails without being rewritten;
+  - unrelated configured and ignored files that have no ledger entry do not
+    create false positives.
+
+  Before the CLI exists, run the focused test and record RED from the missing
+  behavior, not a passing framework assertion.
+
+- [x] **Step 2: Implement the narrow membership/prune helper**
+
+  The ESM CLI defaults to the app cwd and `eslint-suppressions.json`, with
+  explicit `--cwd` and `--suppressions-location` options only so the real CLI
+  can be tested in an isolated fixture. Normal mode never writes.
+
+  For every ledger key, require a canonical contained relative POSIX path, a
+  regular existing file, and `await eslint.isPathIgnored(path) === false`.
+  Report every invalid key together. Treat config, filesystem, JSON, and shape
+  errors as fatal.
+
+  `--prune` removes only invalid top-level file entries. Preserve nested
+  rule/count data byte-semantically, serialize deterministic two-space JSON
+  with a final newline (`{}\n` when empty), and replace the ledger atomically so
+  failure cannot leave a partial file.
+
+- [x] **Step 3: Wire native lint first, census second**
+
+  Change only these scripts:
+
+  ```json
+  "lint": "eslint . && node scripts/eslint-suppression-census.mjs",
+  "lint:prune": "eslint . --prune-suppressions && node scripts/eslint-suppression-census.mjs --prune"
+  ```
+
+  Native ESLint remains the sole owner of diagnostics, parser/config errors,
+  per-file rule/count ceilings, within-file stale detection, output formatting,
+  and their exit precedence. The census never performs a second typed lint.
+
+- [x] **Step 4: Prove the package boundary and self-mutate**
+
+  Against the real worktree, temporarily generate a suppression for an owned
+  proof file, require `pnpm lint` green, delete the file with `apply_patch`, and
+  require normal `pnpm lint` red naming that path. Run `pnpm lint:prune`, prove
+  the entry disappears and normal lint returns green. Separately inject an
+  ignored-path proof entry, require red, prune it, and require green. Restore
+  via the product commands plus `apply_patch`; assert the committed ledger is
+  still exactly 37 pairs / 56 diagnostics and `git status` contains only the
+  intended Task 7 files.
+
+  Self-mutate the ignored-file membership branch and the prune deletion branch;
+  each covering fixture test must fail for the intended reason, then pass after
+  restoration.
+
+- [x] **Step 5: Correct the record**
+
+  Amend the spec and `docs/TESTING.md` to distinguish native within-file
+  rule/count pruning from the repository's whole-file membership census. State
+  that deleted and newly ignored ledger files are detected by normal lint and
+  removed only by `lint:prune`; keep the same-count replacement as the sole
+  accepted blind spot.
+
+  Append the final review's ready-to-paste antagonist lesson:
+
+  ```markdown
+  - **“Normal full lint rejects every stale native suppression” is false when
+    the entire debt-bearing file leaves the lint population.** ESLint applies
+    native suppressions only to returned lint results; a deleted file produces
+    no result and therefore no unused-suppression failure. **Technique: test
+    ratchets by deleting or ignoring the whole debt-bearing file, not only by
+    removing individual diagnostics, and compare ledger keys with the actual
+    lint population.**
+  ```
+
+- [ ] **Step 6: Commit, replay the full gate, and obtain a clean re-review**
+
+  Run the focused test RED/GREEN record, `pnpm lint`, `pnpm lint:prune`,
+  `pnpm format:check`, and `pnpm typecheck`; verify the worktree root and commit
+  as `build: close stale lint-ledger paths`. Then rerun every Task 6 proof and
+  the complete Task 6 gate, remeasure lint time, confirm the clean worktree and
+  unchanged 37/56 ledger, and return the whole branch to the original final
+  reviewer. The reviewer must prove contained configured membership, exact
+  failure naming, prune-only top-level removal, preserved native count
+  semantics, idempotent formatting, and no diagnostic/exit-precedence drift.
+
+- [ ] **Step 7: Create the PR and stop before merge**
+
+  Only after a clean re-review, push `codex/lint-type-ratchet` and create one PR.
+  Its first line is exactly:
 
   ```markdown
   This PR makes new typed-lint debt, untyped Playwright files, and false-green
@@ -1017,11 +1142,11 @@ Project Service, pnpm 11, Bash, Husky, GitHub Actions.
   ```
 
   Follow it with at most six one-line bullets containing the measured
-  diagnostic and file/rule-pair counts from Task 4, `16/16` E2E membership,
-  real-hook outcome, campsite behavior, no tester impact/no standalone release,
-  and measured lint wall time. Put exact red/green probes, full gate results,
-  the suppression breakdown, review verdict, spec/plan links, and same-count
-  blind spot in a collapsed `Record (for agents and audits)` block.
+  diagnostic and file/rule-pair counts, `16/16` E2E membership, real-hook
+  outcome, whole-file census/campsite behavior, no tester impact/no standalone
+  release, and measured lint wall time. Put exact red/green probes, full gate
+  results, the suppression breakdown, review verdict, spec/plan links, and the
+  same-count blind spot in a collapsed `Record (for agents and audits)` block.
 
   Present the PR URL, CI status, suppression count, runtime, and independent
   review verdict to James. Do not merge without his explicit approval.

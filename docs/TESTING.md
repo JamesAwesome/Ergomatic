@@ -430,11 +430,15 @@ Two rules of craft:
 
 ## 14. Typed-lint ratchet
 
-`pnpm lint` applies `app/eslint-suppressions.json` and fails when a selected
-rule appears in a file/rule pair with no allowance, exceeds an existing
-allowance, or leaves an allowance stale after cleanup. Run `pnpm lint:prune`
-after removing grandfathered violations; normal lint must then be green.
-There is deliberately no command that regenerates the baseline.
+`pnpm lint` first applies `app/eslint-suppressions.json` through native ESLint,
+then runs the repository's whole-file membership census. Native ESLint owns
+diagnostics, per-file rule/count ceilings, and within-file stale-suppression
+pruning; the census rejects ledger files that were deleted or newly ignored and
+therefore no longer belong to ESLint's configured population. Run
+`pnpm lint:prune` after removing grandfathered violations: native ESLint first
+removes within-file stale rule/count entries, then the census removes only its
+invalid top-level file entries. Normal lint never writes. There is deliberately
+no command that regenerates the baseline.
 
 Five typed rules apply to production and tests:
 `no-floating-promises`, `no-misused-promises`, `await-thenable`,
@@ -450,7 +454,8 @@ suppressible debt. `pnpm typecheck` separately checks every E2E source and
 its membership census.
 
 ESLint bulk suppressions count violations by file and rule, not by source
-location. They reject a count increase and force pruning after a decrease,
-but cannot detect one same-rule violation replacing another in the same file
-while the count stays equal. `CLAUDE.md` owns the no-growth and campsite
-policy for that honest limitation.
+location. Native pruning plus the census detect both within-file decreases and
+whole ledger files that leave the lint population, but cannot detect one
+same-rule violation replacing another in the same file while the count stays
+equal. That same-count replacement is the sole accepted blind spot;
+`CLAUDE.md` owns the no-growth and campsite policy for it.
