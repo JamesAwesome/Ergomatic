@@ -470,11 +470,11 @@ often they recur.
     twice in one spec: A SOURCED premise fails differently, and this rule
     did not cover it.** Phase JR's spec justified a STORED SHAPE from a
     citation twice, and both times the citation was real:
-    (1) *"0x0039 has appeared in zero of our five captures"* was true when
+    (1) _"0x0039 has appeared in zero of our five captures"_ was true when
     written and false when used — the 2026-08-23 keystone walk had
     captured the frame two days earlier, and the cited document was the
     stale half of a contradiction resolved in the same directory;
-    (2) *"Concept2's API carries `JustRow` first-class"* was correct about
+    (2) _"Concept2's API carries `JustRow` first-class"_ was correct about
     the enum and silent on the attribute the whole argument rested on —
     that field is documented `Required: No`. Neither was unsourced; both
     were UNDER-READ. Both were caught by an adversarial pass rather than
@@ -658,6 +658,27 @@ often they recur.
     its code does not exist**, and "verified on hardware" means nothing until
     the layer is named.
 
+25. **A lower layer reports a durability failure and its caller proceeds as
+    if persistence succeeded.** The 2026-08-28 codebase-integrity audit's
+    headline systemic pattern
+    (`docs/superpowers/audits/2026-08-28-codebase-integrity/final-report.md`),
+    and it had already
+    shipped three times before the audit named it: `Countdown.tsx:220` calls
+    `saveRun(run)` — a function that RETURNS a boolean for exactly this —
+    ignores it, and navigates to Timer, which silently bounces to Today when
+    the run never persisted (AUD-015); `saveMonitorRun` swallows its failed
+    write and returns `void` while the Log door fresh-loads the record that
+    never became durable, so completed PM5 work renders `NO MONITOR READING`
+    (AUD-016); and recurring failure 24's machine-summary defect is the same
+    shape with a reader instead of a writer. **The tell is a documented
+    rationale of the form "the caller has no different action to take on a
+    failed write"** — `monitorRun.ts` says those words verbatim, and AUD-016
+    is the different action it did not imagine (hold the hand-off). At any
+    seam where A persists and B proceeds or reads, the spec names ONE owner
+    of the end-to-end invariant: either the caller branches on the failure
+    it can now see, or a comment states why the outcomes are genuinely
+    indistinguishable — a claim that gets the same evidence bar as any
+    other, because every instance above falsified one.
 
 ## Commands
 

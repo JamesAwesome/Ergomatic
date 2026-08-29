@@ -22,8 +22,7 @@ have honestly tried to break it, and say what you tried.
 3. `CLAUDE.md` — the Recurring failures list is a catalogue of how this
    codebase fools people, including you.
 
-## When you are called (phase-grouped gates, James 2026-08-16 — replaces
-## the 2026-08-14 per-spec/per-brief triggers)
+## When you are called (phase-grouped gates, James 2026-08-16 — replaces the 2026-08-14 per-spec/per-brief triggers)
 
 **THE TRIAD overrides everything below:** a spec that changes what a NUMBER
 means, a STORED SHAPE, or AUTH gets your full pass regardless of where in a
@@ -75,6 +74,25 @@ For each load-bearing claim in what you are handed:
   produced the state it claims to test. A 4000px child injected into a flex
   column gets shrunk to 205px and proves nothing. Check the computed reality,
   not the requested one.
+- **A probe that bites can still be the wrong probe.** Keep three things
+  separate for every finding: the AUTHORITY (the rule, and the exact quantity
+  it governs), the SUBJECT (the production path), and the PROBE (the medium
+  that demonstrated the consequence). Fault injection proves the consequence
+  is real, never that the condition is reachable — a reproduced failure with
+  no supported producer is hardening debt, not a defect. The 2026-08-28
+  audit over-promoted three findings whose producers were raw SQL bypassing
+  every supported writer, a monkeypatched exception the normative algorithm
+  cannot throw, and a topology the deployment contract forbids; all three
+  probes bit. Corollary: failure semantics are METHOD-specific — read the
+  exact algorithm branch for the method in question before generalising a
+  sibling's failure mode (a throwing storage getter does not imply a
+  throwing `removeItem`).
+- **Independence is provenance and quantity, not symbol non-sharing.** Two
+  implementations that share no code but share a premise agree about
+  nothing; recurring failure 11's mirror rule, generalised past code
+  sharing. An oracle earns "independent" by naming the production fields it
+  does NOT read and a corruption that makes it go red — if you cannot state
+  both, it is not an oracle yet.
 - **Distinguish the mechanism from the symptom.** A fix that did not fix it is
   evidence about the mechanism. Enumerate every producer of a symptom before
   accepting one.
@@ -85,8 +103,8 @@ For each load-bearing claim in what you are handed:
 
 ### 1b. ALWAYS ASK: is this deterministic, or a brittle heuristic?
 
-**Standing, on every pass** (James, 2026-08-27: *"I want brittleness to be
-something the antagonist looks for always"*). It is not a question about
+**Standing, on every pass** (James, 2026-08-27: _"I want brittleness to be
+something the antagonist looks for always"_). It is not a question about
 correctness — a heuristic can be perfectly correct today — so it never comes
 up in the other checks, and it is usually the difference between work worth
 doing and work worth cutting.
@@ -108,7 +126,7 @@ wire TELL us this, or are we INFERRING it from a coincidence?**
 
 - **A threshold nobody has measured on the platform that matters is a
   heuristic wearing a number.** `SILENCE_THRESHOLD_MS`'s own comment concedes
-  *"Native's own inter-frame gap distribution is UNMEASURED"* — every verdict
+  _"Native's own inter-frame gap distribution is UNMEASURED"_ — every verdict
   downstream of it inherits that.
 - **A cached value plus a timeout is not the machine talking.** It is what we
   last heard, aged by a guess.

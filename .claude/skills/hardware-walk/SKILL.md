@@ -28,9 +28,9 @@ approval before any docker command runs, in this exact shape:
       rest or between pieces>
     Phone needed: <NO (default) | YES because <walk item>>
 
-**SHORTEST INTERVAL THAT PROVES THE POINT — James, 2026-08-26: *"our skill
+**SHORTEST INTERVAL THAT PROVES THE POINT — James, 2026-08-26: _"our skill
 should instruct you to recommend short intervals. a 500m interval is not short.
-a 250 would be preferred."*** Pick the interval length from what the leg has to
+a 250 would be preferred."_** Pick the interval length from what the leg has to
 OBSERVE, never from what looks like a normal workout. A leg that needs a rest
 BOUNDARY needs to reach a boundary — 250 m gets there in half the rowing of
 500 m and proves exactly as much. A leg that needs a long grid needs many
@@ -194,11 +194,23 @@ it AND the budget (revised, approved) covers it.
 3. Photos: ask him to drop them in a Desktop folder; transcribe every
    one the same day (untranscribed photos went stale once and hid the
    overcount's true onset).
-4. **Teardown, performed not requested**: `bash scripts/walk-lab.sh
-   down`. Ask "keep the stack?" ONLY if he said he's iterating; default
+4. **Scope what the walk proved — a clearance names its device and its
+   runs.** The README records the PM5's serial number (read it off any
+   photo that shows it) and the firmware version when a menu shot is
+   cheap; if firmware was not captured, the README says so. Every
+   finding and clearance is written as "this PM5, these runs" — one
+   device and one walk never generalise to a universal guarantee, and
+   the 2026-08-28 audit walk's clearances had to be re-worded at its
+   exit gate because they read as firmware-general truth nobody had
+   recorded. Label every photo pair SAME-FRAME or CORRELATED; for a
+   correlated PM5/app pair, name what correlates them (a ring seq, a
+   timestamp) — a correlated pair settles less than a same-frame shot
+   and must not be cited as one.
+5. **Teardown, performed not requested**: `bash scripts/walk-lab.sh
+down`. Ask "keep the stack?" ONLY if he said he's iterating; default
    is down. Forgotten stacks are a named failure — stack-reap is the
    net, not the plan.
-5. Commit the walk record on whatever branch the walk served (PR-only
+6. Commit the walk record on whatever branch the walk served (PR-only
    main rules apply — usually it rides the phase's open PR or its own
    docs PR).
 

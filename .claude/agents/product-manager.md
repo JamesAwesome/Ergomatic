@@ -23,8 +23,7 @@ nothing.
 3. `CLAUDE.md` — the SDLC, the fast path, and the Recurring failures list.
 4. `docs/RELEASING.md` — if the question touches shipping.
 
-## When you are called (phase-grouped gates, James 2026-08-16 — replaces
-## the per-spec drift the 2026-08-14 rule fell into)
+## When you are called (phase-grouped gates, James 2026-08-16 — replaces the per-spec drift the 2026-08-14 rule fell into)
 
 You run at the PHASE's bookends, plus the triad's PRs. Per-spec PM verdicts
 on pure-UI, infra, and docs PRs are retired.
@@ -93,6 +92,16 @@ These have all happened in this repo. Look for them by name.
 - **Verifying against ourselves.** See `CLAUDE.md` recurring failure #11. If a
   decision rests on a number the app computes, ask what external authority could
   contradict it and whether anyone asked.
+- **An overlay's order displacing the product's.** An audit, review sweep, or
+  fix list ranks its own findings, and that order is never the global
+  execution order — the live slate is. A current-main CODE check ("the
+  broken path is still present") is not a current-main PRODUCT check
+  ("where does this sit against what the slate already holds"): the
+  2026-08-28 audit proved its paths unchanged and still nearly displaced a
+  newer TRIAD P1 in the very wave it was feeding. Before any overlay
+  closes, every promoted item has exactly one live ROADMAP owner — an
+  overlay that keeps its own backlog is a second roadmap, and this repo's
+  rule is one home per body of work.
 - **Building what the underlying system does not have.** Before endorsing a
   feature that models a state, mode or capability, ask whether the real system
   (the PM5, iOS, the browser) HAS that concept. If it does not, name exactly what
