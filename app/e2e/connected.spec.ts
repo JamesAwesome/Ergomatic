@@ -699,18 +699,26 @@ async function walkSurfaceToLog(
   ).toBeVisible();
   await page.getByRole("button", { name: "Tap again to end" }).click();
 
-  // THE ENDED HAND-OFF FRAME — genuinely a ONE-RENDER flash for a
-  // user-initiated End (`ConnectedSurface.tsx`'s own header: `handoffHeld`
-  // stays `false` for `endedBy: "user"`, so `onEnded()` fires on the very
-  // next render and the caller navigates immediately). A plain
-  // `toBeVisible()` here raced that window under full-suite CPU load
-  // (caught directly investigating this task's own two new
-  // `boundingBox()` round trips just above — 6/6 green in isolation, an
-  // intermittent miss only under the full 279-test parallel run) and is
-  // not this task's frame to make less transient. Whichever of "the frame
-  // painted" or "navigation already landed" happens first is equally good
-  // proof End worked.
-  //
+  // THE ENDED HAND-OFF FRAME — NO LONGER a one-render flash for a
+  // user-initiated End (machine-summary hold spec §2, storage-spine
+  // design). A link-up End is now the THIRD burst-eligible arm:
+  // `endSession` opens the burst condition (`openBurstHold()`) the same
+  // way a machine finish or a Menu terminate does, so `handoffHeld` is
+  // briefly `true` and `onEnded()` — and this walk's own navigation — wait
+  // for it to resolve rather than firing on the very next render. Real
+  // hardware resolves this in ≈0.3-0.6s (spec §2's own corpus,
+  // `end-on-interval-1-recording`'s 558.6ms being the measured worst case
+  // for this exact arm); this walk delivers a scripted 0x0039 right here
+  // so the release comes from `burst-heard`, matching that typical case,
+  // rather than from the hold's own 2000ms backstop (`BURST_HANDOFF_HOLD_MS`)
+  // — a real but much slower path this walk is not testing.
+  await page.evaluate(() => {
+    window.__pm5FakeControls__?.deliverSummary({
+      elapsedSeconds: 100,
+      meters: 500,
+    });
+  });
+
   // `Promise.any`, NOT `Promise.race` (task-6 review, I4 — this is a
   // disclosed retirement-and-restoration, not a silent weakening). The
   // first version of this raced two promises that each swallowed their own
@@ -720,9 +728,12 @@ async function walkSurfaceToLog(
   // this walk. `any` resolves on the first FULFILMENT and rejects with an
   // `AggregateError` if both fail — so the tolerance for which of the two
   // wins survives, and a double failure still fails here, on this line,
-  // naming both branches.
+  // naming both branches. "Wrapping up" (spec §4's approved headline,
+  // replacing the retired "That is the session") is on screen for however
+  // long the hold takes, held or not — this text no longer distinguishes
+  // the two.
   await Promise.any([
-    page.getByText("That is the session").waitFor({ state: "visible" }),
+    page.getByText("Wrapping up").waitFor({ state: "visible" }),
     page.waitForURL(/\/library\/[^/]+\/log\?from=monitor$/),
   ]);
 
