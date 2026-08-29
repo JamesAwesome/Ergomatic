@@ -66,6 +66,7 @@ import { gunzipSync } from "node:zlib";
 import {
   applyContinuityCheck,
   BANNER_RETRACT_HYSTERESIS_MS,
+  BURST_HANDOFF_HOLD_MS,
   BURST_LINGER_MS,
   decideResumeLatch,
   defaultLivenessSchedule,
@@ -488,6 +489,20 @@ function manualSchedule() {
     /** The most recent, still-live timer. */
     pending(): { ms: number; fire: () => void; cancelled: boolean } | null {
       const live = calls.filter((c) => !c.cancelled);
+      return live[live.length - 1] ?? null;
+    },
+    /** Storage-spine design spec §2, Task 3: the hand-off hold's SPLIT
+     *  (`FINISH_HANDOFF_HOLD_MS`) and BURST (`BURST_HANDOFF_HOLD_MS`)
+     *  backstops now share this one `schedule` seam, so a natural finish
+     *  can leave TWO live timers here at once and `pending()`'s "most
+     *  recent" answer no longer names a specific condition. This picks the
+     *  most recent still-live timer scheduled for exactly `ms` — the one a
+     *  test means when it wants "the split condition's own backstop" or
+     *  "the burst condition's own backstop" specifically. */
+    pendingWithMs(
+      ms: number,
+    ): { ms: number; fire: () => void; cancelled: boolean } | null {
+      const live = calls.filter((c) => !c.cancelled && c.ms === ms);
       return live[live.length - 1] ?? null;
     },
   };
@@ -1499,7 +1514,17 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // fills the final interval AT the grace's expiry and that fill has to
     // beat the navigation this hold is what delays (`FINISH_HANDOFF_HOLD_MS`
     // and `FINISH_GRACE_MS` both carry the reasoning).
-    expect(timer.pending()?.ms).toBe(3500);
+    //
+    // Storage-spine design spec §2, Task 3: this natural finish ALSO owes
+    // the BURST condition now (this script never delivers a summary, so
+    // `summaryTotals` stays `undefined`) — the same `schedule` seam carries
+    // both, so `pendingWithMs` targets the split condition's own backstop
+    // by value rather than `pending()`'s now-ambiguous "most recent".
+    expect(timer.calls).toHaveLength(2);
+    expect(timer.pendingWithMs(3500)?.ms).toBe(3500);
+    expect(timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)?.ms).toBe(
+      BURST_HANDOFF_HOLD_MS,
+    );
 
     // Three more `finished` samples from the machine. THE REGRESSION: each
     // of these used to release the hold (and, one layer down, expire the
@@ -1517,9 +1542,22 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 
     expect(result.current.actuals).toHaveLength(1);
     expect(loadMonitorRun()?.actuals).toHaveLength(1);
-    // ...and the hold is over the moment its reason to exist is gone.
+    // Storage-spine design spec §2, Task 3: the split condition is resolved
+    // — its own backstop is cancelled — but the BURST condition is still
+    // owed (this script never hears a summary), so the WHOLE hold stays up
+    // ("releasing the hold only if the burst condition is not also owed").
+    expect(result.current.handoffHeld).toBe(true);
+    expect(timer.pendingWithMs(3500)).toBeNull(); // the split backstop was cancelled
+    expect(timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)).not.toBeNull(); // burst's is still live
+
+    // Nothing else ever comes for the burst either — its own backstop is
+    // what finally frees the hand-off.
+    act(() => {
+      timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)!.fire();
+    });
+    // ...and the hold is over the moment nothing is left to wait for.
     expect(result.current.handoffHeld).toBe(false);
-    expect(timer.pending()).toBeNull(); // the backstop was cancelled, not left to fire
+    expect(timer.pending()).toBeNull(); // both backstops are now cancelled
 
     // THE SEAM THAT FAILED ON DEVICE: what the log screen's own prefill gate
     // sees at the instant the hand-off releases (this is the function
@@ -1561,9 +1599,14 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     tick(fake, 100);
     expect(result.current.handoffHeld).toBe(true);
 
-    // Nothing else ever comes — no split, no further tick, no disconnect.
+    // Nothing else ever comes — no split, no summary, no further tick, no
+    // disconnect. Storage-spine design spec §2, Task 3: this natural finish
+    // owes BOTH conditions now, so BOTH backstops must fire before the
+    // hand-off is free — firing only the most recent (`pending()`) would
+    // leave the other one still owed.
+    expect(timer.calls).toHaveLength(2);
     act(() => {
-      timer.pending()!.fire();
+      timer.calls.forEach((c) => c.fire());
     });
 
     expect(result.current.handoffHeld).toBe(false);
@@ -1602,7 +1645,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(timer.pending()).not.toBeNull(); // still the backstop's to end
   });
 
-  it("the DESKTOP order pays nothing: a run whose final interval is already measured hands off on the finish itself", async () => {
+  it("the DESKTOP order pays nothing ON THE SPLIT — but storage-spine design spec §2, Task 3 widened the hold, so it now still waits for the machine's own summary burst", async () => {
     const timer = manualSchedule();
     const { result, fake } = harness(
       {
@@ -1622,20 +1665,41 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     tick(fake, 100);
 
     expect(result.current.phase).toBe("ended");
-    // Nothing is missing, so there is nothing to wait for and no timer at all
-    // — the hand-off is as immediate as it has always been.
-    expect(result.current.handoffHeld).toBe(false);
-    expect(timer.calls).toHaveLength(0);
     expect(result.current.actuals).toHaveLength(1);
     expect(loadMonitorRun()?.actuals).toHaveLength(1);
+    // Nothing is missing on the SPLIT, so `openHandoffHold` opens nothing —
+    // pre-Task-3 this was the whole hold, and the hand-off really was
+    // immediate. Task 3 widened what the hold OWES: `summaryTotals` is
+    // still `undefined` here (this script never delivers one), so the
+    // BURST condition opens regardless — exactly the "typical machine
+    // finish ... total added wait ~0.3-0.6s over today" case spec §2's own
+    // timing arithmetic names, at its zero-split-wait extreme.
+    expect(result.current.handoffHeld).toBe(true);
+    expect(timer.calls).toHaveLength(1);
+    expect(timer.calls[0]).toMatchObject({
+      ms: BURST_HANDOFF_HOLD_MS,
+      cancelled: false,
+    });
+
+    // The burst never arrives either, so its own backstop is what finally
+    // frees the hand-off — same bounded exit every other condition gets.
+    act(() => {
+      timer.pending()!.fire();
+    });
+    expect(result.current.handoffHeld).toBe(false);
   });
 
-  it("a MACHINE-TERMINATED ending never holds — the driver opens no finish grace for it, so there is nothing to wait for", async () => {
+  it("a MACHINE-TERMINATED ending never holds the SPLIT — the driver opens no finish grace for it — but storage-spine design spec §2, Task 3 makes it hold for the BURST, the arm the corpus's own worst case lives on", async () => {
     // The rower stopped the piece at the erg: the machine reports
     // TERMINATE, not WORKOUTEND. `driver.ts` opens no finish grace on that
     // path (CSAFE-DEF footnote 12 — a mid-terminate Split/Interval Number
-    // has no stable interval to name), so no boundary of ours is coming and
-    // holding the hand-off would only delay the log screen for nothing.
+    // has no stable interval to name), so no SPLIT boundary of ours is
+    // coming and the split condition never opens. Task 3: a Menu terminate
+    // is still burst-eligible (`endedBy: "rower"`, `driver.ts:2724`'s
+    // `terminated` emit) — this is the exact defect `:2201` used to
+    // hardcode away (`held = false` on this branch, unconditionally) and
+    // the arm the corpus's own worst case (542 ms, `smoke-terminated`)
+    // lives on.
     const timer = manualSchedule();
     const { result, fake } = harness(
       {
@@ -1664,9 +1728,20 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // Interval 0 is unmeasured — the ONLY thing separating this from the
     // walk's own sequence is how the machine ended it.
     expect(result.current.actuals).toHaveLength(0);
-    expect(result.current.handoffHeld).toBe(false);
-    expect(timer.calls).toHaveLength(0);
+    expect(result.current.handoffHeld).toBe(true);
+    expect(timer.calls).toHaveLength(1);
+    expect(timer.calls[0]).toMatchObject({
+      ms: BURST_HANDOFF_HOLD_MS,
+      cancelled: false,
+    });
     expect(loadMonitorRun()?.terminated).toBe(true);
+
+    // The burst never arrives in this script either — its own backstop is
+    // the bounded exit, same as every other condition.
+    act(() => {
+      timer.pending()!.fire();
+    });
+    expect(result.current.handoffHeld).toBe(false);
   });
 
   it("a piece that finished without anyone rowing it holds nothing — there is no record to be missing an actual", async () => {
@@ -1693,7 +1768,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(loadMonitorRun()).toBeNull();
   });
 
-  it("the rower's own End never holds either — End is a decision, not a finish", async () => {
+  it("the rower's own End never holds the SPLIT — End is a decision, not a finish — but storage-spine design spec §2, Task 3 makes a link-up End the THIRD burst-eligible arm", async () => {
     const timer = manualSchedule();
     const { result, fake } = harness(
       {
@@ -1713,8 +1788,21 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 
     expect(result.current.phase).toBe("ended");
     expect(result.current.endedBy).toBe("user");
+    // `endSession` never opens the SPLIT condition (End is a decision, not
+    // a finish — there is no boundary of that kind to wait for), but the
+    // link is up (`endedBy: "rower"` on the record), so `openBurstHold()`
+    // owes the BURST condition exactly like a Menu terminate does.
+    expect(result.current.handoffHeld).toBe(true);
+    expect(timer.calls).toHaveLength(1);
+    expect(timer.calls[0]).toMatchObject({
+      ms: BURST_HANDOFF_HOLD_MS,
+      cancelled: false,
+    });
+
+    act(() => {
+      timer.pending()!.fire();
+    });
     expect(result.current.handoffHeld).toBe(false);
-    expect(timer.calls).toHaveLength(0);
   });
 
   it("a link that DIES inside the hold is exactly what the backstop is for — the drop itself is silent by design", async () => {
@@ -1741,6 +1829,10 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     tick(fake, 100);
     tick(fake, 100);
     expect(result.current.handoffHeld).toBe(true);
+    // Storage-spine design spec §2, Task 3: this natural finish owes BOTH
+    // conditions (missing split, and no summary heard yet) — both live on
+    // the same `schedule` seam.
+    expect(timer.calls).toHaveLength(2);
 
     act(() => {
       fake.injectDisconnect();
@@ -1748,9 +1840,10 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 
     // Still held — nothing was emitted to release it...
     expect(result.current.handoffHeld).toBe(true);
-    // ...and the rower is not stranded on the ended frame either.
+    // ...and the rower is not stranded on the ended frame either: BOTH
+    // backstops must fire before the hand-off is free.
     act(() => {
-      timer.pending()!.fire();
+      timer.calls.forEach((c) => c.fire());
     });
     expect(result.current.handoffHeld).toBe(false);
     // The ending stands: a drop AFTER the machine finished does not drag the
@@ -1781,22 +1874,26 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 
     unmount();
 
-    // Task 3: the backstop is NOT cancelled synchronously any more — this
+    // Task 3: the backstops are NOT cancelled synchronously any more — this
     // run's `summaryTotals` is still unset (no burst ever arrives in this
     // script), so teardown defers STEP 1 — and `releaseHandoff("teardown")`
     // stays glued to it (the same glue that keeps a genuine fill's
     // "final-boundary" reason from being pre-empted) — to the burst
-    // linger's own timeout instead.
-    expect(timer.calls).toHaveLength(1);
+    // linger's own timeout instead. TWO backstops now, not one: the split
+    // condition's own (missing actual) AND the burst condition's own (no
+    // summary heard yet) — both opened on this same natural finish.
+    expect(timer.calls).toHaveLength(2);
     expect(timer.calls[0]!.cancelled).toBe(false);
+    expect(timer.calls[1]!.cancelled).toBe(false);
     expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
 
-    // The linger's own cap elapses — no burst ever came — and NOW the
-    // backstop is cancelled, no timer left outliving the session.
+    // The linger's own cap elapses — no burst ever came — and NOW BOTH
+    // backstops are cancelled, no timer left outliving the session.
     act(() => {
       burstTimer.pending()!.fire();
     });
     expect(timer.calls[0]!.cancelled).toBe(true);
+    expect(timer.calls[1]!.cancelled).toBe(true);
 
     // ...and it says so IN THE STASH: the release runs as the deferred
     // path's first statement, above the (second) export, so a session torn
@@ -1807,8 +1904,13 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     const kinds = (JSON.parse(stashed) as { kind: string; detail: string }[])
       .filter((e) => e.kind.startsWith("handoff"))
       .map((e) => `${e.kind}:${e.detail.slice(0, 8)}`);
+    // Storage-spine design spec §2, Task 3: TWO `handoff-hold` entries now
+    // (split, then burst — the order `endByMachine` opens them in), still
+    // ONE `handoff-released` (the hold itself releases once, when neither
+    // condition remains owed).
     expect(kinds).toStrictEqual([
       "handoff-hold:machine ",
+      "handoff-hold:burst-el",
       "handoff-released:teardown",
     ]);
   });
@@ -1850,16 +1952,36 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(entries.find((e) => e.kind === "split-half")?.detail).toContain(
       "0x0037",
     );
-    // The hold, opened and released with its reason.
-    expect(kinds).toContain("handoff-hold");
-    const released = entries.find((e) => e.kind === "handoff-released");
-    expect(released?.detail).toContain("final-boundary");
-    // ...and it reports what the rower is actually being handed.
-    expect(released?.detail).toContain("1 actual(s) measured");
-    // The record's own verdict on the late actual.
+    // The record's own verdict on the late actual — settled the instant the
+    // split lands, independent of the hold's own fate.
     const filed = entries.find((e) => e.kind === "record-actual");
     expect(filed?.detail).toContain("accepted");
     expect(filed?.detail).toContain("index=0");
+
+    // Storage-spine design spec §2, Task 3: this natural finish ALSO owes
+    // the BURST condition (no summary is ever delivered in this script), so
+    // the split's own resolution ("resolve the split condition") no longer
+    // releases the WHOLE hold by itself — that only happens "when no owed
+    // condition remains". Both conditions were opened (their own
+    // `handoff-hold` entries), but no `handoff-released` entry exists yet.
+    expect(kinds.filter((k) => k === "handoff-hold")).toHaveLength(2);
+    expect(entries.find((e) => e.kind === "handoff-released")).toBeUndefined();
+    expect(result.current.handoffHeld).toBe(true);
+
+    // The burst never arrives either; its own backstop is what finally
+    // frees the hand-off, and the ring records THAT reason.
+    act(() => {
+      timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)!.fire();
+    });
+    expect(result.current.handoffHeld).toBe(false);
+    const afterBurst = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const released = afterBurst.find((e) => e.kind === "handoff-released");
+    expect(released?.detail).toContain("burst-timeout");
+    // ...and it reports what the rower is actually being handed.
+    expect(released?.detail).toContain("1 actual(s) measured");
   });
 
   it("THE DROPPED SPLIT, END TO END (fast-follow Task 2, design spec §5): the summary fills the final interval at the deadline, the record accepts it, and the hold releases with 1 measured", async () => {
@@ -1905,9 +2027,16 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(result.current.handoffHeld).toBe(true);
     // THE STRICT INEQUALITY, as two live timers rather than as two
     // constants: the fill is due at 3000 and the hand-off cannot release
-    // before 3500.
+    // before 3500. Storage-spine design spec §2, Task 3: this natural
+    // finish ALSO owes the BURST condition (`summaryTotals` still
+    // undefined) on the same `schedule` seam as the split's own — hence
+    // `pendingWithMs` rather than `pending()`'s now-ambiguous "most recent".
     expect(driverTimer.pending()?.ms).toBe(3000);
-    expect(timer.pending()?.ms).toBe(3500);
+    expect(timer.calls).toHaveLength(2);
+    expect(timer.pendingWithMs(3500)?.ms).toBe(3500);
+    expect(timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)?.ms).toBe(
+      BURST_HANDOFF_HOLD_MS,
+    );
 
     // 0x0039 arrives inside the grace. Still nothing filed — the summary is
     // the fallback, and a split has until the deadline to win.
@@ -1987,9 +2116,18 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     const filed = entries.find((e) => e.kind === "record-actual");
     expect(filed?.detail).toContain("accepted");
     expect(filed?.detail).toContain("finalBoundary=true");
+    // Storage-spine design spec §2, Task 3: `reconcileSummary`'s single
+    // synchronous callback (fired by `driverTimer.pending()!.fire()` above)
+    // both synthesizes the actual (resolving the SPLIT condition — held,
+    // because the BURST condition, opened on this same natural finish, is
+    // still owed) AND — since the hash was already in hand from the
+    // `deliverSummary` call above — immediately calls
+    // `noteTerminateObservations`, which resolves the BURST condition
+    // right after. The burst resolves LAST, so its reason is what the
+    // hold's own single release entry names.
     expect(
       entries.find((e) => e.kind === "handoff-released")?.detail,
-    ).toContain("final-boundary");
+    ).toContain("burst-heard");
   });
 
   it("Task 7, THE ORDERING PIN, UPDATED FOR THE BURST LINGER (storage-spine design spec §2, Task 3): a reconcile that fires at DEFERRAL END — not at teardown itself any more — still lands in the SECOND STASH SNAPSHOT, not merely the in-memory ring (§22's own recorded trap: an entry written after a stash is taken dies with the tab)", async () => {
@@ -2076,9 +2214,20 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     const filed = entries.find((e) => e.kind === "record-actual");
     expect(filed?.detail).toContain("accepted");
     expect(filed?.detail).toContain("finalBoundary=true");
+    // Storage-spine design spec §2, Task 3: `driver.reconcile()` (called
+    // from `reconcileAndReleaseHandoff` at the top of this deferred
+    // `finish`) runs the identical synchronous chain "THE DROPPED SPLIT"
+    // pins — the fill resolves the SPLIT condition (still held, burst
+    // outstanding), then `noteTerminateObservations` (hash already in
+    // hand from `deliverSummary` above) resolves the BURST condition right
+    // after, which is what actually releases the hold. The subsequent
+    // `releaseHandoff("teardown")` call in `reconcileAndReleaseHandoff`
+    // finds both conditions already resolved and is a no-op, so the ring's
+    // one `handoff-released` entry still names the condition that
+    // genuinely resolved last.
     expect(
       entries.find((e) => e.kind === "handoff-released")?.detail,
-    ).toContain("final-boundary");
+    ).toContain("burst-heard");
     // The deadline was CONSUMED at deferral end, not left dangling — the
     // same timer-hygiene bar every other test in this file holds
     // `teardown` to.
@@ -2137,9 +2286,13 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     driverMs = 290;
     tick(fake, 90); // t=290: the split — CLAIMS the grace
 
-    // The hold releases on the boundary itself; nothing has touched the
-    // deadline yet (no summary held).
-    expect(result.current.handoffHeld).toBe(false);
+    // Storage-spine design spec §2, Task 3: the SPLIT condition resolves on
+    // the boundary itself — nothing has touched the deadline yet (no
+    // summary held) — but the BURST condition (this natural finish's
+    // `summaryTotals` is still `undefined`) is still owed, so the WHOLE
+    // hold stays up. Pre-Task-3 this was the whole hold and it really did
+    // release here; Task 3 widened what it owes.
+    expect(result.current.handoffHeld).toBe(true);
     expect(result.current.actuals).toHaveLength(1);
     expect(driverTimer.pending()?.ms).toBe(3000);
 
@@ -2172,6 +2325,16 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(transport.disconnects).toBe(1);
     expect(driverTimer.pending()).toBeNull();
     expect(burstTimer.pending()).toBeNull();
+    // Storage-spine design spec §2, Task 3: the BURST condition — still
+    // owed since the split resolved at t=290 — is what this arrival
+    // finally resolves, and it is what actually releases the hold (the
+    // split's own backstop, on this test's unbound default `schedule`, was
+    // already cancelled when the split landed). Not asserted via
+    // `result.current.handoffHeld` here — the component unmounted above,
+    // so React Testing Library freezes `result.current` at its last render
+    // and this would only ever read stale state; the ring's own
+    // `handoff-released` entry (checked below, via the second stash) is
+    // the real evidence.
 
     const stored = loadMonitorRun();
     expect(stored?.summaryTotals).toStrictEqual({
@@ -2215,6 +2378,11 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(entries.some((e) => e.kind === "summary-half")).toBe(true);
     const verdict = entries.find((e) => e.kind === "summary-reconciled");
     expect(verdict?.detail).toContain("buffered");
+    // Storage-spine design spec §2, Task 3: the burst is the condition that
+    // actually released the hold here (the split already had, at t=290).
+    expect(
+      entries.find((e) => e.kind === "handoff-released")?.detail,
+    ).toContain("burst-heard");
   });
 
   it("(a-cap) LATE SIDE, PRODUCTION TIMING, NOTHING EVER ARRIVES: the driver's own 3000ms deadline would elapse LONG after the hook's 2000ms linger cap — the cap drains first, and the deadline never gets the chance to double-fire", async () => {

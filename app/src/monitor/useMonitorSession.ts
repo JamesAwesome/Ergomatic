@@ -768,6 +768,67 @@ const FINISH_HANDOFF_HOLD_MS = 3500;
  */
 export const BURST_LINGER_MS = 2000;
 
+/**
+ * Storage-spine design spec §2 (2026-08-29-machine-summary-hold-design.md,
+ * "the burst condition"), Wave F PR 1 Task 3: at a burst-eligible `ended`
+ * transition — a machine finish, a Menu terminate, or a user End with the
+ * link up (`run.completedAt !== null && (run.endedBy === "finished" ||
+ * run.endedBy === "rower")`) — whose run has not yet heard the machine's
+ * own summary burst (`run.summaryTotals === undefined`, kept as documented
+ * defence-in-depth below), the hand-off hold owes a SECOND condition
+ * alongside the split's: this many milliseconds, or the burst's own write
+ * ATTEMPT, whichever comes first.
+ *
+ * DERIVATION, the corpus rule (`BURST_LINGER_MS`'s own comment above
+ * carries the authoritative transcription; re-stated here for this
+ * constant's own anchor, which is NOT the same clock). Ten committed
+ * captures now carry a complete burst — eight unique web recordings plus
+ * two production native rings (`walk-2026-08-24/phone-exit7-ring.json`
+ * +358 ms, `walk-2026-08-28/summary-never-stored-ring.json` +452 ms).
+ * Positive post-terminal lags run 271-542 ms, worst case 542 ms
+ * (`walk-2026-08-25/smoke-terminated`, a MENU-terminated close). On the
+ * two `endByMachine` arms (machine finish, Menu terminate) the `ended`
+ * flip happens SYNCHRONOUSLY inside the driver's terminal emit, so the
+ * whole measured window sits inside this backstop with nothing coming off
+ * the top — a ~3.7× margin on the 542 ms worst case.
+ *
+ * THE END-ARM ANCHOR IS DIFFERENT AND DOES NOT INHERIT THAT MARGIN (the
+ * antagonist pass's own correction — a claim this spec once made and
+ * retracted): on the user-End arm the clock starts at the BUTTON, not at
+ * any wire event — the `ended` flip precedes `await driver.terminate()`
+ * (`endSession`, below) — so the terminate round-trip comes off the top of
+ * this budget instead of being free. Measured once
+ * (`walk-2026-08-28/end-on-interval-1-recording.jsonl.gz`, the corpus's
+ * only app-End capture): terminate tx at t=15155.4, machine terminal
+ * +286.3 ms, 0x003F +558.6 ms from the flip — a 3.58× margin under this
+ * backstop, n = 1, web; the native terminate round-trip is unmeasured. The
+ * §5 receipts (`handoff-released: "burst-timeout"`) are the instrument if
+ * that budget is ever exceeded in the field.
+ *
+ * DEFENCE IN DEPTH, NOT THE LOAD-BEARING MECHANISM: on the two
+ * burst-first captures in the corpus the burst arrives BEFORE the
+ * terminal transition is even observed, because both driver arms fold a
+ * buffered burst-first summary onto the record AFTER their terminal emit,
+ * deliberately (`driver.ts:2702-2711`, `:2751-2760` — an observations
+ * event arriving while `completedAt` is still `null` would be declined
+ * permanently, `monitorRun.ts:1095`). So `run.summaryTotals` is ALWAYS
+ * `undefined` at every one of the three sites this condition opens from,
+ * and on the burst-first shape the condition resolves microseconds later
+ * in the SAME synchronous block React batches into one render — the hold
+ * is invisible and costs nothing. The `summaryTotals` clause stays in the
+ * owing predicate as documented defence-in-depth, not as the load-bearing
+ * explanation: if the driver's post-emit fold ever became async, the
+ * burst-first case would pay real hold time and the receipts would show
+ * it.
+ *
+ * NOT SHARED WITH `BURST_LINGER_MS`, even though both read 2000 today:
+ * different anchor (this waits from the `ended` flip; that waits from
+ * TEARDOWN, already downstream of navigate-and-unmount) and a different
+ * consumer (this hold; that linger) — coupling them would let a linger
+ * retune silently retime the rower-visible hold, or vice versa.
+ */
+export const BURST_HANDOFF_HOLD_MS = 2000;
+
 /** Phase LT spec 2 §2's flush policy, verbatim: "a 30-second timer" the
  *  hook owns, independent of the boundary and close flushes. Not tuned —
  *  the spec names the number directly, no derivation to carry. */
@@ -890,11 +951,15 @@ export interface MonitorSessionDeps {
   createLog?: () => MonitorEventLog;
   /** The only clock in this file, and only for the record's ISO stamps. */
   now?: () => Date;
-  /** The ended hand-off's backstop timer (`FINISH_HANDOFF_HOLD_MS`), as a
-   *  schedule-and-cancel pair: returns the canceller. Injected so a test
-   *  FIRES the backstop instead of waiting 250 real milliseconds (and so an
-   *  unmounted test leaves no live timer). Defaults to `setTimeout` /
-   *  `clearTimeout`. */
+  /** The ended hand-off's backstop timers — BOTH owed conditions'
+   *  (`FINISH_HANDOFF_HOLD_MS` for the split condition,
+   *  `BURST_HANDOFF_HOLD_MS` for the burst condition, storage-spine design
+   *  spec §2, Task 3), as a schedule-and-cancel pair: returns the
+   *  canceller. One seam for both — a natural finish can owe both
+   *  conditions at once, and each gets its own call against this same
+   *  injection point. Injected so a test FIRES a backstop instead of
+   *  waiting real milliseconds for it (and so an unmounted test leaves no
+   *  live timer). Defaults to `setTimeout`/`clearTimeout`. */
   schedule?: (cb: () => void, ms: number) => () => void;
   /** The series recorder's 30-second flush timer (Phase LT spec 2 §2's
    *  flush policy — `SERIES_FLUSH_INTERVAL_MS`), as a REPEATING
@@ -1510,7 +1575,7 @@ export function useMonitorSession(
   const seriesRecorderRef = useRef<SeriesRecorder | null>(null);
   /** The 30-second flush timer's own canceller (`SERIES_FLUSH_INTERVAL_MS`),
    *  or `null` when none is running — no run open, or the run has already
-   *  closed. Mirrors `handoffHoldRef`'s own "canceller or null" shape. */
+   *  closed. Mirrors `splitHoldRef`'s own "canceller or null" shape. */
   const seriesFlushCancelRef = useRef<(() => void) | null>(null);
   /** Phase LL Task 1 (link-truth design spec §1): whatever `connect()`'s
    *  own transport resolved to, IF it carries a liveness `snapshot()` —
@@ -1745,9 +1810,20 @@ export function useMonitorSession(
     [nowDate, withSeries, stopSeriesFlush],
   );
 
-  /** The live finish hold: its backstop's canceller, or `null` when no hold
-   *  is open. One at a time — a run ends once. */
-  const handoffHoldRef = useRef<(() => void) | null>(null);
+  /** Storage-spine design spec §2, Task 3: the hand-off hold's SPLIT
+   *  condition — its backstop's canceller (`FINISH_HANDOFF_HOLD_MS`), or
+   *  `null` when this condition is not owed. One at a time — a run ends
+   *  once. Split into its own ref (was the single `handoffHoldRef`) so the
+   *  hold can owe this and the burst condition below independently; the
+   *  hold itself releases only once BOTH read `null`. */
+  const splitHoldRef = useRef<(() => void) | null>(null);
+
+  /** Storage-spine design spec §2, Task 3: the hand-off hold's BURST
+   *  condition — its backstop's canceller (`BURST_HANDOFF_HOLD_MS`), or
+   *  `null` when this condition is not owed. Mirrors `splitHoldRef`'s own
+   *  shape exactly; the two are independent and either, both, or neither
+   *  may be owed at a given `ended` transition (spec §2's three arms). */
+  const burstHoldRef = useRef<(() => void) | null>(null);
 
   /** Storage-spine design spec §2's late side (PR 1, Task 3): while a
    *  BURST-ELIGIBLE teardown (a natural finish or a rower-ended close —
@@ -1773,15 +1849,28 @@ export function useMonitorSession(
    *  handed off (to `lingerFinishRef.current` above). */
   const burstLingerCancelRef = useRef<(() => void) | null>(null);
 
-  /** Ends the hand-off hold, whatever ended it, and says so in the trace.
-   *  A no-op when nothing is held, so every release site can call it
-   *  unconditionally. */
+  /** Storage-spine design spec §2, Task 3: releases EVERY owed condition
+   *  unconditionally — the teardown catch-all, not a per-condition
+   *  resolution (`resolveHandoffCondition` below is that). Cancels both
+   *  `splitHoldRef` and `burstHoldRef` regardless of which (if either) is
+   *  actually owed, and performs the single `handoffHeld: false`
+   *  update/`handoff-released` ring entry only when at least one of them
+   *  was — so calling this with nothing held (every close that never
+   *  opened a hold, or a second call after the hold already released) is a
+   *  true no-op, and calling it with only one condition owed still
+   *  releases correctly. `"teardown"` is its only caller-facing reason: a
+   *  teardown is the hand-off completing, or the rower leaving — either
+   *  way nothing is left to wait for, and neither condition's own more
+   *  specific reason applies once the surface is on its way out. */
   const releaseHandoff = useCallback(
-    (reason: "final-boundary" | "backstop" | "teardown"): void => {
-      const cancel = handoffHoldRef.current;
-      if (cancel === null) return;
-      handoffHoldRef.current = null;
-      cancel();
+    (reason: "teardown"): void => {
+      const splitCancel = splitHoldRef.current;
+      const burstCancel = burstHoldRef.current;
+      if (splitCancel === null && burstCancel === null) return;
+      splitHoldRef.current = null;
+      burstHoldRef.current = null;
+      splitCancel?.();
+      burstCancel?.();
       logRef.current?.record(
         "handoff-released",
         `${reason} — the ended hand-off is free to navigate (${stateRef.current.actuals.length} actual(s) measured)`,
@@ -1791,19 +1880,63 @@ export function useMonitorSession(
     [update],
   );
 
-  /** Opens the hold if — and only if — this run is still missing the actual
-   *  the machine's own finish is about to deliver (walk day 2,
-   *  `FINISH_HANDOFF_HOLD_MS`). Returns whether it opened, so the caller can
-   *  set `handoffHeld` in the SAME state patch that flips the phase (one
-   *  render, not two: a `handoffHeld: false` frame between them would let
-   *  the surface hand off before the hold ever existed).
+  /** Storage-spine design spec §2, Task 3: resolves ONE owed condition —
+   *  cancels its own backstop and clears its own ref — and releases the
+   *  hold (the single `handoffHeld: false` update, the single
+   *  `handoff-released` ring entry naming REASON) only when the OTHER
+   *  condition is not also still owed. A no-op when the named condition is
+   *  not currently owed, so every resolution site can call this
+   *  unconditionally (mirrors `releaseHandoff`'s own idempotence). This is
+   *  the shared helper both `openHandoffHold`'s backstop and
+   *  `openBurstHold`'s backstop schedule against, and both `final-boundary`
+   *  (below) and the `summary-observations` handler call directly. */
+  const resolveHandoffCondition = useCallback(
+    (
+      which: "split" | "burst",
+      reason: "final-boundary" | "burst-heard" | "burst-timeout" | "backstop",
+    ): void => {
+      const ref = which === "split" ? splitHoldRef : burstHoldRef;
+      const cancel = ref.current;
+      // Defensive, same no-op contract as `releaseHandoff`'s own —
+      // currently unreachable from any test in this file (each condition's
+      // own single resolution site fires at most once per run: the driver
+      // vouches for the final boundary once, and `summary-observations`
+      // fires at most once per run by its own doc comment), but the
+      // resolution sites do not themselves enforce that, so this guard is
+      // what makes a hypothetical duplicate a no-op rather than a
+      // double-cancel.
+      if (cancel === null) return;
+      ref.current = null;
+      cancel();
+      if (splitHoldRef.current !== null || burstHoldRef.current !== null) {
+        return;
+      }
+      logRef.current?.record(
+        "handoff-released",
+        `${reason} — the ended hand-off is free to navigate (${stateRef.current.actuals.length} actual(s) measured)`,
+      );
+      update({ handoffHeld: false });
+    },
+    [update],
+  );
+
+  /** Opens the hold's SPLIT condition if — and only if — this run is still
+   *  missing the actual the machine's own finish is about to deliver (walk
+   *  day 2, `FINISH_HANDOFF_HOLD_MS`). Returns whether it opened, so the
+   *  caller can fold `handoffHeld` from BOTH openers into the SAME state
+   *  patch that flips the phase (one render, not two: a
+   *  `handoffHeld: false` frame between them would let the surface hand
+   *  off before the hold ever existed).
    *
    *  "Missing" is the record's own question, asked the record's own way: is
    *  there an actual for the program's LAST interval? That is the only
    *  boundary the driver's finish grace can still deliver
    *  (`monitorRun.ts`'s `acceptableFinalBoundary`), so a run that already has
    *  it — the desktop order, where the split arrives BEFORE the finished tick
-   *  — waits for nothing and pays nothing. */
+   *  — waits for nothing on THIS condition and pays nothing here. (Storage-
+   *  spine design spec §2, Task 3: it may still owe the BURST condition
+   *  below — "pays nothing" was true of the whole hold before this task and
+   *  is now a claim about this condition alone.) */
   const openHandoffHold = useCallback((): boolean => {
     // No record, nothing to wait FOR: a program that armed and finished
     // without the rower ever pulling never reached `live`, so this hook
@@ -1826,8 +1959,8 @@ export function useMonitorSession(
         const id = setTimeout(cb, ms);
         return () => clearTimeout(id);
       });
-    handoffHoldRef.current = schedule(
-      () => releaseHandoff("backstop"),
+    splitHoldRef.current = schedule(
+      () => resolveHandoffCondition("split", "backstop"),
       FINISH_HANDOFF_HOLD_MS,
     );
     logRef.current?.record(
@@ -1835,7 +1968,52 @@ export function useMonitorSession(
       `machine finish with interval ${lastIndex} unmeasured — holding the ended hand-off up to ${FINISH_HANDOFF_HOLD_MS}ms for its split (walk day 2: navigating tears down the subscription the split arrives on)`,
     );
     return true;
-  }, [releaseHandoff]);
+  }, [resolveHandoffCondition]);
+
+  /** Storage-spine design spec §2, Task 3: opens the hold's BURST condition
+   *  if — and only if — this run is burst-eligible and has not yet heard
+   *  the machine's own summary burst: `run.completedAt !== null &&
+   *  (run.endedBy === "finished" || run.endedBy === "rower") &&
+   *  run.summaryTotals === undefined` — the SAME predicate teardown's own
+   *  linger and `appendSummaryObservations`'s own writer gate already
+   *  enforce (one predicate, now three enforcement points, deliberately).
+   *  Returns whether it opened, for the identical one-render reason
+   *  `openHandoffHold` above returns it. Called from all three burst-
+   *  eligible `ended` transitions (`endByMachine`'s two branches,
+   *  `endSession`) — `run === null`/a non-burst-eligible `endedBy` (a
+   *  never-rowed close, `link-lost`, `program-failed`) all return `false`
+   *  via this one predicate rather than each caller special-casing it. */
+  const openBurstHold = useCallback((): boolean => {
+    const run = runRef.current;
+    if (run === null) return false;
+    // Both guards below are DEFENSIVE and currently unreachable from this
+    // function's only two call sites (`endByMachine`, `endSession`), both
+    // of which call `closeRecord` before this — so `completedAt` is never
+    // actually `null` here today. And `summaryTotals` is documented (this
+    // constant's own comment) to be ALWAYS `undefined` at this point given
+    // how the driver folds a burst-first summary — a defence-in-depth
+    // clause against that ordering changing, not a path any test exercises
+    // today (same "unreachable code wearing a guard's clothes" trade
+    // `openHandoffHold`'s own `lastIndex < 0` comment names above).
+    if (run.completedAt === null) return false;
+    if (run.endedBy !== "finished" && run.endedBy !== "rower") return false;
+    if (run.summaryTotals !== undefined) return false;
+    const schedule =
+      depsRef.current.schedule ??
+      ((cb: () => void, ms: number): (() => void) => {
+        const id = setTimeout(cb, ms);
+        return () => clearTimeout(id);
+      });
+    burstHoldRef.current = schedule(
+      () => resolveHandoffCondition("burst", "burst-timeout"),
+      BURST_HANDOFF_HOLD_MS,
+    );
+    logRef.current?.record(
+      "handoff-hold",
+      `burst-eligible close (endedBy=${run.endedBy}) with no summary yet — holding the ended hand-off up to ${BURST_HANDOFF_HOLD_MS}ms for the machine's own summary burst`,
+    );
+    return true;
+  }, [resolveHandoffCondition]);
 
   const handleFrame = useCallback(
     (frame: MonitorFrame, driver: MonitorDriver): void => {
@@ -2100,10 +2278,13 @@ export function useMonitorSession(
           // here only ever picks between the two honest promises. A
           // continuity reset closes a record that has actuals, so it lands
           // on the neutral one exactly as before.
-          // No handoff hold: a reset is not a
-          // natural finish (no boundary is coming), the same reasoning
-          // `endByMachine`'s own `terminated` branch already uses to
-          // skip `openHandoffHold()`.
+          // No handoff hold, either condition: a reset is not a natural
+          // finish (no boundary is coming), the same reasoning
+          // `endByMachine`'s own `terminated` branch uses to skip
+          // `openHandoffHold()` — and `completeContinuityReset` stamps
+          // `endedBy: "interrupted" | "link-lost"` (`monitorRun.ts`),
+          // neither of which is burst-eligible, so `openBurstHold()`'s own
+          // predicate excludes this arm too without a special case here.
           update({ phase: "ended", endedBy: "user", runOpen: false });
         }
         // Same defensive, test-suite-unreachable fallback arm as the seed
@@ -2192,21 +2373,30 @@ export function useMonitorSession(
       // `MonitorRun.endedBy`'s own doc comment (`monitorRun.ts`) for the
       // full table.
       closeRecord(terminated, terminated ? "rower" : "finished");
-      // THE HAND-OFF HOLD (walk day 2). Only a natural FINISH opens one: a
-      // `terminated` close opens no finish grace in the driver either
+      // THE HAND-OFF HOLD (walk day 2; widened by storage-spine design
+      // spec §2, Task 3). Only a natural FINISH opens the SPLIT condition:
+      // a `terminated` close opens no finish grace in the driver either
       // (CSAFE-DEF footnote 12 — the Split/Interval Number is unstable when
-      // a workout is terminated mid-interval), so there is no boundary to
-      // wait for and nothing to hold. The phase flips either way, in one
-      // patch with the hold flag.
-      const held = terminated ? false : openHandoffHold();
+      // a workout is terminated mid-interval), so there is no boundary of
+      // that kind to wait for. BOTH branches may still owe the BURST
+      // condition, though — a Menu terminate is exactly the arm the
+      // corpus's worst case (542 ms, `smoke-terminated`) lives on (spec
+      // §2's second arm) — so `openBurstHold()` runs UNCONDITIONALLY,
+      // never short-circuited by `terminated`, and `handoffHeld` is the OR
+      // of both openers. The phase flips either way, in one patch with the
+      // hold flag — both openers must run before this single `update` so
+      // neither condition is missed by a `handoffHeld: false` frame
+      // between them.
+      const splitOpened = terminated ? false : openHandoffHold();
+      const burstOpened = openBurstHold();
       update({
         phase: "ended",
         endedBy: "machine",
-        handoffHeld: held,
+        handoffHeld: splitOpened || burstOpened,
         runOpen: false,
       });
     },
-    [closeRecord, openHandoffHold, update],
+    [closeRecord, openBurstHold, openHandoffHold, update],
   );
 
   /** `driver` is the one that emitted the event — passed rather than read
@@ -2298,13 +2488,18 @@ export function useMonitorSession(
           runRef.current = next;
           update({ actuals: next.actuals });
         }
-        // Whatever the record decided, the boundary the hold was waiting for
-        // has now been and gone — the wait is for the SPLIT, not for a
-        // successful write (whose outcome the entry above records). Released
-        // AFTER the write above so the release's own log entry reports the
-        // count the rower is about to be handed, not the one from a moment
-        // earlier.
-        if (event.finalBoundary === true) releaseHandoff("final-boundary");
+        // Whatever the record decided, the boundary the SPLIT condition was
+        // waiting for has now been and gone — the wait is for the SPLIT,
+        // not for a successful write (whose outcome the entry above
+        // records). Resolved AFTER the write above so the release's own
+        // log entry (if this also clears the last owed condition) reports
+        // the count the rower is about to be handed, not the one from a
+        // moment earlier. Storage-spine design spec §2, Task 3: this is
+        // "resolve the split condition", not an unconditional release —
+        // the hold stays up if the burst condition is still owed.
+        if (event.finalBoundary === true) {
+          resolveHandoffCondition("split", "final-boundary");
+        }
         return;
       }
       if (event.kind === "workoutComplete") {
@@ -2376,8 +2571,23 @@ export function useMonitorSession(
         // there is no identity to even ATTEMPT the write with — not a
         // reason to skip trying to finish an open linger, which happens
         // unconditionally below.
+        // THE RECEIPT INSTRUMENT (storage-spine design spec §5, Task 3):
+        // "the driver records that it EMITTED; nothing records whether the
+        // record was updated" — the walk README's own lesson. Every branch
+        // below records exactly one of `summary-recorded` /
+        // `summary-append-rejected` / `summary-no-run`, and the burst
+        // condition resolves on the write ATTEMPT (§2's "resolution: ...
+        // RETURNING a run" — accepted or refused, both are an attempt),
+        // never on `run === null` (no identity, so the condition — keyed on
+        // a run — cannot have been owed in the first place; spec §3's
+        // fourth path).
         const run = runRef.current;
-        if (run !== null) {
+        if (run === null) {
+          logRef.current?.record(
+            "summary-no-run",
+            "the machine's own summary arrived with no run identity to attempt the write against",
+          );
+        } else {
           const appended = appendSummaryObservations(run.startedAt, {
             totals: event.totals,
             detail: event.detail,
@@ -2385,7 +2595,26 @@ export function useMonitorSession(
               ? { verificationBytes: event.verificationBytes }
               : {}),
           });
-          if (appended !== null) runRef.current = appended;
+          if (appended !== null) {
+            runRef.current = appended;
+            logRef.current?.record(
+              "summary-recorded",
+              `run=${appended.startedAt} totals=${JSON.stringify(appended.summaryTotals)}`,
+            );
+          } else {
+            // Gate 4 (the same eligible-close predicate this event's own
+            // opener re-checks) refused the write — defensive, not
+            // expected: the opener that owed this condition already
+            // enforces the identical predicate. Waiting longer cannot help
+            // a write that was refused, so this still resolves the
+            // condition (`"burst-heard"` — the burst WAS heard off the
+            // wire; the receipt above is what distinguishes the rejection).
+            logRef.current?.record(
+              "summary-append-rejected",
+              `run=${run.startedAt} the writer gate (appendSummaryObservations) refused this attempt`,
+            );
+          }
+          resolveHandoffCondition("burst", "burst-heard");
         }
         // If a burst-eligible teardown (natural finish OR rower-ended —
         // spec §1 gate 1) is mid-linger waiting for exactly
@@ -2408,15 +2637,23 @@ export function useMonitorSession(
         // session that already ENDED is not dragged back out of `ended` by
         // the drop that follows it.
         //
-        // Deliberately NOT a hand-off-hold release (walk day 2): a hold only
-        // ever exists after the machine's own finish, and by then the
-        // driver's run is CLOSED — which is exactly the case `driver.ts`'s
-        // `onDisconnect` treats as expected housekeeping and does not
-        // announce at all (Appendix E's auto-cycle; that handler's own
-        // comment). No `disconnected` event can reach a held hand-off, so a
-        // release here would be unreachable code claiming to be a guard.
-        // A link that dies inside the hold is precisely what the backstop
-        // (`FINISH_HANDOFF_HOLD_MS`) is for, and its own test proves it.
+        // Deliberately NOT a hand-off-hold release (walk day 2; widened by
+        // storage-spine design spec §2, Task 3 — a hold can now also be
+        // open after a Menu terminate or a user End, not only a machine
+        // finish). On the two `endByMachine` arms the driver's run is
+        // already CLOSED by the time either condition opens — exactly the
+        // case `driver.ts`'s `onDisconnect` treats as expected
+        // housekeeping and does not announce at all (Appendix E's
+        // auto-cycle). On the End arm the driver's run is NOT yet closed
+        // (it closes at the terminal general-status frame), so a real drop
+        // DOES emit here — and the `phase === "ended"` check immediately
+        // below is what discards it (spec §2's "Closes that never hold":
+        // "a real drop DOES emit ... and is then discarded"). Either way no
+        // `disconnected` event releases a held hand-off; a release here
+        // would be unreachable code claiming to be a guard. A link that
+        // dies inside an open hold is precisely what its condition's own
+        // backstop (`FINISH_HANDOFF_HOLD_MS`/`BURST_HANDOFF_HOLD_MS`) is
+        // for, and the split condition's own test proves it.
         if (stateRef.current.phase === "ended") return;
         // F1 fix-round-1 (cohort-unlock spec §1 review, CRITICAL): a raw
         // phase-level disconnect used to leave `driverRef` populated with
@@ -2463,7 +2700,7 @@ export function useMonitorSession(
       // back by itself, the phase stays `disconnected` and the rower's
       // recovery is End -> log, or leave and re-Connect fresh.
     },
-    [endByMachine, handleFrame, releaseHandoff, update, withSeries],
+    [endByMachine, handleFrame, resolveHandoffCondition, update, withSeries],
   );
 
   /** Drops the driver and the radio. FOUR STEPS, IN THIS ORDER (Task 7,
@@ -3216,7 +3453,21 @@ export function useMonitorSession(
     // computed one line above — never recomputed — "End with the link up
     // -> rower", "End with the link gone -> link-lost".
     closeRecord(true, linkGone ? "link-lost" : "rower");
-    update({ phase: "ended", endedBy: "user", runOpen: false });
+    // Storage-spine design spec §2, Task 3: THE THIRD BURST-ELIGIBLE ARM.
+    // `openBurstHold()`'s own predicate is the complement of
+    // `link-lost`/`program-failed`, so a `linkGone` close (`endedBy:
+    // "link-lost"`) already opens nothing — no special case needed here,
+    // the predicate does it. A link-up End (`endedBy: "rower"`) owes the
+    // burst exactly like a Menu terminate does: the machine still emits
+    // its summary over a link that is, by definition, still up (the
+    // `terminate()` below is about to be sent over it).
+    const held = openBurstHold();
+    update({
+      phase: "ended",
+      endedBy: "user",
+      handoffHeld: held,
+      runOpen: false,
+    });
     const driver = driverRef.current;
     // RC-29 (design spec 2026-08-27-link-authority-design.md §2): `linkGone`
     // dropped from this guard on PURPOSE — it used to skip the terminate
@@ -3236,7 +3487,7 @@ export function useMonitorSession(
       // already over as far as the rower is concerned; a machine that
       // refuses the terminate does not un-end it.
     }
-  }, [closeRecord, update]);
+  }, [closeRecord, openBurstHold, update]);
 
   const cancel = useCallback(async (): Promise<void> => {
     const phase = stateRef.current.phase;

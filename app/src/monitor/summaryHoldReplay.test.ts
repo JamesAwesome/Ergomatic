@@ -299,20 +299,63 @@ const END_IDENTITY: RunIdentity = {
  *  duplicate. */
 const FIXED_NOW = new Date("2026-08-25T09:00:00.000Z");
 
+/** Seq 75's terminate-tx barrier's own hex (this file's header, "The End
+ *  press") — the IDENTICAL fixed CSAFE command byte-for-byte as seq 13's
+ *  own pre-programming "prepare" terminate (no session-dependent bytes),
+ *  quoted here so the barrier below is FOUND, not hand-transcribed. */
+const END_TERMINATE_TX_HEX = "f1 76 04 13 02 01 02 60 f2";
+
+/**
+ * The terminate-tx event itself, located by its own bytes rather than by a
+ * hand-picked index or timestamp — a Task-2-review carried finding (Task 3
+ * brief): a re-recorded walk that shifts this event's `t` (or its position
+ * in the file) cannot silently invalidate `scheduleEndPress`'s own due time
+ * below, because that due time is now DERIVED from whatever `t` this event
+ * actually carries, not a literal copied out of a comment.
+ *
+ * `findLast`, not `find`: this exact byte string appears TWICE in
+ * `END_CAPTURE` (seq 13's own pre-programming "prepare" terminate is
+ * byte-identical, this file's header) — `find` would silently grab the
+ * WRONG (much earlier) occurrence and schedule the End press before
+ * programming even completes. The barrier this leg means is the LAST one
+ * — the real terminate the rower's own End press sends, seq 75.
+ */
+const endTerminateBarrier = END_CAPTURE.events.findLast(
+  (e): e is Extract<typeof e, { dir: "tx" }> =>
+    "dir" in e && e.dir === "tx" && e.hex === END_TERMINATE_TX_HEX,
+);
+if (endTerminateBarrier === undefined) {
+  throw new Error(
+    "summaryHoldReplay.test.ts: END_CAPTURE carries no terminate-tx event matching END_TERMINATE_TX_HEX — the capture's shape changed; scheduleEndPress has nothing to derive its due time from",
+  );
+}
+
+/** A MARGIN off the barrier's own timestamp, not an absolute due time: the
+ *  press only needs to land strictly after the last preceding rx event
+ *  (seq 74, t=14633.7 — comfortably more than this margin before the
+ *  barrier) and strictly before the barrier itself, so deriving the due
+ *  time as `barrier.t - END_PRESS_MARGIN_MS` keeps both true even if a
+ *  re-recording moves the barrier's own `t`. 55.4 reproduces this file's
+ *  original literal (15_100) against the barrier's documented 15155.4 —
+ *  chosen for continuity with the capture this leg was built against, not
+ *  because the margin itself is load-bearing. */
+const END_PRESS_MARGIN_MS = 55.4;
+const END_PRESS_DUE_MS = endTerminateBarrier.t - END_PRESS_MARGIN_MS;
+
 /**
  * Leg 2's own scheduled action (this file's header, "The End press"):
- * registers `endSession()` to fire on the replay's virtual clock at a due
- * time between the last rx event before seq 75's terminate-tx barrier
- * (t=14633.7) and the barrier's own recorded t (15155.4) — landing inside
- * the SAME `advanceClock` call `replay.ts`'s `run()` loop makes for that
- * barrier event, before its own `await waitForWrite()`. `void` on
- * purpose: `endSession()`'s returned promise settles `driver.terminate()`
- * asynchronously, and nothing this test reads depends on that settling
- * (the record closes SYNCHRONOUSLY inside `endSession`, before the
- * `await` — this file's header) — the replay's own remaining rx events
- * (the ack, the terminal General Status ticks) give it more than enough
- * microtask-draining room to finish before `replay.run()` itself
- * resolves.
+ * registers `endSession()` to fire on the replay's virtual clock at
+ * `END_PRESS_DUE_MS` — between the last rx event before seq 75's
+ * terminate-tx barrier (t=14633.7) and the barrier's own recorded t
+ * (15155.4) — landing inside the SAME `advanceClock` call `replay.ts`'s
+ * `run()` loop makes for that barrier event, before its own
+ * `await waitForWrite()`. `void` on purpose: `endSession()`'s returned
+ * promise settles `driver.terminate()` asynchronously, and nothing this
+ * test reads depends on that settling (the record closes SYNCHRONOUSLY
+ * inside `endSession`, before the `await` — this file's header) — the
+ * replay's own remaining rx events (the ack, the terminal General Status
+ * ticks) give it more than enough microtask-draining room to finish before
+ * `replay.run()` itself resolves.
  */
 function scheduleEndPress(
   replay: ReplayHandle,
@@ -320,7 +363,7 @@ function scheduleEndPress(
 ): void {
   replay.clock.schedule(() => {
     void result.current.endSession();
-  }, 15_100);
+  }, END_PRESS_DUE_MS);
 }
 
 interface ReplayOutcome {
