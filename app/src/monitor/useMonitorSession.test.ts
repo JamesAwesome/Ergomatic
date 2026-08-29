@@ -37,6 +37,7 @@ import {
   clearMonitorRun,
   loadMonitorRun,
   MONITOR_RUN_KEY,
+  saveMonitorRun,
   type MonitorRun,
 } from "./monitorRun";
 import { buildMonitorLogSteps } from "../session/logDraft";
@@ -2324,6 +2325,238 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // `teardown` to.
     expect(driverTimer.pending()).toBeNull();
   });
+
+  it("MENU TERMINATE RELEASES ON BURST-HEARD (Task 5, storage-spine design spec §2): the arm `:2201` used to hardcode away, still mounted throughout — no unmount, no backstop, the write attempt alone frees the hand-off", async () => {
+    // `noteTerminateObservations` (driver.ts) never emits synchronously when
+    // the hash hasn't arrived yet (`deliverSummary` sends 0x0039 alone, same
+    // as (g)/(h) below) — it waits out its own `HASH_SUBWINDOW_MS` (200ms)
+    // on the DRIVER's schedule seam, separate from the hook's own hand-off
+    // backstop (`BURST_HANDOFF_HOLD_MS`, 2000ms) on `timer` below. Both are
+    // driven by hand here, deliberately kept apart, so this test proves the
+    // release comes from the WRITE ATTEMPT (driverTimer fired at 200ms) and
+    // not from the hold's own much-longer backstop (timer, at 2000ms,
+    // which never fires in this script).
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 40,
+            distanceMeters: 130,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    // The Menu terminate opened the burst condition — `:2201`'s own old
+    // hardcoded `held = false` would fail this line outright.
+    expect(result.current.handoffHeld).toBe(true);
+    expect(timer.calls).toHaveLength(1);
+    expect(timer.calls[0]).toMatchObject({
+      ms: BURST_HANDOFF_HOLD_MS,
+      cancelled: false,
+    });
+
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 40, meters: 130 });
+    });
+    // Buffered, waiting on the hash sub-window — not yet resolved.
+    expect(result.current.handoffHeld).toBe(true);
+    expect(driverTimer.pending()?.ms).toBe(200);
+
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    // The write attempt is what frees the hand-off — STILL MOUNTED, no
+    // navigation-driven teardown involved — and it cancels the hook's own
+    // 2000ms backstop rather than waiting for it.
+    expect(result.current.handoffHeld).toBe(false);
+    expect(timer.calls[0]!.cancelled).toBe(true);
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(entries.find((e) => e.kind === "handoff-hold")?.detail).toContain(
+      "burst-eligible",
+    );
+    const recorded = entries.find((e) => e.kind === "summary-recorded");
+    expect(recorded?.detail).toContain("workDistanceMeters");
+    const released = entries.find((e) => e.kind === "handoff-released");
+    expect(released?.detail).toContain("burst-heard");
+    expect(loadMonitorRun()?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 40,
+      workDistanceMeters: 130,
+    });
+  });
+
+  it("APPEND-REJECTED (Task 5, storage-spine design spec §2/§5): gate 4's write-once refusal still resolves the burst condition, with its own receipt — waiting longer cannot help a write that was refused", async () => {
+    // The writer gate (`appendSummaryObservations`'s `summaryTotals !==
+    // undefined` check, monitorRun.ts:1101) is documented DEFENSIVE — the
+    // opener already enforces the identical predicate, so a real script
+    // never reaches it. This test forces it directly: storage is seeded
+    // with `summaryTotals` already present, out of band, so the writer's
+    // OWN fresh re-read (`stillLive`, not the hook's in-memory `runRef`)
+    // finds the write-once door already shut when the real burst lands.
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 40,
+            distanceMeters: 130,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    expect(result.current.handoffHeld).toBe(true);
+
+    // Seed the write-once door shut, bypassing the hook's own `runRef`
+    // entirely (which still, correctly, reads `summaryTotals: undefined`).
+    const beforeWrite = loadMonitorRun();
+    expect(beforeWrite).not.toBeNull();
+    saveMonitorRun({
+      ...beforeWrite!,
+      summaryTotals: { workElapsedSeconds: 1, workDistanceMeters: 1 },
+    });
+
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 40, meters: 130 });
+    });
+    expect(driverTimer.pending()?.ms).toBe(200);
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    // The condition resolves — waiting longer cannot help a refused write —
+    // and the hold, owing nothing else, is free.
+    expect(result.current.handoffHeld).toBe(false);
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const rejected = entries.find((e) => e.kind === "summary-append-rejected");
+    expect(rejected?.detail).toContain(beforeWrite!.startedAt);
+    expect(rejected?.detail).toContain("refused");
+    // The RECEIPT distinguishes the rejection; the release reason is still
+    // `"burst-heard"` — the burst WAS heard off the wire (spec §2's own
+    // wording), regardless of what the writer did with it.
+    const released = entries.find((e) => e.kind === "handoff-released");
+    expect(released?.detail).toContain("burst-heard");
+    // Write-once held: the seeded totals survive untouched.
+    expect(loadMonitorRun()?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 1,
+      workDistanceMeters: 1,
+    });
+  });
+
+  it("SUMMARY-NO-RUN (Task 5, storage-spine design spec §2/§5): a burst arriving with no run identity resolves nothing and opens nothing — the fourth code path, not an exit of its own", async () => {
+    // The driver's OWN `activeRun` opens at ARM, independent of this hook's
+    // `runRef` (which opens only at the first genuinely-rowing frame,
+    // `openHandoffHold`'s own doc comment). A Menu terminate pressed before
+    // any rowing frame ever arrives closes the driver's run — and still
+    // reaches `endByMachine(true)` (this file's "a piece that finished
+    // without anyone rowing it" test proves the natural-finish sibling of
+    // this same shape) — while this hook's `runRef.current` has stayed
+    // `null` the whole time. The burst, delivered afterward, is still
+    // decoded and forwarded by the driver (`noteSummary`'s "late" door,
+    // gated only on the DRIVER's own `terminatedAwaitingSummary`), and the
+    // hook's own handler finds no identity to attempt a write against.
+    const driverTimer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 0,
+            distanceMeters: 0,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      {
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    // No record ever existed — `openBurstHold`'s own `run === null` branch
+    // (a "never-rowed close", its own doc comment) opens nothing.
+    expect(result.current.handoffHeld).toBe(false);
+    expect(loadMonitorRun()).toBeNull();
+
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 40, meters: 130 });
+    });
+    expect(driverTimer.pending()?.ms).toBe(200);
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    expect(result.current.handoffHeld).toBe(false);
+    expect(loadMonitorRun()).toBeNull();
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(entries.find((e) => e.kind === "handoff-hold")).toBeUndefined();
+    const noRun = entries.find((e) => e.kind === "summary-no-run");
+    expect(noRun?.detail).toContain("no run identity");
+  });
 });
 
 describe("useMonitorSession: teardown — the burst linger (storage-spine design spec §2, PR 1 Task 3)", () => {
@@ -3238,6 +3471,17 @@ describe("useMonitorSession: ending", () => {
       terminated: true,
       endedBy: "link-lost",
     });
+    // Task 5 (unit-test extensions), storage-spine design spec §2: a
+    // `link-lost` close is NOT burst-eligible (the link the burst would
+    // arrive on is gone) — `openBurstHold`'s own predicate rejects
+    // `endedBy: "link-lost"` outright, so `endSession` here opens NOTHING,
+    // unlike its `rower`-arm sibling above.
+    expect(result.current.handoffHeld).toBe(false);
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(entries.find((e) => e.kind === "handoff-hold")).toBeUndefined();
   });
 
   it("Phase LL Task 4: an honest WORKOUTEND stores endedBy finished", async () => {
