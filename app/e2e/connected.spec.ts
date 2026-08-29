@@ -746,15 +746,25 @@ async function walkSurfaceToLog(
   // delivered — no more racing "either the frame painted or we already
   // navigated" (the retired `Promise.any`, task-6 review I4's own
   // disclosed retirement-and-restoration of a prior `Promise.race`): the
-  // hold is proven open above, so this `toHaveURL` is asserting the
-  // CONSEQUENCE of the burst this walk just sent, not a coin flip against
-  // an unrelated backstop.
+  // hold is proven open above (the pre-burst checks), so this `toHaveURL`
+  // is asserting the CONSEQUENCE of the burst this walk just sent, not a
+  // coin flip against an unrelated backstop. PR #228 RE-REVIEW fix: an
+  // earlier version of this round deleted this exact assertion while
+  // rewriting the comment above it to describe it — the comment shipped,
+  // the code it described did not, and post-burst navigation was only
+  // ever checked incidentally via the `h1.screen-title` match below.
+  // Restored, naming the concrete URL shape rather than "asserted above"
+  // (nothing above asserts THIS URL — only the pre-burst `/library/:id`,
+  // no `/log`, which is a different pattern).
+  await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
+
   // THE LOG FLOW — `WorkoutDetail.tsx`'s own `handleConnectedEnded`
-  // navigated here (asserted above), `?from=monitor` appended; a
-  // `MonitorRun`, not a phone `SessionRun`, is what closed, so this is the
-  // manual door's own `/library/:id/log`, not `/session/log`, and the
-  // monitor mode (7C spec §4) is what engages on this exact URL shape.
-  // §2A: the summary's title renders bare, no "Log" prefix.
+  // navigated here (asserted immediately above), `?from=monitor`
+  // appended; a `MonitorRun`, not a phone `SessionRun`, is what closed,
+  // so this is the manual door's own `/library/:id/log`, not
+  // `/session/log`, and the monitor mode (7C spec §4) is what engages on
+  // this exact URL shape. §2A: the summary's title renders bare, no "Log"
+  // prefix.
   await expect(page.locator("h1.screen-title")).toHaveText(title);
 
   // THE STASH (hardware walk 2's loss, pinned in a real browser): the
