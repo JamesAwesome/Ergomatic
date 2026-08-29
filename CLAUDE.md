@@ -593,6 +593,20 @@ often they recur.
     was four characters narrower, and knowing it deleted the fix outright.
     **When a bound justifies a decision, name the layer that enforces it
     and check whether a NARROWER one sits downstream.**
+    **Two more smells, from PR #228 (2026-08-29), where James's review
+    caught what one antagonist pass, six task reviews, and a whole-branch
+    final review all missed — both are RF11's mirror, in test form:**
+    (1) **a test that imports the constant it exists to gate proves
+    nothing about it** — the 2000 ms deadline test derived its clock from
+    `BURST_HANDOFF_HOLD_MS`, so retuning the constant to 2400 retuned the
+    test with it, every suite green; a contract is pinned with
+    INDEPENDENT literals (held at 1999, released at 2000), never with the
+    production symbol. (2) **mutations must also run ABOVE the seam under
+    test** — every hook-level mutation bit, while a parent component
+    passing `handoffHeld: false` straight into the surface beat 4,042
+    client tests and all six connected e2e walks, because every gate
+    entered the pipe below the prop. When a fix's value crosses a
+    component seam, one mutation forges the value AT the seam.
 
 22. **`git checkout -- <file>` to revert a mutation probe, on a file that
     also holds uncommitted work.** Queued as a lesson by James on
