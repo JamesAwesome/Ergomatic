@@ -38,6 +38,7 @@ import {
   loadMonitorRun,
   MONITOR_RUN_KEY,
   saveMonitorRun,
+  takeHandoffRun,
   type MonitorRun,
 } from "./monitorRun";
 import { buildMonitorLogSteps } from "../session/logDraft";
@@ -2559,11 +2560,17 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // wording), regardless of what the writer did with it.
     const released = entries.find((e) => e.kind === "handoff-released");
     expect(released?.detail).toContain("burst-heard");
-    // Write-once held: the seeded totals survive untouched.
-    expect(loadMonitorRun()?.summaryTotals).toStrictEqual({
-      workElapsedSeconds: 1,
-      workDistanceMeters: 1,
-    });
+    // AUD-016 durable hand-off design spec §1 step 2 (CHANGED from
+    // pre-AUD-016): this release now runs the verify, which re-saves
+    // `runRef.current` — the hook's OWN in-memory copy, honestly missing
+    // `summaryTotals` (the append really was refused) — over whatever
+    // storage held. OLD expectation: "write-once held: the seeded totals
+    // survive untouched," true only because nothing wrote to storage
+    // again after the decline. NEW: the verify's own re-save (a plain
+    // `"saved"` verdict — nothing here stubs `localStorage`) overwrites
+    // the artificially-seeded totals with the hook's honest state, so
+    // they do NOT survive past release.
+    expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
   });
 
   it("SUMMARY-NO-RUN (Task 5, storage-spine design spec §2/§5): a burst arriving with no run identity resolves nothing and opens nothing — the fourth code path, not an exit of its own", async () => {
@@ -2775,11 +2782,25 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(entries.some((e) => e.kind === "summary-half")).toBe(true);
     const verdict = entries.find((e) => e.kind === "summary-reconciled");
     expect(verdict?.detail).toContain("buffered");
-    // Storage-spine design spec §2, Task 3: the burst is the condition that
-    // actually released the hold here (the split already had, at t=290).
-    expect(
-      entries.find((e) => e.kind === "handoff-released")?.detail,
-    ).toContain("burst-heard");
+    // AUD-016 durable hand-off design spec §1.2's placement rule (CHANGED
+    // from pre-AUD-016): a release reached POST-UNMOUNT — this burst
+    // arrives during `teardown`'s own already-deferred linger, exactly
+    // the shape the rule names — never renders or logs the ordinary
+    // `handoff-released` release anymore (nobody is watching this hook's
+    // state by the time it fires); it stashes the record to the §3 slot
+    // instead, with its own receipt. OLD expectation: `handoff-released`
+    // with `"burst-heard"` (the burst is what actually released the hold,
+    // the split having already resolved at t=290). NEW: no
+    // `handoff-released` entry at all; `handoff-stashed
+    // reason=post-unmount-burst` in its place — the stash fires
+    // regardless of whether the observations write itself succeeded
+    // (it did, here — storage already has the full record, asserted
+    // above; the slot copy is a harmless, spec-mandated belt-and-braces
+    // safety net for the reader, not evidence anything failed).
+    expect(entries.find((e) => e.kind === "handoff-released")).toBeUndefined();
+    expect(entries.find((e) => e.kind === "handoff-stashed")?.detail).toContain(
+      "post-unmount-burst",
+    );
   });
 
   it("(a-cap) LATE SIDE, PRODUCTION TIMING, NOTHING EVER ARRIVES: the driver's own 3000ms deadline would elapse LONG after the hook's 2000ms linger cap — the cap drains first, and the deadline never gets the chance to double-fire", async () => {
@@ -3851,6 +3872,237 @@ describe("useMonitorSession: ending", () => {
     expect(loadMonitorRun()).toMatchObject({
       completedAt: t0.toISOString(),
       terminated: true,
+    });
+  });
+
+  describe("AUD-016 durable hand-off design spec §1: the release-verify", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("SKIPS entirely when no run was ever opened — End at READY under an always-denying store never enters held-error", async () => {
+      const { result } = await arriveArmedWithoutRowing();
+      // Every `MONITOR_RUN_KEY` write would be denied, but `closeRecord`'s
+      // own null-run branch means `runRef.current` never held anything to
+      // verify in the first place — spec §1's own "skip on `runRef.current
+      // === null`".
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new DOMException(
+          "The quota has been exceeded.",
+          "QuotaExceededError",
+        );
+      });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+
+      expect(result.current.phase).toBe("ended");
+      expect(result.current.handoffHeld).toBe(false);
+      expect(result.current.holdError).toBeNull();
+    });
+
+    it("PROCEED ANYWAY (§1 step 5's non-retry exit): a link-lost End's failed release-verify enters held-error, and proceeding stashes the in-memory run, releases, and logs its own hold-error-proceed receipt (review carry: this receipt is otherwise unpinned anywhere in the suite)", async () => {
+      const { result, fake } = harness({
+        program: TWO_INTERVALS,
+        events: timeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      act(() => {
+        fake.injectDisconnect();
+      });
+      expect(result.current.phase).toBe("disconnected");
+
+      // The spy installs AFTER `createMonitorRun`'s own write already
+      // landed (at the `ready -> live` transition above, unstubbed) — so
+      // relative to THIS spy, exactly ONE `MONITOR_RUN_KEY` write precedes
+      // the verify: `closeRecord`'s own `completeMonitorRun`, inside
+      // `endSession`. No burst hold ever opens for `link-lost`, so nothing
+      // else writes before the verify would be the second. Allow that one,
+      // deny everything after.
+      let allowance = 1;
+      const originalSetItem = Storage.prototype.setItem;
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === localStorage && key === MONITOR_RUN_KEY) {
+          if (allowance <= 0) {
+            throw new DOMException(
+              "The quota has been exceeded.",
+              "QuotaExceededError",
+            );
+          }
+          allowance -= 1;
+        }
+        originalSetItem.call(this, key, value);
+      });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+
+      expect(result.current.phase).toBe("ended");
+      expect(result.current.handoffHeld).toBe(true);
+      expect(result.current.holdError).toBe("storage-failed");
+      const afterEnd = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      expect(afterEnd.some((e) => e.kind === "hold-error-entered")).toBe(true);
+
+      await act(async () => {
+        await result.current.proceedHandoff();
+      });
+
+      expect(result.current.handoffHeld).toBe(false);
+      expect(result.current.holdError).toBeNull();
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      expect(entries.some((e) => e.kind === "hold-error-proceed")).toBe(true);
+      const stashed = entries.find((e) => e.kind === "handoff-stashed");
+      expect(stashed?.detail).toContain("reason=proceed");
+    });
+
+    it("saved-without-series (§1 steps 1/3): the verify's OWN sacrifice succeeding still releases normally, but stashes the (still series-carrying) in-memory run with its own receipt", async () => {
+      const { result, fake } = harness({
+        program: TWO_INTERVALS,
+        events: timeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      act(() => {
+        fake.injectDisconnect();
+      });
+      expect(result.current.phase).toBe("disconnected");
+
+      // The spy installs AFTER `createMonitorRun`'s own write already
+      // landed, so relative to THIS spy: call 1 is `closeRecord`'s own
+      // `completeMonitorRun` write (let through); call 2 is the verify's
+      // OWN first attempt — the ONE call this test denies, forcing
+      // `saveMonitorRun`'s internal sacrifice; call 3 is that sacrifice's
+      // own retry (without series), let through, producing
+      // `"saved-without-series"`.
+      let callCount = 0;
+      const originalSetItem = Storage.prototype.setItem;
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === localStorage && key === MONITOR_RUN_KEY) {
+          callCount += 1;
+          if (callCount === 2) {
+            throw new DOMException(
+              "The quota has been exceeded.",
+              "QuotaExceededError",
+            );
+          }
+        }
+        originalSetItem.call(this, key, value);
+      });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+
+      // The write succeeded (via the sacrifice) — no hold at all, unlike
+      // the "failed" tests above.
+      expect(result.current.phase).toBe("ended");
+      expect(result.current.handoffHeld).toBe(false);
+      expect(result.current.holdError).toBeNull();
+
+      // Storage holds the SMALLER, series-dropped copy...
+      const stored = loadMonitorRun();
+      expect(stored?.seriesDropped).toBe(true);
+      expect(stored?.series).toBeUndefined();
+
+      // ...but the slot holds the hook's own in-memory copy, which
+      // `saveMonitorRun` never mutates — series intact.
+      const stashed = takeHandoffRun();
+      expect(stashed).not.toBeNull();
+      expect(stashed?.series).toBeDefined();
+
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      expect(
+        entries.some(
+          (e) =>
+            e.kind === "handoff-stashed" && e.detail.includes("without-series"),
+        ),
+      ).toBe(true);
+    });
+
+    it("THE ESCAPE HATCH (§1 step 6): teardown while holdError is set stashes the record BEFORE its normal work, even though nobody ever pressed retry or proceed", async () => {
+      const { result, fake, unmount } = harness({
+        program: TWO_INTERVALS,
+        events: timeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      act(() => {
+        fake.injectDisconnect();
+      });
+      expect(result.current.phase).toBe("disconnected");
+
+      // Same reasoning as the sibling tests above: the spy installs AFTER
+      // `createMonitorRun`'s own write, so ONE `MONITOR_RUN_KEY` write
+      // (the close) precedes the verify; deny everything from there.
+      let allowance = 1;
+      const originalSetItem = Storage.prototype.setItem;
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === localStorage && key === MONITOR_RUN_KEY) {
+          if (allowance <= 0) {
+            throw new DOMException(
+              "The quota has been exceeded.",
+              "QuotaExceededError",
+            );
+          }
+          allowance -= 1;
+        }
+        originalSetItem.call(this, key, value);
+      });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+
+      expect(result.current.phase).toBe("ended");
+      expect(result.current.holdError).toBe("storage-failed");
+
+      // The rower leaves via the tab bar / back gesture instead of pressing
+      // either control — teardown fires from the unmount effect, exactly
+      // as it would on a real navigation away.
+      unmount();
+
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      const stashed = entries.find(
+        (e) =>
+          e.kind === "handoff-stashed" && e.detail.includes("teardown-escape"),
+      );
+      expect(stashed).toBeDefined();
+      const carried = takeHandoffRun();
+      expect(carried).not.toBeNull();
+      expect(carried?.workoutId).toBe(TWO_IDENTITY.workoutId);
     });
   });
 });

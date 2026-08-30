@@ -28,6 +28,9 @@ import {
   appendSummaryObservations,
   anyLiveSession,
   connectGuardStage,
+  stashHandoffRun,
+  takeHandoffRun,
+  clearHandoffSlot,
   MONITOR_RUN_KEY,
   type MonitorRun,
   type MachineSummaryDetail,
@@ -1691,7 +1694,9 @@ describe("saveMonitorRun: the sacrifice (§3, ruling 3's own caution section)", 
         throw new DOMException("quota exceeded", "QuotaExceededError");
       });
 
-    expect(() => saveMonitorRun(run)).not.toThrow();
+    // AUD-016 durable hand-off design spec §1 step 1: `:486 ->
+    // "saved-without-series"` — the sacrifice retry landing.
+    expect(saveMonitorRun(run)).toBe("saved-without-series");
     expect(spy).toHaveBeenCalledTimes(2);
 
     const survived = loadMonitorRun();
@@ -1713,7 +1718,9 @@ describe("saveMonitorRun: the sacrifice (§3, ruling 3's own caution section)", 
         throw new DOMException("quota exceeded", "QuotaExceededError");
       });
 
-    expect(() => saveMonitorRun(run)).not.toThrow();
+    // AUD-016 durable hand-off design spec §1 step 1: `:490 -> "failed"` —
+    // the sacrifice retry ALSO threw.
+    expect(saveMonitorRun(run)).toBe("failed");
     expect(spy).toHaveBeenCalledTimes(2);
     expect(loadMonitorRun()).toBeNull();
   });
@@ -1726,7 +1733,9 @@ describe("saveMonitorRun: the sacrifice (§3, ruling 3's own caution section)", 
         throw new DOMException("quota exceeded", "QuotaExceededError");
       });
 
-    expect(() => saveMonitorRun(run)).not.toThrow();
+    // AUD-016 durable hand-off design spec §1 step 1: `:479 -> "failed"` —
+    // no series to sacrifice, the first throw stands.
+    expect(saveMonitorRun(run)).toBe("failed");
     expect(spy).toHaveBeenCalledTimes(1);
     expect(loadMonitorRun()).toBeNull();
   });
@@ -1735,12 +1744,45 @@ describe("saveMonitorRun: the sacrifice (§3, ruling 3's own caution section)", 
     const run: MonitorRun = { ...freshMonitorRun(), series: sampleSeries(2) };
     const spy = vi.spyOn(Storage.prototype, "setItem");
 
-    saveMonitorRun(run);
+    // AUD-016 durable hand-off design spec §1 step 1: `:477 -> "saved"`.
+    expect(saveMonitorRun(run)).toBe("saved");
 
     expect(spy).toHaveBeenCalledTimes(1);
     const loaded = loadMonitorRun();
     expect(loaded!.series).toStrictEqual(run.series);
     expect(loaded!.seriesDropped).toBeUndefined();
+  });
+});
+
+describe("stashHandoffRun / takeHandoffRun / clearHandoffSlot: the AUD-016 durable hand-off slot (design spec §3)", () => {
+  // Module-scope state, not localStorage — `localStorage.clear()` in this
+  // file's own `beforeEach` blocks does not touch it, so each test clears
+  // it explicitly to stay independent of run order.
+  beforeEach(() => {
+    clearHandoffSlot();
+  });
+
+  it("consume-once: takeHandoffRun returns the stashed run once, and nothing on a second call", () => {
+    const run = freshMonitorRun();
+    expect(stashHandoffRun(run)).toBeNull(); // empty slot, nothing superseded
+    expect(takeHandoffRun()).toStrictEqual(run);
+    expect(takeHandoffRun()).toBeNull();
+  });
+
+  it("supersede: a second stash before any take returns the FIRST run as superseded, and only the second is left to take", () => {
+    const first = { ...freshMonitorRun(), workoutId: "id-first" };
+    const second = { ...freshMonitorRun(), workoutId: "id-second" };
+    expect(stashHandoffRun(first)).toBeNull();
+    expect(stashHandoffRun(second)).toStrictEqual(first);
+    expect(takeHandoffRun()).toStrictEqual(second);
+    expect(takeHandoffRun()).toBeNull();
+  });
+
+  it("clear-on-discard: clearHandoffSlot empties the slot independently of ever consuming it", () => {
+    const run = freshMonitorRun();
+    stashHandoffRun(run);
+    clearHandoffSlot();
+    expect(takeHandoffRun()).toBeNull();
   });
 });
 

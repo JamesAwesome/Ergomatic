@@ -446,14 +446,39 @@ function isMonitorRun(value: unknown): value is MonitorRun {
   );
 }
 
+/**
+ * AUD-016 durable hand-off design spec §1 step 1: `saveMonitorRun`'s four
+ * exits, named — `:477 -> "saved"`, `:486 -> "saved-without-series"`,
+ * `:479` and `:490 -> "failed"` (line numbers as cited in the design spec's
+ * own evidence base, main `e78a0de2`). `"saved"` is the ordinary write
+ * landing. `"saved-without-series"` is the sacrifice succeeding: the
+ * record is durable, but the STORED copy dropped its trace
+ * (`seriesDropped: true`) — the caller's own in-memory object is never
+ * mutated by this function and keeps its series regardless of which of
+ * the three exits fires (this function's own closing paragraph).
+ * `"failed"` is nothing durable: either there was no series to sacrifice
+ * and the first throw stood, or the sacrifice retry ALSO threw. Every
+ * existing caller may still ignore this return — TypeScript does not
+ * require consuming it, and none of `createMonitorRun`, the boundary/close
+ * writers, or the 30-second flush below gained a new obligation by this
+ * change. `useMonitorSession.ts`'s ended hand-off verify is the first
+ * caller that acts on it.
+ */
+export type SaveVerdict = "saved" | "saved-without-series" | "failed";
+
 /** Persists the run. Best-effort, same rationale as `saveRun`: localStorage
  *  can throw (quota, private-mode Safari, disabled storage), and this never
- *  lets that escape uncaught. Unlike `saveRun`, this reports nothing back —
- *  the brief's own interface fixes `saveMonitorRun`'s return type at `void`
- *  (the record's would-be callers, `createMonitorRun` below and 7B's
- *  in-progress actuals writes, have no different action to take on a failed
- *  write than a successful one: the in-memory session keeps running either
- *  way, only the localStorage mirror would be stale).
+ *  lets that escape uncaught.
+ *
+ *  **REWRITTEN (AUD-016 durable hand-off design spec §1 step 1).** This
+ *  used to return `void` on the stated premise that "the record's
+ *  would-be callers ... have no different action to take on a failed
+ *  write than a successful one" — recurring failure 25's own tell,
+ *  verbatim, and false the moment a caller exists that DOES have a
+ *  different action. `useMonitorSession`'s ended hand-off is that caller:
+ *  it re-verifies writability once, at the hand-off, and refuses to let
+ *  the rower go silently on a `"failed"` verdict, instead of swallowing it
+ *  the way every OTHER call site here still does.
  *
  *  **THE SACRIFICE (Phase LT spec 2 §3, ruling 3's own caution section):**
  *  a ~720 KB worst-case series (ruling 2's cap) changes the odds of the
@@ -468,15 +493,17 @@ function isMonitorRun(value: unknown): value is MonitorRun {
  *  pre-existing best-effort swallow, unchanged below), they do not become a
  *  guarantee. A record with no `series` at all skips the retry outright —
  *  there is nothing smaller to try, and retrying an identical write would
- *  only throw the identical way. `void` unchanged either way; nothing here
+ *  only throw the identical way. Nothing here
  *  is a second source of truth for what got persisted — the CALLER's
- *  in-memory copy is what every downstream read this session sees, exactly
- *  as before this task. */
-export function saveMonitorRun(r: MonitorRun): void {
+ *  in-memory copy (never mutated by this function, on any of the three
+ *  exits) is what every downstream read this session sees, exactly as
+ *  before this task. */
+export function saveMonitorRun(r: MonitorRun): SaveVerdict {
   try {
     localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(r));
+    return "saved";
   } catch {
-    if (r.series === undefined) return;
+    if (r.series === undefined) return "failed";
     try {
       // `_series` is discarded on purpose — the whole point of this
       // destructure is to drop it; the `^_` ignore pattern in this repo's
@@ -484,9 +511,11 @@ export function saveMonitorRun(r: MonitorRun): void {
       const { series: _series, ...withoutSeries } = r;
       const dropped: MonitorRun = { ...withoutSeries, seriesDropped: true };
       localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(dropped));
+      return "saved-without-series";
     } catch {
       // The retry ALSO failed: today's odds, nothing worse — a run this
       // size was never guaranteed to save even before this task existed.
+      return "failed";
     }
   }
 }
@@ -518,6 +547,62 @@ export function loadMonitorRun(): MonitorRun | null {
 
 export function clearMonitorRun(): void {
   localStorage.removeItem(MONITOR_RUN_KEY);
+}
+
+/**
+ * AUD-016 durable hand-off design spec §3: the one-shot module slot a
+ * failed hand-off's verify stashes the in-memory run into when storage
+ * itself just proved it cannot be trusted — `monitorModeRun`'s own reader
+ * (`session/LogSession.tsx`) consults this BEFORE falling through to
+ * `loadMonitorRun()`, so the reader can serve a full, machine-numbers
+ * record even when storage holds nothing (or a poorer, series-dropped
+ * copy) for it. Module-scope in-memory state, deliberately not
+ * `localStorage`: the whole point is a copy that survives even though the
+ * store just refused a write. Gone on a full page reload or process
+ * restart — this is a same-tab hand-off carrier, never a second
+ * durability mechanism (spec §3's own "the reload residual, honestly"
+ * disclosure).
+ */
+let handoffSlot: MonitorRun | null = null;
+
+/**
+ * Stashes `run`, replacing whatever the slot already held. Returns the
+ * SUPERSEDED run (or `null` when the slot was empty) rather than logging
+ * anything itself — this module has no `logRef` to write a receipt
+ * through, so every caller (`useMonitorSession`, at each of its stash
+ * sites) is what turns a non-null return into the design spec's own
+ * `handoff-stashed reason=superseded` receipt (§1 step 6: "a later
+ * session's stash supersedes the slot ... receipt on overwrite").
+ */
+export function stashHandoffRun(run: MonitorRun): MonitorRun | null {
+  const superseded = handoffSlot;
+  handoffSlot = run;
+  return superseded;
+}
+
+/**
+ * Consumes the slot exactly once: returns whatever is stashed there and
+ * clears it in the SAME call, so a second read — a second reader, or
+ * React StrictMode's own double-invoked lazy initializer (spec §3's own
+ * disclosure: "the discarded second run's side effects do not" survive) —
+ * finds nothing left to resurrect.
+ */
+export function takeHandoffRun(): MonitorRun | null {
+  const run = handoffSlot;
+  handoffSlot = null;
+  return run;
+}
+
+/**
+ * Explicit clear, independent of consuming — design spec §3's lifecycle:
+ * "cleared on consume, on save-success (beside `clearMonitorRun`, which
+ * also usefully clears any stale earlier-session stored record), and on
+ * the manual discard path." A discarded or already-saved session's slot
+ * must not resurrect at the next `?from=monitor` arrival even when nothing
+ * ever called `takeHandoffRun` for it.
+ */
+export function clearHandoffSlot(): void {
+  handoffSlot = null;
 }
 
 /** Builds, persists, and registers a fresh `MonitorRun` — the ONE place a

@@ -66,8 +66,10 @@ import {
   completeContinuityReset,
   completeMonitorRun,
   createMonitorRun,
+  loadMonitorRun,
   recordActual,
   saveMonitorRun,
+  stashHandoffRun,
   type CloseReason,
   type MonitorRun,
 } from "./monitorRun";
@@ -865,6 +867,14 @@ export interface MonitorSession {
    *  or program-failed close, or any close whose owed condition(s) have
    *  already resolved (arrival, write attempt, or backstop). */
   handoffHeld: boolean;
+  /** AUD-016 durable hand-off design spec §1: `"storage-failed"` while the
+   *  ended hand-off's own release-verify has been rejected and the hold has
+   *  NO TIMER — the only ways out are `retryHandoffSave()`,
+   *  `proceedHandoff()`, or leaving (teardown stashes rather than losing
+   *  the record, §1 step 6). `null` at every other time, including a
+   *  `handoffHeld: true` frame that is waiting on the split/burst
+   *  conditions rather than on a failed write. */
+  holdError: "storage-failed" | null;
   /** Mirrors `freezeRef` — `isPausedRun(freezeRef.current)` at the instant
    *  of the last `update()`. Published for `connectedAxes.ts`'s `activity`
    *  axis (design spec §1) — read-only, derived, not a second source of
@@ -906,6 +916,19 @@ export interface MonitorSession {
   endSession(): Promise<void>;
   /** Cancel's machine semantics per state (spec §2's M3 ruling). */
   cancel(): Promise<void>;
+  /** AUD-016 durable hand-off design spec §1 step 5: re-runs the
+   *  release-verify from `holdError`. A no-op when `holdError` is already
+   *  `null` (idempotent, same posture as `releaseHandoff`/
+   *  `resolveHandoffCondition`). Success releases and clears `holdError`;
+   *  a failure that repeats stays held — each attempt gets its own
+   *  `hold-error-retry` receipt regardless of outcome. */
+  retryHandoffSave(): Promise<void>;
+  /** AUD-016 durable hand-off design spec §1 step 5's non-retry exit: from
+   *  `holdError`, stashes the in-memory run (the machine's own numbers,
+   *  §1 step 4's fold included) into the §3 slot and releases — the
+   *  server POST was never the broken link, so the measured session still
+   *  saves. A no-op when `holdError` is already `null`. */
+  proceedHandoff(): Promise<void>;
   /**
    * THE ONE READ-ONLY WINDOW ONTO THE DRIVER'S EVENT LOG (Task 7's
    * diagnostics sheet, handoff §5 — added here because Task 4 exposed the
@@ -1342,6 +1365,11 @@ interface SessionState {
   actuals: IntervalActual[];
   endedBy: "machine" | "user" | null;
   handoffHeld: boolean;
+  /** `MonitorSession.holdError`'s own doc comment carries the full
+   *  reasoning — mirrored here as internal state for the same "the ref is
+   *  truth, `state` is what React reads" split every other field in this
+   *  interface already follows. */
+  holdError: "storage-failed" | null;
   /** Mirrors `freezeRef` (`isPausedRun(freezeRef.current)`), kept as
    *  published STATE rather than read off the ref at return time — reading
    *  a ref during render is exactly what `react-hooks/refs` exists to
@@ -1378,6 +1406,7 @@ const INITIAL_STATE: SessionState = {
   actuals: [],
   endedBy: null,
   handoffHeld: false,
+  holdError: null,
   frozen: false,
   runOpen: false,
   frameSilence: false,
@@ -1832,6 +1861,62 @@ export function useMonitorSession(
    *  may be owed at a given `ended` transition (spec §2's three arms). */
   const burstHoldRef = useRef<(() => void) | null>(null);
 
+  /**
+   * AUD-016 durable hand-off design spec §1: the verify. Re-serializes
+   * `runRef.current` through the SAME `saveMonitorRun` writer every other
+   * write in this file uses — once, synchronously, at the ended hand-off —
+   * and maps its verdict onto what happens next. `runRef.current === null`
+   * (an End at READY: nothing was ever opened) is a no-op success, per the
+   * spec's own "skip on `runRef.current === null`".
+   *
+   * Returns `true` when the caller may release normally (`"saved"` and
+   * `"saved-without-series"` both count — the write itself succeeded, so
+   * there is nothing to hold for) and `false` on `"failed"`, in which case
+   * this function has ALREADY logged `hold-error-entered`: every caller
+   * that gets `false` back folds `handoffHeld: true, holdError:
+   * "storage-failed"` into its own `update()` (never a second, competing
+   * patch — the callers that also flip `phase` need `holdError` in the
+   * SAME call, the same "one render" discipline `openHandoffHold`/
+   * `openBurstHold`'s own combined `update()` already follows).
+   *
+   * `"saved-without-series"` stashes `runRef.current` itself (never
+   * mutated by `saveMonitorRun`, so it still carries the series the STORED
+   * copy just dropped) into §3's slot, with its own receipt — the reader
+   * then has the full-trace copy to serve even though storage only holds
+   * the smaller one. A non-null `stashHandoffRun` return means an EARLIER
+   * stash (a previous `proceedHandoff`/teardown-escape from a run this
+   * hook already finished, still sitting in the slot from before this
+   * hand-off began — the slot has no per-run scoping of its own) is being
+   * superseded; logged as its own receipt, spec §1 step 6's "receipt on
+   * overwrite".
+   */
+  const verifyHandoffWritable = useCallback((): boolean => {
+    const run = runRef.current;
+    if (run === null) return true;
+    const verdict = saveMonitorRun(run);
+    if (verdict === "failed") {
+      logRef.current?.record(
+        "hold-error-entered",
+        `run=${run.startedAt} the release-verify's own re-save was rejected — holding the ended hand-off instead of releasing it silently`,
+      );
+      return false;
+    }
+    if (verdict === "saved-without-series") {
+      const superseded = stashHandoffRun(run);
+      logRef.current?.record(
+        "handoff-stashed",
+        `reason=without-series run=${run.startedAt}`,
+      );
+      if (superseded !== null) {
+        logRef.current?.record(
+          "handoff-stashed",
+          `reason=superseded run=${superseded.startedAt}`,
+        );
+      }
+    }
+    return true;
+  }, []);
+
   /** Storage-spine design spec §2's late side (PR 1, Task 3): while a
    *  BURST-ELIGIBLE teardown (a natural finish or a rower-ended close —
    *  the linger's own predicate, summary-record spec §1 gate 1) is in its
@@ -1918,13 +2003,50 @@ export function useMonitorSession(
       if (splitHoldRef.current !== null || burstHoldRef.current !== null) {
         return;
       }
+      // AUD-016 durable hand-off design spec §1.2's placement rule: a
+      // release reached POST-UNMOUNT — the burst arriving (or the split's
+      // own late finish-grace boundary) DURING an already-deferred
+      // teardown's burst linger — never verifies or renders: nobody is
+      // watching this hook's state anymore, and `saveMonitorRun` re-firing
+      // here would race `teardown`'s own deferred `unsubscribeAndDisconnect`
+      // for no rower-visible benefit. `lingerFinishRef.current !== null` is
+      // exactly "a linger is currently pending" (set by `teardown` right
+      // before it defers, this ref's own doc comment) — STASH instead, so
+      // the record still survives even though nothing renders the outcome.
+      if (lingerFinishRef.current !== null) {
+        const run = runRef.current;
+        if (run !== null) {
+          const superseded = stashHandoffRun(run);
+          logRef.current?.record(
+            "handoff-stashed",
+            `reason=post-unmount-burst run=${run.startedAt}`,
+          );
+          if (superseded !== null) {
+            logRef.current?.record(
+              "handoff-stashed",
+              `reason=superseded run=${superseded.startedAt}`,
+            );
+          }
+        }
+        return;
+      }
+      // THE VERIFY (design spec §1 step 2): this is "the release funnel,
+      // inside the both-refs-null guard" — the ONE place a live-mounted
+      // hand-off's last owed condition resolving turns into an actual
+      // release, so this is also the one place its verify can run without
+      // ever running twice (the guard above already proved neither
+      // condition is still owed).
+      if (!verifyHandoffWritable()) {
+        update({ handoffHeld: true, holdError: "storage-failed" });
+        return;
+      }
       logRef.current?.record(
         "handoff-released",
         `${reason} — the ended hand-off is free to navigate (${stateRef.current.actuals.length} actual(s) measured)`,
       );
-      update({ handoffHeld: false });
+      update({ handoffHeld: false, holdError: null });
     },
-    [update],
+    [update, verifyHandoffWritable],
   );
 
   /** Opens the hold's SPLIT condition if — and only if — this run is still
@@ -2292,7 +2414,23 @@ export function useMonitorSession(
           // `endedBy: "interrupted" | "link-lost"` (`monitorRun.ts`),
           // neither of which is burst-eligible, so `openBurstHold()`'s own
           // predicate excludes this arm too without a special case here.
-          update({ phase: "ended", endedBy: "user", runOpen: false });
+          //
+          // AUD-016 durable hand-off design spec §1.2(b): a close that
+          // opens NO hold at all still owes the verify, synchronously, in
+          // this same `ended` patch — before `handoffHeld` reaches `false`.
+          let handoffHeld = false;
+          let holdError: "storage-failed" | null = null;
+          if (!verifyHandoffWritable()) {
+            handoffHeld = true;
+            holdError = "storage-failed";
+          }
+          update({
+            phase: "ended",
+            endedBy: "user",
+            handoffHeld,
+            holdError,
+            runOpen: false,
+          });
         }
         // Same defensive, test-suite-unreachable fallback arm as the seed
         // above — every real frame reaching this branch already carries
@@ -2343,7 +2481,14 @@ export function useMonitorSession(
       // transport) but no phase moves on it.
       update({ frame });
     },
-    [nowDate, update, startSeriesFlush, withSeries, stopSeriesFlush],
+    [
+      nowDate,
+      update,
+      startSeriesFlush,
+      withSeries,
+      stopSeriesFlush,
+      verifyHandoffWritable,
+    ],
   );
 
   /** A terminal event from the machine: `workoutComplete` (an honest
@@ -2396,14 +2541,35 @@ export function useMonitorSession(
       // between them.
       const splitOpened = terminated ? false : openHandoffHold();
       const burstOpened = openBurstHold();
+      // AUD-016 durable hand-off design spec §1.2(b): "the no-conditions-
+      // owed finish" — neither opener owed anything (the desktop order, or
+      // a burst-first race that already folded the summary before this
+      // event even fired) still owes the verify, synchronously, in this
+      // same `ended` patch, before `handoffHeld` reaches `false`. A close
+      // that DID open a hold skips the verify here — it runs later, once,
+      // at whichever condition resolves last (`resolveHandoffCondition`'s
+      // own release funnel).
+      let handoffHeld = splitOpened || burstOpened;
+      let holdError: "storage-failed" | null = null;
+      if (!handoffHeld && !verifyHandoffWritable()) {
+        handoffHeld = true;
+        holdError = "storage-failed";
+      }
       update({
         phase: "ended",
         endedBy: "machine",
-        handoffHeld: splitOpened || burstOpened,
+        handoffHeld,
+        holdError,
         runOpen: false,
       });
     },
-    [closeRecord, openBurstHold, openHandoffHold, update],
+    [
+      closeRecord,
+      openBurstHold,
+      openHandoffHold,
+      update,
+      verifyHandoffWritable,
+    ],
   );
 
   /** `driver` is the one that emitted the event — passed rather than read
@@ -2620,6 +2786,38 @@ export function useMonitorSession(
               "summary-append-rejected",
               `run=${run.startedAt} the writer gate (appendSummaryObservations) refused this attempt`,
             );
+            // AUD-016 durable hand-off design spec §1 step 4 (the fold):
+            // ONLY the empty-storage decline, specifically —
+            // `appendSummaryObservations`'s OWN four decline reasons
+            // (`monitorRun.ts`'s doc comment) collapse to a bare `null`
+            // here, so `loadMonitorRun() === null` is what tells "storage
+            // holds no live record for this run at all" apart from the
+            // other three (identity mismatch, not yet closed, already
+            // written) — those keep declining exactly as today; folding
+            // for them would paper over a genuine writer-gate refusal with
+            // numbers that do not belong to it. `run.summaryTotals ===
+            // undefined` is the at-most-once guard, the same discipline
+            // `appendSummaryObservations`'s own write-once check already
+            // enforces for the storage path — defence in depth here too:
+            // the driver emits this event at most once per run (its own
+            // doc comment), so this is currently unreachable as a repeat,
+            // kept for the same "should not rest on a second function's
+            // ordering" reasoning this file already uses elsewhere.
+            if (loadMonitorRun() === null && run.summaryTotals === undefined) {
+              const folded: MonitorRun = {
+                ...run,
+                summaryTotals: event.totals,
+                summaryDetail: event.detail,
+                ...(event.verificationBytes !== undefined
+                  ? { verificationBytes: event.verificationBytes }
+                  : {}),
+              };
+              runRef.current = folded;
+              logRef.current?.record(
+                "summary-folded-in-memory",
+                `run=${folded.startedAt} totals=${JSON.stringify(folded.summaryTotals)}`,
+              );
+            }
           }
           resolveHandoffCondition("burst", "burst-heard");
         }
@@ -2762,6 +2960,28 @@ export function useMonitorSession(
       const driver = claimed ?? driverRef.current;
       driverRef.current = null;
       const run = runRef.current;
+
+      // AUD-016 durable hand-off design spec §1 step 6 — THE ESCAPE HATCH.
+      // A rower who leaves the held-error screen via the tab bar or the
+      // back gesture, without pressing RETRY or LOG IT ANYWAY, must not
+      // lose the record silently. Stashed FIRST, before anything else this
+      // teardown does: the sequence below assumes a hand-off that already
+      // released (or was never held at all) — it is not written to also
+      // carry a record out of a held-error state, and this is that record's
+      // one guaranteed chance.
+      if (stateRef.current.holdError !== null && run !== null) {
+        const superseded = stashHandoffRun(run);
+        logRef.current?.record(
+          "handoff-stashed",
+          `reason=teardown-escape run=${run.startedAt}`,
+        );
+        if (superseded !== null) {
+          logRef.current?.record(
+            "handoff-stashed",
+            `reason=superseded run=${superseded.startedAt}`,
+          );
+        }
+      }
 
       // STEP 1 + THE HAND-OFF BACKSTOP, AS ONE FUNCTION (Task 7's original
       // pairing, factored by storage-spine design spec §2's late side,
@@ -3470,10 +3690,24 @@ export function useMonitorSession(
     // its summary over a link that is, by definition, still up (the
     // `terminate()` below is about to be sent over it).
     const held = openBurstHold();
+    // AUD-016 durable hand-off design spec §1.2(b): a link-lost End opens
+    // no hold at all (`held` is always `false` for it, `openBurstHold`'s
+    // own predicate) — the verify runs synchronously, right here, in this
+    // same `ended` patch, exactly like `endByMachine`'s own
+    // no-conditions-owed branch and the continuity-reset close. A link-up
+    // End that DID open the burst hold skips the verify here — it runs
+    // later, once, at `resolveHandoffCondition`'s own release funnel.
+    let handoffHeld = held;
+    let holdError: "storage-failed" | null = null;
+    if (!handoffHeld && !verifyHandoffWritable()) {
+      handoffHeld = true;
+      holdError = "storage-failed";
+    }
     update({
       phase: "ended",
       endedBy: "user",
-      handoffHeld: held,
+      handoffHeld,
+      holdError,
       runOpen: false,
     });
     const driver = driverRef.current;
@@ -3495,7 +3729,62 @@ export function useMonitorSession(
       // already over as far as the rower is concerned; a machine that
       // refuses the terminate does not un-end it.
     }
-  }, [closeRecord, openBurstHold, update]);
+  }, [closeRecord, openBurstHold, update, verifyHandoffWritable]);
+
+  /** AUD-016 durable hand-off design spec §1 step 5: `MonitorSession.
+   *  retryHandoffSave`'s own doc comment carries the contract. A no-op
+   *  when `holdError` is already `null` — nothing is held, so there is
+   *  nothing to retry (the same idempotence `releaseHandoff`/
+   *  `resolveHandoffCondition` already apply to their own operations).
+   *  "Each attempt gets a receipt" (spec's own words): `hold-error-retry`
+   *  fires regardless of whether this particular attempt heals or fails
+   *  again — the OUTCOME is what `verifyHandoffWritable`'s own
+   *  `hold-error-entered`/nothing-extra split already records. */
+  const retryHandoffSave = useCallback(async (): Promise<void> => {
+    if (stateRef.current.holdError === null) return;
+    logRef.current?.record(
+      "hold-error-retry",
+      `run=${runRef.current?.startedAt ?? "none"} retrying the release-verify`,
+    );
+    if (verifyHandoffWritable()) {
+      update({ handoffHeld: false, holdError: null });
+    }
+    // else: stays held. `verifyHandoffWritable` already logged its own
+    // `hold-error-entered` on this attempt's failure; `handoffHeld`/
+    // `holdError` are already `true`/`"storage-failed"` from the attempt
+    // that first entered the hold, so there is nothing further to patch.
+  }, [update, verifyHandoffWritable]);
+
+  /** AUD-016 durable hand-off design spec §1 step 5's non-retry exit:
+   *  `MonitorSession.proceedHandoff`'s own doc comment carries the
+   *  contract. A no-op when `holdError` is already `null`, the same
+   *  idempotence `retryHandoffSave` above applies. Stashes THEN releases —
+   *  the record must be safely in the slot before anything renders past
+   *  the held-error frame (the reader consulting the slot is Task 5's own
+   *  scope; this hook's job ends at making sure something is there to
+   *  consult). */
+  const proceedHandoff = useCallback(async (): Promise<void> => {
+    if (stateRef.current.holdError === null) return;
+    const run = runRef.current;
+    if (run !== null) {
+      const superseded = stashHandoffRun(run);
+      logRef.current?.record(
+        "handoff-stashed",
+        `reason=proceed run=${run.startedAt}`,
+      );
+      if (superseded !== null) {
+        logRef.current?.record(
+          "handoff-stashed",
+          `reason=superseded run=${superseded.startedAt}`,
+        );
+      }
+    }
+    logRef.current?.record(
+      "hold-error-proceed",
+      `run=${run?.startedAt ?? "none"} proceeding without a confirmed write — the in-memory copy travels through the slot instead`,
+    );
+    update({ handoffHeld: false, holdError: null });
+  }, [update]);
 
   const cancel = useCallback(async (): Promise<void> => {
     const phase = stateRef.current.phase;
@@ -3576,6 +3865,7 @@ export function useMonitorSession(
     actuals: state.actuals,
     endedBy: state.endedBy,
     handoffHeld: state.handoffHeld,
+    holdError: state.holdError,
     frozen: state.frozen,
     runOpen: state.runOpen,
     frameSilence: state.frameSilence,
@@ -3584,6 +3874,8 @@ export function useMonitorSession(
     program,
     endSession,
     cancel,
+    retryHandoffSave,
+    proceedHandoff,
     exportLog,
   };
 }
