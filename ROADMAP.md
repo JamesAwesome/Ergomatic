@@ -964,6 +964,20 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **The `screenshots` Playwright project is gated by nothing, and its version
+  pins rot silently.** CI's `e2e` job runs the `chromium` project only, so a
+  release-notes PR bumps `news.spec.ts`'s pins (which go red in CI if missed)
+  and leaves `screenshots.spec.ts`'s alone. Third occurrence: v0.18.0 (#166),
+  then v0.27.0 — #232 fixed the e2e pins and `pnpm screenshots` stayed red on
+  main until an unrelated PR needed to regenerate a capture and tripped over
+  it on 2026-08-30. **The pin is the symptom; the missing gate is the item.**
+  Options: run the screenshots project in CI (it costs a full capture pass),
+  derive the expected version from `package.json` instead of a literal, or
+  drop the pin's version specificity and assert only that a release entry
+  renders. Note the literal exists on purpose — it is what makes the capture
+  fail loudly rather than silently shooting a stale screen (recurring failure
+  7) — so "delete the assertion" is not one of the options. **S**
+
 - **AUD-012 — correct the booting-replica claim.** Two complete servers really
   race before the seed lock on an empty database, but the supported deployment
   is explicitly serial and single-replica. This is Confirmed P3 documentation

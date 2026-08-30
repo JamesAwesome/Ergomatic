@@ -144,6 +144,25 @@ describe("usePlanLinks", () => {
   });
 
   it.each([
+    ["a string", "log-a"],
+    ["null", null],
+    ["an array", [0, "log-a"]],
+    ["a number", 7],
+  ])(
+    "drops an entry that is %s rather than an object, keeping the well-formed ones",
+    async (_, bad) => {
+      mockApiReturning({
+        links: [bad, wireLink({ planIndex: 2, id: "good" })],
+      });
+      const { usePlanLinks } = await import("./usePlanLinks");
+      const { result } = renderHook(() => usePlanLinks("sprint"));
+
+      await waitFor(() => expect(result.current.size).toBe(1));
+      expect(result.current.get(2)?.id).toBe("good");
+    },
+  );
+
+  it.each([
     ["links missing entirely", {}],
     ["links not an array", { links: "nope" }],
     ["the body not an object", "nope"],
