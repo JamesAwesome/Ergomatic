@@ -1384,8 +1384,10 @@ export function describeStoreContracts(
               workoutTitle: "Slack Tide",
               workoutType: "O2",
               // `logInput` carries `workoutId: null` — an off-app row with
-              // no workout to resolve. UNKNOWN, not "personal"; the cases
-              // below cover both real answers.
+              // no workout to resolve. Identity is UNKNOWN, and both
+              // halves are null TOGETHER; the cases below cover the two
+              // real answers.
+              linkedTitle: null,
               workoutIsGlobal: null,
             },
           ]);
@@ -1418,6 +1420,7 @@ export function describeStoreContracts(
               id: second.id,
               workoutTitle: "Dust Whirl",
               workoutType: "AN",
+              linkedTitle: null,
               workoutIsGlobal: null,
             },
           ]);
@@ -1449,6 +1452,34 @@ export function describeStoreContracts(
           );
 
           const [link] = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(link!.workoutIsGlobal).toBe(true);
+          expect(link!.linkedTitle).toBe("2K Test");
+        });
+
+        // Identity is a PAIR off one row, and the snapshot is not part of
+        // it. The route resolves `workoutId` only to check ownership and
+        // then trusts the submitted title, so a log can name one workout
+        // and link to another — the store must report what it LINKS TO.
+        it("reports the LINKED workout's own title, not the log's snapshot title", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const global = await stores.seedGlobalWorkout(
+            workoutInput({ title: "6K Test", type: "AT" }),
+          );
+          await stores.planState.set(userId, "sprint");
+          await stores.logs.create(
+            userId,
+            logInput({
+              workoutId: global.id,
+              // The snapshot disagrees with the row it points at.
+              workoutTitle: "2K Test",
+              workoutType: "AN",
+            }),
+          );
+
+          const [link] = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(link!.workoutTitle).toBe("2K Test");
+          expect(link!.linkedTitle).toBe("6K Test");
           expect(link!.workoutIsGlobal).toBe(true);
         });
 
@@ -1502,7 +1533,10 @@ export function describeStoreContracts(
           await stores.workouts.remove(userId, personal.id);
 
           const [link] = await stores.logs.listPlanLinks(userId, "sprint");
+          // BOTH identity halves go null together — a consumer can never
+          // pair a known title with an unknown ownership.
           expect(link!.workoutIsGlobal).toBeNull();
+          expect(link!.linkedTitle).toBeNull();
           // The snapshot columns survive the delete — that is the whole
           // point of storing them rather than joining for them.
           expect(link!.workoutTitle).toBe("Sea Fret");

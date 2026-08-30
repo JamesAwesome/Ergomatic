@@ -964,31 +964,33 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **A plan row's workout PROVENANCE is never exercised end to end.** The
-  checkpoint swap check turns on `workoutIsGlobal`, resolved by a LEFT JOIN in
-  `listPlanLinks`. Store contracts pin all three states against both backends,
-  and `Plan.test.tsx` pins the rendering — but with the hook MOCKED. Nothing
-  crosses the seam: `postLog` (`e2e/screenshots.spec.ts`) has no `workoutId`
-  field at all and `design.spec.ts` posts `workoutId: null`, so no browser test
-  has ever put a real workout on a plan-linked row. This is recurring failure
-  24's shape exactly — both halves well tested, the join between them untested
-  — and it is the shape that let #233's own P1s ship. **Fix: give `postLog` a
-  `workoutId`, seed a personal workout titled `2K Test` and log it at sprint
-  index 6, and assert the row IS marked.** **S**
+- **DELETING a personal same-titled workout silently unmarks a completed plan
+  row.** `session_logs.workout_id` is `ON DELETE SET NULL`, so a rower who
+  authored their own `2K Test`, rowed it on a checkpoint day (correctly marked
+  `INSTEAD OF 2K Test`) and later deleted that workout sees the mark
+  disappear — the row's identity becomes unknown, and the mark is a positive
+  accusation that never fires on a guess. **This is NOT covered by the
+  2026-08-30 Gate 0 ruling**, which accepted only preset-type edits as
+  derivation's historical cost; an earlier version of this entry claimed
+  otherwise and was wrong. Raised at #233's re-review. **Two ways out, and it
+  needs James:** preserve provenance at save time (a nullable
+  `workout_was_global` column — TRIAD, migration, its own spec), or re-gate
+  the unknown state explicitly and accept that a deletion edits history.
+  Until then the behaviour is documented in `swapMark`'s own comment and
+  nowhere else. **S/M**
 
-- **An unreadable stored `workoutType` renders a confident plan badge.**
-  `session_logs.workout_type` is plain `text`, not the workouts enum, and the
-  POST route only checks non-empty — so an unrecognised value is storable.
-  `Plan.tsx` falls back to the plan's own type for the badge and claims no
-  swap, which is safe but silently asserts a type nobody recorded. Raised at
-  #233's review. **Tightening the WRITER was considered and declined:** the
-  column is deliberately loose because a type legitimately drifts across the
-  save-time snapshot boundary (`seed.ts` records 6K history split across O2 and
-  AT and says "do not fix it"), so rejecting at the route would refuse shapes
-  already ruled valid and break older clients. What is left is a neutral or
-  unknown badge state, which is a **new visual state and therefore carries a
-  design gate**. Only worth doing if a real row is ever observed with a bad
-  type. **S**
+- **A pre-validation row with an unreadable `workoutType` renders a confident
+  plan badge.** `Plan.tsx` falls back to the plan's own type and claims no
+  swap, which is safe but asserts a type nobody recorded. **The WRITER is now
+  fixed** (#233 re-review): `POST /api/logs` validates `workoutType` against
+  the `WorkoutType` union, so no new row can carry a bad value. The earlier
+  refusal to do this was argued from a false premise — the cited O2 -> AT drift
+  is between two VALID union members, so checking the union accepts the whole
+  documented drift and rejects only values no client has ever sent. Reads stay
+  tolerant because rows written before the check exist. What remains is
+  cosmetic and only for those rows: a neutral or unknown badge instead of a
+  confident one, which is a **new visual state and carries a design gate**.
+  Only worth doing if such a row is ever actually observed. **S**
 
 - **The real store's `id DESC` newest-wins tiebreak is pinned by nothing.**
   `resolveNewestPlanLink` orders `plan_index, logged_at DESC, id DESC`; the
@@ -1014,16 +1016,18 @@ Each needs erg time or a deliberate recording session.
   `domain/plans.ts`. **Trigger: the next change to a preset's session types.**
   If that ever becomes routine — an authoring UI, DB-loaded plans — the fix is
   a stored prescribed-type column, which is TRIAD and wants its own spec.
-  Related, and accepted for the same reason: unknown provenance
-  (`workoutIsGlobal: null`, a log whose workout was later deleted) can miss a
-  real checkpoint deviation, because the mark is a positive accusation and
-  never fires on a guess.
+  The deletion case is RELATED but is NOT covered by this ruling — it has its
+  own entry above, because Gate 0 accepted preset edits and nothing else.
 
-- **A UNIT-project flake, observed once and not reproduced.**
-  `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
-  clears thumbs previously set to a real value` failed once on 2026-08-30
-  during #233, then passed on eight consecutive full runs of the same project
-  on the same tree. **This matters more than the known e2e flakes:** the unit
+- **TWO unit-project flakes, each seen once and neither reproduced.** On
+  2026-08-30 during #233: `server/routes/data.test.ts` > `PATCH
+  /api/logs/:id` > `an explicit null clears thumbs previously set to a real
+  value`, then later `GET/PUT /api/prefs` > `PUT updates a field and GET
+  reflects the merge` (expected `#00ff00`, got undefined). Each passed on
+  every rerun — eight and four consecutive full runs respectively. **Two
+  different tests, same shape: supertest against the in-memory fakes.** That
+  pattern is the lead. **This matters more than the known e2e flakes:** the
+  unit
   project has no Docker, no browser and no network — it is fake stores and
   supertest, and it should be deterministic. The test itself is self-contained
   (fresh `makeStores()`, POST then PATCH, no shared fixture), so the

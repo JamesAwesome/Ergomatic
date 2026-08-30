@@ -5,11 +5,12 @@ import { estimateMinutes } from "../../domain/expand.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { PLANS } from "../../domain/plans.js";
 import { suggest, type LibraryEntry } from "../../domain/suggest.js";
-import type {
-  Baselines,
-  Difficulty,
-  Step,
-  WorkoutType,
+import {
+  isWorkoutType,
+  type Baselines,
+  type Difficulty,
+  type Step,
+  type WorkoutType,
 } from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
 import type { ArticleReadsStore } from "../stores/articleReads.js";
@@ -1223,8 +1224,21 @@ export function createDataRouter({
       badRequest(res, "workoutTitle is required", "workoutTitle");
       return;
     }
-    if (typeof body.workoutType !== "string" || body.workoutType.length === 0) {
-      badRequest(res, "workoutType is required", "workoutType");
+    // The column is plain `text`, not the workouts enum, because a log's
+    // type is a SAVE-TIME SNAPSHOT that legitimately diverges from the
+    // workout's current classification — 6K history really is split
+    // across O2 and AT by the 2026-08-22 reclassification, and `seed.ts`
+    // rules that split legitimate.
+    //
+    // That tolerance is about READS, and was mistakenly used to justify
+    // accepting anything on WRITE (re-review of 1b2e80f5). It does not:
+    // both sides of that historical drift are valid `WorkoutType`
+    // members, so checking the union accepts the whole documented drift
+    // and rejects only values no client has ever sent. Rows written
+    // before this check exist, so readers stay tolerant — see
+    // `Plan.tsx`'s `rowedType`.
+    if (!isWorkoutType(body.workoutType)) {
+      badRequest(res, "workoutType must be one of AN|O2|AT|TR", "workoutType");
       return;
     }
     let workoutId: string | null = null;

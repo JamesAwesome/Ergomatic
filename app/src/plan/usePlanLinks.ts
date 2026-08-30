@@ -15,16 +15,20 @@ import type { PlanKey } from "../api/usePlan";
  *  workouts table's enum) — the Plan screen narrows it to a `WorkoutType`
  *  for itself, and falls back to the plan's own type when it cannot.
  *
- *  `workoutIsGlobal` is the provenance of the workout that was rowed, and
- *  it is what makes a checkpoint day answerable: the prescription is
- *  `globalOnly`, so a personal workout sharing the title is not it. `null`
- *  means UNKNOWN (no `workoutId` on the log, or the workout has since been
- *  deleted) and must never be read as "personal" — see `Plan.tsx`'s
- *  `swapMark`. */
+ *  `linkedTitle`/`workoutIsGlobal` are the LINKED workout row's own title
+ *  and ownership — what the row IS, as opposed to what it displays. They
+ *  are a pair and move together: a checkpoint day is answered by
+ *  `title === ref.title && isGlobal`, both read off one workout row, and
+ *  mixing one of them with the save-time snapshot is what let a forged
+ *  (or merely renamed) row pass as the prescribed test. Both are `null`
+ *  when there is no workout to read — no `workoutId` on the log, or it
+ *  has since been deleted — which is UNKNOWN identity, never "personal".
+ *  See `Plan.tsx`'s `swapMark`. */
 export interface PlanLink {
   id: string;
   workoutTitle: string;
   workoutType: string;
+  linkedTitle: string | null;
   workoutIsGlobal: boolean | null;
 }
 
@@ -87,12 +91,20 @@ function parseLink(
   ) {
     return null;
   }
+  if (
+    e.linkedTitle !== undefined &&
+    e.linkedTitle !== null &&
+    typeof e.linkedTitle !== "string"
+  ) {
+    return null;
+  }
   return {
     planIndex: e.planIndex as number,
     link: {
       id: e.id,
       workoutTitle: e.workoutTitle,
       workoutType: e.workoutType,
+      linkedTitle: (e.linkedTitle as string | null | undefined) ?? null,
       workoutIsGlobal:
         (e.workoutIsGlobal as boolean | null | undefined) ?? null,
     },

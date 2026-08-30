@@ -17,6 +17,7 @@ function wireLink(overrides: Record<string, unknown> = {}) {
     id: "log-a",
     workoutTitle: "Slack Tide",
     workoutType: "O2",
+    linkedTitle: "Slack Tide",
     workoutIsGlobal: true,
     ...overrides,
   };
@@ -40,6 +41,7 @@ describe("usePlanLinks", () => {
           id: "log-b",
           workoutTitle: "Dust Whirl",
           workoutType: "AN",
+          linkedTitle: "Dust Whirl",
           workoutIsGlobal: false,
         }),
       ],
@@ -53,12 +55,14 @@ describe("usePlanLinks", () => {
       id: "log-a",
       workoutTitle: "Slack Tide",
       workoutType: "O2",
+      linkedTitle: "Slack Tide",
       workoutIsGlobal: true,
     });
     expect(result.current.get(3)).toStrictEqual({
       id: "log-b",
       workoutTitle: "Dust Whirl",
       workoutType: "AN",
+      linkedTitle: "Dust Whirl",
       workoutIsGlobal: false,
     });
     expect(apiMock).toHaveBeenCalledWith("/api/logs?plan=sprint");
@@ -89,13 +93,14 @@ describe("usePlanLinks", () => {
   // leniency-for-absence-only rule `todayOverrides.ts` settled on.
   it("treats a MISSING workoutIsGlobal as unknown rather than rejecting the entry", async () => {
     mockApiReturning({
-      links: [wireLink({ workoutIsGlobal: undefined })],
+      links: [wireLink({ workoutIsGlobal: undefined, linkedTitle: undefined })],
     });
     const { usePlanLinks } = await import("./usePlanLinks");
     const { result } = renderHook(() => usePlanLinks("sprint"));
 
     await waitFor(() => expect(result.current.size).toBe(1));
     expect(result.current.get(0)?.workoutIsGlobal).toBeNull();
+    expect(result.current.get(0)?.linkedTitle).toBeNull();
     expect(result.current.get(0)?.workoutTitle).toBe("Slack Tide");
   });
 
@@ -164,6 +169,7 @@ describe("usePlanLinks", () => {
     ["a missing workoutType", { workoutType: undefined }],
     ["a non-string workoutType", { workoutType: null }],
     ["a non-boolean workoutIsGlobal", { workoutIsGlobal: "yes" }],
+    ["a non-string linkedTitle", { linkedTitle: 42 }],
     ["a numeric workoutIsGlobal", { workoutIsGlobal: 1 }],
     ["a missing id", { id: undefined }],
     ["a non-string id", { id: { toString: "not a string" } }],

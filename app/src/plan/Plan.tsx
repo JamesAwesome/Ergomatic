@@ -60,12 +60,11 @@ function rowedType(link: PlanLink | undefined): WorkoutType | undefined {
  *  naming its type, and a row has room for one mark.
  *
  *  **A CHECKPOINT day asks about IDENTITY, never about type.** The three
- *  checkpoint days are the days the plan names a specific workout, and it
- *  names it with `globalOnly: true` — `resolvePrescribed`
- *  (`domain/prescription.ts`) resolves that as
- *  `w.title === ref.title && w.isGlobal`, and this is the same predicate
- *  one layer down, against what the log recorded. Both halves are
- *  load-bearing, and each was a live defect before it was here:
+ *  checkpoint days are the days the plan names a specific workout.
+ *  `resolvePrescribed` (`domain/prescription.ts`) resolves such a ref as
+ *  `w.title === ref.title && (!ref.globalOnly || w.isGlobal)`, reading
+ *  both facts off ONE workout row, and this is that predicate one layer
+ *  down. Each part was a live defect before it was here:
  *
  *  - **Title alone is not identity.** A rower may author their own
  *    workout called "2K Test" — titles are not unique, nothing excludes
@@ -78,20 +77,32 @@ function rowedType(link: PlanLink | undefined): WorkoutType | undefined {
  *    O2 -> AT on 2026-08-22, and `workout_type` is a save-time snapshot,
  *    so a genuinely-prescribed 6k rowed before that date is stored O2
  *    against an AT checkpoint day forever. Guarding on type marked it
- *    swapped. The seed's own comment already ruled that split legitimate
- *    ("do not fix it"); identity is what the day actually asks about, and
- *    provenance answers it without consulting type at all.
+ *    swapped. The seed's own comment already ruled that split legitimate.
+ *  - **BOTH identity facts must come from the SAME row.** Comparing the
+ *    log's snapshot TITLE against the joined row's OWNERSHIP mixes two
+ *    sources that are free to disagree: `POST /api/logs` resolves
+ *    `workoutId` only to check ownership and then trusts the submitted
+ *    title and type independently, so a request naming the global 6K
+ *    Test's id with a "2K Test" snapshot was accepted and left the sprint
+ *    checkpoint unmarked. Renaming a prescribed global would do the same
+ *    through the front door. So identity reads `linkedTitle` and
+ *    `workoutIsGlobal` — the linked row's own pair, which also means a
+ *    future rename self-heals, since the workouts table converges and the
+ *    ref is a constant.
  *
- *  `canonicalTitle` covers the other half of the same 2026-08-22 rename:
- *  the titles moved too ("First 2k" -> "2K Test"), and log snapshots keep
- *  the old spelling forever.
+ *  The SNAPSHOT title is the fallback, and only when there is no linked
+ *  row to read: an off-app log that carried no `workoutId`, or a workout
+ *  since deleted. `canonicalTitle` belongs to exactly that path — the
+ *  2026-08-22 rename moved the titles too ("First 2k" -> "2K Test") and
+ *  log snapshots keep the old spelling forever.
  *
- *  `workoutIsGlobal === null` is UNKNOWN provenance, not "personal" — an
- *  off-app row that carried no `workoutId`, or a workout since deleted.
- *  The mark is a positive accusation, so unknown never produces one: a
- *  differing title is still positive evidence of a different workout and
- *  marks on its own, but a matching title with unresolvable provenance
- *  stays quiet rather than guessing.
+ *  Unknown identity never manufactures a mark. The mark is a positive
+ *  accusation, so a matching title with unresolvable ownership stays
+ *  quiet rather than guessing; a DIFFERING title is positive evidence of
+ *  a different workout and still marks on its own. **The cost is real and
+ *  is not yet gated:** deleting a personal same-titled workout nulls the
+ *  log's link, which turns a marked row unmarked after the fact. See
+ *  ROADMAP.
  *
  *  Every OTHER day compares type, where an unreadable stored type also
  *  never manufactures a mark — it can fail to CONFIRM a match, never
@@ -103,14 +114,25 @@ function swapMark(
 ): string | undefined {
   if (link === undefined) return undefined;
   if (prescribe !== undefined) {
+    const ref = prescribe.ref;
+    // The linked row's own pair when there is one; the snapshot title
+    // with unknown ownership when there is not. Never one from each.
+    const identity =
+      link.linkedTitle !== null
+        ? { title: link.linkedTitle, isGlobal: link.workoutIsGlobal }
+        : { title: canonicalTitle(link.workoutTitle), isGlobal: null };
+    // `ref.globalOnly` is read, not assumed. Every shipped ref sets it
+    // true, but `PrescribedRef` allows false and `resolvePrescribed`
+    // honours it — hard-coding the global requirement here would silently
+    // reject a legitimate personal match the day a false ref exists.
     const asPrescribed =
-      canonicalTitle(link.workoutTitle) === prescribe.ref.title &&
-      link.workoutIsGlobal !== false;
+      identity.title === ref.title &&
+      (!ref.globalOnly || identity.isGlobal !== false);
     // The workout's own name, in its own case — the mark names a WORKOUT
     // here and a TYPE below, and a type code genuinely is uppercase where
     // a title is not. Uppercasing the title would re-introduce the "2K
     // TEST reads as a label" problem this round removed from the row.
-    return asPrescribed ? undefined : prescribe.ref.title;
+    return asPrescribed ? undefined : ref.title;
   }
   const rowed = rowedType(link);
   return rowed !== undefined && rowed !== plannedType ? plannedType : undefined;
@@ -387,7 +409,7 @@ function PlanView({
                   The prescribed title used to render uppercased in the
                   mono label voice, which made a real library workout —
                   "2K Test" has its own detail route and is classified
-                  AN/hard/pain 4 — read as a status badge instead of as a
+                  AN/hard/pain 5 — read as a status badge instead of as a
                   name. Every other surface in the app titles a workout at
                   --ink in sentence case (`.workout-row-title`,
                   `.today-log-title`); the plan row was the only one that

@@ -76,6 +76,10 @@ async function postLog(
     notes?: string | null;
     steps?: { label: string }[];
     advancesPlan?: boolean;
+    // The workout this log LINKS TO. Defaults to null below — the shape
+    // every caller here used before the plan row started asking what a
+    // logged session actually was.
+    workoutId?: string | null;
   },
 ): Promise<{ id: string }> {
   const result = await page.evaluate(async (b) => {
@@ -1085,4 +1089,173 @@ test("§5.3 leg (b) re-point: deleting the middle (newest, non-terminal) holder 
   await expect(
     page.getByRole("heading", { name: titlePreReset }),
   ).toBeVisible();
+});
+
+// The identity seam, end to end (re-review of 1b2e80f5). Every other gate
+// on the checkpoint check enters the pipe partway along: the store
+// contracts stop at `listPlanLinks`, and `Plan.test.tsx` starts after it
+// by mocking the hook. Nothing crossed POST -> a REAL workout row -> the
+// plan-links response -> the hook -> the rendered row, and that is the
+// seam the feature is built on — recurring failure 24's shape, and the
+// shape that let this PR's own two P1s ship. One test, both directions,
+// driven entirely through the real API and the real screen.
+test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)", () => {
+  /** Creates a PERSONAL workout through the real route and returns its
+   *  id. Titles are not unique or reserved, so this is a supported row
+   *  that happens to share the prescribed test's name. */
+  async function createPersonalWorkout(
+    page: Page,
+    title: string,
+    type: string,
+  ): Promise<string> {
+    const result = await page.evaluate(
+      async (w) => {
+        const res = await fetch("/api/workouts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: w.title,
+            type: w.type,
+            difficulty: "hard",
+            pain: 5,
+            steps: [
+              {
+                k: "w",
+                duration: { kind: "distance", meters: 2000 },
+                ref: { effort: "max" },
+              },
+            ],
+          }),
+        });
+        return { ok: res.ok, status: res.status, body: await res.text() };
+      },
+      { title, type },
+    );
+    if (!result.ok) {
+      throw new Error(`workout create failed: ${result.status} ${result.body}`);
+    }
+    return (JSON.parse(result.body) as { id: string }).id;
+  }
+
+  /** The sprint plan's first checkpoint is session 7 (index 6), so six
+   *  advancing saves land the next one exactly on it. */
+  async function advanceToFirstCheckpoint(page: Page): Promise<void> {
+    for (let i = 0; i < 6; i += 1) {
+      await postLog(page, {
+        workoutTitle: `Filler ${i}`,
+        workoutType: "O2",
+        advancesPlan: true,
+      });
+    }
+  }
+
+  test("a PERSONAL workout sharing the prescribed title is marked; the real global one is not", async ({
+    page,
+  }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `plan-identity-${testInfo.parallelIndex}@e2e.test`,
+      name: "Plan Identity Tester",
+    });
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+
+    // The rower's OWN "2K Test", authored as an AN so neither title nor
+    // type can tell it apart from the prescribed one. Only provenance
+    // can.
+    const personalId = await createPersonalWorkout(page, "2K Test", "AN");
+    await advanceToFirstCheckpoint(page);
+    await postLog(page, {
+      workoutTitle: "2K Test",
+      workoutType: "AN",
+      workoutId: personalId,
+      advancesPlan: true,
+    });
+
+    await page.goto("/plan");
+    await expect(page.locator(".plan-sequence")).toBeVisible();
+    const checkpointRow = page.locator(".plan-row").nth(6);
+    await expect(checkpointRow.locator(".plan-row-name")).toHaveText("2K Test");
+    await expect(checkpointRow.locator(".plan-row-swap")).toHaveText(
+      "INSTEAD OF 2K Test",
+    );
+
+    // Now the real thing. A Reset puts session 1 back at index 0, so the
+    // same six-filler walk lands the next save on the checkpoint again —
+    // this time linked to the GLOBAL row the plan actually prescribes,
+    // resolved by title through the library the app itself serves.
+    await resetPlanProgress(page);
+    const globalId = await page.evaluate(async () => {
+      const res = await fetch("/api/workouts");
+      const list = (await res.json()) as {
+        id: string;
+        title: string;
+        isGlobal: boolean;
+      }[];
+      return list.find((w) => w.title === "2K Test" && w.isGlobal)!.id;
+    });
+    expect(globalId).not.toBe(personalId);
+
+    await advanceToFirstCheckpoint(page);
+    await postLog(page, {
+      workoutTitle: "2K Test",
+      workoutType: "AN",
+      workoutId: globalId,
+      advancesPlan: true,
+    });
+
+    await page.goto("/plan");
+    await expect(page.locator(".plan-sequence")).toBeVisible();
+    const doneCheckpoint = page.locator(".plan-row").nth(6);
+    await expect(doneCheckpoint.locator(".plan-row-name")).toHaveText(
+      "2K Test",
+    );
+    await expect(doneCheckpoint.locator(".plan-row-swap")).toHaveCount(0);
+  });
+
+  // The reviewer's own falsifier, and the case that separates "identity"
+  // from "provenance": a log LINKED to the global 6K Test while claiming
+  // a "2K Test" snapshot. The route resolves `workoutId` only to check
+  // ownership and then trusts the submitted title, so this is postable —
+  // and both rows here are global, so a provenance-only check cannot tell
+  // them apart. Only reading the LINKED row's own title can.
+  test("a checkpoint linked to the OTHER global test is marked, whatever its snapshot title claims", async ({
+    page,
+  }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `plan-identity-cross-${testInfo.parallelIndex}@e2e.test`,
+      name: "Plan Identity Cross Tester",
+    });
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+
+    const sixK = await page.evaluate(async () => {
+      const res = await fetch("/api/workouts");
+      const list = (await res.json()) as {
+        id: string;
+        title: string;
+        isGlobal: boolean;
+      }[];
+      return list.find((w) => w.title === "6K Test" && w.isGlobal)!.id;
+    });
+
+    await advanceToFirstCheckpoint(page);
+    await postLog(page, {
+      // What the request claims...
+      workoutTitle: "2K Test",
+      workoutType: "AN",
+      // ...and what it actually links to.
+      workoutId: sixK,
+      advancesPlan: true,
+    });
+
+    await page.goto("/plan");
+    await expect(page.locator(".plan-sequence")).toBeVisible();
+    const row = page.locator(".plan-row").nth(6);
+    // The row still DISPLAYS the snapshot — what a rower is shown they
+    // did never changes — but the mark is decided by the link.
+    await expect(row.locator(".plan-row-name")).toHaveText("2K Test");
+    await expect(row.locator(".plan-row-swap")).toHaveText(
+      "INSTEAD OF 2K Test",
+    );
+  });
 });

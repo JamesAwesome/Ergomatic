@@ -405,7 +405,7 @@ type FakeLogRow = Omit<LogInput, "advancesPlan"> & {
  *  is the fake's stand-in for the real store's LEFT JOIN: only
  *  `listPlanLinks` (which can reach the workouts store) turns it into
  *  `PlanLink.workoutIsGlobal`. `delete` reads nothing but `id`. */
-type FakeLinkWinner = Omit<PlanLink, "workoutIsGlobal"> & {
+type FakeLinkWinner = Omit<PlanLink, "workoutIsGlobal" | "linkedTitle"> & {
   workoutId: string | null;
 };
 
@@ -571,6 +571,10 @@ function makeFakeLogsStore(
           workoutId === null ? null : await workouts.get(userId, workoutId);
         resolved.push({
           ...link,
+          // Both halves of identity move together — null with no joined
+          // row, the row's own pair otherwise. Mirrors the real store's
+          // `workoutRowId === null` guard.
+          linkedTitle: workout === null ? null : workout.title,
           workoutIsGlobal: workout === null ? null : workout.isGlobal,
         });
       }

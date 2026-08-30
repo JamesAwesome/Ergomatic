@@ -59,10 +59,15 @@ function mockUsePlanLinks(links: Map<number, PlanLink> = new Map()) {
  *  the seeded library is what a rower actually rows, and a personal row is
  *  the case a test has to ask for explicitly. */
 function link(overrides: Partial<PlanLink> = {}): PlanLink {
+  const workoutTitle = overrides.workoutTitle ?? "Sea Fret";
   return {
     id: "log-abc",
-    workoutTitle: "Sea Fret",
+    workoutTitle,
     workoutType: "O2",
+    // Defaults to AGREEING with the snapshot title, which is the ordinary
+    // case: the client posts a workout's own title alongside its id. A
+    // test that cares about the two DISAGREEING passes its own.
+    linkedTitle: workoutTitle,
     workoutIsGlobal: true,
     ...overrides,
   };
@@ -549,10 +554,20 @@ describe("Plan (done-row workout names and swap marks)", () => {
   // is spelled "First 2k" forever while the prescription says "2K Test".
   // Comparing the raw strings would tell a rower who DID the prescribed
   // test that they did something else.
-  it("a checkpoint rowed under a RETIRED title for the prescribed workout is not marked as a swap", async () => {
+  it("a LINKED checkpoint rowed under a retired title is not marked — the seed renamed the row, so the join already agrees", async () => {
     await readyWithLinks(
       new Map([
-        [6, link({ workoutTitle: "First 2k", workoutType: "AN" })],
+        [
+          6,
+          link({
+            workoutTitle: "First 2k",
+            workoutType: "AN",
+            // The seed's rename pre-pass renames the WORKOUT row in place
+            // (that is what keeps the log's id valid), so the linked row
+            // is spelled the new way while the snapshot keeps the old.
+            linkedTitle: "2K Test",
+          }),
+        ],
         // Positive control in the same render.
         [3, link({ workoutTitle: "Slack Tide", workoutType: "O2" })],
       ]),
@@ -563,6 +578,29 @@ describe("Plan (done-row workout names and swap marks)", () => {
     expect(rowAt(6).querySelector(".plan-row-name")?.textContent).toBe(
       "First 2k",
     );
+  });
+
+  // The UNLINKED half, and the only path on which `canonicalTitle` is
+  // load-bearing: a legacy row with no `workoutId` to join through has
+  // nothing but its snapshot title, spelled the retired way forever.
+  it("an UNLINKED checkpoint rowed under a retired title is not marked either", async () => {
+    await readyWithLinks(
+      new Map([
+        [
+          6,
+          link({
+            workoutTitle: "First 2k",
+            workoutType: "AN",
+            linkedTitle: null,
+            workoutIsGlobal: null,
+          }),
+        ],
+        [3, link({ workoutTitle: "Slack Tide", workoutType: "O2" })],
+      ]),
+    );
+
+    expect(rowAt(3).querySelector(".plan-row-swap")).not.toBeNull();
+    expect(rowAt(6).querySelector(".plan-row-swap")).toBeNull();
   });
 
   // P1 (review of b21f147d). The SAME 2026-08-22 rename that moved the
@@ -583,7 +621,14 @@ describe("Plan (done-row workout names and swap marks)", () => {
     });
     await renderPlan(
       new Map([
-        [6, link({ workoutTitle: "First 6k", workoutType: "O2" })],
+        [
+          6,
+          link({
+            workoutTitle: "First 6k",
+            workoutType: "O2",
+            linkedTitle: "6K Test",
+          }),
+        ],
         // Positive control: index 4 is an AT day in the real head
         // sequence, rowed here as an O2.
         [4, link({ workoutTitle: "Sea Fret", workoutType: "O2" })],
@@ -621,6 +666,63 @@ describe("Plan (done-row workout names and swap marks)", () => {
     expect(row.querySelector(".plan-row-name")?.textContent).toBe("2K Test");
     expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
       "INSTEAD OF 2K Test",
+    );
+  });
+
+  // Identity is a PAIR read off one workout row. `POST /api/logs`
+  // resolves `workoutId` only to check ownership and then trusts the
+  // submitted title independently, so a snapshot title and a linked row
+  // can name different workouts — and the row's own name is the one that
+  // decides whether the checkpoint was met.
+  it("a checkpoint linked to a DIFFERENT global workout is marked, whatever the snapshot title claims", async () => {
+    await readyWithLinks(
+      new Map([
+        [
+          6,
+          link({
+            // What the request claimed, and what the row displays.
+            workoutTitle: "2K Test",
+            workoutType: "AN",
+            // What it actually links to: the OTHER designated test.
+            linkedTitle: "6K Test",
+            workoutIsGlobal: true,
+          }),
+        ],
+      ]),
+    );
+
+    const row = rowAt(6);
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe("2K Test");
+    expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
+      "INSTEAD OF 2K Test",
+    );
+  });
+
+  // The reverse: the row genuinely links to the prescribed global, but
+  // its snapshot title says otherwise — a renamed global, or a mismatched
+  // POST. The link is what counts, so no mark.
+  it("a checkpoint linked to the prescribed global is not marked, even when the snapshot title differs", async () => {
+    await readyWithLinks(
+      new Map([
+        [
+          6,
+          link({
+            workoutTitle: "Some Older Spelling",
+            workoutType: "AN",
+            linkedTitle: "2K Test",
+            workoutIsGlobal: true,
+          }),
+        ],
+        [3, link({ workoutTitle: "Slack Tide", workoutType: "O2" })],
+      ]),
+    );
+
+    expect(rowAt(3).querySelector(".plan-row-swap")).not.toBeNull();
+    expect(rowAt(6).querySelector(".plan-row-swap")).toBeNull();
+    // The row still DISPLAYS the snapshot — identity decides the mark,
+    // never what the rower is shown they did.
+    expect(rowAt(6).querySelector(".plan-row-name")?.textContent).toBe(
+      "Some Older Spelling",
     );
   });
 

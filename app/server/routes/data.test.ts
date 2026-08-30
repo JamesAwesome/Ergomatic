@@ -3528,11 +3528,34 @@ describe("GET/POST /api/logs", () => {
             id: created.body.id,
             workoutTitle: "Slack Tide",
             workoutType: "O2",
+            linkedTitle: null,
             workoutIsGlobal: null,
           },
         ],
       });
     });
+
+    // Re-review of 1b2e80f5: the tolerance for arbitrary type strings was
+    // justified by the O2 -> AT reclassification, and that example does
+    // not support it — both are valid union members, so checking the
+    // union accepts the whole documented drift.
+    it("rejects a workoutType outside the union, field named", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({ ...validLogBody(), workoutType: "nonsense" });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("workoutType");
+    });
+
+    it.each(["AN", "O2", "AT", "TR"])(
+      "accepts %s — including both sides of the 6K reclassification",
+      async (type) => {
+        const res = await asA(
+          request(appFor(makeStores())).post("/api/logs"),
+        ).send({ ...validLogBody(), workoutType: type });
+        expect(res.status).toBe(201);
+      },
+    );
 
     it("rejects an invalid plan key with 400, field named", async () => {
       const res = await asA(
@@ -3569,6 +3592,7 @@ describe("GET/POST /api/logs", () => {
             id: second.body.id,
             workoutTitle: "Dust Whirl",
             workoutType: "AN",
+            linkedTitle: null,
             workoutIsGlobal: null,
           },
         ],
