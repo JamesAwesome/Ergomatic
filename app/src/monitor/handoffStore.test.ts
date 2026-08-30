@@ -298,14 +298,22 @@ describe("verdict caching (§7) — refusals never touch it", () => {
     expect(store.cachedVerdict(run.startedAt)).toBe("saved");
   });
 
-  it("a refused commit is invisible to durable bookkeeping too — durableRevision/durableComplete unchanged", () => {
+  // task-2 review, finding I3: `store.durableState(...)` returns the LIVE
+  // map-value object, not a copy — capturing it as `before` and later
+  // asserting `toStrictEqual(before)` is a SELF-comparison if that object
+  // were ever mutated in place, since `before` is the same reference and
+  // would show the mutation too. Asserted against a literal expectation
+  // instead, which an in-place mutation genuinely cannot fool.
+  it("a refused commit is invisible to durable bookkeeping too — durableRevision/durableComplete unchanged (asserted as literals, not a captured reference)", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
-    const before = store.durableState(run.startedAt);
 
     store.commit(run.startedAt, 99, run);
 
-    expect(store.durableState(run.startedAt)).toStrictEqual(before);
+    expect(store.durableState(run.startedAt)).toStrictEqual({
+      durableRevision: 0,
+      durableComplete: true,
+    });
   });
 });
 
@@ -501,6 +509,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     );
 
     expect(receiptsOfKind("retire")[0]!.claimState).toBe("claimed");
+    expect(receiptsOfKind("retire")[0]!.claimedRenderedRevision).toBe(0);
   });
 
   it("a save-success retire on the claimed revision reports consumed and emits NO handoff-dropped receipt", () => {
@@ -518,6 +527,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
         retiredRevision: 0,
         superseded: false,
         claimState: "consumed",
+        claimedRenderedRevision: 0,
         reason: "save-success",
       },
     ]);
@@ -544,6 +554,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
         retiredRevision: 1,
         superseded: true,
         claimState: "consumed",
+        claimedRenderedRevision: 0,
         reason: "save-success",
       },
     ]);
@@ -723,6 +734,52 @@ describe("hydration — outside render, §8", () => {
     });
   });
 
+  // task-2 review, finding I1: `hydrate()` is the EXPLICIT non-render
+  // trigger Task 3/4 must call before any render that needs to see a
+  // durable-only record (`Today.tsx`/`LogSession.tsx`'s own mount
+  // snapshots are both render-context reads via `useState` lazy init —
+  // confirmed real by the review, not a hypothetical).
+  it("hydrate() is the explicit, idempotent, non-render trigger — read() sees nothing before it, everything after", async () => {
+    const run = freshRun(t0.toISOString());
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+    await freshStore();
+
+    expect(store.read()).toBeNull(); // the render-context read, before hydrate()
+    expect(receipts).toStrictEqual([]);
+
+    store.hydrate();
+
+    expect(store.read()).toStrictEqual({
+      sessionKey: run.startedAt,
+      revision: 0,
+      run,
+    });
+
+    // Idempotent: a second call does not re-read storage — mutate the
+    // physical bytes behind the store's back and confirm they're ignored.
+    const different = freshRun("2026-08-09T00:00:00.000Z");
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(different));
+    store.hydrate();
+
+    expect(store.read()!.sessionKey).toBe(run.startedAt);
+  });
+
+  // task-2 review, finding I1: the §5 manual-door row needs a KEY-FILTERED
+  // non-render read ("the stored key only"). `currentUnretired(sessionKey)`
+  // is that read, mirroring `read()`'s own filtering.
+  it("currentUnretired(sessionKey) filters the same way read() does — a mismatched key returns null even though something else is current", () => {
+    const run = freshRun(t0.toISOString());
+    store.commit(run.startedAt, null, run);
+
+    expect(store.currentUnretired("some-other-key")).toBeNull();
+    expect(store.currentUnretired(run.startedAt)).toStrictEqual({
+      sessionKey: run.startedAt,
+      revision: 0,
+      run,
+    });
+    expect(store.currentUnretired()).not.toBeNull();
+  });
+
   it("malformed bytes: a render-context read() can NEVER trigger the self-clear — the physical bytes survive untouched across repeated read() calls", async () => {
     localStorage.setItem(MONITOR_RUN_KEY, "{not json");
     await freshStore();
@@ -736,22 +793,108 @@ describe("hydration — outside render, §8", () => {
     // notices, receipts it, and STILL does not clear the bytes.
     expect(store.currentUnretired()).toBeNull();
     expect(receiptsOfKind("hydration-malformed")).toStrictEqual([
-      { kind: "hydration-malformed", raw: "{not json" },
+      { kind: "hydration-malformed", rawPreview: "{not json", rawLength: 9 },
     ]);
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("{not json");
   });
 
-  it("malformed bytes clear naturally at the next accepted commit or retire, never as a special-cased extra write", async () => {
-    localStorage.setItem(MONITOR_RUN_KEY, "{not json");
+  it("hydration-malformed truncates a large payload to a short preview plus the true length, never the full bytes", async () => {
+    const huge = "x".repeat(5000);
+    localStorage.setItem(MONITOR_RUN_KEY, huge);
     await freshStore();
-    store.currentUnretired(); // discovers + receipts the malformed state
 
-    const run = freshRun(t0.toISOString());
-    store.commit(run.startedAt, null, run);
+    store.currentUnretired();
 
-    expect(JSON.parse(localStorage.getItem(MONITOR_RUN_KEY)!)).toStrictEqual(
-      JSON.parse(JSON.stringify(run)),
-    );
+    const [receipt] = receiptsOfKind("hydration-malformed");
+    expect(receipt).toBeDefined();
+    expect(receipt!.rawPreview).toBe("x".repeat(200));
+    expect(receipt!.rawPreview.length).toBe(200);
+    expect(receipt!.rawLength).toBe(5000);
+  });
+
+  // task-2 review, finding I2: the ORIGINAL claim ("the next accepted
+  // commit or the next retire is what eventually replaces [malformed
+  // bytes]") was only half true. Split into the two legs the review
+  // named, each asserted on its own terms.
+  describe("the deferred malformed-clear (I2) — exactly what is and isn't reachable", () => {
+    it("the COMMIT leg: an accepted commit whose durable write LANDS physically overwrites the malformed bytes (the slot is single)", async () => {
+      localStorage.setItem(MONITOR_RUN_KEY, "{not json");
+      await freshStore();
+      store.currentUnretired(); // discovers + receipts, does NOT clear
+
+      const run = freshRun(t0.toISOString());
+      const result = store.commit(run.startedAt, null, run);
+
+      expect(result).toStrictEqual({
+        accepted: true,
+        revision: 0,
+        verdict: "saved",
+      });
+      expect(JSON.parse(localStorage.getItem(MONITOR_RUN_KEY)!)).toStrictEqual(
+        JSON.parse(JSON.stringify(run)),
+      );
+    });
+
+    it("the COMMIT leg is CONDITIONAL on the write landing — a commit whose durable write also fails leaves the old garbage untouched", async () => {
+      localStorage.setItem(MONITOR_RUN_KEY, "{not json");
+      await freshStore();
+      store.currentUnretired();
+
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+      const run = freshRun(t0.toISOString());
+      const result = store.commit(run.startedAt, null, run);
+
+      expect(result).toStrictEqual({
+        accepted: true,
+        revision: 0,
+        verdict: "failed",
+      });
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("{not json");
+    });
+
+    it("the RETIRE leg NOW sweeps the malformed slot even when retire's own set matches nothing at all — previously permanently unreachable (proven on review: three retires, bytes unchanged)", async () => {
+      localStorage.setItem(MONITOR_RUN_KEY, "{not json");
+      await freshStore();
+      store.currentUnretired(); // current stays null — nothing for retire to "find"
+
+      store.retire(
+        [{ sessionKey: "irrelevant-key", revision: 0 }],
+        "today-discard",
+      );
+
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+      // Still no spurious "retire" receipt for a key nothing found.
+      expect(receiptsOfKind("retire")).toStrictEqual([]);
+    });
+
+    it("the RETIRE leg's sweep is a one-time thing — repeated retires afterward don't keep re-attempting removeItem", async () => {
+      localStorage.setItem(MONITOR_RUN_KEY, "{not json");
+      await freshStore();
+      store.currentUnretired();
+      const removeSpy = vi.spyOn(Storage.prototype, "removeItem");
+
+      store.retire([], "today-discard");
+      store.retire([], "today-discard");
+      store.retire([], "today-discard");
+
+      expect(removeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("the RETIRE leg's sweep itself is wrapped: a throwing removeItem during the sweep is absorbed and receipted, never thrown out of retire()", async () => {
+      localStorage.setItem(MONITOR_RUN_KEY, "{not json");
+      await freshStore();
+      store.currentUnretired();
+      vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+        throw new DOMException("boom", "SecurityError");
+      });
+
+      expect(() => store.retire([], "today-discard")).not.toThrow();
+      expect(receiptsOfKind("storage-getter-error")).toStrictEqual([
+        { kind: "storage-getter-error", operation: "remove" },
+      ]);
+    });
   });
 
   it("a valid record with a malformed nested series still hydrates, with series stripped (stripMalformedSeries)", async () => {
@@ -774,7 +917,7 @@ describe("hydration — outside render, §8", () => {
 
     expect(store.currentUnretired()).toBeNull();
     expect(receiptsOfKind("hydration-malformed")).toStrictEqual([
-      { kind: "hydration-malformed", raw: "42" },
+      { kind: "hydration-malformed", rawPreview: "42", rawLength: 2 },
     ]);
     // Never cleared during hydration either — same deferral as garbage
     // JSON (the loader's own historical self-clear anti-pattern).
@@ -874,8 +1017,24 @@ describe("the storage getter SecurityError wrap (§1 WHATWG primary)", () => {
   });
 });
 
-describe("read() — memory wins on ties, and precedence generally (§8)", () => {
-  it("memory always wins over the hydrated durable baseline when both name the same key and revision (equal revisions — memory wins)", async () => {
+describe("read() — precedence (§8)", () => {
+  // task-2 review, minor: renamed from "memory wins on ties" — that is
+  // NOT what this test proves, and per §8's own tie language it cannot
+  // be proven at all against THIS module's design. §8 says "equal
+  // revisions — memory wins," which presumes memory and the hydrated
+  // durable baseline can be two DISTINCT candidates at the same revision
+  // simultaneously. This module has no such pair: `current` is a single
+  // reference, hydration only ever populates it when `current === null`
+  // (see `ensureHydrated`'s own guard), and every later mutation replaces
+  // it outright via `commit`/`retire` — there is never a moment where a
+  // memory entry and a durable entry of the SAME revision both exist for
+  // `read()` to choose between. What this test actually shows is the
+  // ordinary, un-tied case: a later commit (revision 0 -> 1) replaces the
+  // hydrated baseline with a genuinely different object, proving the live
+  // entry serves afterward rather than a stale hydrated reference — the
+  // tie itself is unrepresentable by construction, which is a STRONGER
+  // guarantee than resolving it correctly would be.
+  it("a later commit replaces the hydrated durable baseline outright — there is no separate durable candidate left for read() to fall back to", async () => {
     const durableCopy = freshRun(t0.toISOString(), {
       deviceName: "durable device",
     });
@@ -934,5 +1093,36 @@ describe("the single-unretired-session invariant, end to end", () => {
       reason: "second-key",
       current: { sessionKey: first.startedAt, revision: 2, run: first },
     });
+  });
+
+  // task-2 review, finding I1/minor: the invariant's own ONLY
+  // production-reachable form — a rower reloads with yesterday's session
+  // still unretired in DURABLE storage (never explicitly committed or
+  // claimed THIS process), and the very next thing that happens is a
+  // fresh Connect attempting to CREATE today's session. Every other test
+  // in this file establishes the "first" entry via an explicit `commit`
+  // call first; this is the one path where the invariant's protection
+  // comes ENTIRELY from hydration, with no prior commit in this process
+  // at all.
+  it("a durable session from a PRIOR process (hydrated, never committed this process) still refuses a same-process create for a different key", async () => {
+    const yesterday = freshRun("2026-08-04T09:00:00.000Z");
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(yesterday));
+    await freshStore(); // fresh process — nothing committed yet
+
+    const today = freshRun("2026-08-05T09:00:00.000Z");
+    const result = store.commit(today.startedAt, null, today);
+
+    expect(result).toStrictEqual({
+      accepted: false,
+      reason: "second-key",
+      current: { sessionKey: yesterday.startedAt, revision: 0, run: yesterday },
+    });
+    expect(receiptsOfKind("store-second-key-refused")).toStrictEqual([
+      {
+        kind: "store-second-key-refused",
+        sessionKey: today.startedAt,
+        existingKey: yesterday.startedAt,
+      },
+    ]);
   });
 });
