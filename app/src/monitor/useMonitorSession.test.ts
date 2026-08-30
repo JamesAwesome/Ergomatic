@@ -34,6 +34,7 @@ import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
 import {
+  clearHandoffSlot,
   clearMonitorRun,
   loadMonitorRun,
   MONITOR_RUN_KEY,
@@ -572,6 +573,12 @@ function finishedAt(atMs: number): FakeTimelineEvent {
 
 beforeEach(() => {
   localStorage.clear();
+  // REVIEW FIX (F4, Minor): the AUD-016 handoff slot is module-scope state,
+  // not localStorage — `localStorage.clear()` above never touches it, so a
+  // test that stashes and never consumes (the PROCEED/without-series tests)
+  // leaks into whatever runs next. Same discipline `monitorRun.test.ts`'s
+  // own slot describe block already applies.
+  clearHandoffSlot();
 });
 
 describe("useMonitorSession: connect", () => {
@@ -9281,6 +9288,139 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(resetEntry).toBeDefined();
     expect(resetEntry!.detail).toContain("1354");
     expect(resetEntry!.detail).toContain("100");
+  }, 15000);
+
+  // -------------------------------------------------------------------
+  // REVIEW FIX (F3, Important): §1.2(b) names a continuity reset as one of
+  // the three "no-hold" closes that still owe the verify, synchronously, in
+  // the SAME `ended` patch — but nothing before this test could catch a
+  // deleted verify call on this specific arm; the whole suite passed with
+  // it removed. Same real driver + real hook composition as the test
+  // immediately above (a continuity reset has no other way to fire
+  // honestly), with a `MONITOR_RUN_KEY`-scoped storage denial installed
+  // right before the "after" reading that trips the reset.
+  // -------------------------------------------------------------------
+  it("REVIEW FIX (F3): a continuity reset also verifies, synchronously, and enters held-error on a denied write", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    expect(lifecycleCb).toBeDefined();
+    resumeAfterGap(lifecycleCb!);
+    expect(result.current.frameSilence).toBe(true);
+
+    // The spy installs AFTER `createMonitorRun`'s own write already landed
+    // (at the `ready -> live` transition above). Relative to THIS spy: call
+    // 1 is `completeContinuityReset`'s own write (via
+    // `completeWithoutWireEvidence`); call 2 is the recorder's own
+    // trace-fold write the reset branch makes right after (`withSeries`
+    // produces a genuinely new object here — nothing has flushed the
+    // recorder's one banked sample onto the run before this point). Allow
+    // both; deny the verify's own attempt, the third.
+    let allowance = 2;
+    const originalSetItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (this === localStorage && key === MONITOR_RUN_KEY) {
+        if (allowance <= 0) {
+          throw new DOMException(
+            "The quota has been exceeded.",
+            "QuotaExceededError",
+          );
+        }
+        allowance -= 1;
+      }
+      originalSetItem.call(this, key, value);
+    });
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("user");
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("link-lost");
+
+    // THE ASSERTION THIS TEST EXISTS FOR: §1.2(b)'s own no-hold verify ran
+    // synchronously in the SAME patch that set `phase: "ended"`, and it was
+    // denied — held-error, not a silent release.
+    expect(result.current.handoffHeld).toBe(true);
+    expect(result.current.holdError).toBe("storage-failed");
+    const exportedAfter = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(exportedAfter.some((e) => e.kind === "hold-error-entered")).toBe(
+      true,
+    );
   }, 15000);
 
   // -------------------------------------------------------------------

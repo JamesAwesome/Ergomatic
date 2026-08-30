@@ -1861,6 +1861,14 @@ export function useMonitorSession(
    *  may be owed at a given `ended` transition (spec §2's three arms). */
   const burstHoldRef = useRef<(() => void) | null>(null);
 
+  /** AUD-016 durable hand-off design spec §5: the ordinal `release-save`
+   *  names ("verdict + attempt ordinal") — how many times THIS run's
+   *  verify has been attempted, across the initial try and every
+   *  `retryHandoffSave()` after it. Reset to `0` the instant a fresh run
+   *  opens (`createMonitorRun`'s own call site, below) — the ordinal is
+   *  per hand-off, not per hook instance. */
+  const verifyAttemptRef = useRef(0);
+
   /**
    * AUD-016 durable hand-off design spec §1: the verify. Re-serializes
    * `runRef.current` through the SAME `saveMonitorRun` writer every other
@@ -1889,11 +1897,28 @@ export function useMonitorSession(
    * hand-off began — the slot has no per-run scoping of its own) is being
    * superseded; logged as its own receipt, spec §1 step 6's "receipt on
    * overwrite".
+   *
+   * **REVIEW FIX (F2, Important): `release-save` (spec §5's own name,
+   * "verdict + attempt ordinal") fires on EVERY genuine attempt** — the
+   * healthy first try, a heal, and a retry that fails again alike — never
+   * only on failure. Spec §3 names the §5 receipts as the ONLY instrument
+   * for the eviction producer (a write that returns green but the record
+   * later vanishes): a green run needs its own receipt just as much as a
+   * failed one, or there is nothing in the ring to confirm the verify ever
+   * ran at all on the path that matters most. `verifyAttemptRef` is the
+   * ordinal — reset to `0` the instant a fresh run opens, incremented once
+   * per attempt here, so the ring reads "attempt=1" for the first try and
+   * "attempt=2" for `retryHandoffSave`'s own re-verify.
    */
   const verifyHandoffWritable = useCallback((): boolean => {
     const run = runRef.current;
     if (run === null) return true;
     const verdict = saveMonitorRun(run);
+    verifyAttemptRef.current += 1;
+    logRef.current?.record(
+      "release-save",
+      `run=${run.startedAt} verdict=${verdict} attempt=${verifyAttemptRef.current}`,
+    );
     if (verdict === "failed") {
       logRef.current?.record(
         "hold-error-entered",
@@ -2238,6 +2263,9 @@ export function useMonitorSession(
           // `runOpen: true` off this same `update()` could in principle
           // already find a recorder producing samples, though nothing reads
           // it until the first flush.
+          // AUD-016 durable hand-off design spec §5: a fresh run means a
+          // fresh hand-off — the `release-save` ordinal starts over.
+          verifyAttemptRef.current = 0;
           seriesRecorderRef.current = createSeriesRecorder();
           seriesRecorderRef.current.onFrame(frame);
           runRef.current = createMonitorRun(
@@ -2795,15 +2823,42 @@ export function useMonitorSession(
             // other three (identity mismatch, not yet closed, already
             // written) — those keep declining exactly as today; folding
             // for them would paper over a genuine writer-gate refusal with
-            // numbers that do not belong to it. `run.summaryTotals ===
-            // undefined` is the at-most-once guard, the same discipline
-            // `appendSummaryObservations`'s own write-once check already
-            // enforces for the storage path — defence in depth here too:
-            // the driver emits this event at most once per run (its own
-            // doc comment), so this is currently unreachable as a repeat,
-            // kept for the same "should not rest on a second function's
-            // ordering" reasoning this file already uses elsewhere.
-            if (loadMonitorRun() === null && run.summaryTotals === undefined) {
+            // numbers that do not belong to it.
+            //
+            // **REVIEW FIX (F1, Important):** `loadMonitorRun() === null`
+            // alone is true for ALL FOUR of the writer's decline reasons,
+            // not just the empty-storage one — it only tells us storage is
+            // empty RIGHT NOW, never WHY `appendSummaryObservations`
+            // declined. A burst landing on a close the writer gate
+            // deliberately refuses on ELIGIBILITY grounds (`completedAt`
+            // still `null`, or `endedBy` is `link-lost`/`interrupted`/
+            // `program-failed` — a continuity reset stamps two of those,
+            // `completeContinuityReset`'s own doc comment) would fold
+            // machine numbers onto a run that gets NOTHING on healthy
+            // storage, purely because storage also happened to be empty at
+            // that moment — a wrong number travelling through the slot.
+            // `run.completedAt !== null && (run.endedBy === "finished" ||
+            // run.endedBy === "rower")` mirrors `appendSummaryObservations`'s
+            // own gates 1+2 (`monitorRun.ts:1180-1185`) exactly, so the fold
+            // can only ever fire on the SAME closes the writer itself would
+            // have accepted had storage been healthy — the memory carry
+            // stays a strictly poorer-storage substitute for the identical
+            // eligible write, never a wider one.
+            //
+            // `run.summaryTotals === undefined` is the at-most-once guard,
+            // the same discipline `appendSummaryObservations`'s own
+            // write-once check already enforces for the storage path —
+            // defence in depth here too: the driver emits this event at
+            // most once per run (its own doc comment), so this is
+            // currently unreachable as a repeat, kept for the same "should
+            // not rest on a second function's ordering" reasoning this file
+            // already uses elsewhere.
+            if (
+              loadMonitorRun() === null &&
+              run.summaryTotals === undefined &&
+              run.completedAt !== null &&
+              (run.endedBy === "finished" || run.endedBy === "rower")
+            ) {
               const folded: MonitorRun = {
                 ...run,
                 summaryTotals: event.totals,
