@@ -297,6 +297,10 @@ requirements).
     **"Record (for agents and audits)"**. Depth lives there, not up top.
   - The test: the top reads aloud in 30 seconds. The `product-manager`
     final-PR gate checks this and fails the PR presentation on it.
+    **Countable form (PM gate, 2026-08-30, after #228 and #230 both
+    failed the prose version at ~270 and 266 words): ~120 words above
+    the fold, ~25 words per bullet. Check it the way `git diff --stat`
+    checks the fast path — count, don't feel.**
   - Specs open with a plain-language "What and why" paragraph before any
     machinery, and a SUMMARY of a spec is that paragraph plus bullets —
     never a tour of its sections.

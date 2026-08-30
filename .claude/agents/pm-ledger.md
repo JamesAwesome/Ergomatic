@@ -3283,3 +3283,49 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   grep that produced the claim saw that line and misclassified it. What remains
   true: no AGGREGATE reader surfaces the counter to anyone who has not opened
   the log door's diagnostics copy — the Wave B item stands, reworded.
+
+## TRIAD final-PR gate, 2026-08-30 (Wave F chunk 2 — AUD-016 durable hand-off, #230)
+
+- **The presentation rule failed twice running because nothing in it is
+  countable.** #228's body was ~270 words above the fold; #230's, written after
+  that gate ruled on it, was 266 — six bullets (within "~6 max") but three of
+  them three lines each. The author checked the countable half of the rule and
+  read past the uncountable half. **Countermeasure landed in `CLAUDE.md` at
+  this gate: the budget stated as a number (~120 words / ~25 words per bullet
+  above the fold) so it can be checked the way `git diff --stat` checks the
+  fast path.** Gate procedure unchanged: name the bullets to move, never send
+  the body back.
+- **Exit clause 4 has two producers and this PR closes one.** Clause 4's second
+  half — "a storage failure never silently downgrades a measured session" — is
+  discharged for a REJECTED WRITE and explicitly not for EVICTION (green write,
+  record later dropped). At the Wave F close, do not read "AUD-016 shipped" as
+  the clause met; read it as the half it names.
+- **Correction to the 2026-08-28 adjudication note.** That note kept AUD-016 in
+  its slot partly because "the anchor pass found its producer production-observed
+  (`storage-persist denied` on the tester's own phone)". The spec's delta pass
+  narrowed this: `storage-persist denied` means the origin is EVICTABLE, which
+  is the producer this fix cannot catch. No instrument in the codebase can
+  observe a rejected write, and none did. The rank still stands on the audit's
+  confirmed consequence and on the work being complete — but the stated
+  rationale named the wrong producer, and a future gate must not cite it.
+- **When a fix and its instrument are separable and the producer is unmeasured,
+  ship the instrument first.** The strongest case against #230 was that the
+  `release-save`/`handoff-stashed` receipts alone, shipped a wave earlier, would
+  have measured both producers for the cost of a few lines instead of 3,734.
+  It lost only on timing — by the gate the code existed, was reviewed, and
+  carries the receipts anyway. **For the next audit P1 with an unobserved
+  producer, sequence the receipt ahead of the fix, not inside it.**
+- **"Nothing new on any healthy close" is a claim about SIGHT, not behaviour.**
+  Every healthy ended hand-off now re-serializes the full run synchronously
+  (~720 KB worst case) and populates the reader's slot. Both are correct and
+  both are new work on the path no rower ever complains about. **A tester-impact
+  bullet that says "nothing changes" gets asked what changed that the rower
+  cannot see** — that is where the regression would sit, and the final review
+  found its one Critical exactly there.
+- **Release call: AUD-016 RIDES v0.27.0.** The #228 ruling was "do not HOLD the
+  tag for the sibling", never "exclude it" — a tag cut after a merge that omits
+  it is worse on every axis. Bump unchanged (MINOR, forced by #228). The notes
+  now owe a FOURTH item: one sentence for the failed-write state, because a
+  tester meeting `COULD NOT KEEP THE RECORD ON THIS PHONE.` has no other
+  explanation; and the post-End-wait sentence must cover the hold PLUS this
+  PR's verify write.

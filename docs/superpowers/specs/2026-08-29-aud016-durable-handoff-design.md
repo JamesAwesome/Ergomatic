@@ -361,7 +361,8 @@ arrival under a denied-from-open close, where Today's own door never
 renders), and three Minors (M1: `hold-error-entered` deduplicated to the
 hold's first entry; M2: `handoff-released` now fires on the retry-heal and
 proceed exits too; M3: a stale line-number citation replaced with a
-function-name one). All folded into §1/§3/§5 above; see
-`.superpowers/sdd/2026-08-29-aud016-durable-handoff/task-6-report.md`'s
-"Final-review fix wave" section for the full account, gates, and
-mutations.
+function-name one). All folded into §1/§3/§5 above. The full account —
+gates, mutation runs, per-fix evidence — lives in PR #230's Record block
+(the SDD workspace that first held it is git-excluded and dies with the
+worktree; a pointer there would be a dangling citation, RF16's
+corollary).

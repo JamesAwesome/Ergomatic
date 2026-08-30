@@ -328,7 +328,11 @@ rower's work silently.
         own §2 reachability reasoning; the slot's reload-safety and the
         EVICTION producer (a write that returns green but the browser later
         evicts the origin) are disclosed, not solved — the receipts are the
-        only instrument either gets; AUD-011/AUD-015 (the row below) are a
+        only instrument either gets; **the escape-hatch gap (PM gate,
+        2026-08-30): under denial-from-first-write the teardown stash
+        survives while Today renders no door — storage is empty, so
+        nothing in the app points the rower back to the record the stash
+        preserved**; AUD-011/AUD-015 (the row below) are a
         separate audit item, untouched by this work. Two low-risk,
         disclosed coverage gaps remain in `useMonitorSession.ts` (a
         `handoff-stashed reason=superseded` receipt at two of four stash
@@ -343,6 +347,13 @@ rower's work silently.
       for Timer unless the active run is durable. One local-storage recovery
       PR may own both, with separate regression tests; the visible Retry state
       gets rendered Gate 0 first. **P1, Confirmed. M**
+      **Spec condition from #230's PM gate (2026-08-30):** `createMonitorRun`
+      now opens every session with two unguarded `removeItem` calls
+      (`clearMonitorRun()` + `clearHandoffSlot()`) — an unguarded storage
+      call on the SESSION-OPEN path, this chunk's own seam. The AUD-016
+      spec's §7 records the accepted disposition (matches the codebase's
+      nine other unguarded `removeItem` sites); this chunk's spec addresses
+      or explicitly re-accepts those two sites.
       **Corrected at the anchor pass (2026-08-28): the audit's four-loader
       list named the wrong fourth loader.** `loadTodayOverrides` is already
       guarded (`todayOverrides.ts:211`, getter inside its try); the real
@@ -896,6 +907,10 @@ Each needs erg time or a deliberate recording session.
   corpus is web/foreground only (End-arm round-trip n=1, web; background/resume
   n=0). The next connected walk reads the ring for `burst-timeout` receipts and
   the End-arm terminate round-trip on native BLE. (PR #228's PM gate)
+  **Widened at #230's PM gate (2026-08-30):** the AUD-016 verify adds a
+  synchronous full-run re-serialize (~720 KB worst case) to every ended
+  hand-off, so the same walk measures TOTAL post-End latency on native, not
+  only the burst backstop — one walk, both numbers.
 - **A lab capture of `2×Nm rNN`** — the series-truth regression fixture is
   SYNTHETIC; no committed recording exercises distance-work-with-rest-between.
   (`phase-rc.md`)
