@@ -3329,3 +3329,60 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   tester meeting `COULD NOT KEEP THE RECORD ON THIS PHONE.` has no other
   explanation; and the post-End-wait sentence must cover the hold PLUS this
   PR's verify write.
+
+## Product-contract ruling, 2026-08-30 (the hand-off contract: what you see is what saves)
+
+- **The contract, stated once so it stops being re-derived: renders snapshot;
+  destructive actions re-read; recording actions post what was shown.** A
+  screen that carries a Save posts exactly the numbers it displayed when the
+  rower read them; a record that improves after that screen mounted reaches the
+  NEXT arrival, never the mounted one. **It binds SAVE-BEARING FORMS only** —
+  the live pane, a logbook list, and Phase JR's `/justrow` surface are unbound
+  and always were. Without the scoping clause this rule reads as "nothing ever
+  live-updates", which is false today and would be cited against Wave E later.
+  This belongs in `CLAUDE.md`, not here; recorded here because it was ruled at a
+  PM gate. **It was already settled three times** — #228's spec at `:14-17`,
+  `:103-105` and `:236-237` ("the rejected re-read-at-save stays rejected"),
+  `ROADMAP.md:257-262`, and James's own P1b restash-only ruling on #230 — and it
+  is the house pattern, not a log-form quirk: `Today.tsx:280/:288`,
+  `Countdown.tsx:105/:111`, `Timer.tsx:359-360` and both log doors all read once
+  at mount; the only live re-reads in `src/` are a diagnostics COPY button and a
+  dev-only instrument. **Before re-litigating a contract, count how many times
+  it has already been ruled and quote the code comment that states it.**
+  RATIFIED by James 2026-08-30 ("Approved") with the three conditions below.
+- **"Recoverable at the next arrival" was false, and the falsifier was a
+  Save.** `LogSession.tsx:1723-1726` clears the hand-off slot unconditionally on
+  save-success, so a richer same-session revision that P1-2's widened late-burst
+  restash left in the slot is destroyed by the rower's normal next action, with
+  no receipt. The clear is correct (leaving it makes `connectGuardStage()` stage
+  a false "unlogged" on the next Connect); the SILENCE is the defect, and it is
+  RF25 verbatim inside the PR written to fix RF25 at the neighbouring seam. The
+  tell was a stale rationale: the comment at `:1705-1722` still calls that window
+  "an unrelated session's own hand-off" and claims "no product scenario can
+  currently make it independently observable" — both written before P1-2 made it
+  this session's own normal late path, in the same PR. **When a fix widens a
+  window, grep the OTHER end of that window for a comment reasoning about how
+  narrow it used to be.** Condition 1 (blocking): the drop gets a ring receipt
+  (`handoff-dropped reason=richer-at-save`) and the stale comment is fixed.
+- **The honest answer to an unmeasured timing assumption is a measurement, not
+  an architecture.** The live-update contract's whole case rests on
+  `BURST_HANDOFF_HOLD_MS = 2000` being derived from n=10, web, foreground. That
+  argues for the already-booked native walk row (`ROADMAP.md:914-921`) and, if
+  it comes back short, for changing the CONSTANT — not for a subscription
+  coordinator spanning React lifecycles. **Ruling (condition 2): the live-update
+  contract does not reopen until a real phone produces a non-zero count of
+  `handoff-stashed reason=late-burst` / `handoff-dropped reason=richer-at-save`.**
+- **No rower-facing disclosure, by the CS-close test.** A tester will not hit it
+  (zero observed) and cannot misread it (the row reads like the 18 already-tier-B
+  rows the notes already owe an explanation for). A hint on the mounted screen is
+  a mid-edit surprise in everything but name, and it asks a rower to abandon a
+  filled form to gain two metres and a badge. Silent-recoverable is acceptable
+  ONLY because the drop is made countable; silent-and-uncounted is what produced
+  0-of-18.
+- **Release: v0.27.0 (MINOR) is due off merged main; pausing the successor made
+  the tag more urgent, not less** — 17 merges including #228's fix sit untagged
+  against a correction clock expiring ~2026-09-11. James's sequencing ruling
+  (2026-08-30): the notes PR starts AFTER the current fixes land. Drop the
+  failed-write-copy sentence from the notes-owed row until AUD-016 merges — it
+  describes a screen the tag will not contain. Sharpens the 2026-08-29 "ship a
+  fix's tag rather than riding it with its successor" entry.
