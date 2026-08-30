@@ -3528,6 +3528,7 @@ describe("GET/POST /api/logs", () => {
             id: created.body.id,
             workoutTitle: "Slack Tide",
             workoutType: "O2",
+            workoutIsGlobal: null,
           },
         ],
       });
@@ -3568,6 +3569,7 @@ describe("GET/POST /api/logs", () => {
             id: second.body.id,
             workoutTitle: "Dust Whirl",
             workoutType: "AN",
+            workoutIsGlobal: null,
           },
         ],
       });

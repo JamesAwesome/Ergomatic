@@ -1383,6 +1383,10 @@ export function describeStoreContracts(
               id: first.id,
               workoutTitle: "Slack Tide",
               workoutType: "O2",
+              // `logInput` carries `workoutId: null` — an off-app row with
+              // no workout to resolve. UNKNOWN, not "personal"; the cases
+              // below cover both real answers.
+              workoutIsGlobal: null,
             },
           ]);
         });
@@ -1414,8 +1418,95 @@ export function describeStoreContracts(
               id: second.id,
               workoutTitle: "Dust Whirl",
               workoutType: "AN",
+              workoutIsGlobal: null,
             },
           ]);
+        });
+
+        // Provenance (P1 fix, 2026-08-30). A plan checkpoint prescribes
+        // its test with `globalOnly: true`, and titles are neither unique
+        // nor reserved — a rower may author their own "2K Test". The
+        // snapshot columns cannot separate those two rows, so the store
+        // resolves the workout's ownership and the Plan screen compares
+        // THAT. All three states are pinned here, against both backends,
+        // because the fake answers with a store lookup where the real
+        // store answers with a LEFT JOIN — two mechanisms that have to
+        // agree.
+        it("reports a GLOBAL workout's provenance as global", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const global = await stores.seedGlobalWorkout(
+            workoutInput({ title: "2K Test", type: "AN" }),
+          );
+          await stores.planState.set(userId, "sprint");
+          await stores.logs.create(
+            userId,
+            logInput({
+              workoutId: global.id,
+              workoutTitle: "2K Test",
+              workoutType: "AN",
+            }),
+          );
+
+          const [link] = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(link!.workoutIsGlobal).toBe(true);
+        });
+
+        it("reports a rower's OWN workout as not global, even when it shares a designated title", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const personal = await stores.workouts.create(
+            userId,
+            workoutInput({ title: "2K Test", type: "AN" }),
+          );
+          await stores.planState.set(userId, "sprint");
+          await stores.logs.create(
+            userId,
+            logInput({
+              workoutId: personal.id,
+              workoutTitle: "2K Test",
+              workoutType: "AN",
+            }),
+          );
+
+          const [link] = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(link!.workoutIsGlobal).toBe(false);
+        });
+
+        // `session_logs.workout_id` is ON DELETE SET NULL, so a workout
+        // removed after the fact leaves the log intact and the link
+        // dangling. That is UNKNOWN provenance, and must not read as
+        // "personal" — the Plan screen would accuse a rower of a swap
+        // they did not make.
+        it("reports UNKNOWN provenance once the workout the log pointed at is gone", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const personal = await stores.workouts.create(
+            userId,
+            workoutInput({ title: "Sea Fret", type: "O2" }),
+          );
+          await stores.planState.set(userId, "sprint");
+          await stores.logs.create(
+            userId,
+            logInput({
+              workoutId: personal.id,
+              workoutTitle: "Sea Fret",
+              workoutType: "O2",
+            }),
+          );
+          expect(
+            (await stores.logs.listPlanLinks(userId, "sprint"))[0]!
+              .workoutIsGlobal,
+          ).toBe(false);
+
+          await stores.workouts.remove(userId, personal.id);
+
+          const [link] = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(link!.workoutIsGlobal).toBeNull();
+          // The snapshot columns survive the delete — that is the whole
+          // point of storing them rather than joining for them.
+          expect(link!.workoutTitle).toBe("Sea Fret");
+          expect(link!.workoutType).toBe("O2");
         });
 
         it("is scoped per user", async () => {

@@ -55,12 +55,15 @@ function mockUsePlanLinks(links: Map<number, PlanLink> = new Map()) {
 /** A linked done row's payload. `workoutType` defaults to O2 and callers
  *  that care about the swap mark pass their own — every fixture here names
  *  a REAL library workout of its stated type (repo convention: fixtures
- *  that look like production data). */
+ *  that look like production data). `workoutIsGlobal` defaults to true:
+ *  the seeded library is what a rower actually rows, and a personal row is
+ *  the case a test has to ask for explicitly. */
 function link(overrides: Partial<PlanLink> = {}): PlanLink {
   return {
     id: "log-abc",
     workoutTitle: "Sea Fret",
     workoutType: "O2",
+    workoutIsGlobal: true,
     ...overrides,
   };
 }
@@ -521,6 +524,108 @@ describe("Plan (done-row workout names and swap marks)", () => {
     expect(rowAt(6).querySelector(".plan-row-swap")).toBeNull();
     expect(rowAt(6).querySelector(".plan-row-name")?.textContent).toBe(
       "First 2k",
+    );
+  });
+
+  // P1 (review of b21f147d). The SAME 2026-08-22 rename that moved the
+  // titles also reclassified the global 6K Test from O2 to AT, and
+  // `workout_type` is a save-time snapshot too — so a genuinely prescribed
+  // 6k rowed before that date sits at an AT checkpoint day carrying O2,
+  // permanently. The head plan is the one that checkpoints on the 6k, so
+  // this case only exists on that preset, which is why the sprint-only
+  // fixture above could not have caught it. `seed.ts` already ruled the
+  // split legitimate ("do not fix it"); the Plan screen must not report it
+  // as a deviation either.
+  it("a HEAD checkpoint rowed as the pre-2026-08-22 global 6k (First 6k, typed O2, on an AT day) is not marked", async () => {
+    mockUsePlan({
+      state: "ready",
+      plan: { planKey: "head", doneN: 12, sequence: realSequence("head", 12) },
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    await renderPlan(
+      new Map([
+        [6, link({ workoutTitle: "First 6k", workoutType: "O2" })],
+        // Positive control: index 4 is an AT day in the real head
+        // sequence, rowed here as an O2.
+        [4, link({ workoutTitle: "Sea Fret", workoutType: "O2" })],
+      ]),
+    );
+
+    expect(rowAt(4).querySelector(".plan-row-swap")).not.toBeNull();
+    expect(rowAt(6).querySelector(".plan-row-swap")).toBeNull();
+    expect(rowAt(6).querySelector(".plan-row-name")?.textContent).toBe(
+      "First 6k",
+    );
+  });
+
+  // P1 (review of b21f147d). The prescription is `globalOnly`, and titles
+  // are neither unique nor reserved — `isOnboardingTitle`'s own comment
+  // calls a rower's same-titled workout "real, ownable" and insists it
+  // stays suggestable. So a personal AN workout called "2K Test" passes
+  // both a title check and a type check while being emphatically NOT the
+  // prescribed test. Provenance is the only thing that separates them.
+  it("a checkpoint rowed as a PERSONAL workout sharing the prescribed title is marked", async () => {
+    await readyWithLinks(
+      new Map([
+        [
+          6,
+          link({
+            workoutTitle: "2K Test",
+            workoutType: "AN",
+            workoutIsGlobal: false,
+          }),
+        ],
+      ]),
+    );
+
+    const row = rowAt(6);
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe("2K Test");
+    expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
+      "INSTEAD OF 2K TEST",
+    );
+  });
+
+  // The mark is a positive accusation, so unknown provenance never makes
+  // one. A log that carried no `workoutId`, or whose workout has since
+  // been deleted, resolves to null — which is NOT "personal".
+  it("a checkpoint with the prescribed title but UNKNOWN provenance is not marked", async () => {
+    await readyWithLinks(
+      new Map([
+        [
+          6,
+          link({
+            workoutTitle: "2K Test",
+            workoutType: "AN",
+            workoutIsGlobal: null,
+          }),
+        ],
+        [3, link({ workoutTitle: "Slack Tide", workoutType: "O2" })],
+      ]),
+    );
+
+    expect(rowAt(3).querySelector(".plan-row-swap")).not.toBeNull();
+    expect(rowAt(6).querySelector(".plan-row-swap")).toBeNull();
+  });
+
+  // A differing title is positive evidence of a different workout on its
+  // own, so provenance never has to be known for THAT half to fire.
+  it("a checkpoint rowed as a different workout is marked even when provenance is unknown", async () => {
+    await readyWithLinks(
+      new Map([
+        [
+          6,
+          link({
+            workoutTitle: "Dust Whirl",
+            workoutType: "AN",
+            workoutIsGlobal: null,
+          }),
+        ],
+      ]),
+    );
+
+    expect(rowAt(6).querySelector(".plan-row-swap")?.textContent).toBe(
+      "INSTEAD OF 2K TEST",
     );
   });
 

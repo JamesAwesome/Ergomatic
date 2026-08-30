@@ -1019,9 +1019,15 @@ Each needs erg time or a deliberate recording session.
 - **Harden the post-save offer against the library-loading race** — on a slow
   real device it can eat a real rower's offer. **Product-shaped, not a test
   tweak.** **S/M**
-- **Retire `LEGACY_TITLE_RENAMES`** once every deployed environment has booted
-  past the rename. Scope correction: `session_logs.workout_title` keeps the old
-  spelling FOREVER, so the trigger is about the workouts table only.
+- **Retire the SEED's use of `LEGACY_TITLE_RENAMES`** once every deployed
+  environment has booted past the rename. Scope correction:
+  `session_logs.workout_title` keeps the old spelling FOREVER, so the trigger
+  is about the workouts table only. **Second correction (2026-08-30): the MAP
+  itself is now permanent and must not be deleted with the pre-pass.** The map
+  moved to `domain/onboarding.ts` and gained a second, non-expiring reader —
+  `canonicalTitle`, which the Plan screen uses to recognise a checkpoint rowed
+  under a retired title. Workout rows converge; log snapshots never do. What
+  retires is `seed.ts`'s rename loop, not the aliases.
 - **The e2e stack-reap race** — a sibling worktree boot once produced 117
   ECONNREFUSED; `stack-reap.sh` racing `git worktree list` is the suspicion.
 - **Migrate `DEVIATIONS.md`'s first table to stable IDs.** The 2026-08-28 docs

@@ -17,6 +17,7 @@ function wireLink(overrides: Record<string, unknown> = {}) {
     id: "log-a",
     workoutTitle: "Slack Tide",
     workoutType: "O2",
+    workoutIsGlobal: true,
     ...overrides,
   };
 }
@@ -39,6 +40,7 @@ describe("usePlanLinks", () => {
           id: "log-b",
           workoutTitle: "Dust Whirl",
           workoutType: "AN",
+          workoutIsGlobal: false,
         }),
       ],
     });
@@ -51,13 +53,50 @@ describe("usePlanLinks", () => {
       id: "log-a",
       workoutTitle: "Slack Tide",
       workoutType: "O2",
+      workoutIsGlobal: true,
     });
     expect(result.current.get(3)).toStrictEqual({
       id: "log-b",
       workoutTitle: "Dust Whirl",
       workoutType: "AN",
+      workoutIsGlobal: false,
     });
     expect(apiMock).toHaveBeenCalledWith("/api/logs?plan=sprint");
+  });
+
+  // Provenance is a TRI-state and the Plan screen branches on all three,
+  // so the parser must carry each through distinctly rather than
+  // collapsing to a boolean.
+  it.each([
+    ["true", true, true],
+    ["false", false, false],
+    ["null", null, null],
+  ])(
+    "carries workoutIsGlobal %s through unchanged",
+    async (_, wire, expected) => {
+      mockApiReturning({ links: [wireLink({ workoutIsGlobal: wire })] });
+      const { usePlanLinks } = await import("./usePlanLinks");
+      const { result } = renderHook(() => usePlanLinks("sprint"));
+
+      await waitFor(() => expect(result.current.size).toBe(1));
+      expect(result.current.get(0)?.workoutIsGlobal).toBe(expected);
+    },
+  );
+
+  // An older server has no such field. Blanking the row's name over a key
+  // that server never sent would be worse than not knowing the
+  // provenance, so absence upgrades in place to null (UNKNOWN) — the same
+  // leniency-for-absence-only rule `todayOverrides.ts` settled on.
+  it("treats a MISSING workoutIsGlobal as unknown rather than rejecting the entry", async () => {
+    mockApiReturning({
+      links: [wireLink({ workoutIsGlobal: undefined })],
+    });
+    const { usePlanLinks } = await import("./usePlanLinks");
+    const { result } = renderHook(() => usePlanLinks("sprint"));
+
+    await waitFor(() => expect(result.current.size).toBe(1));
+    expect(result.current.get(0)?.workoutIsGlobal).toBeNull();
+    expect(result.current.get(0)?.workoutTitle).toBe("Slack Tide");
   });
 
   it("never fetches when no plan is active (planKey null)", async () => {
@@ -124,6 +163,8 @@ describe("usePlanLinks", () => {
     ["a non-string workoutTitle", { workoutTitle: 42 }],
     ["a missing workoutType", { workoutType: undefined }],
     ["a non-string workoutType", { workoutType: null }],
+    ["a non-boolean workoutIsGlobal", { workoutIsGlobal: "yes" }],
+    ["a numeric workoutIsGlobal", { workoutIsGlobal: 1 }],
     ["a missing id", { id: undefined }],
     ["a non-string id", { id: { toString: "not a string" } }],
     ["a missing planIndex", { planIndex: undefined }],

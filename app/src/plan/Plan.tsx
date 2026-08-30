@@ -49,42 +49,67 @@ function rowedType(link: PlanLink | undefined): WorkoutType | undefined {
 
 /** What this done row replaced, or `undefined` when it was rowed as
  *  planned. The whole check is DERIVED from what the screen already
- *  holds — the log's save-time snapshot against `PLANS` — so nothing new
- *  is stored and no migration exists to get wrong. Its one accepted cost:
+ *  holds — the log's own record against `PLANS` — so nothing new is
+ *  stored and no migration exists to get wrong. Its one accepted cost:
  *  editing a preset's session types would make old rows read as swapped
  *  against the NEW definition (the presets are static code and have
  *  changed once, at Phase 8A).
  *
- *  Two triggers, ONE mark, and the checkpoint branch wins when both fire —
- *  naming the prescription is strictly more informative than naming its
- *  type, and a row has room for one mark:
+ *  Two triggers, ONE mark, and the checkpoint branch wins when both could
+ *  fire — naming the prescription is strictly more informative than
+ *  naming its type, and a row has room for one mark.
  *
- *  1. A CHECKPOINT day (the three days the plan names a specific workout)
- *     where that workout is not what was rowed. `canonicalTitle` is what
- *     makes this safe to ask: `session_logs.workout_title` is a save-time
- *     snapshot the seed's rename pre-pass never rewrites, so a 2k test
- *     logged before 2026-08-22 is spelled "First 2k" forever while the
- *     prescription says "2K Test" — comparing raw strings would tell a
- *     rower who DID the prescribed test that they did something else.
- *  2. Any other day whose rowed type differs from the plan's.
+ *  **A CHECKPOINT day asks about IDENTITY, never about type.** The three
+ *  checkpoint days are the days the plan names a specific workout, and it
+ *  names it with `globalOnly: true` — `resolvePrescribed`
+ *  (`domain/prescription.ts`) resolves that as
+ *  `w.title === ref.title && w.isGlobal`, and this is the same predicate
+ *  one layer down, against what the log recorded. Both halves are
+ *  load-bearing, and each was a live defect before it was here:
  *
- *  An unreadable stored type never manufactures a mark on either branch:
- *  it can only fail to CONFIRM a match, never contradict one. */
+ *  - **Title alone is not identity.** A rower may author their own
+ *    workout called "2K Test" — titles are not unique, nothing excludes
+ *    the onboarding names, and `isOnboardingTitle`'s own comment says
+ *    such a row is "real, ownable" and must stay suggestable. Rowing it
+ *    on the checkpoint day is NOT doing the prescribed test, and a
+ *    title-only check called it one.
+ *  - **Type must NOT enter this branch.** It looks like a cheap extra
+ *    guard and it is actively wrong: the global 6K Test was reclassified
+ *    O2 -> AT on 2026-08-22, and `workout_type` is a save-time snapshot,
+ *    so a genuinely-prescribed 6k rowed before that date is stored O2
+ *    against an AT checkpoint day forever. Guarding on type marked it
+ *    swapped. The seed's own comment already ruled that split legitimate
+ *    ("do not fix it"); identity is what the day actually asks about, and
+ *    provenance answers it without consulting type at all.
+ *
+ *  `canonicalTitle` covers the other half of the same 2026-08-22 rename:
+ *  the titles moved too ("First 2k" -> "2K Test"), and log snapshots keep
+ *  the old spelling forever.
+ *
+ *  `workoutIsGlobal === null` is UNKNOWN provenance, not "personal" — an
+ *  off-app row that carried no `workoutId`, or a workout since deleted.
+ *  The mark is a positive accusation, so unknown never produces one: a
+ *  differing title is still positive evidence of a different workout and
+ *  marks on its own, but a matching title with unresolvable provenance
+ *  stays quiet rather than guessing.
+ *
+ *  Every OTHER day compares type, where an unreadable stored type also
+ *  never manufactures a mark — it can fail to CONFIRM a match, never
+ *  contradict one. */
 function swapMark(
   link: PlanLink | undefined,
   plannedType: WorkoutType,
   prescribe: Prescription | undefined,
 ): string | undefined {
   if (link === undefined) return undefined;
-  const rowed = rowedType(link);
-  const typeContradicts = rowed !== undefined && rowed !== plannedType;
   if (prescribe !== undefined) {
     const asPrescribed =
       canonicalTitle(link.workoutTitle) === prescribe.ref.title &&
-      !typeContradicts;
+      link.workoutIsGlobal !== false;
     return asPrescribed ? undefined : prescribe.ref.title.toUpperCase();
   }
-  return typeContradicts ? plannedType : undefined;
+  const rowed = rowedType(link);
+  return rowed !== undefined && rowed !== plannedType ? plannedType : undefined;
 }
 
 export default function Plan() {

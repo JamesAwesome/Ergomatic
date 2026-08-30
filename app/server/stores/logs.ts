@@ -1,6 +1,6 @@
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "../db/index.js";
-import { planState, sessionLogs } from "../db/schema.js";
+import { planState, sessionLogs, workouts } from "../db/schema.js";
 import type { PlanKey } from "./planState.js";
 
 // From-the-log spec (2026-08-18), §3: thrown by `list()` when a caller
@@ -313,11 +313,24 @@ const LOG_LIST_COLUMNS = {
 // itself: an open `tx` inside `db.transaction` is a `PgTransaction`, not a
 // `Db` (it lacks `Db`'s own `$client` handle) — both expose the identical
 // `selectDistinctOn` builder chain this function actually calls.
-/** One resolved plan slot: which log closed it, and which workout that
- *  log recorded. `workoutTitle`/`workoutType` are the SAVE-TIME snapshot
- *  columns, not a join to `workouts` — a workout that has since been
- *  edited, renamed or deleted must not change what the Plan screen says a
- *  rower did (`workoutId` is `ON DELETE SET NULL`; these two never move).
+/** One resolved plan slot: which log closed it, which workout that log
+ *  recorded, and whether that workout was a GLOBAL row.
+ *
+ *  `workoutTitle`/`workoutType` are the SAVE-TIME snapshot columns, never
+ *  a join — a workout that has since been edited, renamed or deleted must
+ *  not change what the Plan screen says a rower did (`workoutId` is
+ *  `ON DELETE SET NULL`; these two never move).
+ *
+ *  `workoutIsGlobal` IS a join, and is the one fact the snapshot columns
+ *  cannot supply. A plan checkpoint prescribes its test with
+ *  `globalOnly: true` (`domain/prescription.ts`), and `resolvePrescribed`
+ *  enforces that with `w.title === ref.title && w.isGlobal` — a rower's
+ *  OWN workout that happens to share the title is a real, ownable row and
+ *  is never what the checkpoint means. Title alone cannot tell those
+ *  apart, and neither can type: a personal `2K Test` may be authored as an
+ *  AN. `null` means the provenance is unknown, not "personal" — the log
+ *  carried no `workoutId` (an off-app or pre-link row), or the workout it
+ *  pointed at has since been deleted.
  *
  *  `workoutType` is typed `string`, not `WorkoutType`: the column is plain
  *  `text` (schema.ts:147 — deliberately NOT `workoutTypeEnum`, which is
@@ -329,6 +342,7 @@ export interface PlanLink {
   id: string;
   workoutTitle: string;
   workoutType: string;
+  workoutIsGlobal: boolean | null;
 }
 
 async function resolveNewestPlanLink(
@@ -349,14 +363,25 @@ async function resolveNewestPlanLink(
   // separately-resolved row at the same index. A reset collision leaves
   // two rows on one index with different workouts; the contract suite's
   // own collision case is what holds this together.
+  // The LEFT JOIN cannot change cardinality (`workouts.id` is the primary
+  // key, so it matches at most one row) and so cannot disturb DISTINCT ON;
+  // it is LEFT rather than INNER precisely so a log with no surviving
+  // workout link still resolves its slot, with `workoutIsGlobal` null.
   const rows = await executor
     .selectDistinctOn([sessionLogs.planIndex], {
       planIndex: sessionLogs.planIndex,
       id: sessionLogs.id,
       workoutTitle: sessionLogs.workoutTitle,
       workoutType: sessionLogs.workoutType,
+      // `workouts.userId` is nullable and NULL marks a global row — the
+      // same derivation `stores/workouts.ts` exposes as `isGlobal`. Done
+      // in SQL rather than by selecting `userId` and comparing here, so
+      // the boolean crossing the wire is not a raw owner id.
+      workoutUserId: workouts.userId,
+      workoutRowId: workouts.id,
     })
     .from(sessionLogs)
+    .leftJoin(workouts, eq(workouts.id, sessionLogs.workoutId))
     .where(and(...conditions))
     .orderBy(
       sessionLogs.planIndex,
@@ -373,6 +398,12 @@ async function resolveNewestPlanLink(
     id: row.id,
     workoutTitle: row.workoutTitle,
     workoutType: row.workoutType,
+    // No joined workout row at all -> unknown provenance (null). A joined
+    // row -> global exactly when it has no owner. The two nulls are
+    // genuinely different facts and must not collapse, which is why the
+    // row id is selected alongside the owner id.
+    workoutIsGlobal:
+      row.workoutRowId === null ? null : row.workoutUserId === null,
   }));
 }
 

@@ -13,11 +13,19 @@ import type { PlanKey } from "../api/usePlan";
  *  `workoutType` is a bare `string`, mirroring the column it comes from
  *  (`session_logs.workout_type` is plain `text`, deliberately NOT the
  *  workouts table's enum) — the Plan screen narrows it to a `WorkoutType`
- *  for itself, and falls back to the plan's own type when it cannot. */
+ *  for itself, and falls back to the plan's own type when it cannot.
+ *
+ *  `workoutIsGlobal` is the provenance of the workout that was rowed, and
+ *  it is what makes a checkpoint day answerable: the prescription is
+ *  `globalOnly`, so a personal workout sharing the title is not it. `null`
+ *  means UNKNOWN (no `workoutId` on the log, or the workout has since been
+ *  deleted) and must never be read as "personal" — see `Plan.tsx`'s
+ *  `swapMark`. */
 export interface PlanLink {
   id: string;
   workoutTitle: string;
   workoutType: string;
+  workoutIsGlobal: boolean | null;
 }
 
 /** Plan's done-row link (spec §1/§3): "one fetch on mount when a plan is
@@ -67,12 +75,26 @@ function parseLink(
   if (typeof e.id !== "string" || e.id.length === 0) return null;
   if (typeof e.workoutTitle !== "string") return null;
   if (typeof e.workoutType !== "string") return null;
+  // Tri-state, and the three states are genuinely different: true/false
+  // are answers, null is "unknown". A MISSING key is also unknown rather
+  // than a rejection — that is what an older server sends, and rejecting
+  // the entry would blank the row's name over a field it never had. A
+  // present-but-wrong-shaped value still fails, same as every field above.
+  if (
+    e.workoutIsGlobal !== undefined &&
+    e.workoutIsGlobal !== null &&
+    typeof e.workoutIsGlobal !== "boolean"
+  ) {
+    return null;
+  }
   return {
     planIndex: e.planIndex as number,
     link: {
       id: e.id,
       workoutTitle: e.workoutTitle,
       workoutType: e.workoutType,
+      workoutIsGlobal:
+        (e.workoutIsGlobal as boolean | null | undefined) ?? null,
     },
   };
 }
