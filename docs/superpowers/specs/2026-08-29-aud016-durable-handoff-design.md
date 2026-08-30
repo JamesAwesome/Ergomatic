@@ -147,10 +147,19 @@ through `fail()` is ever found, it joins §1.2(b).
 
 ## §3 The reader: slot first, storage second — and what a reload really does
 
-`monitorModeRun` consults a one-shot module slot (`stashHandoffRun` /
-`takeHandoffRun` in `monitorRun.ts`) — AFTER its `from=monitor` guard
-(`LogSession.tsx:327`), so an ordinary manual visit never consumes it —
-then falls through to `loadMonitorRun()` unchanged. Slot lifecycle:
+`monitorModeRun` consults a one-shot module slot — AFTER its
+`from=monitor` guard (`LogSession.tsx:327`), so an ordinary manual visit
+never consumes it — then falls through to `loadMonitorRun()` unchanged.
+The slot API is a QUARTET (amended at Task 5, forced by the
+non-destructive rule below): `stashHandoffRun` / `peekHandoffRun` /
+`takeHandoffRun` / `clearHandoffSlot` in `monitorRun.ts`. The reader
+PEEKS first and takes only a run that passes the same gates storage
+would apply (workoutId match, completedAt, steps build) — a mismatching
+or gate-failing slot run is NEVER consumed-and-discarded; it stays for
+its own workout's later arrival while the reader falls through to
+storage. The post-unmount stash means the slot is live on ordinary
+HEALTHY linger-burst closes too, which is why the workoutId check is
+load-bearing, not defensive. Slot lifecycle:
 cleared on consume, on save-success (beside `clearMonitorRun`, which also
 usefully clears any stale earlier-session stored record), and on the
 manual discard path (a discarded session's slot must not resurrect at the
