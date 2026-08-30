@@ -29,7 +29,14 @@
 //   end to end, not just that the render function is correct in isolation.
 
 import { readFileSync } from "node:fs";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -1323,6 +1330,44 @@ describe("the phase gate — the connected surface (Task 6)", () => {
       screen.queryByRole("navigation", { name: "Connected panes" }),
     ).not.toBeInTheDocument();
     expect(onEnded).toHaveBeenCalledTimes(1);
+  });
+
+  // AUD-016 Task 6, mutation (c) — "ABOVE THE SEAM": every existing
+  // held-error test (`ConnectedSurface.test.tsx`'s own "ended, held on a
+  // failed write" describe block) mounts `ConnectedSurface` DIRECTLY with
+  // a hand-built `session` object — it can prove ConnectedSurface renders
+  // `holdError` correctly, but it can never see a bug in
+  // `ConnectedInterstitial.tsx`'s OWN JSX that forwards `session` to it
+  // (e.g. `session={{ ...session, holdError: null }}`, silently dropping
+  // the field on the way through). This test mounts the REAL
+  // `ConnectedInterstitial`, through the SAME mocked-`useMonitorSession`
+  // seam every other test in this file uses — `session` still reaches
+  // `ConnectedSurface` by way of `ConnectedInterstitial`'s own real render
+  // path, which is the wiring this mutation targets. Confirmed to catch a
+  // `session={{ ...session, holdError: null }}` forgery in
+  // `ConnectedInterstitial.tsx` (RF22: mutated, this test failed with the
+  // strip absent, reverted, this test green again).
+  it("REVIEW FIX (Task 6, mutation c): held-error reaches the rendered strip THROUGH ConnectedInterstitial's own session hand-off, not only inside ConnectedSurface", () => {
+    const { session: held } = renderInterstitial({
+      phase: "ended",
+      endedBy: "user",
+      handoffHeld: true,
+      holdError: "storage-failed",
+      deviceName: DEVICE_NAME,
+    });
+
+    const strip = screen.getByText("COULD NOT KEEP THE RECORD ON THIS PHONE.");
+    expect(strip).toHaveClass("connected-keep-on");
+    const buttons = screen
+      .getAllByRole("button")
+      .filter((b) => ["Retry", "Log it anyway"].includes(b.textContent ?? ""));
+    expect(buttons.map((b) => b.textContent)).toStrictEqual([
+      "Retry",
+      "Log it anyway",
+    ]);
+
+    fireEvent.click(buttons[0]!);
+    expect(held.retryHandoffSave).toHaveBeenCalledTimes(1);
   });
 });
 

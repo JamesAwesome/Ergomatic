@@ -40,6 +40,7 @@ import {
   loadMonitorRun,
   MONITOR_RUN_KEY,
   saveMonitorRun,
+  stashHandoffRun,
   takeHandoffRun,
   type MonitorRun,
 } from "./monitorRun";
@@ -3978,6 +3979,79 @@ describe("useMonitorSession: ending", () => {
       expect(stashed?.detail).toContain("reason=proceed");
     });
 
+    // Task 6 close-out (RF2, "cover naked branches") — see the sibling
+    // supersede test below `saved-without-series` for the full reasoning
+    // (the F4 slot-leak fix retired the test pollution that used to cover
+    // this branch by accident).
+    it("supersede (Task 6 close-out): PROCEED ANYWAY overwrites an earlier, still-unconsumed slot entry, with its own receipt", async () => {
+      const { result, fake } = harness({
+        program: TWO_INTERVALS,
+        events: timeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      act(() => {
+        fake.injectDisconnect();
+      });
+      expect(result.current.phase).toBe("disconnected");
+
+      const stale: MonitorRun = {
+        v: 2,
+        workoutId: "id-stale-unrelated",
+        title: "Stale",
+        program: { intervals: [] },
+        actuals: [],
+        deviceName: "PM5 Stale",
+        startedAt: "2020-01-01T00:00:00.000Z",
+        completedAt: "2020-01-01T00:10:00.000Z",
+        terminated: false,
+        endedBy: "finished",
+      };
+      stashHandoffRun(stale);
+
+      let allowance = 1;
+      const originalSetItem = Storage.prototype.setItem;
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === localStorage && key === MONITOR_RUN_KEY) {
+          if (allowance <= 0) {
+            throw new DOMException(
+              "The quota has been exceeded.",
+              "QuotaExceededError",
+            );
+          }
+          allowance -= 1;
+        }
+        originalSetItem.call(this, key, value);
+      });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+      expect(result.current.holdError).toBe("storage-failed");
+
+      await act(async () => {
+        await result.current.proceedHandoff();
+      });
+
+      const stashed = takeHandoffRun();
+      expect(stashed?.workoutId).not.toBe("id-stale-unrelated");
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      const superseded = entries.find(
+        (e) => e.kind === "handoff-stashed" && e.detail.includes("superseded"),
+      );
+      expect(superseded).toBeDefined();
+      expect(superseded?.detail).toContain("2020-01-01T00:00:00.000Z");
+    });
+
     it("saved-without-series (§1 steps 1/3): the verify's OWN sacrifice succeeding still releases normally, but stashes the (still series-carrying) in-memory run with its own receipt", async () => {
       const { result, fake } = harness({
         program: TWO_INTERVALS,
@@ -4049,6 +4123,85 @@ describe("useMonitorSession: ending", () => {
             e.kind === "handoff-stashed" && e.detail.includes("without-series"),
         ),
       ).toBe(true);
+    });
+
+    // Task 6 close-out (RF2, "cover naked branches"): the F4 slot-leak fix
+    // (review fix round 1) retired a test-pollution accident that used to
+    // exercise EVERY stash site's own `superseded !== null` branch as an
+    // unintended side effect of the slot leaking between tests — fixing
+    // the leak made all four `handoff-stashed reason=superseded` branches
+    // (without-series, post-unmount-burst, teardown-escape, proceed)
+    // genuinely uncovered at once, surfaced by this task's own coverage
+    // pass. Closes the cheap two (this one and PROCEED ANYWAY's own,
+    // below) — see this task's report for why the other two stay
+    // disclosed rather than chased.
+    it("supersede (Task 6 close-out): the without-series stash overwrites an earlier, still-unconsumed slot entry, with its own receipt", async () => {
+      const { result, fake } = harness({
+        program: TWO_INTERVALS,
+        events: timeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      act(() => {
+        fake.injectDisconnect();
+      });
+      expect(result.current.phase).toBe("disconnected");
+
+      // An unrelated, already-stashed run sitting in the slot from before
+      // this hand-off even began (spec §1 step 6: "the slot has no
+      // per-run scoping of its own").
+      const stale: MonitorRun = {
+        v: 2,
+        workoutId: "id-stale-unrelated",
+        title: "Stale",
+        program: { intervals: [] },
+        actuals: [],
+        deviceName: "PM5 Stale",
+        startedAt: "2020-01-01T00:00:00.000Z",
+        completedAt: "2020-01-01T00:10:00.000Z",
+        terminated: false,
+        endedBy: "finished",
+      };
+      stashHandoffRun(stale);
+
+      let callCount = 0;
+      const originalSetItem = Storage.prototype.setItem;
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === localStorage && key === MONITOR_RUN_KEY) {
+          callCount += 1;
+          if (callCount === 2) {
+            throw new DOMException(
+              "The quota has been exceeded.",
+              "QuotaExceededError",
+            );
+          }
+        }
+        originalSetItem.call(this, key, value);
+      });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+
+      expect(result.current.handoffHeld).toBe(false);
+      const stashed = takeHandoffRun();
+      expect(stashed?.workoutId).not.toBe("id-stale-unrelated");
+
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      const superseded = entries.find(
+        (e) => e.kind === "handoff-stashed" && e.detail.includes("superseded"),
+      );
+      expect(superseded).toBeDefined();
+      expect(superseded?.detail).toContain("2020-01-01T00:00:00.000Z");
     });
 
     it("THE ESCAPE HATCH (§1 step 6): teardown while holdError is set stashes the record BEFORE its normal work, even though nobody ever pressed retry or proceed", async () => {

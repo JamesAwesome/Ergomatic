@@ -289,6 +289,55 @@ rower's work silently.
       sequences this against the pocketed-phone row loss and machine-summary
       hand-off;
       the audit does not. **P1, Confirmed. M**
+      - **IMPLEMENTED AND GATED, 2026-08-29/30 (branch `wave-f-aud016-spec`,
+        NOT YET MERGED/RELEASED).** Spec:
+        `docs/superpowers/specs/2026-08-29-aud016-durable-handoff-design.md`.
+        The ended hand-off now VERIFIES writability once (`saveMonitorRun`'s
+        new `SaveVerdict`), at the release funnel and at every no-hold close
+        (link-lost End, continuity reset, the no-conditions-owed finish); a
+        `"failed"` verdict holds in a new, timer-free `holdError:
+        "storage-failed"` state instead of releasing silently, with `Retry`/
+        `Log it anyway` controls (Gate 0 approved) and a teardown escape
+        hatch that stashes rather than loses the record. The empty-storage
+        decline folds the machine's own numbers onto the in-memory run
+        in-place, eligibility-gated (mirrors `appendSummaryObservations`'s
+        own two writer gates — a review fix, F1). A one-shot module slot
+        (`stashHandoffRun`/`peekHandoffRun`/`takeHandoffRun`/
+        `clearHandoffSlot`) carries the in-memory record through to the log
+        door's reader, non-destructively: a slot hit for a DIFFERENT
+        workout, or one that fails an eligibility gate, is left in place
+        and falls through to storage rather than being consumed and lost —
+        the post-unmount stash populates this slot on the ORDINARY healthy
+        close path too, not only on a failed write (review carry F5).
+        Every receipt (`release-save`, `summary-folded-in-memory`,
+        `hold-error-entered`/`-retry`/`-proceed`, `handoff-stashed`) goes
+        through the ring, never the failing store. Gated by
+        `summaryHoldReplay.test.ts`'s legs A/B + the no-hold arm (all
+        green, including leg A's own reader assertion — the whole suite is
+        green for the first time), plus unit/component/integration tests
+        across `monitorRun.test.ts`, `useMonitorSession.test.ts`,
+        `LogSession.test.tsx`, `ConnectedSurface.test.tsx`, and
+        `ConnectedInterstitial.test.tsx` (the last gained an "above the
+        seam" test at close-out, mutation-probed: no other test in the repo
+        would have caught a PARENT forging `holdError: null` on its way
+        into the rendered surface). Full suite green (`pnpm test`,
+        unit+client+integration, 215 files/5763 tests), `pnpm e2e` 420/420,
+        `pnpm lint`/`format:check`/`typecheck` clean.
+        **What this does NOT close:** `fail()`-path closes (a completed run
+        through a program-failure close) stay out of scope, per the spec's
+        own §2 reachability reasoning; the slot's reload-safety and the
+        EVICTION producer (a write that returns green but the browser later
+        evicts the origin) are disclosed, not solved — the receipts are the
+        only instrument either gets; AUD-011/AUD-015 (the row below) are a
+        separate audit item, untouched by this work. Two low-risk,
+        disclosed coverage gaps remain in `useMonitorSession.ts` (a
+        `handoff-stashed reason=superseded` receipt at two of four stash
+        sites, and one already-defensive `endByMachine` branch sitting
+        behind a documented-unreachable predicate) — the underlying
+        mechanisms are proven at other call sites and at the pure-function
+        level; not chased further. **Needs a PM final-PR gate before merge
+        (TRIAD: a stored shape, `MonitorRun.summaryTotals`/`series`/the
+        slot) and James's explicit approval — not struck until then.**
 - [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
