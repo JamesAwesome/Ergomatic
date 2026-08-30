@@ -38,6 +38,7 @@ import {
   loadMonitorRun,
   clearMonitorRun,
   completeInterruptedRun,
+  saveMonitorRun,
   type MonitorRun,
 } from "../monitor/monitorRun";
 import { useStagedDiscard } from "../session/useStagedDiscard";
@@ -635,7 +636,16 @@ function UnloggedMonitorRow({ run }: { run: MonitorRun }) {
     // Stamping is the rower's ruling, not the app's: it is what opens
     // the monitor log screen's own `monitorModeRun` gate for an
     // interrupted record (session/LogSession.tsx, Task 3).
-    completeInterruptedRun(run, new Date());
+    //
+    // STOPGAP (hand-off store design spec §1, plan Task 3 —
+    // `completeInterruptedRun` is now PURE, per `monitorRun.ts`'s own doc
+    // comment on it): this call site persists the returned record itself,
+    // via the legacy `saveMonitorRun`, rather than through the store —
+    // `Today.tsx`'s full store rewrite (reading via `read`/claims, the
+    // reload-vanish receipt) is plan Task 4's own scope ("Today.tsx
+    // unlogged row on the store"), not this task's. This preserves
+    // TODAY's exact persisted behavior unchanged in the meantime.
+    saveMonitorRun(completeInterruptedRun(run, new Date()));
     navigate(`/library/${run.workoutId}/log?from=monitor`);
   }
 

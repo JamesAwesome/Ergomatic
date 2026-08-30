@@ -1795,6 +1795,7 @@ describe("RC-37 ([R5]): the nudge survives Menu-at-READY, the same way it surviv
         actuals: [],
         endedBy: null,
         handoffHeld: false,
+        holdError: null,
         frozen: false,
         runOpen: false,
         frameSilence: false,
@@ -1803,6 +1804,8 @@ describe("RC-37 ([R5]): the nudge survives Menu-at-READY, the same way it surviv
         program: vi.fn().mockResolvedValue(undefined),
         endSession: vi.fn().mockResolvedValue(undefined),
         cancel: vi.fn().mockResolvedValue(undefined),
+        retryHandoffSave: vi.fn().mockResolvedValue(undefined),
+        proceedHandoff: vi.fn().mockResolvedValue(undefined),
         exportLog: vi.fn().mockReturnValue("[]"),
         ...overrides,
       };

@@ -331,6 +331,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     actuals: options.actuals ?? [],
     endedBy: options.endedBy ?? null,
     handoffHeld: false,
+    holdError: null,
     frozen: options.frozen ?? false,
     runOpen: true,
     frameSilence: options.frameSilence ?? false,
@@ -339,6 +340,8 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
+    retryHandoffSave: vi.fn().mockResolvedValue(undefined),
+    proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue(LOG_JSON),
   };
   // `session.frame` is `liveFrame(...)` a few lines up and never null; the

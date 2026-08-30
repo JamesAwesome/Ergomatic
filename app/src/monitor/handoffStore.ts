@@ -794,6 +794,55 @@ export function cachedVerdict(sessionKey: string): DurableVerdict | undefined {
   return cachedVerdicts.get(sessionKey);
 }
 
+/**
+ * TEST-ONLY reset (plan Task 3, added against Task 2's own stated design —
+ * that module's header comment says "never a bespoke reset export that
+ * would exist only for tests," preferring `vi.resetModules()` per test
+ * file, the idiom every `src/monitor/*Replay.test.ts` already uses. That
+ * idiom is NOT what `useMonitorSession.test.ts` actually does for the vast
+ * majority of its ~150 tests: one STATIC top-level import of
+ * `useMonitorSession`, isolated only by a top-level
+ * `beforeEach(() => localStorage.clear())` — a pattern that was sufficient
+ * under the OLD `createMonitorRun` (a stateless, unconditional
+ * `saveMonitorRun` overwrite reading nothing but real `localStorage`) and
+ * is NOT sufficient now: this module's own `current`/`tombstones` are
+ * IN-MEMORY, module-singleton state that `localStorage.clear()` cannot
+ * touch, and this codebase's test fixtures overwhelmingly reuse ONE fixed
+ * `now()` (`t0`, `FIXED_NOW`) across many tests/replays — meaning every
+ * such run shares the identical `sessionKey`. Confirmed empirically: tests
+ * that pass in isolation (`picking -> pairing -> ... -> live -> ended,
+ * with the record written the whole way`) fail when the full suite runs,
+ * because an EARLIER test's leftover `current` entry (same `t0`-derived
+ * key, never retired — nothing in this task's scope calls `retire` at
+ * `cancel()`/unmount) either refuses the later test's own create-commit as
+ * `"stale"`, or — worse — this hook's own "createMonitorRun defense" retire
+ * (spec §5) TOMBSTONES that exact key first, so the create-commit that
+ * follows is refused as `"retired"` instead. Retrofitting `vi.resetModules()`
+ * + a dynamic per-test re-import across ~150 existing call sites was judged
+ * a materially riskier change than one clearly-labelled reset function
+ * called from one already-existing `beforeEach`. Not part of the
+ * `handoffStore` namespace object below (deliberately — it is not a
+ * production API surface).
+ */
+export function resetForTests(): void {
+  current = null;
+  tombstones.clear();
+  claims.clear();
+  durableStateByKey.clear();
+  cachedVerdicts.clear();
+  hydrated = false;
+  durableMalformed = false;
+  // Reuses `setReceiptChannel(null)` rather than duplicating its
+  // `() => undefined` default inline: a second, hand-written copy of that
+  // arrow function is a distinct function OBJECT the coverage tool tracks
+  // separately (found empirically — it showed up as its own "function not
+  // covered", since nothing ever calls a reset-created instance of it
+  // before a real caller's `setReceiptChannel` overwrites it again), and
+  // it is exactly the "two mechanisms disagreeing" shape this codebase's
+  // own RF23 warns about for a rule this trivial to share instead.
+  setReceiptChannel(null);
+}
+
 /** The store's own name, per the plan's Global Constraints ("Names
  *  verbatim from the spec: `handoffStore` ..."). A plain object of the
  *  module's exported functions — this module has exactly one instance per

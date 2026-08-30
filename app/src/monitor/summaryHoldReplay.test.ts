@@ -536,6 +536,18 @@ async function runReplay(
     result: { current: MonitorSession },
   ) => void,
 ): Promise<ReplayOutcome> {
+  // Hand-off store design spec §1, plan Task 3: each call gets a FRESH
+  // module graph via `vi.resetModules()` below (a fresh `handoffStore`
+  // instance included), but PHYSICAL `localStorage` is a real global that
+  // graph reset cannot touch — and every call in this file shares the
+  // IDENTICAL `FIXED_NOW`-derived `sessionKey`. Without this, the second
+  // of two `runReplay` calls in one test (leg 1/2's own "a truncated
+  // replay ... then the full capture" shape) hydrates the FIRST call's
+  // still-present durable bytes under that same key, and the store's own
+  // single-unretired-session invariant then refuses the second run's own
+  // create-commit — found empirically (`burstReplay.test.ts`'s identical
+  // two-call shape hit the same collision; both share this fix).
+  localStorage.clear();
   const replay = createReplayTransport(recording);
   const transport = withLiveness(replay.transport, {
     now: () => replay.clock.now(),

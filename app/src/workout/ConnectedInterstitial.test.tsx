@@ -150,6 +150,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     actuals: [],
     endedBy: null,
     handoffHeld: false,
+    holdError: null,
     frozen: false,
     runOpen: false,
     frameSilence: false,
@@ -158,6 +159,8 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
+    retryHandoffSave: vi.fn().mockResolvedValue(undefined),
+    proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue("[]"),
     ...overrides,
   };

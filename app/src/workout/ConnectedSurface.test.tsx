@@ -245,6 +245,11 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     actuals: [],
     endedBy: null,
     handoffHeld: false,
+    // Hand-off store design spec §7, plan Task 3: added to `MonitorSession`
+    // this task; ConnectedSurface itself has no branch for it yet on this
+    // base (that ships with Task 5's held-error frame restore) — defaulted
+    // here purely to satisfy the widened type.
+    holdError: null,
     frozen: false,
     runOpen: true,
     frameSilence: false,
@@ -253,6 +258,8 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
+    retryHandoffSave: vi.fn().mockResolvedValue(undefined),
+    proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue("[]"),
     ...overrides,
   };

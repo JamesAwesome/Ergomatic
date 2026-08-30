@@ -8,7 +8,7 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, type SessionRun } from "../session/run";
-import { createMonitorRun, loadMonitorRun } from "./monitorRun";
+import { createMonitorRun, loadMonitorRun, saveMonitorRun } from "./monitorRun";
 import ConnectAction from "./ConnectAction";
 
 // 7C Task 1: `createMonitorRun`'s `logSeed` arg is required now. This
@@ -78,11 +78,17 @@ function liveSessionRun(): SessionRun {
  * (`useMonitorSession.ts`), not synchronously on this press). What this
  * DOES model, faithfully, is the one thing this file's own tests are
  * about: the destructive step `createMonitorRun`'s `clearRun()` performs,
- * reduced to a single call so the guard can be proven against a REAL
- * localStorage round trip rather than a "was the callback called"
- * assertion. Task 5's own proof that its real wiring defers this
- * destruction lives in `WorkoutDetail.test.tsx` and `e2e/session.spec.ts`,
- * not here.
+ * reduced to (as of hand-off store design spec §1, plan Task 3 — see that
+ * function's own doc comment in `monitorRun.ts`: it is now a PURE BUILDER,
+ * and its one production caller, `useMonitorSession.ts`'s hook, is what
+ * commits the result through the store) two calls instead of one, so the
+ * guard can still be proven against a REAL localStorage round trip rather
+ * than a "was the callback called" assertion — `saveMonitorRun` is the
+ * SAME general-purpose writer `Today.tsx`/`LogSession.tsx`/
+ * `useStartWorkout.ts` still call directly today, not a re-introduction of
+ * anything this task removed. Task 5's own proof that its real wiring
+ * defers this destruction lives in `WorkoutDetail.test.tsx` and
+ * `e2e/session.spec.ts`, not here.
  */
 function connectAsTaskFiveWill(): void {
   const w = libraryWorkout("Filling Low");
@@ -96,15 +102,17 @@ function connectAsTaskFiveWill(): void {
   if ("code" in compiled) {
     throw new Error(`fixture failed to compile: ${compiled.code}`);
   }
-  createMonitorRun(
-    {
-      workoutId: "fl-connect",
-      title: w.title,
-      program: compiled,
-      deviceName: "PM5 430123456",
-      logSeed: TEST_SEED,
-    },
-    t0,
+  saveMonitorRun(
+    createMonitorRun(
+      {
+        workoutId: "fl-connect",
+        title: w.title,
+        program: compiled,
+        deviceName: "PM5 430123456",
+        logSeed: TEST_SEED,
+      },
+      t0,
+    ),
   );
 }
 

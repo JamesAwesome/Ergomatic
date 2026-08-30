@@ -67,10 +67,18 @@ import {
   completeMonitorRun,
   createMonitorRun,
   recordActual,
-  saveMonitorRun,
   type CloseReason,
   type MonitorRun,
 } from "./monitorRun";
+import {
+  commit as commitHandoff,
+  currentUnretired as currentUnretiredHandoff,
+  retire as retireHandoff,
+  cachedVerdict as cachedHandoffVerdict,
+  retryDurable as retryDurableHandoff,
+  setReceiptChannel,
+  type HandoffReceipt,
+} from "./handoffStore";
 import { check as checkContinuity } from "./continuity";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
 import { defaultTransport } from "../adapters/monitorTransport";
@@ -865,6 +873,21 @@ export interface MonitorSession {
    *  or program-failed close, or any close whose owed condition(s) have
    *  already resolved (arrival, write attempt, or backstop). */
   handoffHeld: boolean;
+  /** Hand-off store design spec §7, plan Task 3: `"storage-failed"` while
+   *  the ended hand-off's own release-verify found the CACHED durable
+   *  verdict (`handoffStore.cachedVerdict`, the last accepted commit's —
+   *  §7: "the release funnel reads the CACHED verdict ... not the close
+   *  commit's") to be `"failed"` — and the hold has NO TIMER: the only ways
+   *  out are `retryHandoffSave()`, `proceedHandoff()`, or leaving. `null`
+   *  at every other time, including a `handoffHeld: true` frame that is
+   *  still waiting on the split/burst conditions rather than on a failed
+   *  write. **No auto-heal** (spec §7, ruled): a LATER commit succeeding
+   *  while this is non-null records its own receipt but does not clear
+   *  this field on its own — only the two explicit exits (or leaving) do.
+   *  This hook SHIPS the state; rendering it is Task 5's restore of the
+   *  held-error frame (`ConnectedSurface` on this base has no branch for
+   *  it yet — that shipped under the closed #230, never merged here). */
+  holdError: "storage-failed" | null;
   /** Mirrors `freezeRef` — `isPausedRun(freezeRef.current)` at the instant
    *  of the last `update()`. Published for `connectedAxes.ts`'s `activity`
    *  axis (design spec §1) — read-only, derived, not a second source of
@@ -906,6 +929,24 @@ export interface MonitorSession {
   endSession(): Promise<void>;
   /** Cancel's machine semantics per state (spec §2's M3 ruling). */
   cancel(): Promise<void>;
+  /** Hand-off store design spec §7, plan Task 3: re-attempts the durable
+   *  write behind `holdError` (`handoffStore.retryDurable`, which NEVER
+   *  bumps revision — spec §1: modelling Retry as `commit` would stale
+   *  this hook's own `lastAcceptedRevisionRef` and refuse the next
+   *  producer commit, the design's own headline case). A no-op when
+   *  `holdError` is already `null` (idempotent, same posture as
+   *  `releaseHandoff`/`resolveHandoffCondition`). A verdict other than
+   *  `"failed"` releases and clears `holdError`; a failure that repeats
+   *  stays held — each attempt gets its own `hold-error-retry` receipt via
+   *  the diagnostic ring regardless of outcome. */
+  retryHandoffSave(): Promise<void>;
+  /** Hand-off store design spec §7, plan Task 3's non-retry exit: releases
+   *  from `holdError` WITHOUT a confirmed durable write. Unlike #230's own
+   *  version of this method, there is no stash to perform — the memory
+   *  tier is already current by construction (every accepted commit writes
+   *  it), so the reader (Task 4/5's own scope) already has the full record
+   *  to serve. A no-op when `holdError` is already `null`. */
+  proceedHandoff(): Promise<void>;
   /**
    * THE ONE READ-ONLY WINDOW ONTO THE DRIVER'S EVENT LOG (Task 7's
    * diagnostics sheet, handoff §5 — added here because Task 4 exposed the
@@ -1342,6 +1383,11 @@ interface SessionState {
   actuals: IntervalActual[];
   endedBy: "machine" | "user" | null;
   handoffHeld: boolean;
+  /** `MonitorSession.holdError`'s own doc comment carries the full
+   *  reasoning — mirrored here as internal state for the same "the ref is
+   *  truth, `state` is what React reads" split every other field in this
+   *  interface already follows. */
+  holdError: "storage-failed" | null;
   /** Mirrors `freezeRef` (`isPausedRun(freezeRef.current)`), kept as
    *  published STATE rather than read off the ref at return time — reading
    *  a ref during render is exactly what `react-hooks/refs` exists to
@@ -1378,6 +1424,7 @@ const INITIAL_STATE: SessionState = {
   actuals: [],
   endedBy: null,
   handoffHeld: false,
+  holdError: null,
   frozen: false,
   runOpen: false,
   frameSilence: false,
@@ -1526,6 +1573,19 @@ export function useMonitorSession(
    *  The single source of truth for "is a run of ours open?"; nothing here
    *  re-derives that from global storage (see the header note on M-2). */
   const runRef = useRef<MonitorRun | null>(null);
+  /** Hand-off store design spec §1, plan Task 3: "the hook holds
+   *  `lastAcceptedRevisionRef` (a ref — it must survive across driver
+   *  callbacks) and applies the discipline: commit accepted -> assign
+   *  `runRef` and update the ref; refused -> `runRef` UNCHANGED, receipt
+   *  only." `null` before this run's own create-commit has ever landed
+   *  (mirrors `commit`'s own `expectedRevision: null` = "expect absent"),
+   *  reset alongside `runRef` at every per-run teardown
+   *  (`cancel()`/`programDropped`) — a stale revision from a PRIOR run
+   *  must never seed a CAS check against this run's own key. Written ONLY
+   *  by `applyProducerCommit` below and by the create-commit at this run's
+   *  own opening (`handleFrame`'s "ready" branch) — nowhere else in this
+   *  file calls `handoffStore.commit`. */
+  const lastAcceptedRevisionRef = useRef<number | null>(null);
   /** What the next `live` transition will file the record under — captured
    *  at `program()` (the only moment the caller tells us what workout this
    *  is), not at `live`. */
@@ -1623,6 +1683,88 @@ export function useMonitorSession(
   const update = useCallback((patch: Partial<SessionState>): void => {
     stateRef.current = { ...stateRef.current, ...patch };
     setState(stateRef.current);
+  }, []);
+
+  /**
+   * Hand-off store design spec §1, plan Task 3: the ONE place this hook
+   * ever calls `handoffStore.commit` for an ALREADY-OPEN run — the sole
+   * committer's own discipline. `next` must be a NEW object (a pure writer
+   * gate's accepted output, e.g. `recordActual`'s return when it differs
+   * from what was passed in) — every call site below already compares
+   * `next !== base` (the gate's own "same reference on decline" contract)
+   * before reaching here, so this function is never asked to commit a
+   * no-op.
+   *
+   * Returns `true` iff the commit was ACCEPTED, in which case `runRef` and
+   * `lastAcceptedRevisionRef` are updated TOGETHER, in the same call — the
+   * two must never drift apart, or the next commit's own `expectedRevision`
+   * would be checked against the wrong number. Returns `false` on ANY
+   * refusal (`"stale"`, `"retired"`, `"second-key"`): `runRef` is then LEFT
+   * UNCHANGED, exactly as spec §1 requires ("a refusal can therefore never
+   * diverge producer from store") — the store's own `commit-refused`/
+   * `store-second-key-refused` receipt (piped to `logRef` via
+   * `setReceiptChannel`, below) is the only record of it; this function
+   * adds no second, competing log entry.
+   *
+   * `createMonitorRun`'s own create-commit (`handleFrame`'s "ready"
+   * branch) does NOT go through this function — a create is
+   * `expectedRevision: null` unconditionally, never
+   * `lastAcceptedRevisionRef.current`, and it seeds `lastAcceptedRevisionRef`
+   * itself rather than reading it.
+   */
+  const applyProducerCommit = useCallback((next: MonitorRun): boolean => {
+    const result = commitHandoff(
+      next.startedAt,
+      lastAcceptedRevisionRef.current,
+      next,
+    );
+    if (!result.accepted) return false;
+    runRef.current = next;
+    lastAcceptedRevisionRef.current = result.revision;
+    return true;
+  }, []);
+
+  /**
+   * Hand-off store design spec §7, plan Task 3: THE VERIFY, collapsed into
+   * the cached verdict — "the release funnel reads the CACHED verdict —
+   * the last accepted commit's, not the close commit's ... The verify's
+   * second serialize is deleted for this reason." Where #230's own
+   * `verifyHandoffWritable` re-serialized `runRef.current` through
+   * `saveMonitorRun` a SECOND time purely to observe its own verdict, this
+   * reads whatever `handoffStore.cachedVerdict` already recorded at the
+   * most recent ACCEPTED commit for this run's key — every closing write
+   * in this file (`closeRecord`, the continuity-reset branch, the boundary
+   * write, the summary-observations write, the series flush) already goes
+   * through `applyProducerCommit` above, which is what keeps this cache
+   * current by the time any of the four call sites below reads it.
+   *
+   * `runRef.current === null` (an End at READY: nothing was ever opened)
+   * is a no-op success, matching #230's own "skip on `runRef.current ===
+   * null`". Returns `true` when the caller may release normally (`"saved"`
+   * and `"saved-without-series"` both count — a degraded-but-landed write
+   * is still a landed write; `durableComplete`'s own staleness bookkeeping
+   * is a DIFFERENT concern, not this gate's) and `false` on `"failed"`, in
+   * which case this function has already logged `hold-error-entered`.
+   *
+   * **No stash on `"saved-without-series"`** (spec §2: "the memory tier is
+   * current by construction — no stash calls exist anymore"): the
+   * in-memory entry `handoffStore.read` will serve is `next` itself,
+   * unconditionally the FULL record — a durable copy that dropped its
+   * series is a fact about the DURABLE tier alone, and the reader (Task
+   * 4/5's own scope) never has to fall back to a slot for it.
+   */
+  const verifyHandoffWritable = useCallback((): boolean => {
+    const run = runRef.current;
+    if (run === null) return true;
+    const verdict = cachedHandoffVerdict(run.startedAt);
+    if (verdict === "failed") {
+      logRef.current?.record(
+        "hold-error-entered",
+        `run=${run.startedAt} the cached durable verdict is "failed" — holding the ended hand-off instead of releasing it silently`,
+      );
+      return false;
+    }
+    return true;
   }, []);
 
   /** Phase LL Task 2: the retract timer's own canceller, or `null` when
@@ -1744,10 +1886,9 @@ export function useMonitorSession(
       // a future change to WHEN the recorder is created should not have to
       // rediscover this guard's absence the hard way.
       if (next === run) return;
-      runRef.current = next;
-      saveMonitorRun(next);
+      applyProducerCommit(next);
     }, SERIES_FLUSH_INTERVAL_MS);
-  }, [withSeries, stopSeriesFlush]);
+  }, [withSeries, stopSeriesFlush, applyProducerCommit]);
 
   /** Stamps `completedAt` on our own run, if one is open. The record's own
    *  `completeMonitorRun` is idempotent too; this guard is here so the
@@ -1797,11 +1938,17 @@ export function useMonitorSession(
       }
       if (run.completedAt !== null) return;
       const withFinalSeries = withSeries(run);
-      runRef.current = completeMonitorRun(
+      const next = completeMonitorRun(
         withFinalSeries,
         { terminated, endedBy },
         nowDate(),
       );
+      // `completeMonitorRun` never declines a live run (the `completedAt
+      // !== null` guard just above already proved it), so `next` is always
+      // a fresh object here — `applyProducerCommit` is called
+      // unconditionally rather than gated on an identity check that could
+      // never be false in practice.
+      applyProducerCommit(next);
       stopSeriesFlush();
       const backwardBucketCount =
         seriesRecorderRef.current?.backwardBucketCount() ?? 0;
@@ -1814,7 +1961,7 @@ export function useMonitorSession(
       seriesRecorderRef.current?.stop();
       seriesRecorderRef.current = null;
     },
-    [nowDate, withSeries, stopSeriesFlush],
+    [nowDate, withSeries, stopSeriesFlush, applyProducerCommit],
   );
 
   /** Storage-spine design spec §2, Task 3: the hand-off hold's SPLIT
@@ -1918,13 +2065,26 @@ export function useMonitorSession(
       if (splitHoldRef.current !== null || burstHoldRef.current !== null) {
         return;
       }
+      // Hand-off store design spec §7, plan Task 3: THIS is the shared
+      // release funnel for all three burst-holding arms (machine finish,
+      // Menu terminate, rower End with the link up) — the ONE place their
+      // own hold's last owed condition resolving turns into an actual
+      // release, so it is also the one place their verify can run without
+      // ever running twice (the guard above already proved neither
+      // condition is still owed). A `"failed"` cached verdict holds
+      // instead of releasing — no timer, only `retryHandoffSave()`/
+      // `proceedHandoff()`/leaving get out.
+      if (!verifyHandoffWritable()) {
+        update({ handoffHeld: true, holdError: "storage-failed" });
+        return;
+      }
       logRef.current?.record(
         "handoff-released",
         `${reason} — the ended hand-off is free to navigate (${stateRef.current.actuals.length} actual(s) measured)`,
       );
-      update({ handoffHeld: false });
+      update({ handoffHeld: false, holdError: null });
     },
-    [update],
+    [update, verifyHandoffWritable],
   );
 
   /** Opens the hold's SPLIT condition if — and only if — this run is still
@@ -2118,7 +2278,7 @@ export function useMonitorSession(
           // it until the first flush.
           seriesRecorderRef.current = createSeriesRecorder();
           seriesRecorderRef.current.onFrame(frame);
-          runRef.current = createMonitorRun(
+          const run = createMonitorRun(
             {
               workoutId: identity.workoutId,
               title: identity.title,
@@ -2138,6 +2298,39 @@ export function useMonitorSession(
             },
             nowDate(),
           );
+          // Hand-off store design spec §1/§5, plan Task 3: `createMonitorRun`
+          // is now a PURE BUILDER (see its own doc comment in
+          // `monitorRun.ts` for why the commit lives HERE rather than
+          // there — a circular import with `handoffStore.ts`). This is the
+          // create-commit, `expectedRevision: null` unconditionally (spec
+          // §1's own "the create case"), preceded by the "createMonitorRun
+          // defense" retire spec §5 names: whatever remains unretired —
+          // structurally, per the single-unretired-session invariant, this
+          // should be nothing at all by the time the Connect guard's own
+          // armed-acceptance retire has run (Task 5's own "doors" scope on
+          // this substrate — Task 2's census found NO existing defensive
+          // clear here at all, "deliberately NOT idempotent-checked" per
+          // `createMonitorRun`'s own doc comment) — but a defensive sweep
+          // right before the create is cheap insurance, and `retire`'s own
+          // per-entry receipt makes it visible if it ever finds anything.
+          const stale = currentUnretiredHandoff();
+          if (stale !== null) {
+            retireHandoff(
+              [{ sessionKey: stale.sessionKey, revision: stale.revision }],
+              "createMonitorRun-defense",
+            );
+          }
+          const created = commitHandoff(run.startedAt, null, run);
+          // Unconditional either way (spec's own exit criteria: "no
+          // rendered change" — a structurally-impossible refusal here must
+          // never block the rower from actually starting to row; the
+          // store's own `store-second-key-refused`/`commit-refused`
+          // receipt, piped to `logRef` above, is what makes a genuine
+          // invariant violation visible without holding up this frame).
+          runRef.current = run;
+          lastAcceptedRevisionRef.current = created.accepted
+            ? created.revision
+            : null;
           startSeriesFlush();
           const freeze = nextFreezeRun(null, frame);
           freezeRef.current = freeze;
@@ -2246,8 +2439,15 @@ export function useMonitorSession(
           // exists, so comparing against ITS result here would make every
           // live frame with recorder data look like a fresh reset.
           const withFinalSeries = withSeries(closed);
-          runRef.current = withFinalSeries;
-          if (withFinalSeries !== closed) saveMonitorRun(withFinalSeries);
+          // Hand-off store design spec §1, plan Task 3: `withFinalSeries`
+          // is always a NEW object relative to the run this hook held
+          // before the reset (`closed !== runRef.current` already proved
+          // that; `withSeries` either returns `closed` itself or a further
+          // spread of it), so this always reaches the store — never a
+          // no-op commit. `completeContinuityReset` is one of the writer
+          // gates this task makes PURE; this call site is its own
+          // committer, same discipline as `closeRecord`'s.
+          applyProducerCommit(withFinalSeries);
           // Same two steps `closeRecord` always takes after its own
           // completion write: the 30s flush timer would otherwise keep
           // firing into a record that can never accept another write, and
@@ -2292,7 +2492,21 @@ export function useMonitorSession(
           // `endedBy: "interrupted" | "link-lost"` (`monitorRun.ts`),
           // neither of which is burst-eligible, so `openBurstHold()`'s own
           // predicate excludes this arm too without a special case here.
-          update({ phase: "ended", endedBy: "user", runOpen: false });
+          //
+          // Hand-off store design spec §7, plan Task 3: one of the "no-hold
+          // closes" — a close that opens NO hold at all still owes the
+          // verify, synchronously, in this SAME `ended` patch, before
+          // `handoffHeld` reaches `false`.
+          const holdError: "storage-failed" | null = verifyHandoffWritable()
+            ? null
+            : "storage-failed";
+          update({
+            phase: "ended",
+            endedBy: "user",
+            runOpen: false,
+            handoffHeld: holdError !== null,
+            holdError,
+          });
         }
         // Same defensive, test-suite-unreachable fallback arm as the seed
         // above — every real frame reaching this branch already carries
@@ -2343,7 +2557,15 @@ export function useMonitorSession(
       // transport) but no phase moves on it.
       update({ frame });
     },
-    [nowDate, update, startSeriesFlush, withSeries, stopSeriesFlush],
+    [
+      nowDate,
+      update,
+      startSeriesFlush,
+      withSeries,
+      stopSeriesFlush,
+      applyProducerCommit,
+      verifyHandoffWritable,
+    ],
   );
 
   /** A terminal event from the machine: `workoutComplete` (an honest
@@ -2396,14 +2618,54 @@ export function useMonitorSession(
       // between them.
       const splitOpened = terminated ? false : openHandoffHold();
       const burstOpened = openBurstHold();
+      // Hand-off store design spec §7, plan Task 3: "the no-conditions-
+      // owed finish" — a close whose run is `null` (a Menu terminate/
+      // WORKOUTEND before any rowing frame ever arrived; both openers
+      // return `false` via their own `run === null` guard) still owes the
+      // verify in this same `ended` patch — a no-op for THIS reason
+      // specifically, since `verifyHandoffWritable`'s own `run === null`
+      // short-circuit always returns `true` there, but kept for the
+      // identical "every ended hand-off with a completed run runs the
+      // verdict branch" uniformity `endSession`/the continuity-reset
+      // branch also follow.
+      // **CORRECTED, found while building this task's own tests
+      // (`useMonitorSession.test.ts`'s "hand-off store" describe block):
+      // for a NON-null run, `burstOpened` is unreachable-false here.** An
+      // earlier version of this comment claimed a burst-first race could
+      // leave `summaryTotals` already set by this point — that requires
+      // `appendSummaryObservations` to have accepted a write against a
+      // STILL-LIVE run, which its own `completedAt === null` gate refuses
+      // outright; the driver's own ordering also emits `terminated` BEFORE
+      // `summary-observations` for exactly this reason (see
+      // `useMonitorSession.test.ts`'s own test (h) and its comment: the
+      // pickup "must run AFTER the `terminated` event or the record is
+      // still open and declines the write forever"). So for a real run,
+      // `openBurstHold()` always opens here, and this branch's own
+      // `!handoffHeld` half is provably true only in the `run === null`
+      // case — a no-op, not a genuine denied-write path; that path is
+      // instead caught by `resolveHandoffCondition`'s own release funnel,
+      // once the hold this function DID open resolves.
+      let handoffHeld = splitOpened || burstOpened;
+      let holdError: "storage-failed" | null = null;
+      if (!handoffHeld && !verifyHandoffWritable()) {
+        handoffHeld = true;
+        holdError = "storage-failed";
+      }
       update({
         phase: "ended",
         endedBy: "machine",
-        handoffHeld: splitOpened || burstOpened,
+        handoffHeld,
+        holdError,
         runOpen: false,
       });
     },
-    [closeRecord, openBurstHold, openHandoffHold, update],
+    [
+      closeRecord,
+      openBurstHold,
+      openHandoffHold,
+      update,
+      verifyHandoffWritable,
+    ],
   );
 
   /** `driver` is the one that emitted the event — passed rather than read
@@ -2464,8 +2726,8 @@ export function useMonitorSession(
         // "the hook layer flushes after each boundary write lands"). Rather
         // than a second write chasing `recordActual`'s own, the freshest
         // series snapshot is attached to the CANDIDATE record passed in, so
-        // `recordActual`'s single internal `saveMonitorRun` call already
-        // carries both the accepted actual and the trace in one write —
+        // this hook's own `applyProducerCommit` call below already commits
+        // both the accepted actual and the trace in one write —
         // §4 S1's write-count check is what this collapsing is FOR.
         // `candidate` is `run` itself, same reference, whenever there is
         // nothing new to attach (`withSeries`'s own doc comment on why that
@@ -2489,10 +2751,17 @@ export function useMonitorSession(
           `index=${event.actual.index} finalBoundary=${event.finalBoundary === true} recordClosed=${run.completedAt !== null} -> ${accepted ? "accepted" : "REFUSED (the record returned unchanged)"} (actuals ${run.actuals.length} -> ${next.actuals.length})`,
         );
         // A refusal returns `candidate` itself unchanged — nothing to
-        // persist, nothing to re-render, exactly as `recordActual`'s own
+        // commit, nothing to re-render, exactly as `recordActual`'s own
         // immutability guard always meant before `candidate` existed.
-        if (accepted) {
-          runRef.current = next;
+        //
+        // Hand-off store design spec §1, plan Task 3: the GATE accepting
+        // (`accepted`, above) is no longer the same fact as the STORE
+        // accepting — a stale/retired/second-key refusal is now possible
+        // here too, and `runOpen`/`actuals` must only ever reflect what the
+        // store actually committed, per the sole-committer discipline
+        // (`applyProducerCommit`'s own doc comment: "a refusal can
+        // therefore never diverge producer from store").
+        if (accepted && applyProducerCommit(next)) {
           update({ actuals: next.actuals });
         }
         // Whatever the record decided, the boundary the SPLIT condition was
@@ -2557,6 +2826,10 @@ export function useMonitorSession(
         rowingStreakRef.current = null;
         lastContinuityRef.current = null;
         runRef.current = null;
+        // Hand-off store design spec §1: same per-run reset `cancel()`
+        // applies to this ref, for the identical reason — see that
+        // function's own comment.
+        lastAcceptedRevisionRef.current = null;
         update({ ...INITIAL_STATE, programDropped: true });
         return;
       }
@@ -2571,13 +2844,13 @@ export function useMonitorSession(
         // observation write, which is precisely all a terminate's summary
         // is allowed to do, and `appendSummaryObservations` re-checks the
         // eligible-close predicate itself (gate 4). `runRef.current` is
-        // the identity this write is keyed on;
-        // `appendSummaryObservations` re-reads storage fresh rather than
-        // trusting it (the same `clearMonitorRun()` resurrection race its
-        // own doc comment names), so a `run === null` here just means
-        // there is no identity to even ATTEMPT the write with — not a
-        // reason to skip trying to finish an open linger, which happens
-        // unconditionally below.
+        // the identity AND the base this write builds on now (hand-off
+        // store design spec §1/§3, plan Task 3: `appendSummaryObservations`
+        // is pure and no longer re-reads storage — see its own doc comment
+        // in `monitorRun.ts`), so a `run === null` here just means there is
+        // no run to even ATTEMPT the write with — not a reason to skip
+        // trying to finish an open linger, which happens unconditionally
+        // below.
         // THE RECEIPT INSTRUMENT (storage-spine design spec §5, Task 3):
         // "the driver records that it EMITTED; nothing records whether the
         // record was updated" — the walk README's own lesson. Every branch
@@ -2595,30 +2868,39 @@ export function useMonitorSession(
             "the machine's own summary arrived with no run identity to attempt the write against",
           );
         } else {
-          const appended = appendSummaryObservations(run.startedAt, {
+          const appended = appendSummaryObservations(run, {
             totals: event.totals,
             detail: event.detail,
             ...(event.verificationBytes !== undefined
               ? { verificationBytes: event.verificationBytes }
               : {}),
           });
-          if (appended !== null) {
-            runRef.current = appended;
+          // Hand-off store design spec §1, plan Task 3: the writer gate
+          // accepting (`appended !== null`) is no longer the same fact as
+          // the store accepting — a stale/retired/second-key refusal is
+          // now possible here too (the sole-committer discipline:
+          // `runRef` must never diverge from an accepted commit).
+          if (appended !== null && applyProducerCommit(appended)) {
             logRef.current?.record(
               "summary-recorded",
               `run=${appended.startedAt} totals=${JSON.stringify(appended.summaryTotals)}`,
             );
           } else {
-            // Gate 4 (the same eligible-close predicate this event's own
-            // opener re-checks) refused the write — defensive, not
-            // expected: the opener that owed this condition already
-            // enforces the identical predicate. Waiting longer cannot help
-            // a write that was refused, so this still resolves the
-            // condition (`"burst-heard"` — the burst WAS heard off the
-            // wire; the receipt above is what distinguishes the rejection).
+            // TWO ways this lands here, both defensive rather than
+            // expected: (1) Gate 4 (the same eligible-close predicate this
+            // event's own opener re-checks) refused the write outright
+            // (`appended === null`) — the opener already enforces the
+            // identical predicate; (2) the writer gate accepted but the
+            // STORE refused the commit (stale/retired/second-key — hand-off
+            // store design spec §1) — the store's own `commit-refused`
+            // receipt (piped to `logRef` via `setReceiptChannel`) carries
+            // which. Waiting longer cannot help either way, so this still
+            // resolves the condition (`"burst-heard"` — the burst WAS heard
+            // off the wire; the receipts above are what distinguish the
+            // rejection).
             logRef.current?.record(
               "summary-append-rejected",
-              `run=${run.startedAt} the writer gate (appendSummaryObservations) refused this attempt`,
+              `run=${run.startedAt} declined — either the writer gate (appendSummaryObservations) or the store's own commit refused this attempt`,
             );
           }
           resolveHandoffCondition("burst", "burst-heard");
@@ -2707,7 +2989,14 @@ export function useMonitorSession(
       // back by itself, the phase stays `disconnected` and the rower's
       // recovery is End -> log, or leave and re-Connect fresh.
     },
-    [endByMachine, handleFrame, resolveHandoffCondition, update, withSeries],
+    [
+      endByMachine,
+      handleFrame,
+      resolveHandoffCondition,
+      update,
+      withSeries,
+      applyProducerCommit,
+    ],
   );
 
   /** Drops the driver and the radio. FOUR STEPS, IN THIS ORDER (Task 7,
@@ -3470,10 +3759,24 @@ export function useMonitorSession(
     // its summary over a link that is, by definition, still up (the
     // `terminate()` below is about to be sent over it).
     const held = openBurstHold();
+    // Hand-off store design spec §7, plan Task 3: a link-lost End opens no
+    // hold at all (`held` is always `false` for it, `openBurstHold`'s own
+    // predicate) — the verify runs synchronously, right here, in this same
+    // `ended` patch, exactly like `endByMachine`'s own no-conditions-owed
+    // branch and the continuity-reset close. A link-up End that DID open
+    // the burst hold skips the verify here — it runs later, once, at
+    // `resolveHandoffCondition`'s own release funnel.
+    let handoffHeld = held;
+    let holdError: "storage-failed" | null = null;
+    if (!handoffHeld && !verifyHandoffWritable()) {
+      handoffHeld = true;
+      holdError = "storage-failed";
+    }
     update({
       phase: "ended",
       endedBy: "user",
-      handoffHeld: held,
+      handoffHeld,
+      holdError,
       runOpen: false,
     });
     const driver = driverRef.current;
@@ -3495,7 +3798,51 @@ export function useMonitorSession(
       // already over as far as the rower is concerned; a machine that
       // refuses the terminate does not un-end it.
     }
-  }, [closeRecord, openBurstHold, update]);
+  }, [closeRecord, openBurstHold, update, verifyHandoffWritable]);
+
+  /** `MonitorSession.retryHandoffSave`'s own doc comment carries the
+   *  contract. `retryDurable` (§1) NEVER bumps `revision` — modelling Retry
+   *  as `commit` would stale this hook's own `lastAcceptedRevisionRef` and
+   *  refuse the very next producer commit (the design's own headline-loss
+   *  case: a late burst arriving right after a heal). So this never touches
+   *  `runRef`/`lastAcceptedRevisionRef` at all — only the durable tier
+   *  changes, and the in-memory entry `handoffStore.read` serves was
+   *  already current. */
+  const retryHandoffSave = useCallback(async (): Promise<void> => {
+    if (stateRef.current.holdError === null) return;
+    const run = runRef.current;
+    if (run === null) {
+      // Defensive: `verifyHandoffWritable` only enters `holdError` when
+      // `runRef.current !== null` (its own null-guard returns `true`
+      // otherwise), so `holdError !== null` with a null run is
+      // unreachable via this hook's own public API. Release rather than
+      // leave the frame stuck on a run this hook no longer has.
+      update({ handoffHeld: false, holdError: null });
+      return;
+    }
+    logRef.current?.record(
+      "hold-error-retry",
+      `run=${run.startedAt} retrying the durable write`,
+    );
+    const verdict = retryDurableHandoff(run.startedAt);
+    if (verdict !== null && verdict !== "failed") {
+      update({ handoffHeld: false, holdError: null });
+    }
+    // else: stays held. `retryDurable`'s own `retry-durable` receipt
+    // (piped to `logRef`) already records the verdict either way.
+  }, [update]);
+
+  /** `MonitorSession.proceedHandoff`'s own doc comment carries the
+   *  contract — no stash: the memory tier is already current by
+   *  construction. */
+  const proceedHandoff = useCallback(async (): Promise<void> => {
+    if (stateRef.current.holdError === null) return;
+    logRef.current?.record(
+      "hold-error-proceed",
+      `run=${runRef.current?.startedAt ?? "none"} proceeding without a confirmed durable write — the memory tier already carries the full record`,
+    );
+    update({ handoffHeld: false, holdError: null });
+  }, [update]);
 
   const cancel = useCallback(async (): Promise<void> => {
     const phase = stateRef.current.phase;
@@ -3553,6 +3900,13 @@ export function useMonitorSession(
     // seed the next one's continuity baseline.
     lastContinuityRef.current = null;
     runRef.current = null;
+    // Hand-off store design spec §1: a stale revision from a run that
+    // never advanced past `programming`/`ready` (the only phases `cancel`
+    // reaches from) must never seed the NEXT run's own create-commit CAS —
+    // though in practice `runRef.current` was already `null` here (a run
+    // only opens at the `ready` -> `live` transition), so this ref was
+    // already `null` too; reset for symmetry with `runRef` itself.
+    lastAcceptedRevisionRef.current = null;
     update(INITIAL_STATE);
   }, [teardown, update]);
 
@@ -3568,6 +3922,42 @@ export function useMonitorSession(
   // effect body runs once (no deps) and `teardown` reads only refs.
   useEffect(() => teardown, [teardown]);
 
+  // Hand-off store design spec §1, plan Task 3: wires `handoffStore`'s ONE
+  // observability sink to THIS hook's own diagnostic ring — "the hook
+  // wires logRef in Task 3" (`handoffStore.ts`'s own `setReceiptChannel`
+  // doc comment). A stable closure reading `logRef.current` AT CALL TIME
+  // (never captured), the same idiom `livenessDepsRef`'s own
+  // `onSilence`/`onRecovery` already use for the identical reason: the log
+  // does not exist yet at mount (only `connect()` creates one), and the
+  // channel must keep working across every `connect()` this hook instance
+  // ever makes, not just the first. Mount/unmount only (`[]`): the store
+  // is a MODULE-LEVEL singleton (one process, `handoffStore.ts`'s own
+  // header), so only one hook instance may hold the channel at a time —
+  // true in production (exactly one connected session), and every test
+  // that mounts a SECOND hook instance concurrently must expect the
+  // second `setReceiptChannel` call to supersede the first, matching the
+  // module's own single-channel contract.
+  //
+  // `"store-receipt:<kind>"`, DELIBERATELY NOT `"handoff-*"` — every other
+  // entry this file's `logRef.record` calls have ever written for the
+  // ended hand-off (`handoff-hold`/`handoff-released`) starts with
+  // `"handoff"`, and `useMonitorSession.test.ts` already has several exact
+  // `entries.filter((e) => e.kind.startsWith("handoff"))` assertions
+  // pinning that narrower ring to precisely those two kinds — a store
+  // receipt naming itself `handoff-*` would silently join their exact
+  // sequence and break every one of them (found by running the full suite,
+  // not by inspection).
+  useEffect(() => {
+    const onReceipt = (receipt: HandoffReceipt): void => {
+      logRef.current?.record(
+        `store-receipt:${receipt.kind}`,
+        JSON.stringify(receipt),
+      );
+    };
+    setReceiptChannel(onReceipt);
+    return () => setReceiptChannel(null);
+  }, []);
+
   return {
     phase: state.phase,
     error: state.error,
@@ -3576,6 +3966,7 @@ export function useMonitorSession(
     actuals: state.actuals,
     endedBy: state.endedBy,
     handoffHeld: state.handoffHeld,
+    holdError: state.holdError,
     frozen: state.frozen,
     runOpen: state.runOpen,
     frameSilence: state.frameSilence,
@@ -3584,6 +3975,8 @@ export function useMonitorSession(
     program,
     endSession,
     cancel,
+    retryHandoffSave,
+    proceedHandoff,
     exportLog,
   };
 }

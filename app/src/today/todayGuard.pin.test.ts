@@ -64,8 +64,15 @@ describe("Today's cold-start guard is untouched by Phase 7B (spec §3)", () => {
     // LATER phase legitimately changes this guard, update this constant
     // ... and say why") for the import line specifically, since the import
     // is asserted here as a SEPARATE claim from the guard block itself.
+    //
+    // Hand-off store design spec §1, plan Task 3: widened AGAIN to bring in
+    // `saveMonitorRun` — `completeInterruptedRun` is now a PURE builder
+    // (`monitorRun.ts`'s own doc comment on it), so `UnloggedMonitorRow`'s
+    // `handleLogIt` persists its returned record itself, as a STOPGAP until
+    // Task 4 rewrites this screen's own unlogged row onto the store. Still
+    // just an import-line widening; the guard block itself is untouched.
     expect(source).toContain(
-      'import {\n  loadMonitorRun,\n  clearMonitorRun,\n  completeInterruptedRun,\n  type MonitorRun,\n} from "../monitor/monitorRun";',
+      'import {\n  loadMonitorRun,\n  clearMonitorRun,\n  completeInterruptedRun,\n  saveMonitorRun,\n  type MonitorRun,\n} from "../monitor/monitorRun";',
     );
     expect(source).not.toMatch(/import\s*\{[^}]*\banyLiveSession\b/);
   });

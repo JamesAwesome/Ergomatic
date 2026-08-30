@@ -463,11 +463,21 @@ export function isMonitorRun(value: unknown): value is MonitorRun {
 /** Persists the run. Best-effort, same rationale as `saveRun`: localStorage
  *  can throw (quota, private-mode Safari, disabled storage), and this never
  *  lets that escape uncaught. Unlike `saveRun`, this reports nothing back —
- *  the brief's own interface fixes `saveMonitorRun`'s return type at `void`
- *  (the record's would-be callers, `createMonitorRun` below and 7B's
- *  in-progress actuals writes, have no different action to take on a failed
- *  write than a successful one: the in-memory session keeps running either
- *  way, only the localStorage mirror would be stale).
+ *  the brief's own interface fixes `saveMonitorRun`'s return type at `void`.
+ *
+ *  **Hand-off store design spec §1, plan Task 3 — no longer the writer
+ *  behind `createMonitorRun`/`recordActual`/`completeMonitorRun`/
+ *  `appendSummaryObservations`.** Those four are pure now; the sole
+ *  production committer is `useMonitorSession.ts`'s hook, through
+ *  `handoffStore.ts`'s own `commit`/`retryDurable` (which duplicate this
+ *  function's sacrifice ordering, ported verbatim — see
+ *  `handoffStore.ts`'s `performDurableWrite`). This function stays exported
+ *  and still backs every OTHER `MONITOR_RUN_KEY` writer this task's scope
+ *  does not touch (`Today.tsx`/`LogSession.tsx`/`useStartWorkout.ts` — Tasks
+ *  4/5's own store rewrites) — it has no different action to take on a
+ *  failed write than a successful one regardless of caller: the in-memory
+ *  session keeps running either way, only the localStorage mirror would be
+ *  stale.
  *
  *  **THE SACRIFICE (Phase LT spec 2 §3, ruling 3's own caution section):**
  *  a ~720 KB worst-case series (ruling 2's cap) changes the odds of the
@@ -534,7 +544,7 @@ export function clearMonitorRun(): void {
   localStorage.removeItem(MONITOR_RUN_KEY);
 }
 
-/** Builds, persists, and registers a fresh `MonitorRun` — the ONE place a
+/** Builds a fresh `MonitorRun` — the ONE place a
  *  new monitor-driven session begins. Cross-clear rule (design spec's
  *  coexistence obligation): creating a `MonitorRun` clears whatever
  *  `SessionRun` is currently on record, unconditionally — a rower cannot be
@@ -570,7 +580,25 @@ export function clearMonitorRun(): void {
  *  here too closes the last silent-failure gap: a caller that forgot to
  *  compute a seed would otherwise write a v2 record with none, and 7C's log
  *  screen would fall through to the manual door with no signal why. Every
- *  run this function builds is stamped `v: 2` unconditionally. */
+ *  run this function builds is stamped `v: 2` unconditionally.
+ *
+ *  **Hand-off store design spec §1/§2, plan Task 3 — PURE BUILDER, no
+ *  longer a persister.** This function used to call `saveMonitorRun(run)`
+ *  directly, making it the one writer this file's own header comment
+ *  called "deliberately NOT idempotent-checked." That write is GONE: the
+ *  create-commit (`handoffStore.commit(run.startedAt, null, run)`, spec §1)
+ *  and its own defensive retire of whatever remains for the staged key
+ *  (spec §5's "createMonitorRun defense" row) now happen at this
+ *  function's one production caller, `useMonitorSession.ts`'s `handleFrame`
+ *  "ready" branch — NOT here. The reason is architectural, not stylistic:
+ *  `handoffStore.ts` imports `MONITOR_RUN_KEY`/`isMonitorRun` FROM this
+ *  file (Task 2's own hydration path), so this file calling back INTO
+ *  `handoffStore.ts` would be a circular import; the hook already imports
+ *  both files, so it is the natural place for the commit to live. Nothing
+ *  else changes: this still returns the SAME shape, and `clearRun()` still
+ *  fires unconditionally — that half of the cross-clear rule is the OTHER
+ *  coexistence mechanism (the phone-timer `SessionRun`), untouched by the
+ *  hand-off store rewrite. */
 export function createMonitorRun(
   args: {
     workoutId: string | null;
@@ -594,7 +622,6 @@ export function createMonitorRun(
     terminated: false,
   };
   clearRun();
-  saveMonitorRun(run);
   return run;
 }
 
@@ -641,14 +668,15 @@ function acceptableFinalBoundary(
 }
 
 /**
- * Appends one interval boundary's actual to a live run, persisting the
- * result — the record-side half of Task 4's run scoping (spec §4: "within
- * an open run: actuals accumulate ... the record is immutable
- * afterwards"), and the function 7B's event wiring appends through when it
- * sees a `MonitorEvent` of kind `intervalComplete`.
+ * Appends one interval boundary's actual to a live run — the record-side
+ * half of Task 4's run scoping (spec §4: "within an open run: actuals
+ * accumulate ... the record is immutable afterwards"), and the function
+ * 7B's event wiring appends through when it sees a `MonitorEvent` of kind
+ * `intervalComplete`. PURE (hand-off store design spec §1, plan Task 3):
+ * returns the new record; the hook is what commits it.
  *
  * **A CLOSED run is immutable — with ONE exception, the FINISH GRACE:
- * otherwise this returns it UNCHANGED and persists nothing.**
+ * otherwise this returns it UNCHANGED.**
  * `completedAt !== null` is what "closed" means on this record
  * (the same "live" vs "finished but not yet logged" boundary
  * `MonitorRun.completedAt`'s own comment draws, and the one
@@ -810,46 +838,29 @@ export function recordActual(
   // row); a boundary the machine reports after any of those lands here
   // and is refused.
   const wasClosed = run.completedAt !== null;
-  // The record this write actually builds on — `run` for a live accept
-  // (nothing to re-read: `run` IS the current record, by construction of
-  // every other writer in this file), or the freshly-loaded copy
-  // `stillLive` returns for the late/closed path below. Declared here so
-  // TypeScript can narrow it without an extra branch at the `next`
-  // assembly site.
-  let base: MonitorRun = run;
-  if (wasClosed) {
-    if (!acceptableFinalBoundary(run, actual, opts)) return run;
-    // Storage-spine design spec §2's late side, Task 3: `BURST_LINGER_MS`
-    // widens the gap between "the hook decided this late actual is
-    // acceptable" (built from a `run` object it may have been holding
-    // since before the linger started) and this write, by up to 2000ms —
-    // the same `clearMonitorRun()` resurrection race
-    // `appendSummaryObservations` guards against (that function's own doc
-    // comment).
-    //
-    // **CORRECTED at the final whole-branch review (LOW-1) — this branch
-    // used to call `stillLive` for its identity check ALONE and then
-    // discard the record it returned, rebuilding `next` by spreading the
-    // stale `run` argument instead.** `appendSummaryObservations` (the
-    // OTHER post-close writer, same file) uses `stillLive`'s own return
-    // value as its base for exactly the reason this branch now does too:
-    // the object `stillLive` hands back is what storage holds RIGHT NOW,
-    // and `run` is whatever the caller was holding before the up-to-2000ms
-    // linger — not provably the same object today (the review traced the
-    // one production caller, `useMonitorSession.ts`, and found the ref
-    // kept in sync by every writer that touches it, so this was not yet
-    // exploitable), but T3 widened what rides on that invariant from two
-    // fields (`summaryTotals`/`verificationBytes`) to six, and the safety
-    // now lives in a different file (a ref-sync discipline in the hook)
-    // than the writer that depends on it. Reading from `stillLive`'s own
-    // result makes the guarantee structural instead of coincidental.
-    const live = stillLive(run.startedAt);
-    if (live === null) return run;
-    base = live;
-  }
-  const actuals = [...base.actuals, actual];
+  if (wasClosed && !acceptableFinalBoundary(run, actual, opts)) return run;
+  // Hand-off store design spec §3, plan Task 3 — THE PROVEN-ON-`main`
+  // DEFECT'S OWN FIX, stated where it used to live. This function is now
+  // PURE: it never persists, and its base is ALWAYS the CALLER's own `run`
+  // argument — never a storage re-read. The late/closed finish-grace path
+  // above used to rebuild its base from `stillLive(run.startedAt)`, a
+  // fresh `loadMonitorRun()` call — which is exactly the defect: when the
+  // live→closed write that PRECEDED this one had been denied (swallowed
+  // by `saveMonitorRun`'s own best-effort catch), storage still held the
+  // last successful write — a stale LIVE copy — and that stale copy became
+  // this function's base, silently re-opening the record and truncating
+  // its actuals (`completedAt` reset to `null`, `endedBy` gone, sums gone).
+  // `stillLive` is DELETED (no callers remain — `appendSummaryObservations`
+  // below is pure now too); the hook (`useMonitorSession.ts`'s sole-
+  // committer discipline, spec §1) is what decides whether `run` itself is
+  // safe to build on — a mid-run denial there simply means the hook's own
+  // `runRef`/`lastAcceptedRevisionRef` never advanced past the last
+  // ACCEPTED commit, so the caller's `run` argument here is, by
+  // construction, the newest record this process has ever agreed to. No
+  // second source of truth to disagree with it.
+  const actuals = [...run.actuals, actual];
   const next: MonitorRun = {
-    ...base,
+    ...run,
     actuals,
     // RC-1 (storage-spine design spec §3): the finish-grace boundary
     // accepted above is the ONLY way `actuals` can still grow after a
@@ -863,11 +874,10 @@ export function recordActual(
     // had sums computed to begin with (that function's own gate below) and
     // none are added here either — only `"finished"` records ever carry
     // these four fields.
-    ...(wasClosed && base.endedBy === "finished"
+    ...(wasClosed && run.endedBy === "finished"
       ? computeWorkRestSums(actuals)
       : {}),
   };
-  saveMonitorRun(next);
   return next;
 }
 
@@ -908,6 +918,15 @@ export function recordActual(
  * wrote it.
  *
  * Returns a NEW record rather than mutating, matching `recordActual`.
+ *
+ * **Hand-off store design spec §1, plan Task 3 — PURE.** No longer calls
+ * `saveMonitorRun` itself: this is one of the three named writer gates
+ * (`recordActual`, this function, `appendSummaryObservations`) that
+ * return `next` (or the same reference on decline) and never persist —
+ * `useMonitorSession.ts`'s hook is the sole committer, applying the result
+ * through `handoffStore.commit` with its own `lastAcceptedRevisionRef`
+ * discipline (spec §1: "a refusal can therefore never diverge producer
+ * from store").
  */
 export function completeMonitorRun(
   run: MonitorRun,
@@ -931,7 +950,6 @@ export function completeMonitorRun(
     // construction, and this spec's bar is "never estimated."
     ...(args.endedBy === "finished" ? computeWorkRestSums(run.actuals) : {}),
   };
-  saveMonitorRun(next);
   return next;
 }
 
@@ -958,6 +976,17 @@ export function completeMonitorRun(
  *
  * Idempotent by the same rule `completeMonitorRun` uses: an already-closed
  * record is returned UNCHANGED and nothing is persisted.
+ *
+ * **Hand-off store design spec §1, plan Task 3 — PURE, widened alongside
+ * `completeMonitorRun`/`recordActual`/`appendSummaryObservations`.** No
+ * longer calls `saveMonitorRun` — persisting is its callers' job now.
+ * `completeContinuityReset`'s one caller (`useMonitorSession.ts`'s own
+ * continuity-reset branch) commits through the hook's own
+ * `applyProducerCommit` discipline; `completeInterruptedRun`'s one caller
+ * (`Today.tsx`'s `UnloggedMonitorRow`) still calls `saveMonitorRun`
+ * directly on the returned record as a STOPGAP — Task 4 owns `Today.tsx`'s
+ * full store rewrite (plan Task 4: "Today.tsx unlogged row on the store"),
+ * and that call site's own comment says so.
  */
 function completeWithoutWireEvidence(
   run: MonitorRun,
@@ -970,7 +999,6 @@ function completeWithoutWireEvidence(
     completedAt: now.toISOString(),
     endedBy,
   };
-  saveMonitorRun(next);
   return next;
 }
 
@@ -1014,98 +1042,85 @@ export function completeContinuityReset(
 }
 
 /**
- * THE `clearMonitorRun()` RESURRECTION RACE'S SHARED CHECK (storage-spine
- * design spec §2's late side, Task 3): `true` — the currently-stored
- * record, freshly re-read — when the record in storage right now is still
- * THIS run (same `startedAt`, still present); `null` when a late write
- * would either resurrect a record that was already cleared or land on
- * some unrelated run that has since taken its place.
- *
- * TWO writers share this, both because `BURST_LINGER_MS` widens the same
- * window for both: `appendSummaryObservations` below (a burst that lands
- * up to the linger's cap after `LogSession`/`Today` already unmounted) and
- * `recordActual`'s finish-grace door (a late-arriving finish-grace actual,
- * accepted against a `run` object the CALLER may have been holding since
- * before the linger started — `useMonitorSession.ts`'s deferred teardown
- * is the one caller old enough for that to matter). Neither trusts the
- * `MonitorRun` object it was handed for THIS question: both re-read
- * storage fresh, because both can now fire well after that object was
- * built.
- */
-function stillLive(startedAt: string): MonitorRun | null {
-  const stored = loadMonitorRun();
-  if (stored === null || stored.startedAt !== startedAt) return null;
-  return stored;
-}
-
-/**
  * PR 1's post-close observation writer (design spec §2, widened RC-3 Task
  * 2): appends the burst's observations — 0x0039's work-only totals, its
  * other nine fields (`MachineSummaryDetail`), and 0x003F's raw
- * verification-hash bytes when the burst produced one — to the STORED
- * record, write-once and identity-keyed, and mute on every mismatch rather
- * than throwing. This is what lets the burst's listener keep listening
- * for up to `BURST_LINGER_MS` after `LogSession`/`Today` have already
- * unmounted and moved on (spec §2's "the listener deliberately outlives
- * the unmounted component"): by the time a late burst arrives, nothing
- * about the record it wants to touch can be trusted from memory, so this
- * re-reads storage fresh (`stillLive`, above — not a value threaded in) on
- * every call.
+ * verification-hash bytes when the burst produced one — write-once and
+ * identity-checked against its OWN `run` argument, and mute on every
+ * mismatch rather than throwing.
  *
- * FOUR ways this declines, each silent (no throw, `null` back, nothing
- * persisted) because a late burst arriving into a world that changed out
- * from under it is not a bug worth surfacing to whatever screen is now
- * live:
+ * **Hand-off store design spec §1/§3, plan Task 3 — PURE, base is the
+ * CALLER's own current record.** This function used to re-read storage
+ * fresh on every call (`stillLive`, since DELETED — no callers remain),
+ * because a late burst can arrive up to `BURST_LINGER_MS` after
+ * `LogSession`/`Today` have already unmounted and the caller's own copy
+ * could no longer be trusted. That re-read is exactly the shape of the §3
+ * defect `recordActual` no longer has: it traded "trust the caller" for
+ * "trust whatever storage says right now," which is wrong precisely when
+ * storage is stale (a denied write). Under this design the caller —
+ * `useMonitorSession.ts`'s hook, the sole committer — always holds the
+ * newest record this process has ever agreed to (`runRef.current`, kept
+ * in lockstep with `lastAcceptedRevisionRef`), so THAT is what this
+ * function builds on. The three FORMER decline reasons that depended on a
+ * storage re-read are gone with it:
  *
- *   1. `MONITOR_RUN_KEY` is empty — the `clearMonitorRun()` resurrection
- *      race (`LogSession.tsx`/`Today.tsx`'s own clear sites, cited in the
- *      spec): the rower already logged or discarded this run and nothing
- *      is left to append to.
- *   2. the stored run's `startedAt !== runStartedAt` — identity is kept
- *      on the RUN, not "the session" (delta C-i): a second `program()`
- *      re-arm inside the same hook instance overwrote the record this
- *      burst belongs to with an unrelated one before the burst landed.
- *      (1) and (2) together are `stillLive`, above.
- *   3. the stored run is not naturally closed — `completedAt === null`
- *      (still live; no completion writer has run yet), or `endedBy` is
- *      neither `"finished"` nor `"rower"` (the complement of
- *      link-lost/program-failed, RC-3 Task 2, spec §1 gate 1: `"rower"`
+ *   - "`MONITOR_RUN_KEY` is empty" (the rower already logged/discarded) —
+ *     now the HOOK's own `commit` call for this write is refused with
+ *     `reason: "retired"` (the store's tombstone, spec §1) if that
+ *     happened; this function has no notion of storage at all anymore.
+ *   - "the stored run's `startedAt` doesn't match" (a second `program()`
+ *     re-arm) — the CALLER passes `run` directly now; a caller holding the
+ *     wrong run's identity is the caller's own bug, not something this
+ *     function can detect by re-reading a key it no longer touches.
+ *
+ * The remaining two declines are genuine PROPERTIES of `run` itself, not
+ * storage facts, and stay exactly as before:
+ *
+ *   1. `run.completedAt === null` — still live; no completion writer has
+ *      run yet.
+ *   2. `run.endedBy` is neither `"finished"` nor `"rower"` (the complement
+ *      of link-lost/program-failed, RC-3 Task 2, spec §1 gate 1: `"rower"`
  *      covers BOTH venues — Menu-at-the-erg and the app's End button,
  *      `CloseReason`'s own doc comment — and the machine speaks the
  *      identical burst for a Menu terminate, notes §25 — and this stays
  *      correct if W8's inactivity auto-terminate lands in `"rower"`
  *      later). A link-lost or program-failed close's burst status is
  *      still UNKNOWN (§1) and still declines.
- *   4. `summaryTotals` already exists — write-once: a second burst
+ *   3. `run.summaryTotals` already exists — write-once: a second burst
  *      arriving for a record already carrying observations (the two
  *      independent triggers in `driver.ts`'s `reconcileSummary`, or a
- *      retried delivery) must never overwrite the first.
+ *      retried delivery) must never overwrite the first. This guard now
+ *      reads whatever `run` the CALLER passed — the hook is expected to
+ *      pass its own latest `runRef.current`, which already reflects an
+ *      earlier accepted write of this same field; a caller that instead
+ *      passed a stale pre-write copy would see this guard miss, which is
+ *      why the hook's own committer discipline (never diverging `runRef`
+ *      from an accepted commit) is what keeps this safe in practice, not
+ *      a defensive re-check inside this function.
  *
  * On the one valid case, writes `summaryTotals` and `summaryDetail`
  * (always, in the SAME write) and `verificationBytes` (only when the
  * caller has one — a burst that never produced 0x003F still folds its
  * totals and detail alone) — every other field on the record, byte for
- * byte, is exactly what was already stored. `isMonitorRun`'s own
+ * byte, is exactly what was already there. `isMonitorRun`'s own
  * positive-conjunction, no-unknown-key design (this file's comment above
  * `isMonitorRun`) is what makes that safe without a validator change or a
  * `v` bump: a record carrying any of these three fields still round-trips
  * through `loadMonitorRun` on any build, new or old.
  *
- * Returns what it wrote (the new record), or `null` when it declined —
+ * Returns what it computed (the new record), or `null` when it declined —
  * matching `recordActual`/`completeMonitorRun`'s own "new record back,
  * caller's copy untouched" idiom, except here there is no caller copy to
  * return unchanged: a decline has nothing worth handing back at all.
  */
 export function appendSummaryObservations(
-  runStartedAt: string,
+  run: MonitorRun,
   observations: {
     totals: { workElapsedSeconds: number; workDistanceMeters: number };
     detail: MachineSummaryDetail;
     verificationBytes?: readonly number[];
   },
 ): MonitorRun | null {
-  const run = stillLive(runStartedAt);
-  if (run === null) return null;
   if (run.completedAt === null) return null;
   // Burst-eligible closes only: the complement of link-lost/program-failed.
   // "rower" covers BOTH venues (Menu-at-the-erg and the app's End button,
@@ -1121,7 +1136,6 @@ export function appendSummaryObservations(
       ? { verificationBytes: observations.verificationBytes }
       : {}),
   };
-  saveMonitorRun(next);
   return next;
 }
 
