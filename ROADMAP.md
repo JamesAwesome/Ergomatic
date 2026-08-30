@@ -416,6 +416,97 @@ rower's work silently.
         the legacy `clearMonitorRun()` — the test failed (the late burst
         was accepted, `accepted:true, revision:1`), confirming it bites.
         Full detail in `.superpowers/sdd/2026-08-30-handoff-store/task-4-report.md`.
+        **Task 5 (the doors + the #230 restoration) landed 2026-08-30,
+        CLOSING the "NARROWED BY TASK 4" condition above.**
+        `useStartWorkout.ts:99` (confirmReplace) and
+        `WorkoutDetail.tsx:298` (row-instead) now route through
+        `handoffStore.retire()` (a fresh, non-render `currentUnretired()`
+        read, key-bound) instead of `clearMonitorRun()` — the proven
+        interim asymmetry is gone; a door-leg test at each (real UI path)
+        drives Discard/Replace/Row-Instead through the real component,
+        then races a producer-style commit for the same key and asserts
+        it is refused (`reason:"retired"`); mutation-probed by reverting
+        each door to the legacy clear — both door-leg tests failed
+        exactly as expected (the late burst was accepted,
+        `revision: 1`/`verdict: "saved"`), confirming they bite.
+        `connectGuardStage` (`monitorRun.ts`) now takes the MonitorRun
+        half of its answer as a boolean PARAMETER rather than calling
+        `loadMonitorRun()` itself (it cannot import `handoffStore.ts` —
+        the same circular-import constraint Task 3's own doc comment
+        states for the create-commit); both callers (`ConnectAction.tsx`,
+        `useStartWorkout.ts`'s `handleStart`) now derive it from
+        `currentUnretired()`, closing the P1-1 memory-only-record hole at
+        both guard doors — a dedicated test per door seeds a record
+        through the store with the DURABLE write denied and confirms the
+        guard stages "unlogged" where `loadMonitorRun()` would have seen
+        nothing; mutation-probed by reverting each guard's own call site
+        back to `loadMonitorRun()` — both memory-only tests failed, each
+        alone. **`monitorRunState()`/`anyLiveSession()` were LEFT
+        UNCHANGED, a deliberate deviation from the spec's literal
+        wording**, not a silent gap: `anyLiveSession()` has zero
+        production callers (Task 3's own header comment on this file, M-2)
+        and fixing it would require the identical parameter-threading
+        change against a 9-cell truth-table test file with no
+        corresponding product benefit — judged disproportionate per
+        CLAUDE.md's own "spend proportionally" rule; flagged for whoever
+        next touches this function, not chased further here.
+        `ConnectAction.tsx`'s "Connect anyway" now retires the STAGED
+        store entry (reason `"connect-guard-armed"`, matching the
+        illustrative reason string Task 2's own `handoffStore.test.ts`
+        already used) before calling `onProceed` — the acceptance point
+        that makes the Replace confirmation binding, captured at STAGE
+        time (not re-read at press time) so a revision that moves while
+        the confirm panel is on screen is honestly reported as
+        `superseded: true` rather than silently overwritten; three
+        dedicated tests (ordinary retire+receipt, a superseded revision
+        proceeding, a no-op when nothing was staged); mutation-probed by
+        skipping the retire entirely — 3 tests failed (the two
+        `ConnectAction.test.tsx` tests plus `LogSession.test.tsx`'s
+        re-pointed row-10 test below), confirming all three are
+        genuinely sensitive to this one call. Task 4's row-10 abandon-path
+        stand-in is RE-POINTED: it now drives the real
+        `ConnectAction` component (Connect -> Connect anyway) instead of
+        calling `handoffStore.retire()` directly.
+        **The #230 restoration** (spec §11): `ConnectedSurface.tsx` (the
+        Gate-0 approved held-error frame — the "COULD NOT KEEP THE RECORD
+        ON THIS PHONE." strip, Retry/Log it anyway, reachable now that
+        Task 3 already shipped its producer), `ConnectedSurface.test.tsx`,
+        `ConnectedSurface.screens.test.tsx`, `ConnectedInterstitial.test.tsx`,
+        `ConnectionLogSheet.test.tsx`, `PaneGrid.test.tsx`, the
+        `connected-ended-error` e2e fixture + screenshots-loop entry, and
+        the two captures all restored verbatim from
+        `origin/wave-f-aud016-spec` — every one of these files had either
+        ZERO drift from the shared merge-base on this branch, or a drift
+        (the mechanical `holdError`/`retryHandoffSave`/`proceedHandoff`
+        fake-session widening) byte-identical to what Task 3 made
+        independently, so nothing on this branch was lost.
+        `WorkoutDetail.connectedRecovery.test.tsx` (new file, the binding
+        route gate, spec §10 row 12) passed UNMODIFIED against the store
+        substrate on its first run; every "the slot" comment retargeted to
+        "the store's memory tier" (the module-slot mechanism it narrates
+        is deleted by this design — spec §2). **`WorkoutDetail.test.tsx`
+        needed NO restoration at all**, contradicting a literal reading of
+        the spec's own restore list: its only difference from the
+        reference branch was the identical mechanical widening, already
+        present in substance on this branch — checked via a three-way diff
+        against the shared merge-base, not assumed.
+        Gates: `pnpm test --project unit --project client` green
+        (5565/5565 tests, 1 skipped, 200 files; one unrelated pre-existing
+        flake observed once in `server/routes/data.test.ts`, gone on
+        re-run, confirmed unrelated to this diff); `pnpm e2e` 420/420;
+        `pnpm screenshots` 82/83 (the one failure, `releases`, is a stale
+        `v0.26.0` version pin against a `v0.27.0`-tagged main — unrelated
+        to this task, not fixed here); the two `connected-ended-error`
+        captures opened and inspected (RF7) — legible, correct button
+        order and copy, no overlap — and came back BYTE-IDENTICAL to the
+        restored reference bytes, confirming the restoration renders
+        pixel-for-pixel as #230's own Gate-0 approval; lint/format/
+        typecheck clean throughout. 19 unrelated screenshot files that
+        changed from environmental/date-dependent rendering noise
+        (today/you/log/news/post-workout-summary screens, none touched by
+        this task's diff) were reverted per the task's own "revert
+        unrelated churn" instruction. Full detail in
+        `.superpowers/sdd/2026-08-30-handoff-store/task-5-report.md`.
 - [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
