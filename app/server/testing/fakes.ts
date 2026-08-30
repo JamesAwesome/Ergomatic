@@ -14,6 +14,7 @@ import {
   type LogInput,
   type LogPatch,
   type LogsStore,
+  type PlanLink,
 } from "../stores/logs.js";
 import type {
   PlanKey,
@@ -380,14 +381,53 @@ type FakeLogRow = Omit<LogInput, "advancesPlan"> & {
 // independently-hand-rolled copies of the tiebreak, mirroring the real
 // store's `resolveNewestPlanLink` (stores/logs.ts). `planIndex`, when
 // given, scopes to that one index (delete's own use — see that method).
+//
+// The `loggedAt` tie resolves by `seq`, this fake's insertion order, and
+// DELIBERATELY not by `id DESC` — which is the real store's own second
+// ORDER BY term. Tried and reverted at the 2026-08-30 review, which asked
+// for the two to be aligned:
+//
+// The real store's `id DESC` is unreachable in practice. Postgres stores
+// `logged_at` to the microsecond, so two ordinary saves never tie and the
+// winner is always decided by `logged_at DESC` alone — observably, newest
+// wins. This fake's `loggedAt` is a plain JS `Date`, so two saves in one
+// test tie constantly. `seq` exists to substitute for the PRECISION the
+// fake lacks, which reproduces that same observable "newest wins"; `id`
+// is a random UUID and would pick a winner at random instead. Aligning
+// the literal tiebreak therefore breaks the agreement it was meant to
+// create — proven, not argued: the change turned two delete contract
+// cases red against the fake while the real store kept passing them.
+//
+// A genuine same-microsecond tie cannot be forced through either store's
+// public API, so no contract case can pin `id DESC` without reaching past
+// the stores into raw SQL, which the shared suite does not do.
+/** The winning row per index, BEFORE provenance is resolved. `workoutId`
+ *  is the fake's stand-in for the real store's LEFT JOIN: only
+ *  `listPlanLinks` (which can reach the workouts store) turns it into
+ *  `PlanLink.workoutIsGlobal`. `delete` reads nothing but `id`. */
+type FakeLinkWinner = Omit<PlanLink, "workoutIsGlobal" | "linkedTitle"> & {
+  workoutId: string | null;
+};
+
 function resolveNewestFakeLink(
   rows: FakeLogRow[],
   planKey: string,
   planIndex?: number,
-): { planIndex: number; id: string }[] {
+): FakeLinkWinner[] {
+  // The workout snapshot and provenance are carried on the SAME winner
+  // record as the id, mirroring the real store's single `selectDistinctOn`
+  // projection — so a reset collision cannot pair one row's id with
+  // another row's workout.
   const byIndex = new Map<
     number,
-    { id: string; loggedAt: Date; seq: number }
+    {
+      id: string;
+      workoutTitle: string;
+      workoutType: string;
+      workoutId: string | null;
+      loggedAt: Date;
+      seq: number;
+    }
   >();
   for (const row of rows) {
     if (row.planKey !== planKey || row.planIndex === null) continue;
@@ -401,6 +441,9 @@ function resolveNewestFakeLink(
     ) {
       byIndex.set(row.planIndex, {
         id: row.id,
+        workoutTitle: row.workoutTitle,
+        workoutType: row.workoutType,
+        workoutId: row.workoutId,
         loggedAt: row.loggedAt,
         seq: row.seq,
       });
@@ -409,10 +452,20 @@ function resolveNewestFakeLink(
   return [...byIndex.entries()].map(([idx, v]) => ({
     planIndex: idx,
     id: v.id,
+    workoutTitle: v.workoutTitle,
+    workoutType: v.workoutType,
+    workoutId: v.workoutId,
   }));
 }
 
-function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
+function makeFakeLogsStore(
+  planState: FakePlanStateStore,
+  // The real store resolves a log's provenance with a LEFT JOIN onto
+  // `workouts`; this fake has to ask the workouts store instead. Passed in
+  // rather than reached for globally so `makeFakeStores` still wires one
+  // object graph with no hidden singleton.
+  workouts: WorkoutsStore,
+): LogsStore {
   const byUser = new Map<string, FakeLogRow[]>();
   return {
     // From-the-log spec (2026-08-18), §3: mirrors the real store's list()
@@ -498,14 +551,34 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
     },
     // From-the-log spec (2026-08-18), §3: newest-wins per plan_index,
     // mirroring the real store's `DISTINCT ON (plan_index) ... ORDER BY
-    // plan_index, logged_at DESC` — ties on `loggedAt` (a real
-    // possibility for this fake's plain `Date`, unlike real Postgres)
-    // resolve by `seq`, the fake's own insertion-order tiebreak.
+    // plan_index, logged_at DESC, id DESC` — including the `id DESC`
+    // tiebreak, which `resolveNewestFakeLink`'s own comment explains.
+    //
+    // Provenance is resolved here rather than in that helper because only
+    // this closure holds the workouts store: `get` checks the globals
+    // first and then the caller's own rows, which is the same reachable
+    // set the real LEFT JOIN can match (a log's `workoutId` only ever
+    // points at a global or at its own owner's row). A miss — the workout
+    // was deleted, or the log never carried an id — is null, which means
+    // UNKNOWN provenance and never "personal".
     async listPlanLinks(userId: string, planKey: string) {
       const rows = byUser.get(userId) ?? [];
-      return resolveNewestFakeLink(rows, planKey).sort(
-        (a, b) => a.planIndex - b.planIndex,
-      );
+      const winners = resolveNewestFakeLink(rows, planKey);
+      const resolved: PlanLink[] = [];
+      for (const winner of winners) {
+        const { workoutId, ...link } = winner;
+        const workout =
+          workoutId === null ? null : await workouts.get(userId, workoutId);
+        resolved.push({
+          ...link,
+          // Both halves of identity move together — null with no joined
+          // row, the row's own pair otherwise. Mirrors the real store's
+          // `workoutRowId === null` guard.
+          linkedTitle: workout === null ? null : workout.title,
+          workoutIsGlobal: workout === null ? null : workout.isGlobal,
+        });
+      }
+      return resolved.sort((a, b) => a.planIndex - b.planIndex);
     },
 
     // Log-delete spec (2026-08-18), §2: mirrors the real store's
@@ -744,10 +817,11 @@ function makeFakeArticleReadsStore(): ArticleReadsStore {
 /** Complete per-user in-memory implementation of all seven data-router stores. */
 export function makeFakeStores(): Stores {
   const planState = makeFakePlanStateStore();
+  const workouts = makeFakeWorkoutsStore();
   return {
     baselines: makeFakeBaselinesStore(),
-    workouts: makeFakeWorkoutsStore(),
-    logs: makeFakeLogsStore(planState),
+    workouts,
+    logs: makeFakeLogsStore(planState, workouts),
     planState,
     preferences: makeFakePreferencesStore(),
     testHistory: makeFakeTestHistoryStore(),

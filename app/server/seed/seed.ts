@@ -4,7 +4,7 @@ import type { Db } from "../db/index.js";
 import type { WorkoutInput } from "../../domain/types.js";
 import { createWorkoutsStore } from "../stores/workouts.js";
 import { GLOBAL_LIBRARY_SEED } from "./library/index.js";
-import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
+import { LEGACY_TITLE_RENAMES } from "../../domain/onboarding.js";
 
 // Arbitrary but fixed application-wide key for the seed advisory lock. Any
 // constant works; it only has to be the same in every process. Exported so
@@ -22,15 +22,13 @@ type LibraryEntry = WorkoutInput & { sortOrder: number };
 // workout link. Renaming in place keeps the id, so the links survive.
 // `contentEqual` deliberately ignores title, so a rename can never ride
 // the content-diff UPDATE path — it needs this write of its own.
-// Old titles are literals on purpose (frozen history, not the constant:
-// the constant is the NEW name). Retirement trigger lives in ROADMAP
-// ("Retire LEGACY_TITLE_RENAMES") — and note session_logs.workout_title
-// is a save-time snapshot, so pre-rename LOGS keep the old spelling
-// forever; only the workouts table converges.
-export const LEGACY_TITLE_RENAMES: ReadonlyMap<string, string> = new Map([
-  ["First 6k", ONBOARDING_TITLES.k6],
-  ["First 2k", ONBOARDING_TITLES.k2],
-]);
+// The map itself now lives in `domain/onboarding.ts` beside the titles it
+// renames TO: session_logs.workout_title is a save-time snapshot, so
+// pre-rename LOGS keep the old spelling forever (only the workouts table
+// converges here) — which means the CLIENT needs the same map to compare a
+// stored title against an authored one. See `canonicalTitle` there.
+// Re-exported so this module's existing importers keep their import path.
+export { LEGACY_TITLE_RENAMES };
 
 // Parsed deep-equal on the content tuple. steps comes back from jsonb with
 // Postgres's canonical key order — isDeepStrictEqual makes that invisible;

@@ -964,6 +964,103 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **ACCEPTED (James, 2026-08-30): deleting a personal same-titled workout
+  unmarks a completed plan row.** `session_logs.workout_id` is `ON DELETE SET
+  NULL`, so a rower who authored their own `2K Test`, rowed it on a checkpoint
+  day (correctly marked `INSTEAD OF 2K Test`) and later deleted that workout
+  sees the mark disappear — the row's identity becomes unknown, and the mark
+  is a positive accusation that never fires on a guess. Raised at #233's
+  re-review, which was right that the 2026-08-30 Gate 0 ruling did not cover
+  it: that ruling accepted preset-type edits and nothing else. **Re-gated
+  verbally instead, and explicitly with no design pass** ("2 is fine, I don't
+  need a mock up"). The alternative — a nullable `workout_was_global` column
+  written at save time — is TRIAD and is NOT being built.
+  **Revisit only if a rower actually hits it**; the shape is documented in
+  `swapMark`'s own comment.
+
+- **A pre-validation row with an unreadable `workoutType` renders a confident
+  plan badge.** `Plan.tsx` falls back to the plan's own type and claims no
+  swap, which is safe but asserts a type nobody recorded. **The WRITER is now
+  fixed** (#233 re-review): `POST /api/logs` validates `workoutType` against
+  the `WorkoutType` union, so no new row can carry a bad value. The earlier
+  refusal to do this was argued from a false premise — the cited O2 -> AT drift
+  is between two VALID union members, so checking the union accepts the whole
+  documented drift and rejects only values no client has ever sent. Reads stay
+  tolerant because rows written before the check exist. What remains is
+  cosmetic and only for those rows: a neutral or unknown badge instead of a
+  confident one, which is a **new visual state and carries a design gate**.
+  Only worth doing if such a row is ever actually observed. **S**
+
+- **The real store's `id DESC` newest-wins tiebreak is pinned by nothing.**
+  `resolveNewestPlanLink` orders `plan_index, logged_at DESC, id DESC`; the
+  fake resolves a `loggedAt` tie by insertion order instead. Aligning the two
+  was tried at #233's review and **reverted with evidence** — it turned two
+  delete contract cases red against the fake while real Postgres kept passing
+  them, because Postgres keeps microseconds (so ordinary saves never tie and
+  `id DESC` is unreachable) while the fake's millisecond `Date` ties
+  constantly, and `seq` is what substitutes for that missing precision. The
+  reasoning is a comment on `resolveNewestFakeLink` so it is not retried. What
+  remains unpinned is the real term itself: pinning it needs a real-store-only
+  test that forces a same-microsecond tie with raw SQL, which the shared
+  contract suite cannot do. **Decide whether that is worth writing at all** —
+  the term is a total-order tiebreak whose only job is determinism. **S**
+
+- **The swap mark goes stale if a plan preset's session types are ever
+  edited.** The Plan screen derives "you swapped this day" by comparing a
+  log's stored type against `PLANS`' type for that slot TODAY, so editing
+  `SPRINT_WEEKS`/`HEAD_WEEKS` would retroactively mark rows that were rowed
+  exactly as the plan then asked. Accepted at the 2026-08-30 design gate
+  (presets are static code and have changed once, at Phase 8A) and recorded in
+  `swapMark`'s own comment plus a warning above the week arrays in
+  `domain/plans.ts`. **Trigger: the next change to a preset's session types.**
+  If that ever becomes routine — an authoring UI, DB-loaded plans — the fix is
+  a stored prescribed-type column, which is TRIAD and wants its own spec.
+  The deletion case is RELATED but is NOT covered by this ruling — it has its
+  own entry above, because Gate 0 accepted preset edits and nothing else.
+
+- **A cross-linked log renders a self-contradictory row.** A log LINKED to
+  the global 6K Test while claiming a `2K Test` snapshot renders
+  `2K Test` with `INSTEAD OF 2K Test` beneath it, which reads as a
+  contradiction. Non-blocking at #233's final review and correctly so: it
+  needs a malformed self-owned request or a client bug to reach, and the
+  explicitly-required personal-same-title case produces the same wording by
+  design. **Revisit only alongside a wording change to the mark itself** —
+  fixing it in isolation would mean the mark stops naming the prescription,
+  which is what makes it useful on every other row. **S**
+
+- **TWO unit-project flakes, each seen once and neither reproduced.** On
+  2026-08-30 during #233: `server/routes/data.test.ts` > `PATCH
+  /api/logs/:id` > `an explicit null clears thumbs previously set to a real
+  value`, then later `GET/PUT /api/prefs` > `PUT updates a field and GET
+  reflects the merge` (expected `#00ff00`, got undefined). Each passed on
+  every rerun — eight and four consecutive full runs respectively. **Two
+  different tests, same shape: supertest against the in-memory fakes.** That
+  pattern is the lead. **This matters more than the known e2e flakes:** the
+  unit
+  project has no Docker, no browser and no network — it is fake stores and
+  supertest, and it should be deterministic. The test itself is self-contained
+  (fresh `makeStores()`, POST then PATCH, no shared fixture), so the
+  nondeterminism is somewhere below it: the fakes carry module-level mutable
+  state (`insertionSeq`, `logsInsertionSeq`) and `Date`-based ordering, which
+  is where to look first. **Not attributed to #233** — that PR's fake changes
+  are confined to `resolveNewestFakeLink`/`listPlanLinks`, which this path
+  never calls — but a single observation cannot rule it out either. Capture the
+  failure output next time it appears rather than re-running past it. **S**
+
+- **The `screenshots` Playwright project is gated by nothing, and its version
+  pins rot silently.** CI's `e2e` job runs the `chromium` project only, so a
+  release-notes PR bumps `news.spec.ts`'s pins (which go red in CI if missed)
+  and leaves `screenshots.spec.ts`'s alone. Third occurrence: v0.18.0 (#166),
+  then v0.27.0 — #232 fixed the e2e pins and `pnpm screenshots` stayed red on
+  main until an unrelated PR needed to regenerate a capture and tripped over
+  it on 2026-08-30. **The pin is the symptom; the missing gate is the item.**
+  Options: run the screenshots project in CI (it costs a full capture pass),
+  derive the expected version from `package.json` instead of a literal, or
+  drop the pin's version specificity and assert only that a release entry
+  renders. Note the literal exists on purpose — it is what makes the capture
+  fail loudly rather than silently shooting a stale screen (recurring failure
+  7) — so "delete the assertion" is not one of the options. **S**
+
 - **AUD-012 — correct the booting-replica claim.** Two complete servers really
   race before the seed lock on an empty database, but the supported deployment
   is explicitly serial and single-replica. This is Confirmed P3 documentation
@@ -1005,9 +1102,15 @@ Each needs erg time or a deliberate recording session.
 - **Harden the post-save offer against the library-loading race** — on a slow
   real device it can eat a real rower's offer. **Product-shaped, not a test
   tweak.** **S/M**
-- **Retire `LEGACY_TITLE_RENAMES`** once every deployed environment has booted
-  past the rename. Scope correction: `session_logs.workout_title` keeps the old
-  spelling FOREVER, so the trigger is about the workouts table only.
+- **Retire the SEED's use of `LEGACY_TITLE_RENAMES`** once every deployed
+  environment has booted past the rename. Scope correction:
+  `session_logs.workout_title` keeps the old spelling FOREVER, so the trigger
+  is about the workouts table only. **Second correction (2026-08-30): the MAP
+  itself is now permanent and must not be deleted with the pre-pass.** The map
+  moved to `domain/onboarding.ts` and gained a second, non-expiring reader —
+  `canonicalTitle`, which the Plan screen uses to recognise a checkpoint rowed
+  under a retired title. Workout rows converge; log snapshots never do. What
+  retires is `seed.ts`'s rename loop, not the aliases.
 - **The e2e stack-reap race** — a sibling worktree boot once produced 117
   ECONNREFUSED; `stack-reap.sh` racing `git worktree list` is the suspicion.
 - **Migrate `DEVIATIONS.md`'s first table to stable IDs.** The 2026-08-28 docs

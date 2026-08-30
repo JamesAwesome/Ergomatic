@@ -47,3 +47,39 @@ const ONBOARDING_TITLE_SET: ReadonlySet<string> = new Set(
 export function isOnboardingTitle(title: string): boolean {
   return ONBOARDING_TITLE_SET.has(title);
 }
+
+/** Retired seed titles, mapped to the name that replaced them. Old titles
+ *  are literals on purpose (frozen history, not the constant: the constant
+ *  is the NEW name). Retirement trigger lives in ROADMAP ("Retire
+ *  LEGACY_TITLE_RENAMES").
+ *
+ *  Lives in `domain/` rather than beside the seed data it was born in
+ *  (`server/seed/seed.ts`, which now imports it) because it has TWO
+ *  readers at different layers and they must not drift: the seed's boot
+ *  pre-pass, which renames deployed WORKOUT rows in place so their ids —
+ *  and every log's link to them — survive; and `canonicalTitle` below,
+ *  which the CLIENT needs because the other half of that rename was never
+ *  performed at all. */
+export const LEGACY_TITLE_RENAMES: ReadonlyMap<string, string> = new Map([
+  ["First 6k", ONBOARDING_TITLES.k6],
+  ["First 2k", ONBOARDING_TITLES.k2],
+]);
+
+/** A stored title, resolved to the name that workout goes by today.
+ *
+ *  `session_logs.workout_title` is a SAVE-TIME SNAPSHOT and is never
+ *  rewritten — the seed's rename pre-pass converges the workouts table
+ *  only, and says so in its own comment. So a 2k test logged before
+ *  2026-08-22 sits in the log table spelled "First 2k" forever, while
+ *  every authored reference to it (a plan checkpoint's `PrescribedRef`,
+ *  the no-baseline card) says "2K Test".
+ *
+ *  Any comparison of a stored title against an authored constant has to
+ *  come through here first. Comparing the raw strings reports a deviation
+ *  that never happened: the Plan screen's checkpoint row would tell a
+ *  rower who DID do the prescribed 2k test that they did something else
+ *  instead. Unknown titles — every library workout, every custom one —
+ *  pass through untouched. */
+export function canonicalTitle(title: string): string {
+  return LEGACY_TITLE_RENAMES.get(title) ?? title;
+}

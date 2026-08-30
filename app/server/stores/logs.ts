@@ -1,6 +1,6 @@
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "../db/index.js";
-import { planState, sessionLogs } from "../db/schema.js";
+import { planState, sessionLogs, workouts } from "../db/schema.js";
 import type { PlanKey } from "./planState.js";
 
 // From-the-log spec (2026-08-18), §3: thrown by `list()` when a caller
@@ -313,12 +313,57 @@ const LOG_LIST_COLUMNS = {
 // itself: an open `tx` inside `db.transaction` is a `PgTransaction`, not a
 // `Db` (it lacks `Db`'s own `$client` handle) — both expose the identical
 // `selectDistinctOn` builder chain this function actually calls.
+/** One resolved plan slot: which log closed it, what that log RECORDED,
+ *  and what the workout it LINKS TO actually is. Those last two are
+ *  different things and the split is the point.
+ *
+ *  `workoutTitle`/`workoutType` are the SAVE-TIME snapshot columns, never
+ *  a join — a workout that has since been edited, renamed or deleted must
+ *  not change what the Plan screen says a rower did (`workoutId` is
+ *  `ON DELETE SET NULL`; these two never move). They are what the row
+ *  DISPLAYS.
+ *
+ *  `linkedTitle`/`workoutIsGlobal` are the joined row's own title and
+ *  ownership: what the row IS. They travel as a PAIR because identity is
+ *  a pair — a checkpoint prescribes its test with `globalOnly: true`
+ *  (`domain/prescription.ts`) and `resolvePrescribed` answers it with
+ *  `w.title === ref.title && w.isGlobal`, both read off ONE workout row.
+ *
+ *  Reading one of those from the snapshot and the other from the join was
+ *  a live defect (re-review of 1b2e80f5): `POST /api/logs` resolves
+ *  `workoutId` only to check ownership (`routes/data.ts`) and then trusts
+ *  the submitted title and type independently, so the two sources can
+ *  disagree — a request naming the global 6K Test's id with a `2K Test`
+ *  snapshot was accepted, and the sprint checkpoint went unmarked. It is
+ *  not only reachable by a forged POST either: renaming a prescribed
+ *  global would break a snapshot-title comparison through the front door,
+ *  where the id survives it.
+ *
+ *  Both are `null` together when there is no workout to read — the log
+ *  carried no `workoutId` (an off-app or pre-link row), or the workout it
+ *  pointed at has since been deleted. That is UNKNOWN identity, never
+ *  "personal".
+ *
+ *  `workoutType` is typed `string`, not `WorkoutType`: the column is plain
+ *  `text` (schema.ts:147 — deliberately NOT `workoutTypeEnum`, which is
+ *  the `workouts` table's column). New writes are validated against the
+ *  union at the route, but rows stored before that check exist, so every
+ *  consumer still has to narrow it for itself. */
+export interface PlanLink {
+  planIndex: number;
+  id: string;
+  workoutTitle: string;
+  workoutType: string;
+  linkedTitle: string | null;
+  workoutIsGlobal: boolean | null;
+}
+
 async function resolveNewestPlanLink(
   executor: Pick<Db, "selectDistinctOn">,
   userId: string,
   planKey: string,
   planIndex?: number,
-): Promise<{ planIndex: number; id: string }[]> {
+): Promise<PlanLink[]> {
   const conditions = [
     eq(sessionLogs.userId, userId),
     eq(sessionLogs.planKey, planKey),
@@ -326,12 +371,31 @@ async function resolveNewestPlanLink(
   if (planIndex !== undefined) {
     conditions.push(eq(sessionLogs.planIndex, planIndex));
   }
+  // The workout columns ride the SAME `selectDistinctOn` as the id, so
+  // they are read off the one row DISTINCT ON picked — never off a
+  // separately-resolved row at the same index. A reset collision leaves
+  // two rows on one index with different workouts; the contract suite's
+  // own collision case is what holds this together.
+  // The LEFT JOIN cannot change cardinality (`workouts.id` is the primary
+  // key, so it matches at most one row) and so cannot disturb DISTINCT ON;
+  // it is LEFT rather than INNER precisely so a log with no surviving
+  // workout link still resolves its slot, with `workoutIsGlobal` null.
   const rows = await executor
     .selectDistinctOn([sessionLogs.planIndex], {
       planIndex: sessionLogs.planIndex,
       id: sessionLogs.id,
+      workoutTitle: sessionLogs.workoutTitle,
+      workoutType: sessionLogs.workoutType,
+      // The linked row's OWN title and ownership — the identity pair.
+      // `workouts.userId` is nullable and NULL marks a global row, the
+      // same derivation `stores/workouts.ts` exposes as `isGlobal`; the
+      // owner id itself never crosses the wire, only the boolean below.
+      linkedTitle: workouts.title,
+      workoutUserId: workouts.userId,
+      workoutRowId: workouts.id,
     })
     .from(sessionLogs)
+    .leftJoin(workouts, eq(workouts.id, sessionLogs.workoutId))
     .where(and(...conditions))
     .orderBy(
       sessionLogs.planIndex,
@@ -346,6 +410,18 @@ async function resolveNewestPlanLink(
   return rows.map((row) => ({
     planIndex: row.planIndex as number,
     id: row.id,
+    workoutTitle: row.workoutTitle,
+    workoutType: row.workoutType,
+    // No joined workout row at all -> unknown identity: BOTH halves null
+    // together, so a consumer can never pair a known title with an
+    // unknown ownership or the reverse. A joined row -> its own title,
+    // and global exactly when it has no owner. The two nulls (no row vs.
+    // a global row's null owner) are genuinely different facts and must
+    // not collapse, which is why the row id is selected alongside the
+    // owner id.
+    linkedTitle: row.workoutRowId === null ? null : row.linkedTitle,
+    workoutIsGlobal:
+      row.workoutRowId === null ? null : row.workoutUserId === null,
   }));
 }
 
@@ -478,10 +554,7 @@ export function createLogsStore(db: Db) {
     // a DB-side default, not settable by `create()`'s input), so this
     // stays an ORDER BY change plus this comment rather than a new
     // test-only seam.
-    async listPlanLinks(
-      userId: string,
-      planKey: string,
-    ): Promise<{ planIndex: number; id: string }[]> {
+    async listPlanLinks(userId: string, planKey: string): Promise<PlanLink[]> {
       return resolveNewestPlanLink(db, userId, planKey);
     },
 

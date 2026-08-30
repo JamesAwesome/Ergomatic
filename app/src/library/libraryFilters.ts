@@ -1,5 +1,5 @@
 import { EMPTY_FILTERS, type DurationBucket, type Filters } from "./filters";
-import type { Difficulty, WorkoutType } from "../../domain/types.js";
+import { isWorkoutType, type Difficulty } from "../../domain/types.js";
 import { clearLibraryScroll } from "./libraryScroll";
 
 /** sessionStorage key for Library's active filters. Same lifecycle as
@@ -10,14 +10,9 @@ import { clearLibraryScroll } from "./libraryScroll";
  *  list, which is the filter-BACK bug this file exists to fix. */
 export const LIBRARY_FILTERS_KEY = "ergomatic.libraryFilters";
 
-const TYPES: readonly WorkoutType[] = ["AN", "O2", "AT", "TR"];
 const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
 const BUCKETS: readonly DurationBucket[] = ["<30", "30-45", "45-60", "60+"];
 const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
-
-function isWorkoutType(v: unknown): v is WorkoutType {
-  return typeof v === "string" && (TYPES as readonly string[]).includes(v);
-}
 
 function isDifficulty(v: unknown): v is Difficulty {
   return (

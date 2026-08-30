@@ -1,4 +1,20 @@
 export type WorkoutType = "AN" | "O2" | "AT" | "TR";
+export const WORKOUT_TYPES: readonly WorkoutType[] = ["AN", "O2", "AT", "TR"];
+/** Narrows an untrusted string to a `WorkoutType`. Needed wherever a type
+ *  arrives as a bare string rather than through the enum: a stored
+ *  localStorage filter, and `session_logs.workout_type`, which is plain
+ *  `text` (deliberately NOT the workouts table's pgEnum) and so can hold
+ *  anything an authenticated client posted. Lives here rather than beside
+ *  any one caller because there were already two byte-identical private
+ *  copies (`todayOverrides.ts`, `libraryFilters.ts`) and the Plan screen's
+ *  swapped-row check would have been a third — the shape recurring
+ *  failure 5 is about. */
+export function isWorkoutType(value: unknown): value is WorkoutType {
+  return (
+    typeof value === "string" &&
+    (WORKOUT_TYPES as readonly string[]).includes(value)
+  );
+}
 export type Difficulty = "easy" | "medium" | "hard";
 export type PaceBase = "2k" | "6k";
 export type Effort = "max" | "min";
