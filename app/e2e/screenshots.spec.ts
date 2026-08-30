@@ -1367,8 +1367,13 @@ test("releases", async ({ page }) => {
   // Bumped alongside each notes PR — #166 shipped the v0.18.0 entry
   // without bumping this pin, which broke `pnpm screenshots` on main
   // (caught 2026-08-23; e2e doesn't run this project, so nothing gated it).
+  // It recurred at v0.27.0: #232 corrected the pins in `news.spec.ts`
+  // (which CI's e2e job DOES run) and this one, in a project no job runs,
+  // stayed at v0.26.0 and kept `pnpm screenshots` red on main. Found here
+  // 2026-08-30 by an unrelated PR needing to regenerate a capture; fixed
+  // in passing rather than left for the next one to trip over.
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.26.0",
+    "v0.27.0",
   );
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "releases.png"),
