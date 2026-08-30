@@ -177,15 +177,25 @@ cannot catch, and the §5 receipts are its only instrument.
 
 New copy and the ended frame's FIRST-EVER interactive elements, only in
 the held-error state (every existing state renders exactly as #228
-shipped): an error line — draft `Could not keep the record on this
-phone.` — with `RETRY` and `LOG IT ANYWAY` beneath; headline stays
-`Wrapping up`. `LOG IT ANYWAY` must read as the safe path it is (the
-record survives to the log and the server); the only thing at risk is
-the local cache copy. Because these are the frame's first controls,
-Gate 0 renders — at real proportions, both orientations, BEFORE any
-implementation — must show focus order, 44 px hit targets, coexistence
-with the tab bar, and every pairing's computed contrast ratio. Exact
-strings are Gate 0's; house rules bind (no em-dashes, never "PM5").
+shipped). **GATE 0 APPROVED (James, 2026-08-29, "Approve" on rendered
+captures, both orientations, real fixture pipeline) — these are now the
+exact strings and structure:**
+
+- Strip, on the ready-screen's `.connected-keep-on` gold warning pattern
+  (gold = "look here", never "you did wrong"):
+  `COULD NOT KEEP THE RECORD ON THIS PHONE.` — 5.50:1 (`--marker` on
+  `--surface-sunken`), computed.
+- `Retry` — `.button-l2` (outline, 52 px), first in reading order (the
+  recovery story reads try-again-then-proceed). 17.11:1.
+- `Log it anyway` — `.button-l1` (lead action, 56 px), second: the lead
+  token because it is the path that always works. 5.94:1 (`--on-color`
+  on `--accent`).
+- Headline stays `Wrapping up`; focus order is document order; the tab
+  bar is hidden on this surface (existing rule), so the controls coexist
+  with nothing.
+
+House rules bind (no em-dashes, never "PM5"). The frame's renders are the
+Gate 0 artifact of 2026-08-29; the implementation must match them.
 
 ## §5 Receipts — every one through the RING, none through the failing store
 
@@ -250,6 +260,7 @@ pinned with literals, not imported constants.
 
 Delta pass RAN 2026-08-29 (verdict REVISE — one kill, one scope kill,
 four falsified claims — all folded above; ledger entry rides this PR,
-plus a correction note to the PM ledger's zero-readers claim). Next:
-Gate 0 rendered and approved → plan → implementation in this worktree,
-failing legs first → PM final-PR gate (TRIAD seam).
+plus a correction note to the PM ledger's zero-readers claim). Gate 0
+APPROVED same day on rendered captures (§4 carries the approved strings).
+Next: plan → implementation in this worktree, failing legs first (§6's
+two stub shapes) → PM final-PR gate (TRIAD seam).
