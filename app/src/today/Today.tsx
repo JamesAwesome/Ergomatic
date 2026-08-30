@@ -34,13 +34,14 @@ import type {
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
+import { loadMonitorRun, completeInterruptedRun } from "../monitor/monitorRun";
 import {
-  loadMonitorRun,
-  clearMonitorRun,
-  completeInterruptedRun,
-  saveMonitorRun,
-  type MonitorRun,
-} from "../monitor/monitorRun";
+  commit as commitHandoff,
+  hydrate as hydrateHandoff,
+  read as readHandoff,
+  retire as retireHandoff,
+  type HandoffEntry,
+} from "../monitor/handoffStore";
 import { useStagedDiscard } from "../session/useStagedDiscard";
 import DoorsCard from "./DoorsCard";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
@@ -58,6 +59,18 @@ import TodayFilterSheet, { type TodayFilterDraft } from "./TodayFilterSheet";
 import TypeBadge from "../components/TypeBadge";
 import { TokenRow } from "../components/TokenRow";
 import { TYPE_WORDS } from "../components/typeWords";
+
+// Hand-off store design spec (rev 4), §8/§1, plan Task 4: this route's own
+// hydration boundary — same reasoning as `LogSession.tsx`'s own identical
+// top-level call (see that module's comment for the full justification).
+// `Today()`'s own mount snapshot (below, `useState(() => readHandoff())`)
+// is a RENDER-CONTEXT read that must never trigger hydration itself; this
+// module-scope statement is the genuinely NON-RENDER site that does it
+// first — plain JS module evaluation, always strictly before `Today()`'s
+// own function body ever runs, whether at real app startup (`AppRoutes.tsx`
+// imports this module eagerly) or, in this file's own tests, at each fresh
+// `vi.resetModules()` + dynamic `import("./Today")`.
+hydrateHandoff();
 
 // Chip order: O2, AT, TR, AN — the pyramid's base-first order, matching
 // Library's own FilterSheet.tsx and Builder's ClassificationCard.tsx TYPE
@@ -286,7 +299,23 @@ export default function Today() {
   // same "cold start with no other path back in" reasoning `run`'s own
   // comment gives, just for the monitor's own record rather than the phone
   // timer's.
-  const [monitorRun] = useState<MonitorRun | null>(() => loadMonitorRun());
+  //
+  // Hand-off store design spec (rev 4), §5, plan Task 4: reads via the
+  // store's `read()` (never `loadMonitorRun()`) — the §5 product gain: a
+  // record that is LIVE ONLY IN THE STORE'S MEMORY TIER (its durable write
+  // denied) is now visible here too, closing the escape-hatch gap filed at
+  // #230's gate (a stashed record with no door under denial-from-first-
+  // write). Retains the full `HandoffEntry`, not a bare `MonitorRun`: the
+  // row's own discard/Log-it handlers (`UnloggedMonitorRow`, below) need
+  // the revision to retire/commit against, key-bound, never a fresh re-read
+  // for authorization. §9.5's own residual — this memory-only row vanishes
+  // on a reload indistinguishable from a durable one — is named, not fixed:
+  // after a reload nothing survives to tell a fresh process the row was
+  // ever there, so no NEW receipt is invented for it; the commit that put
+  // the record there in the first place already receipted its own
+  // `verdict:"failed"` (`handoffStoreReplay`-style row-9 test, task-4-
+  // report.md), which is the artifact that explains the vanish.
+  const [monitorEntry] = useState<HandoffEntry | null>(() => readHandoff());
 
   // A draft older than 24h with startedAt still null was abandoned mid-
   // confirm and never started — discard it with no ceremony (spec: "Deep-
@@ -439,7 +468,7 @@ export default function Today() {
       plan={planState.plan}
       logs={recentLogsState.logs}
       run={run}
-      monitorRun={monitorRun}
+      monitorEntry={monitorEntry}
     />
   );
 }
@@ -585,7 +614,7 @@ function UnloggedRow({ run }: { run: SessionRun }) {
  *    (`completeInterruptedRun`, the door Task 1 built) before navigating,
  *    not a bare `<Link>` — the stamp is what turns the log screen's own
  *    `monitorModeRun` gate honest for an interrupted record (Task 3);
- *  - the discard body is `clearMonitorRun()` alone, never
+ *  - the discard body retires the entry alone, never
  *    `useStagedDiscard().fire()` — that hook clears the phone-timer's own
  *    draft/run records, the WRONG ones for a `MonitorRun`. The diagnostics
  *    stash (`ergomatic:last-monitor-log`/`ergomatic:last-rowed-log`,
@@ -602,11 +631,17 @@ function UnloggedRow({ run }: { run: SessionRun }) {
  *  destroy a DIFFERENT record under the same announced name whenever both
  *  rows render at once — a WCAG name-role-value defect this house's own AA
  *  bar does not allow. */
-function UnloggedMonitorRow({ run }: { run: MonitorRun }) {
+function UnloggedMonitorRow({ entry }: { entry: HandoffEntry }) {
   const discard = useStagedDiscard();
   const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(false);
   const armedButtonRef = useRef<HTMLButtonElement>(null);
+  // Hand-off store design spec (rev 4), §6: `entry` is `Today()`'s own
+  // retained mount snapshot, threaded down unchanged — `run` here is that
+  // snapshot's `.run`, same derivation `LogSession.tsx`'s own monitor
+  // branch uses, kept as a local so every reference below (`run.title`,
+  // `run.workoutId`, …) is byte-identical to before this rewrite.
+  const run = entry.run;
 
   // Same structurally-different-node fix `UnloggedRow`'s own effect
   // documents: arming here swaps in a bare `<button>` at the same tree
@@ -622,10 +657,18 @@ function UnloggedMonitorRow({ run }: { run: MonitorRun }) {
       // Not discard.fire(): that clears the draft and the phone-timer run,
       // the wrong records for a MonitorRun. The diagnostics stash is KEPT
       // on purpose (spec 2b: a rower reporting a bug right after
-      // discarding keeps the evidence) — clearMonitorRun() only ever
-      // touches MONITOR_RUN_KEY.
+      // discarding keeps the evidence).
+      //
+      // Hand-off store design spec (rev 4), §5, plan Task 4: routes
+      // through `retire()`, key-bound to this row's OWN retained
+      // `{sessionKey, revision}` (§5's census row: "Today discard door |
+      // the entry its row rendered (key-bound) | Today's confirm — copy
+      // unchanged and still true"), never a direct `clearMonitorRun()`.
       discard.disarm();
-      clearMonitorRun();
+      retireHandoff(
+        [{ sessionKey: entry.sessionKey, revision: entry.revision }],
+        "today-discard",
+      );
       setDismissed(true);
     } else {
       discard.arm();
@@ -637,25 +680,43 @@ function UnloggedMonitorRow({ run }: { run: MonitorRun }) {
     // the monitor log screen's own `monitorModeRun` gate for an
     // interrupted record (session/LogSession.tsx, Task 3).
     //
-    // STOPGAP (hand-off store design spec §1, plan Task 3 —
-    // `completeInterruptedRun` is now PURE, per `monitorRun.ts`'s own doc
-    // comment on it): this call site persists the returned record itself,
-    // via the legacy `saveMonitorRun`, rather than through the store —
-    // `Today.tsx`'s full store rewrite (reading via `read`/claims, the
-    // reload-vanish receipt) is plan Task 4's own scope ("Today.tsx
-    // unlogged row on the store"), not this task's. This preserves
-    // TODAY's exact persisted behavior unchanged in the meantime.
+    // Hand-off store design spec (rev 4), plan Task 4: replaces Task 3's
+    // own STOPGAP (`saveMonitorRun(completeInterruptedRun(...))`, called
+    // directly on raw storage) with a real store commit —
+    // `commitHandoff(entry.sessionKey, entry.revision, stamped)` — so the
+    // log door's own `monitorModeEntry` (which now reads via the store,
+    // not `loadMonitorRun()`) sees the stamped record in the SAME process
+    // without depending on a coincidental durable write.
+    //
+    // **A deliberate, narrow exception to "the hook is the sole production
+    // committer" (spec §1):** that rule protects a LIVE producer's own
+    // `lastAcceptedRevisionRef` discipline from a second writer racing it.
+    // This row renders ONLY for a DEAD session — `TodayView`'s own render
+    // condition is `completedAt === null` on an entry with no live hook
+    // (this component's own header comment: "Today has no live monitor
+    // hook") — so there is no producer ref for this commit to race, and
+    // the single-unretired-session invariant means no OTHER hook can hold
+    // this exact key while it sits here unretired. `entry.revision` is the
+    // exact CAS guard every other caller uses; a refusal here (a rare
+    // concurrent change to the SAME key between this row's mount and the
+    // tap) is not specially handled — the log door's own gate re-reads the
+    // store fresh at ITS OWN mount and degrades exactly the way any other
+    // `monitorModeRun` miss does (falls through to plain-manual), which is
+    // the same "any miss falls through untouched" contract this door
+    // already promises.
     //
     // Plan Task 3 review (M8): `completeInterruptedRun` is idempotent —
     // it returns `run` UNCHANGED (same reference) when already closed —
     // and this row only renders while `run.completedAt === null`
     // (`TodayView`'s own render condition above), so the identity check
     // below is currently always true in practice. Kept anyway as a cheap
-    // no-op guard rather than an unconditional re-write of bytes already
+    // no-op guard rather than an unconditional re-commit of bytes already
     // on record, in case a future render path ever reaches this handler
     // with an already-closed `run`.
     const stamped = completeInterruptedRun(run, new Date());
-    if (stamped !== run) saveMonitorRun(stamped);
+    if (stamped !== run) {
+      commitHandoff(entry.sessionKey, entry.revision, stamped);
+    }
     navigate(`/library/${run.workoutId}/log?from=monitor`);
   }
 
@@ -881,7 +942,7 @@ function TodayView({
   plan,
   logs,
   run,
-  monitorRun,
+  monitorEntry,
 }: {
   library: LibraryWorkout[];
   // Null the moment EITHER side is null (the app-wide partial-pair
@@ -894,7 +955,11 @@ function TodayView({
   plan: PlanData;
   logs: RecentLog[];
   run: SessionRun | null;
-  monitorRun: MonitorRun | null;
+  // Hand-off store design spec (rev 4), plan Task 4: the full retained
+  // entry, not a bare `MonitorRun` — `UnloggedMonitorRow`'s own
+  // discard/Log-it handlers need the revision (see `Today()`'s own comment
+  // on `monitorEntry` for why).
+  monitorEntry: HandoffEntry | null;
 }) {
   const today = todayDateString();
   // Read once per render — this screen has no ticking display (unlike
@@ -1324,8 +1389,8 @@ function TodayView({
           own doc comment explains why). Does not touch the stale-draft
           guard effect above; `todayGuard.pin.test.ts` pins that guard
           byte-identical. */}
-      {monitorRun !== null && monitorRun.completedAt === null && (
-        <UnloggedMonitorRow run={monitorRun} />
+      {monitorEntry !== null && monitorEntry.run.completedAt === null && (
+        <UnloggedMonitorRow entry={monitorEntry} />
       )}
 
       {/* Phase BL PR C: the three-door onboarding card (canvas Main)
