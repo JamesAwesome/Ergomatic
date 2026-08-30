@@ -345,7 +345,19 @@ export interface MonitorRun {
 // this wave exists to fix, on the records of the rowers most likely to be
 // mid-session. Do that only together with the version bump or the
 // migration, and price the loss above first.
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
+// Task 2 (hand-off store, design spec §8): EXPORTED — no behavior change,
+// only visibility — so `handoffStore.ts`'s own hydration path can validate
+// raw durable bytes with the IDENTICAL rule this file's own `loadMonitorRun`
+// uses, without routing through `loadMonitorRun` itself. That function
+// self-clears on a malformed shape (`clearMonitorRun()` below, unconditional
+// on read) — exactly the anti-pattern §8 forbids for a store read ("Malformed
+// durable bytes are never cleared during a read"). Reusing this validator
+// instead of a second, hand-maintained copy is the DRY call: two shape
+// checks for the same stored type drifting apart is its own defect class
+// (CLAUDE.md RF23's shape, one mechanism disagreeing with another).
+export function isPlainRecord(
+  value: unknown,
+): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -388,7 +400,8 @@ function hasValidSeries(value: Record<string, unknown>): boolean {
  * strips them again, identically — cheap, not a leak, but worth naming
  * so a future reader doesn't assume this function repairs storage.
  */
-function stripMalformedSeries(
+// Task 2: EXPORTED for `handoffStore.ts` — see the note above `isPlainRecord`.
+export function stripMalformedSeries(
   value: Record<string, unknown>,
 ): Record<string, unknown> {
   if (hasValidSeries(value)) return value;
@@ -398,7 +411,8 @@ function stripMalformedSeries(
   return withoutSeries;
 }
 
-function isMonitorRun(value: unknown): value is MonitorRun {
+// Task 2: EXPORTED for `handoffStore.ts` — see the note above `isPlainRecord`.
+export function isMonitorRun(value: unknown): value is MonitorRun {
   if (!isPlainRecord(value)) return false;
   const program = value.program;
   // `logSeed` (7C, v2): same shallow treatment as `program` above — a v1
