@@ -2668,6 +2668,9 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     try {
       const result = await driveToTerminatedEnd();
       expect(result.current.holdError).toBe("storage-failed");
+      const beforeRetry = currentUnretiredHandoffForTest();
+      expect(beforeRetry).not.toBeNull();
+      const revisionBeforeRetry = beforeRetry!.revision;
 
       // Heals: the NEXT durable attempt (Retry's own) succeeds.
       deny = false;
@@ -2677,6 +2680,28 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       expect(result.current.holdError).toBeNull();
       expect(result.current.handoffHeld).toBe(false);
       expect(loadMonitorRun()?.completedAt).not.toBeNull();
+
+      // THE PIN, asserted directly (not merely inferred from the release):
+      // the heal must NOT have bumped the store's own revision for this
+      // key — `retryDurable`'s own contract (spec §1: "modelling Retry as
+      // `commit` would stale the hook's own ref and refuse the next
+      // producer commit").
+      const afterRetry = currentUnretiredHandoffForTest();
+      expect(afterRetry).not.toBeNull();
+      expect(afterRetry!.revision).toBe(revisionBeforeRetry);
+
+      // THE HEADLINE-LOSS CASE ITSELF: a follow-on producer commit, using
+      // the SAME `expectedRevision` the hook's own `lastAcceptedRevisionRef`
+      // still believes (unbumped by the heal), must be ACCEPTED — modelling
+      // Retry as `commit` would have bumped the store's revision, making
+      // this late write's CAS check stale and refusing exactly the write
+      // the design's headline scenario depends on landing.
+      const followOn = commitHandoffForTest(
+        afterRetry!.sessionKey,
+        afterRetry!.revision,
+        { ...afterRetry!.run, title: "a late follow-on commit" },
+      );
+      expect(followOn.accepted).toBe(true);
 
       // A no-op call once already released — idempotent, same posture as
       // `releaseHandoff`/`resolveHandoffCondition`.
@@ -2792,12 +2817,86 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     }
   });
 
+  it("cached-verdict CURRENCY — row 7: the close write lands healthy, but the LATER burst write is denied; the release must read the verdict AS OF release time, not a stale snapshot taken at close", async () => {
+    // Deny ONLY the summary's own fold-in write (the one carrying
+    // `summaryTotals`) — the close write itself (no `summaryTotals` field
+    // yet) lands healthy. Spec §7's own words: "the release funnel reads
+    // the CACHED verdict — the last accepted commit's, not the close
+    // commit's ... up to two durable writes land between close and
+    // release." A verify that re-checked only the close's own verdict
+    // (rather than re-reading the cache fresh at release time) would
+    // wrongly release here.
+    const restore = installMonitorRunWriteDenial(
+      (parsed) =>
+        (parsed as { summaryTotals?: unknown }).summaryTotals !== undefined,
+    );
+    try {
+      const driverTimer = manualSchedule();
+      const { result, fake } = harness(
+        {
+          program: ONE_INTERVAL,
+          events: [
+            status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+            status(200, {
+              workoutState: WORKOUTSTATE_TERMINATE,
+              elapsedSeconds: 40,
+              distanceMeters: 130,
+              spm: 0,
+              currentSplit: 0,
+            }),
+          ],
+        },
+        {
+          driverOptions: {
+            settleTicks: 0,
+            prepareSettleTicks: 0,
+            schedule: driverTimer.schedule,
+          },
+        },
+      );
+
+      await connect(result);
+      await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+      tick(fake, 100);
+      tick(fake, 100); // the Menu press — closes healthy, burst hold opens
+      expect(result.current.phase).toBe("ended");
+      expect(result.current.handoffHeld).toBe(true);
+      // The CLOSE landed fine — proving this is not simply "everything is
+      // denied" (the earlier, broader-predicate test's own shape).
+      expect(loadMonitorRun()?.completedAt).not.toBeNull();
+      expect(result.current.holdError).toBeNull();
+
+      // The burst arrives and its OWN write is denied — the release
+      // funnel (`resolveHandoffCondition`) is what runs the verify here,
+      // and it must see THIS failure, not the close's own healthy one.
+      act(() => {
+        fake.deliverSummary({ elapsedSeconds: 40, meters: 130 });
+      });
+      expect(driverTimer.pending()?.ms).toBe(200);
+      act(() => {
+        driverTimer.pending()!.fire();
+      });
+
+      expect(result.current.handoffHeld).toBe(true);
+      expect(result.current.holdError).toBe("storage-failed");
+    } finally {
+      restore();
+    }
+  });
+
   it("stale-commit refusal: a commit racing UNDER the hook's own lastAcceptedRevisionRef is refused, runRef unchanged, with a receipt — row 4", async () => {
     const { result, fake } = harness({
       program: ONE_INTERVAL,
       events: [
         status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
-        status(200, { elapsedSeconds: 40, distanceMeters: 130 }),
+        finalBoundary(150),
+        status(200, {
+          workoutState: WORKOUTSTATE_WORKOUTEND,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          spm: 0,
+          currentSplit: 0,
+        }),
       ],
     });
     await connect(result);
@@ -2805,6 +2904,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     tick(fake, 100);
     const openedTitle = loadMonitorRun()?.title;
     expect(openedTitle).toBeDefined();
+    expect(result.current.actuals).toHaveLength(0);
 
     // Race the store DIRECTLY underneath the hook's own
     // `lastAcceptedRevisionRef` — a commit this hook never made, bumping
@@ -2817,15 +2917,52 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     });
     expect(raced.accepted).toBe(true);
 
-    // The hook's own NEXT producer commit (the second status tick's own
-    // series-flush-independent boundary — a live frame alone does not
-    // commit, so drive an actual boundary instead) now finds its own
-    // `expectedRevision` (still 0) stale against the store's real current
-    // (1) — refused, and `runRef` (published via `loadMonitorRun` staying
-    // whatever the RACED write left it at) is UNCHANGED by the hook's own
-    // attempt.
-    tick(fake, 100);
+    // THE HOOK'S OWN NEXT PRODUCER COMMIT: a genuine boundary, driving
+    // `recordActual` -> `applyProducerCommit`. Its own `expectedRevision`
+    // (still 0, `lastAcceptedRevisionRef`'s own belief) is now stale
+    // against the store's real current (1, the RACED write's own) —
+    // refused. Checked at BOTH the store (storage) and the hook's own
+    // PUBLISHED state (`result.current.actuals`) — a mutant that lets
+    // `runRef`/`lastAcceptedRevisionRef` update anyway on refusal would
+    // pass the storage check alone (the racer already wrote *some* title
+    // there) but fail this one, since `actuals` would then show the
+    // boundary the store never actually accepted.
+    tick(fake, 50);
     expect(loadMonitorRun()?.title).toBe("RACED — not the hook's own write");
+    expect(result.current.actuals).toHaveLength(0);
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:commit-refused" &&
+          e.detail.includes('"reason":"stale"'),
+      ),
+    ).toBe(true);
+
+    // A SECOND, INDEPENDENT observable: `runRef.current` itself must stay
+    // the pre-race value, not merely "the store wasn't touched" — the
+    // workout's own natural finish reads `runRef.current` DIRECTLY
+    // (`openHandoffHold`'s own `run.actuals.some(a => a.index ===
+    // lastIndex)` check) to decide whether the split hold still has
+    // something to wait for, with NO commit gating in between. If
+    // `runRef.current` had been corrupted to the REFUSED candidate (which
+    // already carries the boundary), this would wrongly see the split as
+    // already present and skip the hold.
+    tick(fake, 50);
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+    const holdEntries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      holdEntries.some(
+        (e) => e.kind === "handoff-hold" && e.detail.includes("unmeasured"),
+      ),
+    ).toBe(true);
   });
 
   it("the immutability pin: a committed entry is never mutated in place — an OLD reference to it, held across a LATER accepted commit, still reads its own original values (the exact comparison the store's own claim/snapshot discipline depends on)", async () => {
