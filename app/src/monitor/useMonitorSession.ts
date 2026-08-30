@@ -2945,6 +2945,58 @@ export function useMonitorSession(
               );
             }
           }
+          // James's PR #230 review, P1b (Important) — RULED: restash-only,
+          // never a Save-time pull ("a Save must post exactly what the
+          // screen showed, never numbers it didn't" — Gate 0). The race:
+          // held-error enters via `burst-timeout`'s own backstop, well
+          // BEFORE this burst is ever heard; Retry heals or Log it anyway
+          // stashes, then releases; `LogSession` mounts and snapshots
+          // whatever carrier held at THAT instant — no `summaryTotals`
+          // yet; passive unmount starts THIS hook's own deferred teardown
+          // linger (`teardown`'s own "burst-eligible, not yet heard" arm);
+          // the burst finally lands here, inside that window, updating
+          // `runRef.current` (append succeeded to storage, or — the branch
+          // just above — folded in memory because storage still declined)
+          // with the run's only copy of the machine's numbers. Nothing else
+          // in this function carries that update anywhere durable: the
+          // `resolveHandoffCondition` call two lines below is about to be a
+          // genuine no-op (`burstHoldRef.current === null` — the condition
+          // already resolved via the backstop, long before this event),
+          // so it will never reach its own post-unmount stash
+          // (`resolveHandoffCondition`'s own doc comment) either.
+          // `lingerFinishRef.current !== null` confirms we are inside that
+          // deferred, POST-RELEASE window specifically (this hook's own
+          // driving component has already unmounted — `onEnded` cannot
+          // fire, and nothing can navigate away from it, while
+          // `handoffHeld` is still true) — restash whatever `runRef
+          // .current` now holds, richer than what any consumer already
+          // read, whichever branch above produced it, so the NEXT
+          // `?from=monitor` arrival (a reload, or the rower returning to
+          // this workout's log door) serves it instead. The already-
+          // mounted consumer's own Save is deliberately untouched: it
+          // already posted (or will post) exactly the tier-B snapshot it
+          // showed — the #228-accepted residual — never a number it never
+          // displayed. P1a's own armed-clear bounds how long this restash
+          // can survive: a new session opened on this workout retires it.
+          if (
+            burstHoldRef.current === null &&
+            lingerFinishRef.current !== null
+          ) {
+            const latest = runRef.current;
+            if (latest !== null && latest.summaryTotals !== undefined) {
+              const superseded = stashHandoffRun(latest);
+              logRef.current?.record(
+                "handoff-stashed",
+                `reason=late-burst run=${latest.startedAt}`,
+              );
+              if (superseded !== null) {
+                logRef.current?.record(
+                  "handoff-stashed",
+                  `reason=superseded run=${superseded.startedAt}`,
+                );
+              }
+            }
+          }
           resolveHandoffCondition("burst", "burst-heard");
         }
         // If a burst-eligible teardown (natural finish OR rower-ended —

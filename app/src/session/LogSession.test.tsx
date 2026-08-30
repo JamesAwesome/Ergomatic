@@ -3148,43 +3148,57 @@ describe("LogSession: the slot-aware reader, through the full screen (Task 5)", 
     // THE ASSERTION THIS TEST EXISTS FOR: the COMMITTED render is the
     // slot's own data (React keeps the FIRST lazy-initializer call's
     // result, spec §3's own StrictMode disclosure) — if the SECOND,
-    // discarded call had somehow won instead, the slot would already be
-    // empty by the time of a real read and this screen would show the
-    // manual door's fallback instead.
+    // discarded call had somehow won instead, this screen would show the
+    // manual door's fallback (nothing in storage either).
+    //
+    // **Updated (James's PR #230 review, P1c, Critical): `monitorModeRun`
+    // now only PEEKS the slot** (the destructive `takeHandoffRun()` used
+    // to run here, during render — React's own purity rule forbids a
+    // side effect that an abandoned or replayed render can't undo).
+    // Under StrictMode's double-invoke, BOTH lazy-initializer calls now
+    // peek the SAME still-present candidate and return the identical
+    // value — there is no "discarded call" race over which one empties
+    // the slot any more, because neither one empties it at all. Ownership
+    // is claimed exactly once, by `confirmSlotOwnership` in the mount
+    // effect, AFTER React has committed to the first call's result — see
+    // that function's own doc comment (`LogSession.tsx`) for the full
+    // account.
     expect(screen.queryByText(/NO MONITOR READING/)).not.toBeInTheDocument();
     expect(screen.queryByText("LOGGED BY HAND")).not.toBeInTheDocument();
-    // Dev-only spurious miss disclosed, not tested (design spec §3 / this
-    // file's own `monitorModeRun` doc comment): the discarded second
-    // initializer call finds the slot already emptied by the first and
-    // may append its own extra `no-run` entry onto `ergomatic:log-door-
-    // misses` — harmless (nothing reads it for this committed render) and
-    // deliberately not asserted here, since asserting an exact miss count
-    // would pin React's own double-invoke behavior rather than this
-    // reader's.
+    // The dev-only spurious `no-run` miss this comment used to disclose
+    // for the discarded SECOND initializer call cannot happen any more
+    // for an ELIGIBLE slot hit like this one (both peeks agree, so
+    // neither one falls through to the `recordLogDoorMiss` branches at
+    // all) — P1c's own side effect on this test's own disclosure.
   });
 });
 
-// James's PR #230 review, P1b (Important): "a summary accepted during
-// teardown's linger cannot reach the Log form that Retry/Log-it-anyway
-// already mounted." His own Record section lays out the exact sequence:
-// the held-error verify fails BEFORE any burst arrives; Retry (heals
-// storage) or Log it anyway (stashes to the slot) releases; THIS screen
-// mounts and snapshots whatever carrier held at that moment — no
-// `summaryTotals` yet; passive unmount starts `useMonitorSession.ts`'s
-// OWN post-unmount teardown linger; the burst FINALLY lands inside that
-// second window, updating storage (a healed write) or the slot (still
-// denied, folded in memory first) with the ONLY copy of the machine's
-// summary this run will ever get; this already-mounted screen never
-// re-reads either carrier. Reproduced here the same way this file's own
-// "mount-to-save gap" tests already do (see the comment above the
-// save-success/Discard slot-clear tests): stash/save the RICHER, SAME-
-// `startedAt` copy AFTER mount, proving the fix (`lateMachineSummary`,
-// `LogSession.tsx`) reads it at Save rather than relying on a natural
-// product path to construct the exact millisecond timing.
-describe("LogSession: a late-accepted machine summary reaches Save even though it landed after mount (James's PR #230 review, P1b)", () => {
-  it("Retry's own arm: a healed STORAGE write landing after mount is the one Save posts, not the poorer mount-time snapshot", async () => {
+// James's PR #230 review, P1b (Important) — RULED (restash-only, never a
+// Save-time pull): "a Save must post exactly what the screen showed,
+// never numbers it didn't." The race this closes: the held-error verify
+// fails BEFORE any burst arrives; Retry (heals storage) or Log it anyway
+// (stashes to the slot) releases; THIS screen mounts and snapshots
+// whatever carrier held at that moment — no `summaryTotals` yet; passive
+// unmount starts `useMonitorSession.ts`'s OWN post-release teardown
+// linger; the burst FINALLY lands inside that window, and the HOOK
+// (never this screen) RESTASHES the updated run into the slot
+// (`reason=late-burst`, that hook's own `summary-observations` handler)
+// for the NEXT `?from=monitor` arrival to serve. This screen's own Save
+// posts tier B — the mount-time snapshot, unchanged — full stop; it never
+// reaches back into a carrier it didn't read at mount. Reproduced here
+// the same way this file's own "mount-to-save gap" tests already do
+// (see the comment above the save-success/Discard slot-clear tests):
+// stash the RICHER, SAME-`startedAt` copy AFTER mount, standing in for
+// the hook's own restash, and assert the three things James's ruling
+// names — the slot holds it, the mounted form's own POST is unchanged,
+// and a fresh arrival (checked BEFORE this screen's own Save, which —
+// like every other successful monitor-mode save — unconditionally clears
+// the slot; see that call site's own "Honest limit" comment) serves the
+// machine numbers.
+describe("LogSession: a late-accepted machine summary is RESTASHED, never pulled into an already-mounted Save (James's PR #230 review, P1b, ruled)", () => {
+  it("Retry's own arm (mounted from STORAGE): a late-burst restash lands in the slot, this screen's own Save is unaffected, and a fresh arrival serves the machine numbers", async () => {
     const { run, workout } = buildMonitorFixture(); // no summaryTotals yet
-    saveMonitorRun(run); // the pre-burst snapshot this screen will mount on
+    saveMonitorRun(run); // the pre-burst snapshot this screen mounts on
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -3198,12 +3212,10 @@ describe("LogSession: a late-accepted machine summary reaches Save even though i
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    // The late burst, accepted during teardown's SECOND linger, healed
-    // straight into storage (`appendSummaryObservations`'s own ordinary
-    // write) — same `startedAt`, now carrying the machine's numbers this
-    // screen's own `monitorRun` state was built before.
-    const { saveMonitorRun: freshSave } = await import("../monitor/monitorRun");
-    freshSave({
+    // Stands in for `useMonitorSession.ts`'s own restash — a late burst
+    // accepted during teardown's post-release linger, after this screen
+    // already snapshotted the poorer copy from storage.
+    const richer: MonitorRun = {
       ...run,
       summaryTotals: { workElapsedSeconds: 812.4, workDistanceMeters: 2231 },
       summaryDetail: {
@@ -3218,30 +3230,47 @@ describe("LogSession: a late-accepted machine summary reaches Save even though i
         avgPaceSecondsPer500m: 112,
       },
       verificationBytes: [1, 2, 3, 4],
-    });
+    };
+    const { stashHandoffRun: freshStash, peekHandoffRun: freshPeek } =
+      await import("../monitor/monitorRun");
+    const { monitorModeRun: freshMonitorModeRun } =
+      await import("./LogSession");
+    freshStash(richer);
 
+    // ASSERTION 1: the slot holds the updated run.
+    expect(freshPeek()).toStrictEqual(richer);
+    // ASSERTION 3 (checked before this screen's own Save, which — like
+    // every other successful save — clears the slot unconditionally): a
+    // fresh `?from=monitor` arrival for this workout serves the machine
+    // numbers.
+    expect(
+      freshMonitorModeRun(
+        new URLSearchParams("from=monitor"),
+        MONITOR_WORKOUT_ID,
+      ),
+    ).toStrictEqual(richer);
+    // That was a PEEK (P1c) — still there, exactly as a real reload's own
+    // mount effect would find it before confirming ownership.
+    expect(freshPeek()).toStrictEqual(richer);
+
+    // ASSERTION 2: THIS screen's own Save posts tier B, unchanged — the
+    // restash sitting in the slot is never read back into it.
     await chooseHeldAndPain();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
     const body = parsedBodies(apiFn)[0]!;
-    expect(body.machineWorkSeconds).toBe(812.4);
-    expect(body.machineWorkMeters).toBe(2231);
-    expect(
-      (body.machineSummary as { verificationBytes?: number[] })
-        .verificationBytes,
-    ).toStrictEqual([1, 2, 3, 4]);
+    expect(body.machineWorkSeconds).toBeUndefined();
+    expect(body.machineWorkMeters).toBeUndefined();
+    expect(body.machineSummary).toBeUndefined();
   });
 
-  it("Log it anyway's own arm: a post-unmount-burst SLOT stash landing after mount is the one Save posts", async () => {
+  it("Log it anyway's own arm (mounted from the SLOT): a late-burst restash after the first consumption is a fresh entry a later arrival still serves", async () => {
     const { run, workout } = buildMonitorFixture(); // no summaryTotals yet
     // Log it anyway's own path: storage stays empty, the pre-burst copy
     // reached this screen through the SLOT.
-    const {
-      stashHandoffRun: freshStash,
-      peekHandoffRun: freshPeek,
-      loadMonitorRun: freshLoad,
-    } = await import("../monitor/monitorRun");
+    const { stashHandoffRun: freshStash } =
+      await import("../monitor/monitorRun");
     freshStash(run);
     mockWorkouts([workout]);
     mockBaselines();
@@ -3255,36 +3284,64 @@ describe("LogSession: a late-accepted machine summary reaches Save even though i
 
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    // Consumed at mount — nothing left for the late stash below to
-    // collide with.
+    // Imported only NOW — after mount — so this resolves the SAME
+    // post-mock module instance `renderManualLog`'s own dynamic import
+    // already loaded (`LogSession.test.tsx`'s own file-wide convention:
+    // importing a mock-dependent module before its mocks are registered
+    // in this reset epoch caches the UNMOCKED version instead).
+    const { peekHandoffRun: freshPeek, loadMonitorRun: freshLoad } =
+      await import("../monitor/monitorRun");
+    const { monitorModeRun: freshMonitorModeRun } =
+      await import("./LogSession");
+    // Consumed at mount (P1c: peek during render, take in the committed
+    // effect) — nothing left for the late restash below to collide with.
     expect(freshPeek()).toBeNull();
     expect(freshLoad()).toBeNull();
 
-    // The late burst, accepted during teardown's SECOND linger while
-    // storage was STILL denied: the in-memory fold ran first
-    // (`useMonitorSession.ts`'s own fold), then
-    // `resolveHandoffCondition`'s post-unmount branch stashed the FOLDED
-    // (now richer) run — same `startedAt` as the one this screen already
-    // consumed and rendered.
-    freshStash({
+    // Stands in for the hook's own late-burst restash: the in-memory fold
+    // ran first (`useMonitorSession.ts`'s own fold), then the SAME
+    // `summary-observations` handler restashed the folded (now richer)
+    // run — same `startedAt` as the one this screen already consumed and
+    // rendered — because the burst condition had ALREADY resolved (via
+    // its own `burst-timeout` backstop) before this event ever arrived,
+    // so nothing else in that function would have carried it anywhere.
+    const richer: MonitorRun = {
       ...run,
       summaryTotals: { workElapsedSeconds: 405.9, workDistanceMeters: 1180 },
-    });
+    };
+    freshStash(richer);
 
+    // ASSERTION 1 + 3: the slot holds it, and a fresh arrival serves it —
+    // checked BEFORE this screen's own Save clears the slot.
+    expect(freshPeek()).toStrictEqual(richer);
+    expect(
+      freshMonitorModeRun(
+        new URLSearchParams("from=monitor"),
+        MONITOR_WORKOUT_ID,
+      ),
+    ).toStrictEqual(richer);
+
+    // ASSERTION 2: THIS screen's own Save posts tier B (this screen's own
+    // mount-time snapshot, `run` — no machine fields at all), unaffected
+    // by the later restash sitting in the slot.
     await chooseHeldAndPain();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
     const body = parsedBodies(apiFn)[0]!;
-    expect(body.machineWorkSeconds).toBe(405.9);
-    expect(body.machineWorkMeters).toBe(1180);
-    // The late stash is consumed too (LogSession's own save-success
-    // `clearHandoffSlot()` call, unconditional) — nothing left to leak
-    // into a later, unrelated arrival.
+    expect(body.machineWorkSeconds).toBeUndefined();
+    expect(body.machineWorkMeters).toBeUndefined();
+    expect(body.machineSummary).toBeUndefined();
+    // The late restash is consumed too (LogSession's own save-success
+    // `clearHandoffSlot()` call, unconditional, same posture as always) —
+    // nothing left to leak into a later, unrelated arrival. This is the
+    // OTHER bound on the restash's life, alongside P1a's own armed-clear:
+    // once THIS session is saved (even without the machine numbers), a
+    // later fresh arrival has nothing further to offer.
     expect(freshPeek()).toBeNull();
   });
 
-  it("the residual, honestly: no late update anywhere means the mount-time snapshot's own absence of machine fields is exactly what posts", async () => {
+  it("the residual, unchanged: no late update anywhere means the mount-time snapshot's own absence of machine fields is exactly what posts", async () => {
     const { run, workout } = buildMonitorFixture(); // no summaryTotals, ever
     saveMonitorRun(run);
     mockWorkouts([workout]);

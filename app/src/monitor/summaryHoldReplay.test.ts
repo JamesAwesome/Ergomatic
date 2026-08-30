@@ -142,6 +142,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 import type { WorkoutType } from "../../domain/types.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
+import type { MonitorEvent } from "../../domain/monitor/types.js";
 import { MONITOR_RUN_KEY, loadMonitorRun, type MonitorRun } from "./monitorRun";
 import { BURST_HANDOFF_HOLD_MS, useMonitorSession } from "./useMonitorSession";
 import type { MonitorSession, RunIdentity } from "./useMonitorSession";
@@ -1713,6 +1714,309 @@ describe("the summary hold's permanent gate, AUD-016 no-hold arm: a link-lost En
     // held-error entry, never a proceed. Task 5's own tests (or a future
     // PROCEED variant of this arm) are where that receipt gets its
     // first assertion.
+    stub.stopFailing();
+  });
+});
+
+// James's PR #230 review, P1b (Important, RULED) + the re-review's own
+// RF24 leg: "one test starting upstream of the producer for this exact
+// race." Every other test that touches this class of bug either drives
+// the hook alone (this file's own legs above, `useMonitorSession.test.ts`)
+// or mounts `LogSession` alone (`LogSession.test.tsx`, stashing a
+// hand-built "late update" directly) — none of them starts before the
+// PRODUCER (the hook's own `summary-observations` handler, mid teardown's
+// deferred linger) and reads AFTER the CONSUMER (a real, mounted
+// `LogSession`) the way recurring failure 24 requires for this exact
+// A-writes-then-B-reads seam.
+//
+// Unlike every OTHER test in this file, this one CANNOT use the file's
+// plain static `useMonitorSession` import (`linkLostHarness`'s own doc
+// comment names why: the slot — `handoffSlot` in `./monitorRun` — is
+// MODULE-SCOPE state, not `localStorage`, so a `LogSession` mounted
+// through a SEPARATELY re-imported module graph would see an entirely
+// different, empty slot than the one this test's own hook writes into).
+// `vi.resetModules()` once, up front, then every module this test touches
+// — the hook, `LogSession`, `./monitorRun`'s own slot functions — is
+// (re-)imported AFTER it, in the SAME epoch, mirroring `runReplay`'s own
+// idiom and `mountLogSessionAndSave`'s own "does NOT resetModules before
+// importing" constraint exactly.
+describe("the summary hold's permanent gate, RF24 (final re-review): a late burst restashes during the SECOND, post-release linger", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("proceed releases on the backstop before any burst; the burst then lands inside teardown's own deferred linger, restashing the machine numbers — the mounted Log's own Save stays tier B, the slot holds the restash, and a fresh arrival serves it", async () => {
+    localStorage.clear();
+    // Denied from the FIRST write onward (leg A's own shape) — the fold,
+    // then the restash, are both exercised; a healed-storage variant
+    // would restash too (the hook's own code does not branch on it) but
+    // adds nothing this leg does not already prove.
+    const stub = stubStorageWrites("from-open");
+
+    // `useMonitorSession.test.ts`'s own F1 technique, restated (this
+    // file's own "no test file imports another" convention): the machine
+    // never completed this run's one interval (End fires at 20s into a
+    // 60s target), so `driver.ts`'s own `noteSummary` admission gate
+    // (`!run.closed` requires `currentIndex === lastIndex`) would refuse
+    // to ever emit `summary-observations` for a plain
+    // `fake.deliverSummary(...)` call here — proven empirically (the
+    // driver's own log shows `summary-totals` decoded but the hook's own
+    // handler never fires). Intercepting `createPm5Driver`'s `events()`
+    // call captures the hook's own subscribed callback so the burst can
+    // be delivered DIRECTLY to it, bypassing that gate ON PURPOSE — the
+    // gate is unrelated to this leg's own subject (the restash), exactly
+    // F1's own reasoning.
+    let capturedCb: ((e: MonitorEvent) => void) | null = null;
+    vi.doMock("./driver", async () => {
+      const actual =
+        await vi.importActual<typeof import("./driver")>("./driver");
+      return {
+        ...actual,
+        createPm5Driver: (
+          ...args: Parameters<typeof actual.createPm5Driver>
+        ) => {
+          const real = actual.createPm5Driver(...args);
+          return {
+            ...real,
+            events: (cb: (e: MonitorEvent) => void) => {
+              capturedCb = cb;
+              return real.events(cb);
+            },
+          };
+        },
+      };
+    });
+    vi.resetModules();
+    const fake = createFakeTransport({
+      deviceName: "PM5 RF24",
+      program: LINK_LOST_PROGRAM,
+      events: [
+        fakeLinkLostStatus(100, { elapsedSeconds: 20, distanceMeters: 70 }),
+      ],
+    });
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        now: () => FIXED_NOW,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+        // `schedule`/`burstLingerSchedule` LEFT AT THEIR REAL DEFAULT
+        // (unlike every other test in this file, which stubs both into
+        // no-ops) — this leg needs the burst hold's own backstop AND
+        // teardown's own linger to be genuinely live, the second one
+        // armed but never waited out (the burst arrives by direct
+        // delivery, well inside its window).
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(LINK_LOST_PROGRAM, LINK_LOST_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flushFake();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flushFake();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(200);
+    });
+    expect(result.current.phase).toBe("live");
+
+    // Fake timers from HERE on, only up to the point held-error enters
+    // (switched back to real immediately after) — `openBurstHold`'s own
+    // backstop `setTimeout` must be created AFTER fake timers install to
+    // be advanceable at all (installing fake timers does not retroactively
+    // convert an already-scheduled real one). `userEvent`'s own internal
+    // delays later in this test are not written to tolerate a faked
+    // clock, hence the narrow window.
+    vi.useFakeTimers();
+
+    // A real, link-up, ROWER-initiated End — burst-eligible (unlike the
+    // no-hold arm above, which uses link-lost specifically to skip the
+    // burst hold entirely) — opens the hold with no verdict yet.
+    await act(async () => {
+      const pending = result.current.endSession();
+      // `driverOptions.settleTicks: 0` bounds `terminate()`'s own ack
+      // wait to zero REQUIRED ticks, but flushing a zero-delay internal
+      // timer still needs an explicit advance under a faked clock.
+      await vi.advanceTimersByTimeAsync(0);
+      await pending;
+    });
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+    expect(result.current.holdError).toBeNull();
+
+    // The burst-timeout backstop fires BEFORE any burst — held-error
+    // enters on the denied release-verify.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BURST_HANDOFF_HOLD_MS);
+    });
+    vi.useRealTimers();
+    expect(result.current.handoffHeld).toBe(true);
+    expect(result.current.holdError).toBe("storage-failed");
+
+    // Log it anyway — releases via the slot (storage stays denied
+    // throughout this leg).
+    await act(async () => {
+      await result.current.proceedHandoff();
+    });
+    expect(result.current.handoffHeld).toBe(false);
+
+    // "Log mounts and snapshots" — a REAL `LogSession`, sharing this
+    // SAME post-reset module graph (no further `vi.resetModules()`
+    // between the hook above and here).
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({
+        state: "ready",
+        workouts: [
+          libraryWorkoutFixture(
+            LINK_LOST_IDENTITY.workoutId!,
+            LINK_LOST_IDENTITY.title,
+          ),
+        ],
+      }),
+    }));
+    vi.doMock("../api/useBaselines", () => ({
+      useBaselines: () => ({
+        state: "ready",
+        baselines: { k2Seconds: null, k6Seconds: null },
+      }),
+    }));
+    vi.doMock("../api/usePlan", () => ({
+      usePlan: () => ({
+        state: "ready",
+        plan: { planKey: null, doneN: 0, sequence: [] },
+        choose: vi.fn(),
+        reset: vi.fn(),
+      }),
+    }));
+    const apiFn = mockApi();
+    const { default: LogSession } = await import("../session/LogSession");
+    render(
+      createElement(
+        MemoryRouter,
+        {
+          initialEntries: [
+            `/library/${LINK_LOST_IDENTITY.workoutId}/log?from=monitor`,
+          ],
+        },
+        createElement(
+          Routes,
+          null,
+          createElement(Route, {
+            path: "/library/:id/log",
+            element: createElement(LogSession),
+          }),
+          createElement(Route, {
+            path: "/today",
+            element: createElement("p", null, "TODAY SCREEN"),
+          }),
+        ),
+      ),
+    );
+    await screen.findByRole("heading", { name: LINK_LOST_IDENTITY.title });
+
+    // "Passive unmount starts the second linger" — the driving hook's own
+    // component unmounts (standing in for a real `ConnectedInterstitial`
+    // once `WorkoutDetail` navigates away), while `LogSession` stays
+    // mounted, holding its own poorer snapshot.
+    unmount();
+
+    // "The summary is accepted" — inside teardown's own deferred linger:
+    // STEPS 1/3/4 (`teardown`'s own naming) are still pending, so the
+    // hook's own subscription (captured above) is still the live one
+    // `handleEvent` receives from — delivered DIRECTLY, bypassing the
+    // driver's own admission gate (this test's own header comment).
+    expect(capturedCb).not.toBeNull();
+    act(() => {
+      capturedCb!({
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 42, workDistanceMeters: 210 },
+        detail: {
+          avgStrokeRate: 24,
+          endingHeartRateBpm: null,
+          avgHeartRateBpm: null,
+          minHeartRateBpm: null,
+          maxHeartRateBpm: null,
+          dragFactorAverage: 100,
+          workoutType: 1,
+          recoveryHeartRateBpm: null,
+          avgPaceSecondsPer500m: 150,
+        },
+      });
+    });
+
+    // ASSERTION 1: the slot holds the restashed, updated run.
+    const { peekHandoffRun: freshPeek } = await import("./monitorRun");
+    const restashed = freshPeek();
+    expect(restashed).not.toBeNull();
+    expect(restashed?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 42,
+      workDistanceMeters: 210,
+    });
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "handoff-stashed" &&
+          e.detail.includes("reason=late-burst"),
+      ),
+    ).toBe(true);
+
+    // ASSERTION 3: a fresh `?from=monitor` arrival serves the machine
+    // numbers — checked BEFORE the already-mounted screen's own Save,
+    // which (like every other successful monitor-mode save) clears the
+    // slot unconditionally.
+    const { monitorModeRun: freshMonitorModeRun } =
+      await import("../session/LogSession");
+    expect(
+      freshMonitorModeRun(
+        new URLSearchParams("from=monitor"),
+        LINK_LOST_IDENTITY.workoutId!,
+      ),
+    ).toStrictEqual(restashed);
+
+    // ASSERTION 2: the ALREADY-MOUNTED screen's own Save posts tier B —
+    // its own mount-time snapshot, untouched by the later restash sitting
+    // in the slot.
+    await userEvent.click(screen.getByRole("button", { name: "HELD" }));
+    await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
+    await screen.findByText("TODAY SCREEN");
+
+    const call = apiFn.mock.calls[0];
+    if (call === undefined) {
+      throw new Error("RF24 leg: Save never posted");
+    }
+    const [, init] = call;
+    const body = JSON.parse((init as RequestInit).body as string) as Record<
+      string,
+      unknown
+    >;
+    expect(body.machineWorkSeconds).toBeUndefined();
+    expect(body.machineWorkMeters).toBeUndefined();
+    expect(body.machineSummary).toBeUndefined();
+
     stub.stopFailing();
   });
 });

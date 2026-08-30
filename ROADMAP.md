@@ -875,12 +875,15 @@ new.
      2026-08-28 phase-open ruling at PR #228's PM gate, plus the AUD-016
      final gate's own addition, James's #230 review, P2b — because the
      note-writer reads THIS row, not the ledger):** the no-backfill
-     sentence naming the 16 permanently-ours rows; the new post-End wait
-     if perceptible, covering the hold PLUS AUD-016's own verify write;
-     and one sentence for the failed-write state a rower can now meet
-     (`COULD NOT KEEP THE RECORD ON THIS PHONE.`) — naming what its two
-     buttons actually do: **Retry rechecks storage; Log it anyway carries
-     the measured session straight to Log.**
+     sentence naming the **18** permanently-ours rows (James's fresh
+     2026-08-30 prod count, above — "0 of 18," two more connected rows
+     since the 2026-08-28 0-of-16 baseline this sentence used to cite);
+     the new post-End wait if perceptible, covering the hold PLUS
+     AUD-016's own verify write; and one sentence for the failed-write
+     state a rower can now meet (`COULD NOT KEEP THE RECORD ON THIS
+     PHONE.`) — naming what its two buttons actually do: **Retry rechecks
+     storage; Log it anyway carries the measured session straight to
+     Log.**
 - **The log-delete accepted gap** — a session with a wrong number has exactly
   one remedy, delete and re-log by hand, and `logged_at` is a DB default rather
   than settable, so a mistake found the next day cannot be re-dated onto its own

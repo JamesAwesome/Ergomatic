@@ -599,10 +599,22 @@ export function peekHandoffRun(): MonitorRun | null {
 
 /**
  * Consumes the slot exactly once: returns whatever is stashed there and
- * clears it in the SAME call, so a second read — a second reader, or
- * React StrictMode's own double-invoked lazy initializer (spec §3's own
- * disclosure: "the discarded second run's side effects do not" survive) —
- * finds nothing left to resurrect.
+ * clears it in the SAME call, so a second read — a second reader, or a
+ * repeat call against an already-emptied slot — finds nothing left to
+ * resurrect.
+ *
+ * **Updated (James's PR #230 review, P1c, Critical): this is no longer
+ * called from a `useState` lazy initializer at all** — `monitorModeRun`
+ * (`session/LogSession.tsx`) used to call this DURING RENDER, which
+ * React's own purity rule forbids (render may be repeated or abandoned
+ * without ever committing, and a destructive read inside it can lose the
+ * slot's only copy with nothing left to claim it). `monitorModeRun` now
+ * only `peekHandoffRun`s; this function is called exactly once, from
+ * `confirmSlotOwnership`'s own mount EFFECT, after React has committed —
+ * see that function's own doc comment for the full account, including why
+ * a StrictMode-doubled EFFECT (mount → cleanup → mount again, dev only)
+ * still calls this safely at most once for real (the second invocation
+ * finds the slot already empty and no-ops).
  */
 export function takeHandoffRun(): MonitorRun | null {
   const run = handoffSlot;
@@ -618,13 +630,25 @@ export function takeHandoffRun(): MonitorRun | null {
  * must not resurrect at the next `?from=monitor` arrival even when nothing
  * ever called `takeHandoffRun` for it.
  *
- * **Final review (C1, Critical): also called from `createMonitorRun` below,
- * unconditionally, the moment a NEW session opens.** That is the site the
- * original lifecycle list above omitted, and the omission was the defect:
- * an earlier session's stash could otherwise outlive the session it
- * belonged to and beat a later, genuinely fresher stored record at the
- * next arrival. See `createMonitorRun`'s own doc comment for the full
- * account.
+ * **Final review (C1, Critical): also called the moment a NEW session's
+ * identity is ACCEPTED.** That is the site the original lifecycle list
+ * above omitted, and the omission was the defect: an earlier session's
+ * stash could otherwise outlive the session it belonged to and beat a
+ * later, genuinely fresher record at the next arrival.
+ *
+ * **Corrected at James's PR #230 review (P1a, Critical): the primary call
+ * site is `useMonitorSession.ts`'s own `"armed"` event handler, NOT
+ * `createMonitorRun` below.** `createMonitorRun` only ever runs once
+ * first-pull evidence is detected, which is too LATE — a session armed
+ * and then ended at READY without ever rowing never reaches it at all,
+ * leaving a stale carrier fully intact for exactly the scenario C1 named.
+ * `"armed"` fires the instant the machine has verified OUR program, real
+ * acceptance independent of whether a stroke ever follows.
+ * `createMonitorRun`'s own call is KEPT — every reachable call to it is
+ * already preceded by an `"armed"` event, so it is a proven no-op on every
+ * path that exists today, retained as defense-in-depth — but it is no
+ * longer the site that closes the gap. See the `"armed"` handler's own
+ * comment for the full account.
  */
 export function clearHandoffSlot(): void {
   handoffSlot = null;
