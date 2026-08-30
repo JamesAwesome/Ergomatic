@@ -3150,6 +3150,57 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     ).toBe(true);
   });
 
+  it("the receipt-channel ownership guard (M7): an unmount racing a LATER mount must not clobber the successor's own channel", async () => {
+    // Session A mounts first and claims the channel via its own effect.
+    const sessionA = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(sessionA.result);
+
+    // Session B mounts SECOND, a genuinely separate hook instance — its
+    // own mount effect steals ownership of the ONE module-level channel
+    // (`handoffStore.ts`'s own "one process, one store" header).
+    const t1 = new Date(t0.getTime() + 120_000);
+    const sessionB = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [status(100, { elapsedSeconds: 50, distanceMeters: 250 })],
+      },
+      { now: () => t1 },
+    );
+    await connect(sessionB.result);
+
+    // Session A UNMOUNTS while B is still live — without the ownership
+    // guard, A's own cleanup would unconditionally null the channel B
+    // now owns.
+    sessionA.unmount();
+
+    // Drive B to `live` — its own create-commit emits a REAL receipt.
+    // Without the guard this receipt would go nowhere (the channel was
+    // nulled by A's unmount), and B's own ring would never see it.
+    await programAndArm(
+      sessionB.result,
+      sessionB.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(sessionB.fake, 100);
+    expect(sessionB.result.current.phase).toBe("live");
+
+    const entries = JSON.parse(sessionB.result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:commit-accepted" &&
+          e.detail.includes(t1.toISOString()),
+      ),
+    ).toBe(true);
+  });
+
   it("A REFUSED SUMMARY COMMIT MUST STILL RESOLVE THE BURST CONDITION (plan Task 3 review, I3 — the #228 invariant this task's own deletion of APPEND-REJECTED left with no assertion): the key is retired WHILE the burst hold is open, then the summary arrives — the store refuses the commit, but the hold still releases", async () => {
     // Row 5's own "tombstone refusal reaching the hook's discipline" gets
     // its FIRST real assertion here too: the SAME retire-while-open shape
