@@ -4122,3 +4122,49 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   distinct arrays if the store keeps history. **TECHNIQUE: for any "entries are
   immutable" design, find the largest field, find whether it is copied or shared, and
   multiply by the write frequency before accepting the word "immutable".**
+
+### 2026-08-30 — the hand-off store protocol rev 3 (delta pass, Wave F / AUD-016 reset)
+
+- **CLAIM: "the single producer loop makes `expectedRevision` one local variable, so
+  CAS refusal is a non-event." HELD on interleaving, FALSE on the caller contract.**
+  No writer spans a yield — `handleEvent`/`handleFrame` are synchronous
+  (`useMonitorSession.ts:2623`, `:2189`) and `endSession` closes the record thirty-nine
+  lines before its first `await` (`:3887` vs `:3930`, its own comment: "Close BEFORE
+  awaiting anything"). But the design leaves `commit`'s CALLER unnamed while today's
+  writer gates persist their own writes and return a bare record (`monitorRun.ts:1043-1044`),
+  so a refusal cannot reach the line that assigns `runRef` — recurring failure 25 rebuilt
+  inside the fix for it. **TECHNIQUE: for any new write primitive, name its caller and
+  then read the CURRENT signature of every function that would call it; a discriminated
+  result is only as load-bearing as the return type that can carry it.**
+- **CLAIM: "a new key appearing between armed and first pull is left standing, not
+  silently destroyed." FALSE — the durable tier is one localStorage key.**
+  `saveMonitorRun` writes `MONITOR_RUN_KEY` unconditionally (`monitorRun.ts:501-521`),
+  so `createMonitorRun`'s own first write (`:770`) overwrites the standing entry's
+  durable half with no retire and no receipt, falsifying invariant 2 ("only `retire`
+  destroys"). **TECHNIQUE: when a design introduces multi-KEY entries over an existing
+  store, open the writer and count how many records the substrate can hold. A protocol
+  cannot be more granular than the key it persists through.**
+- **CLAIM: "the cross-key Replace copy is needed." NO PRODUCER FOUND — and it was
+  carrying a Gate 0.** Entries are created only by `commit`, only the hook produces,
+  and `ConnectAction` always runs `connectGuardStage()` before a session can arm
+  (`ConnectAction.tsx:72`), so the guard stages and armed retires any prior key before
+  a second one can exist. **TECHNIQUE: before designing for a state, try to build a
+  production sequence that reaches it — the enumeration cuts gate rows, residuals AND
+  rower-facing copy, which is the most expensive thing an unreachable state can buy.**
+- **CLAIM (rule contradiction): §1 "a superseded claimed revision REJECTS where the
+  authorization was rower-facing" vs §6 "save-success retires and receipts
+  `richer-at-save`."** Both rower-facing, mutually exclusive; under §1 the save-success
+  retire refuses and Today renders an unlogged row for a session just logged.
+  **TECHNIQUE: for every general rule a spec states, list the specific operations it
+  quantifies over and check each — a rule written for one door will be applied at every
+  door by whoever implements it.**
+- **HELD, and reusable: React cannot schedule an arbitrary driver callback between the
+  new tree's render and its mount effect** — only work React itself runs there can
+  occupy that window, which is the old subtree's passive cleanup (`teardown`,
+  `useMonitorSession.ts:3426`). **TECHNIQUE: before writing a race row into a gate, name
+  the PRODUCER that can occupy the window in the harness; a row that cannot be built as
+  written gets silently rebuilt one layer down, where it cannot fail (RF24).**
+- **PRIMARY, worth not re-researching (WHATWG HTML, Web Storage):** `removeItem` carries
+  no throw condition; `setItem` throws `QuotaExceededError`; the `localStorage` getter
+  throws `SecurityError` — which fails every access, not one method. A "throwing
+  `removeItem`" residual has no supported producer.

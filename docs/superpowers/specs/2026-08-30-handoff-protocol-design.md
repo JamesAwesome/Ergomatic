@@ -1,255 +1,273 @@
-# The hand-off store: one authority for the connected record — protocol design (rev 3, pre-approval)
+# The hand-off store: one authority for the connected record — protocol design (rev 4, for approval)
 
 **What and why.** The logical connected workout lives in four carriers —
 the hook's `runRef`, localStorage, a module slot, and the log form's
 mount snapshot — and no component knows the full set. Six ownership races
 in two James reviews shared one shape: a destructive or productive
 transition consulting a private subset of the carriers. This design
-replaces the carrier conventions with a PROTOCOL: one store, one
-CAS-disciplined write path, one read path, revisioned entries, claim
-tokens that retain what was rendered, key-bound destructive
-authorization, and a self-contained gate. It implements the ratified
-product contract (PM ruling 2026-08-30, RATIFIED): **renders snapshot;
-destructive actions re-read; recording actions post what was shown** —
-binding save-bearing forms only.
+replaces the carrier conventions with a PROTOCOL: one store, one named
+committer, revisioned immutable entries, a claim receipt discipline,
+key-bound destructive authorization, and a self-contained gate. It
+implements the ratified product contract (PM ruling 2026-08-30,
+RATIFIED): **renders snapshot; destructive actions re-read; recording
+actions post what was shown** — binding save-bearing forms only.
 
-Rev 3 resolves James's design gate on `04e8a515` (all eight items;
-§ references below). Rev 2 folded the anchor antagonist pass (one proven
-current-code defect, §3; eight destroyers; cached verdicts; invariant 4
-rewording). Baselines, named per gate item 6: **carrier facts describe
-#230's head `04e8a515`**, whose substrate this design deletes;
-**implementation starts from then-current `main`** (§11).
+Rev 4 resolves James's design gate (8 items), the anchor antagonist pass
+(rev 2), and the rev-3 delta antagonist + PM gates. The two rev-3 gates
+CONVERGED independently on the largest change: **no production sequence
+can reach a two-key state** (PM: the census was counted at the deleted
+substrate; antagonist: enumeration of every entry creator finds the
+guard→armed retire always precedes a second key), so the cross-key
+Replace copy, its Gate-0 artifact, and two gate rows are DELETED and
+replaced by a store invariant. **No Gate-0 render is owed by this
+design: no rower-visible copy or layout changes** — the guard panels
+keep their shipped strings, the held-error frame was Gate-0 approved at
+`91a46ffe` and is restored verbatim, and Today's unlogged row changes
+only in reachability. Stated aloud per RC-24's lesson, not left implied.
+
+Baselines: carrier facts were censused at #230's head (`04e8a515`);
+**the §3 defect is PROVEN ON `main`** (`origin/main:monitorRun.ts:832`);
+implementation starts from then-current `main` (§11).
 
 **Two structural facts anchor the design (antagonist-held):**
 
 1. React runs the new route's render BEFORE the old subtree's passive
-   unmount (`LogSession.tsx:226-228`, verbatim comment), and the old
-   subtree's cleanup before the new subtree's mount effects. Any
-   protection written "at teardown" can be too late for the reader's
-   peek; a memory tier current BEFORE teardown is always visible to the
-   claim. So the memory copy is current by construction — written on
-   every accepted producer update — never an emergency slot.
-2. With that, the stash vocabulary collapses. Every ordering INSIDE the
-   burst delivery window takes one matrix row; the window itself is
-   bounded by the producer's subscription life (`BURST_LINGER_MS`) and
-   is residual §9.1 — bounded, not abolished.
+   unmount (`LogSession.tsx:226-228`), and the old subtree's cleanup
+   before the new subtree's mount effects. Teardown-time protection can
+   be too late for the reader's peek; a memory tier current BEFORE
+   teardown is always visible to the claim. So the memory copy is
+   current by construction — written on every accepted producer update.
+2. With that, the stash vocabulary collapses. Every ordering inside the
+   burst delivery window takes one matrix row; the window is bounded by
+   the producer's subscription life (`BURST_LINGER_MS`) — residual §9.1.
 
 ## §1 The store
 
-One module (`handoffStore`) owns BOTH persistence tiers of the connected
-record. Nothing else writes `MONITOR_RUN_KEY` or holds a module-level
-run.
+One module (`handoffStore`) owns BOTH persistence tiers. Nothing else
+writes `MONITOR_RUN_KEY` or holds a module-level run.
 
 - **Entry:** `{ sessionKey, revision, run }` — `sessionKey` =
-  `startedAt`; `revision` = a per-key monotonic counter owned by the
-  store; entries are immutable objects (a new revision is a new object;
-  reference identity implements revision identity). **The store retains
-  exactly ONE current entry per key** — `revision` is a counter, not a
-  log (the series field is a copied array up to 14,400 samples; retained
-  history would be ~10⁶ live objects on an hour's session). The claim
-  token (§6) may additionally retain ONE older entry per claimed key —
-  bounded, and released with the claim.
-
-- **`commit(sessionKey, expectedRevision, next)` — expected-revision
-  CAS** (gate item 2). A caller states the revision its `next` was
-  derived from. Returns a discriminated result:
-  - `{ accepted: true, revision, verdict }` — the store bumped the
-    revision, wrote the memory tier, attempted the durable tier
-    (verdict `"saved" | "saved-without-series" | "failed"`, the existing
-    four-exit mapping), and cached the verdict (§7).
-  - `{ accepted: false, reason: "stale", current }` — `expectedRevision`
-    is not the current revision: a stale caller cannot silently
-    overwrite the newest copy. The caller re-derives from `current` (or
-    drops, per its own gate) — never blind-retries.
-  - `{ accepted: false, reason: "retired" }` — the key is tombstoned
-    (§5). **A refusal bumps nothing: not the revision, not the cached
-    verdict, not `runRef`** — refusals are receipted, side-effect-free
-    reads of the door.
-  `commit` is a persistence primitive; every existing WRITER GATE stays
-  where it is (`appendSummaryObservations`' four declines,
-  `recordActual`'s immutability + finish-grace vouch,
-  `completeMonitorRun`'s idempotence, the F1 fold's eligibility mirror)
-  — policy above, persistence below. In the hook, the single producer
-  loop makes `expectedRevision` bookkeeping one local variable
-  (`runRef` and the last accepted revision travel together).
-
-- **`read(sessionKey)`** returns the current entry for THAT key under
-  §8's precedence rules. **`candidates()`** returns every unretired
-  entry across both tiers (used by guards; cross-key states are
-  REPORTED, never ranked — §5).
-
-- **`retire(keys: {sessionKey, revision}[], reason)`** is the only
-  destructive operation, and it is KEY- AND REVISION-BOUND (gate
-  item 3): the caller passes the exact set its authorization covered.
-  The store compares against its current state; **an unexpected set —
-  any new key, or a claimed-set revision now superseded where the
-  authorization was rower-facing — REJECTS with
-  `{retired: false, reason: "set-changed", current}`**, and the caller
-  re-prompts (Replace/Start doors) or re-derives (internal callers).
-  One receipt PER retired entry: key, revision, claim state (§6). A
-  retire that finds nothing emits nothing. **There is no
-  `retire("all")`** — every §5 caller names its set from a
-  `candidates()` read that its own confirmation covered.
-
-- **Tombstones.** `retire` leaves a process-scoped tombstone per retired
-  key. A post-retire `commit` for a tombstoned key returns
-  `{accepted:false, reason:"retired"}` with a receipt. **A failed
-  durable removal is MASKED by the tombstone** (gate item 4): the stale
-  durable entry cannot reappear through `read`/`candidates` for the life
-  of the process; after reload the tombstone is gone and the stale entry
-  serves — the disclosed §9.6 residual, now with a stated boundary.
+  `startedAt`; `revision` = a monotonic counter owned by the store;
+  entries immutable (a new revision is a new object; reference identity
+  implements revision identity). One current entry retained; `revision`
+  is a counter, not a log.
+- **AT MOST ONE UNRETIRED SESSION (new store invariant).** The durable
+  tier is a single localStorage key — the substrate cannot be more
+  granular than the key it persists through (delta pass) — and no
+  production sequence creates a second unretired entry: entries are
+  created only by `commit`, only the hook produces, and every acceptance
+  path runs the guard→armed retire first. The store ENFORCES it: a
+  create-commit while an unretired entry exists for a DIFFERENT key is
+  refused with a receipt (`store-second-key-refused`) — the counted
+  impossible, not silent coexistence. All cross-key machinery (plural
+  Replace copy, per-key candidate ranking, different-key discard
+  branches) is deleted on this invariant.
+- **`commit(sessionKey, expectedRevision, next)`** — expected-revision
+  CAS. `expectedRevision: null` means "expect absent" (the create case).
+  Returns `{accepted:true, revision, verdict}` (memory written; durable
+  attempted; verdict `"saved"|"saved-without-series"|"failed"` cached
+  per §7) or `{accepted:false, reason:"stale"|"retired"|"second-key",
+  current?}`. **A refusal bumps nothing** — not revision, not the cached
+  verdict — and is receipted.
+- **The committer is NAMED (delta pass kill):** the HOOK is the sole
+  production caller of `commit`. The writer gates (`recordActual`,
+  `completeMonitorRun`, `appendSummaryObservations`, the fold) become
+  PURE — they return `next` (or the same reference on decline) and never
+  persist. The hook holds `lastAcceptedRevisionRef` (a ref — it must
+  survive across driver callbacks) and applies the discipline: commit
+  accepted → assign `runRef` and update the ref; refused → `runRef`
+  UNCHANGED, receipt only. A refusal can therefore never diverge
+  producer from store — the RF25 shape the unnamed-caller draft rebuilt.
+- **`retryDurable(sessionKey)` (delta pass kill):** Retry's primitive.
+  Re-attempts the durable write of the CURRENT memory entry; updates
+  `durableRevision` and the cached verdict; **never bumps `revision`** —
+  modeling Retry as `commit` would stale the hook's own ref and refuse
+  the next producer commit (the late burst: the design's headline case,
+  lost by its own retry button).
+- **`read(sessionKey?)`** returns the current entry (§8 precedence);
+  **`currentUnretired()`** serves the guards. Hydration and the
+  malformed-bytes rule are §8's (never during render).
+- **`retire(set: {sessionKey, revision}[], reason)`** — the only
+  destructive operation; one receipt per retired entry (key, revision,
+  claim state §6); nothing found → nothing emitted. **Authorization is
+  KEY-BOUND at every door that shows only existence** ("You have an
+  unlogged session" names no figure — PM ruling: revision-bind only
+  where the rower was shown NUMBERS). A revision superseded between a
+  guard's stage and its retire does NOT reject: the retire proceeds and
+  the receipt records the superseded revision. Rejection exists for
+  exactly one mismatch: a NEW KEY in the store that the authorization
+  never staged — which §1's single-session invariant makes a
+  receipted-impossible, so no re-prompt surface is designed (the rev-3
+  re-prompt is deleted; it had no UI home and its one producer needed a
+  full reconnect inside 2 s).
+  **Save-success is the consumer's own retire and is EXEMPT from
+  rejection by construction** (the §1-vs-§6 contradiction the delta pass
+  caught): it retires the claimed key; a richer store revision at that
+  moment proceeds and emits `handoff-dropped reason=richer-at-save` with
+  both revisions (ratified condition 1).
+- **Tombstones.** Process-scoped, per retired key. A post-retire commit
+  is refused (`reason:"retired"`) with a receipt — its plausible
+  producer is the dead hook's late burst racing a fast reconnect.
+  A failed durable removal is masked by the tombstone for the process.
+  **WHATWG PRIMARY (delta pass): `removeItem` carries NO throw
+  condition; `setItem` throws `QuotaExceededError`; the `localStorage`
+  GETTER throws `SecurityError` (failing every access)** — so the
+  throwing-removal residual is retired as a live risk; the tombstone
+  earns its keep on the retired-refusal, and the GETTER is the real
+  hazard the store's accessor wraps (§8, absorbing AUD-011's
+  `loadMonitorRun` loader on day one).
 
 ## §2 What each old carrier becomes
 
-| old carrier (#230 head) | becomes |
+| old carrier | becomes |
 | --- | --- |
-| `runRef` | unchanged — the producer's working copy; every accepted update flows `runRef → commit(key, expectedRev, next)` |
-| stored `MonitorRun` | the durable tier (same key, same stored shape, NO revision persisted — §8; no migration; `isMonitorRun`'s positive conjunction tolerates) |
+| `runRef` | unchanged — the producer's working copy; accepted updates flow `runRef → commit` via the hook, the sole committer |
+| stored `MonitorRun` | the durable tier (same key, same shape, no revision persisted — §8; no migration) |
 | module slot + five stash sites | deleted — the memory tier is current by construction |
 | `stillLive` | deleted — replaced by store reads (§3) |
-| mount snapshot | unchanged — the consumer's claim (ratified contract), now token-backed (§6) |
+| mount snapshot | unchanged — the consumer's claim; **Save posts the SNAPSHOT** (§6) |
 
-## §3 The store fixes a PROVEN defect in current code, out loud
+## §3 The store fixes a PROVEN defect on `main`, out loud
 
 `recordActual`'s late branch rebuilds from `stillLive(startedAt)`
-(`monitorRun.ts:1019-1021` at `04e8a515`), which matches on `startedAt`
-ALONE. When the close write failed (swallowed), storage holds the last
-SUCCESSFUL write — a stale LIVE copy — and the finish-grace boundary
-spreads it as the base: `completedAt: null`, `endedBy` gone, RC-1 sums
-gone, only the actuals the last successful write contained (antagonist
-probe: 3 in-memory actuals → 1, real compiled program). The hook assigns
-it to `runRef.current`; Proceed stashes an OPEN record; the reader's
-`completedAt` gate bounces it to the manual door — AUD-016's escape
-hatch defeated on its own path. Neither shipped gate leg can see it:
-leg A leaves storage empty (refuses correctly), leg B leaves it closed
-(base correct); the defect lives BETWEEN them — storage that ACCEPTED
-writes and then stopped.
+(`origin/main:monitorRun.ts:832-834`), which matches on `startedAt`
+alone. When the close write failed (swallowed), storage holds the last
+successful write — a stale LIVE copy — and the finish-grace boundary
+spreads it as the base: `completedAt: null`, `endedBy` gone, sums gone,
+actuals truncated (antagonist probe: 3 in-memory actuals → 1). The
+record re-opens in `runRef`; the reader's `completedAt` gate bounces the
+session to the manual door. Neither existing gate leg can see it — the
+defect lives between their two stub shapes (storage that ACCEPTED writes
+and then stopped).
 
-Under this design the late boundary's base is `read(sessionKey)` —
-under a mid-run denial the memory tier IS the newest, so the base is the
-caller's own current record, never storage's stale one. §10 row 8 is the
-permanent gate, and its fault injection targets **the live→closed
-WRITE** (deny the write whose payload carries `completedAt` non-null for
-this key — a payload-inspecting stub, not a write count; gate item 7).
+Under this design the late boundary's base is `read(sessionKey)` — under
+a mid-run denial the memory tier is the newest, so the base is the
+caller's own current record. §10 row 8 is the permanent gate; its fault
+injection targets the live→closed WRITE by payload inspection (deny the
+first write whose payload carries `completedAt` non-null — the existing
+spy already receives the serialized value), red against `main`'s
+`recordActual` before the rewrite, demonstrable on the fresh branch's
+first commit.
 
 ## §4 The seven invariants
 
-1. **Until Save, Discard, or a confirmed Replace, at least one
-   recoverable copy exists** — memory tier from first write to retire;
-   durable best-effort. Residual §9.2.
-2. **A destructive transition inspects every carrier it can destroy** —
-   only `retire` destroys; it owns both tiers; every destroyer routes
-   through it with a key/revision-bound set (§5).
-3. **A consumer owns an exact revision** — claim tokens (§6).
-4. **Every accepted producer update after release either reaches the
+1. Until Save, Discard, or a confirmed Replace, at least one recoverable
+   copy exists (memory from first write to retire; durable best-effort;
+   residual §9.2).
+2. A destructive transition inspects every carrier it can destroy — only
+   `retire` destroys; every destroyer routes through it with a key-bound
+   set (§5).
+3. A consumer owns an exact revision — the snapshot retains the entry;
+   the claim records `{key, renderedRevision}` (§6).
+4. Every accepted producer update after release either reaches the
    current consumer, or remains recoverable until that consumer acts,
-   and any loss at that action is COUNTED.**
-5. **Carrier precedence is explicit and WITHIN-KEY (§8)** — cross-key
-   states are reported, never ranked.
-6. **The UI never saves numbers it did not represent** — the consumer
-   posts its claim token's entry (§6); no path injects a later revision
-   into a mounted form.
-7. **Accepted residuals are named precisely (§9)** — none disguised as
-   recovery.
+   and any loss at that action is COUNTED.
+5. Carrier precedence is explicit and within-key (§8); the store holds
+   at most one unretired session (§1).
+6. The UI never saves numbers it did not represent — Save posts the
+   component's own snapshot; the claim supplies the receipt comparison.
+7. Accepted residuals are named precisely (§9).
 
-## §5 Destroyers and guards: the census, baseline-scoped
+## §5 Destroyers and guards: the census, corrected
 
-Counted at `04e8a515` (the #230 head whose substrate is deleted); the
-implementation re-runs this census against its own base `main` before
-coding (§11). All destroyers route through `retire` with a named set:
+Censused at `04e8a515`; the exact `MONITOR_RUN_KEY` writer set was
+independently verified by the delta pass (eight sites + the loader
+self-clear, no ninth); re-run against the implementation's own `main`
+base before coding. All route through `retire` with key-bound sets:
 
-| site (at 04e8a515) | retire set | authorization |
+| site | retire set | authorization |
 | --- | --- | --- |
-| armed acceptance (`useMonitorSession.ts:2675-2676`) | the `candidates()` set STAGED AT THE GUARD (key+revision), passed through Connect → program → armed | `connectGuardStage` reads `candidates()`; the Replace confirmation names each staged entry; an armed-time set mismatch REJECTS and re-prompts (closes the guard-to-armed TOCTOU — gate item 3) |
-| `createMonitorRun` defense (`monitorRun.ts:767-768`) | narrowed: retires only entries whose keys were staged at the guard; a NEW key appearing between armed and first pull is left standing and receipted (`create-defense-unexpected`) — not silently destroyed | inherited from the armed set |
-| save-success (`LogSession.tsx:1724-1725`) | the claim token's `{key, revision}` (§6) | the rower's Save |
-| monitor discard (`LogSession.tsx:2000-2001`) | the claim token's key (M+D) | two-tap arm |
-| manual-door discard (`LogSession.tsx:2212`) | **same key in both tiers → retire M+D; different keys → retire D only, M preserved AND NOT tombstoned** (gate item 4 — a tombstone here would make M permanently unwritable while alive; M's key was never authorized for destruction) | two-tap arm + fresh `candidates()` read |
-| `Today.tsx:627` discard door | D's key (its confirm covers the stored record) | Today's confirm, reading `candidates()` |
-| `WorkoutDetail.tsx:298` row-instead | D's key | its confirm, reading `candidates()` |
-| `useStartWorkout.ts:99` confirmReplace | the staged set — **the Start door's guard reads only the durable tier today (`useStartWorkout.ts:118-135`), the P1-1 hole at a second door**; it reads `candidates()` under this design | Start's Replace confirm, naming each staged entry |
+| armed acceptance | the entry staged at the Connect guard (key-bound; superseded revisions proceed + receipt) | `connectGuardStage` reads `currentUnretired()`; the shipped singular copy stays: "You have an unlogged session. Connecting discards it." |
+| `createMonitorRun` defense | whatever remains for the staged key; a different unretired key is structurally absent (§1 invariant) — if ever seen, refused + `store-second-key-refused` receipt | inherited from the armed set. **Also destroys the phone-timer `SessionRun` (`clearRun`, the third line of the same block)** — outside the store, but its authorization is the SAME guard stage: `connectGuardStage`'s first branch stages the SessionRun (`"unlogged"` on `loadRun()`), so the Replace confirmation covers it; stated here so the census has no unbound destroyer |
+| save-success | the claim's key (exempt from rejection; richer-at-save counted) | the rower's Save |
+| monitor discard | the claim's key (M+D) | two-tap arm |
+| manual-door discard | the stored key only (M untouched — it may await its own arrival; NOT tombstoned) | two-tap arm + fresh read |
+| Today discard door | the entry its row rendered (key-bound) | Today's confirm — copy unchanged and still true ("Discard {title} without logging?") |
+| **row-instead (`WorkoutDetail.tsx:298`)** | the stored key | **CORRECTED (PM): this site has NO confirm of its own** — it is a single-tap escape in the interstitial's failure card; its real authorization is the Connect guard's Replace confirmation one screen earlier, making it a third terminus of the staged set (Connect → program → armed | failure-card). The spec routes the staged set to all three termini |
+| Start replace (`useStartWorkout.ts:99`) | the staged entry | Start's guard reads `currentUnretired()` (today it reads the durable tier only — the P1-1 hole at a second door, closed) |
 
-**Out of Entry retirement, stated narrowly (gate item 6):**
-`loadMonitorRun`'s malformed-record self-clear (`monitorRun.ts:541-545`,
-"Resilience #5") destroys bytes that never formed an Entry — no key, no
-revision, nothing a guard could stage; it remains a loader concern, with
-its receipt. The pre-reset slot `take` sites are #230-substrate facts
-and die with it.
+Out of Entry retirement, stated narrowly: the loader's malformed-bytes
+handling (§8 — deferred, never during render); the diagnostic ring keys.
 
-**Cross-key guard copy:** when `candidates()` reports entries for more
-than one session, the Replace confirmation must name each ("You have 2
-unlogged sessions…"). **This is new rower-facing copy: it carries a
-rendered Gate-0 artifact before this design is approved for
-implementation** (gate item 7; James approves the rendered thing).
+**Product gain, recorded (PM):** Today reads the durable tier today;
+reading the store makes an unlogged row render for a MEMORY-ONLY record
+— closing the escape-hatch gap filed at #230's gate (a stashed record
+with no door under denial-from-first-write). Its residual: that row
+vanishes on reload, indistinguishable from a durable one — named §9.5,
+receipted, not a screen.
 
-## §6 Claims: a token that retains what was rendered
+## §6 Claims: the snapshot IS the retained copy
 
-The gate's item 1 killed rev 2's claim shape — render holds R0, the old
-tree's cleanup can publish R1 before the mount effect, the store retains
-only R1, and a CAS claim of R0 then fails with the screen already
-showing R0. The claim therefore RETAINS, not references:
+The consumer's mount snapshot (`useState` lazy init) already retains the
+rendered entry R0 — the store does not duplicate it (delta pass: a
+store-side retained token is a second strong reference buying nothing).
 
-- **Render** peeks (`read`, no side effects) and captures the ENTRY —
-  the immutable R0 object — into the snapshot (unchanged behavior; the
-  snapshot already holds the object).
-- **The commit effect claims:** `claim(sessionKey, entry)` registers the
-  token `{sessionKey, renderedEntry, renderedRevision}` — **the token
-  retains the rendered entry itself, independent of the store's current
-  entry**. Claiming never compares against the current revision and
-  cannot fail: a richer R1 in the store stays the store's current entry;
-  the token holds R0. StrictMode double-claim is idempotent by value.
-- **Save** posts the TOKEN's entry (invariant 6 — the screen's own
-  numbers, structurally). Save-success retires the token's key: the
-  retire receipt compares `renderedRevision` against the store's current
-  revision and a mismatch emits `handoff-dropped reason=richer-at-save`
-  with both revisions (ratified condition 1).
-- **Claim states per key: unclaimed → claimed → consumed.** The abandon
-  path (claimed, unmount without Save) leaves CLAIMED; any later retire
-  counts non-consumed entries as drops. `unclaim` happens implicitly:
-  tokens are per-mount; a new claim for the key replaces the token; a
-  retire releases it.
+- **Render** peeks (`read`, side-effect-free per §8) and snapshots the
+  entry — unchanged.
+- **The commit effect claims:** registers `{sessionKey,
+  renderedRevision}` — a lightweight receipt-and-state record, NOT a
+  copy. Claiming never compares against the current revision and cannot
+  fail; StrictMode double-claim is idempotent by value.
+- **Save posts the SNAPSHOT** — the component's own retained entry
+  (invariant 6 verbatim; "Save posts the token's entry" was the delta
+  pass's kill — the token is per-key, the snapshot per-mount, and any
+  divergence would post numbers the screen never showed).
+- Save-success retires the claimed key; revision mismatch proceeds and
+  counts (`handoff-dropped reason=richer-at-save`, both revisions).
+- **Claim states per key: unclaimed → claimed → consumed.** Abandon
+  (claimed, unmount without Save) leaves CLAIMED; any later retire
+  counts non-consumed entries as drops. Tokens are per-mount; a new
+  claim replaces; a retire releases.
 
 ## §7 Verdicts, the hand-off, and no auto-heal
 
-`commit` caches the durable verdict per key; **the release funnel reads
-the CACHED verdict — the LAST accepted commit's, not the close
-commit's** (up to two durable writes land between close and release: the
-finish-grace boundary and the burst append; a close-time verdict is
-stale by release time and could release green over a durable copy
-missing the final interval). The verify's second serialize is deleted
-for THIS reason. Retry re-attempts the durable write of the current
-memory entry. A refused commit never touches the cached verdict (§1).
+`commit` caches the durable verdict per key; the release funnel reads
+the CACHED verdict — the last accepted commit's, not the close commit's
+(up to two durable writes land between close and release). The verify's
+second serialize is deleted for this reason. `retryDurable` (§1)
+re-attempts without bumping. A refused commit never touches the cached
+verdict.
 
 **No auto-heal (ruled):** a later commit succeeding while held-in-error
-does not exit the held-error frame — the Gate-0 frame has two controls
-and no auto-exit; a screen changing under the rower is the mid-edit
-surprise the contract rejects. The heal is receipted; the rower's Retry
-then succeeds instantly.
+does not exit the held-error frame (Gate-0 frame, two controls, no
+auto-exit; a screen changing under the rower is the rejected mid-edit
+surprise). The heal is receipted; Retry then succeeds instantly.
 
-## §8 Revision precedence, fully specified (gate item 5)
+## §8 Revision precedence and hydration, fully specified
 
-- **No revision is persisted.** Safe because producers die with the
-  page: no in-memory revision can outlive the durable copy it derives
-  from. The one post-reload writer of an existing key
-  (`completeInterruptedRun`, `Today.tsx:638` at `04e8a515`) derives FROM
-  the durable copy — monotone.
-- **Process hydration baseline:** at first store access in a process, a
-  durable entry hydrates as `revision 0` for its key; the per-key
-  counter starts above it.
-- **Tracked durable revision:** the store records, per key, the revision
-  of the last SUCCESSFUL durable write (`durableRevision ≤ revision`).
-  A failed durable attempt leaves `durableRevision` unchanged — the
-  durable tier is known-stale by exactly `revision − durableRevision`
-  accepted updates, which is what the receipts report.
-- **`read(key)`:** the memory entry when present (it is by construction
-  ≥ any durable copy for that key in this process); the hydrated durable
-  entry otherwise. **Equal revisions: memory wins** (same object in
-  practice; stated for completeness).
-- **Reload:** memory and tombstones are gone; the durable tier serves at
-  hydration baseline. Under a durable-failure session this is §9.2's
-  loss; under a §1 masked-removal it is §9.6's resurrection window.
-- **Cross-key:** `read` is per-key only; `candidates()` reports all
-  keys; no cross-key ranking exists anywhere in the protocol.
+- **No revision persisted.** Safe: producers die with the page; the one
+  post-reload writer of an existing key (`completeInterruptedRun`)
+  derives FROM the durable entry it was handed, so its
+  `expectedRevision` is that entry's hydrated revision — well-defined.
+- **Hydration:** at the store's first NON-RENDER access in a process
+  (guards, doors, commit paths), a durable entry hydrates as
+  `revision 0`. **Never during render:** the render peek reads only
+  what is already hydrated or the memory tier. **Malformed durable
+  bytes are never cleared during a read** (the current loader
+  self-clears at `monitorRun.ts:544`, which under a render-time read
+  destroys bytes during a repeatable render — P1c's class re-entering
+  through the loader): the store records the malformed state, treats
+  the key as absent, receipts it, and clears at the next retire or
+  accepted commit for the key.
+- **Tracked durable state:** per key, `durableRevision` (last
+  successful durable write) and `durableComplete` (false when that
+  write was `saved-without-series` — a poorer copy of the same
+  revision; without the flag the staleness metric would claim currency
+  for a durable copy missing up to ~720 KB of trace — delta pass).
+  Failed attempts leave both unchanged; receipts report
+  `revision − durableRevision` and the completeness flag.
+- **`read(key)`:** memory entry when present (by construction ≥ any
+  durable copy this process has seen); hydrated durable entry
+  otherwise; equal revisions — memory wins.
+- **Reload:** memory, tombstones, claims are gone; durable serves at
+  hydration baseline (§9.2/§9.6 residuals).
+- **The storage GETTER (`SecurityError`) is wrapped by the store's
+  accessor** — a getter throw makes both tiers behave as absent-durable
+  with a receipt, never an unhandled throw. This absorbs AUD-011's
+  `loadMonitorRun` loader on day one (AUD-011 shrinks to three
+  loaders; the #230-gate `removeItem` spec condition is superseded by
+  the WHATWG primary above and this section — ROADMAP updated on
+  approval).
 
 ## §9 Accepted residuals, named
 
@@ -261,120 +279,139 @@ then succeeds instantly.
    is process-scoped; counted via the `no-run` door miss.
 3. **Eviction** — a green durable write may not survive; receipts are
    the only instrument.
-4. **Richer-at-save drop** — counted (`handoff-dropped
-   reason=richer-at-save`), per the ratified conditions.
-5. **Second-tab staleness** — a stale same-tab memory copy outranks a
-   second tab's fresher durable write for the same key; single-tab is
-   the codebase's stated assumption, now a named residual.
-6. **Masked durable removal** — a throwing `removeItem` leaves a durable
-   entry hidden by the process tombstone; it resurrects only after
-   reload (stated boundary), receipted at the failed removal.
+4. **Richer-at-save drop** — counted, per the ratified conditions.
+5. **Today's memory-only unlogged row vanishes on reload**,
+   indistinguishable from a durable one — receipted at hydration when a
+   claimed-but-unpersisted session is absent (the flip side of the §5
+   product gain).
+6. **Masked durable removal** — kept only as the tombstone's process
+   behavior; retired as a live risk (WHATWG: `removeItem` has no throw
+   condition). After reload a stale durable entry would serve; the
+   receipts at the failed session bound the surprise.
 7. **Abandoned claims** — counted at the next retire as
    claimed-not-consumed drops.
+8. **Second-tab staleness** — single-tab is the codebase's stated
+   assumption; a stale same-tab memory copy outranks a second tab's
+   fresher durable write for the same key.
 
 ## §10 The gate (self-contained; RF24-shaped; mutations of invariants)
 
 All rows start above the producer (replay harness over real capture
-bytes, virtual clock, injected schedule; payload-inspecting storage
-stubs — deny by CONTENT, e.g. "the first write whose payload carries
-`completedAt` non-null", never by count alone).
+bytes, virtual clock, injected schedule; PAYLOAD-INSPECTING storage
+stubs — deny by content, never by count alone; the existing spy already
+receives the serialized value).
 
-1. **Guard sees what acceptance destroys.** Unretired entries
-   (memory-only / durable-only / both / TWO KEYS) → Connect and Start
-   both stage Replace naming each entry; armed retires exactly the
-   staged set with per-entry receipts. Mutations: guard reads one tier →
-   fails; armed retires a key not staged (set-mismatch path disabled) →
-   fails.
+1. **Guard sees what acceptance destroys:** unretired entry
+   (memory-only / durable-only / both tiers, ONE key) → Connect and
+   Start stage Replace with the shipped singular copy; armed retires the
+   staged entry with its receipt; a superseded revision proceeds +
+   receipt. Mutations: guard reads one tier → fails; armed retires
+   without the staged set (unbound) → the receipt assertion fails.
 2. **Producer update after release, four orderings** (before/after
    navigation × before/after teardown) — all reach `commit`; the
-   consumer's token is unaffected; receipts show the accepted revisions.
-   Mutation: gate the post-release commit on any window predicate →
-   the excluded ordering fails.
-3. **The claim race, exactly** (gate item 1): R0 render → R1 commit
-   (old tree's late fold) → R0 claim (token retains R0) → Save → POST
-   carries R0's numbers → retire receipts `richer-at-save` with
-   {R0, R1}. Mutations: token references instead of retains (claim
-   compares current revision) → fails at claim; POST reads the store
-   instead of the token → the screen==save assertion fails.
-4. **Stale-commit refusal:** a caller committing with a stale
-   `expectedRevision` is refused, bumps nothing, receipt present; the
-   newest entry survives. Mutation: accept stale commits → the
-   last-write-wins assertion fails.
-5. **Tombstone:** post-retire commit refused with receipt; a masked
-   failed removal keeps the durable entry invisible for the process and
-   serves it after simulated reload (residual asserted as itself).
-   Mutations: refusal bumps the revision → fails; tombstone not
-   consulted by `read` → fails.
-6. **Manual discard, both cases** (gate item 4): same key → M+D
-   retired; different keys → D retired, M alive, NOT tombstoned,
-   `candidates()` still reports it, Connect stages it. Mutation:
-   tombstone the preserved key → fails.
+   consumer's snapshot unaffected; receipts show accepted revisions.
+   Mutation: gate the post-release commit on a window predicate → the
+   excluded ordering fails.
+3. **The claim race, with its producer NAMED:** R0 render → **R1
+   committed from the OLD hook's passive-cleanup teardown** (the only
+   occupant React allows between the new render and its mount effect —
+   delta pass; an arbitrary driver callback cannot be scheduled there,
+   and a store-level direct call would be RF24 wearing this row's
+   number) → R0 claim → Save → POST carries R0's numbers → retire
+   receipts `richer-at-save {R0, R1}`. Mutations: POST reads the store
+   instead of the snapshot → screen==save fails; claim compares current
+   revision (can fail) → the claim-cannot-fail assertion fails.
+4. **Stale-commit refusal:** a stale `expectedRevision` is refused,
+   bumps nothing, `runRef` unchanged (the hook discipline), receipt
+   present. Mutation: accept stale → last-write-wins fails.
+5. **Tombstone:** post-retire commit refused + receipted; the refusal
+   reaches the HOOK's discipline (runRef not re-assigned). Masked
+   removal invisible for the process; serves after simulated reload
+   (residual asserted as itself). Mutations: refusal bumps revision →
+   fails; `read` ignores tombstones → fails.
+6. **Manual discard:** stored key retired, memory entry (same key —
+   the only reachable case) retired with it; the asymmetric
+   different-key branch is DELETED with the cross-key machinery — the
+   row instead asserts §1's invariant: a second-key create is refused +
+   `store-second-key-refused` receipted. Mutation: allow the second
+   key → the invariant row fails.
 7. **The four storage shapes** (denied-from-open / denied-at-close /
-   healed-on-Retry / saved-without-series) over real bytes — held-error,
-   Retry, Proceed behaviors as shipped; cached-verdict currency asserted
-   (the release reads the LAST commit's verdict — deny the
-   boundary-write only and the release must hold).
+   healed-on-Retry / saved-without-series) over real bytes —
+   held-error, `retryDurable` (no revision bump — assert the revision
+   is UNCHANGED across a heal), Proceed as shipped; cached-verdict
+   currency (deny the boundary-write only → the release must hold);
+   `saved-without-series` sets `durableComplete=false` and the receipt
+   says so. Mutation: model Retry as `commit` → the
+   revision-unchanged assertion fails AND the follow-on burst commit is
+   refused (the headline-loss case, pinned).
 8. **The §3 defect row:** mid-run denial landed on the live→closed
    write by payload inspection, then the finish-grace boundary → the
    record stays closed, all actuals kept, Proceed carries a COMPLETE
-   record to the reader and the POST carries the measured work. Red
-   against `04e8a515`'s code by construction.
+   record to the reader, POST carries the measured work. Red against
+   `main`'s `recordActual` (`origin/main:monitorRun.ts:832`) before the
+   rewrite — demonstrated on the fresh branch's first commit.
 9. **Reload residuals** asserted as residuals (durable serves;
-   denied+reload = counted loss).
+   denied+reload = counted loss; Today's memory-only row present before
+   reload, absent + receipted after).
 10. **Abandon path:** claim, unmount without saving, next acceptance →
     per-entry receipt counts claimed-not-consumed.
-11. **Invariant mutations, each with its named detector:** break
-    monotonicity (reuse a revision) → the receipt-sequence assertion
-    fails; mutate an entry in place → **the token/claim comparison**
-    fails (the only consumer holding an old reference); reorder tier
-    precedence → row 8 fails; drop a receipt kind → its named row
-    fails.
+11. **Invariant mutations, each with its named detector:** reuse a
+    revision → the receipt-sequence assertion fails; mutate an entry in
+    place → the snapshot/claim comparison fails (the only holder of an
+    old reference); reorder tier precedence → row 8 fails; drop a
+    receipt kind → its named row fails; write the durable key from
+    outside the store → a module-boundary lint/grep gate fails.
 12. **The binding route gate:** `WorkoutDetail.connectedRecovery.test.tsx`
-    restored AS A FILE and retargeted — real WorkoutDetail → interstitial
-    → hook → fake transport → held-error button → reader → POST machine
-    fields. Store-level rows never substitute for it. Memory-currency
-    assertions are internal-consistency checks (RF11's mirror rule) —
-    invariant tests, never evidence about the record.
+    restored AS A FILE and RETARGETED (its two `MONITOR_RUN_KEY`
+    assertions survive; its slot-vocabulary comments get the budgeted
+    comment pass — §11): real WorkoutDetail → interstitial → hook →
+    fake transport → held-error button → reader → POST machine fields.
+    Store-level rows never substitute for it. Memory-currency
+    assertions are internal-consistency checks (RF11's mirror rule).
 
-**Exit criteria (self-contained):** every §10 row implemented and green
-on the fresh branch; every named mutation run per RF22 with recorded
-failure text; the §5 cross-key Replace copy Gate-0 approved as a
-rendered artifact; per-file coverage on every store-touching file (RF2);
-`pnpm e2e` green; the §3 defect row red-then-green demonstrated against
-the old substrate's behavior (documented in the PR); receipts vocabulary
-documented in the normative spec.
+**Exit criteria:** every row implemented and green on the fresh branch;
+every named mutation run per RF22 with recorded failure text; per-file
+coverage on every store-touching file (RF2); `pnpm e2e` green; the §3
+row demonstrated red-then-green against `main`'s behavior (documented in
+the PR); the receipts vocabulary documented in the normative spec; NO
+Gate-0 artifact owed (no rendered change — stated, not implied).
 
-## §11 The branch reset, auditable (gate item 8)
+## §11 The branch reset, auditable
 
 - **PR #230 CLOSES UNMERGED** on this design's approval; its branch is
-  preserved as the record (pushed through `04e8a515`).
-- **Implementation starts from then-current `main`** on a fresh branch;
-  the §5 census re-runs against that base before coding.
-- **No rebase or cherry-pick of the coupled substrate.** Restored
-  VERBATIM (file-level, zero coupling, per the PM's measured table):
-  `WorkoutDetail.connectedRecovery.test.tsx`, `ConnectedSurface.tsx`,
+  preserved as the record (pushed through `4c034377`).
+- **Implementation starts from then-current `main`**; the §5 census
+  re-runs against that base before coding.
+- **No rebase or cherry-pick of the coupled substrate.** Restored as
+  files: `WorkoutDetail.connectedRecovery.test.tsx` (retargeted +
+  comment pass — it narrates the deleted slot),
+  `WorkoutDetail.test.tsx` (retargeted — eleven durable-substrate
+  assertions survive; comments checked), `ConnectedSurface.tsx`,
   `ConnectedSurface.test.tsx`, `ConnectedSurface.screens.test.tsx`,
-  `ConnectedInterstitial.test.tsx`, the `connected-ended-error` fixture +
-  screenshots-loop entry, `WorkoutDetail.test.tsx`,
-  `ConnectionLogSheet.test.tsx`, `PaneGrid.test.tsx`, and the two
-  committed `connected-ended-error{,-landscape}.png` captures.
-  REWRITTEN against the store (the requirements checklist, not source):
-  `monitorRun.ts`, `useMonitorSession.ts`, `LogSession.tsx`, `Today.tsx`,
-  `WorkoutDetail.tsx`, `useStartWorkout.ts`, `summaryHoldReplay.test.ts`,
-  `monitorRun.test.ts`, `useMonitorSession.test.ts`, `LogSession.test.tsx`,
+  `ConnectedInterstitial.test.tsx`, the `connected-ended-error` fixture
+  + screenshots-loop entry, `ConnectionLogSheet.test.tsx`,
+  `PaneGrid.test.tsx`, and the two committed
+  `connected-ended-error{,-landscape}.png` captures. REWRITTEN against
+  the store (requirements checklist, not source): `monitorRun.ts`,
+  `useMonitorSession.ts`, `LogSession.tsx`, `Today.tsx`,
+  `WorkoutDetail.tsx`, `useStartWorkout.ts`,
+  `summaryHoldReplay.test.ts`, `monitorRun.test.ts`,
+  `useMonitorSession.test.ts`, `LogSession.test.tsx`,
   `ConnectAction.test.tsx`.
-- **The Gate-0 UI does not ship unreachable:** the held-error frame lands
-  in the same PR as its producer (the store + verify), never ahead of it.
-- The 2026-08-29 plan document stays off `main` (a plan instructing an
-  implementer to build the deleted substrate).
+- **The Gate-0 UI does not ship unreachable:** the held-error frame
+  lands in the same PR as its producer.
+- The 2026-08-29 plan document stays off `main`.
+- **Wave F re-sequencing (PM):** store → AUD-011/015 (AUD-011 minus the
+  `loadMonitorRun` loader, which §8 absorbs; its `removeItem` spec
+  condition superseded — ROADMAP updated on approval) → `door` column →
+  lifecycle spec.
 
 ## Process
 
-Maps: done. Anchor antagonist pass: folded (rev 2). James's design gate
-on `04e8a515`: folded (this rev). NEXT, per his instruction: re-run the
-antagonist gate (delta: attack §1's CAS/commit shape, §5's set-bound
-retire, §6's retaining token, §8's precedence table, §10's
-buildability) and the PM gate (the cross-key Replace copy's product
-shape; the census's product cost), resolve, render the §5 Gate-0
-artifact, then present for James's explicit approval. No production code
-before approval.
+Maps: done. Anchor pass: folded (rev 2). James's design gate: folded
+(rev 3). Delta antagonist + PM gates on rev 3: folded (this rev; their
+ledger entries ride the branch). NEXT: James's explicit approval →
+normative spec rewrite + ROADMAP updates → implementation plan → fresh
+branch off `main`. No production code before approval. The v0.27.0 tag
+decision (both gates: cut now, without AUD-016) is presented alongside
+but is James's alone.

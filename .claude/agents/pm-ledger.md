@@ -3433,3 +3433,42 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   successor's path — and it would ship an unreachable branch whose only tests
   mount it directly (RF21's shape) for at least one tag. **The test is
   reachability by a production path, not diff independence.**
+
+## PM gate, 2026-08-30 (hand-off store protocol rev 3 — the cross-key copy)
+
+- **A census counted at the substrate you are DELETING imports its states into
+  the design that removes them.** §5's census was counted at `04e8a515`
+  (#230's head) and said so in its own heading; the two-key state it produced
+  is a fact about the module slot plus one durable key, and §1 deletes the
+  slot. Under the design itself: `MONITOR_RUN_KEY` is a single key
+  (`monitorRun.ts:28`), `createMonitorRun` has one production call site
+  (`useMonitorSession.ts:2288`), and every armed transition retires whatever
+  the guard staged (`:2675-2676`) — so at most ONE unretired entry exists on
+  any single-WebView path. **Re-run a census against the design's own END
+  STATE before any of its states earns UI.** Ruled: the cross-key Replace copy
+  is descoped, the copy stays singular, and the multi-key condition ships as a
+  receipt — "instrument first when the producer is unmeasured" applied to its
+  own successor.
+- **Revision-bind a destructive action only where the rower was shown
+  NUMBERS.** Save's claim binds a revision because the screen rendered it
+  (invariant 6). Connect, Start, Today, the manual door and row-instead show
+  only EXISTENCE — "You have an unlogged session" names no figure — so a
+  late-burst revision bump between the guard read and armed does not
+  invalidate the authorization given, and rejecting on it puts a confirmation
+  panel in front of a rower standing at a programmed erg. Ruled: KEY-bind
+  those doors, receipt the superseded revision, reject only on a new key.
+- **An authorization column is a claim about a rendered control — open the
+  control.** §5 attributed `WorkoutDetail.tsx:298` (row-instead) to "its
+  confirm"; that site is a single-tap `.button-l2` in the interstitial's
+  failure card with no confirmation at all. Its real authorization is the
+  Connect guard's, one screen earlier — a THIRD terminus of the staged set.
+- **The census's product effect here is a GAIN and the gate should say so.**
+  Today reads the durable tier only; reading the store closes the
+  escape-hatch gap this ledger filed at #230's gate (a stashed record with no
+  door under denial-from-first-write). Owed with it: a memory-only row
+  vanishes on reload, indistinguishable from a durable one — a named residual
+  and a receipt, not a screen.
+- **Release, re-checked not re-derived:** v0.27.0 without AUD-016 still
+  stands, and rev 3 strengthens it — the pause is now a design plus an
+  approval plus a from-scratch implementation. The notes-owed row must lose
+  its failed-write sentence before the notes PR starts.
