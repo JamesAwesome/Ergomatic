@@ -4069,3 +4069,56 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   render, passive cleanup, and late producer events explicitly, recording
   object identity at every hand-off; two individually correct lifetimes can
   leave the consumer holding the pre-update object.**
+
+### 2026-08-30 — the hand-off store protocol draft (anchor pass, Wave F / AUD-016 reset)
+
+- **CLAIM: "a closed `MonitorRun` is immutable, so the finish-grace boundary can
+  only ever add one actual." FALSE when the close write failed.** `recordActual`'s
+  late branch rebuilds the record from `stillLive(startedAt)` (`monitorRun.ts:1019-1021`),
+  which matches on `startedAt` ALONE — so when `completeMonitorRun`'s own write was
+  rejected, the base is storage's stale LIVE copy and the returned record comes back
+  with `completedAt: null`, `endedBy: undefined`, the RC-1 sums gone, and only the
+  actuals the last SUCCESSFUL write happened to contain. Measured: 3 in-memory actuals
+  → 1, on a real compiled `Filling Low` program. The hook then assigns it to
+  `runRef.current` (`useMonitorSession.ts:2732-2734`), so PROCEED stashes an OPEN
+  record and `LogSession`'s `completedAt` gate bounces it to the manual door — the
+  AUD-016 escape hatch defeated on the path AUD-016 exists for.
+  **TECHNIQUE: run the failure ORDERING, not the failure.** Both shipped legs deny
+  storage at an endpoint (leg A from the first write, leg B at the release-verify
+  only) and both are safe — leg A leaves storage empty so `stillLive` refuses, leg B
+  leaves it closed so the base is right. The defect lives strictly BETWEEN them:
+  storage that ACCEPTED a write and then stopped. RF24's real question is not "are the
+  gates green" but "which test starts upstream of the producer" — and the harness
+  already had the primitive (`stubStorageWrites(...).armAfter(n)` is a COUNTDOWN, so
+  the denial can be landed on any nth write by count, not by timing).
+- **CLAIM: "one write path means the guard's inspect-set and the destroy-set are the
+  same set by construction." FALSE — the draft's caller list was three short.**
+  Grepping every writer of `MONITOR_RUN_KEY` found EIGHT destroyers, not five:
+  `Today.tsx:627`, `WorkoutDetail.tsx:298` and `useStartWorkout.ts:99` are all
+  durable-only clears the design never named, and the Start door's own guard
+  (`useStartWorkout.ts:118-135`) reads only the durable tier — the exact P1-1 hole
+  `connectGuardStage` was patched for, still open at a different door.
+  **TECHNIQUE: for any "only X destroys" claim, grep every writer of the KEY, not
+  every caller of the named function.** A destroyer that reaches storage through a
+  different helper is invisible to a call-graph read of the helper you believe is the
+  only one.
+- **CLAIM: "`commit` already returned the verdict for the close write, so the second
+  serialize goes away." FALSE on every held path.** Up to two durable writes land
+  between the close and the release funnel — the finish-grace boundary
+  (`monitorRun.ts:1043`) and the burst append (`monitorRun.ts:1297`) — so the close
+  verdict is stale by release time and can release green over a durable copy missing
+  the final interval. **TECHNIQUE: when a design deletes a re-check, ask what it was
+  re-checking AGAINST, then count the writes between the two moments.** The saving is
+  real; the reason was not. (Fix: the store caches the durable verdict per key.)
+- **CLAIM (invariant wording): "remains recoverable after that consumer acts."
+  Unsatisfiable under the ratified contract, and the draft's own §3 gloss and §6.4
+  both say so two lines apart.** Words in invariants get implemented.
+  **TECHNIQUE: read every invariant against the residual list that follows it — a
+  design that names its own accepted loss has already falsified any invariant
+  promising that loss cannot happen.**
+- **HELD, and worth reusing: `snapshot()` copies its samples array every call
+  (`seriesRecorder.ts:426-431`, cap 14_400), so "immutable entry per revision" is a
+  memory question, not a style one** — an hour's session at a 30 s flush retains ~120
+  distinct arrays if the store keeps history. **TECHNIQUE: for any "entries are
+  immutable" design, find the largest field, find whether it is copied or shared, and
+  multiply by the write frequency before accepting the word "immutable".**

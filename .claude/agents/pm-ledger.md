@@ -3386,3 +3386,50 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   failed-write-copy sentence from the notes-owed row until AUD-016 merges — it
   describes a screen the tag will not contain. Sharpens the 2026-08-29 "ship a
   fix's tag rather than riding it with its successor" entry.
+
+## PM ruling, 2026-08-30 (PR #230's disposition under the substrate reset)
+
+- **When a substrate is replaced mid-PR, measure the survival boundary PER FILE
+  before choosing rebase, cherry-pick or fresh branch.** #230's boundary ran
+  inside files and inside functions, so no commit-shaped operation could cut on
+  it: `monitorRun.ts` alone holds `SaveVerdict` (preserved by the protocol) and
+  the slot quartet (deleted), both introduced in one commit and touched by
+  eleven more. The cheap discriminator is a coupling grep per changed file.
+  It produced the decision in one command: **10 files with ZERO references
+  (573 lines + 2 captures) restore verbatim; 7 files / 4,105 lines get
+  rewritten, of which only 197 lines actually name the dying API.** That last
+  ratio is the general trap — a thin API with a large reasoning shell reads as
+  "mostly salvageable" and is in fact mostly *retargetable*, which is a rewrite
+  with a checklist, not a cherry-pick.
+- **A pause REOPENS every release ruling that assumed the paused PR would
+  merge.** The 2026-08-30 gate ruled AUD-016 rides v0.27.0 on the reasoning
+  "a tag cut after a merge that omits it is worse on every axis" — true when the
+  PR was hours from merge, void once it became a new spec plus an approval plus
+  an implementation. Ruled here: **cut v0.27.0 off merged main WITHOUT
+  AUD-016** (17 merges untagged, correction clock ~2026-09-11). At any pause,
+  re-read the release ruling for the premise "it merges soon" and say aloud
+  whether it still holds.
+- **A ROADMAP row landed from a ledger condition is not append-only — a pause
+  un-lands it.** The failed-write notes sentence reached the notes-owed row on
+  James's own P2b review; the pause means that row now instructs the note-writer
+  to describe a screen the tag will not contain. **The gate that lands a
+  condition owns removing it when its subject stops shipping.**
+- **Review-round fixes that live only in an unpushed worktree are the same
+  single-point-of-failure as a finding that lives only in a PR body (RF14).**
+  At this ruling, three commits — including all three fixes for James's second
+  review, each reproducing one of his disposable probes as a permanent test —
+  were unpushed, so GitHub still showed his three Criticals unaddressed and the
+  only copy sat in a worktree the SDLC tells us to tear down. **Push after every
+  review round, before anything else, pausing included.** If this recurs it
+  belongs in `CLAUDE.md`'s SDLC bullet, not here.
+- **A test matrix written entirely at the new seam recreates RF24.** The
+  hand-off store draft's §5 mapped six of James's seven probes; the one it
+  missed (P2a, `WorkoutDetail.connectedRecovery.test.tsx`) is the only test that
+  starts at the product route and ends at the POST. **When a redesign inherits a
+  predecessor's tests, check which of them START ABOVE the new component; those
+  are restored as files, never re-derived from the new spec.**
+- **Do not split a Gate-0-approved UI slice off a paused PR just because it is
+  provably unaffected.** Zero coupling to the dying substrate, 573 lines off the
+  successor's path — and it would ship an unreachable branch whose only tests
+  mount it directly (RF21's shape) for at least one tag. **The test is
+  reachability by a production path, not diff independence.**
