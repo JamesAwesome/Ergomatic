@@ -98,15 +98,26 @@ function parseLink(
   ) {
     return null;
   }
+  // THE PAIR INVARIANT, enforced rather than merely documented. The
+  // server emits `linkedTitle` and `workoutIsGlobal` together or not at
+  // all — they are one workout row's title and ownership, and the whole
+  // point of carrying them is that a checkpoint's identity is decided by
+  // both or by neither. Validating them independently let a HALF-pair
+  // through (a known title beside unknown ownership), which is a shape no
+  // server produces and which `swapMark` would nonetheless act on. An
+  // older server sends neither, which is the legitimate absent case.
+  const linkedTitle = (e.linkedTitle as string | null | undefined) ?? null;
+  const workoutIsGlobal =
+    (e.workoutIsGlobal as boolean | null | undefined) ?? null;
+  if ((linkedTitle === null) !== (workoutIsGlobal === null)) return null;
   return {
     planIndex: e.planIndex as number,
     link: {
       id: e.id,
       workoutTitle: e.workoutTitle,
       workoutType: e.workoutType,
-      linkedTitle: (e.linkedTitle as string | null | undefined) ?? null,
-      workoutIsGlobal:
-        (e.workoutIsGlobal as boolean | null | undefined) ?? null,
+      linkedTitle,
+      workoutIsGlobal,
     },
   };
 }

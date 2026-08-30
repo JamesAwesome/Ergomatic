@@ -64,9 +64,12 @@ function link(overrides: Partial<PlanLink> = {}): PlanLink {
     id: "log-abc",
     workoutTitle,
     workoutType: "O2",
-    // Defaults to AGREEING with the snapshot title, which is the ordinary
-    // case: the client posts a workout's own title alongside its id. A
-    // test that cares about the two DISAGREEING passes its own.
+    // The identity PAIR. Defaults to a linked row that agrees with the
+    // snapshot, which is the ordinary case: the client posts a workout's
+    // own title alongside its id. A test that cares about the two
+    // DISAGREEING passes its own — and a test representing UNKNOWN
+    // identity must null BOTH halves, because the server never emits one
+    // without the other (`usePlanLinks` now rejects a half-pair outright).
     linkedTitle: workoutTitle,
     workoutIsGlobal: true,
     ...overrides,
@@ -758,6 +761,7 @@ describe("Plan (done-row workout names and swap marks)", () => {
           link({
             workoutTitle: "Dust Whirl",
             workoutType: "AN",
+            linkedTitle: null,
             workoutIsGlobal: null,
           }),
         ],
@@ -770,8 +774,9 @@ describe("Plan (done-row workout names and swap marks)", () => {
   });
 
   // `session_logs.workout_type` is plain text, not the workouts table's
-  // enum, so an unrecognised value is storable. A type we cannot read is
-  // not evidence of a swap.
+  // enum. The POST route now rejects values outside the union, so this
+  // covers rows written BEFORE that check — the only ones that can carry
+  // an unreadable type. A type we cannot read is not evidence of a swap.
   it("an unreadable stored type falls back to the plan's own badge and claims no swap", async () => {
     await readyWithLinks(
       new Map([

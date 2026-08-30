@@ -37,10 +37,12 @@ const STATUS_GLYPH: Record<PlanSequenceItem["status"], string> = {
  *  workout's name and make the row contradict itself.
  *
  *  `session_logs.workout_type` is plain `text` (schema.ts — deliberately
- *  NOT the workouts table's pgEnum), and the POST route only checks it is
- *  a non-empty string, so an unrecognised value is genuinely storable.
- *  `undefined` here means "we cannot read it", which the swap check below
- *  treats as no evidence at all rather than as a deviation. */
+ *  NOT the workouts table's pgEnum). `POST /api/logs` now validates it
+ *  against the `WorkoutType` union, so no NEW row can carry an
+ *  unrecognised value; rows written before that check can, and this
+ *  narrowing exists for them alone. `undefined` here means "we cannot
+ *  read it", which the swap check below treats as no evidence at all
+ *  rather than as a deviation. */
 function rowedType(link: PlanLink | undefined): WorkoutType | undefined {
   return link !== undefined && isWorkoutType(link.workoutType)
     ? link.workoutType

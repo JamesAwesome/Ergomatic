@@ -76,9 +76,10 @@ async function postLog(
     notes?: string | null;
     steps?: { label: string }[];
     advancesPlan?: boolean;
-    // The workout this log LINKS TO. Defaults to null below — the shape
-    // every caller here used before the plan row started asking what a
-    // logged session actually was.
+    // The workout this log LINKS TO. Defaults to null below, which is
+    // what every caller in this file used before the plan row started
+    // asking what a logged session actually WAS — the identity-seam
+    // describe at the end of this file passes real workout ids.
     workoutId?: string | null;
   },
 ): Promise<{ id: string }> {
@@ -1137,6 +1138,24 @@ test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)
     return (JSON.parse(result.body) as { id: string }).id;
   }
 
+  /** Waits until the plan-links fetch has actually landed on the
+   *  checkpoint row.
+   *
+   *  Without this, a "no mark" assertion is a FALSE GREEN: before
+   *  `usePlanLinks` resolves, an upcoming checkpoint row already renders
+   *  the prescribed title as its name and carries zero swap marks, so
+   *  `name === "2K Test"` and `markCount === 0` are both true of a screen
+   *  that has not yet learned anything about the log. Proved by holding
+   *  `GET /api/logs?plan=sprint` (re-review of dd95d335). Becoming an
+   *  `<a>` with an href is the one signal that only a RESOLVED, matched
+   *  link can produce.
+   */
+  async function awaitCheckpointLinked(page: Page) {
+    const row = page.locator(".plan-row").nth(6);
+    await expect(row).toHaveAttribute("href", /\/today\/log\/.+/);
+    return row;
+  }
+
   /** The sprint plan's first checkpoint is session 7 (index 6), so six
    *  advancing saves land the next one exactly on it. */
   async function advanceToFirstCheckpoint(page: Page): Promise<void> {
@@ -1172,8 +1191,7 @@ test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)
     });
 
     await page.goto("/plan");
-    await expect(page.locator(".plan-sequence")).toBeVisible();
-    const checkpointRow = page.locator(".plan-row").nth(6);
+    const checkpointRow = await awaitCheckpointLinked(page);
     await expect(checkpointRow.locator(".plan-row-name")).toHaveText("2K Test");
     await expect(checkpointRow.locator(".plan-row-swap")).toHaveText(
       "INSTEAD OF 2K Test",
@@ -1204,8 +1222,9 @@ test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)
     });
 
     await page.goto("/plan");
-    await expect(page.locator(".plan-sequence")).toBeVisible();
-    const doneCheckpoint = page.locator(".plan-row").nth(6);
+    // The link has to exist BEFORE "no mark" means anything — see
+    // `awaitCheckpointLinked`.
+    const doneCheckpoint = await awaitCheckpointLinked(page);
     await expect(doneCheckpoint.locator(".plan-row-name")).toHaveText(
       "2K Test",
     );
@@ -1249,8 +1268,7 @@ test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)
     });
 
     await page.goto("/plan");
-    await expect(page.locator(".plan-sequence")).toBeVisible();
-    const row = page.locator(".plan-row").nth(6);
+    const row = await awaitCheckpointLinked(page);
     // The row still DISPLAYS the snapshot — what a rower is shown they
     // did never changes — but the mark is decided by the link.
     await expect(row.locator(".plan-row-name")).toHaveText("2K Test");

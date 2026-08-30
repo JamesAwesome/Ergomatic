@@ -1234,9 +1234,10 @@ export function createDataRouter({
     // accepting anything on WRITE (re-review of 1b2e80f5). It does not:
     // both sides of that historical drift are valid `WorkoutType`
     // members, so checking the union accepts the whole documented drift
-    // and rejects only values no client has ever sent. Rows written
-    // before this check exist, so readers stay tolerant — see
-    // `Plan.tsx`'s `rowedType`.
+    // and rejects only values no IN-REPO client emits (every producer
+    // reads a workout's enum-typed `type`; what some third party may have
+    // POSTed is not knowable from here). Rows written before this check
+    // exist, so readers stay tolerant — see `Plan.tsx`'s `rowedType`.
     if (!isWorkoutType(body.workoutType)) {
       badRequest(res, "workoutType must be one of AN|O2|AT|TR", "workoutType");
       return;

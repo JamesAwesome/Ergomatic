@@ -70,15 +70,17 @@ describe("usePlanLinks", () => {
 
   // Provenance is a TRI-state and the Plan screen branches on all three,
   // so the parser must carry each through distinctly rather than
-  // collapsing to a boolean.
+  // collapsing to a boolean. Null travels as a PAIR — see below.
   it.each([
-    ["true", true, true],
-    ["false", false, false],
-    ["null", null, null],
+    ["true", true, "Slack Tide", true],
+    ["false", false, "Slack Tide", false],
+    ["null", null, null, null],
   ])(
     "carries workoutIsGlobal %s through unchanged",
-    async (_, wire, expected) => {
-      mockApiReturning({ links: [wireLink({ workoutIsGlobal: wire })] });
+    async (_, wire, title, expected) => {
+      mockApiReturning({
+        links: [wireLink({ workoutIsGlobal: wire, linkedTitle: title })],
+      });
       const { usePlanLinks } = await import("./usePlanLinks");
       const { result } = renderHook(() => usePlanLinks("sprint"));
 
@@ -86,6 +88,29 @@ describe("usePlanLinks", () => {
       expect(result.current.get(0)?.workoutIsGlobal).toBe(expected);
     },
   );
+
+  // `linkedTitle` and `workoutIsGlobal` are one workout row's title and
+  // ownership. The server emits them together or not at all, and a
+  // checkpoint's identity is decided by both or by neither — so a HALF
+  // pair is a shape no server produces and one `swapMark` would still act
+  // on. Dropped, not repaired: repairing it would mean inventing the
+  // missing half.
+  it.each([
+    ["a title with unknown ownership", { workoutIsGlobal: null }],
+    ["ownership with no title", { linkedTitle: null }],
+  ])("drops an entry carrying %s", async (_, half) => {
+    mockApiReturning({
+      links: [
+        wireLink({ planIndex: 9, ...half }),
+        wireLink({ planIndex: 2, id: "good" }),
+      ],
+    });
+    const { usePlanLinks } = await import("./usePlanLinks");
+    const { result } = renderHook(() => usePlanLinks("sprint"));
+
+    await waitFor(() => expect(result.current.size).toBe(1));
+    expect(result.current.get(2)?.id).toBe("good");
+  });
 
   // An older server has no such field. Blanking the row's name over a key
   // that server never sent would be worse than not knowing the

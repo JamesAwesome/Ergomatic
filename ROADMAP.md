@@ -1018,6 +1018,16 @@ Each needs erg time or a deliberate recording session.
   The deletion case is RELATED but is NOT covered by this ruling — it has its
   own entry above, because Gate 0 accepted preset edits and nothing else.
 
+- **A cross-linked log renders a self-contradictory row.** A log LINKED to
+  the global 6K Test while claiming a `2K Test` snapshot renders
+  `2K Test` with `INSTEAD OF 2K Test` beneath it, which reads as a
+  contradiction. Non-blocking at #233's final review and correctly so: it
+  needs a malformed self-owned request or a client bug to reach, and the
+  explicitly-required personal-same-title case produces the same wording by
+  design. **Revisit only alongside a wording change to the mark itself** —
+  fixing it in isolation would mean the mark stops naming the prescription,
+  which is what makes it useful on every other row. **S**
+
 - **TWO unit-project flakes, each seen once and neither reproduced.** On
   2026-08-30 during #233: `server/routes/data.test.ts` > `PATCH
   /api/logs/:id` > `an explicit null clears thumbs previously set to a real
