@@ -964,6 +964,76 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **A plan row's workout PROVENANCE is never exercised end to end.** The
+  checkpoint swap check turns on `workoutIsGlobal`, resolved by a LEFT JOIN in
+  `listPlanLinks`. Store contracts pin all three states against both backends,
+  and `Plan.test.tsx` pins the rendering — but with the hook MOCKED. Nothing
+  crosses the seam: `postLog` (`e2e/screenshots.spec.ts`) has no `workoutId`
+  field at all and `design.spec.ts` posts `workoutId: null`, so no browser test
+  has ever put a real workout on a plan-linked row. This is recurring failure
+  24's shape exactly — both halves well tested, the join between them untested
+  — and it is the shape that let #233's own P1s ship. **Fix: give `postLog` a
+  `workoutId`, seed a personal workout titled `2K Test` and log it at sprint
+  index 6, and assert the row IS marked.** **S**
+
+- **An unreadable stored `workoutType` renders a confident plan badge.**
+  `session_logs.workout_type` is plain `text`, not the workouts enum, and the
+  POST route only checks non-empty — so an unrecognised value is storable.
+  `Plan.tsx` falls back to the plan's own type for the badge and claims no
+  swap, which is safe but silently asserts a type nobody recorded. Raised at
+  #233's review. **Tightening the WRITER was considered and declined:** the
+  column is deliberately loose because a type legitimately drifts across the
+  save-time snapshot boundary (`seed.ts` records 6K history split across O2 and
+  AT and says "do not fix it"), so rejecting at the route would refuse shapes
+  already ruled valid and break older clients. What is left is a neutral or
+  unknown badge state, which is a **new visual state and therefore carries a
+  design gate**. Only worth doing if a real row is ever observed with a bad
+  type. **S**
+
+- **The real store's `id DESC` newest-wins tiebreak is pinned by nothing.**
+  `resolveNewestPlanLink` orders `plan_index, logged_at DESC, id DESC`; the
+  fake resolves a `loggedAt` tie by insertion order instead. Aligning the two
+  was tried at #233's review and **reverted with evidence** — it turned two
+  delete contract cases red against the fake while real Postgres kept passing
+  them, because Postgres keeps microseconds (so ordinary saves never tie and
+  `id DESC` is unreachable) while the fake's millisecond `Date` ties
+  constantly, and `seq` is what substitutes for that missing precision. The
+  reasoning is a comment on `resolveNewestFakeLink` so it is not retried. What
+  remains unpinned is the real term itself: pinning it needs a real-store-only
+  test that forces a same-microsecond tie with raw SQL, which the shared
+  contract suite cannot do. **Decide whether that is worth writing at all** —
+  the term is a total-order tiebreak whose only job is determinism. **S**
+
+- **The swap mark goes stale if a plan preset's session types are ever
+  edited.** The Plan screen derives "you swapped this day" by comparing a
+  log's stored type against `PLANS`' type for that slot TODAY, so editing
+  `SPRINT_WEEKS`/`HEAD_WEEKS` would retroactively mark rows that were rowed
+  exactly as the plan then asked. Accepted at the 2026-08-30 design gate
+  (presets are static code and have changed once, at Phase 8A) and recorded in
+  `swapMark`'s own comment plus a warning above the week arrays in
+  `domain/plans.ts`. **Trigger: the next change to a preset's session types.**
+  If that ever becomes routine — an authoring UI, DB-loaded plans — the fix is
+  a stored prescribed-type column, which is TRIAD and wants its own spec.
+  Related, and accepted for the same reason: unknown provenance
+  (`workoutIsGlobal: null`, a log whose workout was later deleted) can miss a
+  real checkpoint deviation, because the mark is a positive accusation and
+  never fires on a guess.
+
+- **A UNIT-project flake, observed once and not reproduced.**
+  `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
+  clears thumbs previously set to a real value` failed once on 2026-08-30
+  during #233, then passed on eight consecutive full runs of the same project
+  on the same tree. **This matters more than the known e2e flakes:** the unit
+  project has no Docker, no browser and no network — it is fake stores and
+  supertest, and it should be deterministic. The test itself is self-contained
+  (fresh `makeStores()`, POST then PATCH, no shared fixture), so the
+  nondeterminism is somewhere below it: the fakes carry module-level mutable
+  state (`insertionSeq`, `logsInsertionSeq`) and `Date`-based ordering, which
+  is where to look first. **Not attributed to #233** — that PR's fake changes
+  are confined to `resolveNewestFakeLink`/`listPlanLinks`, which this path
+  never calls — but a single observation cannot rule it out either. Capture the
+  failure output next time it appears rather than re-running past it. **S**
+
 - **The `screenshots` Playwright project is gated by nothing, and its version
   pins rot silently.** CI's `e2e` job runs the `chromium` project only, so a
   release-notes PR bumps `news.spec.ts`'s pins (which go red in CI if missed)

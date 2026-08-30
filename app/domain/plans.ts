@@ -80,6 +80,17 @@ function buildSessions(weeks: WorkoutType[][], checkpoint: PlanDay): PlanDay[] {
 // sharpening, but O2 still outnumbers everything else — fresh and fast
 // beats flat and fried. Per-week AN+TR: 1,1,2,0(deload),
 // 2,3,3,0(deload), 3,3,3,3.
+// EDITING A SESSION TYPE BELOW REWRITES HISTORY ON THE PLAN SCREEN.
+// `Plan.tsx`'s `swapMark` decides "you rowed something else that day" by
+// comparing a stored log's own type against the type THIS ARRAY gives
+// that slot TODAY — so changing a day from O2 to AT retroactively marks
+// every already-rowed O2 at that index as a swap, for work that matched
+// the plan exactly when it was done. Accepted at the 2026-08-30 design
+// gate (these presets are static code and have changed once, at Phase
+// 8A); ROADMAP carries the trigger. If preset editing ever becomes
+// routine — an authoring UI, DB-loaded plans — the fix is a stored
+// prescribed-type column on the log, not a change here. Applies to
+// `HEAD_WEEKS` below in exactly the same way.
 export const SPRINT_WEEKS: WorkoutType[][] = [
   // -- base --
   ["O2", "AT", "O2", "TR", "AT", "O2", "O2"],
