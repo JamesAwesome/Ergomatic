@@ -895,6 +895,15 @@ test("plan-linked", async ({ page }) => {
   // TR day showing an O2 badge beside an O2 workout's name.
   await expect(linkedRows.nth(3).locator(".type-badge")).toHaveText("O2");
 
+  // The upcoming checkpoint (sprint index 6, row 7) names its prescribed
+  // workout in the SAME treatment, by its own name — not uppercased into
+  // the label voice it used to borrow (James, 2026-08-30). Asserted on
+  // the committed capture's own screen so the visual record and the
+  // assertion cannot disagree.
+  const checkpointRow = page.locator(".plan-row").nth(6);
+  await expect(checkpointRow.locator(".plan-row-name")).toHaveText("2K Test");
+  await expect(page.getByText("2K TEST", { exact: true })).toHaveCount(0);
+
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "plan-linked.png"),
   });

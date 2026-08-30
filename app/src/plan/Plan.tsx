@@ -106,7 +106,11 @@ function swapMark(
     const asPrescribed =
       canonicalTitle(link.workoutTitle) === prescribe.ref.title &&
       link.workoutIsGlobal !== false;
-    return asPrescribed ? undefined : prescribe.ref.title.toUpperCase();
+    // The workout's own name, in its own case — the mark names a WORKOUT
+    // here and a TYPE below, and a type code genuinely is uppercase where
+    // a title is not. Uppercasing the title would re-introduce the "2K
+    // TEST reads as a label" problem this round removed from the row.
+    return asPrescribed ? undefined : prescribe.ref.title;
   }
   const rowed = rowedType(link);
   return rowed !== undefined && rowed !== plannedType ? plannedType : undefined;
@@ -373,25 +377,29 @@ function PlanView({
                 {item.index + 1}
               </span>
               <TypeBadge type={rowedType(link) ?? item.code} />
-              {/* Phase 8A: the "TEST" badge retired with its plan code — a
-                  checkpoint is now a real-type day carrying a prescription,
-                  computed CLIENT-SIDE from PLANS (the prescription never
-                  crosses the wire). The affix is the PRESCRIBED WORKOUT'S
-                  TITLE, uppercased to the row's mono voice (James,
-                  2026-08-22: the checkpoint is the one day the plan names
-                  a specific workout, so the row says which: 2K TEST /
-                  6K TEST).
-                  It yields to the name once the row has one: the affix
-                  exists to say which workout the plan WANTS, and a row
-                  that already records what was rowed — plus a mark when
-                  that was something else — has no second thing to say. */}
-              {prescribe !== undefined && link === undefined && (
-                <span className="plan-row-checkpoint mono-status">
-                  {prescribe.ref.title.toUpperCase()}
+              {/* ONE name per row, in one treatment (James, 2026-08-30:
+                  "a 2k test is just a specific workout on a specific
+                  day"). Which workout it names depends on whether the day
+                  has happened: the one you rowed if it has, the one the
+                  plan asks for if it has not (only the three checkpoint
+                  days carry a prescription — `PLANS` holds it client-side
+                  and it never crosses the wire, Phase 8A).
+                  The prescribed title used to render uppercased in the
+                  mono label voice, which made a real library workout —
+                  "2K Test" has its own detail route and is classified
+                  AN/hard/pain 4 — read as a status badge instead of as a
+                  name. Every other surface in the app titles a workout at
+                  --ink in sentence case (`.workout-row-title`,
+                  `.today-log-title`); the plan row was the only one that
+                  shouted it. A done row cannot show both, and does not
+                  need to: it records what was rowed, plus a mark when
+                  that was something else. */}
+              {(link !== undefined || prescribe !== undefined) && (
+                <span className="plan-row-name">
+                  {link !== undefined
+                    ? link.workoutTitle
+                    : prescribe!.ref.title}
                 </span>
-              )}
-              {link !== undefined && (
-                <span className="plan-row-name">{link.workoutTitle}</span>
               )}
               <span className="plan-row-status" aria-hidden="true">
                 {STATUS_GLYPH[item.status]}

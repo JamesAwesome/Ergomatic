@@ -2526,8 +2526,12 @@ test.describe("plan screen (a plan active)", () => {
     test("a long workout name is clipped inside its row, and never widens the page", async ({
       page,
     }) => {
-      const name = page.locator(".plan-row-name");
+      // Scoped to the DONE row: since 2026-08-30 the three checkpoint
+      // days name their prescribed workout through this same class, so a
+      // page-wide locator matches four elements on this screen.
+      const name = page.locator(".plan-row-done .plan-row-name");
       await expect(name).toHaveCount(1);
+      await expect(page.locator(".plan-row-name")).toHaveCount(4);
 
       const box = await name.evaluate((el) => ({
         clientWidth: el.clientWidth,
@@ -2576,7 +2580,9 @@ test.describe("plan screen (a plan active)", () => {
       // The mark sits on its own line (variant B), so it must be BELOW
       // the name rather than beside it — measured, not assumed from the
       // grid rule.
-      const nameBox = (await page.locator(".plan-row-name").boundingBox())!;
+      const nameBox = (await page
+        .locator(".plan-row-done .plan-row-name")
+        .boundingBox())!;
       const markBox = (await mark.boundingBox())!;
       expect(markBox.y).toBeGreaterThanOrEqual(nameBox.y + nameBox.height);
 

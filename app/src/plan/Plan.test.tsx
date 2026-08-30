@@ -248,11 +248,17 @@ describe("Plan (active plan — sequence rendering)", () => {
   // one day the plan names a specific workout, so the row says which),
   // computed client-side from PLANS — the prescription never crosses the
   // wire; the fixture's `code` is a bare WorkoutType.
+  //
+  // The title is the workout's OWN name, not an uppercased label (James,
+  // 2026-08-30: "a 2k test is just a specific workout on a specific
+  // day"). Pinned with the literal string rather than
+  // `ONBOARDING_TITLES.k2`, so renaming the constant cannot quietly
+  // retune this assertion to whatever it becomes (recurring failure 21).
   it.each([
-    ["sprint", "AN", "2K TEST"],
-    ["head", "AT", "6K TEST"],
+    ["sprint", "AN", "2K Test"],
+    ["head", "AT", "6K Test"],
   ] as const)(
-    "marks the three %s checkpoint rows with the prescribed title, typed %s, no TEST badge anywhere",
+    "names the three %s checkpoint rows with the prescribed workout, typed %s, no TEST badge anywhere",
     async (planKey, checkpointType, prescribedTitle) => {
       mockUsePlan({
         state: "ready",
@@ -267,12 +273,16 @@ describe("Plan (active plan — sequence rendering)", () => {
       await renderPlan();
 
       const rows = document.querySelectorAll(".plan-row");
-      const marked = [...rows].flatMap((row, i) =>
-        row.querySelector(".plan-row-checkpoint") ? [i] : [],
+      // Nothing is done in this fixture, so every named row is a
+      // prescription — which makes "the rows that carry a name" and "the
+      // three checkpoint days" the same set, and that identity is the
+      // assertion.
+      const named = [...rows].flatMap((row, i) =>
+        row.querySelector(".plan-row-name") ? [i] : [],
       );
-      expect(marked).toStrictEqual([6, 34, 62]);
-      for (const i of marked) {
-        expect(rows[i].querySelector(".plan-row-checkpoint")?.textContent).toBe(
+      expect(named).toStrictEqual([6, 34, 62]);
+      for (const i of named) {
+        expect(rows[i].querySelector(".plan-row-name")?.textContent).toBe(
           prescribedTitle,
         );
         expect(rows[i].querySelector(".type-badge")?.textContent).toBe(
@@ -280,8 +290,36 @@ describe("Plan (active plan — sequence rendering)", () => {
         );
       }
       expect(screen.queryByText("TEST")).not.toBeInTheDocument();
+      // The retired label voice is gone, not merely restyled: the
+      // uppercased spelling must appear nowhere on the screen.
+      expect(screen.queryByText("2K TEST")).not.toBeInTheDocument();
+      expect(screen.queryByText("6K TEST")).not.toBeInTheDocument();
     },
   );
+
+  // The prescribed name renders in the SAME treatment as a rowed one —
+  // one class, one voice. A row names a workout exactly one way; which
+  // workout it names is what differs.
+  it("names a prescribed workout with the same element a rowed one uses", async () => {
+    mockUsePlan({
+      state: "ready",
+      plan: SPRINT_ACTIVE,
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    await renderPlan(new Map([[0, link({ workoutTitle: "Sea Fret" })]]));
+
+    const rows = document.querySelectorAll(".plan-row");
+    // Row 1 is done and names what was rowed; row 35 is an upcoming
+    // checkpoint and names what the plan asks for.
+    expect(rows[0]!.querySelector(".plan-row-name")?.textContent).toBe(
+      "Sea Fret",
+    );
+    expect(rows[34]!.querySelector(".plan-row-name")?.textContent).toBe(
+      "2K Test",
+    );
+    expect(document.querySelector(".plan-row-checkpoint")).toBeNull();
+  });
 
   it("scrolls rather than growing the page — the sequence has its own overflow container", async () => {
     mockUsePlan({
@@ -466,17 +504,17 @@ describe("Plan (done-row workout names and swap marks)", () => {
     expect(rowAt(0).querySelector(".type-badge")?.textContent).toBe("O2");
   });
 
-  it("a checkpoint day rowed as prescribed shows the workout's name INSTEAD of the prescribed affix, and no mark", async () => {
+  it("a checkpoint day rowed as prescribed names the workout once, and carries no mark", async () => {
     await readyWithLinks(
       new Map([[6, link({ workoutTitle: "2K Test", workoutType: "AN" })]]),
     );
 
     const row = rowAt(6);
+    // Exactly one name. Before the row was rowed it named the plan's
+    // prescription; now it names what closed the day, and those are the
+    // same workout — saying it twice would be the bug.
+    expect(row.querySelectorAll(".plan-row-name")).toHaveLength(1);
     expect(row.querySelector(".plan-row-name")?.textContent).toBe("2K Test");
-    // The affix exists to say which workout the plan wants. Once the row
-    // records that you did it, repeating it beside the name says the same
-    // thing twice.
-    expect(row.querySelector(".plan-row-checkpoint")).toBeNull();
     expect(row.querySelector(".plan-row-swap")).toBeNull();
   });
 
@@ -490,7 +528,7 @@ describe("Plan (done-row workout names and swap marks)", () => {
     const row = rowAt(6);
     expect(row.querySelector(".plan-row-name")?.textContent).toBe("Dust Whirl");
     expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
-      "INSTEAD OF 2K TEST",
+      "INSTEAD OF 2K Test",
     );
   });
 
@@ -502,7 +540,7 @@ describe("Plan (done-row workout names and swap marks)", () => {
     const row = rowAt(6);
     expect(row.querySelectorAll(".plan-row-swap")).toHaveLength(1);
     expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
-      "INSTEAD OF 2K TEST",
+      "INSTEAD OF 2K Test",
     );
   });
 
@@ -582,7 +620,7 @@ describe("Plan (done-row workout names and swap marks)", () => {
     const row = rowAt(6);
     expect(row.querySelector(".plan-row-name")?.textContent).toBe("2K Test");
     expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
-      "INSTEAD OF 2K TEST",
+      "INSTEAD OF 2K Test",
     );
   });
 
@@ -625,7 +663,7 @@ describe("Plan (done-row workout names and swap marks)", () => {
     );
 
     expect(rowAt(6).querySelector(".plan-row-swap")?.textContent).toBe(
-      "INSTEAD OF 2K TEST",
+      "INSTEAD OF 2K Test",
     );
   });
 
@@ -662,23 +700,34 @@ describe("Plan (done-row workout names and swap marks)", () => {
     expect(row.querySelector(".type-badge")?.textContent).toBe("AT");
   });
 
-  it("an unlinked done checkpoint keeps its prescribed affix", async () => {
+  // A done checkpoint with no stored link cannot say what was rowed, so
+  // it falls back to naming what the plan asked for — the same thing an
+  // upcoming checkpoint shows.
+  it("an unlinked done checkpoint still names the prescribed workout", async () => {
     await readyWithLinks(new Map([[0, link()]]));
 
-    expect(rowAt(6).querySelector(".plan-row-checkpoint")?.textContent).toBe(
-      "2K TEST",
+    expect(rowAt(6).querySelector(".plan-row-name")?.textContent).toBe(
+      "2K Test",
     );
-    expect(rowAt(6).querySelector(".plan-row-name")).toBeNull();
+    expect(rowAt(6).querySelector(".plan-row-swap")).toBeNull();
   });
 
-  it("an upcoming checkpoint keeps its prescribed affix and never gains a name", async () => {
+  it("an upcoming checkpoint names the prescribed workout", async () => {
     await readyWithLinks(new Map([[0, link()]]));
 
     // Index 34 is the second checkpoint, still ahead of doneN=11.
-    expect(rowAt(34).querySelector(".plan-row-checkpoint")?.textContent).toBe(
-      "2K TEST",
+    expect(rowAt(34).querySelector(".plan-row-name")?.textContent).toBe(
+      "2K Test",
     );
-    expect(rowAt(34).querySelector(".plan-row-name")).toBeNull();
+  });
+
+  // Only checkpoint days carry a prescription, so an ordinary upcoming
+  // day still has nothing to name — the name is not simply "always on".
+  it("an ordinary upcoming day names nothing", async () => {
+    await readyWithLinks(new Map([[0, link()]]));
+
+    expect(rowAt(33).querySelector(".plan-row-name")).toBeNull();
+    expect(rowAt(35).querySelector(".plan-row-name")).toBeNull();
   });
 
   it("today and upcoming rows never take a name or a mark, even when links carries their index", async () => {

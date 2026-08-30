@@ -2679,14 +2679,14 @@ button.back-link:disabled,
   flex-shrink: 0;
 }
 
-/* Phase 8A: the checkpoint mark that replaced the TEST badge — a small
-   mono affix after the type badge (`.mono-status` supplies font/colour;
-   a stated design for the seam task, reviewed by Task 2's design pass). */
-.plan-row-checkpoint {
-  flex-shrink: 0;
-}
+/* `.plan-row-checkpoint` lived here — Phase 8A's small mono affix that
+   replaced the TEST badge, uppercasing the prescribed workout's title
+   into the label voice. Removed 2026-08-30: a checkpoint's prescription
+   is a real library workout and now renders through `.plan-row-name`
+   below like every other name on the row. Deleted with its markup rather
+   than left behind (recurring failure 5). */
 
-/* The workout a done row recorded (design gate, 2026-08-30). Reuses
+/* The workout a row names (design gate, 2026-08-30). Reuses
    `.today-log-title`'s exact treatment — 14px, --ink, single-line
    ellipsis — so the Plan row and the history row name a workout the same
    way rather than inventing a second voice for one string. The title is
