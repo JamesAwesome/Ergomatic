@@ -29,6 +29,7 @@ import {
   anyLiveSession,
   connectGuardStage,
   stashHandoffRun,
+  peekHandoffRun,
   takeHandoffRun,
   clearHandoffSlot,
   MONITOR_RUN_KEY,
@@ -1754,12 +1755,22 @@ describe("saveMonitorRun: the sacrifice (§3, ruling 3's own caution section)", 
   });
 });
 
-describe("stashHandoffRun / takeHandoffRun / clearHandoffSlot: the AUD-016 durable hand-off slot (design spec §3)", () => {
+describe("stashHandoffRun / peekHandoffRun / takeHandoffRun / clearHandoffSlot: the AUD-016 durable hand-off slot (design spec §3)", () => {
   // Module-scope state, not localStorage — `localStorage.clear()` in this
   // file's own `beforeEach` blocks does not touch it, so each test clears
   // it explicitly to stay independent of run order.
   beforeEach(() => {
     clearHandoffSlot();
+  });
+
+  it("Task 5: peekHandoffRun reads without consuming — the same run comes back every time until something actually takes it", () => {
+    const run = freshMonitorRun();
+    stashHandoffRun(run);
+    expect(peekHandoffRun()).toStrictEqual(run);
+    expect(peekHandoffRun()).toStrictEqual(run); // still there — a peek is not a take
+    expect(peekHandoffRun()).toStrictEqual(run);
+    expect(takeHandoffRun()).toStrictEqual(run);
+    expect(peekHandoffRun()).toBeNull(); // NOW it's gone
   });
 
   it("consume-once: takeHandoffRun returns the stashed run once, and nothing on a second call", () => {

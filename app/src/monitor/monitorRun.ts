@@ -581,6 +581,23 @@ export function stashHandoffRun(run: MonitorRun): MonitorRun | null {
 }
 
 /**
+ * Task 5 (review carry F5, Important): a NON-consuming read — returns
+ * whatever is stashed without clearing it. `monitorModeRun`'s own reader
+ * needs this: F5's own finding is that the slot is populated far more
+ * often than the design's original framing implied (the post-unmount
+ * stash fires on the ordinary HEALTHY Menu-terminate path too, not only
+ * on a failed write), so a slot hit can legitimately belong to a
+ * DIFFERENT workout than the one the reader is being asked about right
+ * now, or fail one of `monitorModeRun`'s own eligibility gates. Peeking
+ * first lets the reader DECIDE before consuming — `takeHandoffRun` below
+ * stays the one-shot, ACTUALLY-USING-IT consumption, called only once the
+ * peeked value has been proven eligible for THIS arrival.
+ */
+export function peekHandoffRun(): MonitorRun | null {
+  return handoffSlot;
+}
+
+/**
  * Consumes the slot exactly once: returns whatever is stashed there and
  * clears it in the SAME call, so a second read — a second reader, or
  * React StrictMode's own double-invoked lazy initializer (spec §3's own

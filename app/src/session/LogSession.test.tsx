@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useEffect } from "react";
+import { StrictMode, useEffect } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
@@ -29,9 +29,12 @@ import { buildLogSeed, buildLogSteps, formatLogDate } from "./logDraft";
 import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
 import { buildSummaryModel } from "./summaryModel";
 import {
+  clearHandoffSlot,
   connectGuardStage,
   loadMonitorRun,
+  peekHandoffRun,
   saveMonitorRun,
+  stashHandoffRun,
   type MachineSummaryDetail,
   type MonitorRun,
 } from "../monitor/monitorRun";
@@ -557,6 +560,13 @@ async function renderManualLogWithHistory(workoutId: string) {
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
+  // AUD-016 durable hand-off design spec §3, Task 5: the handoff slot is
+  // module-scope state — `localStorage.clear()` above never touches it —
+  // so a test that stashes and never consumes (the mismatch/eligibility
+  // tests below) would otherwise leak into whatever runs next. Same
+  // discipline `monitorRun.test.ts`'s own slot tests and
+  // `useMonitorSession.test.ts`'s file-level `beforeEach` already apply.
+  clearHandoffSlot();
   // Default: no active plan — see `mockPlan`'s own comment on why this
   // keeps every plan-agnostic test in this file passing unmodified.
   mockPlan();
@@ -2794,6 +2804,257 @@ describe("LogSession: monitorModeRun logs which condition missed onto the log-do
       kind: "log-door-miss",
       detail: "no-run",
     });
+  });
+});
+
+// AUD-016 durable hand-off design spec §3, Task 5: the slot-aware reader.
+// Pure-function level first (mirrors the four-condition-gate block above,
+// same cost reasoning), then the full screen for the render/POST/discard/
+// save-success/StrictMode assertions the pure level can't reach.
+describe("LogSession: monitorModeRun consults the AUD-016 handoff slot (design spec §3, Task 5)", () => {
+  it("a slot-carried run, eligible for THIS workoutId, is served directly and CONSUMED (peekHandoffRun reads null afterward)", () => {
+    const { run } = buildMonitorFixture();
+    // Storage stays empty on purpose — the whole point is that the slot
+    // alone is enough.
+    stashHandoffRun(run);
+    const search = new URLSearchParams("from=monitor");
+
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(run);
+    expect(peekHandoffRun()).toBeNull();
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  it("REVIEW FIX (F5, Important): a slot carrying a DIFFERENT workout's run is left UNTOUCHED — the reader falls through to storage, and the slot is still intact for its own, later, correct arrival", () => {
+    const { run: runForX } = buildMonitorFixture();
+    stashHandoffRun({ ...runForX, workoutId: "id-workout-x" });
+    const search = new URLSearchParams("from=monitor");
+
+    // This arrival is for a DIFFERENT workout (Y = MONITOR_WORKOUT_ID);
+    // storage holds nothing for it either, so the miss is genuine, but the
+    // ASSERTION THIS TEST EXISTS FOR is what happens to the slot, not the
+    // miss reason.
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+
+    // The slot must NOT have been consumed-and-discarded: workout X's own
+    // later, correct arrival still finds its run waiting.
+    const stillThere = peekHandoffRun();
+    expect(stillThere).not.toBeNull();
+    expect(stillThere?.workoutId).toBe("id-workout-x");
+    const searchForX = new URLSearchParams("from=monitor");
+    expect(monitorModeRun(searchForX, "id-workout-x")).toStrictEqual(
+      stillThere,
+    );
+    // NOW it's gone — X's own real arrival is what finally consumes it.
+    expect(peekHandoffRun()).toBeNull();
+  });
+
+  it("REVIEW FIX (F5): a slot-carried run that fails ANY OTHER eligibility gate (not yet completed) is ALSO left untouched, never consumed-and-lost", () => {
+    const { run } = buildMonitorFixture();
+    stashHandoffRun({ ...run, completedAt: null });
+    const search = new URLSearchParams("from=monitor");
+
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+    expect(peekHandoffRun()).not.toBeNull();
+  });
+
+  it("REVIEW FIX (F5): a slot-carried run whose logSeed no longer aligns falls through the same way a stored one does, and is left in place", () => {
+    const { run } = buildMonitorFixture();
+    const { logSeed: _drop, ...v1Shaped } = run;
+    stashHandoffRun({ ...v1Shaped, v: 1 });
+    const search = new URLSearchParams("from=monitor");
+
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+    expect(peekHandoffRun()).not.toBeNull();
+  });
+
+  it("an ordinary manual visit (no from=monitor) does NOT consume the slot", () => {
+    const { run } = buildMonitorFixture();
+    stashHandoffRun(run);
+    const search = new URLSearchParams(); // no "from" at all
+
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+    // The slot guard sits AFTER the `from=monitor` check (design spec §3:
+    // "so an ordinary manual visit never consumes it") — the slot must
+    // still hold the run a later, genuine `?from=monitor` arrival needs.
+    expect(peekHandoffRun()).toStrictEqual(run);
+  });
+
+  it("the slot wins over storage when both are eligible for the SAME workout — the slot is consulted FIRST", () => {
+    const { run: stored } = buildMonitorFixture({
+      summaryTotals: { workElapsedSeconds: 1, workDistanceMeters: 1 },
+    });
+    saveMonitorRun(stored);
+    const { run: slotted } = buildMonitorFixture({
+      summaryTotals: { workElapsedSeconds: 999, workDistanceMeters: 999 },
+    });
+    stashHandoffRun(slotted);
+    const search = new URLSearchParams("from=monitor");
+
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(slotted);
+    // Storage is untouched either way — the slot path never writes.
+    expect(loadMonitorRun()).toStrictEqual(stored);
+  });
+});
+
+// `LogSession.test.tsx`'s own file-wide convention (`renderManualLog` and
+// every other full-screen helper): `beforeEach` calls `vi.resetModules()`
+// and every render dynamically `import()`s `./LogSession` fresh. That
+// gives a FRESH `../monitor/monitorRun` module graph too — a DIFFERENT
+// instance than this file's own STATIC `import { stashHandoffRun, ... }`
+// at the top (resolved once, before any test ever ran, never touched by a
+// later `resetModules()`). The handoff slot is MODULE-scope state, not
+// localStorage — `saveMonitorRun`/`loadMonitorRun`'s tests never hit this
+// because storage is a genuine global, but `stashHandoffRun`'s effect on
+// the pre-reset instance is invisible to whatever `LogSession.tsx` reads
+// after the fresh import. Every test below dynamically imports
+// `../monitor/monitorRun` itself, in the SAME post-reset epoch
+// `renderManualLog`'s own `LogSession` import will share, and uses THAT
+// copy's functions instead of the file's static ones.
+describe("LogSession: the slot-aware reader, through the full screen (Task 5)", () => {
+  it("a slot-carried run (storage EMPTY) renders through the monitor door and POSTs its machine fields, exactly like a stored one would", async () => {
+    const { run, workout } = buildMonitorFixture({
+      summaryTotals: { workElapsedSeconds: 24.3, workDistanceMeters: 76 },
+    });
+    const { stashHandoffRun: freshStash } =
+      await import("../monitor/monitorRun");
+    freshStash(run);
+    expect(loadMonitorRun()).toBeNull();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-slot-fixture" }), {
+          status: 201,
+        }),
+      ),
+    );
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    // Genuinely served from the slot, not a fallback render: the
+    // machine-summary total is right there on screen before Save is ever
+    // pressed, and storage never held it.
+    expect(screen.queryByText(/NO MONITOR READING/)).not.toBeInTheDocument();
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.machineWorkSeconds).toBe(24.3);
+    expect(body.machineWorkMeters).toBe(76);
+  });
+
+  // NOTE on both tests below: an ELIGIBLE, matching slot entry is ALWAYS
+  // consumed at MOUNT (`monitorModeRun`'s own peek-then-take) — stashing
+  // before render and checking the slot after Save/Discard would prove
+  // nothing (mount-time consumption already empties it regardless of
+  // whether save-success's/discard's own `clearHandoffSlot()` call ever
+  // ran — confirmed by mutation: removing either call left both such
+  // tests green). Both tests instead stash AFTER mount, simulating the
+  // one gap mount-time consumption cannot cover (a stash landing for this
+  // workout between mount and Save/Discard) — the honest scenario
+  // `LogSession.tsx`'s own comment at each call site now states plainly:
+  // no product path in this codebase can construct that gap end-to-end,
+  // so this proves the CODE calls `clearHandoffSlot()`, not a naturally
+  // arising product scenario.
+  it("save-success clears the slot beside clearMonitorRun (design spec §3's own lifecycle) — proven against a stash landing in the mount-to-save gap", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run); // served from STORAGE this time
+    mockWorkouts([workout]);
+    mockBaselines();
+    mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-slot-save" }), {
+          status: 201,
+        }),
+      ),
+    );
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const { stashHandoffRun: freshStash, peekHandoffRun: freshPeek } =
+      await import("../monitor/monitorRun");
+    freshStash(run);
+    expect(freshPeek()).not.toBeNull();
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    expect(freshPeek()).toBeNull();
+  });
+
+  it("Discard clears the slot beside clearMonitorRun — proven against a stash landing in the mount-to-discard gap", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run); // served from STORAGE this time
+    mockWorkouts([workout]);
+    mockBaselines();
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const { stashHandoffRun: freshStash, peekHandoffRun: freshPeek } =
+      await import("../monitor/monitorRun");
+    freshStash(run);
+    expect(freshPeek()).not.toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+
+    expect(
+      await screen.findByText("WORKOUT DETAIL SCREEN"),
+    ).toBeInTheDocument();
+    expect(freshPeek()).toBeNull();
+  });
+
+  it("StrictMode: the committed render used the slot value, despite the lazy initializer running twice in dev", async () => {
+    const { run, workout } = buildMonitorFixture({
+      summaryTotals: { workElapsedSeconds: 24.3, workDistanceMeters: 76 },
+    });
+    const { stashHandoffRun: freshStash } =
+      await import("../monitor/monitorRun");
+    freshStash(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const { default: LogSession } = await import("./LogSession");
+
+    render(
+      <StrictMode>
+        <MemoryRouter
+          initialEntries={[`/library/${MONITOR_WORKOUT_ID}/log?from=monitor`]}
+        >
+          <Routes>
+            <Route path="/library/:id/log" element={<LogSession />} />
+            <Route path="/library/:id" element={<p>WORKOUT DETAIL SCREEN</p>} />
+            <Route path="/today" element={<p>TODAY SCREEN</p>} />
+          </Routes>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    // THE ASSERTION THIS TEST EXISTS FOR: the COMMITTED render is the
+    // slot's own data (React keeps the FIRST lazy-initializer call's
+    // result, spec §3's own StrictMode disclosure) — if the SECOND,
+    // discarded call had somehow won instead, the slot would already be
+    // empty by the time of a real read and this screen would show the
+    // manual door's fallback instead.
+    expect(screen.queryByText(/NO MONITOR READING/)).not.toBeInTheDocument();
+    expect(screen.queryByText("LOGGED BY HAND")).not.toBeInTheDocument();
+    // Dev-only spurious miss disclosed, not tested (design spec §3 / this
+    // file's own `monitorModeRun` doc comment): the discarded second
+    // initializer call finds the slot already emptied by the first and
+    // may append its own extra `no-run` entry onto `ergomatic:log-door-
+    // misses` — harmless (nothing reads it for this committed render) and
+    // deliberately not asserted here, since asserting an exact miss count
+    // would pin React's own double-invoke behavior rather than this
+    // reader's.
   });
 });
 

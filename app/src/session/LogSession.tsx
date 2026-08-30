@@ -32,8 +32,11 @@ import {
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
 import {
+  clearHandoffSlot,
   clearMonitorRun,
   loadMonitorRun,
+  peekHandoffRun,
+  takeHandoffRun,
   type MachineSummaryDetail,
   type MonitorRun,
 } from "../monitor/monitorRun";
@@ -318,13 +321,46 @@ function recordLogDoorMiss(condition: string): void {
  *  are unchanged; this call site's `useState` lazy initializer may run
  *  twice under StrictMode in dev, which duplicates at most one diagnostic
  *  entry — harmless for a best-effort append, same posture every other
- *  writer onto this stash already takes. */
+ *  writer onto this stash already takes.
+ *
+ *  **Task 5 (AUD-016 durable hand-off design spec §3): the slot is
+ *  consulted FIRST, after the `from=monitor` guard alone, before any of
+ *  storage's own four gates run.** `peekHandoffRun`/`takeHandoffRun`
+ *  (`monitor/monitorRun.ts`) carry the run a failed hand-off's verify
+ *  stashed in memory when storage itself proved untrustworthy — the
+ *  reader's job is to serve THAT copy when it is genuinely this arrival's
+ *  own, and never otherwise. **Review carry (F5, Important, from Task 3's
+ *  own review): the slot is populated far more often than the design's
+ *  original framing implied** — the post-unmount stash fires on the
+ *  ORDINARY, healthy Menu-terminate path too (a burst arriving during
+ *  `useMonitorSession`'s own teardown linger), not only on a failed
+ *  write. A slot hit is therefore common, not exceptional, and it can
+ *  belong to a DIFFERENT workout than the one this exact arrival is
+ *  asking about (a stale entry left by an earlier session, or ordinary
+ *  timing). `eligibleForThisArrival` below applies the SAME three
+ *  eligibility gates storage's own path applies (completedAt/workoutId/
+ *  buildMonitorLogSteps — see that function's own comment for why the
+ *  fourth, "no run", doesn't apply here and why `completedAt` is
+ *  defensive rather than load-bearing for a slot candidate) — a PEEK, not
+ *  a take, so an ineligible candidate is decided on WITHOUT ever being
+ *  removed: on any miss the slot is left exactly as it was and this falls
+ *  straight through to `loadMonitorRun()`, unchanged from before this
+ *  task. That non-destructive rule is the whole point of peeking first —
+ *  a mismatching slot entry must survive for its own, later, correct
+ *  arrival; it must never be consumed and lost by a read that was never
+ *  entitled to it. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function monitorModeRun(
   search: URLSearchParams,
   workoutId: string,
 ): MonitorRun | null {
   if (search.get("from") !== "monitor") return null;
+  const slotted = peekHandoffRun();
+  if (slotted !== null && eligibleForThisArrival(slotted, workoutId)) {
+    // Consumed only now, having just proven it is actually going to be
+    // served — `takeHandoffRun`'s own one-shot contract (design spec §3).
+    return takeHandoffRun();
+  }
   const run = loadMonitorRun();
   if (run === null) {
     recordLogDoorMiss("no-run");
@@ -345,6 +381,42 @@ export function monitorModeRun(
     return null;
   }
   return run;
+}
+
+/**
+ * Task 5's own silent pre-check for `peekHandoffRun`'s candidate: the SAME
+ * three eligibility gates `monitorModeRun`'s storage path applies above
+ * (`completedAt`/`workoutId`/`buildMonitorLogSteps`). The fourth gate ("no
+ * run at all") does not apply here by construction — the caller already
+ * proved `slotted !== null` before calling this.
+ *
+ * Deliberately SILENT — no `recordLogDoorMiss` call on a miss. A slot
+ * entry that fails this check usually belongs to a DIFFERENT workout
+ * entirely (this function's own caller-side comment, F5): logging a miss
+ * under THIS `workoutId` about a record that was never for it would
+ * misattribute the door-miss counter's own evidence. The gate that
+ * actually decides this arrival's outcome is the storage path below,
+ * which already logs correctly for whatever storage genuinely holds.
+ *
+ * **The `completedAt` gate is defensive here, not load-bearing.** Every
+ * stash site in `useMonitorSession.ts` (`proceedHandoff`, and the
+ * without-series/post-unmount-burst/teardown-escape stashes inside
+ * `verifyHandoffWritable`/`teardown`) only ever fires from an
+ * already-`ended` hand-off, whose run is closed before the verify (or the
+ * escape) ever runs — so a slot-carried run with `completedAt === null`
+ * should not be reachable in production. Kept anyway, same posture as
+ * this file's own storage-path gate: a future stash site that violated
+ * the invariant should find this door closed, not open.
+ */
+function eligibleForThisArrival(run: MonitorRun, workoutId: string): boolean {
+  if (run.completedAt === null) return false;
+  if (run.workoutId !== workoutId) return false;
+  try {
+    buildMonitorLogSteps(run);
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 /** Phase LM PR 1 Task 4 (lost-monitor design spec): the flagship arrival,
@@ -1484,6 +1556,17 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // that `clearMonitorRun()` (below) already retired; re-deriving on every
   // render would do exactly that the instant the record disappeared out
   // from under a still-mounted component.
+  //
+  // StrictMode, disclosed (design spec §3's own words, `peekHandoffRun`'s
+  // doc comment): in dev, React calls this initializer TWICE and keeps
+  // only the FIRST result. When the slot is the source, the FIRST call
+  // consumes it (`takeHandoffRun`) and wins the committed render; the
+  // DISCARDED second call finds the slot already empty and can fall
+  // through to storage, writing a spurious dev-only `no-run` miss into
+  // `ergomatic:log-door-misses` — harmless (the committed render already
+  // has the right value; `recordLogDoorMiss` is a diagnostic append, never
+  // read back by this component) but worth naming so a future reader of
+  // that stash isn't fooled by a miss whose own render never happened.
   const [monitorRun] = useState<MonitorRun | null>(() =>
     monitorModeRun(searchParams, workoutId),
   );
@@ -1546,7 +1629,32 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     saveError,
     submit,
   } = useLogForm((logId) => {
-    if (monitorRun !== null) clearMonitorRun();
+    // Task 5 (design spec §3's lifecycle: "cleared on ... save-success
+    // beside clearMonitorRun"): the same condition, the same moment.
+    // `monitorRun !== null` here means `?from=monitor` was genuinely
+    // engaged, whether the run being saved came from the slot or storage.
+    //
+    // **Honest limit of this call, stated rather than implied (the review
+    // carry's own bar):** whenever the SAME run this save is about was
+    // sourced from the slot, `takeHandoffRun` already emptied it back at
+    // MOUNT (`monitorModeRun`'s own peek-then-take) — this call is then a
+    // pure no-op, and no product scenario in this codebase can currently
+    // make it independently observable (an eligible, matching slot entry
+    // is ALWAYS consumed before this ever runs). It stays as
+    // defense-in-depth for the one gap mount-time consumption cannot
+    // cover: a stash landing for THIS workout in the window between mount
+    // and this save-success firing (an unrelated session's own hand-off
+    // resolving mid-form, however narrow) — clearing it here matches
+    // `clearMonitorRun`'s own established, unconditional-clear posture
+    // for exactly that reason: this app assumes one active monitor
+    // session at a time, so there is no OTHER workout's entry to protect
+    // here the way there would be at an unrelated door (see
+    // `eligibleForThisArrival`'s own comment for where that protection
+    // actually lives).
+    if (monitorRun !== null) {
+      clearMonitorRun();
+      clearHandoffSlot();
+    }
     const offer = pendingOfferRef.current;
     if (offer !== null) {
       // James's ruling (spec rev 2): the record fires on the SAVE, before
@@ -1786,10 +1894,31 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     // screen (spec §4: "navigates back to the detail"), not `/today` — the
     // session door's discard lands on `/today` because it has no other
     // natural home; this one does.
+    //
+    // Task 5 (design spec §3's lifecycle: "cleared on ... the manual
+    // discard path"): `clearHandoffSlot()` joins `clearMonitorRun()` here.
+    //
+    // **Honest limit, stated rather than implied:** this branch only ever
+    // renders once `monitorModeRun` already returned non-null for THIS
+    // workoutId — if that run came from the slot, `takeHandoffRun` already
+    // emptied it at MOUNT, so this call is then a pure no-op with no
+    // product scenario in this codebase that makes it independently
+    // observable (same honest limit `useLogForm`'s own save-success
+    // callback above states for its identical call). Kept as
+    // defense-in-depth for the same narrow gap that comment names — a
+    // stash landing for THIS workout between mount and this discard
+    // firing — under the same one-active-session assumption
+    // `clearMonitorRun` itself already rests on. Not the same call as the
+    // OTHER discard door below (`ManualDoorLog`'s own plain-manual
+    // branch): that one fires precisely when `monitorModeRun` MISSED,
+    // which — per F5 — can mean a DIFFERENT workout's slot entry is still
+    // correctly sitting there; clearing it from an unrelated workout's
+    // discard would destroy real, still-pending data. It stays untouched.
     function handleMonitorDiscardClick() {
       if (discard.armed) {
         discard.disarm();
         clearMonitorRun();
+        clearHandoffSlot();
         navigate(`/library/${workoutId}`);
       } else {
         discard.arm();
@@ -1989,6 +2118,14 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // silently does today. Navigates to the workout's own detail screen —
   // the same target `handleMonitorDiscardClick` above uses, for the same
   // reason (spec §4: "navigates back to the detail"), not `/today`.
+  // Task 5 — deliberately does NOT touch the handoff slot, unlike
+  // `handleMonitorDiscardClick`'s own sibling call above. This branch
+  // fires precisely when `monitorModeRun` MISSED for THIS `workoutId` —
+  // per F5, a miss can mean a DIFFERENT workout's run is sitting in the
+  // slot, correctly, awaiting its own eventual arrival (the mismatch case
+  // `eligibleForThisArrival`'s own comment describes). Clearing the slot
+  // from here would destroy that unrelated, still-pending record over an
+  // action the rower took about a workout that never touched it.
   function handleManualDiscardClick() {
     if (discard.armed) {
       discard.disarm();
