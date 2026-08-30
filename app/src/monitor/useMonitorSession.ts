@@ -1920,10 +1920,25 @@ export function useMonitorSession(
       `run=${run.startedAt} verdict=${verdict} attempt=${verifyAttemptRef.current}`,
     );
     if (verdict === "failed") {
-      logRef.current?.record(
-        "hold-error-entered",
-        `run=${run.startedAt} the release-verify's own re-save was rejected — holding the ended hand-off instead of releasing it silently`,
-      );
+      // M1 (Minor, final review): `hold-error-entered` names the MOMENT the
+      // hold is entered, once — a `retryHandoffSave()` that fails again
+      // calls back into this same function, and without this guard it
+      // would re-log "entered" on every failed retry, as though the hold
+      // were being freshly opened each time. `hold-error-retry`
+      // (`retryHandoffSave`'s own receipt) already names every attempt,
+      // and `release-save` (F2) already names every verdict; a repeat
+      // "entered" on top of both is noise, not a new fact. Gated on
+      // `stateRef.current.holdError === null` — true only the first time
+      // this run's verify fails, since every caller that gets `false` back
+      // folds `holdError: "storage-failed"` into its own `update()` in the
+      // SAME render this function returns to (this function's own doc
+      // comment).
+      if (stateRef.current.holdError === null) {
+        logRef.current?.record(
+          "hold-error-entered",
+          `run=${run.startedAt} the release-verify's own re-save was rejected — holding the ended hand-off instead of releasing it silently`,
+        );
+      }
       return false;
     }
     if (verdict === "saved-without-series") {
@@ -2839,11 +2854,38 @@ export function useMonitorSession(
             // that moment — a wrong number travelling through the slot.
             // `run.completedAt !== null && (run.endedBy === "finished" ||
             // run.endedBy === "rower")` mirrors `appendSummaryObservations`'s
-            // own gates 1+2 (`monitorRun.ts:1180-1185`) exactly, so the fold
-            // can only ever fire on the SAME closes the writer itself would
-            // have accepted had storage been healthy — the memory carry
-            // stays a strictly poorer-storage substitute for the identical
-            // eligible write, never a wider one.
+            // own two eligibility gates (M3: cite the function, not a line
+            // range — its `completedAt`/`endedBy` checks) exactly, so the
+            // fold can only ever fire on the SAME closes the writer itself
+            // would have accepted had storage been healthy — the memory
+            // carry stays a strictly poorer-storage substitute for the
+            // identical eligible write, never a wider one.
+            //
+            // **I1 (Important, final review): `loadMonitorRun() === null`
+            // still cannot, on its own, distinguish "genuinely empty"
+            // (`appendSummaryObservations`'s own `stillLive` returning
+            // `null` because storage holds NOTHING) from "storage holds a
+            // record, but for the WRONG identity" (`stillLive` returning
+            // `null` because a PRIOR session's own unlogged record is still
+            // sitting there) — both leave `loadMonitorRun()` looking exactly
+            // like an unrelated non-null record in the second case, so a
+            // naive `=== null` check alone would wrongly fold on the first
+            // but wrongly skip the fold on the second, when this run's own
+            // eligibility is identical either way. **Resolved by relying on
+            // C1's create-time clear (`createMonitorRun`'s own doc comment),
+            // not by teaching this gate to call `stillLive` itself:**
+            // `createMonitorRun` now empties storage (and the slot)
+            // unconditionally the instant a session opens, so for the
+            // remainder of THIS session's life storage can only ever hold
+            // nothing or a record sharing THIS run's own `startedAt` — an
+            // unrelated PRIOR session's record can no longer be lingering
+            // when this burst arrives. Under that invariant, `loadMonitorRun()
+            // === null` and "stillLive → null specifically" become the same
+            // fact, and the identity-mismatch case this comment used to
+            // worry about is unreachable, not merely unhandled. Pinned by a
+            // dedicated leg-A test in `summaryHoldReplay.test.ts` that seeds
+            // a genuinely unrelated prior record before the session opens
+            // and asserts the fold still fires.
             //
             // `run.summaryTotals === undefined` is the at-most-once guard,
             // the same discipline `appendSummaryObservations`'s own
@@ -3794,7 +3836,17 @@ export function useMonitorSession(
    *  "Each attempt gets a receipt" (spec's own words): `hold-error-retry`
    *  fires regardless of whether this particular attempt heals or fails
    *  again — the OUTCOME is what `verifyHandoffWritable`'s own
-   *  `hold-error-entered`/nothing-extra split already records. */
+   *  `hold-error-entered`/nothing-extra split already records.
+   *
+   *  **M2 (Minor, final review): a heal also logs `handoff-released`.**
+   *  Every OTHER way the hand-off ever releases (`releaseHandoff`,
+   *  `resolveHandoffCondition`'s own release branch) goes through the
+   *  funnel's own `handoff-released` receipt; this exit used to bypass it
+   *  and patch `handoffHeld`/`holdError` directly, so the ring never
+   *  recorded a heal as a release at all — only as a `hold-error-retry`
+   *  that happened to be followed by nothing further. `"retry-heal"` is
+   *  this exit's own reason string, the same free-text convention
+   *  `resolveHandoffCondition`'s `reason` argument already uses. */
   const retryHandoffSave = useCallback(async (): Promise<void> => {
     if (stateRef.current.holdError === null) return;
     logRef.current?.record(
@@ -3802,6 +3854,10 @@ export function useMonitorSession(
       `run=${runRef.current?.startedAt ?? "none"} retrying the release-verify`,
     );
     if (verifyHandoffWritable()) {
+      logRef.current?.record(
+        "handoff-released",
+        `retry-heal — the ended hand-off is free to navigate (${stateRef.current.actuals.length} actual(s) measured)`,
+      );
       update({ handoffHeld: false, holdError: null });
     }
     // else: stays held. `verifyHandoffWritable` already logged its own
@@ -3817,7 +3873,14 @@ export function useMonitorSession(
    *  the record must be safely in the slot before anything renders past
    *  the held-error frame (the reader consulting the slot is Task 5's own
    *  scope; this hook's job ends at making sure something is there to
-   *  consult). */
+   *  consult).
+   *
+   *  **M2 (Minor, final review): this exit ALSO logs `handoff-released`,**
+   *  the same funnel receipt `retryHandoffSave`'s own heal now logs
+   *  (see that function's own doc comment) — proceeding is a release too,
+   *  just one that carries `hold-error-proceed`'s own reason alongside it
+   *  rather than a healed verify. `"proceed"` is this exit's own reason
+   *  string. */
   const proceedHandoff = useCallback(async (): Promise<void> => {
     if (stateRef.current.holdError === null) return;
     const run = runRef.current;
@@ -3837,6 +3900,10 @@ export function useMonitorSession(
     logRef.current?.record(
       "hold-error-proceed",
       `run=${run?.startedAt ?? "none"} proceeding without a confirmed write — the in-memory copy travels through the slot instead`,
+    );
+    logRef.current?.record(
+      "handoff-released",
+      `proceed — the ended hand-off is free to navigate (${stateRef.current.actuals.length} actual(s) measured)`,
     );
     update({ handoffHeld: false, holdError: null });
   }, [update]);

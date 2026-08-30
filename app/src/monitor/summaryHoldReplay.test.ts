@@ -1333,6 +1333,67 @@ describe("the summary hold's permanent gate, AUD-016 leg A: denied from the firs
       expect(loadMonitorRun()).toBeNull();
     },
   );
+
+  it(
+    "REVIEW FIX (I1, Important): a PRIOR unlogged record already in storage " +
+      "from an ABANDONED earlier session does not block the fold — " +
+      "createMonitorRun (C1's own fix) retires it before this session's " +
+      "first write is even denied",
+    async () => {
+      localStorage.clear();
+      // A prior, unrelated session's completed-but-never-logged record —
+      // I1's own scenario: a genuinely different identity sitting in
+      // storage BEFORE this session ever opens. Seeded through the real
+      // `setItem`, before `stubStorageWrites` starts intercepting it.
+      const priorUnlogged: MonitorRun = {
+        v: 1,
+        workoutId: "an-earlier-abandoned-workout",
+        title: "An earlier, abandoned session",
+        program: { intervals: [] },
+        actuals: [],
+        deviceName: "PM5",
+        startedAt: "2020-01-01T00:00:00.000Z",
+        completedAt: "2020-01-01T01:00:00.000Z",
+        terminated: false,
+      };
+      localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(priorUnlogged));
+      expect(loadMonitorRun()).not.toBeNull();
+
+      // Leg A's own premise: denied from the FIRST write onward.
+      // `createMonitorRun`'s explicit `clearMonitorRun()` is a
+      // `removeItem`, never a `setItem` — this stub only intercepts
+      // `setItem`, so the clear still fires and still empties the key even
+      // though the SAVE immediately after it is denied.
+      stubStorageWrites("from-open");
+
+      const full = await runReplay(
+        SMOKE_CAPTURE,
+        SMOKE_TERMINATED_PROGRAM,
+        SMOKE_IDENTITY,
+      );
+
+      expect(full.divergences).toStrictEqual([]);
+      expect(full.phase).toBe("ended");
+
+      // Storage holds nothing — the prior record is GONE, not merely a
+      // non-null value the fold's guard would have to see past.
+      expect(loadMonitorRun()).toBeNull();
+
+      // The fold still fires: the prior record's mere presence at session
+      // start never blocks it once `createMonitorRun`'s clear has run.
+      const entriesAfterBurst = JSON.parse(full.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      const folded = entriesAfterBurst.find(
+        (e) => e.kind === "summary-folded-in-memory",
+      );
+      expect(folded).toBeDefined();
+      expect(folded?.detail).toContain(
+        JSON.stringify({ workElapsedSeconds: 31.5, workDistanceMeters: 110 }),
+      );
+    },
+  );
 });
 
 describe("the summary hold's permanent gate, AUD-016 leg B: fails from the release-verify only (durable hand-off design spec §6)", () => {

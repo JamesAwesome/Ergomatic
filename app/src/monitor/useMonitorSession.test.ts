@@ -4330,6 +4330,159 @@ describe("useMonitorSession: ending", () => {
       expect(saves[1]!.detail).toContain("verdict=saved");
       expect(saves[1]!.detail).toContain("attempt=2");
     });
+
+    it("REVIEW FIX (M1, Minor): a failed retryHandoffSave does not re-log hold-error-entered — only the attempt that first enters the hold does", async () => {
+      const { result, fake } = harness({
+        program: TWO_INTERVALS,
+        events: timeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      act(() => {
+        fake.injectDisconnect();
+      });
+      expect(result.current.phase).toBe("disconnected");
+
+      // Denied unconditionally, from the verify's own first attempt through
+      // every retry after it — this test's whole point is that a SECOND
+      // failure must not re-log "entered".
+      const originalSetItem = Storage.prototype.setItem;
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === localStorage && key === MONITOR_RUN_KEY) {
+          throw new DOMException(
+            "The quota has been exceeded.",
+            "QuotaExceededError",
+          );
+        }
+        originalSetItem.call(this, key, value);
+      });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+      expect(result.current.holdError).toBe("storage-failed");
+
+      await act(async () => {
+        await result.current.retryHandoffSave();
+      });
+      // Still held — the stub never stopped throwing.
+      expect(result.current.holdError).toBe("storage-failed");
+
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      expect(
+        entries.filter((e) => e.kind === "hold-error-entered"),
+      ).toHaveLength(1);
+      // `hold-error-retry` still fires every attempt (spec's own words) —
+      // only "entered" is deduplicated.
+      expect(entries.filter((e) => e.kind === "hold-error-retry")).toHaveLength(
+        1,
+      );
+      // Two genuine verify attempts happened either way (F2's own receipt).
+      expect(entries.filter((e) => e.kind === "release-save")).toHaveLength(2);
+    });
+
+    it("REVIEW FIX (M2, Minor): a retry-heal logs its own handoff-released receipt — the funnel's release line, not just hold-error-retry", async () => {
+      const { result, fake } = harness({
+        program: TWO_INTERVALS,
+        events: timeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      act(() => {
+        fake.injectDisconnect();
+      });
+      expect(result.current.phase).toBe("disconnected");
+
+      const spy = vi
+        .spyOn(Storage.prototype, "setItem")
+        .mockImplementation(function (this: Storage, key: string) {
+          if (this === localStorage && key === MONITOR_RUN_KEY) {
+            throw new DOMException(
+              "The quota has been exceeded.",
+              "QuotaExceededError",
+            );
+          }
+        });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+      expect(result.current.holdError).toBe("storage-failed");
+      const beforeHeal = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+      }[];
+      expect(beforeHeal.some((e) => e.kind === "handoff-released")).toBe(false);
+
+      spy.mockRestore();
+      await act(async () => {
+        await result.current.retryHandoffSave();
+      });
+      expect(result.current.handoffHeld).toBe(false);
+
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      const released = entries.find((e) => e.kind === "handoff-released");
+      expect(released).toBeDefined();
+      expect(released?.detail).toContain("retry-heal");
+    });
+
+    it("REVIEW FIX (M2, Minor): PROCEED ANYWAY logs its own handoff-released receipt too", async () => {
+      const { result, fake } = harness({
+        program: TWO_INTERVALS,
+        events: timeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      act(() => {
+        fake.injectDisconnect();
+      });
+      expect(result.current.phase).toBe("disconnected");
+
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+        this: Storage,
+        key: string,
+      ) {
+        if (this === localStorage && key === MONITOR_RUN_KEY) {
+          throw new DOMException(
+            "The quota has been exceeded.",
+            "QuotaExceededError",
+          );
+        }
+      });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+      expect(result.current.holdError).toBe("storage-failed");
+
+      await act(async () => {
+        await result.current.proceedHandoff();
+      });
+      expect(result.current.handoffHeld).toBe(false);
+
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      const released = entries.find((e) => e.kind === "handoff-released");
+      expect(released).toBeDefined();
+      expect(released?.detail).toContain("proceed");
+    });
   });
 });
 

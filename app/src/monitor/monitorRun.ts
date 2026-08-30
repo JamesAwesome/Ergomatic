@@ -617,6 +617,14 @@ export function takeHandoffRun(): MonitorRun | null {
  * the manual discard path." A discarded or already-saved session's slot
  * must not resurrect at the next `?from=monitor` arrival even when nothing
  * ever called `takeHandoffRun` for it.
+ *
+ * **Final review (C1, Critical): also called from `createMonitorRun` below,
+ * unconditionally, the moment a NEW session opens.** That is the site the
+ * original lifecycle list above omitted, and the omission was the defect:
+ * an earlier session's stash could otherwise outlive the session it
+ * belonged to and beat a later, genuinely fresher stored record at the
+ * next arrival. See `createMonitorRun`'s own doc comment for the full
+ * account.
  */
 export function clearHandoffSlot(): void {
   handoffSlot = null;
@@ -658,7 +666,38 @@ export function clearHandoffSlot(): void {
  *  here too closes the last silent-failure gap: a caller that forgot to
  *  compute a seed would otherwise write a v2 record with none, and 7C's log
  *  screen would fall through to the manual door with no signal why. Every
- *  run this function builds is stamped `v: 2` unconditionally. */
+ *  run this function builds is stamped `v: 2` unconditionally.
+ *
+ *  **AUD-016 durable hand-off design spec, final review (C1, Critical): a
+ *  NEW session opening is the one moment guaranteed to make anything
+ *  already sitting in either hand-off carrier stale for THIS session's
+ *  eventual close.** `clearHandoffSlot()` closes the traced defect
+ *  directly: nothing used to retire `handoffSlot` when a fresh session
+ *  began, so an earlier session's stashed run (a post-unmount burst or a
+ *  teardown-escape that was never Saved) could still be sitting there,
+ *  eligible for THIS workout, when this session later ends healthy and
+ *  mounted — `monitorModeRun`'s slot-first read would then serve the
+ *  OLDER, stale session instead of the one that just finished, and Save
+ *  would post it while clearing the newer session's own storage out from
+ *  under it. Retiring the slot here, at the one place a session's identity
+ *  changes, is what makes that scenario unreachable: `eligibleForThisArrival`
+ *  has no recency check by design (it cannot — a bare `MonitorRun` carries
+ *  no session-sequence number), so recency has to be enforced by never
+ *  letting an old session's stash survive to compete with a new one.
+ *
+ *  **Decided and documented (the brief's own open question): `clearMonitorRun()`
+ *  joins the slot clear, unconditionally, before either the `SessionRun`
+ *  clear or the save attempt below.** Without it, the identical staleness
+ *  class survives one layer down: `saveMonitorRun(run)`'s overwrite-on-success
+ *  is what normally erases an old STORED completed record when a new
+ *  session opens on the same workout, but `localStorage.setItem` throws
+ *  before writing anything at all on a quota rejection — a create-time
+ *  write failure would otherwise leave that old, unrelated completed
+ *  record sitting in storage, exactly the kind of record `LogSession`'s
+ *  reader would later mistake for this session's own. Calling
+ *  `clearMonitorRun()` first makes the failure path match the success
+ *  path (both leave the OLD record gone) rather than strictly worse than
+ *  it. Ordered before `saveMonitorRun(run)` for the same reason. */
 export function createMonitorRun(
   args: {
     workoutId: string | null;
@@ -681,6 +720,8 @@ export function createMonitorRun(
     completedAt: null,
     terminated: false,
   };
+  clearMonitorRun();
+  clearHandoffSlot();
   clearRun();
   saveMonitorRun(run);
   return run;

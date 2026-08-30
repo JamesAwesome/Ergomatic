@@ -443,7 +443,10 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
 });
 
 describe("createMonitorRun", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    clearHandoffSlot();
+  });
 
   it("builds a fresh, persisted MonitorRun stamped from its arguments and `now`, and always v: 2 (7C spec §2)", () => {
     const program = fillingLowProgram();
@@ -523,6 +526,76 @@ describe("createMonitorRun", () => {
       ),
     ).not.toThrow();
     expect(loadRun()).toBeNull();
+  });
+
+  // AUD-016 durable hand-off design spec, final review (C1, Critical): a
+  // stale handoff-slot entry from an ABANDONED earlier session (stashed but
+  // never Saved — a post-unmount burst or a teardown-escape) must not
+  // survive to beat a fresher record once a NEW session opens on the same
+  // workout. `createMonitorRun` is the one place a session's identity
+  // changes, so it is the one place that can retire the slot for good.
+  it("REVIEW FIX (C1, Critical): retires any leftover handoff-slot entry the instant a new session opens", () => {
+    const stale: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+      endedBy: "finished",
+    };
+    stashHandoffRun(stale);
+    expect(peekHandoffRun()).not.toBeNull();
+
+    createMonitorRun(
+      {
+        workoutId: "fl-workout-id",
+        title: "Filling Low",
+        program: fillingLowProgram(),
+        deviceName: "PM5",
+        logSeed: TEST_SEED,
+      },
+      t0,
+    );
+
+    expect(peekHandoffRun()).toBeNull();
+  });
+
+  // The brief's own "decide-and-document" question, answered: YES, the
+  // create-time clear ALSO retires a pre-existing STORED record outright,
+  // not only the slot — because `saveMonitorRun`'s overwrite-on-success
+  // cannot reach the failure case. `localStorage.setItem` throws before
+  // writing anything at all on a quota rejection, so without an explicit
+  // `clearMonitorRun()` first, a create whose OWN write then fails would
+  // leave the OLD, unrelated completed record sitting in storage — exactly
+  // the shape `LogSession`'s reader could later mistake for this session's
+  // own.
+  it("REVIEW FIX (C1, decide-and-document): also clears a pre-existing STORED record outright, so a create-time write failure never leaves an old one behind", () => {
+    const stale: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+      endedBy: "finished",
+    };
+    saveMonitorRun(stale);
+    expect(loadMonitorRun()).not.toBeNull();
+
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+    try {
+      createMonitorRun(
+        {
+          workoutId: "fl-workout-id",
+          title: "Filling Low",
+          program: fillingLowProgram(),
+          deviceName: "PM5",
+          logSeed: TEST_SEED,
+        },
+        t0,
+      );
+    } finally {
+      setItemSpy.mockRestore();
+    }
+
+    expect(loadMonitorRun()).toBeNull();
   });
 });
 

@@ -31,6 +31,7 @@ import { buildSummaryModel } from "./summaryModel";
 import {
   clearHandoffSlot,
   connectGuardStage,
+  createMonitorRun,
   loadMonitorRun,
   peekHandoffRun,
   saveMonitorRun,
@@ -2879,20 +2880,57 @@ describe("LogSession: monitorModeRun consults the AUD-016 handoff slot (design s
     expect(peekHandoffRun()).toStrictEqual(run);
   });
 
-  it("the slot wins over storage when both are eligible for the SAME workout — the slot is consulted FIRST", () => {
-    const { run: stored } = buildMonitorFixture({
-      summaryTotals: { workElapsedSeconds: 1, workDistanceMeters: 1 },
+  // REWORKED (final review, C1, Critical): this test used to pin "the slot
+  // wins over storage when both are eligible for the SAME workout" as
+  // though that were safe, intended behavior — stashing one fixture and
+  // saving a SEPARATE one directly, with no session lifecycle between them.
+  // That is exactly the shape of the traced defect: a stale slot entry left
+  // by an ABANDONED earlier session (stashed but never Saved) beating a
+  // fresher STORED record for the same workout, with nothing to retire it.
+  // The reader's own slot-first order has not changed — it still exists for
+  // the SAME-session cases (`saved-without-series`, PROCEED ANYWAY) where
+  // the slot genuinely IS the better copy. What changed is the producer
+  // side: `createMonitorRun` now retires the slot the instant a new
+  // session's identity begins, so this exact cross-session scenario can no
+  // longer arise. The new truth is proven end to end, through the real
+  // session boundary, rather than by hand-assembling the two carriers.
+  it("REVIEW FIX (C1, Critical): a stale slot entry from an ABANDONED earlier session does not beat a fresher stored record — opening a new session retires the slot first", () => {
+    const { run: staleSession } = buildMonitorFixture({
+      summaryTotals: { workElapsedSeconds: 111, workDistanceMeters: 111 },
     });
-    saveMonitorRun(stored);
-    const { run: slotted } = buildMonitorFixture({
+    // Session 1: stashed (a post-unmount burst or a teardown-escape) but
+    // never Saved — the exact scenario the finding names.
+    stashHandoffRun(staleSession);
+    expect(peekHandoffRun()).not.toBeNull();
+
+    // Session 2 opens on the SAME workout. `createMonitorRun` is the one
+    // place a session's identity changes, and the fix makes it retire
+    // whatever the slot was still holding.
+    createMonitorRun(
+      {
+        workoutId: MONITOR_WORKOUT_ID,
+        title: staleSession.title,
+        program: staleSession.program,
+        deviceName: "PM5 2",
+        logSeed: staleSession.logSeed!,
+      },
+      new Date("2026-08-01T13:00:00.000Z"),
+    );
+    expect(peekHandoffRun()).toBeNull();
+
+    // Session 2 ends healthy-mounted (no stash — the reader falls through
+    // to storage) and its own completed record lands there.
+    const { run: freshSession } = buildMonitorFixture({
       summaryTotals: { workElapsedSeconds: 999, workDistanceMeters: 999 },
     });
-    stashHandoffRun(slotted);
-    const search = new URLSearchParams("from=monitor");
+    saveMonitorRun(freshSession);
 
-    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(slotted);
-    // Storage is untouched either way — the slot path never writes.
-    expect(loadMonitorRun()).toStrictEqual(stored);
+    const search = new URLSearchParams("from=monitor");
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(
+      freshSession,
+    );
+    // The slot stays empty — nothing was left to consume.
+    expect(peekHandoffRun()).toBeNull();
   });
 });
 
