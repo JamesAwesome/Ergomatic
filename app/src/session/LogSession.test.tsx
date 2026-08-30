@@ -510,8 +510,14 @@ async function renderManualLog(workoutId: string, search = "") {
 // history STACK itself, not just the string it navigated to.
 function BackTrigger() {
   const navigate = useNavigate();
+  // `void`: react-router-dom v7's own `NavigateFunction` returns
+  // `void | Promise<void>` (view-transition support) — surfaced by
+  // typescript-eslint once this file gained a third onClick of this exact
+  // shape (this task's own new §10 row 3 test, below); fixed here and at
+  // `ConnectedStandIn`'s identical call too, campsite rule, since nothing
+  // in any of the three ever needs to await it.
   return (
-    <button type="button" onClick={() => navigate(-1)}>
+    <button type="button" onClick={() => void navigate(-1)}>
       SIMULATE BROWSER BACK
     </button>
   );
@@ -2882,7 +2888,7 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
     return (
       <button
         type="button"
-        onClick={() => navigate(`/library/${workoutId}/log${search}`)}
+        onClick={() => void navigate(`/library/${workoutId}/log${search}`)}
       >
         HAND OFF
       </button>
@@ -3073,13 +3079,7 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
 // records the exact `(set, reason)` pair so a test can assert not just
 // THAT a retire happened but which key/revision/reason it carried.
 function mockHandoffRetireSpy() {
-  const spy =
-    vi.fn<
-      (
-        set: readonly { sessionKey: string; revision: number }[],
-        reason: string,
-      ) => void
-    >();
+  const spy = vi.fn();
   vi.doMock("../monitor/handoffStore", async () => {
     const actual = await vi.importActual<
       typeof import("../monitor/handoffStore")
@@ -5636,5 +5636,249 @@ describe("LogSession: the post-test prompt's degrade arms (Phase BL PR B)", () =
 
     await userEvent.click(screen.getByRole("button", { name: "Not now" }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+});
+
+// Hand-off store design spec (rev 4), §10 row 3, plan Task 4: "The claim
+// race, with its producer NAMED: R0 render → R1 committed from the OLD
+// hook's passive-cleanup teardown ... → R0 claim → Save → POST carries
+// R0's numbers → retire receipts richer-at-save {R0, R1}."
+//
+// `ProducerTeardownStandIn` mirrors this file's own `ConnectedStandIn`
+// (above, "the log-door miss survives the teardown that follows it") —
+// the SAME structural fact both tests exercise (`LogSession.tsx:226-228`'s
+// own citation: React runs the new route's render BEFORE the old
+// subtree's passive unmount) — except this stand-in's cleanup commits R1
+// directly through the store, standing in for `useMonitorSession.ts`'s
+// own `applyProducerCommit` at teardown. This is NOT "RF24 wearing this
+// row's number" (the row's own parenthetical warning): the injection
+// point is a REAL React passive-unmount callback, the exact lifecycle
+// position the real hook's own teardown occupies — an arbitrary call
+// between two `render()`s in the test body, with no such lifecycle tie,
+// would be the unsound shortcut that warning names instead.
+describe("LogSession: the claim race — R0 render, R1 committed during the old hook's teardown, R0 claim, Save posts R0 (§10 row 3)", () => {
+  function ProducerTeardownStandIn({
+    workoutId,
+    commitR1,
+  }: {
+    workoutId: string;
+    commitR1: () => void;
+  }) {
+    const navigate = useNavigate();
+    useEffect(() => () => commitR1(), [commitR1]);
+    return (
+      <button
+        type="button"
+        onClick={() => void navigate(`/library/${workoutId}/log?from=monitor`)}
+      >
+        HAND OFF
+      </button>
+    );
+  }
+
+  async function renderRow3(workoutId: string, commitR1: () => void) {
+    const { default: LogSession } = await import("./LogSession");
+    return render(
+      <MemoryRouter initialEntries={["/connected"]}>
+        <Routes>
+          <Route
+            path="/connected"
+            element={
+              <ProducerTeardownStandIn
+                workoutId={workoutId}
+                commitR1={commitR1}
+              />
+            }
+          />
+          <Route path="/library/:id/log" element={<LogSession />} />
+          <Route path="/library/:id" element={<p>WORKOUT DETAIL SCREEN</p>} />
+          <Route path="/today" element={<p>TODAY SCREEN</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("Save posts R0's numbers even though a richer R1 landed during teardown; the claim used R0's own revision, never a re-read; the retire counts richer-at-save", async () => {
+    const { run: r0, workout } = buildMonitorFixture();
+    saveMonitorRun(r0);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-row3" }), { status: 201 }),
+      ),
+    );
+
+    // R1: a late summary-observations fold landing in the teardown window —
+    // the exact shape `appendSummaryObservations` produces post-close,
+    // richer than R0 (R0 never carries `summaryTotals`).
+    const r1 = {
+      ...r0,
+      summaryTotals: { workElapsedSeconds: 9999, workDistanceMeters: 99999 },
+    };
+    const { handoffStore, setReceiptChannel } =
+      await import("../monitor/handoffStore");
+    const receipts: unknown[] = [];
+    setReceiptChannel((r) => receipts.push(r));
+    const commitR1 = () => {
+      const result = handoffStore.commit(r0.startedAt, 0, r1);
+      // Fixture sanity: R1 must actually land (revision 0 -> 1) for this
+      // test to mean anything — a silently-refused R1 would make every
+      // assertion below trivially true for the wrong reason.
+      if (!result.accepted) throw new Error("R1 commit was refused");
+    };
+
+    await renderRow3(MONITOR_WORKOUT_ID, commitR1);
+    await userEvent.click(screen.getByRole("button", { name: "HAND OFF" }));
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // R1 genuinely landed — the store's own current entry is richer than
+    // what the screen rendered from.
+    expect(handoffStore.read()?.revision).toBe(1);
+    expect(handoffStore.read()?.run.summaryTotals).toBeDefined();
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    // POST carries R0's own numbers: no machine-summary keys at all, since
+    // R0 (what the screen rendered and posts) never had `summaryTotals`.
+    const body = parsedBodies(apiFn)[0]!;
+    expect("machineWorkSeconds" in body).toBe(false);
+    expect("machineSummary" in body).toBe(false);
+
+    // The claim used R0's OWN revision (0), never a re-read of the current
+    // (richer) one — visible only through the retire receipt's own
+    // `claimedRenderedRevision`, since claim() itself never exposes its
+    // registration except at retire time (handoffStore.ts's own design).
+    const retireReceipt = receipts.find(
+      (r): r is { kind: "retire"; [k: string]: unknown } =>
+        (r as { kind?: string }).kind === "retire",
+    );
+    expect(retireReceipt).toMatchObject({
+      sessionKey: r0.startedAt,
+      authorizedRevision: 0,
+      retiredRevision: 1,
+      superseded: true,
+      claimState: "consumed",
+      claimedRenderedRevision: 0,
+      reason: "save-success",
+    });
+
+    // §6/§10 row 3/ratified condition 1: the richer-at-save drop, counted.
+    const droppedReceipt = receipts.find(
+      (r) => (r as { kind?: string }).kind === "handoff-dropped",
+    );
+    expect(droppedReceipt).toStrictEqual({
+      kind: "handoff-dropped",
+      reason: "richer-at-save",
+      sessionKey: r0.startedAt,
+      claimedRevision: 0,
+      currentRevision: 1,
+    });
+  });
+});
+
+// Hand-off store design spec (rev 4), §10 row 5's own door leg + Task 3's
+// I1 finding: "The doors' own clears are the CAUSE of this exposure, not a
+// mitigation for it ... routing them through retire is the fix." This is
+// THE test that proves the fix at a real door, not only at the store
+// (`handoffStoreReplay.test.ts`'s own row 5 already proves the store's own
+// `retire()` tombstones correctly in isolation — this proves a REAL UI
+// discard reaches it).
+describe("LogSession: the door leg — Discard tombstones the key, so a late producer burst can no longer resurrect it (§10 row 5 door leg)", () => {
+  it("a late burst commit for the discarded key is refused after Discard, through the real UI path", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+    await screen.findByText("WORKOUT DETAIL SCREEN");
+    expect(loadMonitorRun()).toBeNull();
+
+    // THE LATE BURST: the dead hook's own linger-window commit, racing the
+    // discard that already fired for the identical key/revision — exactly
+    // Task 3's I1 shape ("a burst landing in the linger AFTER a rower has
+    // already Saved or Discarded").
+    const { handoffStore } = await import("../monitor/handoffStore");
+    const lateBurst = {
+      ...run,
+      summaryTotals: { workElapsedSeconds: 1, workDistanceMeters: 1 },
+    };
+    const result = handoffStore.commit(run.startedAt, 0, lateBurst);
+
+    expect(result).toStrictEqual({ accepted: false, reason: "retired" });
+    // No resurrection: neither tier shows the late burst's record.
+    expect(loadMonitorRun()).toBeNull();
+    expect(handoffStore.read()).toBeNull();
+  });
+});
+
+// Hand-off store design spec (rev 4), §6/§9.7, §10 row 10, plan Task 4:
+// "Abandon (claimed, unmount without Save) leaves CLAIMED; any later
+// retire counts non-consumed entries as drops" / "Abandon path: claim,
+// unmount without saving, next acceptance → per-entry receipt counts
+// claimed-not-consumed."
+describe("LogSession: the abandon path — claim survives unmount, counted at the next retire as claimed-not-consumed (§10 row 10)", () => {
+  it("mount claims R0; unmounting WITHOUT Save/Discard leaves it claimed; a later retire (any reason but save-success) reports claimState:'claimed'", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+
+    const { handoffStore, setReceiptChannel } =
+      await import("../monitor/handoffStore");
+    const receipts: unknown[] = [];
+    setReceiptChannel((r) => receipts.push(r));
+
+    const { unmount } = await renderManualLog(
+      MONITOR_WORKOUT_ID,
+      "?from=monitor",
+    );
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(receipts).toContainEqual({
+      kind: "claim",
+      sessionKey: run.startedAt,
+      renderedRevision: 0,
+    });
+
+    // Abandon: the rower leaves (Back press / unmount) without Save or
+    // Discard — no retire fires from this component at all.
+    unmount();
+    expect(handoffStore.read()?.sessionKey).toBe(run.startedAt);
+
+    // "Next acceptance": some LATER destructive authorization retires this
+    // same, still-claimed key (Task 5's own armed-acceptance defense retire
+    // is the production-reachable form of this; Task 5 has not landed on
+    // this branch yet, so this stands in with the store's own retire
+    // directly — the CONSUMER-side claim discipline this row exists to
+    // prove is unaffected by which door eventually calls it).
+    handoffStore.retire(
+      [{ sessionKey: run.startedAt, revision: 0 }],
+      "createMonitorRun-defense",
+    );
+
+    const retireReceipt = receipts.find(
+      (r) => (r as { kind?: string }).kind === "retire",
+    );
+    expect(retireReceipt).toMatchObject({
+      sessionKey: run.startedAt,
+      claimState: "claimed",
+    });
+    // Never "consumed" — that label is reserved for a "save-success" retire
+    // (handoffStore.ts's own `deriveClaim`), and this retire's reason is
+    // not that.
+    expect((retireReceipt as { claimState: string }).claimState).not.toBe(
+      "consumed",
+    );
   });
 });
