@@ -4058,3 +4058,14 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   verifying re-save does NOT cover. **Technique: before accepting a ring entry as
   evidence of failure X, read the CODE that emits that string and ask what
   condition it actually tests.**
+
+### 2026-08-30 — James's #230 review (the slot's three ownership races)
+
+- **"A one-shot slot makes a failed hand-off safe even though teardown keeps
+  listening."** Believed because the run was stashed before release and
+  teardown separately preserved late bursts. False: the new route consumes the
+  immutable object before the old passive cleanup opens its linger, and a
+  later fold replaces only the dead owner's `runRef`. **Technique: sequence
+  render, passive cleanup, and late producer events explicitly, recording
+  object identity at every hand-off; two individually correct lifetimes can
+  leave the consumer holding the pre-update object.**
