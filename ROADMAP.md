@@ -964,6 +964,27 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **`swapMark`'s `globalOnly: false` arm has no test that can fail.** The
+  checkpoint predicate reads `ref.globalOnly` rather than assuming it
+  (mirroring `resolvePrescribed`), but every shipped ref sets it `true`, so
+  no fixture built from real `PLANS` data can distinguish the two versions —
+  only mocking `domain/plans` with a synthetic false ref could, which trades
+  a real fixture for a contrived one. Flagged at #233's final review as
+  latent, not blocking. **Trigger: the first `globalOnly: false` ref or the
+  plan-authoring UI — whichever lands first writes the test in the same
+  change.** **S**
+
+- **`stack-env.sh` accepts an empty `REPO_ROOT` and mints a phantom stack.**
+  A manual `source app/scripts/stack-env.sh` without `REPO_ROOT` hashes the
+  empty string to `ergomatic-67295` (:8195) in every worktree — a stack
+  belonging to no path, reaped at the next scripted boot; symptom is 81/81
+  ECONNREFUSED, or worse, valid-looking probes against whatever bundle was
+  last composed there. The scripts set `REPO_ROOT` and are unaffected; the
+  fix is a loud `: "${REPO_ROOT:?set REPO_ROOT before sourcing}"` guard at
+  the top. Two lines in `scripts/`, but a wrong version breaks every e2e
+  boot, so it rides the next PR touching `app/scripts/`, not a fast path.
+  Session memory `stack-env-needs-repo-root` carries the full account. **S**
+
 - **ACCEPTED (James, 2026-08-30): deleting a personal same-titled workout
   unmarks a completed plan row.** `session_logs.workout_id` is `ON DELETE SET
   NULL`, so a rower who authored their own `2K Test`, rowed it on a checkpoint
