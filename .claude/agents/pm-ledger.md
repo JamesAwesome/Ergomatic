@@ -3274,3 +3274,12 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   (the permanent gate's mechanics) moved into the Record block. **When a PR
   misses the budget but not the intent, name the single bullet to move rather
   than sending the body back for a rewrite.**
+
+## Correction, 2026-08-29 (landed by the controller at the AUD-016 spec pass)
+
+- The 2026-08-28 phase-open entry's claim that `ergomatic:log-door-misses` has
+  "zero production readers" is FALSE: `withDoorMisses` (`LogSession.tsx:868-874`)
+  reads it on every `?from=monitor` arrival, feeding MONITOR LOG · COPY. The
+  grep that produced the claim saw that line and misclassified it. What remains
+  true: no AGGREGATE reader surfaces the counter to anyone who has not opened
+  the log door's diagnostics copy — the Wave B item stands, reworded.

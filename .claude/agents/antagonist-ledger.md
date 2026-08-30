@@ -3997,3 +3997,64 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   background/resume burst timing (still zero captures); the exact tier-B1 avg
   split for the leg-5 row (needs the Gate 0 render); whether
   `end-on-interval-1`'s program transcribes cleanly from its seq 15-19 tx bytes.
+
+### 2026-08-29 — AUD-016 spec delta pass (Wave F chunk 2, verify-at-release)
+
+- **A writer that re-reads storage cannot be rescued by an in-memory carry.**
+  The AUD-016 spec proposed carrying a completed run through in memory when
+  localStorage rejects writes. `appendSummaryObservations` (`monitorRun.ts:1093`)
+  re-reads storage fresh via `stillLive`/`loadMonitorRun` by design, so when the
+  writes are denied it finds NOTHING to append to, declines, and the machine's
+  own summary never reaches the in-memory run at all — the memory carry preserves
+  a record strictly poorer than the storage path it replaces, on the one path the
+  spec exists for. Believed because the burst handler assigns `runRef.current =
+  appended` and everyone read that line, not the `appended === null` branch four
+  lines below it. **Technique: a 20-line probe that denied `setItem` from the
+  FIRST write, then RESTORED it before the burst — so the decline could not be
+  blamed on the burst's own write.** Printed `stored: NOTHING STORED / appended:
+  DECLINED (null) / inMemoryHasSummary: false`. Generalises: for any "carry it in
+  memory instead" design, grep every writer downstream of the failure for a fresh
+  `load*()` — a re-reading writer is silently coupled to the broken store.
+- **A fault-injection stub that engages LATE proves the plumbing and nothing
+  else.** The same spec's gate stubbed `localStorage.setItem` "from the
+  release-verify onward", leaving create/record-actual/close/append all
+  successful — so storage held a COMPLETE record, the verify's failure had no
+  consequence, and the leg's own assertion ("the POST carries the measured work
+  with NO prior successful storage write") was false by construction. Its sibling
+  claim, that a reload lands in a `no-run` miss, was false for the same reason:
+  all four `monitorModeRun` gates pass on the stale stored record. **Technique:
+  for every injected fault, enumerate the writers that ran BEFORE injection and
+  state what storage holds at the moment of the assertion.** The audit's own
+  prescription had said it: "rejected writes at OPEN, boundary, retry, and close."
+- **React 19 StrictMode invokes a `useState` lazy initializer TWICE and keeps
+  the FIRST result.** Demonstrated (`calls = 2, committed = "THE-RUN"`), not
+  inferred. So a one-shot module slot consumed inside such an initializer SURVIVES
+  — but the discarded second invocation still runs every side effect in that
+  initializer, which for `monitorModeRun` means a spurious
+  `recordLogDoorMiss("no-run")` written into the very counter the design depends
+  on. **Technique: assert against a deliberately impossible expected value
+  (`toEqual({calls: -1, ...})`) so vitest's diff PRINTS the real answer** — faster
+  and more honest than a console.log the runner may swallow.
+- **"Zero production readers" from a grep of the constant.** The PM ledger and
+  this spec both said `ergomatic:log-door-misses` had none; `withDoorMisses`
+  (`LogSession.tsx:868-874`) reads it in production on every `?from=monitor`
+  arrival, and the grep that produced the claim saw that exact line and counted
+  it as a test hit. **Technique: for any "nothing reads X" claim, grep the raw KEY
+  STRING as well as the constant, and follow every hit to a call site — a
+  reader can be one helper away from the writer in the same file.**
+- **A receipt written to the store that is failing is decoration (RF21).** §5
+  proposed `recordLogDoorMiss("storage-failed-proceed")` as the counter that
+  "finally counts its headline case" — it writes via `localStorage.setItem` inside
+  a try/catch, so under the denial it exists to count, it records nothing.
+  **Technique: for every instrument added to a failure path, ask which subsystem
+  it writes through and whether that subsystem is the one that failed.**
+- **`storage-persist denied` is not evidence of a rejected write** (RF16 second
+  corollary, fourth instance). The string means `navigator.storage.persist()`
+  returned falsy — the origin is EVICTABLE — and its own doc comment calls denial
+  the expected, tolerated WKWebView outcome. No instrument in this codebase can
+  observe a rejected monitor-run write at all (`saveMonitorRun`'s catch records
+  nothing), so "production-observed producer" cannot be true of any write
+  rejection. Worse, the thing actually observed — eviction — is a producer a
+  verifying re-save does NOT cover. **Technique: before accepting a ring entry as
+  evidence of failure X, read the CODE that emits that string and ask what
+  condition it actually tests.**
