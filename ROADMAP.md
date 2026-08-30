@@ -974,17 +974,14 @@ Each needs erg time or a deliberate recording session.
   plan-authoring UI — whichever lands first writes the test in the same
   change.** **S**
 
-- **`stack-env.sh` accepts an empty `REPO_ROOT` and mints a phantom stack.**
-  A manual `source app/scripts/stack-env.sh` without `REPO_ROOT` hashes the
-  empty string to `ergomatic-67295` (:8195) in every worktree — a stack
-  belonging to no path, reaped at the next scripted boot; symptom is 81/81
-  ECONNREFUSED, or worse, valid-looking probes against whatever bundle was
-  last composed there. The scripts set `REPO_ROOT` and are unaffected; the
-  fix is a loud `: "${REPO_ROOT:?set REPO_ROOT before sourcing}"` guard at
-  the top. Two lines in `scripts/`, but a wrong version breaks every e2e
-  boot, so it rides the next PR touching `app/scripts/`, not a fast path.
-  Session memory `stack-env-needs-repo-root` carries the full account. **S**
-
+- **RESOLVED (in the same PR that filed it): `stack-env.sh` now refuses an
+  empty `REPO_ROOT`** with `: "${REPO_ROOT:?...}"` instead of hashing the
+  empty string into the phantom `ergomatic-67295` stack. Probed both ways:
+  unset -> loud refusal (exit 127, message names the fix); set -> the real
+  per-worktree id, and `pnpm e2e`/`pnpm screenshots` both boot and pass.
+  All three script consumers (`e2e.sh`, `screenshots.sh`, `walk-lab.sh`)
+  set `REPO_ROOT` before sourcing, verified by grep. Session memory
+  `stack-env-needs-repo-root` carries the incident.
 - **ACCEPTED (James, 2026-08-30): deleting a personal same-titled workout
   unmarks a completed plan row.** `session_logs.workout_id` is `ON DELETE SET
   NULL`, so a rower who authored their own `2K Test`, rowed it on a checkpoint

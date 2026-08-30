@@ -45,6 +45,15 @@
 #
 # Explicit env always wins: every assignment below is `:-` guarded, so CI
 # or a human can still pin any of these by exporting it first.
+# Loud guard: sourcing this with REPO_ROOT unset/empty used to hash the
+# EMPTY STRING, silently minting a phantom stack (ergomatic-67295, :8195)
+# in every worktree — a project belonging to no path, reaped at the next
+# scripted boot. Manual `source` calls hit this twice on 2026-08-30
+# (81/81 ECONNREFUSED, and probes nearly trusted against the wrong
+# bundle). Every script consumer (e2e.sh, screenshots.sh, walk-lab.sh)
+# sets REPO_ROOT first, so this only fires on the mistake it names.
+: "${REPO_ROOT:?stack-env.sh: set REPO_ROOT (the worktree root) before sourcing}"
+
 STACK_HASH=$(printf %s "$REPO_ROOT" | cksum | cut -d' ' -f1)
 PORT_OFFSET=$((STACK_HASH % 400))
 
