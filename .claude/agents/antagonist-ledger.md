@@ -3997,3 +3997,174 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   background/resume burst timing (still zero captures); the exact tier-B1 avg
   split for the leg-5 row (needs the Gate 0 render); whether
   `end-on-interval-1`'s program transcribes cleanly from its seq 15-19 tx bytes.
+
+### 2026-08-29 — AUD-016 spec delta pass (Wave F chunk 2, verify-at-release)
+
+- **A writer that re-reads storage cannot be rescued by an in-memory carry.**
+  The AUD-016 spec proposed carrying a completed run through in memory when
+  localStorage rejects writes. `appendSummaryObservations` (`monitorRun.ts:1093`)
+  re-reads storage fresh via `stillLive`/`loadMonitorRun` by design, so when the
+  writes are denied it finds NOTHING to append to, declines, and the machine's
+  own summary never reaches the in-memory run at all — the memory carry preserves
+  a record strictly poorer than the storage path it replaces, on the one path the
+  spec exists for. Believed because the burst handler assigns `runRef.current =
+  appended` and everyone read that line, not the `appended === null` branch four
+  lines below it. **Technique: a 20-line probe that denied `setItem` from the
+  FIRST write, then RESTORED it before the burst — so the decline could not be
+  blamed on the burst's own write.** Printed `stored: NOTHING STORED / appended:
+  DECLINED (null) / inMemoryHasSummary: false`. Generalises: for any "carry it in
+  memory instead" design, grep every writer downstream of the failure for a fresh
+  `load*()` — a re-reading writer is silently coupled to the broken store.
+- **A fault-injection stub that engages LATE proves the plumbing and nothing
+  else.** The same spec's gate stubbed `localStorage.setItem` "from the
+  release-verify onward", leaving create/record-actual/close/append all
+  successful — so storage held a COMPLETE record, the verify's failure had no
+  consequence, and the leg's own assertion ("the POST carries the measured work
+  with NO prior successful storage write") was false by construction. Its sibling
+  claim, that a reload lands in a `no-run` miss, was false for the same reason:
+  all four `monitorModeRun` gates pass on the stale stored record. **Technique:
+  for every injected fault, enumerate the writers that ran BEFORE injection and
+  state what storage holds at the moment of the assertion.** The audit's own
+  prescription had said it: "rejected writes at OPEN, boundary, retry, and close."
+- **React 19 StrictMode invokes a `useState` lazy initializer TWICE and keeps
+  the FIRST result.** Demonstrated (`calls = 2, committed = "THE-RUN"`), not
+  inferred. So a one-shot module slot consumed inside such an initializer SURVIVES
+  — but the discarded second invocation still runs every side effect in that
+  initializer, which for `monitorModeRun` means a spurious
+  `recordLogDoorMiss("no-run")` written into the very counter the design depends
+  on. **Technique: assert against a deliberately impossible expected value
+  (`toEqual({calls: -1, ...})`) so vitest's diff PRINTS the real answer** — faster
+  and more honest than a console.log the runner may swallow.
+- **"Zero production readers" from a grep of the constant.** The PM ledger and
+  this spec both said `ergomatic:log-door-misses` had none; `withDoorMisses`
+  (`LogSession.tsx:868-874`) reads it in production on every `?from=monitor`
+  arrival, and the grep that produced the claim saw that exact line and counted
+  it as a test hit. **Technique: for any "nothing reads X" claim, grep the raw KEY
+  STRING as well as the constant, and follow every hit to a call site — a
+  reader can be one helper away from the writer in the same file.**
+- **A receipt written to the store that is failing is decoration (RF21).** §5
+  proposed `recordLogDoorMiss("storage-failed-proceed")` as the counter that
+  "finally counts its headline case" — it writes via `localStorage.setItem` inside
+  a try/catch, so under the denial it exists to count, it records nothing.
+  **Technique: for every instrument added to a failure path, ask which subsystem
+  it writes through and whether that subsystem is the one that failed.**
+- **`storage-persist denied` is not evidence of a rejected write** (RF16 second
+  corollary, fourth instance). The string means `navigator.storage.persist()`
+  returned falsy — the origin is EVICTABLE — and its own doc comment calls denial
+  the expected, tolerated WKWebView outcome. No instrument in this codebase can
+  observe a rejected monitor-run write at all (`saveMonitorRun`'s catch records
+  nothing), so "production-observed producer" cannot be true of any write
+  rejection. Worse, the thing actually observed — eviction — is a producer a
+  verifying re-save does NOT cover. **Technique: before accepting a ring entry as
+  evidence of failure X, read the CODE that emits that string and ask what
+  condition it actually tests.**
+
+### 2026-08-30 — James's #230 review (the slot's three ownership races)
+
+- **"A one-shot slot makes a failed hand-off safe even though teardown keeps
+  listening."** Believed because the run was stashed before release and
+  teardown separately preserved late bursts. False: the new route consumes the
+  immutable object before the old passive cleanup opens its linger, and a
+  later fold replaces only the dead owner's `runRef`. **Technique: sequence
+  render, passive cleanup, and late producer events explicitly, recording
+  object identity at every hand-off; two individually correct lifetimes can
+  leave the consumer holding the pre-update object.**
+
+### 2026-08-30 — the hand-off store protocol draft (anchor pass, Wave F / AUD-016 reset)
+
+- **CLAIM: "a closed `MonitorRun` is immutable, so the finish-grace boundary can
+  only ever add one actual." FALSE when the close write failed.** `recordActual`'s
+  late branch rebuilds the record from `stillLive(startedAt)` (`monitorRun.ts:1019-1021`),
+  which matches on `startedAt` ALONE — so when `completeMonitorRun`'s own write was
+  rejected, the base is storage's stale LIVE copy and the returned record comes back
+  with `completedAt: null`, `endedBy: undefined`, the RC-1 sums gone, and only the
+  actuals the last SUCCESSFUL write happened to contain. Measured: 3 in-memory actuals
+  → 1, on a real compiled `Filling Low` program. The hook then assigns it to
+  `runRef.current` (`useMonitorSession.ts:2732-2734`), so PROCEED stashes an OPEN
+  record and `LogSession`'s `completedAt` gate bounces it to the manual door — the
+  AUD-016 escape hatch defeated on the path AUD-016 exists for.
+  **TECHNIQUE: run the failure ORDERING, not the failure.** Both shipped legs deny
+  storage at an endpoint (leg A from the first write, leg B at the release-verify
+  only) and both are safe — leg A leaves storage empty so `stillLive` refuses, leg B
+  leaves it closed so the base is right. The defect lives strictly BETWEEN them:
+  storage that ACCEPTED a write and then stopped. RF24's real question is not "are the
+  gates green" but "which test starts upstream of the producer" — and the harness
+  already had the primitive (`stubStorageWrites(...).armAfter(n)` is a COUNTDOWN, so
+  the denial can be landed on any nth write by count, not by timing).
+- **CLAIM: "one write path means the guard's inspect-set and the destroy-set are the
+  same set by construction." FALSE — the draft's caller list was three short.**
+  Grepping every writer of `MONITOR_RUN_KEY` found EIGHT destroyers, not five:
+  `Today.tsx:627`, `WorkoutDetail.tsx:298` and `useStartWorkout.ts:99` are all
+  durable-only clears the design never named, and the Start door's own guard
+  (`useStartWorkout.ts:118-135`) reads only the durable tier — the exact P1-1 hole
+  `connectGuardStage` was patched for, still open at a different door.
+  **TECHNIQUE: for any "only X destroys" claim, grep every writer of the KEY, not
+  every caller of the named function.** A destroyer that reaches storage through a
+  different helper is invisible to a call-graph read of the helper you believe is the
+  only one.
+- **CLAIM: "`commit` already returned the verdict for the close write, so the second
+  serialize goes away." FALSE on every held path.** Up to two durable writes land
+  between the close and the release funnel — the finish-grace boundary
+  (`monitorRun.ts:1043`) and the burst append (`monitorRun.ts:1297`) — so the close
+  verdict is stale by release time and can release green over a durable copy missing
+  the final interval. **TECHNIQUE: when a design deletes a re-check, ask what it was
+  re-checking AGAINST, then count the writes between the two moments.** The saving is
+  real; the reason was not. (Fix: the store caches the durable verdict per key.)
+- **CLAIM (invariant wording): "remains recoverable after that consumer acts."
+  Unsatisfiable under the ratified contract, and the draft's own §3 gloss and §6.4
+  both say so two lines apart.** Words in invariants get implemented.
+  **TECHNIQUE: read every invariant against the residual list that follows it — a
+  design that names its own accepted loss has already falsified any invariant
+  promising that loss cannot happen.**
+- **HELD, and worth reusing: `snapshot()` copies its samples array every call
+  (`seriesRecorder.ts:426-431`, cap 14_400), so "immutable entry per revision" is a
+  memory question, not a style one** — an hour's session at a 30 s flush retains ~120
+  distinct arrays if the store keeps history. **TECHNIQUE: for any "entries are
+  immutable" design, find the largest field, find whether it is copied or shared, and
+  multiply by the write frequency before accepting the word "immutable".**
+
+### 2026-08-30 — the hand-off store protocol rev 3 (delta pass, Wave F / AUD-016 reset)
+
+- **CLAIM: "the single producer loop makes `expectedRevision` one local variable, so
+  CAS refusal is a non-event." HELD on interleaving, FALSE on the caller contract.**
+  No writer spans a yield — `handleEvent`/`handleFrame` are synchronous
+  (`useMonitorSession.ts:2623`, `:2189`) and `endSession` closes the record thirty-nine
+  lines before its first `await` (`:3887` vs `:3930`, its own comment: "Close BEFORE
+  awaiting anything"). But the design leaves `commit`'s CALLER unnamed while today's
+  writer gates persist their own writes and return a bare record (`monitorRun.ts:1043-1044`),
+  so a refusal cannot reach the line that assigns `runRef` — recurring failure 25 rebuilt
+  inside the fix for it. **TECHNIQUE: for any new write primitive, name its caller and
+  then read the CURRENT signature of every function that would call it; a discriminated
+  result is only as load-bearing as the return type that can carry it.**
+- **CLAIM: "a new key appearing between armed and first pull is left standing, not
+  silently destroyed." FALSE — the durable tier is one localStorage key.**
+  `saveMonitorRun` writes `MONITOR_RUN_KEY` unconditionally (`monitorRun.ts:501-521`),
+  so `createMonitorRun`'s own first write (`:770`) overwrites the standing entry's
+  durable half with no retire and no receipt, falsifying invariant 2 ("only `retire`
+  destroys"). **TECHNIQUE: when a design introduces multi-KEY entries over an existing
+  store, open the writer and count how many records the substrate can hold. A protocol
+  cannot be more granular than the key it persists through.**
+- **CLAIM: "the cross-key Replace copy is needed." NO PRODUCER FOUND — and it was
+  carrying a Gate 0.** Entries are created only by `commit`, only the hook produces,
+  and `ConnectAction` always runs `connectGuardStage()` before a session can arm
+  (`ConnectAction.tsx:72`), so the guard stages and armed retires any prior key before
+  a second one can exist. **TECHNIQUE: before designing for a state, try to build a
+  production sequence that reaches it — the enumeration cuts gate rows, residuals AND
+  rower-facing copy, which is the most expensive thing an unreachable state can buy.**
+- **CLAIM (rule contradiction): §1 "a superseded claimed revision REJECTS where the
+  authorization was rower-facing" vs §6 "save-success retires and receipts
+  `richer-at-save`."** Both rower-facing, mutually exclusive; under §1 the save-success
+  retire refuses and Today renders an unlogged row for a session just logged.
+  **TECHNIQUE: for every general rule a spec states, list the specific operations it
+  quantifies over and check each — a rule written for one door will be applied at every
+  door by whoever implements it.**
+- **HELD, and reusable: React cannot schedule an arbitrary driver callback between the
+  new tree's render and its mount effect** — only work React itself runs there can
+  occupy that window, which is the old subtree's passive cleanup (`teardown`,
+  `useMonitorSession.ts:3426`). **TECHNIQUE: before writing a race row into a gate, name
+  the PRODUCER that can occupy the window in the harness; a row that cannot be built as
+  written gets silently rebuilt one layer down, where it cannot fail (RF24).**
+- **PRIMARY, worth not re-researching (WHATWG HTML, Web Storage):** `removeItem` carries
+  no throw condition; `setItem` throws `QuotaExceededError`; the `localStorage` getter
+  throws `SecurityError` — which fails every access, not one method. A "throwing
+  `removeItem`" residual has no supported producer.

@@ -3274,3 +3274,201 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   (the permanent gate's mechanics) moved into the Record block. **When a PR
   misses the budget but not the intent, name the single bullet to move rather
   than sending the body back for a rewrite.**
+
+## Correction, 2026-08-29 (landed by the controller at the AUD-016 spec pass)
+
+- The 2026-08-28 phase-open entry's claim that `ergomatic:log-door-misses` has
+  "zero production readers" is FALSE: `withDoorMisses` (`LogSession.tsx:868-874`)
+  reads it on every `?from=monitor` arrival, feeding MONITOR LOG · COPY. The
+  grep that produced the claim saw that line and misclassified it. What remains
+  true: no AGGREGATE reader surfaces the counter to anyone who has not opened
+  the log door's diagnostics copy — the Wave B item stands, reworded.
+
+## TRIAD final-PR gate, 2026-08-30 (Wave F chunk 2 — AUD-016 durable hand-off, #230)
+
+- **The presentation rule failed twice running because nothing in it is
+  countable.** #228's body was ~270 words above the fold; #230's, written after
+  that gate ruled on it, was 266 — six bullets (within "~6 max") but three of
+  them three lines each. The author checked the countable half of the rule and
+  read past the uncountable half. **Countermeasure landed in `CLAUDE.md` at
+  this gate: the budget stated as a number (~120 words / ~25 words per bullet
+  above the fold) so it can be checked the way `git diff --stat` checks the
+  fast path.** Gate procedure unchanged: name the bullets to move, never send
+  the body back.
+- **Exit clause 4 has two producers and this PR closes one.** Clause 4's second
+  half — "a storage failure never silently downgrades a measured session" — is
+  discharged for a REJECTED WRITE and explicitly not for EVICTION (green write,
+  record later dropped). At the Wave F close, do not read "AUD-016 shipped" as
+  the clause met; read it as the half it names.
+- **Correction to the 2026-08-28 adjudication note.** That note kept AUD-016 in
+  its slot partly because "the anchor pass found its producer production-observed
+  (`storage-persist denied` on the tester's own phone)". The spec's delta pass
+  narrowed this: `storage-persist denied` means the origin is EVICTABLE, which
+  is the producer this fix cannot catch. No instrument in the codebase can
+  observe a rejected write, and none did. The rank still stands on the audit's
+  confirmed consequence and on the work being complete — but the stated
+  rationale named the wrong producer, and a future gate must not cite it.
+- **When a fix and its instrument are separable and the producer is unmeasured,
+  ship the instrument first.** The strongest case against #230 was that the
+  `release-save`/`handoff-stashed` receipts alone, shipped a wave earlier, would
+  have measured both producers for the cost of a few lines instead of 3,734.
+  It lost only on timing — by the gate the code existed, was reviewed, and
+  carries the receipts anyway. **For the next audit P1 with an unobserved
+  producer, sequence the receipt ahead of the fix, not inside it.**
+- **"Nothing new on any healthy close" is a claim about SIGHT, not behaviour.**
+  Every healthy ended hand-off now re-serializes the full run synchronously
+  (~720 KB worst case) and populates the reader's slot. Both are correct and
+  both are new work on the path no rower ever complains about. **A tester-impact
+  bullet that says "nothing changes" gets asked what changed that the rower
+  cannot see** — that is where the regression would sit, and the final review
+  found its one Critical exactly there.
+- **Release call: AUD-016 RIDES v0.27.0.** The #228 ruling was "do not HOLD the
+  tag for the sibling", never "exclude it" — a tag cut after a merge that omits
+  it is worse on every axis. Bump unchanged (MINOR, forced by #228). The notes
+  now owe a FOURTH item: one sentence for the failed-write state, because a
+  tester meeting `COULD NOT KEEP THE RECORD ON THIS PHONE.` has no other
+  explanation; and the post-End-wait sentence must cover the hold PLUS this
+  PR's verify write.
+
+## Product-contract ruling, 2026-08-30 (the hand-off contract: what you see is what saves)
+
+- **The contract, stated once so it stops being re-derived: renders snapshot;
+  destructive actions re-read; recording actions post what was shown.** A
+  screen that carries a Save posts exactly the numbers it displayed when the
+  rower read them; a record that improves after that screen mounted reaches the
+  NEXT arrival, never the mounted one. **It binds SAVE-BEARING FORMS only** —
+  the live pane, a logbook list, and Phase JR's `/justrow` surface are unbound
+  and always were. Without the scoping clause this rule reads as "nothing ever
+  live-updates", which is false today and would be cited against Wave E later.
+  This belongs in `CLAUDE.md`, not here; recorded here because it was ruled at a
+  PM gate. **It was already settled three times** — #228's spec at `:14-17`,
+  `:103-105` and `:236-237` ("the rejected re-read-at-save stays rejected"),
+  `ROADMAP.md:257-262`, and James's own P1b restash-only ruling on #230 — and it
+  is the house pattern, not a log-form quirk: `Today.tsx:280/:288`,
+  `Countdown.tsx:105/:111`, `Timer.tsx:359-360` and both log doors all read once
+  at mount; the only live re-reads in `src/` are a diagnostics COPY button and a
+  dev-only instrument. **Before re-litigating a contract, count how many times
+  it has already been ruled and quote the code comment that states it.**
+  RATIFIED by James 2026-08-30 ("Approved") with the three conditions below.
+- **"Recoverable at the next arrival" was false, and the falsifier was a
+  Save.** `LogSession.tsx:1723-1726` clears the hand-off slot unconditionally on
+  save-success, so a richer same-session revision that P1-2's widened late-burst
+  restash left in the slot is destroyed by the rower's normal next action, with
+  no receipt. The clear is correct (leaving it makes `connectGuardStage()` stage
+  a false "unlogged" on the next Connect); the SILENCE is the defect, and it is
+  RF25 verbatim inside the PR written to fix RF25 at the neighbouring seam. The
+  tell was a stale rationale: the comment at `:1705-1722` still calls that window
+  "an unrelated session's own hand-off" and claims "no product scenario can
+  currently make it independently observable" — both written before P1-2 made it
+  this session's own normal late path, in the same PR. **When a fix widens a
+  window, grep the OTHER end of that window for a comment reasoning about how
+  narrow it used to be.** Condition 1 (blocking): the drop gets a ring receipt
+  (`handoff-dropped reason=richer-at-save`) and the stale comment is fixed.
+- **The honest answer to an unmeasured timing assumption is a measurement, not
+  an architecture.** The live-update contract's whole case rests on
+  `BURST_HANDOFF_HOLD_MS = 2000` being derived from n=10, web, foreground. That
+  argues for the already-booked native walk row (`ROADMAP.md:914-921`) and, if
+  it comes back short, for changing the CONSTANT — not for a subscription
+  coordinator spanning React lifecycles. **Ruling (condition 2): the live-update
+  contract does not reopen until a real phone produces a non-zero count of
+  `handoff-stashed reason=late-burst` / `handoff-dropped reason=richer-at-save`.**
+- **No rower-facing disclosure, by the CS-close test.** A tester will not hit it
+  (zero observed) and cannot misread it (the row reads like the 18 already-tier-B
+  rows the notes already owe an explanation for). A hint on the mounted screen is
+  a mid-edit surprise in everything but name, and it asks a rower to abandon a
+  filled form to gain two metres and a badge. Silent-recoverable is acceptable
+  ONLY because the drop is made countable; silent-and-uncounted is what produced
+  0-of-18.
+- **Release: v0.27.0 (MINOR) is due off merged main; pausing the successor made
+  the tag more urgent, not less** — 17 merges including #228's fix sit untagged
+  against a correction clock expiring ~2026-09-11. James's sequencing ruling
+  (2026-08-30): the notes PR starts AFTER the current fixes land. Drop the
+  failed-write-copy sentence from the notes-owed row until AUD-016 merges — it
+  describes a screen the tag will not contain. Sharpens the 2026-08-29 "ship a
+  fix's tag rather than riding it with its successor" entry.
+
+## PM ruling, 2026-08-30 (PR #230's disposition under the substrate reset)
+
+- **When a substrate is replaced mid-PR, measure the survival boundary PER FILE
+  before choosing rebase, cherry-pick or fresh branch.** #230's boundary ran
+  inside files and inside functions, so no commit-shaped operation could cut on
+  it: `monitorRun.ts` alone holds `SaveVerdict` (preserved by the protocol) and
+  the slot quartet (deleted), both introduced in one commit and touched by
+  eleven more. The cheap discriminator is a coupling grep per changed file.
+  It produced the decision in one command: **10 files with ZERO references
+  (573 lines + 2 captures) restore verbatim; 7 files / 4,105 lines get
+  rewritten, of which only 197 lines actually name the dying API.** That last
+  ratio is the general trap — a thin API with a large reasoning shell reads as
+  "mostly salvageable" and is in fact mostly *retargetable*, which is a rewrite
+  with a checklist, not a cherry-pick.
+- **A pause REOPENS every release ruling that assumed the paused PR would
+  merge.** The 2026-08-30 gate ruled AUD-016 rides v0.27.0 on the reasoning
+  "a tag cut after a merge that omits it is worse on every axis" — true when the
+  PR was hours from merge, void once it became a new spec plus an approval plus
+  an implementation. Ruled here: **cut v0.27.0 off merged main WITHOUT
+  AUD-016** (17 merges untagged, correction clock ~2026-09-11). At any pause,
+  re-read the release ruling for the premise "it merges soon" and say aloud
+  whether it still holds.
+- **A ROADMAP row landed from a ledger condition is not append-only — a pause
+  un-lands it.** The failed-write notes sentence reached the notes-owed row on
+  James's own P2b review; the pause means that row now instructs the note-writer
+  to describe a screen the tag will not contain. **The gate that lands a
+  condition owns removing it when its subject stops shipping.**
+- **Review-round fixes that live only in an unpushed worktree are the same
+  single-point-of-failure as a finding that lives only in a PR body (RF14).**
+  At this ruling, three commits — including all three fixes for James's second
+  review, each reproducing one of his disposable probes as a permanent test —
+  were unpushed, so GitHub still showed his three Criticals unaddressed and the
+  only copy sat in a worktree the SDLC tells us to tear down. **Push after every
+  review round, before anything else, pausing included.** If this recurs it
+  belongs in `CLAUDE.md`'s SDLC bullet, not here.
+- **A test matrix written entirely at the new seam recreates RF24.** The
+  hand-off store draft's §5 mapped six of James's seven probes; the one it
+  missed (P2a, `WorkoutDetail.connectedRecovery.test.tsx`) is the only test that
+  starts at the product route and ends at the POST. **When a redesign inherits a
+  predecessor's tests, check which of them START ABOVE the new component; those
+  are restored as files, never re-derived from the new spec.**
+- **Do not split a Gate-0-approved UI slice off a paused PR just because it is
+  provably unaffected.** Zero coupling to the dying substrate, 573 lines off the
+  successor's path — and it would ship an unreachable branch whose only tests
+  mount it directly (RF21's shape) for at least one tag. **The test is
+  reachability by a production path, not diff independence.**
+
+## PM gate, 2026-08-30 (hand-off store protocol rev 3 — the cross-key copy)
+
+- **A census counted at the substrate you are DELETING imports its states into
+  the design that removes them.** §5's census was counted at `04e8a515`
+  (#230's head) and said so in its own heading; the two-key state it produced
+  is a fact about the module slot plus one durable key, and §1 deletes the
+  slot. Under the design itself: `MONITOR_RUN_KEY` is a single key
+  (`monitorRun.ts:28`), `createMonitorRun` has one production call site
+  (`useMonitorSession.ts:2288`), and every armed transition retires whatever
+  the guard staged (`:2675-2676`) — so at most ONE unretired entry exists on
+  any single-WebView path. **Re-run a census against the design's own END
+  STATE before any of its states earns UI.** Ruled: the cross-key Replace copy
+  is descoped, the copy stays singular, and the multi-key condition ships as a
+  receipt — "instrument first when the producer is unmeasured" applied to its
+  own successor.
+- **Revision-bind a destructive action only where the rower was shown
+  NUMBERS.** Save's claim binds a revision because the screen rendered it
+  (invariant 6). Connect, Start, Today, the manual door and row-instead show
+  only EXISTENCE — "You have an unlogged session" names no figure — so a
+  late-burst revision bump between the guard read and armed does not
+  invalidate the authorization given, and rejecting on it puts a confirmation
+  panel in front of a rower standing at a programmed erg. Ruled: KEY-bind
+  those doors, receipt the superseded revision, reject only on a new key.
+- **An authorization column is a claim about a rendered control — open the
+  control.** §5 attributed `WorkoutDetail.tsx:298` (row-instead) to "its
+  confirm"; that site is a single-tap `.button-l2` in the interstitial's
+  failure card with no confirmation at all. Its real authorization is the
+  Connect guard's, one screen earlier — a THIRD terminus of the staged set.
+- **The census's product effect here is a GAIN and the gate should say so.**
+  Today reads the durable tier only; reading the store closes the
+  escape-hatch gap this ledger filed at #230's gate (a stashed record with no
+  door under denial-from-first-write). Owed with it: a memory-only row
+  vanishes on reload, indistinguishable from a durable one — a named residual
+  and a receipt, not a screen.
+- **Release, re-checked not re-derived:** v0.27.0 without AUD-016 still
+  stands, and rev 3 strengthens it — the pause is now a design plus an
+  approval plus a from-scratch implementation. The notes-owed row must lose
+  its failed-write sentence before the notes PR starts.
