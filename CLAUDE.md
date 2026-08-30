@@ -240,6 +240,39 @@ requirements).
     bigger PR is cheaper to run gates on but harder to review. When
     grouping would force a reviewer to reason about a stored-shape change
     and an unrelated redesign in one pass, split. Otherwise group.
+- **CLOSE THE INVARIANT BEFORE REQUESTING RE-REVIEW.** A fix round closes
+  every finding's underlying invariant, not only its latest counterexample.
+  Every factual claim in a report, review comment, or code comment names
+  either the command and relevant output that established it or a citation.
+  Label an inference and cite the observations it rests on; an unsupported
+  claim is invention that will be read as evidence. These rules bind the
+  controller that asks for the next review:
+  - **Name the authority and lifetime of every predicate input.** When a
+    classification combines a saved snapshot with a linked or freshly fetched
+    entity, state which record owns identity and whether the inputs can legally
+    disagree. For a positive identity claim, select one authoritative record.
+    If inputs span records, define and test disagreement; do not assume a writer
+    made them equal.
+  - **A seam gap gates the PR that creates it.** When recurring failure 24's
+    upstream-producer trigger applies, add the supported producer → consumer
+    gate in that PR. Do not file it as roadmap or follow-on work and ask for
+    re-review with the seam untested.
+  - **A negative async assertion waits for positive readiness.** Before
+    asserting that asynchronously enriched UI has NO mark, warning, or state,
+    first await an observable owned by that enrichment (for example, its
+    resolved link).
+  - **Mutate the deciding source, not a convenient neighbour.** Per recurring
+    failure 22, commit the real change before running the probe. The mutation
+    must change the authority selected by the predicate and reach the artifact
+    under assertion. For served UI, follow recurring failure 12: run
+    `pnpm build`, grep a string literal over `dist/` in both directions, and
+    prove the probe goes red before trusting its restored green.
+  - **Reconcile the review record before requesting another round.** For each
+    finding, record the invariant, fix, supported-path test, biting mutation
+    and what its failure said (recurring failure 21), and comment/ruling
+    status. Replace superseded claims instead of appending a contradictory
+    history, and never call a cost "accepted" without the exact recorded
+    ruling that accepts it.
 - **Mid-phase requests batch to the phase's close-out task** (or the fast
   path after merge) instead of resuming a live agent — one review instead
   of several resumed contexts. Exception: anything that invalidates

@@ -4168,3 +4168,19 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   no throw condition; `setItem` throws `QuotaExceededError`; the `localStorage` getter
   throws `SecurityError` — which fails every access, not one method. A "throwing
   `removeItem`" residual has no supported producer.
+
+### 2026-08-30 — PR #233 review rounds (findings from James's PR review)
+
+- **CLAIM: "a snapshot title plus the linked row's ownership is workout
+  identity." FALSE — the two facts can name different workouts.** It was
+  believed because adding the join appeared to distinguish global from
+  personal rows, but `POST /api/logs` accepts the snapshot and `workoutId`
+  independently. **Technique: drive a supported writer → join → consumer test
+  in which the snapshot stays constant while the linked entity changes; every
+  field in an identity predicate must come from the same authoritative row.**
+- **CLAIM: "no swap mark" proved the joined identity was accepted. FALSE —
+  the pre-fetch fallback already had no mark.** A negative e2e assertion went
+  green before the plan-link response arrived. **Technique: before asserting
+  absence on asynchronously enriched UI, wait for a positive readiness witness
+  owned by that enrichment (the resolved anchor in this case), then make the
+  identity source wrong and confirm the absence assertion turns red.**
