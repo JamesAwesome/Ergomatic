@@ -463,7 +463,7 @@ export default function ConnectedSurface({
             <p className="connected-keep-on">
               COULD NOT KEEP THE RECORD ON THIS PHONE.
             </p>
-            <div className="action-stack connected-ended-error-actions">
+            <div className="action-stack">
               <button
                 type="button"
                 className="button-l2"
