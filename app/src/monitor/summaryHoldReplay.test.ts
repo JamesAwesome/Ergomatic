@@ -143,7 +143,7 @@ import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 import type { WorkoutType } from "../../domain/types.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { MONITOR_RUN_KEY, loadMonitorRun, type MonitorRun } from "./monitorRun";
-import { BURST_HANDOFF_HOLD_MS } from "./useMonitorSession";
+import { BURST_HANDOFF_HOLD_MS, useMonitorSession } from "./useMonitorSession";
 import type { MonitorSession, RunIdentity } from "./useMonitorSession";
 import {
   parseRecording,
@@ -156,6 +156,12 @@ import {
   type ReplayResult,
 } from "./transports/replay";
 import { withLiveness } from "./transports/liveness";
+import {
+  createFakeTransport,
+  type FakeScript,
+  type FakeTimelineEvent,
+} from "./transports/fake";
+import { WORKOUTSTATE_INTERVALWORKTIME } from "../../domain/monitor/pm5/parse.js";
 import {
   END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
@@ -770,41 +776,60 @@ export async function mountLogSessionAndSave(
  * leaving every other key writable costs nothing and avoids stubbing
  * more than the leg actually needs.
  *
- * `"from-open"` (Task 1, leg A): fails from construction onward — the
- * FIRST write this session ever attempts (`createMonitorRun`'s own
- * persist, `monitorRun.ts`'s doc comment) is already denied, and the
- * stub is never told to stop — leg A's own premise is that storage stays
- * empty for the run's entire life. `"from-release"` (Task 2, leg B):
- * starts PASSING THROUGH; the returned `startFailing`/`stopFailing` pair
- * lets a later task flip it on right before the release-verify write it
- * wants denied (the mid-session-quota shape spec §6 names) and back off
- * again for the "un-stub then retry heals" step.
+ * `"from-open"` (Task 1, leg A): the allowance starts at `0` — the FIRST
+ * write this session ever attempts (`createMonitorRun`'s own persist,
+ * `monitorRun.ts`'s doc comment) is already denied, and nothing in leg A
+ * ever raises it — leg A's own premise is that storage stays empty for
+ * the run's entire life.
+ *
+ * `"from-release"` (Task 2, revised from Task 1's boolean toggle): starts
+ * at `+Infinity` (pure pass-through) until `armAfter(n)` sets a COUNTDOWN
+ * — the next `n` `MONITOR_RUN_KEY` writes succeed, and the write
+ * immediately after those `n` throws. A count, not a toggle a test flips
+ * mid-flight, because there is NO execution-yield boundary between an
+ * accepted write this leg needs (create/actuals/close/append) and the
+ * write immediately downstream of it that must fail (the future
+ * release-verify, or the no-hold arm's synchronous in-`ended`-patch
+ * verify): both leg B and the no-hold arm produce every one of their
+ * legitimate writes and the write-to-be-denied inside ONE synchronous
+ * call stack once Task 3 lands it (the burst handler resolves the hold
+ * and releases in the same handler that just wrote; `endSession`'s
+ * no-hold branch verifies synchronously in its own `update()` call) — by
+ * the time a test regains control to call anything, the boundary it
+ * wanted to straddle has already passed. `armAfter(n)` is called ONCE,
+ * before the action that will produce those `n` legitimate writes, so it
+ * lands on the right one by COUNT rather than by timing. `stopFailing()`
+ * (Task 2's own "un-stub then retry heals" step) restores unconditional
+ * pass-through.
  */
 function stubStorageWrites(when: "from-open" | "from-release"): {
-  startFailing: () => void;
-  stopFailing: () => void;
+  armAfter(n: number): void;
+  stopFailing(): void;
 } {
-  let failing = when === "from-open";
+  let allowance = when === "from-open" ? 0 : Number.POSITIVE_INFINITY;
   const originalSetItem = Storage.prototype.setItem;
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
     this: Storage,
     key: string,
     value: string,
   ) {
-    if (failing && this === localStorage && key === MONITOR_RUN_KEY) {
-      throw new DOMException(
-        "The quota has been exceeded.",
-        "QuotaExceededError",
-      );
+    if (this === localStorage && key === MONITOR_RUN_KEY) {
+      if (allowance <= 0) {
+        throw new DOMException(
+          "The quota has been exceeded.",
+          "QuotaExceededError",
+        );
+      }
+      if (allowance !== Number.POSITIVE_INFINITY) allowance -= 1;
     }
     originalSetItem.call(this, key, value);
   });
   return {
-    startFailing: () => {
-      failing = true;
+    armAfter(n: number): void {
+      allowance = n;
     },
-    stopFailing: () => {
-      failing = false;
+    stopFailing(): void {
+      allowance = Number.POSITIVE_INFINITY;
     },
   };
 }
@@ -1308,4 +1333,325 @@ describe("the summary hold's permanent gate, AUD-016 leg A: denied from the firs
       expect(loadMonitorRun()).toBeNull();
     },
   );
+});
+
+describe("the summary hold's permanent gate, AUD-016 leg B: fails from the release-verify only (durable hand-off design spec §6)", () => {
+  it("appends the burst to storage normally, then holds on the failed release-verify; RETRY heals, releases, and posts the machine's own numbers straight from storage", async () => {
+    localStorage.clear();
+    const stub = stubStorageWrites("from-release");
+    // Earlier writes land: create (rowing detected), close
+    // (`completeMonitorRun` at the terminal transition), append (the
+    // burst's own `saveMonitorRun` inside `appendSummaryObservations`)
+    // — exactly THREE `MONITOR_RUN_KEY` writes happen before the future
+    // release-verify would be the fourth. Armed BEFORE any of them run
+    // (there is no later yield point to arm from — this file's own
+    // `stubStorageWrites` doc comment carries the full reasoning): the
+    // single 60 s interval is Menu-terminated at ~31 s (this file's own
+    // header), so no interval boundary is ever crossed and no
+    // `recordActual` write ever competes for a slot in the count.
+    stub.armAfter(3);
+
+    const full = await runReplay(
+      SMOKE_CAPTURE,
+      SMOKE_TERMINATED_PROGRAM,
+      SMOKE_IDENTITY,
+    );
+
+    expect(full.divergences).toStrictEqual([]);
+    expect(full.phase).toBe("ended");
+
+    // The burst landed in storage NORMALLY — leg B's whole premise,
+    // unlike leg A's empty-storage decline. Already true today (no
+    // Task-3 dependency): the writer gate finds a live record and
+    // accepts, exactly as leg 1's own full-replay assertion (2) already
+    // proves for this identical capture.
+    const storedAfterBurst = loadMonitorRun();
+    expect(storedAfterBurst).not.toBeNull();
+    expect(storedAfterBurst!.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 31.5,
+      workDistanceMeters: 110,
+    });
+    const entriesAfterBurst = JSON.parse(full.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(entriesAfterBurst.some((e) => e.kind === "summary-recorded")).toBe(
+      true,
+    );
+
+    // --- held-error entered on the (future) release-verify's own
+    // failure, even though the record it is verifying is already
+    // complete in storage (spec §1: the verify is about WRITABILITY
+    // right now, not about what is already there). RED until Task 3 —
+    // today nothing verifies at release at all, so this arm releases
+    // exactly like leg 1's own baseline (`handoffHeld` flips `false`
+    // the instant the burst condition resolves, regardless of the
+    // write's own outcome). ---------------------------------------------
+    expect(full.session.current.handoffHeld).toBe(true);
+    const hookHeld = withFutureHandoff(full.session.current);
+    expect(hookHeld.holdError).toBe("storage-failed");
+    expect(entriesAfterBurst.some((e) => e.kind === "hold-error-entered")).toBe(
+      true,
+    );
+
+    // --- un-stub, then RETRY heals: releases, and a fresh LogSession
+    // mount posts the machine's own numbers STRAIGHT FROM STORAGE (no
+    // slot needed — the record was already complete there the whole
+    // time). RED until Task 3 — `retryHandoffSave` does not exist yet. -
+    stub.stopFailing();
+    await act(async () => {
+      await hookHeld.retryHandoffSave();
+    });
+    expect(full.session.current.handoffHeld).toBe(false);
+    const entriesAfterRetry = JSON.parse(full.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(entriesAfterRetry.some((e) => e.kind === "hold-error-retry")).toBe(
+      true,
+    );
+
+    expect(loadMonitorRun()).not.toBeNull();
+    const { body } = await mountLogSessionAndSave(
+      SMOKE_WORKOUT_ID,
+      "Walk Smoke",
+    );
+    expect(body.machineWorkSeconds).toBe(31.5);
+    expect(body.machineWorkMeters).toBe(110);
+    expect(body.machineSummary).toStrictEqual({
+      verificationBytes: SMOKE_VERIFICATION_BYTES,
+      ...SMOKE_SUMMARY_DETAIL,
+    });
+  });
+
+  it("the honest reload (spec §3): with nothing but the stored record itself to consult, a fresh LogSession mount renders it — no no-run miss", async () => {
+    localStorage.clear();
+    // GREEN TODAY, deliberately — no stub at all here: this test is not
+    // about a failed write, it is about what an ordinary reload finds
+    // once the burst has already landed in storage, which does not
+    // depend on whether the future verify or slot exist. Mechanically
+    // near-identical to leg 1's own assertion (3) (same capture, same
+    // mount helper) — reproduced fresh here as its own named pin per
+    // spec §3's "the reload residual, honestly" sentence, per the task
+    // brief's own instruction to keep this pin regardless of whether it
+    // is green already (it is).
+    const full = await runReplay(
+      SMOKE_CAPTURE,
+      SMOKE_TERMINATED_PROGRAM,
+      SMOKE_IDENTITY,
+    );
+    expect(full.divergences).toStrictEqual([]);
+    expect(loadMonitorRun()).not.toBeNull();
+
+    const { body } = await mountLogSessionAndSave(
+      SMOKE_WORKOUT_ID,
+      "Walk Smoke",
+    );
+    expect(body.machineWorkSeconds).toBe(31.5);
+    expect(body.machineWorkMeters).toBe(110);
+  });
+});
+
+/**
+ * AUD-016 durable hand-off design spec §1.2(b) / Task 2's own RF10
+ * substitution (documented, per the task brief's own allowance):
+ * `END_CAPTURE` (leg 2's own recording) is a normal, link-up user End —
+ * the byte-replay engine only ever replays what a capture actually
+ * contains, and no committed capture in this repo shows a link-lost End
+ * (a disconnect immediately followed by the rower pressing End).
+ * Producing one requires INJECTING a disconnect mid-session, which
+ * `transports/replay.ts`'s own engine has no hook for (it plays back
+ * recorded rx/tx events against a virtual clock; it does not synthesize a
+ * new wire condition a capture never recorded). This substitutes a
+ * hook-level unit test driven through `createFakeTransport` instead — the
+ * SAME mechanism `useMonitorSession.test.ts`'s own "Phase LL Task 4: End
+ * after the link is gone stores endedBy link-lost" test already
+ * established for this exact scenario (`injectDisconnect()` then
+ * `endSession()`, `useMonitorSession.test.ts:3520-3558`) — restated here,
+ * not imported, per this project's "no test file in `src/monitor/`
+ * imports another" convention; `createFakeTransport` itself is a shared
+ * fixture module, not a test file, so importing IT directly is not what
+ * that convention forbids.
+ */
+const LINK_LOST_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 0,
+    },
+  ],
+};
+
+const LINK_LOST_IDENTITY: RunIdentity = {
+  workoutId: "id-link-lost-fixture",
+  title: "Link Lost Fixture",
+  logSeed: { steps: [{ label: "1:00 @ 2:00.0", kind: "work" }], paces: {} },
+};
+
+/** Mirrors `useMonitorSession.test.ts`'s own `status()` helper (identical
+ *  defaults and shape) — restated, not imported, per this file's own
+ *  convention. */
+function fakeLinkLostStatus(
+  atMs: number,
+  over: Partial<
+    Omit<Extract<FakeTimelineEvent, { kind: "status" }>, "kind" | "atMs">
+  >,
+): FakeTimelineEvent {
+  return {
+    atMs,
+    kind: "status",
+    workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+    elapsedSeconds: 0,
+    distanceMeters: 0,
+    spm: 22,
+    currentSplit: 120,
+    heartRateBpm: 140,
+    programIntervalIndex: 0,
+    ...over,
+  };
+}
+
+/** Drains the microtask queue generously — `useMonitorSession.test.ts`'s
+ *  own `flush()`, restated per this file's convention. */
+async function flushFake(): Promise<void> {
+  for (let i = 0; i < 200; i += 1) await Promise.resolve();
+}
+
+/** `useMonitorSession.test.ts`'s own `harness()`, trimmed to what this
+ *  leg needs (no wire-write counting) — `createTransport` is passed
+ *  EXPLICITLY, so unlike the byte-replay legs above, this never touches
+ *  `adapters/monitorTransport` at all and needs no `vi.doMock`/
+ *  `vi.resetModules()`/dynamic re-import dance: the plain, statically
+ *  imported `useMonitorSession` is used directly, exactly as
+ *  `useMonitorSession.test.ts`'s own harness already does. */
+function linkLostHarness(script: FakeScript): {
+  fake: ReturnType<typeof createFakeTransport>;
+  result: { current: MonitorSession };
+} {
+  const fake = createFakeTransport({ deviceName: "PM5 Fixture", ...script });
+  const { result } = renderHook(() =>
+    useMonitorSession({
+      createTransport: () => fake,
+      now: () => FIXED_NOW,
+      driverOptions: {
+        settleTicks: 0,
+        prepareSettleTicks: 0,
+        schedule: () => (): void => undefined,
+      },
+      schedule: () => (): void => undefined,
+      burstLingerSchedule: () => (): void => undefined,
+    }),
+  );
+  return { fake, result };
+}
+
+async function connectFake(result: { current: MonitorSession }): Promise<void> {
+  await act(async () => {
+    await result.current.connect();
+  });
+}
+
+/** `useMonitorSession.test.ts`'s own `programAndArm()`, restated. */
+async function programAndArmFake(
+  result: { current: MonitorSession },
+  fake: ReturnType<typeof createFakeTransport>,
+  program: WorkoutProgram,
+  identity: RunIdentity,
+): Promise<void> {
+  await act(async () => {
+    let settled = false;
+    const pending = result.current.program(program, identity).finally(() => {
+      settled = true;
+    });
+    await flushFake();
+    for (let i = 0; i < 25 && !settled; i += 1) {
+      fake.tick(0);
+      await flushFake();
+    }
+    await pending;
+  });
+}
+
+function tickFake(
+  fake: ReturnType<typeof createFakeTransport>,
+  ms: number,
+): void {
+  act(() => {
+    fake.tick(ms);
+  });
+}
+
+describe("the summary hold's permanent gate, AUD-016 no-hold arm: a link-lost End also verifies (durable hand-off design spec §1.2(b))", () => {
+  it("RF10 substitution (this file's own comment above): a link-lost End opens no burst hold, but the future verify still runs SYNCHRONOUSLY in the same ended patch and still enters held-error on a failed write", async () => {
+    localStorage.clear();
+    const stub = stubStorageWrites("from-release");
+    // Exactly TWO `MONITOR_RUN_KEY` writes happen before the future
+    // no-hold verify would be the third: create (rowing detected) and
+    // close (`completeMonitorRun`, inside `endSession`'s own
+    // `closeRecord` call). No interval ever completes — End fires well
+    // short of the single interval's own 60 s — so no `recordActual`
+    // write ever competes for a slot in the count.
+    stub.armAfter(2);
+
+    const { fake, result } = linkLostHarness({
+      program: LINK_LOST_PROGRAM,
+      events: [
+        fakeLinkLostStatus(100, { elapsedSeconds: 20, distanceMeters: 70 }),
+        fakeLinkLostStatus(200, {
+          elapsedSeconds: 40,
+          distanceMeters: 140,
+        }),
+      ],
+    });
+    await connectFake(result);
+    await programAndArmFake(
+      result,
+      fake,
+      LINK_LOST_PROGRAM,
+      LINK_LOST_IDENTITY,
+    );
+    tickFake(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      fake.injectDisconnect();
+    });
+    expect(result.current.phase).toBe("disconnected");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("user");
+    expect(loadMonitorRun()).toMatchObject({ endedBy: "link-lost" });
+
+    // §1.2(b), the whole point of this arm: no burst hold ever opens
+    // for a link-lost close (`openBurstHold`'s own predicate rejects it
+    // outright), but the verify still runs — and still enters
+    // held-error on a failed write. RED until Task 3: today
+    // `handoffHeld` reads `false` here (there is no verify concept yet
+    // to override the "link-lost opens nothing" default) — the SAME
+    // reading `useMonitorSession.test.ts`'s own "Phase LL Task 4" test
+    // already pins, unstubbed, for this identical close shape. --------
+    expect(result.current.handoffHeld).toBe(true);
+    const hookHeld = withFutureHandoff(result.current);
+    expect(hookHeld.holdError).toBe("storage-failed");
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(entries.some((e) => e.kind === "hold-error-entered")).toBe(true);
+
+    // Review carry (task-2 brief): PROCEED ANYWAY / `hold-error-proceed`
+    // stays UNPINNED by this arm — it only reaches the initial
+    // held-error entry, never a proceed. Task 5's own tests (or a future
+    // PROCEED variant of this arm) are where that receipt gets its
+    // first assertion.
+    stub.stopFailing();
+  });
 });
