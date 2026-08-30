@@ -419,6 +419,69 @@ function eligibleForThisArrival(run: MonitorRun, workoutId: string): boolean {
   return true;
 }
 
+/**
+ * James's PR #230 review, P1b (Important): "a summary accepted during
+ * teardown's linger cannot reach the Log form that Retry/Log-it-anyway
+ * already mounted." This screen's own `monitorRun` is a `useState`
+ * snapshot taken ONCE at mount (`monitorModeRun`, above). A burst that
+ * lands AFTER that snapshot — deterministically reachable when it arrives
+ * after the ended hand-off's own 2000ms hold/backstop resolves (entering
+ * held-error, Retry/Log-it-anyway already pressed, Log already mounted)
+ * but before `useMonitorSession`'s OWN post-unmount teardown linger gives
+ * up — updates the run's ONLY copy of the machine's summary in ONE of two
+ * places this screen never looks again: STORAGE, if the release-verify
+ * had healed (`appendSummaryObservations`'s ordinary write succeeds
+ * straight through, ignorant of who is or isn't still mounted to read
+ * it), or the SLOT, if it had not (the post-unmount-burst stash,
+ * `useMonitorSession.ts`'s own `resolveHandoffCondition` — the in-memory
+ * fold already ran first, so the stashed copy carries `summaryTotals`
+ * too). Both exits would otherwise save WITHOUT `machineWorkSeconds`/
+ * `machineWorkMeters`/verification bytes — a record silently poorer than
+ * what storage (or the slot) actually holds by the time Save is pressed.
+ *
+ * **The chosen fix (of the review's own two named directions): propagate
+ * a late update before the consumer commits, checked at the one moment
+ * that matters — Save — rather than keeping the producer (the hook) alive
+ * until every possible burst window has closed.** The alternative —
+ * holding the ended hand-off open, and `LogSession` unmounted, until no
+ * burst could conceivably still arrive — would mean widening the
+ * rower-visible 2000ms wait this design already bounded on purpose (the
+ * "Getting the monitor's own numbers." held-error copy's own Gate 0), for
+ * a producer this screen has no way to keep listening to once it has
+ * navigated here anyway. Re-checking at Save is cheap, bounded to the one
+ * commit that matters, and mirrors this codebase's own established
+ * discipline for exactly this class of staleness (`stillLive`,
+ * `monitorRun.ts`: "re-reads storage fresh rather than trusting it").
+ *
+ * **The residual, honestly:** a rower who presses Save in the narrow
+ * window BEFORE the late burst lands still saves without it — this
+ * function only helps a Save that happens AFTER the update, never one
+ * mid-flight. Unmitigated on purpose: no UI signals "wait, more numbers
+ * may still arrive" today (the held-error screen already left that
+ * exact promise behind it, Gate 0's own wording), and inventing one here
+ * would be a second, uncoordinated wait on top of the first.
+ *
+ * Checks storage before the slot — a healed write is the MORE common
+ * shape (Retry's own path) and, if present, is definitionally not stale.
+ * Matches by `startedAt` — this run's own identity, never a different
+ * session's — so an unrelated later session's own record (or a stale
+ * slot entry left by an even later hand-off) can never leak in here.
+ * Returns `null` on no match, the ordinary case: no late burst, or one
+ * for a DIFFERENT run entirely.
+ */
+function lateMachineSummary(mounted: MonitorRun): MonitorRun | null {
+  for (const candidate of [loadMonitorRun(), peekHandoffRun()]) {
+    if (
+      candidate !== null &&
+      candidate.startedAt === mounted.startedAt &&
+      candidate.summaryTotals !== undefined
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 /** Phase LM PR 1 Task 4 (lost-monitor design spec): the flagship arrival,
  *  as a predicate. TRUE only when this route was reached from the
  *  CONNECTED door (`?from=monitor`, `WorkoutDetail.tsx`'s
@@ -1835,6 +1898,14 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
 
     const handleMonitorSave = (opts: { advancesPlan?: boolean } = {}) => {
       pendingOfferRef.current = monitorOffer;
+      // James's PR #230 review, P1b (Important): re-checked HERE, at the
+      // one moment the record actually commits, never earlier — see
+      // `lateMachineSummary`'s own doc comment for the full account of
+      // the race this closes.
+      const machineSummarySource =
+        monitorRun.summaryTotals === undefined
+          ? (lateMachineSummary(monitorRun) ?? monitorRun)
+          : monitorRun;
       return submit(
         {
           workoutId: activeWorkout.id,
@@ -1853,17 +1924,33 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           restMeters: monitorRun.restMeters,
           // RC-3 (storage-spine design spec §2, PR 1 Task 7): same
           // optional-key idiom as `workSeconds` etc. above — spread
-          // straight from `monitorRun.summaryTotals`/`summaryDetail`/
-          // `verificationBytes` (Tasks 2-4), never re-derived here.
-          ...(monitorRun.summaryTotals !== undefined
+          // straight from `machineSummarySource`'s own
+          // `summaryTotals`/`summaryDetail`/`verificationBytes` (Tasks
+          // 2-4), never re-derived here. `machineSummarySource` is
+          // `monitorRun` itself on every path except the one P1b exists
+          // for (this screen's own mount-time snapshot has none, but a
+          // late-accepted burst gave a SAME-run copy in storage or the
+          // slot one) — every OTHER field on the POST above still reads
+          // `monitorRun` directly, because a late burst only ever adds
+          // these three fields (`appendSummaryObservations`'s own
+          // writer, and the in-memory fold, both write only
+          // `summaryTotals`/`summaryDetail`/optionally
+          // `verificationBytes` — never `actuals`, `endedBy`,
+          // `deviceName`, or anything else this POST reads).
+          ...(machineSummarySource.summaryTotals !== undefined
             ? {
-                machineWorkSeconds: monitorRun.summaryTotals.workElapsedSeconds,
+                machineWorkSeconds:
+                  machineSummarySource.summaryTotals.workElapsedSeconds,
                 machineWorkMeters: Math.round(
-                  monitorRun.summaryTotals.workDistanceMeters,
+                  machineSummarySource.summaryTotals.workDistanceMeters,
                 ),
                 machineSummary: {
-                  ...(monitorRun.verificationBytes !== undefined
-                    ? { verificationBytes: [...monitorRun.verificationBytes] }
+                  ...(machineSummarySource.verificationBytes !== undefined
+                    ? {
+                        verificationBytes: [
+                          ...machineSummarySource.verificationBytes,
+                        ],
+                      }
                     : {}),
                   // A real build-738-era record can carry `summaryTotals`
                   // (and maybe `verificationBytes`) with no `summaryDetail`
@@ -1876,7 +1963,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
                   // `machineSummary` — correct, not a bug. Same shape the
                   // server-side integration test names "a build-738-era
                   // record's honest shape."
-                  ...(monitorRun.summaryDetail ?? {}),
+                  ...(machineSummarySource.summaryDetail ?? {}),
                 },
               }
             : {}),

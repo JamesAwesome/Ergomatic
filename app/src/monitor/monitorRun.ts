@@ -697,7 +697,27 @@ export function clearHandoffSlot(): void {
  *  reader would later mistake for this session's own. Calling
  *  `clearMonitorRun()` first makes the failure path match the success
  *  path (both leave the OLD record gone) rather than strictly worse than
- *  it. Ordered before `saveMonitorRun(run)` for the same reason. */
+ *  it. Ordered before `saveMonitorRun(run)` for the same reason.
+ *
+ *  **James's PR #230 review, P1a (Critical): this clear is now REDUNDANT
+ *  on every reachable path, and that is by design, not an oversight.**
+ *  This function only ever runs once the rower's first pull is detected
+ *  (`useMonitorSession.ts`'s own doc comment at its one call site), which
+ *  is too LATE to close the gap he found: a session armed and then ended
+ *  at READY without ever rowing never reaches this function at all, so a
+ *  stale same-workout carrier from an earlier session survived untouched
+ *  — and `WorkoutDetail.tsx` navigates to the log door's `?from=monitor`
+ *  arrival unconditionally on End, so the reader consulted it anyway. The
+ *  real fix moved the clear EARLIER, to the `"armed"` event handler in
+ *  `useMonitorSession.ts` (the moment the machine has verified OUR
+ *  program — a real acceptance, not a mere attempt) — see that handler's
+ *  own comment. The clear here is kept rather than deleted: every
+ *  reachable call to this function is already preceded by an `"armed"`
+ *  event (this file's own single production call site, downstream of the
+ *  `"ready"` phase transition that event drives), so this is a proven
+ *  no-op on every path that exists today, kept as defense-in-depth against
+ *  a hypothetical future caller that reaches this function WITHOUT first
+ *  passing through `"armed"` — cheap insurance, not load-bearing. */
 export function createMonitorRun(
   args: {
     workoutId: string | null;

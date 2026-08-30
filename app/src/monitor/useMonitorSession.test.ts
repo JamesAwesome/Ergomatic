@@ -39,6 +39,7 @@ import {
   clearMonitorRun,
   loadMonitorRun,
   MONITOR_RUN_KEY,
+  peekHandoffRun,
   saveMonitorRun,
   stashHandoffRun,
   takeHandoffRun,
@@ -4487,7 +4488,94 @@ describe("useMonitorSession: ending", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Whole-branch review, BLOCKING B1 (RULED): `endSession`'s own `linkGone`
+// James's PR #230 review, P1a (Critical): "End at READY resurrects the
+// previous same-workout run." `createMonitorRun`'s own clear (C1) only
+// fires once first-pull evidence is detected — a session PROGRAMMED then
+// ENDED AT READY without ever rowing never reaches `createMonitorRun` at
+// all, so an older same-workout slot entry (this codebase's own C1
+// scenario, one session earlier) survived completely untouched. And
+// `WorkoutDetail.tsx`'s `handleConnectedEnded` navigates to the log
+// door's `?from=monitor` arrival UNCONDITIONALLY on End (it does not
+// check whether a run was ever created), so the reader consulted that
+// stale carrier anyway. James's own disposable probe reproduced this
+// exactly: stash session A, program session B to READY, end it, and the
+// reader returned session A. Fixed by moving the retiring clear from
+// `createMonitorRun` (first pull) to the `"armed"` event handler
+// (acceptance) — see that handler's own comment in `useMonitorSession.ts`.
+// ---------------------------------------------------------------------------
+
+describe("James's PR #230 review, P1a (Critical): armed retires stale carriers, not first-pull", () => {
+  beforeEach(() => clearHandoffSlot());
+
+  it("a session armed then ended at READY without ever rowing does not resurrect an older same-workout stash", async () => {
+    // Session A: an eligible, completed v2 run for the SAME workout,
+    // stashed exactly as a post-unmount burst or a teardown-escape would
+    // leave it — never Saved. `TEST_SEED`'s own single-warmup-step seed
+    // (this file's shared fixture) only aligns with a ONE-interval
+    // program (`buildMonitorLogSteps`'s own length check, `logDraft.ts`)
+    // — `TWO_INTERVALS` has two, so this is its own two-step seed,
+    // genuinely aligned, matching what `eligibleForThisArrival`'s own
+    // condition 4 actually checks.
+    const twoStepSeed: LogSeed = {
+      steps: [
+        { label: "Interval 1", kind: "work" },
+        { label: "Interval 2", kind: "work" },
+      ],
+      paces: {},
+    };
+    const workoutId = TWO_IDENTITY.workoutId!;
+    const sessionA: MonitorRun = {
+      v: 2,
+      workoutId,
+      title: TWO_IDENTITY.title,
+      program: TWO_INTERVALS,
+      logSeed: twoStepSeed,
+      actuals: [],
+      deviceName: "PM5 SESSION A",
+      startedAt: "2020-01-01T00:00:00.000Z",
+      completedAt: "2020-01-01T00:10:00.000Z",
+      terminated: false,
+      endedBy: "finished",
+    };
+    stashHandoffRun(sessionA);
+    expect(
+      monitorModeRun(new URLSearchParams("from=monitor"), workoutId),
+    ).toStrictEqual(sessionA);
+    // That call CONSUMED it (the reader's own one-shot contract) — restash
+    // for session B's own arrival below, matching the review's own
+    // sequence (the probe never reads the slot until AFTER session B
+    // ends).
+    stashHandoffRun(sessionA);
+
+    // Session B: programmed and armed for the SAME workout — the machine
+    // has verified OUR program — but the rower never pulls.
+    const { result, fake } = harness({ program: TWO_INTERVALS, events: [] });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    // James's own P1a fix: armed retires the slot immediately, before any
+    // stroke — proven directly, not just through the end-to-end outcome
+    // below.
+    expect(peekHandoffRun()).toBeNull();
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+    expect(result.current.phase).toBe("ended");
+    // No run was ever created (no first pull) — `endSession`'s own
+    // `closeRecord` finds nothing to close, and the verify skips outright
+    // (`runRef.current === null`).
+    expect(result.current.handoffHeld).toBe(false);
+    expect(result.current.holdError).toBeNull();
+
+    // James's exact assertion: the reader must find NOTHING for this
+    // workout — session A must not be resurrected.
+    expect(
+      monitorModeRun(new URLSearchParams("from=monitor"), workoutId),
+    ).toBeNull();
+  });
+});
 // (`phase === "disconnected"` alone) predates Task 2, which widened what
 // "lost" means for the SCREEN (watchdog silence, an app-lifecycle resume)
 // while the record kept the old, narrower test — so a rower pressing End

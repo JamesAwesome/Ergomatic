@@ -63,6 +63,8 @@ import { createEventLog, type MonitorEventLog } from "./eventLog";
 import type { LogSeed } from "../session/logDraft";
 import {
   appendSummaryObservations,
+  clearHandoffSlot,
+  clearMonitorRun,
   completeContinuityReset,
   completeMonitorRun,
   createMonitorRun,
@@ -2645,6 +2647,33 @@ export function useMonitorSession(
         // Kept because "we are ready" and "an error is on screen" must
         // never be simultaneously true, and that invariant should not rest
         // on a second function's ordering.
+        //
+        // **James's PR #230 review, P1a: this is the ACCEPTANCE point, not
+        // `createMonitorRun` below.** A NEW connected session's identity is
+        // real the instant the machine has verified OUR program — never
+        // mind whether the rower ever pulls. `createMonitorRun`'s own
+        // clear (`monitorRun.ts`'s doc comment, C1) only fires once rowing
+        // starts, so a session armed and then ended at READY (no first
+        // pull, no `createMonitorRun` call at all) used to leave an OLDER
+        // same-workout slot entry (or stored record) fully intact — and
+        // `WorkoutDetail.tsx`'s `handleConnectedEnded` navigates to
+        // `?from=monitor` UNCONDITIONALLY on End, so the reader consulted
+        // that stale carrier for a session that never created one of its
+        // own. Clearing both here, at every armed transition, closes the
+        // gap: retiring a stale carrier no longer waits on a stroke that
+        // may never come.
+        //
+        // `createMonitorRun`'s own clear is KEPT, not removed — it is now
+        // fully redundant on every reachable path (armed always precedes
+        // `createMonitorRun`, the file's only call site, below), but
+        // removing it would make `createMonitorRun` depend on a caller
+        // discipline it cannot itself verify, and the cost of the
+        // redundant no-op call is negligible. Documented here rather than
+        // silently duplicated: if `createMonitorRun` ever gains a second
+        // caller that does NOT go through an armed event first, this
+        // comment is the one to revisit.
+        clearHandoffSlot();
+        clearMonitorRun();
         update({ phase: "ready", error: null });
         return;
       }

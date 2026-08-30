@@ -3096,6 +3096,151 @@ describe("LogSession: the slot-aware reader, through the full screen (Task 5)", 
   });
 });
 
+// James's PR #230 review, P1b (Important): "a summary accepted during
+// teardown's linger cannot reach the Log form that Retry/Log-it-anyway
+// already mounted." His own Record section lays out the exact sequence:
+// the held-error verify fails BEFORE any burst arrives; Retry (heals
+// storage) or Log it anyway (stashes to the slot) releases; THIS screen
+// mounts and snapshots whatever carrier held at that moment — no
+// `summaryTotals` yet; passive unmount starts `useMonitorSession.ts`'s
+// OWN post-unmount teardown linger; the burst FINALLY lands inside that
+// second window, updating storage (a healed write) or the slot (still
+// denied, folded in memory first) with the ONLY copy of the machine's
+// summary this run will ever get; this already-mounted screen never
+// re-reads either carrier. Reproduced here the same way this file's own
+// "mount-to-save gap" tests already do (see the comment above the
+// save-success/Discard slot-clear tests): stash/save the RICHER, SAME-
+// `startedAt` copy AFTER mount, proving the fix (`lateMachineSummary`,
+// `LogSession.tsx`) reads it at Save rather than relying on a natural
+// product path to construct the exact millisecond timing.
+describe("LogSession: a late-accepted machine summary reaches Save even though it landed after mount (James's PR #230 review, P1b)", () => {
+  it("Retry's own arm: a healed STORAGE write landing after mount is the one Save posts, not the poorer mount-time snapshot", async () => {
+    const { run, workout } = buildMonitorFixture(); // no summaryTotals yet
+    saveMonitorRun(run); // the pre-burst snapshot this screen will mount on
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-p1b-retry" }), {
+          status: 201,
+        }),
+      ),
+    );
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // The late burst, accepted during teardown's SECOND linger, healed
+    // straight into storage (`appendSummaryObservations`'s own ordinary
+    // write) — same `startedAt`, now carrying the machine's numbers this
+    // screen's own `monitorRun` state was built before.
+    const { saveMonitorRun: freshSave } = await import("../monitor/monitorRun");
+    freshSave({
+      ...run,
+      summaryTotals: { workElapsedSeconds: 812.4, workDistanceMeters: 2231 },
+      summaryDetail: {
+        avgStrokeRate: 24,
+        endingHeartRateBpm: 150,
+        avgHeartRateBpm: 150,
+        minHeartRateBpm: 140,
+        maxHeartRateBpm: 160,
+        dragFactorAverage: 130,
+        workoutType: 1,
+        recoveryHeartRateBpm: null,
+        avgPaceSecondsPer500m: 112,
+      },
+      verificationBytes: [1, 2, 3, 4],
+    });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.machineWorkSeconds).toBe(812.4);
+    expect(body.machineWorkMeters).toBe(2231);
+    expect(
+      (body.machineSummary as { verificationBytes?: number[] })
+        .verificationBytes,
+    ).toStrictEqual([1, 2, 3, 4]);
+  });
+
+  it("Log it anyway's own arm: a post-unmount-burst SLOT stash landing after mount is the one Save posts", async () => {
+    const { run, workout } = buildMonitorFixture(); // no summaryTotals yet
+    // Log it anyway's own path: storage stays empty, the pre-burst copy
+    // reached this screen through the SLOT.
+    const {
+      stashHandoffRun: freshStash,
+      peekHandoffRun: freshPeek,
+      loadMonitorRun: freshLoad,
+    } = await import("../monitor/monitorRun");
+    freshStash(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-p1b-proceed" }), {
+          status: 201,
+        }),
+      ),
+    );
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    // Consumed at mount — nothing left for the late stash below to
+    // collide with.
+    expect(freshPeek()).toBeNull();
+    expect(freshLoad()).toBeNull();
+
+    // The late burst, accepted during teardown's SECOND linger while
+    // storage was STILL denied: the in-memory fold ran first
+    // (`useMonitorSession.ts`'s own fold), then
+    // `resolveHandoffCondition`'s post-unmount branch stashed the FOLDED
+    // (now richer) run — same `startedAt` as the one this screen already
+    // consumed and rendered.
+    freshStash({
+      ...run,
+      summaryTotals: { workElapsedSeconds: 405.9, workDistanceMeters: 1180 },
+    });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.machineWorkSeconds).toBe(405.9);
+    expect(body.machineWorkMeters).toBe(1180);
+    // The late stash is consumed too (LogSession's own save-success
+    // `clearHandoffSlot()` call, unconditional) — nothing left to leak
+    // into a later, unrelated arrival.
+    expect(freshPeek()).toBeNull();
+  });
+
+  it("the residual, honestly: no late update anywhere means the mount-time snapshot's own absence of machine fields is exactly what posts", async () => {
+    const { run, workout } = buildMonitorFixture(); // no summaryTotals, ever
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-p1b-none" }), { status: 201 }),
+      ),
+    );
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.machineWorkSeconds).toBeUndefined();
+    expect(body.machineWorkMeters).toBeUndefined();
+    expect(body.machineSummary).toBeUndefined();
+  });
+});
+
 // FIX ROUND (whole-branch review, MEDIUM) — THE ORDERING, WHICH THE TESTS
 // ABOVE CANNOT SEE. They call `monitorModeRun` directly, so nothing in them
 // ever exercises the one sequence the entry exists for: a `?from=monitor`
