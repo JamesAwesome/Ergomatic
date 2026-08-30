@@ -1134,23 +1134,36 @@ describe("anyLiveSession: the coexistence truth table", () => {
 
 // Phase 7B Task 2, spec §3. The predicate half of the Connect guard; the
 // staged confirm it feeds is ConnectAction.test.tsx's.
+//
+// Hand-off store design spec §5, plan Task 5: `connectGuardStage` now
+// takes the MonitorRun half of its answer as a parameter (this file's own
+// doc comment on the function explains why it cannot read the store
+// itself — a circular import with `handoffStore.ts`). Every test below
+// still seeds via `saveMonitorRun` (the durable tier only, this file's own
+// long-standing fixture idiom) and derives the parameter from
+// `loadMonitorRun() !== null` — the real caller (`ConnectAction.tsx`)
+// derives the identical boolean from `currentUnretired()` instead, which
+// ALSO sees a memory-only entry; that broader visibility is
+// `ConnectAction.test.tsx`'s and `handoffStore.test.ts`'s to prove, not
+// this function's own descending-severity branching, which is all these
+// tests are about.
 describe("connectGuardStage: the Connect door's lock", () => {
   beforeEach(() => localStorage.clear());
 
   const finishedAt = new Date("2026-08-05T13:00:00.000Z").toISOString();
 
   it("nothing on record: null — Connect proceeds with no ceremony", () => {
-    expect(connectGuardStage()).toBeNull();
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBeNull();
   });
 
   it("a finished-but-unlogged SessionRun: 'unlogged' — the F5 record", () => {
     saveRun(fakeSessionRun(finishedAt));
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("a live SessionRun: 'in-progress' — destroyed just as completely, lesser loss", () => {
     saveRun(fakeSessionRun(null));
-    expect(connectGuardStage()).toBe("in-progress");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("in-progress");
   });
 
   // Task 5 review, HIGH-1: `createMonitorRun`'s own `saveMonitorRun` call
@@ -1162,12 +1175,12 @@ describe("connectGuardStage: the Connect door's lock", () => {
   // ALSO clears it unconditionally. The guard reads it now.
   it("a finished-but-unlogged MonitorRun (no SessionRun on record): 'unlogged' — 7C's prefill input", () => {
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("a live MonitorRun (no SessionRun on record): 'unlogged' — dead-run truth: any MonitorRun visible at Connect's door is dead (the connected session lives on WorkoutDetail's surface, and reload/navigation tears it down), so completedAt === null here means interrupted, not running (F6 spec 2b, exit criterion 5)", () => {
     saveMonitorRun(freshMonitorRun());
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   // Pin, not a red-first case (antagonist correction #3): completedAt !==
@@ -1181,30 +1194,30 @@ describe("connectGuardStage: the Connect door's lock", () => {
       new Date(finishedAt),
     );
     saveMonitorRun(stamped);
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("a SessionRun on record wins over a MonitorRun — same descending-severity order handleStart already uses", () => {
     saveRun(fakeSessionRun(finishedAt));
     saveMonitorRun(freshMonitorRun());
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("both records finished-but-unlogged: staged ONCE, not twice — a single ConnectGuardStage value, the SessionRun's own sentence", () => {
     saveRun(fakeSessionRun(finishedAt));
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("garbage in RUN_KEY falls through to the MonitorRun check (loadRun's own Resilience #5)", () => {
     localStorage.setItem(RUN_KEY, "{{ not json");
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("garbage in both keys: null — nothing at risk", () => {
     localStorage.setItem(RUN_KEY, "{{ not json");
-    expect(connectGuardStage()).toBeNull();
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBeNull();
   });
 
   // THE MUTATION TARGET, stated as an assertion rather than left to a
@@ -1217,7 +1230,7 @@ describe("connectGuardStage: the Connect door's lock", () => {
     saveRun(fakeSessionRun(finishedAt));
 
     expect(anyLiveSession()).toBe("none");
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("still disagrees when BOTH records are stale — anyLiveSession()'s 'both-stale' row is still a discard for Connect", () => {
@@ -1225,7 +1238,7 @@ describe("connectGuardStage: the Connect door's lock", () => {
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
 
     expect(anyLiveSession()).toBe("none");
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 });
 

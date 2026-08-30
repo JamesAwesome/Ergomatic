@@ -621,6 +621,17 @@ export function createMonitorRun(
     completedAt: null,
     terminated: false,
   };
+  // Hand-off store design spec section 5, plan Task 5: this destroys the
+  // phone-timer SessionRun unconditionally, same as before -- census note,
+  // stated here so this destroyer has a bound authorization too, not new
+  // machinery. Its authorization is the SAME guard stage as the monitor
+  // side's own retire: connectGuardStage's first branch stages the
+  // SessionRun ("in-progress"/"unlogged" on loadRun()), so the Connect
+  // guard's Replace confirmation ("You have an unlogged session.
+  // Connecting discards it." / "A session is in progress. Replace it?")
+  // already covers what this line is about to remove -- the rower was
+  // warned about THIS record before ever reaching the first real rowing
+  // frame that runs this function.
   clearRun();
   return run;
 }
@@ -1389,14 +1400,32 @@ export type ConnectGuardStage = "unlogged" | "in-progress" | null;
  * see now stages `"unlogged"`, matching the finished case it already used
  * to reach. The `SessionRun` branch above is untouched — a phone timer
  * genuinely does keep running in the background across reload/navigation,
- * so `"in-progress"` stays true there. */
-export function connectGuardStage(): ConnectGuardStage {
+ * so `"in-progress"` stays true there.
+ *
+ * **Hand-off store design spec section 5, plan Task 5 -- the `MonitorRun`
+ * check now takes its answer as a PARAMETER, never `loadMonitorRun()`
+ * directly.** The P1-1 hole this closes: `loadMonitorRun()` reads the
+ * DURABLE tier only, so a record whose durable write failed (memory-only
+ * -- exactly what `Today.tsx`, Task 4, now renders a row for) was
+ * invisible here, while Today's own store-backed read could already see
+ * it. The caller (`ConnectAction.tsx`) reads `currentUnretired()` and
+ * passes whether it found an entry -- this function cannot call the store
+ * itself: `handoffStore.ts` imports `MONITOR_RUN_KEY`/`isMonitorRun` FROM
+ * this file (Task 2's own hydration path), so the reverse import would be
+ * circular, the identical constraint `createMonitorRun`'s own doc comment
+ * states for the create-commit. `hasUnretiredMonitorRun` stands for "does
+ * the store currently hold an unretired `MonitorRun`" -- a boolean, not
+ * the entry itself, because this function only ever needs to know WHETHER
+ * to stage, never WHICH revision; the caller keeps the entry for its own
+ * later retire (spec section 5's "armed acceptance" row). */
+export function connectGuardStage(
+  hasUnretiredMonitorRun: boolean,
+): ConnectGuardStage {
   const run = loadRun();
   if (run !== null) {
     return run.completedAt === null ? "in-progress" : "unlogged";
   }
-  const monitorRun = loadMonitorRun();
-  if (monitorRun !== null) {
+  if (hasUnretiredMonitorRun) {
     // A MonitorRun visible at a Connect door is dead: the connected
     // session lives on WorkoutDetail's surface and reload/navigation
     // tears it down. "In progress" would assert machine state we do

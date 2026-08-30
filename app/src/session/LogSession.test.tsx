@@ -4601,7 +4601,7 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
     // exercising the monitor branch.
     expect(screen.getByText("BY FEEL")).toBeInTheDocument();
     expect(loadMonitorRun()).not.toBeNull();
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
 
     await userEvent.click(
       screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
@@ -4614,7 +4614,7 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
       await screen.findByText("WORKOUT DETAIL SCREEN"),
     ).toBeInTheDocument();
     expect(loadMonitorRun()).toBeNull();
-    expect(connectGuardStage()).toBeNull();
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -5857,14 +5857,19 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     expect(handoffStore.read()?.sessionKey).toBe(run.startedAt);
 
     // "Next acceptance": some LATER destructive authorization retires this
-    // same, still-claimed key (Task 5's own armed-acceptance defense retire
-    // is the production-reachable form of this; Task 5 has not landed on
-    // this branch yet, so this stands in with the store's own retire
-    // directly — the CONSUMER-side claim discipline this row exists to
-    // prove is unaffected by which door eventually calls it).
-    handoffStore.retire(
-      [{ sessionKey: run.startedAt, revision: 0 }],
-      "createMonitorRun-defense",
+    // same, still-claimed key. Task 5's own armed-acceptance retire is now
+    // production-reachable: RE-POINTED (plan Task 5, carried from
+    // ROADMAP's AUD-016 item) at the REAL door — `ConnectAction.tsx`'s own
+    // `handleConnectAnyway`, driven through its real UI, standing in for a
+    // rower who abandons this log and then presses Connect on the same
+    // (still-unretired) workout. The CONSUMER-side claim discipline this
+    // row exists to prove is unaffected by which door eventually calls
+    // it, but this is no longer a store-level stand-in for one.
+    const { default: ConnectAction } = await import("../monitor/ConnectAction");
+    render(<ConnectAction onProceed={() => undefined} />);
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect anyway" }),
     );
 
     const retireReceipt = receipts.find(

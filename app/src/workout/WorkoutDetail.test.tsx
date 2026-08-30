@@ -1726,11 +1726,15 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
       // The compiled PERSONAL_WORKOUT program is a different one than the
       // stale connected record's own "Filling Low" — proceeding here
-      // replaces the stale record outright once a new one opens (this
-      // screen's own compile step never touches storage itself; the
-      // destruction is `WorkoutDetail.handleRowInstead`'s `clearMonitorRun`
-      // below, reached the same way Start's own "Connect anyway" analogue
-      // reaches `startSession`'s cross-clear).
+      // replaces the stale record outright (this screen's own compile step
+      // never touches storage itself). Hand-off store design spec §5, plan
+      // Task 5: the destruction now happens at THIS "Connect anyway" press
+      // — `ConnectAction.tsx`'s own armed retire, not (any longer)
+      // `WorkoutDetail.handleRowInstead`'s below, which by the time it
+      // fires here finds the key already gone (a no-op — see this
+      // describe block's own dedicated "the door leg" test for
+      // `handleRowInstead`'s retire exercised where it actually finds
+      // something).
       await screen.findByText("This device has no Bluetooth transport.", {
         selector: ".connected-serif-line",
       });
@@ -1739,6 +1743,53 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       );
 
       expect(loadMonitorRun()).toBeNull();
+    });
+
+    // Hand-off store design spec §5, plan Task 5 (the NAMED Task 5 exit
+    // condition, ROADMAP's AUD-016 item): `handleRowInstead` routes
+    // through `retire()`, not the legacy `clearMonitorRun()`, so the key
+    // is tombstoned there too — independent of whatever `ConnectAction`'s
+    // own "armed" retire already did. Nothing is staged at Connect here
+    // (storage starts empty), so this isolates THIS door's own fresh
+    // read: a record that becomes unretired WHILE the interstitial is up
+    // (a race Connect's own guard never saw) is still caught by
+    // `handleRowInstead`'s own `currentUnretired()` read, and a late
+    // producer burst racing the row-instead press is refused afterward.
+    it("the door leg — Row Instead tombstones the key, so a late producer burst can no longer resurrect it", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      await renderDetail("/library/w3");
+      const {
+        commit: commitHandoff,
+        currentUnretired: currentUnretiredHandoff,
+      } = await import("../monitor/handoffStore");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      // Nothing staged: Connect proceeds straight to the interstitial.
+      await screen.findByText("This device has no Bluetooth transport.", {
+        selector: ".connected-serif-line",
+      });
+
+      // THE RACE: a record becomes unretired while the failure screen is
+      // showing — not staged at Connect's own guard, so ConnectAction's
+      // own armed retire never touched it.
+      const raced = monitorRunFor(FINISHED_AT);
+      const created = commitHandoff(raced.startedAt, null, raced);
+      expect(created.accepted).toBe(true);
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Row on the phone timer instead" }),
+      );
+
+      expect(currentUnretiredHandoff()).toBeNull();
+
+      // THE LATE BURST: a producer commit for the identical key/revision
+      // this door just retired.
+      const lateBurst = commitHandoff(raced.startedAt, 0, {
+        ...raced,
+        completedAt: "2026-08-05T12:41:05.000Z",
+      });
+      expect(lateBurst).toStrictEqual({ accepted: false, reason: "retired" });
+      expect(currentUnretiredHandoff()).toBeNull();
     });
 
     it("a LIVE-looking MonitorRun (completedAt: null) still stages the unlogged sentence: any MonitorRun at this door is dead (F6 spec 2b, exit criterion 5)", async () => {

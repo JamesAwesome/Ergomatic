@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
+import {
+  currentUnretired as currentUnretiredHandoff,
+  retire as retireHandoff,
+} from "./handoffStore";
 
 /**
  * The Connect door and the lock in front of it (7B Task 2, spec §3 — "the
@@ -67,12 +71,56 @@ export default function ConnectAction({
   // blocks the immediate `onProceed()` AND picks the panel's copy, so the
   // two can never disagree about which case triggered the stage.
   const [stage, setStage] = useState<ConnectGuardStage>(null);
+  // Hand-off store design spec §5, plan Task 5: whatever `currentUnretired()`
+  // showed AT STAGE TIME — captured here, not re-read at press time, so a
+  // revision that changes while the confirm panel sits on screen (the OLD
+  // hook's own linger-window burst racing this rower's hesitation) is
+  // exactly what "superseded" reports at the retire below. `null` means
+  // either nothing is staged, or the stage is the `SessionRun` case (that
+  // record carries no revision of its own — its destruction is
+  // `clearRun()`'s, authorized by this same guard stage; see
+  // `createMonitorRun`'s own doc comment in `monitorRun.ts`).
+  const [stagedEntry, setStagedEntry] = useState<{
+    sessionKey: string;
+    revision: number;
+  } | null>(null);
 
   function handleConnect() {
-    const staged = connectGuardStage();
+    const monitorEntry = currentUnretiredHandoff();
+    const staged = connectGuardStage(monitorEntry !== null);
     if (staged !== null) {
+      setStagedEntry(monitorEntry);
       setStage(staged);
       return;
+    }
+    onProceed();
+  }
+
+  // The armed retire (spec §5's "armed acceptance" row): the moment this
+  // confirm becomes binding — "Connecting discards it" stops being a
+  // warning and becomes a fact. Key-bound to whatever `handleConnect`
+  // captured above; a revision that has since moved on (a late burst from
+  // the OLD hook's own linger window, or any other producer) still
+  // retires — `retire()`'s own key lookup finds and removes the CURRENT
+  // entry for that key regardless of the authorized revision, and reports
+  // the mismatch as `superseded` rather than refusing (§1: a superseded
+  // revision never rejects). Runs BEFORE `onProceed()` — well before
+  // `useMonitorSession.ts`'s own "createMonitorRun defense" retire, Task
+  // 3, which finds nothing left to do here in the ordinary case (Task 3's
+  // M6 same-key adopt guard handles the one case where this hasn't run:
+  // a genuine same-millisecond collision between the key retired here and
+  // the run about to be created there).
+  function handleConnectAnyway() {
+    if (stagedEntry !== null) {
+      retireHandoff(
+        [
+          {
+            sessionKey: stagedEntry.sessionKey,
+            revision: stagedEntry.revision,
+          },
+        ],
+        "connect-guard-armed",
+      );
     }
     onProceed();
   }
@@ -93,13 +141,18 @@ export default function ConnectAction({
           >
             Cancel
           </button>
-          {/* Straight to `onProceed`, with no clearing of its own: the
-              destruction belongs to `createMonitorRun` downstream, exactly
-              as Start's own "Replace session" hands off to
-              `useStartWorkout.ts`'s `confirmReplace` (Phase 6I Task 4:
-              extracted from WorkoutDetail's own former `startSession`)
-              rather than reaching into storage from the panel. */}
-          <button type="button" className="button-primary" onClick={onProceed}>
+          {/* Hand-off store design spec §5, plan Task 5: `handleConnectAnyway`
+              retires the staged store entry here, then hands off to
+              `onProceed` — the analogue of Start's own "Replace session"
+              (`useStartWorkout.ts`'s `confirmReplace`), which destroys
+              immediately at its own press too, never reaching into storage
+              from the panel directly (the retire call lives in a named
+              function, not inline in this JSX). */}
+          <button
+            type="button"
+            className="button-primary"
+            onClick={handleConnectAnyway}
+          >
             Connect anyway
           </button>
         </div>

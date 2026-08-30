@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -9,6 +9,13 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, type SessionRun } from "../session/run";
 import { createMonitorRun, loadMonitorRun, saveMonitorRun } from "./monitorRun";
+import {
+  commit as commitHandoff,
+  currentUnretired as currentUnretiredHandoff,
+  resetForTests as resetHandoffStoreForTests,
+  setReceiptChannel,
+  type HandoffReceipt,
+} from "./handoffStore";
 import ConnectAction from "./ConnectAction";
 
 // 7C Task 1: `createMonitorRun`'s `logSeed` arg is required now. This
@@ -121,7 +128,10 @@ function renderConnect() {
 }
 
 describe("ConnectAction: the destruction it stands in front of", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
 
   // The proof, first and on its own: with no lock, the walk from Connect to
   // an erased finished session is one function call long. Every guard test
@@ -138,7 +148,10 @@ describe("ConnectAction: the destruction it stands in front of", () => {
 });
 
 describe("ConnectAction: the guard", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
 
   it("nothing on record: Connect proceeds immediately, no confirm", async () => {
     renderConnect();
@@ -325,5 +338,141 @@ describe("ConnectAction: the guard", () => {
     ).toBeInTheDocument();
     expect(loadRun()).not.toBeNull();
     expect(loadMonitorRun()).toBeNull();
+  });
+
+  // Hand-off store design spec §5, plan Task 5 (the P1-1 hole, closed —
+  // §10 row 1's own "guard reads one tier -> fails" mutation target). A
+  // record whose DURABLE write was denied (memory-only) is exactly what
+  // Today's own store-backed row already renders for (Task 4) — this
+  // proves Connect's guard now agrees, where `loadMonitorRun()` (durable
+  // tier only) would have seen nothing at all.
+  it("a memory-only record (durable write denied) is visible to the guard, same as Today's own row", async () => {
+    const w = libraryWorkout("Filling Low");
+    const draft = buildDraft({
+      id: "fl-memory-only",
+      title: w.title,
+      type: w.type as WorkoutType,
+      steps: w.steps,
+    });
+    const compiled = compileProgram(buildRun(draft, baselines, t0).phases);
+    if ("code" in compiled) {
+      throw new Error(`fixture failed to compile: ${compiled.code}`);
+    }
+    const run = createMonitorRun(
+      {
+        workoutId: "fl-memory-only",
+        title: w.title,
+        program: compiled,
+        deviceName: "PM5 430123456",
+        logSeed: TEST_SEED,
+      },
+      t0,
+    );
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+    const created = commitHandoff(run.startedAt, null, run);
+    setItemSpy.mockRestore();
+    expect(created).toMatchObject({ accepted: true, verdict: "failed" });
+    // Confirms the fixture is genuinely memory-only: nothing durable.
+    expect(loadMonitorRun()).toBeNull();
+
+    renderConnect();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      screen.getByText("You have an unlogged session. Connecting discards it."),
+    ).toBeInTheDocument();
+  });
+});
+
+// Hand-off store design spec §5, plan Task 5: the "armed acceptance" row —
+// `handleConnectAnyway`'s own retire, the acceptance point that makes
+// Connect's Replace confirmation binding (real UI path — the door leg the
+// task brief names, mutation-probed in the task report).
+describe("ConnectAction: the armed retire (hand-off store §5 row 1)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+
+  it("Connect anyway retires the staged store entry — key-bound, receipted", async () => {
+    connectAsTaskFiveWill();
+    const staged = currentUnretiredHandoff();
+    expect(staged).not.toBeNull();
+    const receipts: HandoffReceipt[] = [];
+    setReceiptChannel((r) => receipts.push(r));
+    renderConnect();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect anyway" }),
+    );
+
+    // Retired BEFORE `onProceed` (`connectAsTaskFiveWill`) runs its own
+    // `saveMonitorRun`/`createMonitorRun` pair — the retire receipt for
+    // the OLD key must exist independently of whatever the new session
+    // then writes.
+    const retireReceipts = receipts.filter((r) => r.kind === "retire");
+    expect(retireReceipts).toContainEqual({
+      kind: "retire",
+      sessionKey: staged!.sessionKey,
+      authorizedRevision: 0,
+      retiredRevision: 0,
+      superseded: false,
+      claimState: "unclaimed",
+      reason: "connect-guard-armed",
+    });
+    setReceiptChannel(null);
+  });
+
+  it("a revision superseded between stage and press still retires — superseded:true, receipted, not rejected (§1)", async () => {
+    connectAsTaskFiveWill();
+    const staged = currentUnretiredHandoff();
+    expect(staged).not.toBeNull();
+    renderConnect();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    // THE RACE: the dead hook's own linger-window burst lands WHILE the
+    // confirm panel sits on screen — after `handleConnect` captured
+    // revision 0, before "Connect anyway" is pressed.
+    const bumped = commitHandoff(staged!.sessionKey, 0, staged!.run);
+    expect(bumped).toMatchObject({ accepted: true, revision: 1 });
+    const receipts: HandoffReceipt[] = [];
+    setReceiptChannel((r) => receipts.push(r));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect anyway" }),
+    );
+
+    const retireReceipt = receipts.find((r) => r.kind === "retire");
+    expect(retireReceipt).toMatchObject({
+      sessionKey: staged!.sessionKey,
+      authorizedRevision: 0,
+      retiredRevision: 1,
+      superseded: true,
+      reason: "connect-guard-armed",
+    });
+    // Never rejected — §1: "a superseded revision... does NOT reject."
+    expect(currentUnretiredHandoff()).toBeNull();
+    setReceiptChannel(null);
+  });
+
+  it("nothing staged (a SessionRun-only stage): the retire is a no-op, no retire receipt fires", async () => {
+    saveRun(unloggedSessionRun());
+    expect(currentUnretiredHandoff()).toBeNull();
+    const receipts: HandoffReceipt[] = [];
+    setReceiptChannel((r) => receipts.push(r));
+    renderConnect();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect anyway" }),
+    );
+
+    expect(receipts.filter((r) => r.kind === "retire")).toStrictEqual([]);
+    setReceiptChannel(null);
   });
 });

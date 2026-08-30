@@ -21,7 +21,10 @@ import { buildNudgedDraft, saveDraft, startDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import { buildLogSeed } from "../session/logDraft";
 import { clearRun } from "../session/run";
-import { clearMonitorRun } from "../monitor/monitorRun";
+import {
+  currentUnretired as currentUnretiredHandoff,
+  retire as retireHandoff,
+} from "../monitor/handoffStore";
 import ConnectAction from "../monitor/ConnectAction";
 import type { RunIdentity } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
@@ -290,12 +293,32 @@ function WorkoutDetailView({
   // stamp exactly (fast-follow spec §3: every rewired entry point stamps
   // `startedAt` at the same moment it navigates to the countdown) — this
   // commits to a phone session just as surely.
+  //
+  // Hand-off store design spec §5, plan Task 5: the legacy `clearMonitorRun()`
+  // is gone. This is the CENSUS'S "row-instead" row: this site has no
+  // confirm of its own — it is a single-tap escape in the interstitial's
+  // failure card, and its real authorization is the Connect guard's own
+  // Replace confirmation one screen earlier (`ConnectAction.tsx`'s own
+  // "armed" retire, spec §5's "armed acceptance" row), which has usually
+  // already retired the record this door would otherwise find. A fresh,
+  // non-render read of `currentUnretired()` here is what makes this door a
+  // named terminus of the SAME staged set too — matching
+  // `useStartWorkout.ts`'s own `confirmReplace` (Task 5's other door):
+  // whatever remains gets retired, key-bound; usually nothing (a no-op —
+  // "nothing found -> nothing emitted", §1), but never silently left
+  // behind for a late producer burst to resurrect.
   function handleRowInstead() {
     setConnecting(null);
     const draft = startDraft(buildNudgedDraft(workout, nudges));
     if (saveDraft(draft)) {
       clearRun();
-      clearMonitorRun();
+      const stale = currentUnretiredHandoff();
+      if (stale !== null) {
+        retireHandoff(
+          [{ sessionKey: stale.sessionKey, revision: stale.revision }],
+          "row-instead",
+        );
+      }
       navigate("/session/countdown");
     } else {
       setRowInsteadError("Couldn't start this session. Try again.");
