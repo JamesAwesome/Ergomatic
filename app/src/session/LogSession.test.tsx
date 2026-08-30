@@ -47,7 +47,7 @@ import type { MonitorLogEntry } from "../monitor/eventLog";
 // because the DEFAULT export's hooks need whatever `vi.doMock` a given test
 // registered first): `monitorModeRun` touches no hook, no mocked module,
 // nothing `vi.resetModules()` below would ever need to invalidate.
-import { monitorModeRun } from "./LogSession";
+import { confirmSlotOwnership, monitorModeRun } from "./LogSession";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
@@ -2813,16 +2813,55 @@ describe("LogSession: monitorModeRun logs which condition missed onto the log-do
 // same cost reasoning), then the full screen for the render/POST/discard/
 // save-success/StrictMode assertions the pure level can't reach.
 describe("LogSession: monitorModeRun consults the AUD-016 handoff slot (design spec §3, Task 5)", () => {
-  it("a slot-carried run, eligible for THIS workoutId, is served directly and CONSUMED (peekHandoffRun reads null afterward)", () => {
+  // REWORKED (James's PR #230 review, P1c, Critical): `monitorModeRun`
+  // used to consume the slot itself, INSIDE this same call — a
+  // destructive side effect during what is really a RENDER-time read
+  // (the real caller is a `useState` lazy initializer). React's own
+  // purity rule exists because render may run more than once or never
+  // commit at all; an aborted render that had already destroyed the
+  // slot's only copy would lose it with no screen ever owning it. Fixed
+  // by splitting the contract: `monitorModeRun` now only PEEKS (proven
+  // here by calling it TWICE — the render-may-repeat shape — and finding
+  // the slot still intact either time), and `confirmSlotOwnership` claims
+  // it exactly once, called only from the mount EFFECT that runs after
+  // commit (`ManualDoorLog`'s own wiring, exercised end to end by the
+  // full-screen tests below).
+  it("a slot-carried run, eligible for THIS workoutId, is served during RENDER without being consumed — ownership is confirmed separately, after commit", () => {
     const { run } = buildMonitorFixture();
     // Storage stays empty on purpose — the whole point is that the slot
     // alone is enough.
     stashHandoffRun(run);
     const search = new URLSearchParams("from=monitor");
 
+    // Called TWICE — the exact shape an aborted-and-replayed render would
+    // produce — and the slot survives both calls untouched.
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(run);
-    expect(peekHandoffRun()).toBeNull();
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(run);
+    expect(peekHandoffRun()).not.toBeNull();
     expect(loadMonitorRun()).toBeNull();
+
+    // Ownership is claimed only once COMMITTED.
+    confirmSlotOwnership(run);
+    expect(peekHandoffRun()).toBeNull();
+
+    // Idempotent, matching the StrictMode-doubled-effect case: a second
+    // confirm against an already-empty slot is a safe no-op.
+    expect(() => confirmSlotOwnership(run)).not.toThrow();
+    expect(peekHandoffRun()).toBeNull();
+  });
+
+  it("REVIEW FIX (P1c): confirmSlotOwnership only claims a candidate that STILL matches — a different run sitting in the slot by the time of the confirm is left untouched", () => {
+    const { run } = buildMonitorFixture();
+    const unrelated: MonitorRun = {
+      ...run,
+      startedAt: "2020-01-01T00:00:00.000Z",
+    };
+    stashHandoffRun(unrelated);
+
+    // Confirming against a DIFFERENT identity than what the slot actually
+    // holds right now must never claim the wrong candidate.
+    confirmSlotOwnership(run);
+    expect(peekHandoffRun()).toStrictEqual(unrelated);
   });
 
   it("REVIEW FIX (F5, Important): a slot carrying a DIFFERENT workout's run is left UNTOUCHED — the reader falls through to storage, and the slot is still intact for its own, later, correct arrival", () => {
@@ -2842,10 +2881,13 @@ describe("LogSession: monitorModeRun consults the AUD-016 handoff slot (design s
     expect(stillThere).not.toBeNull();
     expect(stillThere?.workoutId).toBe("id-workout-x");
     const searchForX = new URLSearchParams("from=monitor");
-    expect(monitorModeRun(searchForX, "id-workout-x")).toStrictEqual(
-      stillThere,
-    );
-    // NOW it's gone — X's own real arrival is what finally consumes it.
+    const servedForX = monitorModeRun(searchForX, "id-workout-x");
+    expect(servedForX).toStrictEqual(stillThere);
+    // Still there after the RENDER-time read (P1c: peek, not take) — the
+    // mount effect's own `confirmSlotOwnership` is what finally consumes
+    // it, once committed.
+    expect(peekHandoffRun()).not.toBeNull();
+    confirmSlotOwnership(servedForX!);
     expect(peekHandoffRun()).toBeNull();
   });
 
@@ -2983,15 +3025,41 @@ describe("LogSession: the slot-aware reader, through the full screen (Task 5)", 
     expect(body.machineWorkMeters).toBe(76);
   });
 
+  // James's PR #230 review, P1c (Critical): the WIRING proof — this file's
+  // own pure-function-level tests above prove `monitorModeRun` no longer
+  // consumes and `confirmSlotOwnership` does, but neither proves
+  // `ManualDoorLog` actually CALLS `confirmSlotOwnership` from its mount
+  // effect in production. RTL's `render()` is act-wrapped (effects flush
+  // synchronously before it returns), so the slot is provably empty the
+  // INSTANT this call resolves — proving the real component's own effect
+  // fired, not just that the standalone functions compose correctly.
+  it("REVIEW FIX (P1c): the mount effect actually claims the slot in the real, rendered component — not just in the standalone functions", async () => {
+    const { run, workout } = buildMonitorFixture();
+    const { stashHandoffRun: freshStash, peekHandoffRun: freshPeek } =
+      await import("../monitor/monitorRun");
+    freshStash(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // The mount effect has already run (RTL's act-wrapped `render()`) —
+    // ownership is claimed, not merely peeked.
+    expect(freshPeek()).toBeNull();
+  });
+
   // NOTE on both tests below: an ELIGIBLE, matching slot entry is ALWAYS
-  // consumed at MOUNT (`monitorModeRun`'s own peek-then-take) — stashing
-  // before render and checking the slot after Save/Discard would prove
-  // nothing (mount-time consumption already empties it regardless of
-  // whether save-success's/discard's own `clearHandoffSlot()` call ever
-  // ran — confirmed by mutation: removing either call left both such
-  // tests green). Both tests instead stash AFTER mount, simulating the
-  // one gap mount-time consumption cannot cover (a stash landing for this
-  // workout between mount and Save/Discard) — the honest scenario
+  // consumed shortly after mount (`monitorModeRun`'s own peek, this
+  // component's own mount effect calling `confirmSlotOwnership` right
+  // after — P1c) — stashing before render and checking the slot after
+  // Save/Discard would prove nothing (mount-time consumption already
+  // empties it regardless of whether save-success's/discard's own
+  // `clearHandoffSlot()` call ever ran — confirmed by mutation: removing
+  // either call left both such tests green). Both tests instead stash
+  // AFTER mount, simulating the one gap mount-time consumption cannot
+  // cover (a stash landing for this workout between mount and
+  // Save/Discard) — the honest scenario
   // `LogSession.tsx`'s own comment at each call site now states plainly:
   // no product path in this codebase can construct that gap end-to-end,
   // so this proves the CODE calls `clearHandoffSlot()`, not a naturally

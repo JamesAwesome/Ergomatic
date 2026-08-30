@@ -357,9 +357,19 @@ export function monitorModeRun(
   if (search.get("from") !== "monitor") return null;
   const slotted = peekHandoffRun();
   if (slotted !== null && eligibleForThisArrival(slotted, workoutId)) {
-    // Consumed only now, having just proven it is actually going to be
-    // served — `takeHandoffRun`'s own one-shot contract (design spec §3).
-    return takeHandoffRun();
+    // **James's PR #230 review, P1c (Critical): PEEKS, never TAKES.** This
+    // function runs INSIDE a `useState` lazy initializer — during RENDER
+    // — and React's own purity rule (react.dev/reference/rules/components-
+    // and-hooks-must-be-pure) exists precisely because render may be
+    // called more than once (StrictMode's dev-only double-invoke, already
+    // disclosed below) or ABANDONED entirely without ever committing (an
+    // interrupted update, a suspended tree, or any future concurrent-
+    // rendering path) — an abandoned render that had already destroyed
+    // the slot's only copy would lose it with no screen ever owning it.
+    // The actual one-shot consumption is `confirmSlotOwnership` below,
+    // called only from `ManualDoorLog`'s own mount EFFECT — after React
+    // has committed, never during render.
+    return slotted;
   }
   const run = loadMonitorRun();
   if (run === null) {
@@ -417,6 +427,33 @@ function eligibleForThisArrival(run: MonitorRun, workoutId: string): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * James's PR #230 review, P1c (Critical): the committed-ownership half of
+ * the slot's one-shot contract, split off from `monitorModeRun` above
+ * (which now only PEEKS). Called exactly once, from `ManualDoorLog`'s own
+ * mount EFFECT — never from render, and never more than once per mount,
+ * since a `useState` value is referentially stable across re-renders and
+ * an effect with that value in its own dependency array fires once.
+ *
+ * Re-checks the slot itself rather than trusting the caller's own `run`
+ * blindly: a no-op unless the slot STILL holds a candidate whose identity
+ * (`startedAt`) matches the one this screen rendered. This makes the
+ * function safe to call from a StrictMode-doubled effect (dev's own
+ * mount -> cleanup -> mount replay fires it twice; the SECOND call finds
+ * the slot already emptied by the first and does nothing) and safe
+ * against the vanishingly narrow window where something else could have
+ * superseded or consumed the slot between this component's render and its
+ * own effect — either way, claiming a candidate that no longer matches
+ * would be its own bug, not a fix for one.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function confirmSlotOwnership(run: MonitorRun): void {
+  const slotted = peekHandoffRun();
+  if (slotted !== null && slotted.startedAt === run.startedAt) {
+    takeHandoffRun();
+  }
 }
 
 /**
@@ -1620,19 +1657,30 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // render would do exactly that the instant the record disappeared out
   // from under a still-mounted component.
   //
-  // StrictMode, disclosed (design spec §3's own words, `peekHandoffRun`'s
-  // doc comment): in dev, React calls this initializer TWICE and keeps
-  // only the FIRST result. When the slot is the source, the FIRST call
-  // consumes it (`takeHandoffRun`) and wins the committed render; the
-  // DISCARDED second call finds the slot already empty and can fall
-  // through to storage, writing a spurious dev-only `no-run` miss into
-  // `ergomatic:log-door-misses` — harmless (the committed render already
-  // has the right value; `recordLogDoorMiss` is a diagnostic append, never
-  // read back by this component) but worth naming so a future reader of
-  // that stash isn't fooled by a miss whose own render never happened.
+  // StrictMode, updated (James's PR #230 review, P1c): `monitorModeRun`
+  // now only PEEKS the slot — in dev, React calling this initializer
+  // TWICE returns the SAME value both times (a peek is idempotent), so
+  // there is no longer a "discarded second call" to disclose here at all;
+  // the spurious dev-only `no-run` miss this comment used to name for the
+  // slot-sourced case cannot happen any more (both calls see the same
+  // still-present candidate). Actual ownership is claimed exactly once,
+  // after commit, by the mount effect right below.
   const [monitorRun] = useState<MonitorRun | null>(() =>
     monitorModeRun(searchParams, workoutId),
   );
+
+  // James's PR #230 review, P1c (Critical): the committed half of the
+  // slot's one-shot contract — `monitorModeRun` above only peeked, so if
+  // `monitorRun` came from the slot, nothing has actually consumed it
+  // yet. Fires once, after this component's OWN render has committed
+  // (never during it, which is what made the old direct-consuming
+  // version unsafe — react.dev's purity rule: an interrupted or replayed
+  // render must never have side effects that outlive it). A no-op when
+  // `monitorRun` is `null` or came from storage (`confirmSlotOwnership`'s
+  // own re-check finds nothing matching in the slot either way).
+  useEffect(() => {
+    if (monitorRun !== null) confirmSlotOwnership(monitorRun);
+  }, [monitorRun]);
 
   // Task 4: computed once at mount, the same lazy-init idiom and for the
   // same reason as `monitorRun` above — this reads storage, and a later
@@ -1699,9 +1747,10 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     //
     // **Honest limit of this call, stated rather than implied (the review
     // carry's own bar):** whenever the SAME run this save is about was
-    // sourced from the slot, `takeHandoffRun` already emptied it back at
-    // MOUNT (`monitorModeRun`'s own peek-then-take) — this call is then a
-    // pure no-op, and no product scenario in this codebase can currently
+    // sourced from the slot, the mount effect already emptied it right
+    // after commit (`monitorModeRun`'s own peek, `confirmSlotOwnership`'s
+    // own take — P1c) — this call is then a pure no-op, and no product
+    // scenario in this codebase can currently
     // make it independently observable (an eligible, matching slot entry
     // is ALWAYS consumed before this ever runs). It stays as
     // defense-in-depth for the one gap mount-time consumption cannot
@@ -1987,9 +2036,10 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     //
     // **Honest limit, stated rather than implied:** this branch only ever
     // renders once `monitorModeRun` already returned non-null for THIS
-    // workoutId — if that run came from the slot, `takeHandoffRun` already
-    // emptied it at MOUNT, so this call is then a pure no-op with no
-    // product scenario in this codebase that makes it independently
+    // workoutId — if that run came from the slot, the mount effect already
+    // emptied it right after commit (`confirmSlotOwnership`, P1c), so this
+    // call is then a pure no-op with no product scenario in this codebase
+    // that makes it independently
     // observable (same honest limit `useLogForm`'s own save-success
     // callback above states for its identical call). Kept as
     // defense-in-depth for the same narrow gap that comment names — a
