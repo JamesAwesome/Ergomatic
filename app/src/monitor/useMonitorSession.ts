@@ -2952,36 +2952,62 @@ export function useMonitorSession(
           // BEFORE this burst is ever heard; Retry heals or Log it anyway
           // stashes, then releases; `LogSession` mounts and snapshots
           // whatever carrier held at THAT instant — no `summaryTotals`
-          // yet; passive unmount starts THIS hook's own deferred teardown
-          // linger (`teardown`'s own "burst-eligible, not yet heard" arm);
-          // the burst finally lands here, inside that window, updating
-          // `runRef.current` (append succeeded to storage, or — the branch
-          // just above — folded in memory because storage still declined)
-          // with the run's only copy of the machine's numbers. Nothing else
-          // in this function carries that update anywhere durable: the
+          // yet; the burst finally lands here, updating `runRef.current`
+          // (append succeeded to storage, or — the branch just above —
+          // folded in memory because storage still declined) with the
+          // run's only copy of the machine's numbers. Nothing else in this
+          // function carries that update anywhere durable: the
           // `resolveHandoffCondition` call two lines below is about to be a
           // genuine no-op (`burstHoldRef.current === null` — the condition
-          // already resolved via the backstop, long before this event),
-          // so it will never reach its own post-unmount stash
+          // already resolved via the backstop, long before this event), so
+          // it will never reach its own post-unmount stash
           // (`resolveHandoffCondition`'s own doc comment) either.
-          // `lingerFinishRef.current !== null` confirms we are inside that
-          // deferred, POST-RELEASE window specifically (this hook's own
-          // driving component has already unmounted — `onEnded` cannot
-          // fire, and nothing can navigate away from it, while
-          // `handoffHeld` is still true) — restash whatever `runRef
-          // .current` now holds, richer than what any consumer already
-          // read, whichever branch above produced it, so the NEXT
-          // `?from=monitor` arrival (a reload, or the rower returning to
-          // this workout's log door) serves it instead. The already-
-          // mounted consumer's own Save is deliberately untouched: it
-          // already posted (or will post) exactly the tier-B snapshot it
+          //
+          // **Widened at James's SECOND review of PR #230 (P1-2, Critical):
+          // the first fix here gated on `lingerFinishRef.current !== null`
+          // — "we are inside teardown's own POST-UNMOUNT burst linger" —
+          // and that misses a real, earlier window: the moment the hand-off
+          // releases (`proceedHandoff`, `retryHandoffSave`'s heal, or
+          // `resolveHandoffCondition`'s own ordinary release) is NOT the
+          // same moment `teardown` runs.** `ConnectedSurface`'s own
+          // `onEnded` effect (`workout/ConnectedSurface.tsx:352-358`) fires
+          // only once `handoffHeld` is already `false` — release always
+          // happens strictly BEFORE the navigation that eventually unmounts
+          // this hook — so there is a gap, bounded by nothing, between
+          // "released" and "unmounted", and a wire event answers to no
+          // React commit. A burst landing in THAT gap used to vanish
+          // silently: `lingerFinishRef.current` is still `null` (`teardown`
+          // has not run yet, so the linger was never set up), and the
+          // `resolveHandoffCondition` call below is the same no-op it
+          // always is once `burstHoldRef.current` is already `null`.
+          // `!stateRef.current.handoffHeld` is the correct, single signal
+          // for "this hand-off has already released, whichever way, and
+          // whichever side of teardown we're currently on" — it reads
+          // `false` identically whether the post-unmount linger has
+          // started yet or not, so this now restashes on EITHER side of
+          // passive cleanup: burst-during-the-post-unmount-linger (the
+          // first fix's own shape, unchanged) and
+          // burst-after-release-before-unmount (the gap this review found).
+          // `burstHoldRef.current === null` still excludes the ordinary,
+          // still-held, first-time arrival (where the plain
+          // `resolveHandoffCondition("burst", "burst-heard")` call below is
+          // what releases and renders, correctly, with no restash needed)
+          // and the "left via tab bar while still held, no release at all"
+          // escape shape (`burstHoldRef.current` is still the pending
+          // backstop's own canceller there, never `null`, so this block
+          // stays skipped and `resolveHandoffCondition`'s own
+          // post-unmount stash carries that case instead, unchanged).
+          //
+          // Restash whatever `runRef.current` now holds, richer than what
+          // any consumer already read, whichever branch above produced it,
+          // so the NEXT `?from=monitor` arrival (a reload, or the rower
+          // returning to this workout's log door) serves it instead. The
+          // already-mounted consumer's own Save is deliberately untouched:
+          // it already posted (or will post) exactly the tier-B snapshot it
           // showed — the #228-accepted residual — never a number it never
           // displayed. P1a's own armed-clear bounds how long this restash
           // can survive: a new session opened on this workout retires it.
-          if (
-            burstHoldRef.current === null &&
-            lingerFinishRef.current !== null
-          ) {
+          if (burstHoldRef.current === null && !stateRef.current.handoffHeld) {
             const latest = runRef.current;
             if (latest !== null && latest.summaryTotals !== undefined) {
               const superseded = stashHandoffRun(latest);

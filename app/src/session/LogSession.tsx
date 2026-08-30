@@ -438,20 +438,40 @@ function eligibleForThisArrival(run: MonitorRun, workoutId: string): boolean {
  * an effect with that value in its own dependency array fires once.
  *
  * Re-checks the slot itself rather than trusting the caller's own `run`
- * blindly: a no-op unless the slot STILL holds a candidate whose identity
- * (`startedAt`) matches the one this screen rendered. This makes the
- * function safe to call from a StrictMode-doubled effect (dev's own
- * mount -> cleanup -> mount replay fires it twice; the SECOND call finds
- * the slot already emptied by the first and does nothing) and safe
- * against the vanishingly narrow window where something else could have
- * superseded or consumed the slot between this component's render and its
- * own effect — either way, claiming a candidate that no longer matches
- * would be its own bug, not a fix for one.
+ * blindly: a no-op unless the slot STILL holds the EXACT candidate object
+ * this screen rendered. This makes the function safe to call from a
+ * StrictMode-doubled effect (dev's own mount -> cleanup -> mount replay
+ * fires it twice; the SECOND call finds the slot already emptied by the
+ * first and does nothing) and safe against the vanishingly narrow window
+ * where something else could have superseded or consumed the slot between
+ * this component's render and its own effect — either way, claiming a
+ * candidate that no longer matches would be its own bug, not a fix for
+ * one.
+ *
+ * **James's SECOND PR #230 review (P1-3, Critical): compares by REFERENCE
+ * IDENTITY (`slotted === run`), never `startedAt`.** `startedAt` alone is
+ * not enough to prove the candidate is the same REVISION: P1-2's own
+ * restash mechanism (`useMonitorSession.ts`'s `summary-observations`
+ * handler) can replace the slot with a RICHER copy of the exact same run —
+ * same `startedAt`, now carrying `summaryTotals` it did not have at render
+ * time — in the narrow window between this component's render (which
+ * peeked the poorer R0) and this effect's own commit-time confirm. A
+ * `startedAt` match would then TAKE the richer R1 out from under a screen
+ * that is still rendering R0, destroying the only copy of it with nothing
+ * left to claim it. Reference identity closes this exactly: `stashHandoffRun`
+ * always installs a NEW object, so `slotted === run` is true only when
+ * NOTHING has touched the slot since the render that produced `run` — the
+ * ordinary, overwhelmingly common case — and false the instant a fresher
+ * revision has taken its place, CAS-style. On a mismatch this function
+ * does nothing at all: the richer copy is left exactly where it is,
+ * non-destructive, for the NEXT `?from=monitor` arrival to find — the same
+ * "never consumed-and-discarded" rule this file's own eligibility gates
+ * already apply to a mismatching candidate.
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function confirmSlotOwnership(run: MonitorRun): void {
   const slotted = peekHandoffRun();
-  if (slotted !== null && slotted.startedAt === run.startedAt) {
+  if (slotted === run) {
     takeHandoffRun();
   }
 }

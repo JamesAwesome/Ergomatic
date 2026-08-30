@@ -1740,7 +1740,7 @@ describe("the summary hold's permanent gate, AUD-016 no-hold arm: a link-lost En
 // (re-)imported AFTER it, in the SAME epoch, mirroring `runReplay`'s own
 // idiom and `mountLogSessionAndSave`'s own "does NOT resetModules before
 // importing" constraint exactly.
-describe("the summary hold's permanent gate, RF24 (final re-review): a late burst restashes during the SECOND, post-release linger", () => {
+describe("the summary hold's permanent gate, RF24 (final re-review + James's second review, P1-2): a late burst restashes on EITHER side of passive cleanup", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -2007,6 +2007,252 @@ describe("the summary hold's permanent gate, RF24 (final re-review): a late burs
     const call = apiFn.mock.calls[0];
     if (call === undefined) {
       throw new Error("RF24 leg: Save never posted");
+    }
+    const [, init] = call;
+    const body = JSON.parse((init as RequestInit).body as string) as Record<
+      string,
+      unknown
+    >;
+    expect(body.machineWorkSeconds).toBeUndefined();
+    expect(body.machineWorkMeters).toBeUndefined();
+    expect(body.machineSummary).toBeUndefined();
+
+    stub.stopFailing();
+  });
+
+  // James's SECOND PR #230 review (P1-2, Critical): the leg above proves
+  // the restash fires once `teardown`'s own POST-UNMOUNT linger is already
+  // running. This leg proves the window the first fix missed — the burst
+  // landing AFTER `proceedHandoff()` releases but BEFORE the driving
+  // component ever unmounts at all (so `teardown` has not run, and
+  // `lingerFinishRef` is still `null` the whole time). Production reaches
+  // this window because `ConnectedSurface`'s own `onEnded` effect
+  // (`workout/ConnectedSurface.tsx:352-358`) only navigates once
+  // `handoffHeld` is already `false` — release always happens first, in
+  // the same synchronous call that flips it, and nothing bounds how long
+  // React takes to run the effect and commit the resulting unmount. A wire
+  // event answers to no React commit, so the gap is real. Same setup as
+  // the leg above, reordered: the burst is delivered to the hook's own
+  // still-live subscription WITHOUT ever calling `unmount()` first.
+  it("proceed releases on the backstop before any burst; the burst then lands BEFORE the driving component ever unmounts — the slot still gets the restash, and a fresh arrival still serves it", async () => {
+    localStorage.clear();
+    const stub = stubStorageWrites("from-open");
+
+    let capturedCb: ((e: MonitorEvent) => void) | null = null;
+    vi.doMock("./driver", async () => {
+      const actual =
+        await vi.importActual<typeof import("./driver")>("./driver");
+      return {
+        ...actual,
+        createPm5Driver: (
+          ...args: Parameters<typeof actual.createPm5Driver>
+        ) => {
+          const real = actual.createPm5Driver(...args);
+          return {
+            ...real,
+            events: (cb: (e: MonitorEvent) => void) => {
+              capturedCb = cb;
+              return real.events(cb);
+            },
+          };
+        },
+      };
+    });
+    vi.resetModules();
+    const fake = createFakeTransport({
+      deviceName: "PM5 RF24b",
+      program: LINK_LOST_PROGRAM,
+      events: [
+        fakeLinkLostStatus(100, { elapsedSeconds: 20, distanceMeters: 70 }),
+      ],
+    });
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        now: () => FIXED_NOW,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(LINK_LOST_PROGRAM, LINK_LOST_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flushFake();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flushFake();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(200);
+    });
+    expect(result.current.phase).toBe("live");
+
+    vi.useFakeTimers();
+    await act(async () => {
+      const pending = result.current.endSession();
+      await vi.advanceTimersByTimeAsync(0);
+      await pending;
+    });
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+    expect(result.current.holdError).toBeNull();
+
+    // The burst-timeout backstop fires BEFORE any burst — held-error
+    // enters on the denied release-verify.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BURST_HANDOFF_HOLD_MS);
+    });
+    vi.useRealTimers();
+    expect(result.current.handoffHeld).toBe(true);
+    expect(result.current.holdError).toBe("storage-failed");
+
+    // Log it anyway — releases via the slot (storage stays denied
+    // throughout this leg).
+    await act(async () => {
+      await result.current.proceedHandoff();
+    });
+    expect(result.current.handoffHeld).toBe(false);
+
+    // "Log mounts and snapshots" — a REAL `LogSession`, sharing this SAME
+    // post-reset module graph.
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({
+        state: "ready",
+        workouts: [
+          libraryWorkoutFixture(
+            LINK_LOST_IDENTITY.workoutId!,
+            LINK_LOST_IDENTITY.title,
+          ),
+        ],
+      }),
+    }));
+    vi.doMock("../api/useBaselines", () => ({
+      useBaselines: () => ({
+        state: "ready",
+        baselines: { k2Seconds: null, k6Seconds: null },
+      }),
+    }));
+    vi.doMock("../api/usePlan", () => ({
+      usePlan: () => ({
+        state: "ready",
+        plan: { planKey: null, doneN: 0, sequence: [] },
+        choose: vi.fn(),
+        reset: vi.fn(),
+      }),
+    }));
+    const apiFn = mockApi();
+    const { default: LogSession } = await import("../session/LogSession");
+    render(
+      createElement(
+        MemoryRouter,
+        {
+          initialEntries: [
+            `/library/${LINK_LOST_IDENTITY.workoutId}/log?from=monitor`,
+          ],
+        },
+        createElement(
+          Routes,
+          null,
+          createElement(Route, {
+            path: "/library/:id/log",
+            element: createElement(LogSession),
+          }),
+          createElement(Route, {
+            path: "/today",
+            element: createElement("p", null, "TODAY SCREEN"),
+          }),
+        ),
+      ),
+    );
+    await screen.findByRole("heading", { name: LINK_LOST_IDENTITY.title });
+
+    // THE GAP THIS LEG EXISTS FOR: the burst lands NOW — `handoffHeld` is
+    // already `false` (proceed released above), but the driving hook has
+    // NOT been unmounted yet, so `teardown` has never run and
+    // `lingerFinishRef` is still `null`. The first fix's own condition
+    // (`lingerFinishRef.current !== null`) would have skipped this burst
+    // entirely; the widened one (`!stateRef.current.handoffHeld`) does not.
+    expect(capturedCb).not.toBeNull();
+    act(() => {
+      capturedCb!({
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 55, workDistanceMeters: 260 },
+        detail: {
+          avgStrokeRate: 24,
+          endingHeartRateBpm: null,
+          avgHeartRateBpm: null,
+          minHeartRateBpm: null,
+          maxHeartRateBpm: null,
+          dragFactorAverage: 100,
+          workoutType: 1,
+          recoveryHeartRateBpm: null,
+          avgPaceSecondsPer500m: 150,
+        },
+      });
+    });
+
+    // ASSERTION 1: the slot holds the restashed, updated run — even though
+    // no unmount, and therefore no post-unmount linger, has happened yet.
+    const { peekHandoffRun: freshPeek } = await import("./monitorRun");
+    const restashed = freshPeek();
+    expect(restashed).not.toBeNull();
+    expect(restashed?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 55,
+      workDistanceMeters: 260,
+    });
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "handoff-stashed" &&
+          e.detail.includes("reason=late-burst"),
+      ),
+    ).toBe(true);
+
+    // ASSERTION 3: a fresh `?from=monitor` arrival serves the machine
+    // numbers — checked BEFORE the already-mounted screen's own Save.
+    const { monitorModeRun: freshMonitorModeRun } =
+      await import("../session/LogSession");
+    expect(
+      freshMonitorModeRun(
+        new URLSearchParams("from=monitor"),
+        LINK_LOST_IDENTITY.workoutId!,
+      ),
+    ).toStrictEqual(restashed);
+
+    // ASSERTION 2: the ALREADY-MOUNTED screen's own Save still posts tier
+    // B — its own mount-time snapshot, untouched by the restash sitting in
+    // the slot (the design's own restash-only rule, unaffected by which
+    // window produced the restash).
+    await userEvent.click(screen.getByRole("button", { name: "HELD" }));
+    await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
+    await screen.findByText("TODAY SCREEN");
+
+    const call = apiFn.mock.calls[0];
+    if (call === undefined) {
+      throw new Error("RF24b leg: Save never posted");
     }
     const [, init] = call;
     const body = JSON.parse((init as RequestInit).body as string) as Record<

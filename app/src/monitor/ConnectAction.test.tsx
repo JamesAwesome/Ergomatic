@@ -8,7 +8,14 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, type SessionRun } from "../session/run";
-import { createMonitorRun, loadMonitorRun } from "./monitorRun";
+import {
+  createMonitorRun,
+  loadMonitorRun,
+  stashHandoffRun,
+  peekHandoffRun,
+  clearHandoffSlot,
+  type MonitorRun,
+} from "./monitorRun";
 import ConnectAction from "./ConnectAction";
 
 // 7C Task 1: `createMonitorRun`'s `logSeed` arg is required now. This
@@ -112,8 +119,41 @@ function renderConnect() {
   render(<ConnectAction onProceed={connectAsTaskFiveWill} />);
 }
 
+/** A completed run carrying only the AUD-016 hand-off slot — no
+ *  SessionRun, no stored MonitorRun (P1-1, James's second review). The
+ *  same real assembly (buildDraft -> buildRun -> compileProgram) every
+ *  other fixture in this file uses, never a hand-built minimum. */
+function slotOnlyMonitorRun(): MonitorRun {
+  const w = libraryWorkout("Filling Low");
+  const draft = buildDraft({
+    id: "fl-slot",
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const compiled = compileProgram(buildRun(draft, baselines, t0).phases);
+  if ("code" in compiled) {
+    throw new Error(`fixture failed to compile: ${compiled.code}`);
+  }
+  return {
+    v: 2,
+    workoutId: "fl-slot",
+    title: w.title,
+    program: compiled,
+    logSeed: TEST_SEED,
+    actuals: [],
+    deviceName: "PM5 slot",
+    startedAt: t0.toISOString(),
+    completedAt: finishedAt,
+    terminated: false,
+  };
+}
+
 describe("ConnectAction: the destruction it stands in front of", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    clearHandoffSlot();
+  });
 
   // The proof, first and on its own: with no lock, the walk from Connect to
   // an erased finished session is one function call long. Every guard test
@@ -130,7 +170,10 @@ describe("ConnectAction: the destruction it stands in front of", () => {
 });
 
 describe("ConnectAction: the guard", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    clearHandoffSlot();
+  });
 
   it("nothing on record: Connect proceeds immediately, no confirm", async () => {
     renderConnect();
@@ -262,6 +305,73 @@ describe("ConnectAction: the guard", () => {
       expect(
         screen.queryByText("A session is in progress. Replace it?"),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  // James's SECOND PR #230 review (P1-1, Critical): a completed run
+  // sitting ONLY in the AUD-016 hand-off slot (`monitorRun.ts`'s own
+  // `stashHandoffRun`) — no SessionRun, no stored MonitorRun. Exactly the
+  // shape PROCEED ANYWAY and the late-burst restash produce, and it used
+  // to sail past this guard with no warning at all: neither of the two
+  // checks above sees it, so Connect proceeded silently, and the very
+  // next `"armed"` transition (`useMonitorSession.ts`'s own handler)
+  // destroyed it.
+  describe("over a slot-only unlogged run (P1-1, James's second review)", () => {
+    it("stages the confirm and touches nothing — the slot survives the first press (a peek, not a take)", async () => {
+      const slotted = slotOnlyMonitorRun();
+      stashHandoffRun(slotted);
+      renderConnect();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      expect(
+        screen.getByText(
+          "You have an unlogged session. Connecting discards it.",
+        ),
+      ).toBeInTheDocument();
+      expect(peekHandoffRun()).toStrictEqual(slotted);
+      expect(loadMonitorRun()).toBeNull();
+    });
+
+    it("Cancel preserves the slot exactly as it found it and restores Connect", async () => {
+      const slotted = slotOnlyMonitorRun();
+      stashHandoffRun(slotted);
+      renderConnect();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.getByRole("button", { name: "Connect" })).toBeVisible();
+      expect(peekHandoffRun()).toStrictEqual(slotted);
+    });
+
+    // THE ORDERING THIS FINDING IS ABOUT: the warning must be up, and the
+    // slot still intact, BEFORE anything downstream ever gets a chance to
+    // destroy it — the guard's own peek is what makes that true. Only
+    // once the rower confirms does the destruction happen, and only then.
+    it("the warning precedes any destruction: the slot is untouched while the confirm is showing, and is only retired once Connect anyway is pressed", async () => {
+      const slotted = slotOnlyMonitorRun();
+      stashHandoffRun(slotted);
+      renderConnect();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      expect(
+        screen.getByText(
+          "You have an unlogged session. Connecting discards it.",
+        ),
+      ).toBeInTheDocument();
+      // The warning is up, and the record is STILL there — the guard
+      // peeked, it did not consume.
+      expect(peekHandoffRun()).not.toBeNull();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Connect anyway" }),
+      );
+
+      // Only the confirmed press's own downstream destruction
+      // (`createMonitorRun`'s own unconditional clear, C1) retires the
+      // slot — never before the warning had a chance to be seen.
+      expect(peekHandoffRun()).toBeNull();
     });
   });
 

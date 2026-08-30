@@ -175,6 +175,28 @@ verified against main `e78a0de2`:
    independently returns to the exact URL (a bookmark, browser history),
    not one Today ever prompts. §3 below carries the full, corrected
    picture.
+7. **The late-burst restash — introduced at James's first PR #230 review
+   (P1b, "RULED: restash-only", not previously written up in this spec —
+   corrected here) and WIDENED at his second review (P1-2, Critical).** A
+   burst whose numbers arrive only AFTER the hand-off has already released
+   (a retry-heal, PROCEED ANYWAY, or the ordinary backstop release)
+   restashes `runRef.current` into §3's slot with its own receipt
+   (`handoff-stashed reason=late-burst`) — never a Save-time pull into an
+   already-mounted reader (Gate 0's own "a Save must post exactly what the
+   screen showed, never numbers it didn't"), only a copy for the NEXT
+   `?from=monitor` arrival to find. **The correct trigger is "this
+   hand-off has already released", not "we are inside teardown's own
+   post-unmount linger" — the first fix's own condition, and the gap the
+   second review found.** Release always happens strictly BEFORE the
+   navigation that eventually unmounts the driving hook
+   (`workout/ConnectedSurface.tsx`'s own `onEnded` effect fires only once
+   `handoffHeld` is already `false`), and a wire event answers to no React
+   commit — so a burst can land on EITHER side of that unmount: before it
+   (a real gap, bounded by nothing, that the first fix's own
+   linger-only condition missed entirely) or after it, inside `teardown`'s
+   own deferred linger (the shape the first fix did cover). Both windows
+   now restash identically, keyed on the release having already happened
+   rather than on which side of `teardown` the burst happens to land.
 
 ## §2 Scope
 
@@ -199,7 +221,42 @@ or gate-failing slot run is NEVER consumed-and-discarded; it stays for
 its own workout's later arrival while the reader falls through to
 storage. The post-unmount stash means the slot is live on ordinary
 HEALTHY linger-burst closes too, which is why the workoutId check is
-load-bearing, not defensive. Slot lifecycle:
+load-bearing, not defensive.
+
+**The consume itself is split across a render/commit boundary (James's
+first PR #230 review, P1c, Critical — not previously written up here).**
+`monitorModeRun` runs inside a `useState` lazy initializer — during
+RENDER, which React may repeat or abandon without ever committing — so it
+only ever `peekHandoffRun`s; a separate exported `confirmSlotOwnership(run)`
+claims the slot exactly once, called from `ManualDoorLog`'s own mount
+EFFECT, after commit. **Amended at his SECOND review (P1-3, Critical):
+`confirmSlotOwnership` compares by REFERENCE IDENTITY (`slotted === run`),
+never by `startedAt`.** `startedAt` alone cannot tell "the exact revision
+this screen rendered" from "a different revision of the same run" —
+§1 step 7's own late-burst restash can replace the slot with a RICHER
+same-`startedAt` copy in the gap between this screen's render (which
+peeked the poorer one) and its own effect's commit-time confirm, and a
+`startedAt` match would TAKE the richer copy out from under a screen that
+is still rendering the poorer one, destroying it with nothing left to
+claim it. Reference identity is exact by construction (`stashHandoffRun`
+always installs a new object) and fails safe: a mismatch does nothing,
+leaving the fresher revision in the slot for the next arrival, the same
+non-destructive rule the eligibility gates above already apply.
+
+**The guard at the OTHER door also reads the slot (P1-1, Critical).**
+`connectGuardStage()` (`monitorRun.ts`) — the confirm `ConnectAction`
+stages before a rower may start a NEW connected session at all — checks
+`SessionRun` and stored `MonitorRun` but, before this review, never the
+hand-off slot. A completed run can live in the slot ALONE (PROCEED
+ANYWAY, or the late-burst restash) with no other carrier holding it, and
+that shape used to sail past the guard with no warning at all: the very
+next `"armed"` transition (§1's own acceptance point) clears the slot
+unconditionally. The guard now also `peekHandoffRun()`s — a peek, never a
+take, matching the reader's own non-destructive discipline above — and
+stages `"unlogged"` on a hit, the same sentence the stored-`MonitorRun`
+case already uses.
+
+Slot lifecycle:
 cleared on consume, on save-success (beside `clearMonitorRun`, which also
 usefully clears any stale earlier-session stored record), on the
 manual discard path (a discarded session's slot must not resurrect at the
@@ -366,3 +423,32 @@ gates, mutation runs, per-fix evidence — lives in PR #230's Record block
 (the SDD workspace that first held it is git-excluded and dies with the
 worktree; a pointer there would be a dangling citation, RF16's
 corollary).
+
+**James's first PR #230 review (P1a/P1b/P1c/P2a/P2b, 2026-08-30):** five
+findings — P1a (Critical, the `"armed"` clear moved from `createMonitorRun`
+to the event handler itself), P1b (Important, the late-burst restash
+mechanism, RULED restash-only), P1c (Critical, the reader's peek/take split
+via `confirmSlotOwnership`), P2a (Important, the real recovery composition
+test), P2b (docs, the ROADMAP note count) — were fixed and gated but never
+folded into this document at the time; that gap is corrected retroactively
+by this same paragraph and by the mechanism descriptions §1 step 7 and §3
+now carry, since James's SECOND review (immediately below) builds directly
+on them.
+
+**James's SECOND PR #230 review (P1-1/P1-2/P1-3, 2026-08-30):** three
+further Critical findings, each a race the first round's own fixes opened.
+P1-1: `connectGuardStage()` missed the hand-off slot as a carrier, so a
+slot-only unlogged run got no Connect warning before the next `"armed"`
+clear destroyed it — fixed by peeking the slot too (§3). P1-2: the
+late-burst restash (§1 step 7) only fired inside `teardown`'s own
+post-unmount linger, missing the equally real window between a release and
+the navigation-triggered unmount that eventually reaches `teardown` at
+all — fixed by keying the restash on "already released"
+(`!handoffHeld`), not on which side of `teardown` the burst lands. P1-3:
+`confirmSlotOwnership` matched by `startedAt`, which cannot tell a
+render-time revision from a richer same-identity one P1-2's own restash
+installs before the mount effect commits — fixed by reference-identity
+CAS (§3). All three closed with failing-first tests reproducing his own
+probes; full account in the SDD workspace's `task-6-report.md` (git-
+excluded, dies with the worktree — the same RF16 corollary the paragraph
+above already names).

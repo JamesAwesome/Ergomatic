@@ -1279,7 +1279,13 @@ describe("anyLiveSession: the coexistence truth table", () => {
 // Phase 7B Task 2, spec §3. The predicate half of the Connect guard; the
 // staged confirm it feeds is ConnectAction.test.tsx's.
 describe("connectGuardStage: the Connect door's lock", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    // Module-scope state, not localStorage (`monitorRun.test.ts`'s own
+    // slot describe block below carries the identical note) — the P1-1
+    // tests in this block stash into it, so it must start empty too.
+    clearHandoffSlot();
+  });
 
   const finishedAt = new Date("2026-08-05T13:00:00.000Z").toISOString();
 
@@ -1369,6 +1375,41 @@ describe("connectGuardStage: the Connect door's lock", () => {
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
 
     expect(anyLiveSession()).toBe("none");
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  // James's SECOND PR #230 review (P1-1, Critical): his own probe,
+  // verbatim — a completed run sitting ONLY in the AUD-016 hand-off slot
+  // (no SessionRun, no stored MonitorRun) is exactly the shape
+  // `proceedHandoff`/the late-burst restash produce, and it used to be
+  // invisible to this guard entirely: neither `loadRun()` nor
+  // `loadMonitorRun()` sees it, so Connect showed no warning at all, and
+  // the very next `"armed"` transition (`useMonitorSession.ts`'s own
+  // handler, P1a's fix) destroyed it with nothing having asked first.
+  it("REVIEW FIX (P1-1, Critical): a completed run sitting ONLY in the AUD-016 hand-off slot is ALSO 'unlogged' — the guard must not miss it", () => {
+    stashHandoffRun({ ...freshMonitorRun(), completedAt: finishedAt });
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  // The guard's own slot check must be a PEEK, matching `monitorModeRun`'s
+  // non-destructive discipline (`session/LogSession.tsx`) — a Connect press
+  // that merely ASKS must never itself be the thing that empties the slot,
+  // Cancel included.
+  it("REVIEW FIX (P1-1): the slot check peeks, never takes — the candidate survives the guard read untouched", () => {
+    const slotted = { ...freshMonitorRun(), completedAt: finishedAt };
+    stashHandoffRun(slotted);
+
+    expect(connectGuardStage()).toBe("unlogged");
+    expect(peekHandoffRun()).toStrictEqual(slotted);
+  });
+
+  // Descending-severity order (this describe's own "wins over"/"staged
+  // ONCE" tests above): a SessionRun or stored MonitorRun already staged
+  // is not overridden by ALSO having a slot entry — a rower with all three
+  // stale still sees exactly one sentence.
+  it("REVIEW FIX (P1-1): a slot entry does not upstage a SessionRun or stored MonitorRun already staged — still exactly one 'unlogged'", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    stashHandoffRun({ ...freshMonitorRun(), completedAt: finishedAt });
     expect(connectGuardStage()).toBe("unlogged");
   });
 });

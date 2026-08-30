@@ -1548,7 +1548,24 @@ export type ConnectGuardStage = "unlogged" | "in-progress" | null;
  * see now stages `"unlogged"`, matching the finished case it already used
  * to reach. The `SessionRun` branch above is untouched — a phone timer
  * genuinely does keep running in the background across reload/navigation,
- * so `"in-progress"` stays true there. */
+ * so `"in-progress"` stays true there.
+ *
+ * **James's second PR #230 review (P1-1, Critical): also peeks the AUD-016
+ * hand-off slot (`monitorRun.ts`'s own `peekHandoffRun`).** A completed run
+ * can be a legitimate carrier of real, unsaved history while living in
+ * NEITHER `SessionRun` nor stored `MonitorRun` at all — PROCEED ANYWAY
+ * (`useMonitorSession.ts`'s `proceedHandoff`) and the late-burst restash
+ * (`summary-observations`'s own handler) both stash there specifically
+ * BECAUSE storage could not be trusted, so a slot-only record is not an
+ * edge case this guard can skip. Without this check, Connect's guard saw
+ * nothing at risk (both other checks miss), showed no warning, and the
+ * very next `"armed"` transition destroyed it — `useMonitorSession.ts`'s
+ * own `"armed"` handler clears the slot unconditionally the instant a new
+ * session's identity is accepted (P1a's own fix), with nothing between the
+ * press and that clear to have asked first. `peekHandoffRun()`, never
+ * `takeHandoffRun()`: this is a read-only check, the same non-destructive
+ * discipline `monitorModeRun`'s own peek follows (`session/LogSession.tsx`)
+ * — a Cancel press must leave the slot exactly as it found it. */
 export function connectGuardStage(): ConnectGuardStage {
   const run = loadRun();
   if (run !== null) {
@@ -1560,6 +1577,13 @@ export function connectGuardStage(): ConnectGuardStage {
     // session lives on WorkoutDetail's surface and reload/navigation
     // tears it down. "In progress" would assert machine state we do
     // not have (spec 2b, exit criterion 5).
+    return "unlogged";
+  }
+  if (peekHandoffRun() !== null) {
+    // A slot-only completed run (P1-1): no SessionRun, no stored
+    // MonitorRun, but a real record sitting in the AUD-016 hand-off slot —
+    // "unlogged" is the honest sentence for it too, same severity as the
+    // stored-MonitorRun case immediately above.
     return "unlogged";
   }
   return null;

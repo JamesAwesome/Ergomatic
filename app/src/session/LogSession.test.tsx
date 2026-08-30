@@ -2864,6 +2864,46 @@ describe("LogSession: monitorModeRun consults the AUD-016 handoff slot (design s
     expect(peekHandoffRun()).toStrictEqual(unrelated);
   });
 
+  // James's SECOND PR #230 review (P1-3, Critical): his own probe,
+  // verbatim. `confirmSlotOwnership` used to compare by `startedAt` alone
+  // — not enough to prove the candidate is the same REVISION.
+  // P1-2's own restash (`useMonitorSession.ts`'s `summary-observations`
+  // handler) can replace the slot with a RICHER copy of the exact same run
+  // — same `startedAt`, now carrying `summaryTotals` — in the window
+  // between this screen's render (which peeked the poorer R0) and the
+  // mount effect's own commit-time confirm. A `startedAt` match would then
+  // TAKE the richer R1 out from under a screen that is still rendering R0,
+  // destroying the only copy of it with nothing left to claim it.
+  it("REVIEW FIX (P1-3, Critical): a richer, SAME-startedAt revision interposed between render and confirm SURVIVES — reference identity, not startedAt, decides ownership", () => {
+    const { run: r0 } = buildMonitorFixture();
+    stashHandoffRun(r0);
+    const search = new URLSearchParams("from=monitor");
+
+    // Render-time peek — exactly what a `useState` lazy initializer
+    // captures into this screen's own state.
+    const rendered = monitorModeRun(search, MONITOR_WORKOUT_ID);
+    expect(rendered).toStrictEqual(r0);
+
+    // Between render and the mount effect's own commit, a richer
+    // same-identity revision (P1-2's restash) replaces the slot.
+    const r1: MonitorRun = {
+      ...r0,
+      summaryTotals: { workElapsedSeconds: 999, workDistanceMeters: 999 },
+    };
+    stashHandoffRun(r1);
+
+    // The mount effect fires with the STALE `rendered` reference (R0) —
+    // the component still renders exactly what it committed; nothing
+    // re-derives it mid-flight.
+    confirmSlotOwnership(rendered!);
+
+    // R1 SURVIVES: confirm refused to take a candidate that no longer
+    // matches by REFERENCE, even though `startedAt` is identical — it is
+    // left in the slot, non-destructive, for the next `?from=monitor`
+    // arrival to find.
+    expect(peekHandoffRun()).toStrictEqual(r1);
+  });
+
   it("REVIEW FIX (F5, Important): a slot carrying a DIFFERENT workout's run is left UNTOUCHED — the reader falls through to storage, and the slot is still intact for its own, later, correct arrival", () => {
     const { run: runForX } = buildMonitorFixture();
     stashHandoffRun({ ...runForX, workoutId: "id-workout-x" });
