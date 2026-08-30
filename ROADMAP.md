@@ -272,14 +272,13 @@ rower's work silently.
         into the real hook, never a storage-seeded fixture) plus
         `useMonitorSession.test.ts`'s receipt-instrument unit tests. **What
         this does NOT close:** the note-corrections row below stays OPEN on
-        its own clock, and the production re-count was **WAIVED as PR #228's
-        merge gate (James, 2026-08-29 — prod access unavailable from the
-        session; "0 of 16" stays the dated 2026-08-28 BASELINE, not a
-        PR-gate count). It must re-run BEFORE the next tag is cut or before
-        any release note repeats "never":**
-        `select count(*) filter (where machine_work_seconds is not null),
-        count(*) from session_logs where device_name is not null;`
-        Both still owed before this item as a whole is struck.
+        its own clock. The production re-count was waived as #228's merge
+        gate, then **DISCHARGED 2026-08-30: James ran the query on prod —
+        0 of 18** (two more connected rows since the 2026-08-28 0-of-16
+        baseline, still none machine-confirmed). The v0.27.0 notes'
+        "never" claim rests on this fresh count; the interesting re-run is
+        AFTER v0.27.0 reaches his phone, where the first nonzero
+        machine-confirmed row is the fix's field proof.
 
 - [ ] **Audit AUD-016 — measured connected work survives storage failure.** A
       completed PM5 interval retained in memory can reach Log as
@@ -289,11 +288,84 @@ rower's work silently.
       sequences this against the pocketed-phone row loss and machine-summary
       hand-off;
       the audit does not. **P1, Confirmed. M**
+      - **ARCHITECTURAL RESET (James, 2026-08-30): the carrier substrate was
+        replaced by the hand-off store protocol —
+        `docs/superpowers/specs/2026-08-30-handoff-protocol-design.md`
+        (rev 4, APPROVED by James 2026-08-30 after his own design gate plus
+        two antagonist passes and two PM gates). PR #230 CLOSED UNMERGED as
+        the preserved record; implementation restarts on a fresh branch off
+        main; the behaviors below (held-error frame, Retry/Log-it-anyway,
+        receipts, the render/commit split, James's seven review probes as
+        permanent tests) are PRESERVED and restore file-level from that
+        branch; the slot substrate described below is DELETED by the
+        protocol. The paragraph that follows records what the closed branch
+        built and proved — a record, not the live design:**
+        Spec (superseded, banner added):
+        `docs/superpowers/specs/2026-08-29-aud016-durable-handoff-design.md`.
+        The ended hand-off now VERIFIES writability once (`saveMonitorRun`'s
+        new `SaveVerdict`), at the release funnel and at every no-hold close
+        (link-lost End, continuity reset, the no-conditions-owed finish); a
+        `"failed"` verdict holds in a new, timer-free `holdError:
+        "storage-failed"` state instead of releasing silently, with `Retry`/
+        `Log it anyway` controls (Gate 0 approved) and a teardown escape
+        hatch that stashes rather than loses the record. The empty-storage
+        decline folds the machine's own numbers onto the in-memory run
+        in-place, eligibility-gated (mirrors `appendSummaryObservations`'s
+        own two writer gates — a review fix, F1). A one-shot module slot
+        (`stashHandoffRun`/`peekHandoffRun`/`takeHandoffRun`/
+        `clearHandoffSlot`) carries the in-memory record through to the log
+        door's reader, non-destructively: a slot hit for a DIFFERENT
+        workout, or one that fails an eligibility gate, is left in place
+        and falls through to storage rather than being consumed and lost —
+        the post-unmount stash populates this slot on the ORDINARY healthy
+        close path too, not only on a failed write (review carry F5).
+        Every receipt (`release-save`, `summary-folded-in-memory`,
+        `hold-error-entered`/`-retry`/`-proceed`, `handoff-stashed`) goes
+        through the ring, never the failing store. Gated by
+        `summaryHoldReplay.test.ts`'s legs A/B + the no-hold arm (all
+        green, including leg A's own reader assertion — the whole suite is
+        green for the first time), plus unit/component/integration tests
+        across `monitorRun.test.ts`, `useMonitorSession.test.ts`,
+        `LogSession.test.tsx`, `ConnectedSurface.test.tsx`, and
+        `ConnectedInterstitial.test.tsx` (the last gained an "above the
+        seam" test at close-out, mutation-probed: no other test in the repo
+        would have caught a PARENT forging `holdError: null` on its way
+        into the rendered surface). Full suite green (`pnpm test`,
+        unit+client+integration, 215 files/5763 tests), `pnpm e2e` 420/420,
+        `pnpm lint`/`format:check`/`typecheck` clean.
+        **What this does NOT close:** `fail()`-path closes (a completed run
+        through a program-failure close) stay out of scope, per the spec's
+        own §2 reachability reasoning; the slot's reload-safety and the
+        EVICTION producer (a write that returns green but the browser later
+        evicts the origin) are disclosed, not solved — the receipts are the
+        only instrument either gets; **the escape-hatch gap (PM gate,
+        2026-08-30): under denial-from-first-write the teardown stash
+        survives while Today renders no door — storage is empty, so
+        nothing in the app points the rower back to the record the stash
+        preserved**; AUD-011/AUD-015 (the row below) are a
+        separate audit item, untouched by this work. Two low-risk,
+        disclosed coverage gaps remain in `useMonitorSession.ts` (a
+        `handoff-stashed reason=superseded` receipt at two of four stash
+        sites, and one already-defensive `endByMachine` branch sitting
+        behind a documented-unreachable predicate) — the underlying
+        mechanisms are proven at other call sites and at the pure-function
+        level; not chased further. **Needs a PM final-PR gate before merge
+        (TRIAD: a stored shape, `MonitorRun.summaryTotals`/`series`/the
+        slot) and James's explicit approval — not struck until then.**
 - [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
       PR may own both, with separate regression tests; the visible Retry state
       gets rendered Gate 0 first. **P1, Confirmed. M**
+      **RESHAPED by the approved hand-off store protocol (2026-08-30, its
+      §8):** the store's accessor wraps the localStorage GETTER
+      (`SecurityError` fails every access — WHATWG PRIMARY, in the
+      antagonist ledger) and absorbs the `loadMonitorRun` loader on day
+      one, so THIS chunk owns three loaders, not four (`loadRun`,
+      `loadDraft`, `loadTodayPick`). The earlier #230-gate `removeItem`
+      spec condition is SUPERSEDED: `removeItem` carries no throw
+      condition per the same PRIMARY, and the store's `retire` wraps its
+      durable removal regardless.
       **Corrected at the anchor pass (2026-08-28): the audit's four-loader
       list named the wrong fourth loader.** `loadTodayOverrides` is already
       guarded (`todayOverrides.ts:211`, getter inside its try); the real
@@ -812,10 +884,18 @@ new.
      A correction alone reads "we told you something that was never true" with no
      remedy; the same words behind a working feature read as a repair. Ship them
      regardless if the fix slips past roughly two weeks.
-     **The same notes owe two more things (landed here from the 2026-08-28
-     phase-open ruling at PR #228's PM gate, because the note-writer reads
-     THIS row, not the ledger):** the no-backfill sentence naming the 16
-     permanently-ours rows, and the new post-End wait if perceptible.
+     **The same notes owe two more things (landed here from the
+     2026-08-28 phase-open ruling at PR #228's PM gate — because the
+     note-writer reads THIS row, not the ledger):** the no-backfill
+     sentence naming the **18** permanently-ours rows (James's fresh
+     2026-08-30 prod count, above — "0 of 18"); and the post-End wait if
+     perceptible (the hold only — AUD-016's verify write is NOT in this
+     tag). **The failed-write-state sentence (`COULD NOT KEEP THE RECORD
+     ON THIS PHONE.`, its two buttons) was landed here at James's #230
+     P2b review and REMOVED at the 2026-08-30 pause ruling: it describes
+     a screen v0.27.0 does not contain. It returns with the hand-off
+     store's PR** (the gate that lands a condition owns removing it when
+     its subject stops shipping — pm-ledger, 2026-08-30).
 - **The log-delete accepted gap** — a session with a wrong number has exactly
   one remedy, delete and re-log by hand, and `logged_at` is a DB default rather
   than settable, so a mistake found the next day cannot be re-dated onto its own
@@ -847,6 +927,10 @@ Each needs erg time or a deliberate recording session.
   corpus is web/foreground only (End-arm round-trip n=1, web; background/resume
   n=0). The next connected walk reads the ring for `burst-timeout` receipts and
   the End-arm terminate round-trip on native BLE. (PR #228's PM gate)
+  **Widened at #230's PM gate (2026-08-30):** the AUD-016 verify adds a
+  synchronous full-run re-serialize (~720 KB worst case) to every ended
+  hand-off, so the same walk measures TOTAL post-End latency on native, not
+  only the burst backstop — one walk, both numbers.
 - **A lab capture of `2×Nm rNN`** — the series-truth regression fixture is
   SYNTHETIC; no committed recording exercises distance-work-with-rest-between.
   (`phase-rc.md`)

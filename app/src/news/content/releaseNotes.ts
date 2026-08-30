@@ -5,6 +5,36 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.27.0 (2026-08-30): range v0.26.0..main = 17 merges, each accounted
+    // per RF15 (`git log v0.26.0..main --oneline`, no --merges). #228 is
+    // items 1-2 and the reason corrections 3-4 can ship as a repair rather
+    // than a bare apology (the PM's 2026-08-28 sequencing ruling). #227,
+    // #220 and #218 are item 5 (three small copy fixes, one line). No note:
+    // #229/#226/#225/#224/#223/#222/#221/#215/#214/#213 (docs, ledgers,
+    // lint/CI infrastructure — nothing a tester receives) and
+    // #219/#217/#216 (test-and-gate work with no behavior change).
+    //
+    // THE "NEVER" CLAIM IS COUNTED, NOT INFERRED: James ran the recount on
+    // production 2026-08-30 — 0 machine-confirmed of 18 connected rows —
+    // so item 3's "never once" and its "stay as our computed numbers"
+    // rest on a fresh count, per his own waiver condition on #228.
+    //
+    // DELIBERATELY ABSENT: anything about the failed-write screen
+    // (COULD NOT KEEP THE RECORD ON THIS PHONE., Retry, Log it anyway).
+    // That work was paused for the hand-off store reset (PR #230 closed
+    // unmerged, 2026-08-30) and is not in this tag; its sentence returns
+    // with the store's own PR. The ROADMAP notes-owed row carries this.
+    version: "v0.27.0",
+    date: "2026-08-30",
+    items: [
+      "Your saved rows now show the erg's own numbers. Finish or end a connected session and the app waits a moment for the monitor to speak its own totals before opening the log screen; the saved row then carries them, marked MACHINE CONFIRMED with the monitor's verification code. Until now that never happened once, on any row.",
+      "The wait is short, usually under a second. The screen says what it is doing: Wrapping up, then Getting the monitor's own numbers.",
+      "A correction we owe you. v0.22.0 said your saved rows could show what the erg itself reported, and v0.23.0 said three summary numbers come straight from the erg. Neither was ever true before this release: a timing bug meant the monitor's totals never reached a single saved row. Rows saved before this release keep our computed numbers permanently; on our own data that is all 18 connected rows. From this release on, the claim is real.",
+      "A second correction. v0.11.0 told you DISTANCE counts warm-up and rest meters and to check it against the monitor side by side. Since v0.22.0 the three numbers up top count your work only, so that instruction no longer describes the screen. The total line beneath them is where the rest meters live.",
+      "Three small wording fixes: the ready screen's warning now says to keep the phone's screen on, not the monitor's; the baseline estimate line drops a stale instruction; and the training pyramid article is readable at phone size in the app's own words.",
+    ],
+  },
+  {
     // v0.26.0 (2026-08-28): range v0.25.0..main = 7 merges, each accounted
     // per RF15. #206 (RC-27) and #212 (RC-33) are items 1 and 2 — #206 is
     // the one this range OWED, having merged AFTER v0.25.0's own notes PR.
