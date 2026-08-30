@@ -3031,12 +3031,15 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // share a `startedAt`). Without the defense retire this create-commit
     // would be refused `"second-key"` (the single-unretired-session
     // invariant, spec §1) against session 1's still-unretired leftover.
-    // FOUND while writing this test: using the SAME key here (this
-    // describe block's own `harness` default, `now: () => t0`) makes the
-    // defense retire TOMBSTONE that exact key, so the create that follows
-    // is refused `"retired"` instead of succeeding — a real, instructive
-    // trap this test's own title ("a DIFFERENT key") already named
-    // correctly; the first draft's code did not match it.
+    // FOUND while writing this test, and FIXED at the review round (M6):
+    // using the SAME key here (this describe block's own `harness`
+    // default, `now: () => t0`) used to make the defense retire TOMBSTONE
+    // that exact key, so the create that followed was refused `"retired"`
+    // instead of succeeding. `createMonitorRun`'s own call site now
+    // detects that same-key case and adopts the entry's revision instead
+    // of retiring it — see the sibling test below ("the same-key defense
+    // guard") for that scenario directly; this one keeps the DIFFERENT-key
+    // shape its own title names.
     const t1 = new Date(t0.getTime() + 60_000);
     const session2 = harness(
       {
@@ -3071,6 +3074,161 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       ),
     ).toBe(true);
     expect(loadMonitorRun()?.startedAt).toBe(t1.toISOString());
+  });
+
+  it("the same-key defense guard (M6): a leftover entry sharing the NEW run's own key is ADOPTED (an update-shaped commit), never retired-then-refused", async () => {
+    // Session 1 opens and is left OPEN — same singleton-store shape as
+    // the sibling test above, but session 2 below reuses the IDENTICAL
+    // clock (`harness`'s own default `now: () => t0`), so its own
+    // `startedAt` collides with session 1's leftover key exactly.
+    const session1 = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(session1.result);
+    await programAndArm(
+      session1.result,
+      session1.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session1.fake, 100);
+    expect(session1.result.current.phase).toBe("live");
+    const collidingKey = loadMonitorRun()?.startedAt;
+    expect(collidingKey).toBe(t0.toISOString());
+
+    // Session 2, a SEPARATE hook instance, the SAME clock — the exact
+    // collision retiring-then-creating cannot survive (retire always
+    // tombstones; a create against a just-tombstoned key is refused
+    // "retired"). The defense at `createMonitorRun`'s own call site
+    // detects `stale.sessionKey === run.startedAt` and adopts the
+    // entry's own revision instead — an UPDATE, never a retire.
+    const session2 = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 50, distanceMeters: 250 })],
+    });
+    await connect(session2.result);
+    await programAndArm(
+      session2.result,
+      session2.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session2.fake, 100);
+
+    expect(session2.result.current.phase).toBe("live");
+    // Session 2's own record IS live now, at the NEXT revision (1) — an
+    // update over session 1's own revision-0 entry, not a fresh create
+    // (which would itself be refused "retired" if a retire had run).
+    const afterSession2 = currentUnretiredHandoffForTest();
+    expect(afterSession2).not.toBeNull();
+    expect(afterSession2!.sessionKey).toBe(collidingKey);
+    expect(afterSession2!.revision).toBe(1);
+    expect(loadMonitorRun()?.startedAt).toBe(collidingKey);
+    // No "createMonitorRun-defense" RETIRE receipt this time — the guard
+    // skipped it on purpose (retiring here would have tombstoned the key
+    // this very commit needed).
+    const entries = JSON.parse(session2.result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:retire" &&
+          e.detail.includes("createMonitorRun-defense"),
+      ),
+    ).toBe(false);
+    // The commit itself DID land, as an accepted update — confirmed via
+    // the store's own receipt rather than inferred from `phase` alone.
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:commit-accepted" &&
+          e.detail.includes(`"revision":1`),
+      ),
+    ).toBe(true);
+  });
+
+  it("A REFUSED SUMMARY COMMIT MUST STILL RESOLVE THE BURST CONDITION (plan Task 3 review, I3 — the #228 invariant this task's own deletion of APPEND-REJECTED left with no assertion): the key is retired WHILE the burst hold is open, then the summary arrives — the store refuses the commit, but the hold still releases", async () => {
+    // Row 5's own "tombstone refusal reaching the hook's discipline" gets
+    // its FIRST real assertion here too: the SAME retire-while-open shape
+    // is exactly what a Save/Discard racing a still-lingering burst would
+    // produce once Task 4 routes those doors through `retire()`.
+    const driverTimer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 40,
+            distanceMeters: 130,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      {
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100); // the Menu press — closes healthy, burst hold opens
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+    expect(result.current.holdError).toBeNull();
+
+    // THE RACE: retire the key directly through the store WHILE the burst
+    // hold is still open — the shape a Save/Discard produces once Task 4
+    // routes those doors through `retire()` instead of the legacy
+    // `clearMonitorRun()` (ROADMAP's own AUD-016 open condition on Task 4).
+    const current = currentUnretiredHandoffForTest();
+    expect(current).not.toBeNull();
+    retireHandoffForTest(
+      [{ sessionKey: current!.sessionKey, revision: current!.revision }],
+      "test-simulated-save-while-burst-open",
+    );
+
+    // THE SUMMARY ARRIVES: the writer gate accepts (it still reads
+    // `runRef.current`, which has no idea it was just retired), but the
+    // STORE refuses the commit — tombstoned.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 40, meters: 130 });
+    });
+    expect(driverTimer.pending()?.ms).toBe(200);
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    // The refusal receipt, from the store itself (piped to the ring).
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:commit-refused" &&
+          e.detail.includes('"reason":"retired"'),
+      ),
+    ).toBe(true);
+    // THE INVARIANT ITSELF: a refused summary write still resolves the
+    // burst condition — "waiting longer cannot help a write that was
+    // refused" — so the hold does not strand the rower on a session that
+    // has already been dispatched elsewhere.
+    const released = entries.find((e) => e.kind === "handoff-released");
+    expect(released?.detail).toContain("burst-heard");
+    expect(result.current.handoffHeld).toBe(false);
+    expect(result.current.holdError).toBeNull();
   });
 
   it("the burst-first-race ordering (test (h)'s own shape) under denial: the summary's OWN commit is what's refused, and resolveHandoffCondition's release funnel is what catches it — endByMachine's own no-conditions-owed branch stays unreachable here (burst is still open when it runs)", async () => {

@@ -237,6 +237,23 @@ const NO_IDENTITY: { program: WorkoutProgram } & RunIdentity = {
   ...ANONYMOUS_RUN,
 };
 
+/**
+ * Plan Task 3 review (M7): ownership tracking for `handoffStore`'s ONE
+ * receipt-channel slot — module-level because the slot itself is
+ * (`handoffStore.ts`'s own header: "one process, one store"). Each hook
+ * instance's own mount effect increments this and captures its own
+ * token; its unmount cleanup only calls `setReceiptChannel(null)` when
+ * this counter STILL equals its own token — i.e. no LATER mount has
+ * claimed the slot since. Without this, an unmount racing a second
+ * mount (StrictMode's double-invoke, or two hook instances genuinely
+ * overlapping) could null out a SUCCESSOR instance's own channel: the
+ * cleanup fires unconditionally, `setReceiptChannel`'s own contract is
+ * "last call wins" with no per-caller identity, so instance A's
+ * teardown silently steals instance B's receipts with no error and no
+ * test able to tell the difference without this guard.
+ */
+let receiptChannelOwner = 0;
+
 /** Fire-and-forget, with the rejection deliberately dropped. Three places
  *  hang up on a radio and one leaves an erg terminated; none of them has
  *  anything to do differently if it fails, and an unhandled rejection
@@ -1756,6 +1773,20 @@ export function useMonitorSession(
   const verifyHandoffWritable = useCallback((): boolean => {
     const run = runRef.current;
     if (run === null) return true;
+    // Plan Task 3 review (⚠️ observation): `verdict` reads `undefined`
+    // in TWO distinct cases, and both correctly fall through to
+    // "release" below — never conflate this with a genuine
+    // `"failed"`. (1) this key has never been committed at all (not
+    // reachable here in practice, since `runRef.current !== null`
+    // implies `createMonitorRun`'s own create-commit already ran); (2)
+    // the key was ALREADY RETIRED — `handoffStore.retire()` deletes the
+    // cached-verdict entry for a key it retires (`handoffStore.ts`'s own
+    // `retire`: `cachedVerdicts.delete(sessionKey)`), so a commit this
+    // hook believes is still open but that some door has since retired
+    // reads back as `undefined` here too. Releasing on `undefined` is
+    // correct either way — there is nothing left to hold a write open
+    // FOR — but it is `undefined` for that reason, not because nothing
+    // ever happened.
     const verdict = cachedHandoffVerdict(run.startedAt);
     if (verdict === "failed") {
       logRef.current?.record(
@@ -1766,6 +1797,46 @@ export function useMonitorSession(
     }
     return true;
   }, []);
+
+  /**
+   * Plan Task 3 review (I4): the THREE "no-hold close" sites
+   * (`endByMachine`'s own no-conditions-owed branch, `endSession`'s
+   * link-lost branch, and the continuity-reset branch) used to each
+   * inline their own copy of "if nothing opened a hold, run the verify
+   * and compute `handoffHeld`/`holdError`" — two of the three shared an
+   * identical `let`+`if` shape, but the continuity-reset branch's own
+   * copy was a bare ternary with no `alreadyOpen` guard at all (it never
+   * opens a hold to begin with), which made it a DIFFERENT STRUCTURE, not
+   * merely a differently-named copy of the same one — "architecturally
+   * identical" was a claim about intent, not about what a test exercising
+   * one copy could prove about the others. Collapsed into this one
+   * function so mutating the verify's own consultation in ONE place is
+   * what every one of the three call sites depends on, and each existing
+   * denied-write test (via `endSession`'s call, or the release funnel)
+   * bites here.
+   *
+   * `alreadyOpen`: `true` when the caller's own opener(s) already armed a
+   * hold (`splitOpened || burstOpened`, or `endSession`'s own `held`) —
+   * short-circuits to "held, no verify" without touching
+   * `verifyHandoffWritable` at all, since that hold's own eventual
+   * release runs the verify itself, once, at `resolveHandoffCondition`'s
+   * shared funnel (never here — running it twice would be the RF24 shape
+   * this review round's own I4 finding warns about). `false` for a close
+   * that never had anything to open (the continuity-reset branch's own
+   * permanent case, or the other two whenever their own openers found
+   * nothing owed) — runs the verify synchronously.
+   */
+  const noHoldCloseVerdict = useCallback(
+    (
+      alreadyOpen: boolean,
+    ): { handoffHeld: boolean; holdError: "storage-failed" | null } => {
+      if (alreadyOpen) return { handoffHeld: true, holdError: null };
+      if (verifyHandoffWritable())
+        return { handoffHeld: false, holdError: null };
+      return { handoffHeld: true, holdError: "storage-failed" };
+    },
+    [verifyHandoffWritable],
+  );
 
   /** Phase LL Task 2: the retract timer's own canceller, or `null` when
    *  no hysteresis window is currently running (no silence has ever fired,
@@ -2313,14 +2384,34 @@ export function useMonitorSession(
           // `createMonitorRun`'s own doc comment) — but a defensive sweep
           // right before the create is cheap insurance, and `retire`'s own
           // per-entry receipt makes it visible if it ever finds anything.
+          // Plan Task 3 review (M6): if the leftover entry's OWN key
+          // already equals the run we are about to create (a genuine
+          // clock-resolution collision — the exact shape this task's own
+          // test fixtures hit before `resetForTests()` existed, per that
+          // function's own doc comment), retiring it here would be
+          // self-defeating: `retire()` tombstones unconditionally, so the
+          // create-commit two lines below would find its OWN key freshly
+          // retired and be refused `"retired"` instead of succeeding. In
+          // that one case, skip the retire and ADOPT the entry's own
+          // revision — an UPDATE-shaped commit (`expectedRevision:
+          // stale.revision`), not a create — so the run this hook is
+          // about to open lands as the next revision of what is already
+          // there rather than tombstoning its own key out from under
+          // itself.
           const stale = currentUnretiredHandoff();
-          if (stale !== null) {
+          const sameKeyStale =
+            stale !== null && stale.sessionKey === run.startedAt;
+          if (stale !== null && !sameKeyStale) {
             retireHandoff(
               [{ sessionKey: stale.sessionKey, revision: stale.revision }],
               "createMonitorRun-defense",
             );
           }
-          const created = commitHandoff(run.startedAt, null, run);
+          const created = commitHandoff(
+            run.startedAt,
+            sameKeyStale ? stale.revision : null,
+            run,
+          );
           // Unconditional either way (spec's own exit criteria: "no
           // rendered change" — a structurally-impossible refusal here must
           // never block the rower from actually starting to row; the
@@ -2496,15 +2587,15 @@ export function useMonitorSession(
           // Hand-off store design spec §7, plan Task 3: one of the "no-hold
           // closes" — a close that opens NO hold at all still owes the
           // verify, synchronously, in this SAME `ended` patch, before
-          // `handoffHeld` reaches `false`.
-          const holdError: "storage-failed" | null = verifyHandoffWritable()
-            ? null
-            : "storage-failed";
+          // `handoffHeld` reaches `false`. This branch never opens a hold
+          // of its own (the comment above explains why), so it is always
+          // `noHoldCloseVerdict(false)` — never `true`.
+          const { handoffHeld, holdError } = noHoldCloseVerdict(false);
           update({
             phase: "ended",
             endedBy: "user",
             runOpen: false,
-            handoffHeld: holdError !== null,
+            handoffHeld,
             holdError,
           });
         }
@@ -2564,7 +2655,7 @@ export function useMonitorSession(
       withSeries,
       stopSeriesFlush,
       applyProducerCommit,
-      verifyHandoffWritable,
+      noHoldCloseVerdict,
     ],
   );
 
@@ -2645,12 +2736,9 @@ export function useMonitorSession(
       // case — a no-op, not a genuine denied-write path; that path is
       // instead caught by `resolveHandoffCondition`'s own release funnel,
       // once the hold this function DID open resolves.
-      let handoffHeld = splitOpened || burstOpened;
-      let holdError: "storage-failed" | null = null;
-      if (!handoffHeld && !verifyHandoffWritable()) {
-        handoffHeld = true;
-        holdError = "storage-failed";
-      }
+      const { handoffHeld, holdError } = noHoldCloseVerdict(
+        splitOpened || burstOpened,
+      );
       update({
         phase: "ended",
         endedBy: "machine",
@@ -2659,13 +2747,7 @@ export function useMonitorSession(
         runOpen: false,
       });
     },
-    [
-      closeRecord,
-      openBurstHold,
-      openHandoffHold,
-      update,
-      verifyHandoffWritable,
-    ],
+    [closeRecord, openBurstHold, openHandoffHold, update, noHoldCloseVerdict],
   );
 
   /** `driver` is the one that emitted the event — passed rather than read
@@ -3707,6 +3789,25 @@ export function useMonitorSession(
         if (run !== null && run.completedAt === null) {
           // Phase LL Task 4 (design spec §4's writer table): "a failed
           // program() closing an open run -> program-failed".
+          //
+          // Hand-off store design spec §7, plan Task 3 review (⚠️
+          // observation): this close deliberately runs NO verify at
+          // all — `closeRecord` commits through `applyProducerCommit`
+          // like every other close, but nothing here checks
+          // `verifyHandoffWritable()` or sets `holdError`/`handoffHeld`
+          // afterward. This is BY DESIGN, not an oversight: `fail()`
+          // below moves `phase` to `"failed"`, never `"ended"` — this
+          // closing path never reaches the ended hand-off surface at
+          // all (`ConnectedSurface`'s own held-error frame renders only
+          // on `phase === "ended"`), so there is no screen a held-error
+          // state could ever appear on for it. The record's own
+          // durability still goes through the SAME store commit as
+          // every other close (a genuine write failure here is still
+          // receipted, via the piped `store-receipt:commit-accepted`
+          // with `verdict:"failed"`), just with no rower-facing recovery
+          // surface built for it — matching the ROADMAP's own AUD-016
+          // note ("`fail()`-path closes... stay out of scope, per the
+          // spec's own §2 reachability reasoning").
           closeRecord(true, "program-failed");
           update({ runOpen: false });
           // ...and leave the erg terminated rather than holding an orphan.
@@ -3766,12 +3867,7 @@ export function useMonitorSession(
     // branch and the continuity-reset close. A link-up End that DID open
     // the burst hold skips the verify here — it runs later, once, at
     // `resolveHandoffCondition`'s own release funnel.
-    let handoffHeld = held;
-    let holdError: "storage-failed" | null = null;
-    if (!handoffHeld && !verifyHandoffWritable()) {
-      handoffHeld = true;
-      holdError = "storage-failed";
-    }
+    const { handoffHeld, holdError } = noHoldCloseVerdict(held);
     update({
       phase: "ended",
       endedBy: "user",
@@ -3798,7 +3894,7 @@ export function useMonitorSession(
       // already over as far as the rower is concerned; a machine that
       // refuses the terminate does not un-end it.
     }
-  }, [closeRecord, openBurstHold, update, verifyHandoffWritable]);
+  }, [closeRecord, openBurstHold, update, noHoldCloseVerdict]);
 
   /** `MonitorSession.retryHandoffSave`'s own doc comment carries the
    *  contract. `retryDurable` (§1) NEVER bumps `revision` — modelling Retry
@@ -3948,6 +4044,9 @@ export function useMonitorSession(
   // sequence and break every one of them (found by running the full suite,
   // not by inspection).
   useEffect(() => {
+    // M7: claim ownership of the slot for this mount.
+    receiptChannelOwner += 1;
+    const myOwnerToken = receiptChannelOwner;
     const onReceipt = (receipt: HandoffReceipt): void => {
       logRef.current?.record(
         `store-receipt:${receipt.kind}`,
@@ -3955,7 +4054,16 @@ export function useMonitorSession(
       );
     };
     setReceiptChannel(onReceipt);
-    return () => setReceiptChannel(null);
+    return () => {
+      // Only release the slot if nobody has claimed it since — a LATER
+      // mount's own effect already bumped `receiptChannelOwner` past our
+      // token, in which case it also already overwrote the channel with
+      // its own, and nulling it here would clobber that successor's
+      // receipts instead of our own.
+      if (receiptChannelOwner === myOwnerToken) {
+        setReceiptChannel(null);
+      }
+    };
   }, []);
 
   return {

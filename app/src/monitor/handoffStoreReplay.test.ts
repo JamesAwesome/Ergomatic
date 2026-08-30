@@ -356,15 +356,28 @@ describe("the finish-grace boundary vs. a denied live→closed write (design spe
     // programming mismatch would still surface as a real divergence here.
     expect(outcome.divergences).toStrictEqual([]);
 
-    // The late boundary's own attempted write is the LAST entry — nothing
-    // else touches `MONITOR_RUN_KEY` after it in this capture (the summary
-    // burst that follows moments later, seq 2445-2447, calls
-    // `appendSummaryObservations`, which declines outright once `stillLive`
-    // reads a `completedAt: null` record and never attempts a write at
-    // all — `monitorRun.ts:1096-1098`).
+    // CORRECTED (plan Task 3 review, M5): this comment used to claim the
+    // late boundary's own attempted write was the LAST entry, because the
+    // summary burst that follows moments later (seq 2445-2447) declined
+    // outright — true of the OLD `stillLive`-based `appendSummaryObservations`,
+    // which re-read STORAGE and found a stale `completedAt: null` record.
+    // It is FALSE now: `appendSummaryObservations` is pure and builds on
+    // the hook's own `runRef.current` (plan Task 3), which correctly
+    // reflects the closed, 3-actual record regardless of the denied
+    // durable write — so its own gate passes, and it attempts a REAL
+    // write too, carrying `summaryTotals`. Empirically 9 attempts now,
+    // not fewer, and the LAST one is the summary's own. This test's own
+    // subject is the FINISH-GRACE BOUNDARY's computed value specifically
+    // (row 8), not the summary's — so pin the last attempt that does NOT
+    // carry `summaryTotals`, which is robust to however many further
+    // attempts a healthy in-memory record goes on to produce afterward.
     const attempts = stub.attempts();
     expect(attempts.length).toBeGreaterThan(0);
-    const lastAttempt = attempts[attempts.length - 1]!;
+    const preSummaryAttempts = attempts.filter(
+      (a) => a.summaryTotals === undefined,
+    );
+    expect(preSummaryAttempts.length).toBeGreaterThan(0);
+    const lastAttempt = preSummaryAttempts[preSummaryAttempts.length - 1]!;
 
     // THE ASSERTION THAT IS RED TODAY: `completeMonitorRun`'s own
     // live→closed write was denied, and `stillLive` (`monitorRun.ts:
@@ -383,6 +396,14 @@ describe("the finish-grace boundary vs. a denied live→closed write (design spe
     expect(lastAttempt.workMeters).toBeDefined();
     expect(lastAttempt.restSeconds).toBeDefined();
     expect(lastAttempt.restMeters).toBeDefined();
+
+    // The corrected account, checked rather than merely asserted in a
+    // comment: the summary burst's own attempt DOES land after the
+    // boundary's, and it DOES carry `summaryTotals` — proving
+    // `preSummaryAttempts` above is filtering out a real, later attempt,
+    // not a hypothetical one.
+    expect(attempts.length).toBeGreaterThan(preSummaryAttempts.length);
+    expect(attempts[attempts.length - 1]!.summaryTotals).toBeDefined();
   });
 
   // THE CONTROL — proves the RED assertion above is the defect, not a

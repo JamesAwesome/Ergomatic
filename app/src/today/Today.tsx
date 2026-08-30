@@ -645,7 +645,17 @@ function UnloggedMonitorRow({ run }: { run: MonitorRun }) {
     // reload-vanish receipt) is plan Task 4's own scope ("Today.tsx
     // unlogged row on the store"), not this task's. This preserves
     // TODAY's exact persisted behavior unchanged in the meantime.
-    saveMonitorRun(completeInterruptedRun(run, new Date()));
+    //
+    // Plan Task 3 review (M8): `completeInterruptedRun` is idempotent —
+    // it returns `run` UNCHANGED (same reference) when already closed —
+    // and this row only renders while `run.completedAt === null`
+    // (`TodayView`'s own render condition above), so the identity check
+    // below is currently always true in practice. Kept anyway as a cheap
+    // no-op guard rather than an unconditional re-write of bytes already
+    // on record, in case a future render path ever reaches this handler
+    // with an already-closed `run`.
+    const stamped = completeInterruptedRun(run, new Date());
+    if (stamped !== run) saveMonitorRun(stamped);
     navigate(`/library/${run.workoutId}/log?from=monitor`);
   }
 

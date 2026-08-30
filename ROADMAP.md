@@ -352,6 +352,39 @@ rower's work silently.
         level; not chased further. **Needs a PM final-PR gate before merge
         (TRIAD: a stored shape, `MonitorRun.summaryTotals`/`series`/the
         slot) and James's explicit approval — not struck until then.**
+      - **Implementation progress (plan `docs/superpowers/plans/2026-08-30-handoff-store.md`):**
+        Task 1 (row-8 red leg) and Task 2 (the store module) landed; Task 3
+        (the producer rewrite — `monitorRun.ts`'s writer gates made pure,
+        `useMonitorSession.ts` as sole committer, the held-error state
+        machine rebuilt against the store) landed 2026-08-30, its own
+        review round folded in the same day.
+        **OPEN CONDITION ON TASK 4 (found at Task 3's review, a LIVE
+        regression on this branch today, not a hypothetical): a burst
+        landing in the linger AFTER the rower has already Saved or
+        Discarded through `LogSession.tsx`/`Today.tsx` (which still call
+        the legacy `clearMonitorRun()` directly, unconverted) now
+        RESURRECTS the dispatched session.** Proven by reverting the
+        reviewer's own probe test to production's real mechanism
+        (`clearMonitorRun()` in place of the store's `retire()`): it
+        fails. Under the OLD design `appendSummaryObservations` re-read
+        storage fresh and found it empty, declining; under this design it
+        builds on the hook's own `runRef.current` (unaware of the
+        external clear) and the resulting commit succeeds — nothing told
+        the store's own `current`/`tombstones` that the door's clear
+        happened, so `commit()` finds no tombstone and writes the record
+        back. **The doors' own legacy clears are the CAUSE of this gap,
+        not a mitigation for it** — an earlier framing in Task 3's own
+        report said the opposite and was corrected. Task 4 (the consumer
+        rewrite, `LogSession.tsx`'s reader on `read`/claims) closes this
+        by routing every door's discard/save-success through
+        `handoffStore.retire()` instead of `clearMonitorRun()` — that
+        retire is what plants the tombstone a late burst's commit needs
+        to be refused against. **The leg to add belongs AT the door
+        (retire happens, THEN the physical clear), not inside `retire()`
+        itself** — `retire()` already tombstones unconditionally; the gap
+        is that today's doors never call it at all (RF24's shape: every
+        instrument downstream of the door is green while the door itself
+        is where the real defect lives).
 - [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
