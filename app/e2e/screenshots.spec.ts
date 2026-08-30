@@ -3755,6 +3755,11 @@ const CONNECTED_STATES = [
   "connected-pane-grid-long",
   "connected-log-sheet",
   "connected-ended",
+  // AUD-016 Task 4 (spec §4, Gate 0 approved 2026-08-29): the ended frame's
+  // FIRST-EVER interactive elements — a failed write holds the hand-off and
+  // shows the "COULD NOT KEEP THE RECORD ON THIS PHONE." strip plus Retry /
+  // Log it anyway, in place of the plain-held reassurance above.
+  "connected-ended-error",
 ] as const;
 
 /** THE GRID SCROLLER'S OWN BUDGET, in pixels, per orientation — the number
