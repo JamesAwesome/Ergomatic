@@ -835,6 +835,25 @@ describe("hydration — outside render, §8", () => {
       );
     });
 
+    it("the COMMIT leg's flag actually clears once the write lands — a LATER retire of the fresh entry does not ALSO re-sweep the slot it just wrote", async () => {
+      localStorage.setItem(MONITOR_RUN_KEY, "{not json");
+      await freshStore();
+      store.currentUnretired();
+
+      const run = freshRun(t0.toISOString());
+      store.commit(run.startedAt, null, run); // write lands — should clear the pending flag
+
+      const removeSpy = vi.spyOn(Storage.prototype, "removeItem");
+      store.retire(
+        [{ sessionKey: run.startedAt, revision: 0 }],
+        "today-discard",
+      );
+
+      // Exactly the entry's OWN removal — a still-set flag would fire the
+      // sweep's own removeItem call first, then the entry's, i.e. twice.
+      expect(removeSpy).toHaveBeenCalledTimes(1);
+    });
+
     it("the COMMIT leg is CONDITIONAL on the write landing — a commit whose durable write also fails leaves the old garbage untouched", async () => {
       localStorage.setItem(MONITOR_RUN_KEY, "{not json");
       await freshStore();
