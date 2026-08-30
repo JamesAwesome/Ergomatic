@@ -360,12 +360,24 @@ rower's work silently.
         review round folded in the same day. Task 4 (the consumer rewrite
         — `LogSession.tsx`'s reader on `read`/claims, `Today.tsx`'s
         unlogged row on the store) landed 2026-08-30.
-        **CLOSED BY TASK 4 (2026-08-30) — was an OPEN CONDITION found at
-        Task 3's review: a LIVE regression on that branch, not a
-        hypothetical, where a burst landing in the linger AFTER the rower
-        had already Saved or Discarded through `LogSession.tsx`/
-        `Today.tsx` (which still called the legacy `clearMonitorRun()`
-        directly, unconverted) RESURRECTED the dispatched session.**
+        **NARROWED BY TASK 4 (2026-08-30), NOT closed — corrected at
+        Task 4's review: closed at LogSession/Today (their doors route
+        through `retire()`), but `useStartWorkout.ts:99` (confirmReplace)
+        and `WorkoutDetail.tsx:298` (row-instead) still legacy-clear, and
+        the reviewer PROVED the interim asymmetry those two create: a
+        legacy clear no longer removes the record from Today's
+        store-backed view, so Today renders a row for a session the rower
+        just replaced, and LOG IT commits it back into the tier the clear
+        emptied. RF24's shape (session.spec's replace test asserts
+        storage and never returns to Today). NAMED TASK 5 EXIT
+        CONDITION: those two doors route through `retire()`, with a leg
+        entering at each door; Task 6's module-boundary gate covers
+        REMOVERS as well as writers. Also Task 5's: `connectGuardStage`
+        and `monitorRunState` still read the durable tier only — a
+        memory-only record renders on Today while invisible to the
+        Connect/Start guards. Original finding, for the record: a burst
+        landing in the linger after a Save/Discard through the legacy
+        clears RESURRECTED the dispatched session.**
         Proven at the time by reverting the reviewer's own probe test to
         production's real mechanism (`clearMonitorRun()` in place of the
         store's `retire()`): it failed. Under the OLD design

@@ -78,6 +78,15 @@ writes `MONITOR_RUN_KEY` or holds a module-level run.
   accepted → assign `runRef` and update the ref; refused → `runRef`
   UNCHANGED, receipt only. A refusal can therefore never diverge
   producer from store — the RF25 shape the unnamed-caller draft rebuilt.
+  **One named exception (ruled at Task 4's review, 2026-08-30): Today's
+  interrupted-session close (`handleLogIt`) is a SECOND committer.** Its
+  discipline, stated: it commits a CLOSE for a DEAD session — the
+  single-unretired invariant means no hook can hold that key, so there
+  is no `lastAcceptedRevisionRef` to diverge from; `expectedRevision`
+  comes from the mount snapshot; a refusal is receipted
+  (`commit-refused`) and degrades to the log door's own counted miss.
+  No third committer exists; any new one needs its discipline written
+  here first.
 - **`retryDurable(sessionKey)` (delta pass kill):** Retry's primitive.
   Re-attempts the durable write of the CURRENT memory entry; updates
   `durableRevision` and the cached verdict; **never bumps `revision`** —
