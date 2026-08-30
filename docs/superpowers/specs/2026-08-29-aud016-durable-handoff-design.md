@@ -333,7 +333,12 @@ pinned with literals, not imported constants.
   (`monitorRun.ts:498`) — hardening debt the delta pass noted and
   deliberately did not promote (no supported producer found; the same
   reasoning that downgraded AUD-020). §3's slot-before-storage ordering
-  already shields the new path.
+  already shields the new path. The same disposition covers
+  `createMonitorRun`'s session-open clears (final-review fix C1): they
+  are bare `removeItem` calls, unguarded like the codebase's nine other
+  `removeItem` sites — an exotic denial mode that made `removeItem`
+  throw would propagate, a pre-existing class this PR neither introduced
+  nor widened, left unguarded on the AUD-020 reasoning.
 
 ## Process
 
