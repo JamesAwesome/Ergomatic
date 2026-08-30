@@ -23,6 +23,7 @@ import {
 } from "../../domain/monitor/program.js";
 import type {
   DiscoveredMonitor,
+  MonitorEvent,
   MonitorFrame,
   Transport,
 } from "../../domain/monitor/types.js";
@@ -4110,6 +4111,71 @@ describe("useMonitorSession: ending", () => {
       const carried = takeHandoffRun();
       expect(carried).not.toBeNull();
       expect(carried?.workoutId).toBe(TWO_IDENTITY.workoutId);
+    });
+
+    it("release-save (review fix F2, spec §5's own name): fires on EVERY verify attempt — a denied first try AND the healthy heal that follows it — never only on failure", async () => {
+      const { result, fake } = harness({
+        program: TWO_INTERVALS,
+        events: timeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      act(() => {
+        fake.injectDisconnect();
+      });
+      expect(result.current.phase).toBe("disconnected");
+
+      // The spy installs AFTER `createMonitorRun`'s own write already
+      // landed, so relative to THIS spy: call 1 is `closeRecord`'s own
+      // write; deny it from call 2 onward — the verify's own first
+      // attempt.
+      let allowance = 1;
+      const originalSetItem = Storage.prototype.setItem;
+      const spy = vi
+        .spyOn(Storage.prototype, "setItem")
+        .mockImplementation(function (
+          this: Storage,
+          key: string,
+          value: string,
+        ) {
+          if (this === localStorage && key === MONITOR_RUN_KEY) {
+            if (allowance <= 0) {
+              throw new DOMException(
+                "The quota has been exceeded.",
+                "QuotaExceededError",
+              );
+            }
+            allowance -= 1;
+          }
+          originalSetItem.call(this, key, value);
+        });
+
+      await act(async () => {
+        await result.current.endSession();
+      });
+      expect(result.current.holdError).toBe("storage-failed");
+
+      // The heal: fully un-stub (not `stopFailing` — there is no such
+      // helper here, this file's own idiom is restoring the spy outright)
+      // and retry.
+      spy.mockRestore();
+      await act(async () => {
+        await result.current.retryHandoffSave();
+      });
+      expect(result.current.handoffHeld).toBe(false);
+
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      const saves = entries.filter((e) => e.kind === "release-save");
+      expect(saves).toHaveLength(2);
+      expect(saves[0]!.detail).toContain("verdict=failed");
+      expect(saves[0]!.detail).toContain("attempt=1");
+      expect(saves[1]!.detail).toContain("verdict=saved");
+      expect(saves[1]!.detail).toContain("attempt=2");
     });
   });
 });
@@ -9157,6 +9223,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
   afterEach(() => {
     vi.doUnmock("../adapters/monitorTransport");
     vi.doUnmock("../adapters/appLifecycle");
+    vi.doUnmock("./driver");
     vi.resetModules();
     vi.restoreAllMocks();
   });
@@ -9421,6 +9488,186 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(exportedAfter.some((e) => e.kind === "hold-error-entered")).toBe(
       true,
     );
+  }, 15000);
+
+  // -------------------------------------------------------------------
+  // REVIEW FIX (F1, Important): the fold's original guard checked only
+  // `loadMonitorRun() === null` — true for ALL FOUR of the writer's
+  // decline reasons, not just the empty-storage one. A burst landing on a
+  // link-lost close (a continuity reset stamps exactly this `endedBy`)
+  // while storage happens to be empty must NOT fold machine numbers onto
+  // a run the writer gate would refuse on ELIGIBILITY grounds regardless
+  // of storage.
+  //
+  // Reaching this required real investigation, not just a plausible-
+  // looking harness (recorded so the next person doesn't re-walk it): a
+  // full `MonitorDriver` DOUBLE (bypassing `driver.ts` entirely) was tried
+  // first and failed for a real reason — `withLiveness`'s own watchdog
+  // arms itself by observing `GENERAL_STATUS_UUID` traffic AT THE
+  // TRANSPORT, which only the REAL driver's `subscribe()` call ever
+  // produces; a double that never touches the transport leaves the
+  // watchdog permanently unarmed, so `frameSilence` (the continuity
+  // check's own gate) can never latch. The fix keeps the REAL driver (and
+  // this file's own already-proven `interceptingTransport`/real-byte
+  // composition, identical to the test above) for everything up to and
+  // including the close, and reaches directly into the hook's OWN
+  // subscription — captured by wrapping `createPm5Driver`'s real return
+  // value, forwarding every call unchanged except `events()`, which ALSO
+  // stashes the callback — to fire the summary event by hand afterward.
+  // This bypasses `driver.ts`'s own `noteSummary` admission gate ON
+  // PURPOSE (that gate is unrelated to this fix and, per its own
+  // requirements — the run observably at or past its final interval, or
+  // already terminated-awaiting-summary — cannot honestly co-occur with
+  // an excluded `endedBy` without deep, disproportionate new fixture
+  // engineering): the HOOK's fold guard must refuse this event on its OWN
+  // merits, never relying on the driver to have filtered it first.
+  // -------------------------------------------------------------------
+  it("REVIEW FIX (F1): the fold refuses a burst on a link-lost close even with storage empty — machine numbers never travel through a close the writer gate would refuse anyway", async () => {
+    let capturedCb: ((e: MonitorEvent) => void) | null = null;
+    vi.doMock("./driver", async () => {
+      const actual =
+        await vi.importActual<typeof import("./driver")>("./driver");
+      return {
+        ...actual,
+        createPm5Driver: (
+          ...args: Parameters<typeof actual.createPm5Driver>
+        ) => {
+          const real = actual.createPm5Driver(...args);
+          return {
+            ...real,
+            events: (cb: (e: MonitorEvent) => void) => {
+              capturedCb = cb;
+              return real.events(cb);
+            },
+          };
+        },
+      };
+    });
+
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    expect(lifecycleCb).toBeDefined();
+    resumeAfterGap(lifecycleCb!);
+    expect(result.current.frameSilence).toBe(true);
+
+    // Healthy close, deliberately — no storage denial here. F1's own
+    // defect never needed one; only an empty store at the moment the
+    // burst lands.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("ended");
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("link-lost");
+
+    // The resurrection-race shape (`monitorRun.ts`'s own `stillLive`
+    // comment): storage is now empty, but the LINK never actually
+    // dropped — a continuity reset never tears down the subscription
+    // (confirmed by the test above), so the captured callback is still
+    // the live one `handleEvent` itself would receive from.
+    clearMonitorRun();
+    expect(loadMonitorRun()).toBeNull();
+
+    expect(capturedCb).not.toBeNull();
+    act(() => {
+      capturedCb!({
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 60, workDistanceMeters: 200 },
+        detail: {
+          avgStrokeRate: 24,
+          endingHeartRateBpm: null,
+          avgHeartRateBpm: null,
+          minHeartRateBpm: null,
+          maxHeartRateBpm: null,
+          dragFactorAverage: 100,
+          workoutType: 1,
+          recoveryHeartRateBpm: null,
+          avgPaceSecondsPer500m: 150,
+        },
+      });
+    });
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(entries.some((e) => e.kind === "summary-append-rejected")).toBe(
+      true,
+    );
+    // THE ASSERTION THIS TEST EXISTS FOR: F1's own defect would have
+    // folded here — empty storage was ALL the old guard ever checked. The
+    // fixed guard also requires an ELIGIBLE `endedBy`, which a link-lost
+    // close never is.
+    expect(entries.some((e) => e.kind === "summary-folded-in-memory")).toBe(
+      false,
+    );
+    expect(loadMonitorRun()).toBeNull();
   }, 15000);
 
   // -------------------------------------------------------------------
