@@ -991,20 +991,18 @@ Each needs erg time or a deliberate recording session.
   confident one, which is a **new visual state and carries a design gate**.
   Only worth doing if such a row is ever actually observed. **S**
 
-- **The real store's `id DESC` newest-wins tiebreak is pinned by nothing.**
-  `resolveNewestPlanLink` orders `plan_index, logged_at DESC, id DESC`; the
-  fake resolves a `loggedAt` tie by insertion order instead. Aligning the two
-  was tried at #233's review and **reverted with evidence** — it turned two
-  delete contract cases red against the fake while real Postgres kept passing
-  them, because Postgres keeps microseconds (so ordinary saves never tie and
-  `id DESC` is unreachable) while the fake's millisecond `Date` ties
-  constantly, and `seq` is what substitutes for that missing precision. The
-  reasoning is a comment on `resolveNewestFakeLink` so it is not retried. What
-  remains unpinned is the real term itself: pinning it needs a real-store-only
-  test that forces a same-microsecond tie with raw SQL, which the shared
-  contract suite cannot do. **Decide whether that is worth writing at all** —
-  the term is a total-order tiebreak whose only job is determinism. **S**
-
+- **DISPOSED (post-#233 follow-ons): the real store's `id DESC` tiebreak
+  stays unpinned, on purpose.** `resolveNewestPlanLink` orders `plan_index,
+  logged_at DESC, id DESC`; the fake resolves a `loggedAt` tie by insertion
+  order. Aligning them was tried at #233's review and reverted with evidence
+  (two delete contract cases went red against the fake while real Postgres
+  kept passing). Pinning the real term would need a raw-SQL test forcing a
+  same-microsecond tie — a state no supported writer can produce, since
+  Postgres stores microseconds and ordinary saves never tie. That is a test
+  for an unreachable branch whose only job is determinism, bought at
+  integration-suite cost: not worth writing. `resolveNewestFakeLink`'s
+  comment carries the reasoning at the code; revisit only if a writer ever
+  batches inserts inside one transaction timestamp.
 - **The swap mark goes stale if a plan preset's session types are ever
   edited.** The Plan screen derives "you swapped this day" by comparing a
   log's stored type against `PLANS`' type for that slot TODAY, so editing
@@ -1033,9 +1031,16 @@ Each needs erg time or a deliberate recording session.
   /api/logs/:id` > `an explicit null clears thumbs previously set to a real
   value`, then later `GET/PUT /api/prefs` > `PUT updates a field and GET
   reflects the merge` (expected `#00ff00`, got undefined). Each passed on
-  every rerun — eight and four consecutive full runs respectively. **Two
-  different tests, same shape: supertest against the in-memory fakes.** That
-  pattern is the lead. **This matters more than the known e2e flakes:** the
+  every rerun — eight and four consecutive full runs respectively, plus
+  three more clean stress runs at the follow-on round (fifteen total). **Two
+  different tests, same shape: supertest against the in-memory fakes**, and
+  both failures read as `expected undefined to be <value>` on a response
+  body field — the shape of a non-JSON or failed response, not of wrong
+  data (the prefs fake is a plain per-instance Map with no async, no
+  clock, and no shared state; read directly, it cannot produce a partial
+  merge). The lead is therefore the transport under load — supertest's
+  ephemeral sockets while parallel vitest workers saturate the machine —
+  not the fakes. **This matters more than the known e2e flakes:** the
   unit
   project has no Docker, no browser and no network — it is fake stores and
   supertest, and it should be deterministic. The test itself is self-contained
@@ -1047,20 +1052,17 @@ Each needs erg time or a deliberate recording session.
   never calls — but a single observation cannot rule it out either. Capture the
   failure output next time it appears rather than re-running past it. **S**
 
-- **The `screenshots` Playwright project is gated by nothing, and its version
-  pins rot silently.** CI's `e2e` job runs the `chromium` project only, so a
-  release-notes PR bumps `news.spec.ts`'s pins (which go red in CI if missed)
-  and leaves `screenshots.spec.ts`'s alone. Third occurrence: v0.18.0 (#166),
-  then v0.27.0 — #232 fixed the e2e pins and `pnpm screenshots` stayed red on
-  main until an unrelated PR needed to regenerate a capture and tripped over
-  it on 2026-08-30. **The pin is the symptom; the missing gate is the item.**
-  Options: run the screenshots project in CI (it costs a full capture pass),
-  derive the expected version from `package.json` instead of a literal, or
-  drop the pin's version specificity and assert only that a release entry
-  renders. Note the literal exists on purpose — it is what makes the capture
-  fail loudly rather than silently shooting a stale screen (recurring failure
-  7) — so "delete the assertion" is not one of the options. **S**
-
+- **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
+  can no longer rot independently.** The class was two independent literals —
+  `news.spec.ts`'s (CI-gated, bumped by every notes PR) and
+  `screenshots.spec.ts`'s (no CI job, rotted at v0.18.0/#166 and
+  v0.27.0/#232). Both now import ONE constant, `e2e/releasePin.ts`, so the
+  ungated copy cannot drift from the gated one and CI still forces the bump
+  through `news.spec.ts`. Running the screenshots project in CI was
+  considered and not taken: it buys nothing this doesn't once the literals
+  cannot diverge, at the cost of a capture pass per push. Deriving the pin
+  from `RELEASE_NOTES` was rejected as a mirror (RF11) — the screen renders
+  that same module, so it could only ever catch render breakage.
 - **AUD-012 — correct the booting-replica claim.** Two complete servers really
   race before the seed lock on an empty database, but the supported deployment
   is explicitly serial and single-replica. This is Confirmed P3 documentation

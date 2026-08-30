@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { NEWEST_RELEASE_VERSION } from "./releasePin";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
 
 // Phase 6H Task 7: the News tab proven against the real stack — the one
@@ -104,7 +105,7 @@ test("News at rest: 7 UNREAD, three pinned rows, four latest rows, WHAT'S NEW sh
 
   await expect(page.getByRole("heading", { name: "WHAT'S NEW" })).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.27.0",
+    NEWEST_RELEASE_VERSION,
   );
 });
 
@@ -184,7 +185,7 @@ test("/news/releases lists every version, newest first", async ({ page }) => {
   // title no longer names a number that goes stale every tag.
   const versions = page.locator(".news-release-version");
   await expect(versions).toHaveCount(26);
-  await expect(versions.nth(0)).toContainText("v0.27.0");
+  await expect(versions.nth(0)).toContainText(NEWEST_RELEASE_VERSION);
   await expect(versions.nth(1)).toContainText("v0.26.0");
   await expect(versions.nth(2)).toContainText("v0.25.0");
   await expect(versions.nth(3)).toContainText("v0.24.0");
