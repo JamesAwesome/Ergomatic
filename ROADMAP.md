@@ -964,20 +964,19 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **DELETING a personal same-titled workout silently unmarks a completed plan
-  row.** `session_logs.workout_id` is `ON DELETE SET NULL`, so a rower who
-  authored their own `2K Test`, rowed it on a checkpoint day (correctly marked
-  `INSTEAD OF 2K Test`) and later deleted that workout sees the mark
-  disappear — the row's identity becomes unknown, and the mark is a positive
-  accusation that never fires on a guess. **This is NOT covered by the
-  2026-08-30 Gate 0 ruling**, which accepted only preset-type edits as
-  derivation's historical cost; an earlier version of this entry claimed
-  otherwise and was wrong. Raised at #233's re-review. **Two ways out, and it
-  needs James:** preserve provenance at save time (a nullable
-  `workout_was_global` column — TRIAD, migration, its own spec), or re-gate
-  the unknown state explicitly and accept that a deletion edits history.
-  Until then the behaviour is documented in `swapMark`'s own comment and
-  nowhere else. **S/M**
+- **ACCEPTED (James, 2026-08-30): deleting a personal same-titled workout
+  unmarks a completed plan row.** `session_logs.workout_id` is `ON DELETE SET
+  NULL`, so a rower who authored their own `2K Test`, rowed it on a checkpoint
+  day (correctly marked `INSTEAD OF 2K Test`) and later deleted that workout
+  sees the mark disappear — the row's identity becomes unknown, and the mark
+  is a positive accusation that never fires on a guess. Raised at #233's
+  re-review, which was right that the 2026-08-30 Gate 0 ruling did not cover
+  it: that ruling accepted preset-type edits and nothing else. **Re-gated
+  verbally instead, and explicitly with no design pass** ("2 is fine, I don't
+  need a mock up"). The alternative — a nullable `workout_was_global` column
+  written at save time — is TRIAD and is NOT being built.
+  **Revisit only if a rower actually hits it**; the shape is documented in
+  `swapMark`'s own comment.
 
 - **A pre-validation row with an unreadable `workoutType` renders a confident
   plan badge.** `Plan.tsx` falls back to the plan's own type and claims no

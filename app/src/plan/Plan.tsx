@@ -100,9 +100,12 @@ function rowedType(link: PlanLink | undefined): WorkoutType | undefined {
  *  accusation, so a matching title with unresolvable ownership stays
  *  quiet rather than guessing; a DIFFERING title is positive evidence of
  *  a different workout and still marks on its own. **The cost is real and
- *  is not yet gated:** deleting a personal same-titled workout nulls the
- *  log's link, which turns a marked row unmarked after the fact. See
- *  ROADMAP.
+ *  is ACCEPTED (James, 2026-08-30):** deleting a personal same-titled
+ *  workout nulls the log's link, so a row that WAS marked stops being
+ *  marked. Re-gated verbally after #233's re-review pointed out that the
+ *  design gate had only covered preset edits; storing provenance at save
+ *  time was the alternative and is deliberately not built. ROADMAP holds
+ *  the entry and the revisit trigger.
  *
  *  Every OTHER day compares type, where an unreadable stored type also
  *  never manufactures a mark — it can fail to CONFIRM a match, never
