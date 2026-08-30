@@ -142,7 +142,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 import type { WorkoutType } from "../../domain/types.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
-import { loadMonitorRun, type MonitorRun } from "./monitorRun";
+import { MONITOR_RUN_KEY, loadMonitorRun, type MonitorRun } from "./monitorRun";
 import { BURST_HANDOFF_HOLD_MS } from "./useMonitorSession";
 import type { MonitorSession, RunIdentity } from "./useMonitorSession";
 import {
@@ -238,6 +238,33 @@ const SMOKE_IDENTITY: RunIdentity = {
   title: "Walk Smoke",
   logSeed: { steps: [{ label: "1:00 @ 2:32.0", kind: "work" }], paces: {} },
 };
+
+/** AUD-016 durable hand-off design spec §6 leg A (Task 1): the SAME
+ *  `SMOKE_CAPTURE` decode leg 1's own full-replay assertion already
+ *  established above — reproduced here as named constants rather than
+ *  read off a stored `MonitorRun`, because leg A's whole premise is that
+ *  `MONITOR_RUN_KEY` is denied from the session's first write onward, so
+ *  `loadMonitorRun()` returns `null` throughout and there is never a
+ *  stored record to read these fields FROM. The numbers are identical:
+ *  same recording, same wire bytes, same decode — only the PATH the
+ *  machine's own numbers travel differs (memory fold + slot, not
+ *  storage). `SMOKE_VERIFICATION_BYTES` is the FULL 19-byte payload (this
+ *  file's header, "seq 296's raw 0x003F ... full 19-byte verification
+ *  payload"), not just leg 1's own first-8-byte spot check. */
+const SMOKE_SUMMARY_DETAIL = {
+  avgStrokeRate: 46,
+  endingHeartRateBpm: null,
+  avgHeartRateBpm: null,
+  minHeartRateBpm: null,
+  maxHeartRateBpm: null,
+  dragFactorAverage: 101,
+  workoutType: 1,
+  recoveryHeartRateBpm: null,
+  avgPaceSecondsPer500m: 143.1,
+};
+const SMOKE_VERIFICATION_BYTES = [
+  140, 215, 219, 144, 135, 230, 130, 229, 212, 26, 1, 0, 82, 0, 0, 0, 0, 0, 0,
+];
 
 /** HAND-TRANSCRIBED, byte-verified this session against seq 15-19's own
  *  assembled tx payload (85-byte CSAFE frame, `f1 76 55 <85 bytes> <sum>
@@ -502,6 +529,16 @@ interface ReplayOutcome {
   handoffHeld: boolean;
   phase: string;
   exportLog: () => string;
+  /** AUD-016 durable hand-off design spec §6 (Task 1): the raw hook
+   *  handle itself, for a leg that keeps interacting with the SAME
+   *  `useMonitorSession` mount after `replay.run()` resolves —
+   *  `retryHandoffSave()`/`proceedHandoff()`/`holdError` all need the
+   *  LIVE instance, not the point-in-time snapshot the other fields
+   *  above already are. `.current` always reflects the latest render
+   *  (`renderHook`'s own contract); a caller that invokes anything on it
+   *  which changes state must wrap that call in `act()`, the same way
+   *  the `connect()`/`program()` calls inside this function already do. */
+  session: { current: MonitorSession };
 }
 
 /**
@@ -586,6 +623,7 @@ async function runReplay(
     handoffHeld: result.current.handoffHeld,
     phase: result.current.phase,
     exportLog: () => result.current.exportLog(),
+    session: result,
   };
 }
 
@@ -716,6 +754,59 @@ export async function mountLogSessionAndSave(
     unknown
   >;
   return { body, apiFn };
+}
+
+/**
+ * AUD-016 durable hand-off design spec §6: "TWO stub shapes, because the
+ * design behaves differently under each." Intercepts `localStorage`
+ * writes to `MONITOR_RUN_KEY` ONLY — never `sessionStorage` (shares
+ * `Storage.prototype` with `localStorage`; `this` is checked below so a
+ * `sessionStorage.setItem` call is never touched) and never any OTHER
+ * localStorage key: this file's own ring (`eventLog.ts`'s
+ * `createEventLog`, read this session) is a plain in-memory array —
+ * `exportLog()` needs no writable key at all — and nothing else this
+ * file's replay path writes through `localStorage.setItem` (the log
+ * door's own diagnostic keys among them) needs touching either, so
+ * leaving every other key writable costs nothing and avoids stubbing
+ * more than the leg actually needs.
+ *
+ * `"from-open"` (Task 1, leg A): fails from construction onward — the
+ * FIRST write this session ever attempts (`createMonitorRun`'s own
+ * persist, `monitorRun.ts`'s doc comment) is already denied, and the
+ * stub is never told to stop — leg A's own premise is that storage stays
+ * empty for the run's entire life. `"from-release"` (Task 2, leg B):
+ * starts PASSING THROUGH; the returned `startFailing`/`stopFailing` pair
+ * lets a later task flip it on right before the release-verify write it
+ * wants denied (the mid-session-quota shape spec §6 names) and back off
+ * again for the "un-stub then retry heals" step.
+ */
+function stubStorageWrites(when: "from-open" | "from-release"): {
+  startFailing: () => void;
+  stopFailing: () => void;
+} {
+  let failing = when === "from-open";
+  const originalSetItem = Storage.prototype.setItem;
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+    this: Storage,
+    key: string,
+    value: string,
+  ) {
+    if (failing && this === localStorage && key === MONITOR_RUN_KEY) {
+      throw new DOMException(
+        "The quota has been exceeded.",
+        "QuotaExceededError",
+      );
+    }
+    originalSetItem.call(this, key, value);
+  });
+  return {
+    startFailing: () => {
+      failing = true;
+    },
+    stopFailing: () => {
+      failing = false;
+    },
+  };
 }
 
 // File-level (not per-`describe`): every leg in this file shares the
@@ -1083,4 +1174,138 @@ describe("the summary hold's permanent gate, leg 3: timeout (storage-spine desig
     expect(body).not.toHaveProperty("machineWorkMeters");
     expect(body).not.toHaveProperty("machineSummary");
   });
+});
+
+/**
+ * AUD-016 durable hand-off design spec (2026-08-29-aud016-durable-handoff-
+ * design.md) §6, Task 1's own dispatch brief: the plan's Global Constraints
+ * fix these three names verbatim on the FUTURE `MonitorSession` shape —
+ * `holdError: "storage-failed" | null`, `retryHandoffSave()`,
+ * `proceedHandoff()` — and none of them exist on the type today. Casting
+ * through this interface (rather than `any`) keeps every OTHER field on
+ * `session.current` type-checked normally, and pins the exact names Task 3
+ * must land rather than leaving them to be reinvented at review time.
+ * Return type is `Promise<void>` by INFERENCE from this hook's existing
+ * mutating methods (`connect`/`program`/`endSession`/`cancel` are all
+ * async) — the plan does not pin this explicitly; `await`ing a
+ * synchronous `void` return is harmless either way, so this assumption
+ * costs nothing if Task 3 lands them synchronous instead.
+ */
+interface FutureHandoffSession extends MonitorSession {
+  holdError: "storage-failed" | null;
+  retryHandoffSave(): Promise<void>;
+  proceedHandoff(): Promise<void>;
+}
+
+function withFutureHandoff(session: MonitorSession): FutureHandoffSession {
+  return session as unknown as FutureHandoffSession;
+}
+
+describe("the summary hold's permanent gate, AUD-016 leg A: denied from the first write (durable hand-off design spec §6)", () => {
+  it(
+    "declines the burst against empty storage, folds the machine's own " +
+      "numbers in memory, holds on the failed verify instead of releasing " +
+      "silently, stays held under a retry that still fails, and still " +
+      "posts the machine's own numbers once the rower proceeds anyway — " +
+      "with storage empty the whole time",
+    async () => {
+      localStorage.clear();
+      // Leg A's whole premise (spec §6): denied from the FIRST write, kept
+      // throwing throughout — never restored. `createMonitorRun`'s own
+      // persist (`program()`, below) is already denied.
+      stubStorageWrites("from-open");
+
+      const full = await runReplay(
+        SMOKE_CAPTURE,
+        SMOKE_TERMINATED_PROGRAM,
+        SMOKE_IDENTITY,
+      );
+
+      expect(full.divergences).toStrictEqual([]);
+      expect(full.phase).toBe("ended");
+
+      // --- assertion (1): the burst DECLINES against empty storage, AND
+      // the in-memory fold still carries the machine's own numbers (spec
+      // §1 step 4, "the kill's fix" — without it, the memory carry is
+      // strictly poorer than the storage path it replaces). RED until
+      // Task 3: the decline half already passes today (the writer gate's
+      // existing path 1, `stillLive` finding `MONITOR_RUN_KEY` empty), but
+      // the fold and its own receipt do not exist yet, so this whole
+      // assertion is red on the AND. ------------------------------------
+      expect(loadMonitorRun()).toBeNull();
+      const entriesAfterBurst = JSON.parse(full.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      expect(
+        entriesAfterBurst.some((e) => e.kind === "summary-append-rejected"),
+      ).toBe(true);
+      // RED until Task 3 — `summary-folded-in-memory` does not exist yet.
+      const folded = entriesAfterBurst.find(
+        (e) => e.kind === "summary-folded-in-memory",
+      );
+      expect(folded).toBeDefined();
+      expect(folded?.detail).toContain(
+        JSON.stringify({ workElapsedSeconds: 31.5, workDistanceMeters: 110 }),
+      );
+
+      // --- assertion (2): the hand-off enters held-error rather than
+      // releasing silently (spec §1 step 1's "failed" verdict exit). RED
+      // until Task 3 — today nothing verifies writability at release at
+      // all, so this arm releases identically to leg 1's own baseline
+      // (`handoffHeld` flips `false` the instant the burst condition
+      // resolves, regardless of the write's own outcome). -----------------
+      expect(full.session.current.handoffHeld).toBe(true);
+      const hookAfterBurst = withFutureHandoff(full.session.current);
+      expect(hookAfterBurst.holdError).toBe("storage-failed");
+      expect(
+        entriesAfterBurst.some((e) => e.kind === "hold-error-entered"),
+      ).toBe(true);
+
+      // --- assertion (3): RETRY, with the stub still throwing, stays
+      // held and records its own receipt (spec §1 step 5). RED until
+      // Task 3 — `retryHandoffSave` does not exist on the hook yet. -------
+      await act(async () => {
+        await hookAfterBurst.retryHandoffSave();
+      });
+      expect(full.session.current.handoffHeld).toBe(true);
+      const hookAfterRetry = withFutureHandoff(full.session.current);
+      expect(hookAfterRetry.holdError).toBe("storage-failed");
+      const entriesAfterRetry = JSON.parse(full.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      expect(entriesAfterRetry.some((e) => e.kind === "hold-error-retry")).toBe(
+        true,
+      );
+
+      // --- assertion (4): PROCEED ANYWAY releases, and a FRESH LogSession
+      // mount serves the SLOT-carried run — storage is STILL empty right
+      // up to that mount, yet the POST carries the machine's own numbers
+      // (spec §1 step 5's non-retry exit + §3's slot). RED until Task 5 —
+      // the reader is not slot-aware yet, so this fresh mount finds
+      // nothing to serve and never even reaches the log door's heading. --
+      await act(async () => {
+        await hookAfterRetry.proceedHandoff();
+      });
+      expect(full.session.current.handoffHeld).toBe(false);
+
+      expect(loadMonitorRun()).toBeNull();
+      const { body } = await mountLogSessionAndSave(
+        SMOKE_WORKOUT_ID,
+        "Walk Smoke",
+      );
+
+      expect(body.machineWorkSeconds).toBe(31.5);
+      expect(body.machineWorkMeters).toBe(110);
+      expect(body.machineSummary).toStrictEqual({
+        verificationBytes: SMOKE_VERIFICATION_BYTES,
+        ...SMOKE_SUMMARY_DETAIL,
+      });
+
+      // Storage never once held the record across this entire leg — the
+      // machine carry travelled through memory and the slot only.
+      expect(loadMonitorRun()).toBeNull();
+    },
+  );
 });
