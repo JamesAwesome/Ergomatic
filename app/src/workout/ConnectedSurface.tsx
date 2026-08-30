@@ -440,19 +440,61 @@ export default function ConnectedSurface({
          *  ("Connecting", "Sending the workout", "Ready when you pull") and
          *  is honest whether or not a hold is open. */}
         <p className="connected-serif-line">Wrapping up</p>
-        <p className="connected-body-line">
-          {session.handoffHeld
-            ? // While the hold is open the "kept" promise below has not
-              // happened yet — claiming it here would be exactly the
-              // dishonesty the hold exists to avoid. Names the wait's
-              // reason: "monitor", never "PM5" (RC-18 standing rule).
-              "Getting the monitor's own numbers."
-            : kept === 0
-              ? "No numbers to keep."
-              : session.endedBy === "machine"
-                ? "The monitor finished it. Your numbers are kept."
-                : "Your numbers are kept."}
-        </p>
+        {/* HELD-ERROR (AUD-016 Task 4, spec §4) — the ended frame's
+         *  FIRST-EVER interactive elements, GATE 0 APPROVED (James,
+         *  2026-08-29, "Approve" on rendered captures, both orientations,
+         *  real fixture pipeline) as exact strings and structure. This
+         *  replaces the plain-held reassurance below, never joins it — "the
+         *  monitor's own numbers" is exactly the promise a failed write did
+         *  NOT keep. Reuses the ready-screen's own `.connected-keep-on` gold
+         *  warning (--marker on --surface-sunken, 5.50:1) rather than
+         *  inventing a second "look here" device — gold, not --accent red,
+         *  because the write failing is not something the rower did wrong.
+         *  Retry (`.button-l2`, outline, 52px) reads first: the recovery
+         *  story is try-again-then-proceed. Log it anyway (`.button-l1`,
+         *  lead action, 56px, 5.94:1 on --accent) reads second, carrying the
+         *  lead token because it is the path that always works — the only
+         *  thing at risk on that path is the local cache copy, never the
+         *  record itself (§5's receipts all go through the ring). Focus
+         *  order is document order; the tab bar is already hidden on this
+         *  surface, so the controls coexist with nothing. */}
+        {session.holdError === "storage-failed" ? (
+          <>
+            <p className="connected-keep-on">
+              COULD NOT KEEP THE RECORD ON THIS PHONE.
+            </p>
+            <div className="action-stack">
+              <button
+                type="button"
+                className="button-l2"
+                onClick={() => void session.retryHandoffSave()}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="button-l1"
+                onClick={() => void session.proceedHandoff()}
+              >
+                Log it anyway
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="connected-body-line">
+            {session.handoffHeld
+              ? // While the hold is open the "kept" promise below has not
+                // happened yet — claiming it here would be exactly the
+                // dishonesty the hold exists to avoid. Names the wait's
+                // reason: "monitor", never "PM5" (RC-18 standing rule).
+                "Getting the monitor's own numbers."
+              : kept === 0
+                ? "No numbers to keep."
+                : session.endedBy === "machine"
+                  ? "The monitor finished it. Your numbers are kept."
+                  : "Your numbers are kept."}
+          </p>
+        )}
       </main>
     );
   }

@@ -245,10 +245,6 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     actuals: [],
     endedBy: null,
     handoffHeld: false,
-    // Hand-off store design spec §7, plan Task 3: added to `MonitorSession`
-    // this task; ConnectedSurface itself has no branch for it yet on this
-    // base (that ships with Task 5's held-error frame restore) — defaulted
-    // here purely to satisfy the widened type.
     holdError: null,
     frozen: false,
     runOpen: true,
@@ -2217,6 +2213,121 @@ describe("ended: the surface hands off and unmounts", () => {
       phase: "ended",
       endedBy: "user",
       handoffHeld: false,
+      actuals: [actualOf(0, 480)],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "Your numbers are kept.",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Held-error: the ended frame's FIRST-EVER interactive elements (AUD-016
+// Task 4, spec §4). Gate 0 approved (James, 2026-08-29) the strip text, the
+// button order, and the classes as exact — pinned here with LITERALS, never
+// imported constants (RF21, and Task 6's mutation (e) depends on it).
+// ---------------------------------------------------------------------------
+
+describe("ended, held on a failed write: the strip and its two controls", () => {
+  it("renders the strip and both buttons in document order, wired to the two methods, and does not fire onEnded while held", () => {
+    const onEnded = vi.fn();
+    const { session: held } = renderSurface(
+      {
+        phase: "ended",
+        endedBy: "user",
+        handoffHeld: true,
+        holdError: "storage-failed",
+        actuals: [actualOf(0, 480)],
+      },
+      onEnded,
+    );
+
+    expect(screen.getByText("Wrapping up")).toBeInTheDocument();
+    const strip = screen.getByText("COULD NOT KEEP THE RECORD ON THIS PHONE.");
+    expect(strip).toHaveClass("connected-keep-on");
+
+    // The strip REPLACES the plain-held reassurance; it does not join it —
+    // the promise the reassurance makes is exactly what did not happen.
+    expect(
+      screen.queryByText("Getting the monitor's own numbers."),
+    ).not.toBeInTheDocument();
+
+    const buttons = screen
+      .getAllByRole("button")
+      .filter((b) => ["Retry", "Log it anyway"].includes(b.textContent ?? ""));
+    expect(buttons.map((b) => b.textContent)).toStrictEqual([
+      "Retry",
+      "Log it anyway",
+    ]);
+    expect(buttons[0]).toHaveClass("button-l2");
+    expect(buttons[1]).toHaveClass("button-l1");
+
+    // Held, so the ordinary hand-off has not fired.
+    expect(onEnded).not.toHaveBeenCalled();
+
+    fireEvent.click(buttons[0]!);
+    expect(held.retryHandoffSave).toHaveBeenCalledTimes(1);
+    expect(held.proceedHandoff).not.toHaveBeenCalled();
+
+    fireEvent.click(buttons[1]!);
+    expect(held.proceedHandoff).toHaveBeenCalledTimes(1);
+  });
+
+  it("every other ended state still renders exactly as before — held-error is additive, not a rewrite", () => {
+    // Plain held, no error: unchanged reassurance line, no strip, no buttons.
+    const held = renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      handoffHeld: true,
+      holdError: null,
+      actuals: [actualOf(0, 480)],
+    });
+    expect(
+      screen.getByText("Getting the monitor's own numbers."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("COULD NOT KEEP THE RECORD ON THIS PHONE."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Log it anyway" }),
+    ).not.toBeInTheDocument();
+    held.unmount();
+
+    // Not held, zero measured — the honest-zero branch.
+    const zero = renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      handoffHeld: false,
+      holdError: null,
+      actuals: [],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "No numbers to keep.",
+    );
+    zero.unmount();
+
+    // Not held, machine-finished with something measured.
+    const machine = renderSurface({
+      phase: "ended",
+      endedBy: "machine",
+      handoffHeld: false,
+      holdError: null,
+      actuals: [actualOf(0, 480)],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "The monitor finished it. Your numbers are kept.",
+    );
+    machine.unmount();
+
+    // Not held, user-ended with something measured.
+    renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      handoffHeld: false,
+      holdError: null,
       actuals: [actualOf(0, 480)],
     });
     expect(document.querySelector(".connected-body-line")!.textContent).toBe(
