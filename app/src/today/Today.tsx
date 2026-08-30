@@ -689,21 +689,35 @@ function UnloggedMonitorRow({ entry }: { entry: HandoffEntry }) {
     // without depending on a coincidental durable write.
     //
     // **A deliberate, narrow exception to "the hook is the sole production
-    // committer" (spec §1):** that rule protects a LIVE producer's own
-    // `lastAcceptedRevisionRef` discipline from a second writer racing it.
-    // This row renders ONLY for a DEAD session — `TodayView`'s own render
-    // condition is `completedAt === null` on an entry with no live hook
-    // (this component's own header comment: "Today has no live monitor
-    // hook") — so there is no producer ref for this commit to race, and
-    // the single-unretired-session invariant means no OTHER hook can hold
-    // this exact key while it sits here unretired. `entry.revision` is the
-    // exact CAS guard every other caller uses; a refusal here (a rare
-    // concurrent change to the SAME key between this row's mount and the
-    // tap) is not specially handled — the log door's own gate re-reads the
-    // store fresh at ITS OWN mount and degrades exactly the way any other
-    // `monitorModeRun` miss does (falls through to plain-manual), which is
-    // the same "any miss falls through untouched" contract this door
-    // already promises.
+    // committer" (spec §1, homed at Task 4's review — see that section's
+    // own "One named exception" paragraph):** that rule protects a LIVE
+    // producer's own `lastAcceptedRevisionRef` discipline from a second
+    // writer racing it. This row renders ONLY for a DEAD session —
+    // `TodayView`'s own render condition is `completedAt === null` on an
+    // entry with no live hook (this component's own header comment:
+    // "Today has no live monitor hook") — so there is no producer ref for
+    // this commit to race, and the single-unretired-session invariant
+    // means no OTHER hook can hold this exact key while it sits here
+    // unretired. `entry.revision` is the exact CAS guard every other
+    // caller uses.
+    //
+    // **The return value below is discarded on purpose (RF25's own tell —
+    // a lower layer reports a failure and the caller proceeds regardless —
+    // so this paragraph is that rule's required justification, not a
+    // shrug): a refusal here is caught by TWO instruments, not merely "a
+    // degrade."** (1) the store's own `commit-refused` receipt fires
+    // unconditionally on any CAS miss, independent of whether this call
+    // site reads the result — the SAME observability every other
+    // `commit()` caller relies on, never invented here. (2) the log
+    // door's own counted miss: a refused commit leaves the stamped record
+    // out of the store, so `monitorModeEntry`'s own re-read at the log
+    // door's mount finds the OLD (still-open or already-retired) entry
+    // and records one of its own named misses via `recordLogDoorMiss`
+    // (`"not-completed"` if the close never landed, `"no-run"` if the key
+    // was retired in the meantime) — the same "any miss falls through
+    // untouched" contract this door already promises for every other
+    // `monitorModeRun` miss, not a special case invented for this call
+    // site.
     //
     // Plan Task 3 review (M8): `completeInterruptedRun` is idempotent —
     // it returns `run` UNCHANGED (same reference) when already closed —

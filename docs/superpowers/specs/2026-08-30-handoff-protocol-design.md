@@ -292,7 +292,12 @@ surprise). The heal is receipted; Retry then succeeds instantly.
 5. **Today's memory-only unlogged row vanishes on reload**,
    indistinguishable from a durable one — receipted at hydration when a
    claimed-but-unpersisted session is absent (the flip side of the §5
-   product gain).
+   product gain). **What shipped (Task 4, ruled acceptable at its
+   review):** the pre-reload `commit-accepted{verdict:"failed"}` receipt
+   IS the counter, not a new hydration-time receipt — a fresh process has
+   no claim to detect against (claims are process-scoped, §1), so
+   "receipted at hydration" is satisfied by the ORIGINAL commit's own
+   receipt rather than a second one invented at the reload that follows.
 6. **Masked durable removal** — kept only as the tombstone's process
    behavior; retired as a live risk (WHATWG: `removeItem` has no throw
    condition). After reload a stale durable entry would serve; the

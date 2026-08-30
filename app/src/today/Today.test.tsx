@@ -2759,11 +2759,26 @@ describe("Today (§10 row 9): a memory-only unlogged row, present before reload 
       screen.queryByText(/interrupted connected session/),
     ).not.toBeInTheDocument();
 
-    // §9.5: the vanish is not a NEW event hydration invents — it is
-    // explained by the ORIGINAL commit's own receipt, already carrying
-    // `verdict:"failed"` (spec's own words: "coordinate with what the
-    // store already emits, don't duplicate" — no new receipt kind exists
-    // for this residual).
+    // §9.5, stated plainly (review correction): `receipts` was captured
+    // via `setReceiptChannel` on the PRE-reload module instance, and this
+    // assertion reads that same array — it is forensic evidence about the
+    // ORIGINAL commit, not a check on the reload path itself, and it
+    // CANNOT bite on a reload-mechanism regression (a fresh module after
+    // `vi.resetModules()` has no receipt channel wired to this array at
+    // all, so nothing the reloaded process does could ever appear here
+    // either way). THE GATE for "the vanish is real" is the pair of DOM
+    // assertions above: the row visible before reload
+    // (`screen.getByText(/interrupted connected session\./)`,
+    // pre-`unmount()`) and absent after
+    // (`queryByText(...).not.toBeInTheDocument()`, post-reload) — that
+    // pair is what a broken hydrate() or a broken reload would actually
+    // flip (see the dedicated "Today renders without hydrate" mutation
+    // probe, task-4-report.md). What THIS assertion adds on top: it
+    // explains WHY the vanish is honest rather than a bug — the vanish is
+    // not a NEW event hydration invents, it is explained by the ORIGINAL
+    // commit's own receipt, already carrying `verdict:"failed"` (spec's
+    // own words: "coordinate with what the store already emits, don't
+    // duplicate" — no new receipt kind exists for this residual).
     const commitReceipt = receipts.find(
       (r) => (r as { kind?: string }).kind === "commit-accepted",
     );

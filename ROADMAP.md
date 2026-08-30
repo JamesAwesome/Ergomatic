@@ -375,7 +375,17 @@ rower's work silently.
         REMOVERS as well as writers. Also Task 5's: `connectGuardStage`
         and `monitorRunState` still read the durable tier only — a
         memory-only record renders on Today while invisible to the
-        Connect/Start guards. Original finding, for the record: a burst
+        Connect/Start guards. **Two report-only carries from Task 4,
+        moved here per RF14 so they have a life past the PR:** (1) the
+        row-10 abandon-path test (`LogSession.test.tsx`, "the abandon
+        path — claim survives unmount...") stands in with a direct
+        `handoffStore.retire()` call for "the next acceptance," since no
+        real door supplies an armed-acceptance defense retire on this
+        branch yet — Task 5 re-points that test at whichever door lands
+        it. (2) `Today.test.tsx`'s own row-9 "denied+reload counted"
+        residual test (a durable write denied, then a genuine reload)
+        has no `LogSession.tsx`-side twin — owed to Task 5 or Task 6's
+        own close-out. Original finding, for the record: a burst
         landing in the linger after a Save/Discard through the legacy
         clears RESURRECTED the dispatched session.**
         Proven at the time by reverting the reviewer's own probe test to
