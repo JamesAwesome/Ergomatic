@@ -14,6 +14,7 @@ import {
   type LogInput,
   type LogPatch,
   type LogsStore,
+  type PlanLink,
 } from "../stores/logs.js";
 import type {
   PlanKey,
@@ -384,10 +385,19 @@ function resolveNewestFakeLink(
   rows: FakeLogRow[],
   planKey: string,
   planIndex?: number,
-): { planIndex: number; id: string }[] {
+): PlanLink[] {
+  // The workout snapshot is carried on the SAME winner record as the id,
+  // mirroring the real store's single `selectDistinctOn` projection — so a
+  // reset collision cannot pair one row's id with another row's workout.
   const byIndex = new Map<
     number,
-    { id: string; loggedAt: Date; seq: number }
+    {
+      id: string;
+      workoutTitle: string;
+      workoutType: string;
+      loggedAt: Date;
+      seq: number;
+    }
   >();
   for (const row of rows) {
     if (row.planKey !== planKey || row.planIndex === null) continue;
@@ -401,6 +411,8 @@ function resolveNewestFakeLink(
     ) {
       byIndex.set(row.planIndex, {
         id: row.id,
+        workoutTitle: row.workoutTitle,
+        workoutType: row.workoutType,
         loggedAt: row.loggedAt,
         seq: row.seq,
       });
@@ -409,6 +421,8 @@ function resolveNewestFakeLink(
   return [...byIndex.entries()].map(([idx, v]) => ({
     planIndex: idx,
     id: v.id,
+    workoutTitle: v.workoutTitle,
+    workoutType: v.workoutType,
   }));
 }
 

@@ -3507,17 +3507,29 @@ describe("GET/POST /api/logs", () => {
 
   // From-the-log spec (2026-08-18), §2/§3: Plan's done-row link.
   describe("GET /api/logs?plan=", () => {
-    it("returns the linked log id per plan index", async () => {
+    // The workout each row recorded travels WITH its link: the Plan
+    // screen names it on the done row, and compares its type against the
+    // plan's own type for that slot to decide whether the day was swapped.
+    it("returns the linked log id per plan index, carrying that row's workout title and type", async () => {
       const app = appFor(makeStores());
       await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
-      const created = await asA(request(app).post("/api/logs")).send(
-        validLogBody(),
-      );
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        workoutTitle: "Slack Tide",
+        workoutType: "O2",
+      });
 
       const res = await asA(request(app).get("/api/logs?plan=sprint"));
       expect(res.status).toBe(200);
       expect(res.body).toStrictEqual({
-        links: [{ planIndex: 0, id: created.body.id }],
+        links: [
+          {
+            planIndex: 0,
+            id: created.body.id,
+            workoutTitle: "Slack Tide",
+            workoutType: "O2",
+          },
+        ],
       });
     });
 
@@ -3532,19 +3544,32 @@ describe("GET/POST /api/logs", () => {
     // The reset collision (spec §2): after a reset, the next advancing
     // save stamps index 0 again — the read side must resolve newest-wins,
     // not the first (now stale) row at that index.
-    it("resolves a reset collision newest-wins: the later log wins its index", async () => {
+    it("resolves a reset collision newest-wins: the later log wins its index, and its own workout comes with it", async () => {
       const app = appFor(makeStores());
       await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
-      await asA(request(app).post("/api/logs")).send(validLogBody());
+      await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        workoutTitle: "Sea Fret",
+        workoutType: "O2",
+      });
 
       await asA(request(app).put("/api/plan")).send({ reset: true });
-      const second = await asA(request(app).post("/api/logs")).send(
-        validLogBody(),
-      );
+      const second = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        workoutTitle: "Dust Whirl",
+        workoutType: "AN",
+      });
 
       const res = await asA(request(app).get("/api/logs?plan=sprint"));
       expect(res.body).toStrictEqual({
-        links: [{ planIndex: 0, id: second.body.id }],
+        links: [
+          {
+            planIndex: 0,
+            id: second.body.id,
+            workoutTitle: "Dust Whirl",
+            workoutType: "AN",
+          },
+        ],
       });
     });
 

@@ -1,4 +1,8 @@
-import type { Difficulty, WorkoutType } from "../../domain/types.js";
+import {
+  isWorkoutType,
+  type Difficulty,
+  type WorkoutType,
+} from "../../domain/types.js";
 import {
   DURATION_BUCKETS,
   bucketsForCap,
@@ -59,13 +63,8 @@ export interface TodayOverrides {
   source: "global" | "custom" | null;
 }
 
-const TYPES: readonly WorkoutType[] = ["AN", "O2", "AT", "TR"];
 const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
 const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
-
-function isWorkoutType(v: unknown): v is WorkoutType {
-  return typeof v === "string" && (TYPES as readonly string[]).includes(v);
-}
 
 function isDifficulty(v: unknown): v is Difficulty {
   return (

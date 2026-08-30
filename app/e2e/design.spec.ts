@@ -2433,13 +2433,21 @@ test.describe("plan screen (a plan active)", () => {
       // A real advancing save (default `advancesPlan: true`) — the ONLY
       // way a genuinely linked done row exists (§2: linkage is stored,
       // never inferred).
+      // The title is deliberately a LONG custom one (design gate,
+      // 2026-08-30): the row now renders that string, and a seed short
+      // enough to fit would sweep the one case that cannot clip. It lands
+      // on plan index 0, an O2 day, and is stored as an AT — so this
+      // fixture is also the swapped-row layout, which is the taller of the
+      // two and the one the tap-target and axe sweeps below most need to
+      // see.
       const result = await page.evaluate(async () => {
         const res = await fetch("/api/logs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             workoutId: null,
-            workoutTitle: "Design Plan Link Sweep",
+            workoutTitle:
+              "Design Plan Link Sweep, a long custom title that cannot fit one row",
             workoutType: "AT",
             held: null,
             pain: null,
@@ -2505,6 +2513,75 @@ test.describe("plan screen (a plan active)", () => {
       });
       expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink, 15.41:1 on --page
       expect(styles.decoration).toBe("none");
+    });
+
+    // Design gate (2026-08-30). The name is a stored string the rower
+    // authored, so the only thing standing between it and a row that
+    // pushes the page sideways is `.plan-row-name`'s clip. That
+    // rule is inert on an INLINE box — a span only gets `overflow`/
+    // `text-overflow` because it is a flex (or, on a swapped row, grid)
+    // ITEM and so is blockified. Recurring failure 21's second smell is
+    // exactly this: measuring an inline element, whose `clientWidth` is
+    // always 0, and reading the resulting green as proof.
+    test("a long workout name is clipped inside its row, and never widens the page", async ({
+      page,
+    }) => {
+      const name = page.locator(".plan-row-name");
+      await expect(name).toHaveCount(1);
+
+      const box = await name.evaluate((el) => ({
+        clientWidth: el.clientWidth,
+        scrollWidth: el.scrollWidth,
+        display: getComputedStyle(el).display,
+        overflow: getComputedStyle(el).overflowX,
+        ellipsis: getComputedStyle(el).textOverflow,
+      }));
+      // Blockified, so the clip rules apply at all. A zero clientWidth
+      // here is the inline-box failure, not a narrow row.
+      expect(box.clientWidth).toBeGreaterThan(0);
+      expect(box.display).not.toBe("inline");
+      expect(box.overflow).toBe("hidden");
+      expect(box.ellipsis).toBe("ellipsis");
+      // Genuinely clipped: the content is wider than the box it is shown
+      // in, which is what makes this fixture a real test of the rule
+      // rather than a short title that would fit under any CSS at all.
+      expect(box.scrollWidth).toBeGreaterThan(box.clientWidth);
+
+      // And the clip actually contains it: the document never gains a
+      // horizontal scroll, and the row stays inside the viewport.
+      const page_ = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      expect(page_.scrollWidth).toBeLessThanOrEqual(page_.clientWidth);
+
+      const rowBox = (await page.locator(".plan-row-done").boundingBox())!;
+      expect(rowBox.x + rowBox.width).toBeLessThanOrEqual(page_.clientWidth);
+    });
+
+    // The swap mark: index 0 is an O2 day in the real sprint sequence and
+    // the seeded log is an AT, so this fixture IS a swapped row.
+    test("the swapped row names what the plan asked for, at the vetted --ink-3 token", async ({
+      page,
+    }) => {
+      const mark = page.locator(".plan-row-swap");
+      await expect(mark).toHaveCount(1);
+      await expect(mark).toHaveText("INSTEAD OF O2");
+
+      const color = await mark.evaluate((el) => getComputedStyle(el).color);
+      // --ink-3 #57544c: 6.69:1 on --page, 6.30:1 on --surface-sunken.
+      // Deliberately NOT --ink-4, which is 4.48:1 on --surface-sunken.
+      expect(color).toBe("rgb(87, 84, 76)");
+
+      // The mark sits on its own line (variant B), so it must be BELOW
+      // the name rather than beside it — measured, not assumed from the
+      // grid rule.
+      const nameBox = (await page.locator(".plan-row-name").boundingBox())!;
+      const markBox = (await mark.boundingBox())!;
+      expect(markBox.y).toBeGreaterThanOrEqual(nameBox.y + nameBox.height);
+
+      // The badge follows what was ROWED, not what the plan asked.
+      await expect(page.locator(".plan-row-done .type-badge")).toHaveText("AT");
     });
   });
 });

@@ -817,12 +817,20 @@ test("plan", async ({ page }) => {
 
 // PM final-PR gate, condition 3: `plan.png` above is reset to zero done
 // rows (recurring failure #7's own trap in reverse — no done row at all,
-// let alone a linked one). This capture advances one real session through
-// the same `advancesPlan: true` path `log-detail` uses (a genuine atomic
-// upsert, not a faked checkmark), so Plan.tsx's own done-row link (§1:
+// let alone a linked one). This capture advances real sessions through the
+// same `advancesPlan: true` path `log-detail` uses (genuine atomic
+// upserts, not faked checkmarks), so Plan.tsx's own done-row link (§1:
 // "a done row with stored linkage becomes a link" — `usePlanLinks`,
 // `GET /api/logs?plan=<key>`) has something real to find and render row 1
 // as an `<a class="plan-row plan-row-done">` instead of a plain `<div>`.
+//
+// Four sessions, not one (design gate, 2026-08-30): every `create` bumps
+// `done_n`, so these land on plan indices 0..3, and the real sprint
+// sequence at those indices is O2 AT O2 TR. The first three are rowed as
+// planned and the FOURTH is an O2 on a TR day — so the capture shows both
+// halves of what a done row now says (the workout's name, and the mark
+// naming what it replaced) rather than only the half that happens to be
+// on the happy path.
 test("plan-linked", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-plan-linked@e2e.test",
@@ -830,36 +838,62 @@ test("plan-linked", async ({ page }) => {
   });
   await choosePlan(page, "sprint");
   await resetPlanProgress(page);
-  await postLog(page, {
-    workoutTitle: "Sea Fret",
-    workoutType: "O2",
-    held: "held",
-    pain: 2,
-    avgSplitSeconds: 130,
-    timeSeconds: 780,
-    distanceMeters: 3000,
-    advancesPlan: true,
-    steps: [
-      {
-        label: "6:00 @ 6k",
-        targetSplit: 130,
-        actualSplit: 130,
-        actualSource: "stopwatch",
-        meters: 3000,
-      },
-    ],
-  });
+  const rowed: { title: string; type: "O2" | "AT" | "TR" | "AN" }[] = [
+    { title: "Sea Fret", type: "O2" }, // index 0, an O2 day
+    { title: "Occluded Front", type: "AT" }, // index 1, an AT day
+    { title: "Horse Latitudes", type: "O2" }, // index 2, an O2 day
+    { title: "Slack Tide", type: "O2" }, // index 3 is a TR day — SWAPPED
+  ];
+  for (const { title, type } of rowed) {
+    await postLog(page, {
+      workoutTitle: title,
+      workoutType: type,
+      held: "held",
+      pain: 2,
+      avgSplitSeconds: 130,
+      timeSeconds: 780,
+      distanceMeters: 3000,
+      advancesPlan: true,
+      steps: [
+        {
+          label: "6:00 @ 6k",
+          targetSplit: 130,
+          actualSplit: 130,
+          actualSource: "stopwatch",
+          meters: 3000,
+        },
+      ],
+    });
+  }
 
   await page.goto("/plan");
   await page.locator(".plan-sequence").waitFor();
   await expect(page.locator(".plan-row")).toHaveCount(84);
 
-  // The load-bearing assertion: a done row that is genuinely a link, not
-  // just a checkmark glyph — `usePlanLinks`'s fetch has to have resolved
-  // and matched row 1 before this holds.
-  const linkedRow = page.locator("a.plan-row-done");
-  await expect(linkedRow).toHaveCount(1);
-  await expect(linkedRow).toHaveAttribute("href", /\/today\/log\/.+/);
+  // The load-bearing assertion: done rows that are genuinely links, not
+  // just checkmark glyphs — `usePlanLinks`'s fetch has to have resolved
+  // and matched each row before this holds.
+  const linkedRows = page.locator("a.plan-row-done");
+  await expect(linkedRows).toHaveCount(4);
+  await expect(linkedRows.first()).toHaveAttribute("href", /\/today\/log\/.+/);
+
+  // The name reaches the row from the stored log, and the swap mark names
+  // the plan's own type for a day rowed as something else. Both are read
+  // off the SAME four rows, so neither can pass on a screen where the
+  // other never rendered.
+  await expect(linkedRows.nth(0).locator(".plan-row-name")).toHaveText(
+    "Sea Fret",
+  );
+  await expect(linkedRows.nth(3).locator(".plan-row-name")).toHaveText(
+    "Slack Tide",
+  );
+  await expect(page.locator(".plan-row-swap")).toHaveCount(1);
+  await expect(linkedRows.nth(3).locator(".plan-row-swap")).toHaveText(
+    "INSTEAD OF TR",
+  );
+  // The badge follows what was ROWED, not what the plan asked: row 4 is a
+  // TR day showing an O2 badge beside an O2 workout's name.
+  await expect(linkedRows.nth(3).locator(".type-badge")).toHaveText("O2");
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "plan-linked.png"),

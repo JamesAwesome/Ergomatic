@@ -313,12 +313,30 @@ const LOG_LIST_COLUMNS = {
 // itself: an open `tx` inside `db.transaction` is a `PgTransaction`, not a
 // `Db` (it lacks `Db`'s own `$client` handle) — both expose the identical
 // `selectDistinctOn` builder chain this function actually calls.
+/** One resolved plan slot: which log closed it, and which workout that
+ *  log recorded. `workoutTitle`/`workoutType` are the SAVE-TIME snapshot
+ *  columns, not a join to `workouts` — a workout that has since been
+ *  edited, renamed or deleted must not change what the Plan screen says a
+ *  rower did (`workoutId` is `ON DELETE SET NULL`; these two never move).
+ *
+ *  `workoutType` is typed `string`, not `WorkoutType`: the column is plain
+ *  `text` (schema.ts:147 — deliberately NOT `workoutTypeEnum`, which is
+ *  the `workouts` table's column) and the route only checks it is a
+ *  non-empty string, so an unrecognised value is storable and every
+ *  consumer has to narrow it for itself. */
+export interface PlanLink {
+  planIndex: number;
+  id: string;
+  workoutTitle: string;
+  workoutType: string;
+}
+
 async function resolveNewestPlanLink(
   executor: Pick<Db, "selectDistinctOn">,
   userId: string,
   planKey: string,
   planIndex?: number,
-): Promise<{ planIndex: number; id: string }[]> {
+): Promise<PlanLink[]> {
   const conditions = [
     eq(sessionLogs.userId, userId),
     eq(sessionLogs.planKey, planKey),
@@ -326,10 +344,17 @@ async function resolveNewestPlanLink(
   if (planIndex !== undefined) {
     conditions.push(eq(sessionLogs.planIndex, planIndex));
   }
+  // The workout columns ride the SAME `selectDistinctOn` as the id, so
+  // they are read off the one row DISTINCT ON picked — never off a
+  // separately-resolved row at the same index. A reset collision leaves
+  // two rows on one index with different workouts; the contract suite's
+  // own collision case is what holds this together.
   const rows = await executor
     .selectDistinctOn([sessionLogs.planIndex], {
       planIndex: sessionLogs.planIndex,
       id: sessionLogs.id,
+      workoutTitle: sessionLogs.workoutTitle,
+      workoutType: sessionLogs.workoutType,
     })
     .from(sessionLogs)
     .where(and(...conditions))
@@ -346,6 +371,8 @@ async function resolveNewestPlanLink(
   return rows.map((row) => ({
     planIndex: row.planIndex as number,
     id: row.id,
+    workoutTitle: row.workoutTitle,
+    workoutType: row.workoutType,
   }));
 }
 
@@ -478,10 +505,7 @@ export function createLogsStore(db: Db) {
     // a DB-side default, not settable by `create()`'s input), so this
     // stays an ORDER BY change plus this comment rather than a new
     // test-only seam.
-    async listPlanLinks(
-      userId: string,
-      planKey: string,
-    ): Promise<{ planIndex: number; id: string }[]> {
+    async listPlanLinks(userId: string, planKey: string): Promise<PlanLink[]> {
       return resolveNewestPlanLink(db, userId, planKey);
     },
 

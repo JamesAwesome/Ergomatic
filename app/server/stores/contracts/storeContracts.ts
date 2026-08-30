@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WorkoutType } from "../../../domain/types.js";
 import type { ArticleReadsStore } from "../articleReads.js";
 import type { BaselinesStore } from "../baselines.js";
-import type { LogInput, LogsStore } from "../logs.js";
+import type { LogInput, LogsStore, PlanLink } from "../logs.js";
 import type { PlanStateStore } from "../planState.js";
 import { PREFERENCES_DEFAULTS, type PreferencesStore } from "../preferences.js";
 import type { TestDistance, TestHistoryStore } from "../testHistory.js";
@@ -20,6 +20,18 @@ import type { NewWorkoutInput, WorkoutsStore } from "../workouts.js";
 // Well-formed but guaranteed-absent from any backend (real Postgres or the
 // in-memory fake) a fresh `makeStores()` call produces.
 const NON_EXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
+
+/** `listPlanLinks` also returns each winning row's save-time workout
+ *  snapshot, pinned in full by the two dedicated `listPlanLinks` cases
+ *  below. The DELETE suite's subject is only ever WHICH LOG holds an
+ *  index, and none of its cases varies the workout — so they project
+ *  through this rather than restating one constant fixture title seven
+ *  times, which would assert nothing about deleting. */
+function linkIds(
+  links: readonly PlanLink[],
+): { planIndex: number; id: string }[] {
+  return links.map(({ planIndex, id }) => ({ planIndex, id }));
+}
 
 export interface SeededGlobalWorkout {
   id: string;
@@ -1355,29 +1367,55 @@ export function describeStoreContracts(
       // From-the-log spec (2026-08-18), §2/§3: Plan's done-row link and
       // the `?plan=` route variant, newest-wins per index.
       describe("listPlanLinks", () => {
-        it("returns the linked log id per plan index", async () => {
+        it("returns the linked log id per plan index, with the workout that row recorded", async () => {
           const stores = await makeStores();
           const userId = await stores.makeUser();
           await stores.planState.set(userId, "sprint");
-          const first = await stores.logs.create(userId, logInput());
+          const first = await stores.logs.create(
+            userId,
+            logInput({ workoutTitle: "Slack Tide", workoutType: "O2" }),
+          );
 
           const links = await stores.logs.listPlanLinks(userId, "sprint");
-          expect(links).toStrictEqual([{ planIndex: 0, id: first.id }]);
+          expect(links).toStrictEqual([
+            {
+              planIndex: 0,
+              id: first.id,
+              workoutTitle: "Slack Tide",
+              workoutType: "O2",
+            },
+          ]);
         });
 
         // The reset collision (spec §2, antagonist B5): after a reset, the
         // next advancing save stamps index 0 again — the OLDER row at that
-        // index must not win.
-        it("a reset collision resolves newest-wins: the later loggedAt row wins the index", async () => {
+        // index must not win. The two rows now carry DIFFERENT workouts, so
+        // this also pins that the title/type come from the WINNING row —
+        // a projection that resolved the id newest-wins but read the
+        // workout off any row at that index would go red here.
+        it("a reset collision resolves newest-wins: the later loggedAt row wins the index, and brings its own workout", async () => {
           const stores = await makeStores();
           const userId = await stores.makeUser();
           await stores.planState.set(userId, "sprint");
-          await stores.logs.create(userId, logInput());
+          await stores.logs.create(
+            userId,
+            logInput({ workoutTitle: "Sea Fret", workoutType: "O2" }),
+          );
           await stores.planState.reset(userId);
-          const second = await stores.logs.create(userId, logInput());
+          const second = await stores.logs.create(
+            userId,
+            logInput({ workoutTitle: "Dust Whirl", workoutType: "AN" }),
+          );
 
           const links = await stores.logs.listPlanLinks(userId, "sprint");
-          expect(links).toStrictEqual([{ planIndex: 0, id: second.id }]);
+          expect(links).toStrictEqual([
+            {
+              planIndex: 0,
+              id: second.id,
+              workoutTitle: "Dust Whirl",
+              workoutType: "AN",
+            },
+          ]);
         });
 
         it("is scoped per user", async () => {
@@ -1451,7 +1489,9 @@ export function describeStoreContracts(
           expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
 
           const links = await stores.logs.listPlanLinks(userId, "sprint");
-          expect(links).toStrictEqual([{ planIndex: 0, id: first.id }]);
+          expect(linkIds(links)).toStrictEqual([
+            { planIndex: 0, id: first.id },
+          ]);
         });
 
         // Wrong plan key: a Switch (planState.set to a different key)
@@ -1520,7 +1560,9 @@ export function describeStoreContracts(
           expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
 
           const headLinks = await stores.logs.listPlanLinks(userId, "head");
-          expect(headLinks).toStrictEqual([{ planIndex: 0, id: headLog.id }]);
+          expect(linkIds(headLinks)).toStrictEqual([
+            { planIndex: 0, id: headLog.id },
+          ]);
         });
 
         // NON-TERMINAL index — the B1 orphan fixture (antagonist, spec
@@ -1547,7 +1589,9 @@ export function describeStoreContracts(
           expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
 
           const links = await stores.logs.listPlanLinks(userId, "sprint");
-          expect(links).toStrictEqual([{ planIndex: 1, id: second.id }]);
+          expect(linkIds(links)).toStrictEqual([
+            { planIndex: 1, id: second.id },
+          ]);
           expect(await stores.logs.get(userId, second.id)).not.toBeNull();
         });
 
@@ -1567,7 +1611,7 @@ export function describeStoreContracts(
             doneN: 1,
           });
           expect(
-            await stores.logs.listPlanLinks(userId, "sprint"),
+            linkIds(await stores.logs.listPlanLinks(userId, "sprint")),
           ).toStrictEqual([{ planIndex: 0, id: newer.id }]);
 
           const result = await stores.logs.delete(userId, older.id);
@@ -1577,7 +1621,7 @@ export function describeStoreContracts(
           expect(planStateRow).toStrictEqual({ planKey: "sprint", doneN: 1 });
           expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
           expect(
-            await stores.logs.listPlanLinks(userId, "sprint"),
+            linkIds(await stores.logs.listPlanLinks(userId, "sprint")),
           ).toStrictEqual([{ planIndex: 0, id: newer.id }]);
         });
 
@@ -1598,7 +1642,7 @@ export function describeStoreContracts(
             doneN: 2,
           });
           expect(
-            await stores.logs.listPlanLinks(userId, "sprint"),
+            linkIds(await stores.logs.listPlanLinks(userId, "sprint")),
           ).toStrictEqual([
             { planIndex: 0, id: newer.id },
             { planIndex: 1, id: terminal.id },
@@ -1611,7 +1655,7 @@ export function describeStoreContracts(
           expect(planStateRow).toStrictEqual({ planKey: "sprint", doneN: 2 });
           expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
           expect(
-            await stores.logs.listPlanLinks(userId, "sprint"),
+            linkIds(await stores.logs.listPlanLinks(userId, "sprint")),
           ).toStrictEqual([
             { planIndex: 0, id: older.id },
             { planIndex: 1, id: terminal.id },

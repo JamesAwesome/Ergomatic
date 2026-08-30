@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { PLANS } from "../../domain/plans";
 import type { PlanData, PlanKey, PlanSequenceItem } from "../api/usePlan";
+import type { PlanLink } from "./usePlanLinks";
 
 // Realistic fixture per repo convention: the real 84-code sequence from
 // domain/plans.ts (not a 3-row hand stub), status derived exactly like
@@ -47,11 +48,24 @@ function mockUsePlan(state: unknown) {
 // this file's tests. Defaults to no links at all, so every test written
 // before this task (none of which calls this) renders exactly as it did
 // pre-Task-6: every done row falls back to plain text.
-function mockUsePlanLinks(links: Map<number, string> = new Map()) {
+function mockUsePlanLinks(links: Map<number, PlanLink> = new Map()) {
   vi.doMock("./usePlanLinks", () => ({ usePlanLinks: () => links }));
 }
 
-async function renderPlan(links: Map<number, string> = new Map()) {
+/** A linked done row's payload. `workoutType` defaults to O2 and callers
+ *  that care about the swap mark pass their own — every fixture here names
+ *  a REAL library workout of its stated type (repo convention: fixtures
+ *  that look like production data). */
+function link(overrides: Partial<PlanLink> = {}): PlanLink {
+  return {
+    id: "log-abc",
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    ...overrides,
+  };
+}
+
+async function renderPlan(links: Map<number, PlanLink> = new Map()) {
   mockUsePlanLinks(links);
   const { default: Plan } = await import("./Plan");
   return render(<Plan />, { wrapper: MemoryRouter });
@@ -66,7 +80,7 @@ function LocationProbe() {
   return <p>PROBE from={String(from)}</p>;
 }
 
-async function renderPlanWithProbe(links: Map<number, string>) {
+async function renderPlanWithProbe(links: Map<number, PlanLink>) {
   mockUsePlanLinks(links);
   const { default: Plan } = await import("./Plan");
   return render(
@@ -295,7 +309,7 @@ describe("Plan (done-row links, Task 6)", () => {
       choose: vi.fn(),
       reset: vi.fn(),
     });
-    const links = new Map([[0, "log-abc"]]);
+    const links = new Map([[0, link()]]);
     await renderPlan(links);
 
     const rows = document.querySelectorAll(".plan-row");
@@ -312,7 +326,7 @@ describe("Plan (done-row links, Task 6)", () => {
       choose: vi.fn(),
       reset: vi.fn(),
     });
-    const links = new Map([[0, "log-abc"]]);
+    const links = new Map([[0, link()]]);
     await renderPlanWithProbe(links);
 
     await userEvent.click(document.querySelectorAll(".plan-row")[0]!);
@@ -329,7 +343,7 @@ describe("Plan (done-row links, Task 6)", () => {
     });
     // Only index 0 is linked; indices 1..10 are also done but pre-spec-2
     // (or otherwise unlinked) — every one of them must stay plain text.
-    const links = new Map([[0, "log-abc"]]);
+    const links = new Map([[0, link()]]);
     await renderPlan(links);
 
     const rows = document.querySelectorAll(".plan-row");
@@ -349,7 +363,7 @@ describe("Plan (done-row links, Task 6)", () => {
     // Index 11 is TODAY in this fixture (doneN=11) — a link entry for it
     // would only ever arrive from a stale/adversarial response, and must
     // never be honored for a non-done row.
-    const links = new Map([[11, "log-today-somehow"]]);
+    const links = new Map([[11, link({ id: "log-today-somehow" })]]);
     await renderPlan(links);
 
     const todayRow = document.querySelector('[aria-current="step"]')!;
@@ -364,7 +378,7 @@ describe("Plan (done-row links, Task 6)", () => {
       choose: vi.fn(),
       reset: vi.fn(),
     });
-    const links = new Map([[0, "log-abc"]]);
+    const links = new Map([[0, link()]]);
     await renderPlan(links);
 
     const rows = document.querySelectorAll(".plan-row");
@@ -376,6 +390,220 @@ describe("Plan (done-row links, Task 6)", () => {
     // directly rather than through an ancestor.
     expect(rows[0]).toHaveClass("plan-row");
     expect(rows[0]!.tagName).toBe("A");
+  });
+});
+
+// A done plan row names the workout that closed it, and says so when that
+// workout was not what the plan asked for. Two triggers, ONE mark: the
+// type differs from the plan's own type for that slot, or it is one of
+// the three checkpoint days and the prescribed test is not what was
+// rowed. Derived, never stored — the comparison is between the log's
+// save-time snapshot and `PLANS`, both of which this screen already has.
+//
+// SPRINT_ACTIVE is doneN=11, so indices 0..10 are done. The real sprint
+// sequence at those indices is O2 AT O2 TR AT O2 AN(checkpoint) O2 AT O2
+// TR — every fixture below picks a REAL library workout of the type it
+// claims, so no case leans on a type/title pair the corpus would never
+// produce.
+describe("Plan (done-row workout names and swap marks)", () => {
+  function readyWithLinks(links: Map<number, PlanLink>) {
+    mockUsePlan({
+      state: "ready",
+      plan: SPRINT_ACTIVE,
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    return renderPlan(links);
+  }
+
+  function rowAt(index: number): HTMLElement {
+    return document.querySelectorAll<HTMLElement>(".plan-row")[index]!;
+  }
+
+  it("names the workout a linked done row recorded", async () => {
+    await readyWithLinks(new Map([[0, link({ workoutTitle: "Sea Fret" })]]));
+
+    expect(rowAt(0).querySelector(".plan-row-name")?.textContent).toBe(
+      "Sea Fret",
+    );
+  });
+
+  // The badge has to agree with the title beside it. On an unswapped row
+  // the two types are equal so nothing moves; on a swapped row showing the
+  // PLAN's type would put an "TR" badge next to an O2 workout's name.
+  it("a swapped row's badge shows the type ROWED, and the mark names what the plan asked for", async () => {
+    // Index 3 is a TR day in the real sprint sequence; Slack Tide is an O2.
+    await readyWithLinks(
+      new Map([[3, link({ workoutTitle: "Slack Tide", workoutType: "O2" })]]),
+    );
+
+    const row = rowAt(3);
+    expect(row.querySelector(".type-badge")?.textContent).toBe("O2");
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe("Slack Tide");
+    expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
+      "INSTEAD OF TR",
+    );
+    expect(row).toHaveClass("plan-row-swapped");
+  });
+
+  it("a row rowed as planned carries no mark, in the same render as one that does", async () => {
+    await readyWithLinks(
+      new Map([
+        // Index 0 is an O2 day, rowed as an O2.
+        [0, link({ workoutTitle: "Sea Fret", workoutType: "O2" })],
+        // Index 3 is a TR day, rowed as an O2 — the positive control that
+        // proves the selector below is live in this very render.
+        [3, link({ workoutTitle: "Slack Tide", workoutType: "O2" })],
+      ]),
+    );
+
+    expect(rowAt(3).querySelector(".plan-row-swap")).not.toBeNull();
+    expect(rowAt(0).querySelector(".plan-row-swap")).toBeNull();
+    expect(rowAt(0)).not.toHaveClass("plan-row-swapped");
+    expect(rowAt(0).querySelector(".type-badge")?.textContent).toBe("O2");
+  });
+
+  it("a checkpoint day rowed as prescribed shows the workout's name INSTEAD of the prescribed affix, and no mark", async () => {
+    await readyWithLinks(
+      new Map([[6, link({ workoutTitle: "2K Test", workoutType: "AN" })]]),
+    );
+
+    const row = rowAt(6);
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe("2K Test");
+    // The affix exists to say which workout the plan wants. Once the row
+    // records that you did it, repeating it beside the name says the same
+    // thing twice.
+    expect(row.querySelector(".plan-row-checkpoint")).toBeNull();
+    expect(row.querySelector(".plan-row-swap")).toBeNull();
+  });
+
+  it("a checkpoint day rowed as a DIFFERENT workout of the same type is marked against the prescription, not the type", async () => {
+    // Dust Whirl is a real AN — the type matches the checkpoint day, so
+    // only the prescription check can catch this.
+    await readyWithLinks(
+      new Map([[6, link({ workoutTitle: "Dust Whirl", workoutType: "AN" })]]),
+    );
+
+    const row = rowAt(6);
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe("Dust Whirl");
+    expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
+      "INSTEAD OF 2K TEST",
+    );
+  });
+
+  it("a checkpoint day whose type AND workout both differ gets ONE mark, naming the prescription", async () => {
+    await readyWithLinks(
+      new Map([[6, link({ workoutTitle: "Sea Fret", workoutType: "O2" })]]),
+    );
+
+    const row = rowAt(6);
+    expect(row.querySelectorAll(".plan-row-swap")).toHaveLength(1);
+    expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
+      "INSTEAD OF 2K TEST",
+    );
+  });
+
+  // `session_logs.workout_title` is a save-time snapshot that the seed's
+  // rename pre-pass never rewrites, so a 2k test logged before 2026-08-22
+  // is spelled "First 2k" forever while the prescription says "2K Test".
+  // Comparing the raw strings would tell a rower who DID the prescribed
+  // test that they did something else.
+  it("a checkpoint rowed under a RETIRED title for the prescribed workout is not marked as a swap", async () => {
+    await readyWithLinks(
+      new Map([
+        [6, link({ workoutTitle: "First 2k", workoutType: "AN" })],
+        // Positive control in the same render.
+        [3, link({ workoutTitle: "Slack Tide", workoutType: "O2" })],
+      ]),
+    );
+
+    expect(rowAt(3).querySelector(".plan-row-swap")).not.toBeNull();
+    expect(rowAt(6).querySelector(".plan-row-swap")).toBeNull();
+    expect(rowAt(6).querySelector(".plan-row-name")?.textContent).toBe(
+      "First 2k",
+    );
+  });
+
+  // `session_logs.workout_type` is plain text, not the workouts table's
+  // enum, so an unrecognised value is storable. A type we cannot read is
+  // not evidence of a swap.
+  it("an unreadable stored type falls back to the plan's own badge and claims no swap", async () => {
+    await readyWithLinks(
+      new Map([
+        [3, link({ workoutTitle: "Slack Tide", workoutType: "nonsense" })],
+        [4, link({ workoutTitle: "Sea Fret", workoutType: "O2" })],
+      ]),
+    );
+
+    // Index 3 is a TR day; the badge falls back rather than rendering an
+    // unstyled/unknown type.
+    expect(rowAt(3).querySelector(".type-badge")?.textContent).toBe("TR");
+    expect(rowAt(3).querySelector(".plan-row-swap")).toBeNull();
+    // Index 4 is an AT day rowed as O2 — the control proving the mark is
+    // reachable in this render.
+    expect(rowAt(4).querySelector(".plan-row-swap")?.textContent).toBe(
+      "INSTEAD OF AT",
+    );
+  });
+
+  it("a done row with no stored link renders exactly as it did before: plan badge, no name, no mark", async () => {
+    await readyWithLinks(new Map([[0, link()]]));
+
+    // Index 1 is done (doneN=11) but unlinked — a pre-linkage row, or a
+    // links fetch that failed.
+    const row = rowAt(1);
+    expect(row.querySelector(".plan-row-name")).toBeNull();
+    expect(row.querySelector(".plan-row-swap")).toBeNull();
+    expect(row.querySelector(".type-badge")?.textContent).toBe("AT");
+  });
+
+  it("an unlinked done checkpoint keeps its prescribed affix", async () => {
+    await readyWithLinks(new Map([[0, link()]]));
+
+    expect(rowAt(6).querySelector(".plan-row-checkpoint")?.textContent).toBe(
+      "2K TEST",
+    );
+    expect(rowAt(6).querySelector(".plan-row-name")).toBeNull();
+  });
+
+  it("an upcoming checkpoint keeps its prescribed affix and never gains a name", async () => {
+    await readyWithLinks(new Map([[0, link()]]));
+
+    // Index 34 is the second checkpoint, still ahead of doneN=11.
+    expect(rowAt(34).querySelector(".plan-row-checkpoint")?.textContent).toBe(
+      "2K TEST",
+    );
+    expect(rowAt(34).querySelector(".plan-row-name")).toBeNull();
+  });
+
+  it("today and upcoming rows never take a name or a mark, even when links carries their index", async () => {
+    await readyWithLinks(
+      new Map([
+        // Index 11 is TODAY, 12 is upcoming — both entries could only ever
+        // arrive from a stale or adversarial response.
+        [11, link({ workoutTitle: "Sea Fret", workoutType: "AN" })],
+        [12, link({ workoutTitle: "Dust Whirl", workoutType: "AN" })],
+        [3, link({ workoutTitle: "Slack Tide", workoutType: "O2" })],
+      ]),
+    );
+
+    expect(rowAt(3).querySelector(".plan-row-swap")).not.toBeNull();
+    for (const index of [11, 12]) {
+      expect(rowAt(index).querySelector(".plan-row-name")).toBeNull();
+      expect(rowAt(index).querySelector(".plan-row-swap")).toBeNull();
+    }
+  });
+
+  it("a long custom title still renders in full in the DOM — the clip is CSS, never a truncated string", async () => {
+    const longTitle =
+      "Sunday morning long steady state with a rate ladder in the back half";
+    await readyWithLinks(
+      new Map([[0, link({ workoutTitle: longTitle, workoutType: "O2" })]]),
+    );
+
+    expect(rowAt(0).querySelector(".plan-row-name")?.textContent).toBe(
+      longTitle,
+    );
   });
 });
 

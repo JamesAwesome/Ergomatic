@@ -2686,6 +2686,61 @@ button.back-link:disabled,
   flex-shrink: 0;
 }
 
+/* The workout a done row recorded (design gate, 2026-08-30). Reuses
+   `.today-log-title`'s exact treatment — 14px, --ink, single-line
+   ellipsis — so the Plan row and the history row name a workout the same
+   way rather than inventing a second voice for one string. The title is
+   never truncated in the DOM; the clip is this rule's job alone.
+   Contrast: --ink #1b1a17 is 15.41:1 on --page and 14.50:1 on
+   --surface-sunken. */
+.plan-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The swap mark: what the plan asked for, on a day rowed as something
+   else. --ink-3, never --ink-4 — the standing "no small mono label reads
+   --ink-4" rule (that token is 4.48:1 on --surface-sunken, under the AA
+   floor). --ink-3 measures 6.69:1 on --page and 6.30:1 on
+   --surface-sunken. */
+.plan-row-swap {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* Variant B (design gate, 2026-08-30): a swapped row grows a second line
+   for its mark instead of sharing one with the name. Inline, the longest
+   mark ("INSTEAD OF 2K TEST") takes 126 px of a 330 px content width and
+   leaves the name about fifteen characters — worst on the three
+   checkpoint days, which are the rows most worth reading. Scoped to
+   swapped rows only, so the other eighty-odd keep `.plan-row`'s flex
+   layout and its even 44px rhythm exactly as before.
+   Columns mirror the flex order: index, badge, name, status. The
+   `.visually-hidden` status word is `position: absolute` (see its own
+   rule), so it takes no grid cell, the same way it consumes no flex
+   space. */
+.plan-row-swapped {
+  display: grid;
+  grid-template-columns: 24px auto 1fr auto;
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: center;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.plan-row-swapped .plan-row-swap {
+  grid-column: 2 / -1;
+}
+
 .plan-row-status {
   flex: 1;
   text-align: right;
