@@ -575,6 +575,64 @@ rower's work silently.
         this task's diff) were reverted per the task's own "revert
         unrelated churn" instruction. Full detail in
         `.superpowers/sdd/2026-08-30-handoff-store/task-5-report.md`.
+        **Task 6 (close-out) landed 2026-08-30 — the plan's own six tasks
+        are now ALL complete.** The module-boundary gate (spec §10 row 11)
+        finally lands (`scripts/handoffStoreBoundary.test.ts`): nothing
+        under `src/` outside `handoffStore.ts` (plus a disclosed
+        allowlist — `monitorRun.ts`'s own legacy `saveMonitorRun`/
+        `clearMonitorRun`, zero production callers, kept for the large
+        pre-existing test-fixture convention that calls them directly) or
+        `e2e/` (design.spec.ts/screenshots.spec.ts/session.spec.ts, plus
+        `connected.spec.ts` — a genuine fourth writer this close-out found
+        that the close-out brief did not name) writes or removes the
+        durable key; mutation-probed twice (a non-store src file, a
+        non-allowlisted e2e spec), both go red, both revert clean. The
+        full spec §10 mutation ledger is now consolidated (Tasks 1-5's own
+        recorded mutations, plus four run fresh at close-out: row 2's
+        post-release window-predicate gate, row 5's
+        tombstone-refusal-bumps-revision leg, row 11's revision-reuse, and
+        row 11's tier-precedence reorder — the last confirmed GENUINELY
+        UNREACHABLE at the store's own hydration guard by construction,
+        matching Task 2's own disclosed limitation; row 8's actual
+        guarantee is independently mutation-tested at the producer-purity
+        layer instead, Task 1's probes 1-2 and Task 3's mutation 2) — full
+        table in
+        `.superpowers/sdd/2026-08-30-handoff-store/task-6-report.md`.
+        `pnpm screenshots` now passes 83/83 (the stale `v0.26.0`
+        release-notes pin bumped to this branch's own `v0.27.0` tag).
+        Running it also surfaced one genuinely stale, unrelated capture —
+        `connected-interstitial-ready{,-landscape}.png` still showed
+        PR #227's retired "KEEP THE SCREEN ON" copy, never refreshed
+        against the source's actual, already-shipped "KEEP YOUR PHONE
+        SCREEN ON" — refreshed here since it corrects drift rather than
+        adding noise; 21 other environmental/date-dependent diffs
+        (today/you/log/news/post-workout-summary, Task 5's own named
+        category) were reverted again, unchanged in kind. `monitorRunState()`/
+        `anyLiveSession()` and Today.tsx's own stale-draft-discard guard's
+        `loadMonitorRun()` read (the THIRD legacy read Task 5's review
+        named) are both left in place, with a citing comment each:
+        deleting either would orphan the cross-file anti-pattern
+        documentation naming them by design (M-1's own reference pattern,
+        `todayGuard.pin.test.ts`'s binding pin) — exactly the "unrelated
+        churn" this close-out's own brief says to avoid dragging in.
+        Per-file coverage on all ten store-touching files:
+        `handoffStore.ts` 100/98.91/100/100, `useMonitorSession.ts`
+        98.55/95.82/98.79/99.65, `monitorRun.ts` 100/98.13/100/100,
+        `LogSession.tsx` 99.04/95.73/96.61/98.97, `Today.tsx`
+        99.36/97.67/100/100, `ConnectAction.tsx` 100/100/100/100,
+        `WorkoutDetail.tsx` 91.37/90.42/100/91.07, `useStartWorkout.ts`
+        100/100/100/100, `ConnectedSurface.tsx` 100/100/100/100,
+        `ConnectedInterstitial.tsx` 100/100/100/100 — none under 90 on any
+        axis (RF2). Full gates green: `pnpm lint`/`format:check`/
+        `typecheck` clean; `pnpm test --project unit --project client` 201
+        files / 5576 passed + 1 skipped (5577); `pnpm test:coverage` (all
+        three projects) 219 files / 5824 passed + 1 skipped (5825),
+        aggregate 98.93/97.45/98.98/99.35; `pnpm e2e` 420/420; `pnpm
+        screenshots` 83/83. **AUD-016 stays NOT STRUCK** — the line above
+        ("Needs a PM final-PR gate before merge... not struck until
+        then") still governs, unchanged by this close-out task. Full
+        detail in
+        `.superpowers/sdd/2026-08-30-handoff-store/task-6-report.md`.
 - [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
