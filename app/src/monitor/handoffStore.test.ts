@@ -479,6 +479,48 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     expect(receipts).toStrictEqual([]);
   });
 
+  // ADDED at the final fix round (2026-08-30), adversarial pass F-1: the
+  // no-op test directly above runs against an EMPTY store, so it passes
+  // whether or not `retire` reads `sessionKey` at all — the probe (make
+  // the per-entry lookup ignore `sessionKey` and retire whatever is
+  // current) left all 5638 tests green. `handoffStore.ts`'s per-entry
+  // lookup is the ONLY thing standing between an authorization staged for
+  // one session and the destruction of a DIFFERENT one, and until this
+  // test it had no gate of its own.
+  it("KEY-BINDING: a retire set naming key A leaves key B's entry ALIVE — the authorization destroys the key it names, never 'whatever is current' (§1: authorization is KEY-BOUND)", () => {
+    const keyB = t0.toISOString();
+    const runB = freshRun(keyB);
+    store.commit(keyB, null, runB);
+    const keyA = new Date(t0.getTime() - 60_000).toISOString();
+    expect(keyA).not.toBe(keyB);
+    receipts.length = 0;
+
+    store.retire([{ sessionKey: keyA, revision: 0 }], "monitor-discard");
+
+    // B SURVIVES, whole: still the current unretired entry, at its own
+    // revision, still readable, still durable.
+    expect(store.read(keyB)).toStrictEqual({
+      sessionKey: keyB,
+      revision: 0,
+      run: runB,
+    });
+    expect(store.currentUnretired()).not.toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
+    // ...and B was never TOMBSTONED either — a mutant that removed the
+    // entry but left the tombstone unarmed would fail the read above, but
+    // one that armed the tombstone while leaving the entry in place would
+    // not: a later commit for B must still be accepted.
+    expect(
+      store.commit(keyB, 0, { ...runB, title: "B is still writable" }),
+    ).toStrictEqual({ accepted: true, revision: 1, verdict: "saved" });
+
+    // NOTHING was retired, so NOTHING was receipted (§1: "nothing found ->
+    // nothing emitted") — asserted on the retire receipts specifically,
+    // since the accepted commit above emits its own.
+    expect(receiptsOfKind("retire")).toStrictEqual([]);
+    expect(receiptsOfKind("handoff-dropped")).toStrictEqual([]);
+  });
+
   it("an unclaimed entry retires with claimState unclaimed", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
