@@ -365,11 +365,14 @@ testers already know: `2 intervals kept.` / `Nothing kept.`, counted by
 `summaryModel.ts`'s `measuredIntervalCount(actuals)` — the same function the
 LOST THE MONITOR banner names, never a second notion of "kept".
 
-**GATE 0 STATUS: the WORDS are cleared; the current PLACEMENT is PENDING**
-(James's review of rev 2, P1-5: an approval of the workout-screen artifact
-does not carry to the log-screen delta — the gate is the approval of the
-rendered thing, and the rendered thing changed). What stands approved and
-what awaits are separated below.
+**GATE 0 CLEARED IN FULL — James, 2026-08-31, with the merge word on rev 4.**
+The delta re-rendered after his rev-2 review (P1-5 correctly held that the
+workout-screen approval did not carry to the changed surface) was presented
+as three pieces on the artifact — the log-screen placement, the strip's new
+body line ("The row below is what the erg measured before it stopped."), and
+the transient SESSION ENDED frame's drop copy with its sentence-case register
+choice — and approved together with the PR. The words below were approved
+first, on the original artifact:
 
 **Approved — James, 2026-08-31**, on the rendered artifact
 `docs/superpowers/specs/2026-08-31-lifecycle-exit-gate.html` (before/after in
@@ -391,10 +394,10 @@ The approved surface, binding on implementation:
   program-dropped arrival, not the workout screen — the words, register,
   tokens and contrast pairings approved above carry over unchanged. **The
   revised placement, the new body line ("The row below is what the erg
-  measured before it stopped."), and the interim ended frame's drop copy are
-  the PENDING Gate 0 delta**, rendered on the same artifact's log-screen
-  section and awaiting James's explicit approval — no §1 implementation
-  starts before it. The workout screen gets no new surface after all.
+  measured before it stopped."), and the interim ended frame's drop copy were
+  the Gate 0 delta, rendered on the same artifact and CLEARED with the merge
+  word** (status block above). The workout screen gets no new surface after
+  all.
 - **No banner on the live screen.** James's RC-37 ruling ("loose any new
   banners") holds; the one line is added only because something was rowed.
 - Contrast, computed and on the artifact: title `--ink` on `--surface`
@@ -613,7 +616,7 @@ becomes available from ordinary use. Rides §3's ring work.
 
 | PR | Contents | Gates |
 | --- | --- | --- |
-| 1 | §1 live drop arm + `"program-dropped"` + server migration | TRIAD; Gate 0 (words cleared; log-screen placement delta PENDING); antagonist delta pass |
+| 1 | §1 live drop arm + `"program-dropped"` + server migration | TRIAD; Gate 0 CLEARED in full (2026-08-31); antagonist delta pass |
 | 2 | §2 ring history + ungated door, §3 resume instrument, §6 latch counter | one coherent chunk: all three are ring work. **Gate 0 on the ring door** (James's review P2-6: a new always-available screen listing saved rings is user-visible layout and copy, and rev 2 gave it no design gate) |
 | 3 | §4 freeze predicate | opens only when §3 has reported |
 | 4 | §5 partial metres | behind the `door` column's migration |

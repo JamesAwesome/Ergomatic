@@ -197,8 +197,8 @@ rower's work silently.
       union is a hand-copied mirror; all three widen in one commit, gated by
       a `POST /api/logs` seam test (this row said "no migration" until
       James's rev-2 review; that was the client-side story only). **TRIAD**
-      (stored close reason + the enum migration). Gate 0: words cleared,
-      log-screen placement delta pending.
+      (stored close reason + the enum migration). Gate 0 CLEARED in full
+      (2026-08-31, with the spec PR's merge word).
 - [ ] **The pocketed-phone window's two co-producers. RE-SCOPED on evidence
       2026-08-31 — one is not a defect.** `pause-declared` at 66 spm while
       rowing is real and stays here, owned by
