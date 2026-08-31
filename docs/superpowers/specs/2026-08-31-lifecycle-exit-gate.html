@@ -248,6 +248,52 @@
 <hr class="rule">
 
 <section>
+  <h2>The moment in between: the ended frame</h2>
+  <p>Between the drop and the log screen, the existing <span class="mono">SESSION ENDED</span> surface renders for a moment (React paints it before the navigation effect runs). Today its machine-ended line would say <em>"The monitor finished it. Your numbers are kept."</em> &mdash; false here. These frames show what it says instead, in that surface's own voice: the mono status label, the 36px serif line, and the body line are the real elements at their real styles; only the body line's words change, branching on the new <span class="mono">closeReason</span> field.</p>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col">
+        <div class="lab">Interim &middot; intervals kept</div>
+        <div class="e e-portrait" style="height:360px;">
+          <div class="e-body" style="justify-content:center; align-items:flex-start; gap:10px; padding:28px 22px;">
+            <p style="font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:11px; letter-spacing:.18em; color:var(--ink-3); margin:0;">SESSION ENDED</p>
+            <p style="font-family:Georgia,'Times New Roman',serif; font-size:36px; color:var(--ink); margin:0;">Wrapping up</p>
+            <p style="font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:13px; color:var(--ink-2); margin:0;">The erg dropped the workout. 2 intervals kept.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Interim &middot; nothing completed</div>
+        <div class="e e-portrait" style="height:360px;">
+          <div class="e-body" style="justify-content:center; align-items:flex-start; gap:10px; padding:28px 22px;">
+            <p style="font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:11px; letter-spacing:.18em; color:var(--ink-3); margin:0;">SESSION ENDED</p>
+            <p style="font-family:Georgia,'Times New Roman',serif; font-size:36px; color:var(--ink); margin:0;">Wrapping up</p>
+            <p style="font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:13px; color:var(--ink-2); margin:0;">The erg dropped the workout. Nothing kept.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Interim &middot; landscape</div>
+        <div class="e e-land" style="height:260px;">
+          <div class="e-body" style="justify-content:center; align-items:flex-start; gap:10px; padding:28px 32px;">
+            <p style="font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:11px; letter-spacing:.18em; color:var(--ink-3); margin:0;">SESSION ENDED</p>
+            <p style="font-family:Georgia,'Times New Roman',serif; font-size:36px; color:var(--ink); margin:0;">Wrapping up</p>
+            <p style="font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:13px; color:var(--ink-2); margin:0;">The erg dropped the workout. 2 intervals kept.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <p class="note"><strong>A deliberate register choice for your eyes:</strong> the body line here is sentence case &mdash; <span class="mono">The erg dropped the workout. 2 intervals kept.</span> &mdash; because it joins the ended surface's existing body-line family ("Your numbers are kept.", "No numbers to keep."), which is sentence case throughout. The caps title belongs to the log strip. Same words, each surface's own voice. <span class="mono">SESSION ENDED</span> and <span class="mono">Wrapping up</span> stay: both are true. Contrast is the surface's existing pairings: label <span class="mono">--ink-3</span> on <span class="mono">--page</span> 6.69:1, serif <span class="mono">--ink</span> 15.41:1, body <span class="mono">--ink-2</span> 9.74:1.</p>
+</section>
+
+<hr class="rule">
+
+<section>
   <h2>The failed-write case is not new</h2>
   <p>If the record cannot be saved, the session does <strong>not</strong> hand off to the log &mdash; it holds in the state you already approved for PR&nbsp;#239, in the ended frame where that state actually lives, unchanged and shown here only so the whole path is visible in one place. Navigating away while the record never persisted is the exact harm &sect;1 exists to stop.</p>
   <div class="strip">
@@ -297,7 +343,7 @@
   <h2>What I am asking you to approve</h2>
   <div class="decision">
     <p><strong>Already approved (2026-08-31, unchanged):</strong> the words &mdash; <span class="mono">THE ERG DROPPED THE WORKOUT.</span>, then <span class="mono">2 intervals kept.</span> / <span class="mono">Nothing kept.</span> counted by the same <span class="mono">measuredIntervalCount</span> the LOST THE MONITOR banner uses &mdash; the register, and no banner on the live screen.</p>
-    <p><strong>The delta needing your eyes: the placement.</strong> Your "just go to log" ruling moved the exit to the log screen through the existing ended hand-off, so the strip now sits at the top of the log screen, above the title, identical in both orientations &mdash; and the body line changed with the ground under it: <span class="mono">The row below is what the erg measured before it stopped.</span> replaces the workout-screen sentence about nudged targets, which no longer describes the screen the rower is on. The workout screen gets no new surface at all.</p>
+    <p><strong>The delta needing your eyes, all three pieces:</strong> <strong>(a) the placement</strong> &mdash; your "just go to log" ruling moved the exit to the log screen through the existing ended hand-off, so the strip sits at the top of the log screen, above the title, identical in both orientations. <strong>(b) The strip's body line</strong> &mdash; <span class="mono">The row below is what the erg measured before it stopped.</span> replaces the workout-screen sentence about nudged targets, which no longer describes the screen the rower is on; the workout screen gets no new surface at all. <strong>(c) The interim ended frame</strong> &mdash; the transient <span class="mono">SESSION ENDED / Wrapping up</span> surface that paints before navigation, whose body line now tells the truth (<span class="mono">The erg dropped the workout. 2 intervals kept.</span> / <span class="mono">Nothing kept.</span>) instead of "The monitor finished it." &mdash; rendered above in both cases and both orientations, including its sentence-case register choice.</p>
   </div>
   <p class="note">Nothing is implemented. This is the gate, not the presentation of a built thing.</p>
 </section>

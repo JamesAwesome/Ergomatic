@@ -223,10 +223,11 @@ first two at once; the third is now owned honestly below.
 
 ### What the rower gets
 
-The erg throws the workout away mid-row. The app closes the record, keeps every
-interval actually rowed, and lands on the log screen with the row in front of
-them — the same hand-off every other connected ending already makes — under a
-strip saying what happened and what survived.
+The erg throws the workout away mid-row. The app closes the record, keeps
+every **completed** interval (an in-flight one is discarded until §5 lands —
+so a single-interval piece keeps nothing), and lands on the log screen with
+the row in front of them — the same hand-off every other connected ending
+already makes — under a strip saying what happened and what survived.
 
 ### Behaviour
 
@@ -250,18 +251,42 @@ that already exists: the ended frame renders, `WorkoutDetail.tsx`'s
 and the log door — the record's owner per `Today.tsx`'s own stated premise —
 receives it.
 
-**The interim ended frame must not lie (James's review of rev 2, P1-2).**
-React renders the ended frame before the passive effect calls `onEnded()`, so
-for at least one visible frame the rower sees the ended surface — and
-`ConnectedSurface`'s machine-ended copy says `The monitor finished it. Your
-numbers are kept.`, which is false here: the erg dropped the workout. The
-ended frame for a program-dropped close therefore renders **the approved Gate
-0 words** — `THE ERG DROPPED THE WORKOUT.` plus the kept count — branching on
-the RUN's `endedBy === "program-dropped"` (the same authority the log strip
-uses; never a new session-state value). This is the strip's copy appearing one
-screen early, not a new surface, and it is on the Gate 0 artifact. **Owed
-test: a rendered-path test that inspects the ended frame BEFORE the route
-effect fires** and asserts the drop copy, not the finish copy.
+**The interim ended frame must not lie (James's review of rev 2, P1-2), and
+its authority has a REAL transport (his re-review of rev 3, P1-1 — rev 3
+named the run's close reason as the branch input without saying how it
+reaches `ConnectedSurface`, which receives only the published
+`MonitorSession`, where that value does not exist).** The transport, defined:
+
+- **A new published session field, `closeReason: CloseReason | null`** —
+  record-derived, set by the live-drop arm in the SAME `ended` patch that
+  flips the phase, mirroring the value `closeRecord` just wrote to the run
+  (one writer, one moment, no second derivation), `null` in `INITIAL_STATE`
+  and every non-ended state, cleared by every per-run reset. This is the
+  "record-derived, typed field carried through the ended render" the review
+  asked for. It is a mirror of a stored value for rendering, not a second
+  authority — the log strip still reads the durable record on arrival.
+- **The live-drop arm does NOT set `programDropped: true`.** That boolean is
+  the PRE-ROW exit signal: `ConnectedInterstitial`'s effect calls `onExit()`
+  on it, which is the workout-screen exit this design just ruled out. The
+  flag stays the READY path's; the live path's whole navigation story is the
+  normal ended hand-off (`onEnded`), so the two effects cannot race — only
+  one is armed.
+- **Ordering:** React renders the `ended` frame (with `closeReason` already
+  in the same patch — no frame can see `phase: "ended"` without it), the
+  rower sees the drop copy, then the passive effect navigates. The copy:
+  `ConnectedSurface`'s ended body line branches on
+  `session.closeReason === "program-dropped"` ahead of its `endedBy`
+  branches, rendering the drop words in the body-line family (the exact
+  rendered form is on the Gate 0 artifact's interim-frame section, pending
+  with the rest of the delta). `SESSION ENDED` / `Wrapping up` stay — they
+  are true here.
+- **Owed test, sharpened to what the review asked:** a rendered-path test
+  that inspects the ended frame BEFORE the route effect fires and asserts
+  the drop copy — **plus the mutation that proves the transport is
+  load-bearing: drop `closeReason` from the ended patch and the test must go
+  red by observing `The monitor finished it. Your numbers are kept.`** on a
+  session the erg abandoned. If that mutation doesn't bite, the test is
+  asserting the copy without exercising the transport.
 
 - **No split hold.** Corrected reason, per the antagonist's item 5: the first
   draft claimed "the machine has left mid-interval, so CSAFE-DEF footnote 12
@@ -418,9 +443,12 @@ gates them. Client-side the never-migrate contract holds unchanged.
 **Rendering is otherwise unchanged in this PR.** `"program-dropped"` renders
 wherever `"program-failed"` renders today in the STORED views (History, the
 saved row); any wording that distinguishes them there belongs to the `door`
-column's Gate 0, not here. The two surfaces this PR does add — the log
-screen's strip and the interim ended frame's drop copy — both read
-**`monitorRun.endedBy === "program-dropped"`, the DURABLE record**.
+column's Gate 0, not here. The two surfaces this PR does add both answer to
+the DURABLE record's `endedBy === "program-dropped"`: the log screen's strip
+reads it directly from the hand-off `MonitorRun`, and the interim ended frame
+reads the published `closeReason` session field — a same-patch mirror of that
+exact stored value, defined with its transport and lifetime in the Mechanism
+section above.
 (Rev 2 said the strip "reads the SESSION, not the stored reason" — WRONG, and
 James's review P1-1 caught it: `handleConnectedEnded` navigates with no route
 state, the connected hook unmounts, and `LogSession` receives only the
