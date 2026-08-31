@@ -3651,6 +3651,123 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     ).toBe(true);
   });
 
+  // THE CREATE PATH'S THIRD COMMITTER EXCEPTION, PINNED IN THE DIRECTION
+  // IT SHIPS (final fix round, 2026-08-30; antagonist §10 audit, F-5,
+  // controller ruling: KEEP the shipped behaviour and pin it). The
+  // antagonist's finding was that NEITHER direction was pinned — honouring
+  // §1's ordinary discipline instead (skip the `runRef` assignment on a
+  // refused create) also passed all 5638 tests, so the code was free to
+  // flip either way unnoticed.
+  //
+  // The shipped direction: a create assigns `runRef` UNCONDITIONALLY, so a
+  // refused create still leaves the rower with a working session rather
+  // than a rowing erg and no in-memory record at all. Spec §1 now homes
+  // this as the third named exception with its discipline.
+  it("a REFUSED create still opens the session: `runRef` holds the run (the hold proves it), the refusal is receipted, and the store stays empty for that key — §1's third committer exception", async () => {
+    // Session 1 opens the record at the shared clock's key...
+    const session1 = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(session1.result);
+    await programAndArm(
+      session1.result,
+      session1.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session1.fake, 100);
+    const key = loadMonitorRun()?.startedAt;
+    expect(key).toBe(t0.toISOString());
+
+    // ...and a DOOR retires it (a Today discard, a save-success — any of
+    // §5's termini). `retire` tombstones unconditionally, and tombstones
+    // are process-scoped, so the key is now permanently un-creatable for
+    // the life of this process.
+    retireHandoffForTest([{ sessionKey: key!, revision: 0 }], "today-discard");
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+
+    // Session 2 — a fresh hook on the SAME clock, so the SAME key — is the
+    // "dead hook's late reconnect" shape `createMonitorRun`'s own commit
+    // documents. Its create-commit is refused `"retired"`.
+    const timer = manualSchedule();
+    const session2 = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 50, distanceMeters: 250 }),
+          finishedAt(200),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+    await connect(session2.result);
+    await programAndArm(
+      session2.result,
+      session2.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session2.fake, 100);
+
+    // THE SHIPPED DIRECTION, half one: the rower is rowing. The session
+    // opened and published a live frame despite the store refusing it.
+    expect(session2.result.current.phase).toBe("live");
+    expect(session2.result.current.runOpen).toBe(true);
+    // THE STORE, meanwhile, holds NOTHING for that key — the divergence is
+    // real, not a store that quietly accepted after all.
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    const live = JSON.parse(session2.result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      live.some(
+        (e) =>
+          e.kind === "store-receipt:commit-refused" &&
+          e.detail.includes('"reason":"retired"'),
+      ),
+    ).toBe(true);
+
+    // THE SHIPPED DIRECTION, half two — the assertion that actually
+    // separates the two candidate behaviours. `openHandoffHold` reads
+    // `runRef.current` DIRECTLY and returns `false` when it is null, so
+    // the hold opening at this natural finish is only possible if the
+    // refused create assigned `runRef` anyway. The §1-honouring
+    // alternative (skip the assignment) produces no hold and no ring
+    // entry here at all.
+    tick(session2.fake, 100);
+    expect(session2.result.current.phase).toBe("ended");
+    expect(session2.result.current.handoffHeld).toBe(true);
+    const ended = JSON.parse(session2.result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      ended.some(
+        (e) => e.kind === "handoff-hold" && e.detail.includes("unmeasured"),
+      ),
+    ).toBe(true);
+
+    // AND THE CONSEQUENCE THE SPEC NAMES: at release, the verify reads the
+    // cached verdict for a key `retire` deleted — `undefined`, never
+    // `"failed"` — so the hand-off RELEASES rather than holding the rower
+    // in front of an error frame for a write nothing is waiting on.
+    //
+    // ONLY THE SPLIT CONDITION IS OWED HERE, and that is itself a
+    // consequence of the divergence rather than an accident of the
+    // script: `openBurstHold`'s predicate reads `runRef.current`, whose
+    // close-commit was REFUSED, so the in-memory run is still OPEN
+    // (`completedAt === null`) and burst-ineligible. The split backstop
+    // alone therefore releases the whole hold.
+    expect(timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)).toBeNull();
+    act(() => {
+      timer.pendingWithMs(3500)!.fire();
+    });
+    expect(session2.result.current.handoffHeld).toBe(false);
+    expect(session2.result.current.holdError).toBeNull();
+  });
+
   it("the receipt-channel ownership guard (M7): an unmount racing a LATER mount must not clobber the successor's own channel", async () => {
     // Session A mounts first and claims the channel via its own effect.
     const sessionA = harness({
