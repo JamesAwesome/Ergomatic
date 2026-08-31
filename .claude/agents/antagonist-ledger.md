@@ -4357,3 +4357,122 @@ work-only definitions; PR0-before-PR1; RF25 seam ownership.
   encoding (units, rounding, timezone) and never on meaning. The genuinely
   independent oracle here is ErgData posting the same physical row and
   comparing C2's two records — which is also the dedup experiment.
+
+## Wave F lifecycle spec — full pass (2026-08-31)
+
+Spec: `docs/superpowers/specs/2026-08-31-lifecycle-design.md` (PR #245).
+Verdict REVISE: three kill-shots, three overstatements, two claims held.
+All findings folded into the spec's same-day revision; James's destination
+ruling ("Just go to log") resolved kill-shots 1 and 4 in one move.
+
+**Falsified, and the technique that settled each**
+
+1. **"The row is saved and reachable from the log."** BROKEN — the record had
+   ZERO doors. Technique: **enumerate every PRODUCER of the route, not the
+   route's existence.** `grep -rn "from=monitor"` returns exactly two
+   navigations: `WorkoutDetail.tsx` (which the draft suppressed by design)
+   and `Today.tsx`, gated `monitorEntry.run.completedAt === null` — an OPEN
+   run only. Closing the record disqualified it from the second door while
+   the spec removed the first. The clincher was the repo's own stated
+   premise for that exclusion (`Today.tsx`): a completed-but-unlogged
+   MonitorRun is ruled out "because 7C's own log path already owns that
+   record's state" — the draft deleted the path the premise depends on.
+   RF25 with the polarity flipped: the writer succeeds and no reader exists.
+
+2. **"No migration; every consumer is an allowlist keyed on `finished`."**
+   BROKEN three ways, all server-side, all invisible to the four consumers
+   the draft enumerated. Technique: **grep the union's VALUE STRINGS across
+   `server/` and `drizzle/`, not the type name.** `schema.ts:68` is a
+   `pgEnum` (so `ALTER TYPE … ADD VALUE` is required); `routes/data.ts:164`
+   is a hard validator that 400s an unknown value, and `LogSession.tsx`
+   posts the field verbatim; and `logs.ts:40`'s `EndedBy` is a HAND-COPIED
+   literal union, not derived from `CloseReason`, so widening the client
+   union typechecks clean and fails only at runtime on a phone.
+   **Generalised: when a client union is "mirrored" server-side, check
+   whether the mirror is a copy or a derivation — a copy makes the compiler
+   blind at exactly the seam a stored-shape spec is reasoning about.**
+
+3. **"`openBurstHold()` runs unconditionally."** A NO-OP as designed. Its own
+   predicate is an allowlist of TWO (`finished`/`rower`), which the draft
+   paraphrased as "keyed on `finished`". Technique: **read the callee's
+   predicate for every "reuse unconditionally"** — "unconditionally"
+   describes the call site and says nothing about the callee's own gate.
+
+4. **"The exit does not happen until the record is durable."** Structurally
+   impossible as scoped. The READY exit is
+   `update({ ...INITIAL_STATE, programDropped: true })` → `phase: "idle"` →
+   the interstitial renders null and fires `onExit()` on the flag; the
+   COULD-NOT-KEEP surface renders only inside `ConnectedSurface`'s ended
+   frame on `holdError === "storage-failed"`, unreachable from a full state
+   reset. Technique: **trace the state RESET, not the flag.** A spec that
+   says "reuse the existing exit" and "hold the existing failure state" is
+   asserting two mutually exclusive states when the exit is a reset.
+
+5. **"The machine has left mid-interval, so CSAFE-DEF footnote 12 applies
+   verbatim."** The antecedent is false. RC-37's emit site sits inside
+   `toMonitorFrame(raw).state === "armed"` — at detection the PM5 is back at
+   WaitToBegin holding its unprogrammed default, ≥3 ticks and ≥2000 ms after
+   the drop. PRIMARY: `walk-2026-08-28/README.md` ("`frame state=armed
+   elapsed=50.81`") and the same walk's leg 3 ("`ws=11` means not `armed`,
+   so the detector correctly ignored it"). The CONCLUSION (no split hold)
+   survives for a stronger reason — there will never be another boundary —
+   but the citation was under-read. Technique: **for any "X is like Y" claim
+   about the machine, find the wire state the DETECTOR requires and check it
+   against a capture.**
+
+6. **"Recordings and lifecycle events are mutually exclusive BY CONSTRUCTION;
+   we can NEVER record wire bytes across an iOS lifecycle event."**
+   OVERSTATED, and the repo had already written the honest version.
+   `recording.ts:44-59` gives the real cause (the `isNative()` branch plus a
+   web `appLifecycle` no-op — NOT `dist-grep.sh`, which proves the
+   consequence) and ends "Both ends would have to change first … and neither
+   is this task's to decide." RF18 exactly: a documented deferral
+   re-researched into an impossibility. Also: the corpus count was stated as
+   eight without listing the directory; `find` returns TEN (zero with
+   lifecycle events — the zero held). Technique: **before writing
+   "impossible", grep for the repo's own comment on the same question** —
+   this codebase's deferrals are documented at the seam and are usually one
+   sentence more honest than the spec re-deriving them.
+
+7. **"The distance-goal suppression covers every one of the six committed
+   captures."** A true quote, three days stale. `continuity.ts` last changed
+   2026-08-25; the corpus now holds TEN recordings, and
+   `walk-2026-08-28/rest-boundary-recording.jsonl.gz` is described by its
+   own README as "TIME-ONLY by design (no distance interval anywhere)" with
+   a real rest boundary — a committed, non-suppressed pair source. RF16's
+   second corollary, committed inside the section that invokes it by name.
+   Technique: **corpus facts expire, and so do the CODE COMMENTS that state
+   them — `git log` the file and `find` the corpus before re-filing an item
+   on a comment's count.**
+
+**Attacked and HELD (Wave F's vetted ground)**
+
+- §0.3's unrecoverability — three probes, and it strengthened: the SECOND
+  teardown key (`sessionStorage["ergomatic:last-monitor-log"]`) is MORE
+  perishable, not less; `git show` of the committing revision shows the ring
+  was never fuller; and "lossy commit, not lossy instrument" is now PROVEN —
+  `eventLog.ts` pushes unconditionally with a monotonic `nextSeq` and only
+  tail-slices, so interior seq gaps cannot be produced by the ring. Verified
+  seqs `[21,23,24,25,27,28,29,30,32,34,35,37,39]`; the six named gaps exact.
+- RC-29's retirement — verified from both cited sources plus the artifact:
+  `decideResumeLatch`'s own doc comment names the 9-banner rate as a property
+  of the code it replaced; `lock-phone-ring.json` decodes to exactly one
+  latch (`gap=39410ms silent=true`) preceded by a genuine `liveness-silence`.
+  The spec correctly declines to claim a post-fix rate and ships a counter.
+- The `storedSummary.ts` fifth-value quote — byte-compared, verbatim,
+  correctly applied.
+- RF24 test SHAPE — replaying real frames and synthesising only the trigger
+  does start upstream of the producer; `WorkoutDetail.connectedRecovery
+  .test.tsx` is the model. The SCOPE failed (see below) and was widened.
+
+**Techniques worth keeping**
+
+- **Enumerate the producers of a ROUTE.** "Reachable from X" is a claim about
+  producers; specs state it as a property of the destination. Grep the
+  literal route, count the navigations, read each one's render gate.
+- **Ask whether a server "mirror" is a copy or a derivation.** For any new
+  union member, grep the VALUE STRINGS across `server/` and `drizzle/`.
+- **A gate that asserts the buggy behaviour cannot go red on it.** The
+  draft's "destination is the workout, not the log" assertion passed on the
+  exact defect that stranded the record. When an assertion pins a REMOVAL,
+  pair it with an assertion that the removed thing is replaced.

@@ -136,9 +136,12 @@ skipped.
 
 ## Wave F — Lifecycle: the app stops losing rows
 
-**Status:** OPEN and shipping — two of its items are struck and released
-(#228 in v0.27.0, #239 in v0.30.0); the lifecycle spec, correct resume and the
-`door` column are what remain. **TRIAD** (stored shape: the `door` column).
+**Status:** OPEN and shipping — three of its items are struck (#228 in
+v0.27.0, #239 in v0.30.0, and the ring-recovery item struck unrecoverable on
+2026-08-31); the lifecycle spec is WRITTEN
+(`docs/superpowers/specs/2026-08-31-lifecycle-design.md`, four PRs), and
+correct resume and the `door` column remain beside it. **TRIAD** (stored
+shapes: the `door` column, and the lifecycle spec's fifth `CloseReason`).
 **L.** Absorbs the rest of Phase LM, whose PR 1 shipped as #198 / v0.24.0.
 
 **Goal:** a phone in a pocket, a phone that locks, and a link that drops all
@@ -169,23 +172,64 @@ rower's work silently.
       excerpt that omits what End stored, so it cannot prove an absence
       (James's PR #225 review).** Deliberately not claimed in v0.26.0's
       notes. Its three work items are the next three entries. **M**
+      **SPECCED 2026-08-31: `docs/superpowers/specs/2026-08-31-lifecycle-design.md`
+      §0.1, which carries this chain and keeps link 3→4 labelled a
+      hypothesis. The hypothesis is now PERMANENTLY unprovable — see the
+      struck ring item below — so the spec is written around it rather than
+      waiting on it.** The cited hook line numbers moved with PR #239; the
+      handler is `useMonitorSession.ts`'s `programDropped` case, found by
+      name rather than by line.
 - [ ] **Handle `programDropped` while a run is live** (from the
       pocketed-phone re-diagnosis above). Small and deterministic, warranted
       whatever the full ring says — the detector already fires; only the
       live arm swallows it, and that arm has NO test
       (`useMonitorSession.test.ts` covers only `ended`). The spec says what
       the rower sees and what the record keeps. **S**
-- [ ] **The pocketed-phone window's two co-producers**, real and NOT fixed
-      by the item above: `pause-declared` at 66 spm while rowing (the freeze
-      predicate's observed production false positive), and TWD 52→0→64 m
-      non-monotonic. Both stay owned by the lifecycle spec. **S**
-- [ ] **Recover the full ring before the lifecycle spec is written — it
-      settles the causal hypothesis.** The committed
-      `pocketed-phone-prerow-ring.json` is a CURATED excerpt (six seq gaps
-      against a contiguous-numbering `record()`);
-      `ergomatic:last-session-log` on the phone may still hold the whole
-      thing, including what End actually stored — which the excerpt does not
-      show. **S**
+      **SPECCED as `2026-08-31-lifecycle-design.md` §1, and it is that
+      spec's PR 1, shipping alone.** The scoping premise that justified
+      ignoring a live drop — the handler's own "the walk's trigger is READY,
+      never a live session" — is FALSIFIED: the 2026-08-28 walk produced the
+      same signature with no Menu press, after a 67 s background. Closes as
+      a normal ended session with a fifth `CloseReason`,
+      `"program-dropped"` (James, 2026-08-31), and hands off to the log.
+      **Carries a server migration** — `ended_by` is a Postgres `pgEnum`, a
+      hard 400 validator names the five values, and the server's `EndedBy`
+      union is a hand-copied mirror; all three widen in one commit, gated by
+      a `POST /api/logs` seam test (this row said "no migration" until
+      James's rev-2 review; that was the client-side story only). **TRIAD**
+      (stored close reason + the enum migration). Gate 0 CLEARED in full
+      (2026-08-31, with the spec PR's merge word).
+- [ ] **The pocketed-phone window's two co-producers. RE-SCOPED on evidence
+      2026-08-31 — one is not a defect.** `pause-declared` at 66 spm while
+      rowing is real and stays here, owned by
+      `2026-08-31-lifecycle-design.md` §4, and it deliberately WAITS on that
+      spec's §3 instrument rather than being fixed on the stale-frame story
+      (66 spm is consistent with a stale reading, not evidence of one).
+      **TWD 52→0→64 m non-monotonic is CORRECT BEHAVIOUR and leaves this
+      item:** `continuity.ts`'s `check` convicts a reset only when TWD,
+      elapsed AND distance all read backward together — TWD alone is the
+      documented F2a false kill that rule exists to prevent, and it rightly
+      returns `"continuation"`. What that comment does confess is re-filed
+      to the open-item register: the distance-goal suppression covers all
+      six committed captures, so the F2b count bound has been compared on
+      ZERO pairs ("clean but VACUOUS", its own words). **S**
+- [x] **~~Recover the full ring before the lifecycle spec is written~~ —
+      STRUCK 2026-08-31: it is UNRECOVERABLE, and the loss was ours.**
+      `ergomatic:last-session-log` is written UNCONDITIONALLY on every
+      connected teardown including failed pairings and connect-then-cancel,
+      one key with no history, so every later session overwrote it —
+      and the production connected-row count went 16 (08-28) → 18 (08-30),
+      which counts only the sessions that saved a row. Ruled unrecoverable
+      by James, 2026-08-31; the lifecycle spec is written around the
+      ambiguity. **The excerpt's six gaps were never a lossy instrument:**
+      they are INTERIOR (seq 21-39, missing 22/26/31/33/36/38) while the
+      ring is capacity-500 and tail-keeping, so it can only ever lose a
+      contiguous head — and at seq 39 the cap never fired. The whole ring
+      was in hand and 13 of ~39 entries were hand-picked into the committed
+      file. Replaced by the ring-durability work in
+      `2026-08-31-lifecycle-design.md` §2, which is now a PREREQUISITE:
+      the ring is the only instrument that reaches production, and today it
+      can only be read by destroying it.
 
 - [ ] **Correct resume** (was LM PR 2). James's ruling, 2026-08-20:
       **"CORRECT RESUME, not a background mode."** **Unblocked 2026-08-26** —
@@ -197,17 +241,27 @@ rower's work silently.
       interpolation into a diagnostic line (`useMonitorSession.ts:3072-3079`),
       and `decideResumeLatch`'s latch does nothing that recovers — there is
       no existing resume mechanism to extend. **M**
-- [ ] **RC-29 — the 2.5 s banner declares a link dead that never dropped.**
-      **Folded in here by James, 2026-08-31**, from the open-item register's
-      decision table; it is the same trigger family as the pocketed phone, so
-      it gets designed with the freeze predicate and the `programDropped` arm
-      rather than tuned as a threshold. What it costs today: a red banner
-      mid-row, a saved row stamped `endedBy: "link-lost"` for a failure that
-      did not happen, and a suppressed `driver.terminate()` that leaves the
-      monitor running. Measured false-positive rate: 9 banners in 288 s over a
-      link that never dropped (`walk-2026-08-26/`). Site is
-      `useMonitorSession.ts:3210`. **TRIAD — it both sends and suppresses a
-      wire command.** Evidence: `docs/history/phase-rc.md`. **S/M**
+      **DELIBERATELY EXCLUDED from `2026-08-31-lifecycle-design.md`** (its
+      §0.6, skip spoken not silent): build-from-zero, its own M, and the
+      pocketed-phone chain does not need it — the late open cost the series
+      trace's head, never the interval actuals. Stays a separate Wave F
+      item.
+- [ ] **RC-29 — LEFT WAVE F on 2026-08-31, same day it was folded in.** It
+      was folded in carrying a measured false-positive rate — "9 banners in
+      288 s over a link that never dropped (`walk-2026-08-26/`)" — that
+      `2026-08-27-link-authority-design.md` revision 4 had ALREADY retired:
+      `decideResumeLatch` shipped in v0.24.0 and killed exactly that, and
+      the build-759 ring from the next day
+      (`walk-2026-08-27/lock-phone-ring.json`) shows ONE latch for one
+      39.4 s lock with `silent=true` — the watchdog behaving correctly.
+      v0.24.0's own release note tells testers so. **Nobody has measured the
+      rate since, so there is no defect number to design against**
+      (recurring failure 16's second corollary: a sourced premise true when
+      written and false when used). Ruled out of the spec by James,
+      2026-08-31. It returns to the open-item register as UNMEASURED on the
+      current build; `2026-08-31-lifecycle-design.md` §6 ships a latch
+      counter so ordinary use produces the number, and no threshold moves
+      until it does.
 - [ ] **The `door` column.** One stored-shape change that discharges four
       items which each say in their own text that they want the next
       stored-shape change to the logs table: - **The PARTIAL complaint — an abandoned piece must say it was abandoned.**
@@ -237,6 +291,15 @@ rower's work silently.
       mid-row loss gives `kept = 0`, which was the MAJORITY outcome of walk
       leg B, not an oddity. **The spec states explicitly whether correct resume
       recovers those metres.** **S**
+      **SPECCED as `2026-08-31-lifecycle-design.md` §5, and SEQUENCED BEHIND
+      THE `door` COLUMN above.** The live-drop arm (§1) inherits this
+      directly: banking "what was rowed" banks nothing when no boundary was
+      reached. A stored partial is OUR number, not the machine's — there is
+      no interval pair mid-interval — so it can never be tier A, and
+      `measuredIntervalCount` correctly will not count it toward
+      "N intervals kept." That is the PARTIAL vocabulary's job, which is why
+      this lands with or after that migration and its summary copy is part
+      of that item's Gate 0, never before.
 - [ ] **`rowingActive` is falsified but not dangerous.** Owed: (a) one test
       pinning `surfaceModel.ts:915`'s `midSessionMirror` byte-half — measured,
       deleting it leaves 5,357 tests / 191 files green, so nothing gates it
@@ -380,6 +443,11 @@ rower's work silently.
       durability, and the Capacitor-WKWebView reachability research line.
 
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
+
+**RULED by James, 2026-08-31: all three ride the `door` COLUMN's migration
+PR**, not a branch of their own and not the lifecycle spec's PRs. They carry
+none of that migration's risk, so bundling them costs a reviewer nothing and
+saves three round trips.
 
 - [ ] **`ALTER TABLE "preferences" DROP COLUMN "warmup";`** — one line, safe
       once no deployed image reads it. Still present at
@@ -816,6 +884,46 @@ X" is a real disposition — most of these are single files.
 
 ## Codebase-audit owners
 
+- **RC-29 — the 2.5 s banner, UNMEASURED on the current build.** Returned here
+  from Wave F on 2026-08-31, the same day it was folded in, because the number
+  it carried was pre-fix: `decideResumeLatch` (v0.24.0) killed the nine-banner
+  rate, and the next day's build-759 ring shows one correct latch for one
+  39.4 s lock. No threshold moves until ordinary use produces a fresh rate —
+  `2026-08-31-lifecycle-design.md` §6's latch counter is what produces it.
+  **Rides the lifecycle spec's PR 2** (the ring chunk). Evidence:
+  `docs/superpowers/specs/2026-08-27-link-authority-design.md` rev 4,
+  `docs/monitor/sessions/walk-2026-08-27/lock-phone-ring.json`.
+- **The continuity count bound has never been exercised unsuppressed.**
+  `continuity.ts`'s F2b interval-count bound runs under the same distance-goal
+  suppression as the three-axis signature, and that suppression covers **every
+  one of the six committed captures** — so the bound has been compared on ZERO
+  pairs. Its own doc comment says so: "clean but VACUOUS", and the decision to
+  keep the suppression rather than lift it was recorded deliberately. A green
+  corpus here is not evidence the bound is safe. Split off the TWD co-producer
+  when that item was re-scoped, 2026-08-31 (the non-monotonic reading itself is
+  correct behaviour — the documented F2a false kill). **Needs a capture whose
+  program has no distance-kind interval — and one now EXISTS** (antagonist
+  pass, 2026-08-31): the VACUOUS comment dates to 2026-08-25, and
+  `walk-2026-08-28/rest-boundary-recording.jsonl.gz` is "TIME-ONLY by design
+  (no distance interval anywhere)" per its own walk README, with a real rest
+  boundary — so this may be answerable at the desk today. Evidence:
+  `app/src/monitor/continuity.ts`'s `check` doc comment,
+  `.claude/agents/antagonist-ledger.md`'s "Phase RC delta pass".
+- **The recording tap and lifecycle events are mutually exclusive — a
+  documented DEFERRAL, not an impossibility** (corrected at the antagonist
+  pass, 2026-08-31; the first version of this row said "none ever can" and
+  blamed `dist-grep.sh`, which proves the consequence, not the cause).
+  The cause is two adapter decisions: `adapters/monitorTransport.ts`'s
+  `isNative()` branch skips the tap, and `adapters/appLifecycle.ts`'s web arm
+  is a deliberate no-op. `recording.ts:44-59` already records it, verbatim:
+  "Both ends would have to change first — a recorder on the native arm, or a
+  web arm that reports transitions again — and neither is this task's to
+  decide." Until one end is deliberately built, recordings are laptop-only and
+  lifecycle events phone-only — **zero of the TEN committed recordings carry
+  one** (count corrected; the directory was listed this time). RF19 one layer
+  deeper. `2026-08-31-lifecycle-design.md` §0.4 routes around it by
+  instrumenting the ring; this row exists because the gap outlives that
+  workaround and will bite the next lifecycle defect.
 - **RC-9(b) — a LIVE ring verdict for 0x0039's totals against
   Σ`recordedActuals`**, the way (a) and (d) have one. Moved here from Wave E's
   exit at the PM open gate (2026-08-31): no shared mechanism, PR, or risk model
