@@ -4,12 +4,25 @@
 
 Laptop Chrome with Web Bluetooth only. No phone and no heart-rate requirement.
 From the feature worktree's `app/` directory, run `bash scripts/walk-lab.sh
-up`, use the printed backdoor login, then open `/justrow/observe`. Confirm
-**JUST ROW OBSERVER** and `<PM5 name> connected` before pulling. This screen
-subscribes but never programs, so pulling from the PM5 main menu is the native
-Just Row entry. The printed card's generic **LOG SCREEN** download instruction
-does not apply here: this observe-only screen creates no MonitorRun or Log
-screen; use its **Download capture** control instead.
+up`, use the printed backdoor login, then open `/justrow/observe`.
+
+The screen opens on **JUST ROW OBSERVER · Not connected**. **Tap Connect** and
+pick the PM5 from Chrome's chooser. The tap is not a convenience:
+`navigator.bluetooth.requestDevice()` only runs while the page holds a
+transient user activation, and a URL you typed does not carry one — a screen
+that connected on its own would fail here with `SecurityError: Must be
+handling a user gesture to show a permission request.`
+
+Wait for `<PM5 name> connected` **and a non-zero `N events captured`** before
+pulling. The heading alone only proves the Bluetooth link came up; the count
+is what proves notifications are actually arriving, and it should climb every
+second once you are rowing. If it stays at its opening value, stop — the
+capture is empty and the row would be wasted.
+
+This screen subscribes but never programs, so pulling from the PM5 main menu
+is the native Just Row entry. The printed card's generic **LOG SCREEN**
+download instruction does not apply here: this observe-only screen creates no
+MonitorRun or Log screen; use its **Download capture** control instead.
 
 ## Budget
 
@@ -22,10 +35,16 @@ Three pieces:
 The first piece is the only deliberate long row: the 5-minute auto-split is the
 evidence, not a fitness target.
 
-Give one instruction at a time; make no mid-piece asks. After each piece, use
-**Download capture** on the observer before disconnecting. The first download
-is the exact artefact that closes OPEN 1/2/4/5/6/7; the timeout run resolves
-OPEN 3.
+Give one instruction at a time; make no mid-piece asks.
+
+**Between pieces:** use **Download capture** BEFORE **Disconnect**, every
+time. Disconnect returns the screen to **Not connected**, and the next piece
+starts by tapping **Connect** again — a fresh chooser pick each time. The
+order matters because each connect installs a new recording tap and replaces
+the previous one, so a capture not downloaded before the next Connect is gone.
+
+The first download is the exact artefact that closes OPEN 1/2/4/5/6/7; the
+timeout run resolves OPEN 3.
 
 ## Evidence destination and closeout
 
