@@ -953,14 +953,39 @@ describe("POST /api/workouts/bulk", () => {
   // "2K Test" while the PR record said the producer was gone. Same
   // all-or-nothing posture as every other bulk error.
   it("rejects a reserved title in a paste, creating NOTHING — the bulk door is guarded too", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
     const text = `1 | 2K Test | AN | hard | 5\nw 2000m max\n\n2 | Steady | O2 | easy | 1\nw 20' 2k+10`;
-    const res = await asA(
-      request(appFor(makeStores())).post("/api/workouts/bulk"),
-    ).send({ text });
+    const res = await asA(request(app).post("/api/workouts/bulk")).send({
+      text,
+    });
     expect(res.status).toBe(200);
     expect(res.body.created).toHaveLength(0);
     expect(res.body.errors).toHaveLength(1);
     expect(res.body.errors[0].message).toContain("title is reserved");
+    // The STORE, not just the response: "created NOTHING" is a claim
+    // about persistence (re-review of dc6ea3ed) — a route that created
+    // rows and reported [] would pass the body assertions alone.
+    expect(await stores.workouts.list("user-a")).toHaveLength(0);
+  });
+
+  // The strict legacy-edit ruling (James: no changed-into carve-out) has
+  // to be pinned by a row that EXISTS under a reserved title — a
+  // changed-into-only implementation passes every rename test. Seeded
+  // through the store: the only producer class left.
+  it("PUT of a legacy same-titled row is rejected even when the title is UNCHANGED", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    const legacy = await stores.workouts.create("user-a", {
+      ...validWorkoutBody({ title: "2K Test", type: "AN" }),
+      source: "user",
+    });
+
+    const res = await asA(request(app).put(`/api/workouts/${legacy.id}`)).send(
+      validWorkoutBody({ title: "2K Test", type: "AN", pain: 4 }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("title");
   });
 
   it("reports domain validation failures for syntactically-valid but out-of-bounds workouts, creating nothing", async () => {

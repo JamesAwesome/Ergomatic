@@ -646,11 +646,12 @@ describe("Plan (done-row workout names and swap marks)", () => {
   });
 
   // P1 (review of b21f147d). The prescription is `globalOnly`, and titles
-  // are neither unique nor reserved — `isOnboardingTitle`'s own comment
-  // calls a rower's same-titled workout "real, ownable" and insists it
-  // stays suggestable. So a personal AN workout called "2K Test" passes
-  // both a title check and a type check while being emphatically NOT the
-  // prescribed test. Provenance is the only thing that separates them.
+  // carry no unique constraint. Since the 2026-08-31 reservation, new
+  // personal rows cannot take the designated titles — but LEGACY rows
+  // created before it can hold one, pass both a title check and a type
+  // check, and still be emphatically NOT the prescribed test. Provenance
+  // is the only thing that separates them, which is why this fixture
+  // remains a real population, not history-proofing.
   it("a checkpoint rowed as a PERSONAL workout sharing the prescribed title is marked", async () => {
     await readyWithLinks(
       new Map([
@@ -980,6 +981,30 @@ describe("Plan (a globalOnly: false prescription — mocked, the only producer)"
     expect(row.querySelector(".plan-row-swap")?.textContent).toContain(
       "My Own Test",
     );
+  });
+});
+
+// CANARY for the mock cleanup above (re-review of dc6ea3ed: deleting the
+// doUnmock left the suite green, so the cleanup itself was ungated). This
+// test runs AFTER the mocked describe in file order and asserts the REAL
+// preset is back: sprint index 6 prescribes "2K Test". With the synthetic
+// preset leaked, this row would name "My Own Test" instead and go red.
+describe("Plan (the real presets are restored after the mocked describe)", () => {
+  it("an upcoming checkpoint names the REAL prescribed test again", async () => {
+    mockUsePlan({
+      state: "ready",
+      plan: {
+        planKey: "sprint",
+        doneN: 0,
+        sequence: realSequence("sprint", 0),
+      },
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    await renderPlan();
+
+    const row = document.querySelectorAll<HTMLElement>(".plan-row")[6]!;
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe("2K Test");
   });
 });
 

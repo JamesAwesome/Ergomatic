@@ -991,13 +991,17 @@ Each needs erg time or a deliberate recording session.
   **Revisit only if a rower actually hits it**; the shape is documented in
   `swapMark`'s own comment.
 
-- **RESOLVED (edge-marks gate, James, 2026-08-31): a pre-validation row with
-  an unreadable `workoutType` renders a bordered shaded box, not the plan's
-  badge.** The box shares `.type-badge` (two no-break spaces of content), so
-  its box model equals every neighbour's by construction — the only size
-  check possible, since the POST validation means no supported writer can
-  mint such a row for a live measurement. Decorative under WCAG 1.4.11; the
-  row's meaning lives in the name and the swap logic never reads the box.
+- **RESOLVED (edge-marks gate + James's re-review, 2026-08-31): a
+  pre-validation row with an unreadable `workoutType` renders a bordered
+  shaded box that is a MEANINGFUL, accessible cue** — `--rule-2` fill,
+  `--ink-4` border (4.76:1 / 4.48:1, clearing 1.4.11's 3:1 non-text
+  floor; the first cut's 1.53:1 "decorative" framing was rejected on
+  review), with a visually-hidden "type unknown" twin for AT. Box model
+  equals a real badge's by construction (shared `.type-badge`, two
+  no-break spaces, border compensated in padding) AND by measurement:
+  `design.spec.ts` injects the badge into the live screen and asserts
+  computed colours, an in-test 3:1 computation, and sub-pixel geometry.
+
 - **DISPOSED (post-#233 follow-ons, rationale corrected at #235's review):
   the real store's `id DESC` tiebreak stays unpinned as LOW-VALUE — not, as
   this entry first claimed, unreachable.** The owning comment in
@@ -1037,15 +1041,19 @@ Each needs erg time or a deliberate recording session.
   seed key replacing `isOnboardingTitle`'s remaining call sites. Name
   conflicts in general REMAIN allowed.
 
-- **The reservation is a NON-ADDITIVE API change with a bounded exposure
-  window (PM gate C3).** A request that used to 201 now 400s, and the
-  shipped v0.28.0 client has no pre-check — its Builder renders the generic
-  "Couldn't save this workout. Try again." retry loop for a permanent 400.
-  `docs/RELEASING.md`'s additive-only rule generalises here: ask which
-  shipped build SENDS the request, not only which reads the column. Exposure
-  runs from the merge (web deploys continuously) to the next tag. **The next
-  tag's notes MUST name the reservation** ("2K Test" and "6K Test" are the
-  app's own; pick another name) — that sentence closes this item.
+- **The reservation is a NON-ADDITIVE API change and takes a COORDINATED
+  TAG (PM gate C3, corrected at James's re-review).** A request that used
+  to 201 now 400s, and the shipped v0.28.0 client has no pre-check — its
+  Builder renders the generic "Couldn't save this workout. Try again."
+  retry loop for a permanent 400. The first disposition ("ride the next
+  tag") contradicted `docs/RELEASING.md`'s own rule: old TestFlight builds
+  talk to the newest server, and **a breaking change forces a coordinated
+  tag**. Disposition now: #238 merges WITH its release notes and tag —
+  the notes PR lands immediately behind the merge, the tag (v0.29.0) cuts
+  on it, and the note names the reservation. The exposure window is the
+  minutes between the two merges, not an open-ended wait. This item
+  closes when that tag exists.
+
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
   clears thumbs previously set to a real value`, then `GET/PUT /api/prefs` >

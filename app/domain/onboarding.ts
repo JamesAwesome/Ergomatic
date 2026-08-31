@@ -41,9 +41,15 @@ const ONBOARDING_TITLE_SET: ReadonlySet<string> = new Set(
  *  pool), the no-baseline card's lookup, and the save-stack demotion
  *  (PostWorkoutSummary, onboarding title on a no-baseline account). Every
  *  exclusion call site ANDs this with the row's own `isGlobal` — title
- *  alone isn't enough: a rower's own custom workout that happens to share
- *  one of these titles is a real, ownable row, and must stay suggestable
- *  (final-review fix, 2026-08-09). */
+ *  alone isn't enough: a LEGACY personal workout sharing one of these
+ *  titles is a real, ownable row and must stay suggestable (final-review
+ *  fix, 2026-08-09). Since 2026-08-31 NEW personal rows cannot take
+ *  these titles: all three workout-writing routes (POST/PUT
+ *  `/api/workouts` and `/bulk` — `routes/data.ts`'s `reservedTitle` and
+ *  the bulk loop's own arm) reject them, and the Builder mirrors it at
+ *  the field. The reservation is a fence around this string-keyed
+ *  identity, not a product principle — a stable seed key retiring these
+ *  call sites retires the fence too (PM gate, #238). */
 export function isOnboardingTitle(title: string): boolean {
   return ONBOARDING_TITLE_SET.has(title);
 }

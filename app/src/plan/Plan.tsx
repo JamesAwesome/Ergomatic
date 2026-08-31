@@ -68,11 +68,12 @@ function rowedType(link: PlanLink | undefined): WorkoutType | undefined {
  *  both facts off ONE workout row, and this is that predicate one layer
  *  down. Each part was a live defect before it was here:
  *
- *  - **Title alone is not identity.** A rower may author their own
- *    workout called "2K Test" — titles are not unique, nothing excludes
- *    the onboarding names, and `isOnboardingTitle`'s own comment says
- *    such a row is "real, ownable" and must stay suggestable. Rowing it
- *    on the checkpoint day is NOT doing the prescribed test, and a
+ *  - **Title alone is not identity.** A LEGACY personal workout may be
+ *    called "2K Test" — titles carry no unique constraint, and until
+ *    the 2026-08-31 reservation (all three workout-writing routes now
+ *    reject the designated titles) nothing excluded the onboarding
+ *    names. Such legacy rows are real, stay suggestable, and rowing one
+ *    on the checkpoint day is NOT doing the prescribed test — a
  *    title-only check called it one.
  *  - **Type must NOT enter this branch.** It looks like a cheap extra
  *    guard and it is actively wrong: the global 6K Test was reclassified

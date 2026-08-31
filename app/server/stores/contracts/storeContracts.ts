@@ -1427,11 +1427,12 @@ export function describeStoreContracts(
         });
 
         // Provenance (P1 fix, 2026-08-30). A plan checkpoint prescribes
-        // its test with `globalOnly: true`, and titles are neither unique
-        // nor reserved — a rower may author their own "2K Test". The
-        // snapshot columns cannot separate those two rows, so the store
-        // resolves the workout's ownership and the Plan screen compares
-        // THAT. All three states are pinned here, against both backends,
+        // its test with `globalOnly: true`, and titles carry no unique
+        // constraint. Since 2026-08-31 the designated titles are RESERVED
+        // at every workout-writing route, but LEGACY personal rows can
+        // still hold one — the snapshot columns cannot separate those
+        // from the global, so the store resolves the workout's ownership
+        // and the Plan screen compares THAT. All three states are pinned here, against both backends,
         // because the fake answers with a store lookup where the real
         // store answers with a LEFT JOIN — two mechanisms that have to
         // agree.

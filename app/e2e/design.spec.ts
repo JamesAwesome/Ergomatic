@@ -2587,24 +2587,44 @@ test.describe("plan screen (a plan active)", () => {
         const bs = getComputedStyle(box);
         const rb = real.getBoundingClientRect();
         const bb = box.getBoundingClientRect();
+        // The ADJACENT background the border must contrast against —
+        // read from the page, not assumed (re-review of dc6ea3ed).
+        const rowBg = getComputedStyle(document.body).backgroundColor;
         return {
           background: bs.backgroundColor,
           borderColor: bs.borderTopColor,
           borderWidth: bs.borderTopWidth,
+          adjacentBg: rowBg,
           heightDelta: Math.abs(rb.height - bb.height),
-          // Widths: a real 2-char badge vs the 2-nbsp box — same font,
-          // same effective padding. Allow sub-pixel glyph variance.
+          // IBM Plex Mono is monospace: two nbsp and two letters have the
+          // SAME advance, and the border is padding-compensated — so the
+          // outer widths are equal, not merely close. A 2px allowance
+          // would let the compensation be dropped unnoticed (exactly a
+          // 2px width change); sub-pixel only.
           widthDelta: Math.abs(rb.width - bb.width),
         };
       });
       expect(m.background).toBe("rgb(222, 216, 201)"); // --rule-2
       expect(m.borderColor).toBe("rgb(111, 106, 95)"); // --ink-4
       expect(m.borderWidth).toBe("1px");
-      // --ink-4 #6f6a5f on --page #f4f1e8 computes 4.76:1 (>= the 3:1
-      // non-text floor); the value is pinned above, the ratio recorded
-      // in index.css's own comment.
+      // 1.4.11's 3:1 floor, COMPUTED from the measured pair rather than
+      // trusted from a comment: sRGB relative luminance per WCAG 2.x.
+      const lum = (css: string) => {
+        const [r, g, b] = css
+          .match(/\d+/g)!
+          .slice(0, 3)
+          .map((v) => Number(v) / 255)
+          .map((c) =>
+            c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+          );
+        return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+      };
+      const [hi, lo] = [lum(m.borderColor), lum(m.adjacentBg)].sort(
+        (a, b) => b - a,
+      );
+      expect((hi! + 0.05) / (lo! + 0.05)).toBeGreaterThanOrEqual(3);
       expect(m.heightDelta).toBeLessThanOrEqual(0.5);
-      expect(m.widthDelta).toBeLessThanOrEqual(2);
+      expect(m.widthDelta).toBeLessThanOrEqual(0.5);
     });
 
     // The swap mark: index 0 is an O2 day in the real sprint sequence and

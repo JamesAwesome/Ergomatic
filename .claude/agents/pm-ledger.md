@@ -3482,7 +3482,10 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   record, and in a test comment — while `POST /api/workouts/bulk`
   (`data.ts`) called the same `validateWorkoutInput` unguarded and sat one
   tap away at the Library's **IMPORT**. One command finds it:
-  `grep -n validateWorkoutInput` returns three call sites, `grep -n
+  `grep -n validateWorkoutInput` over the ROUTES returns three
+  request-writing call sites (the repo carries two more in
+  `app/scripts/library-moves.ts`, a curation script that writes no user
+  rows — James's re-review caught the unqualified count); `grep -n
   reservedTitle` returned two. **The tell is a producer claim written in the
   same breath as the fix**, and the cost here was an end-to-end gate retired
   on it plus a false line in the record that supersedes the Gate 0 artifacts.
@@ -3501,10 +3504,16 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   post-gate decision that adds user-visible words re-opens the gate for those
   words — cheaply, at the PM verdict, but deliberately. (Discharged here:
   James picked the final string from rendered options.)
-- **A restriction is not a capability: it earns disclosure, not a tag.** Ruled
-  here: #238 rides the next tag rather than taking v0.28.1, and its notes must
-  name the reservation. A rower loses a name they had; that is a release note
-  even though nothing was gained.
+- **A restriction is not a capability — but a NON-ADDITIVE restriction takes a
+  coordinated tag, not a deferred note.** The first ruling here ("ride the
+  next tag") was corrected at James's re-review: `docs/RELEASING.md` is
+  explicit that a breaking change forces a coordinated tag, and "mention it
+  in a later note" leaves shipped clients in a retry loop meanwhile. Final
+  disposition: #238 merges with its notes PR immediately behind and the tag
+  on that — the capability question decides the VERSION (no new capability =
+  no minor celebration in the notes' framing), the compatibility rule decides
+  the TIMING. A rower loses a name they had; that is a release note even
+  though nothing was gained.
 - **Before reserving a name, ask why the app is keyed on a string at all.**
   `domain/onboarding.ts` calls the two titles "the ONLY identity the rest of
   the app uses to recognize them". #233 already replaced that with a

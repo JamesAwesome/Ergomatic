@@ -36,13 +36,18 @@ home the artifacts and PR bodies point to.
    `canonicalTitle`) is the fallback only when no linked row exists.
    Unknown identity never manufactures a mark.
 
-4. **The badge shows the type ROWED** (readable stored type), else — for
-   a linked row with an unreadable pre-validation type — a bordered
-   shaded box (`--rule-2` fill, `--rule-3` border) that IS a
-   `.type-badge` with two no-break spaces, so its box model equals every
-   neighbour by construction (James, 2026-08-31: shaded box; border;
-   size checked against the others). Unlinked rows keep the plan's
-   badge: legitimately the plan's own claim.
+4. **The badge shows the type ROWED** (readable stored type), else —
+   for a linked row with an unreadable pre-validation type — a bordered
+   shaded box: `--rule-2` fill, **`--ink-4` border** (4.76:1 on
+   `--page`, 4.48:1 on `--surface-sunken`; the box is a MEANINGFUL cue
+   under WCAG 1.4.11, per James's re-review, and the first cut's
+   `--rule-3` at 1.53:1 was rejected). AT hears a visually-hidden
+   "type unknown" twin. The box IS a `.type-badge` with two no-break
+   spaces, so its box model equals every neighbour by construction, and
+   `design.spec.ts` injects it into the live screen to measure the
+   served stylesheet: computed colours, the 3:1 ratio computed from the
+   measured pair, sub-pixel outer geometry. Unlinked rows keep the
+   plan's badge: legitimately the plan's own claim.
 
 5. **Mark wording: `INSTEAD OF <x>` everywhere** (option D, James,
    2026-08-31). The workout's own name in its own case; a type code
