@@ -98,6 +98,7 @@ describe("POST/GET /api/logs: endedBy round-trips through real Postgres, rejects
     ["rower", "rower"],
     ["link-lost", "link-lost"],
     ["program-failed", "program-failed"],
+    ["program-dropped", "program-dropped"],
     ["interrupted", "interrupted"],
   ])("round-trips endedBy=%s POST -> GET", async (_label, value) => {
     const bearer = await bearerToken();

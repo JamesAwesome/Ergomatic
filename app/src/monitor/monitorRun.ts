@@ -47,8 +47,27 @@ export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
  * producers are "the link is why this record stops here," learned two
  * different ways. `MonitorRun.endedBy`'s own doc comment has the full
  * writer table, all six.
+ *
+ * Wave F PR 1 (lifecycle design spec §1, "The new close reason", TRIAD):
+ * `"program-dropped"` is a fifth member, not a reuse of
+ * `"program-failed"` — the two are behaviourally identical to every
+ * client consumer today (each is a `"finished"`-only or
+ * `"finished"`/`"rower"`-only allowlist, so a fifth value fails closed by
+ * design), but `"program-failed"` means *our* `program()` call failed
+ * while a live drop is the *machine* discarding a program that already
+ * succeeded — and with the ring unrecoverable (§0.3), `endedBy` is the
+ * only durable field a future occurrence will leave behind. Conflating
+ * the two would make a future count of live drops impossible. This task
+ * widens the STORED SHAPE only (client union, server enum/union/
+ * validator, migration); the honest wire-event producer that actually
+ * writes this value through `completeMonitorRun` lands in a later task
+ * of this same PR (spec §1's "Mechanism" section) — until then the type
+ * permits a fifth value no writer yet emits, same shape as every other
+ * additive-optional field in this file between its type-widening task and
+ * its writer task.
  */
-export type CloseReason = "finished" | "rower" | "link-lost" | "program-failed";
+export type CloseReason =
+  "finished" | "rower" | "link-lost" | "program-failed" | "program-dropped";
 
 /**
  * RC-3 (storage-spine design spec §2, PR 1 Task 2): the nine 0x0039 fields
@@ -428,11 +447,11 @@ export function isMonitorRun(value: unknown): value is MonitorRun {
     typeof value.startedAt === "string" &&
     (value.completedAt === null || typeof value.completedAt === "string") &&
     typeof value.terminated === "boolean" &&
-    // Phase LL Task 4: widened alongside the type — a record written by
-    // ANY era's writer (a legacy `"interrupted"` row, or one of the four
-    // new `CloseReason` values) still loads. Shallow membership check
-    // only, same discipline as every other field this validator covers:
-    // "shaped enough not to crash a reader that unconditionally
+    // Phase LL Task 4, widened again by Wave F PR 1 (spec §1): a record
+    // written by ANY era's writer (a legacy `"interrupted"` row, or one of
+    // the five new `CloseReason` values) still loads. Shallow membership
+    // check only, same discipline as every other field this validator
+    // covers: "shaped enough not to crash a reader that unconditionally
     // destructures `endedBy`," never a claim about which specific writer
     // produced it.
     (value.endedBy === undefined ||
@@ -440,6 +459,7 @@ export function isMonitorRun(value: unknown): value is MonitorRun {
       value.endedBy === "rower" ||
       value.endedBy === "link-lost" ||
       value.endedBy === "program-failed" ||
+      value.endedBy === "program-dropped" ||
       value.endedBy === "interrupted") &&
     // Phase LT spec 2, Task 2: same shallow "shaped enough not to crash an
     // unconditional destructure" treatment as `logSeed` above. No

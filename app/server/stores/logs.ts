@@ -32,13 +32,24 @@ export type HeldResult = "held" | "under" | "over";
 export type Thumbs = "up" | "down";
 // Phase LL Task 4 (design spec §4, TRIAD): the server-side mirror of
 // `src/monitor/monitorRun.ts`'s widened `MonitorRun.endedBy` — the SAME
-// five values, including `"interrupted"` (F6's pre-existing value, along
+// values, including `"interrupted"` (F6's pre-existing value, along
 // for the ride so the widened union is one additive shape, not two). The
 // pgEnum (`server/db/schema.ts`'s `endedByEnum`) is the value authority;
 // this type mirrors it the same way `HeldResult`/`Thumbs` above already
 // mirror theirs.
+// Wave F PR 1 (lifecycle design spec §1, "The migration, owned"): this is
+// a HAND-COPIED literal union, not derived from `CloseReason` — widening
+// the client union typechecks clean and fails only at runtime on a phone
+// unless this mirror (and `server/db/schema.ts`'s `endedByEnum`, and
+// `server/routes/data.ts`'s `ENDED_BY_VALUES`) moves in the same commit.
+// `"program-dropped"` added here for exactly that reason.
 export type EndedBy =
-  "finished" | "rower" | "link-lost" | "program-failed" | "interrupted";
+  | "finished"
+  | "rower"
+  | "link-lost"
+  | "program-failed"
+  | "program-dropped"
+  | "interrupted";
 
 // Amendment (2026-08-02, Phase 6C Task 1.5): targetSplit is now OPTIONAL (an
 // effort step's frozen split is an estimate, never a prescription — the 5G

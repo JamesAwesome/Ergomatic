@@ -677,6 +677,7 @@ export function describeStoreContracts(
           "rower",
           "link-lost",
           "program-failed",
+          "program-dropped",
           "interrupted",
         ] as const;
         const ids = await Promise.all(

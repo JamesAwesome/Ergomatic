@@ -59,14 +59,20 @@ const ACTUAL_SOURCES: ActualSource[] = ["assumed", "stopwatch", "pm5"];
 const HELD_RESULTS: HeldResult[] = ["held", "under", "over"];
 const THUMBS_VALUES: Thumbs[] = ["up", "down"];
 // Phase LL Task 4 (design spec §4, TRIAD): the known values — the SAME
-// five `server/db/schema.ts`'s `endedByEnum` accepts. `endedByError` below
-// is the "validateSeriesSample's cousin" the brief names: known value or
-// absent, reject anything else.
+// values `server/db/schema.ts`'s `endedByEnum` accepts. `endedByError`
+// below is the "validateSeriesSample's cousin" the brief names: known
+// value or absent, reject anything else.
+// Wave F PR 1 (lifecycle design spec §1, "The migration, owned"): a third
+// independent mirror of the same value set (alongside the pgEnum and
+// `server/stores/logs.ts`'s `EndedBy`) — `"program-dropped"` moves here
+// in the same commit as those two, or an unwidened validator 400s every
+// program-dropped save outright.
 const ENDED_BY_VALUES: EndedBy[] = [
   "finished",
   "rower",
   "link-lost",
   "program-failed",
+  "program-dropped",
   "interrupted",
 ];
 const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
@@ -167,7 +173,7 @@ function endedByError(value: unknown): string | null {
     value !== null &&
     !ENDED_BY_VALUES.includes(value as EndedBy)
   ) {
-    return "endedBy must be one of finished|rower|link-lost|program-failed|interrupted or null";
+    return "endedBy must be one of finished|rower|link-lost|program-failed|program-dropped|interrupted or null";
   }
   return null;
 }

@@ -28,6 +28,7 @@ const EXHAUSTIVE: Record<EndedBy, true> = {
   rower: true,
   "link-lost": true,
   "program-failed": true,
+  "program-dropped": true,
   interrupted: true,
 };
 

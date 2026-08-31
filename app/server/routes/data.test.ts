@@ -1270,7 +1270,7 @@ describe("GET/POST /api/logs", () => {
     expect(res.status).toBe(400);
     expect(res.body.field).toBe("endedBy");
     expect(res.body.error).toBe(
-      "endedBy must be one of finished|rower|link-lost|program-failed|interrupted or null",
+      "endedBy must be one of finished|rower|link-lost|program-failed|program-dropped|interrupted or null",
     );
   });
 
@@ -1281,6 +1281,7 @@ describe("GET/POST /api/logs", () => {
       "rower",
       "link-lost",
       "program-failed",
+      "program-dropped",
       "interrupted",
     ]) {
       const res = await asA(request(app).post("/api/logs")).send({

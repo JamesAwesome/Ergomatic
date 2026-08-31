@@ -1328,7 +1328,13 @@ describe("endedBy: the additive close-reason marker (F6, widened Phase LL Task 4
     expect(loaded!.endedBy).toBe("interrupted");
   });
 
-  it.each(["finished", "rower", "link-lost", "program-failed"] as const)(
+  it.each([
+    "finished",
+    "rower",
+    "link-lost",
+    "program-failed",
+    "program-dropped",
+  ] as const)(
     "round-trips the NEW value endedBy: %s through save/load",
     (value) => {
       const run: MonitorRun = {
