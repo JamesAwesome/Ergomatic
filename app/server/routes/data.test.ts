@@ -2000,10 +2000,12 @@ describe("GET/POST /api/logs", () => {
   it.each([
     ["an unknown zone name", "Not/AZone"],
     ["a raw UTC offset, not a zone name", "+05:00"],
-    [
-      "a legacy alias Intl also accepts but IANA doesn't canonically list",
-      "GMT+5",
-    ],
+    // Task 2 review (deferred, fixed at Task 6): "GMT+5" is NOT an
+    // Intl-accepted legacy alias — `Intl.DateTimeFormat` throws
+    // "Invalid time zone specified: GMT+5" on it, same as any other
+    // unrecognized string. This case pins that ordinary rejection, not a
+    // looser-than-IANA acceptance the validator has to narrow.
+    ["a string Intl itself rejects outright, same as an unknown zone", "GMT+5"],
   ])(
     "rejects an invalid tz (%s) with 400, field named",
     async (_label, value) => {

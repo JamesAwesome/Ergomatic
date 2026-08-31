@@ -127,12 +127,17 @@ export function createConcept2Store(db: Db) {
         const outcome = await fn(link);
 
         if (outcome.action === "store") {
+          // Controller ruling R2 (task-6-brief.md, carrying Task 3's ruling
+          // forward): a successful refresh proves the grant lives, so it
+          // ALSO clears `needsReauthAt` — a stale flag left set here would
+          // wrongly keep blocking uploads after the grant has recovered.
           await tx
             .update(concept2Links)
             .set({
               accessToken: outcome.tokens.accessToken,
               refreshToken: outcome.tokens.refreshToken,
               expiresAt: outcome.tokens.expiresAt,
+              needsReauthAt: null,
               updatedAt: sql`now()`,
             })
             .where(eq(concept2Links.userId, userId));

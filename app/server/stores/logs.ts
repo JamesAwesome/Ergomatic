@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { planState, sessionLogs, workouts } from "../db/schema.js";
 import type { PlanKey } from "./planState.js";
@@ -790,6 +790,48 @@ export function createLogsStore(db: Db) {
     // suggestion pool's "least recently done" ordering. Logs with no
     // workoutId (workout since deleted, or ad-hoc) are excluded: there's
     // nothing to attribute recency to.
+    // Wave E PR1 Task 6 (task-6-brief.md): server-written only, after C2's
+    // own 2xx (route's own comment) — never client input (LogInput's own
+    // comment names why the two columns are absent from that interface).
+    // Owner-scoped UPDATE, same idiom as `update()` above; the boolean
+    // return is the route's seam for "row deleted concurrently between the
+    // eligibility read and this write" (RF25: this route owns that
+    // invariant, and the route's 502 branch is keyed on this return, not on
+    // a re-read).
+    async recordC2Result(
+      userId: string,
+      id: string,
+      c2ResultId: number,
+      c2UserId: number,
+    ): Promise<boolean> {
+      const rows = await db
+        .update(sessionLogs)
+        .set({ c2ResultId, c2UserId })
+        .where(and(eq(sessionLogs.userId, userId), eq(sessionLogs.id, id)))
+        .returning({ id: sessionLogs.id });
+      return rows.length === 1;
+    },
+
+    // Wave E PR1 Task 6, plan deviation 2: legacy-row upload persist-on-
+    // first-use. The `tz IS NULL` guard rides IN the WHERE clause (not a
+    // read-then-write in JS) so a concurrent second upload attempt for the
+    // same row can never clobber the zone the first attempt already wrote
+    // — the route's own dedup-stability property (a retry must build the
+    // SAME date string) depends on this write being idempotent-after-first,
+    // never a plain unconditional SET.
+    async recordTz(userId: string, id: string, tz: string): Promise<void> {
+      await db
+        .update(sessionLogs)
+        .set({ tz })
+        .where(
+          and(
+            eq(sessionLogs.userId, userId),
+            eq(sessionLogs.id, id),
+            isNull(sessionLogs.tz),
+          ),
+        );
+    },
+
     async lastDonePerWorkout(userId: string): Promise<Record<string, number>> {
       const rows = await db
         .select({

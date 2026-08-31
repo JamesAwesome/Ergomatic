@@ -380,6 +380,11 @@ type FakeLogRow = Omit<LogInput, "advancesPlan"> & {
   planKey: string | null;
   planIndex: number | null;
   seq: number;
+  // Wave E PR1 Task 6 (task-6-brief.md): server-written only, never on
+  // `LogInput` (that interface's own comment) — `create()` below always
+  // stamps both null, and `recordC2Result` is the ONE writer after that.
+  c2ResultId: number | null;
+  c2UserId: number | null;
 };
 
 // Log-delete spec (2026-08-18), §2: the SAME newest-wins resolution
@@ -702,6 +707,12 @@ function makeFakeLogsStore(
         // of the real store, which also never sets them.
         completedAt: stored.completedAt ?? null,
         tz: stored.tz ?? null,
+        // Wave E PR1 Task 6: server-written only (see `FakeLogRow`'s own
+        // comment) — every row this fake's `create()` produces starts with
+        // both null, matching the real store's `create()`, which never
+        // sets either column either.
+        c2ResultId: null,
+        c2UserId: null,
         planKey,
         planIndex,
         id: crypto.randomUUID(),
@@ -718,6 +729,34 @@ function makeFakeLogsStore(
         if (row.workoutId) result[row.workoutId] = 0;
       }
       return result;
+    },
+    // Wave E PR1 Task 6: mirrors the real store's owner-scoped UPDATE
+    // (stores/logs.ts's own comment) — a foreign or absent id writes
+    // nothing and returns false, the same "row deleted concurrently" seam
+    // the route's 502 branch is keyed on.
+    async recordC2Result(
+      userId: string,
+      id: string,
+      c2ResultId: number,
+      c2UserId: number,
+    ) {
+      const rows = byUser.get(userId) ?? [];
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx === -1) return false;
+      rows[idx] = { ...rows[idx], c2ResultId, c2UserId };
+      byUser.set(userId, rows);
+      return true;
+    },
+    // Wave E PR1 Task 6, plan deviation 2: mirrors the real store's
+    // `tz IS NULL` guard (stores/logs.ts's own comment) — a row that
+    // already carries a tz is left untouched, never overwritten.
+    async recordTz(userId: string, id: string, tz: string) {
+      const rows = byUser.get(userId) ?? [];
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx === -1) return;
+      if (rows[idx].tz !== null) return;
+      rows[idx] = { ...rows[idx], tz };
+      byUser.set(userId, rows);
     },
   } as unknown as LogsStore;
 }
@@ -898,11 +937,15 @@ export function makeFakeConcept2Store(
         if (outcome.action === "store") {
           const existing = links.get(userId);
           if (existing) {
+            // Controller ruling R2 (task-6-brief.md): mirrors the real
+            // store's own `needsReauthAt: null` on a successful refresh
+            // (concept2.ts's own comment on this branch).
             links.set(userId, {
               ...existing,
               accessToken: outcome.tokens.accessToken,
               refreshToken: outcome.tokens.refreshToken,
               expiresAt: outcome.tokens.expiresAt,
+              needsReauthAt: null,
               updatedAt: clock(),
             });
           }

@@ -196,6 +196,42 @@ describe("concept2 store against real Postgres", () => {
       });
     });
 
+    // Controller ruling R2 (task-6-brief.md, carrying Task 3's ruling
+    // forward): a successful refresh proves the grant lives, so "store"
+    // must ALSO clear a previously-set needsReauthAt — a stale flag would
+    // wrongly keep blocking uploads after the grant has already recovered.
+    // Distinct from the "'store' writes..." test above, which never sets
+    // the flag in the first place and so could never catch its removal.
+    it("'store' clears a PREVIOUSLY-SET needsReauthAt (controller ruling R2)", async () => {
+      const store = createConcept2Store(db);
+      const fresh = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-lock-store-clears-flag",
+        email: "lock-store-clears-flag@c2-store.test",
+        name: "LSF",
+      });
+      await store.upsertLink(fresh.id, link());
+      await store.withLinkLock(fresh.id, async () => ({
+        action: "flagReauth" as const,
+        result: "flagged",
+      }));
+      expect((await store.getLink(fresh.id))?.needsReauthAt).not.toBeNull();
+
+      const result = await store.withLinkLock(fresh.id, async () => ({
+        action: "store" as const,
+        tokens: {
+          accessToken: "at-recovered",
+          refreshToken: "rt-recovered",
+          expiresAt: new Date("2026-10-01T00:00:00Z"),
+        },
+        result: "stored",
+      }));
+      expect(result).toBe("stored");
+
+      const after = await store.getLink(fresh.id);
+      expect(after?.needsReauthAt).toBeNull();
+      expect(after?.accessToken).toBe("at-recovered");
+    });
+
     it("locks a userId with no link row and passes fn a null link", async () => {
       const store = createConcept2Store(db);
       const fresh = await createUserStore(db).createUser({
