@@ -315,8 +315,9 @@ export function createConcept2Router({
       return;
     }
 
-    const mappingRow = toMappingRow(row);
-    const failure = eligibilityFailure(mappingRow);
+    // Eligibility never reads tz — safe to check before tz resolution.
+    const eligibilityRow = toMappingRow(row);
+    const failure = eligibilityFailure(eligibilityRow);
     if (failure !== null) {
       res.status(422).json({ error: "not_eligible", reason: failure });
       return;
@@ -328,22 +329,53 @@ export function createConcept2Router({
     // the SAME stored zone rather than re-deriving from whatever zone
     // that later request happened to carry — the dedup-stability
     // property C2's second-granular dedup key needs.
-    let effectiveTz: string;
-    if (row.tz === null) {
-      await logs.recordTz(userId, logId, tz);
-      effectiveTz = tz;
-    } else {
-      effectiveTz = row.tz;
-    }
+    //
+    // Fix round 1, I1: `effectiveTz` MUST be resolved before the row used
+    // to build the payload is constructed. The original code built
+    // `mappingRow` first and only wrote `tz` afterward, so `mappingRow.tz`
+    // stayed `null` even on a row whose `completedAt` was already set —
+    // `buildC2Payload`'s paired branch (`completedAt !== null && tz !==
+    // null`) never fired on attempt 1 (fell to `loggedAt` + the request's
+    // own zone) but DID fire on a retry once `row.tz` was no longer null
+    // read fresh — two different dates for the same row. M1: `recordTz`
+    // now returns the zone that actually landed (a concurrent writer may
+    // have beaten this request to it), so `effectiveTz` is never this
+    // request's own guess when someone else already decided it.
+    const effectiveTz =
+      row.tz === null ? await logs.recordTz(userId, logId, tz) : row.tz;
 
+    // The row used to build the payload, AFTER `effectiveTz` is settled:
+    // `tz` is forced to `effectiveTz` (never the raw, possibly-null
+    // `row.tz`) so `buildC2Payload`'s paired branch treats a freshly
+    // persisted zone exactly like an already-stored one — same stable
+    // `completedAt`-based date on every attempt from here on.
+    const mappingRow: SessionLogRow = { ...eligibilityRow, tz: effectiveTz };
+
+    // I4: `weightClass`/`c2UserId` for the payload and for
+    // `recordC2Result` must come from the LOCKED re-read inside
+    // `withLinkLock`, never the unlocked `store.getLink` read above — a
+    // relink landing between that read and the lock would otherwise pair
+    // the OLD account's identity with the NEW account's token.
+    type LinkIdentity = { weightClass: WeightClass; c2UserId: number };
     type TokenOutcome =
-      | { ok: true; accessToken: string }
+      | { ok: true; accessToken: string; link: LinkIdentity }
       | { ok: false; status: number; body: Record<string, unknown> };
 
     // Token freshness inside `withLinkLock` (plan deviation 4): a locked
     // re-read, so a concurrent refresh from another request is visible
     // here before this one decides whether to refresh again.
-    async function acquireAccessToken(): Promise<TokenOutcome> {
+    //
+    // I2: `retry` forces a GENUINE refresh attempt — passed only from the
+    // one-time 401 retry below, after C2 rejected a token this route
+    // believed was fresh (the ordinary freshness check would otherwise
+    // see the SAME unexpired `expiresAt` and hand back the SAME rejected
+    // token again, never actually refreshing). If the locked re-read
+    // shows the access token has already changed since the stale one was
+    // tried, another request already rotated it — use that stored pair
+    // rather than making a second wire call.
+    async function acquireAccessToken(retry?: {
+      staleAccessToken: string;
+    }): Promise<TokenOutcome> {
       return store.withLinkLock<TokenOutcome>(userId, async (locked) => {
         if (locked === null) {
           return {
@@ -355,15 +387,52 @@ export function createConcept2Router({
             },
           };
         }
+        // M2: a link flagged mid-flight (by a DIFFERENT concurrent
+        // request, between this route's own earlier unlocked check and
+        // this locked re-read) must not reach the wire with a token
+        // whose grant this route already knows is dead-or-flagged.
+        if (locked.needsReauthAt !== null) {
+          return {
+            action: "none",
+            result: {
+              ok: false,
+              status: 409,
+              body: { error: "needs_reauth" },
+            },
+          };
+        }
+        const identity: LinkIdentity = {
+          weightClass: locked.weightClass,
+          c2UserId: locked.c2UserId,
+        };
         if (
-          locked.expiresAt.getTime() >
-          now().getTime() + TOKEN_REFRESH_SKEW_MS
+          retry !== undefined &&
+          locked.accessToken !== retry.staleAccessToken
+        ) {
+          // Another request already refreshed since the rejected token
+          // was tried — no wire call needed.
+          return {
+            action: "none",
+            result: {
+              ok: true,
+              accessToken: locked.accessToken,
+              link: identity,
+            },
+          };
+        }
+        if (
+          retry === undefined &&
+          locked.expiresAt.getTime() > now().getTime() + TOKEN_REFRESH_SKEW_MS
         ) {
           // Covers "another request already refreshed" too: the locked
           // re-read sees whatever the winner of that race wrote.
           return {
             action: "none",
-            result: { ok: true, accessToken: locked.accessToken },
+            result: {
+              ok: true,
+              accessToken: locked.accessToken,
+              link: identity,
+            },
           };
         }
         const refreshed = await client.refreshTokens(locked.refreshToken);
@@ -374,6 +443,7 @@ export function createConcept2Router({
             result: {
               ok: true,
               accessToken: refreshed.tokens.accessToken,
+              link: identity,
             },
           };
         }
@@ -403,21 +473,43 @@ export function createConcept2Router({
       return;
     }
 
-    const payload = buildC2Payload(mappingRow, link, effectiveTz);
     let accessToken = tokenOutcome.accessToken;
+    let lockedLink = tokenOutcome.link;
+    let payload = buildC2Payload(mappingRow, lockedLink, effectiveTz);
     let postResult = await client.postResult(accessToken, payload);
 
     // ONE refresh-and-retry through the same locked path (brief) — C2
     // rejected a token this route believed was fresh; try exactly once
-    // more, then fall through to the same outcome handling either way.
+    // more (forcing a genuine refresh — I2), then fall through to the
+    // same outcome handling either way. The identity used to build the
+    // retry's payload comes from whichever locked read actually produced
+    // the token that gets sent (I4).
     if (!postResult.ok && postResult.kind === "auth") {
-      const retryOutcome = await acquireAccessToken();
+      const retryOutcome = await acquireAccessToken({
+        staleAccessToken: accessToken,
+      });
       if (!retryOutcome.ok) {
         res.status(retryOutcome.status).json(retryOutcome.body);
         return;
       }
       accessToken = retryOutcome.accessToken;
+      lockedLink = retryOutcome.link;
+      payload = buildC2Payload(mappingRow, lockedLink, effectiveTz);
       postResult = await client.postResult(accessToken, payload);
+
+      // I2: a REPEAT 401 immediately after a GENUINE refresh (or after
+      // picking up another request's already-rotated pair) is the same
+      // signal `refreshTokens`'s own `grantDead` gives — the grant is
+      // invalid, not merely stale-by-timing. Flag it identically (never
+      // delete) rather than falling through to a generic c2_error.
+      if (!postResult.ok && postResult.kind === "auth") {
+        await store.withLinkLock(userId, async () => ({
+          action: "flagReauth",
+          result: undefined,
+        }));
+        res.status(409).json({ error: "needs_reauth" });
+        return;
+      }
     }
 
     if (postResult.ok) {
@@ -430,7 +522,7 @@ export function createConcept2Router({
         userId,
         logId,
         postResult.resultId,
-        link.c2UserId,
+        lockedLink.c2UserId,
       );
       if (!recorded) {
         res.status(502).json({ error: "c2_error" });
@@ -446,7 +538,9 @@ export function createConcept2Router({
         .json({ error: "duplicate", c2ResultId: postResult.resultId });
       return;
     }
-    // "auth" (the one retry is exhausted) or "c2_error".
+    // Only "c2_error" can still reach here — every "auth" outcome is
+    // handled above, either by a successful retry or by the repeat-401
+    // flagReauth branch.
     res.status(502).json({ error: "c2_error" });
   });
 

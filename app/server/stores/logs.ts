@@ -819,8 +819,16 @@ export function createLogsStore(db: Db) {
     // — the route's own dedup-stability property (a retry must build the
     // SAME date string) depends on this write being idempotent-after-first,
     // never a plain unconditional SET.
-    async recordTz(userId: string, id: string, tz: string): Promise<void> {
-      await db
+    //
+    // Fix round 1, M1: returns the EFFECTIVE stored zone, never `void` —
+    // when the guard blocks this call's own write (a concurrent writer got
+    // there first), the caller must build its payload from whatever zone
+    // actually landed, not silently keep using its own `tz` argument as if
+    // it had won. `RETURNING` on the guarded UPDATE reports the winning
+    // value for free when THIS call wrote it; when it didn't (zero rows
+    // returned), a plain re-read reports what the other writer stored.
+    async recordTz(userId: string, id: string, tz: string): Promise<string> {
+      const written = await db
         .update(sessionLogs)
         .set({ tz })
         .where(
@@ -829,7 +837,21 @@ export function createLogsStore(db: Db) {
             eq(sessionLogs.id, id),
             isNull(sessionLogs.tz),
           ),
-        );
+        )
+        .returning({ tz: sessionLogs.tz });
+      if (written[0]) return written[0].tz as string;
+
+      // The guard blocked this write — either a concurrent writer already
+      // stored a zone (the expected race), or the row no longer exists
+      // (caller has already resolved it to a row before calling this, so
+      // this is defensive only). `?? tz` covers the defensive case with the
+      // caller's own value rather than returning a nullable type for a
+      // structurally-unreachable branch.
+      const [current] = await db
+        .select({ tz: sessionLogs.tz })
+        .from(sessionLogs)
+        .where(and(eq(sessionLogs.userId, userId), eq(sessionLogs.id, id)));
+      return current?.tz ?? tz;
     },
 
     async lastDonePerWorkout(userId: string): Promise<Record<string, number>> {

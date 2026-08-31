@@ -814,12 +814,19 @@ describe("domain stores against real Postgres", () => {
         });
         const { id } = await logs.create(fresh.id, logInput());
 
-        await logs.recordTz(fresh.id, id, "America/Los_Angeles");
+        // Fix round 1, M1: `recordTz` returns the EFFECTIVE stored zone,
+        // never `void` — asserted here, not just via a follow-up `get()`.
+        const returned = await logs.recordTz(
+          fresh.id,
+          id,
+          "America/Los_Angeles",
+        );
+        expect(returned).toBe("America/Los_Angeles");
         const row = await logs.get(fresh.id, id);
         expect(row?.tz).toBe("America/Los_Angeles");
       });
 
-      it("a second call for the same row is a no-op — first write wins", async () => {
+      it("a second call for the same row is a no-op — first write wins, and its return value proves it", async () => {
         const logs = createLogsStore(db);
         const users = createUserStore(db);
         const fresh = await users.createUser({
@@ -829,14 +836,20 @@ describe("domain stores against real Postgres", () => {
         });
         const { id } = await logs.create(fresh.id, logInput());
 
-        await logs.recordTz(fresh.id, id, "America/Los_Angeles");
-        await logs.recordTz(fresh.id, id, "UTC");
+        const first = await logs.recordTz(fresh.id, id, "America/Los_Angeles");
+        expect(first).toBe("America/Los_Angeles");
+        // Fix round 1, M1: the SECOND call's own return value must report
+        // the zone that actually won (the first one), never echo back its
+        // own "UTC" argument as if it had written it — this is the exact
+        // property a concurrent writer needs to build the SAME payload.
+        const second = await logs.recordTz(fresh.id, id, "UTC");
+        expect(second).toBe("America/Los_Angeles");
 
         const row = await logs.get(fresh.id, id);
         expect(row?.tz).toBe("America/Los_Angeles");
       });
 
-      it("never overwrites a tz the row was CREATED with", async () => {
+      it("never overwrites a tz the row was CREATED with, and reports THAT zone back", async () => {
         const logs = createLogsStore(db);
         const users = createUserStore(db);
         const fresh = await users.createUser({
@@ -849,7 +862,8 @@ describe("domain stores against real Postgres", () => {
           logInput({ tz: "America/New_York" }),
         );
 
-        await logs.recordTz(fresh.id, id, "UTC");
+        const returned = await logs.recordTz(fresh.id, id, "UTC");
+        expect(returned).toBe("America/New_York");
 
         const row = await logs.get(fresh.id, id);
         expect(row?.tz).toBe("America/New_York");

@@ -6,12 +6,9 @@ import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import { makeFakeConcept2Store, makeFakeStores } from "../testing/fakes.js";
 import type { LogInput, LogsStore } from "../stores/logs.js";
 import type { C2Client } from "../concept2/client.js";
+import { formatC2Date } from "../concept2/mapping.js";
 import type { Concept2Store, WeightClass } from "../stores/concept2.js";
-import {
-  createConcept2Router,
-  ATTEMPT_MAX_AGE_MS,
-  type Concept2RouterDeps,
-} from "./concept2.js";
+import { createConcept2Router, type Concept2RouterDeps } from "./concept2.js";
 
 // Wave E PR1 Task 6 (task-6-brief.md): supertest + fake session store, same
 // harness shape as `data.test.ts`'s own `appFor`. The concept2 store is the
@@ -259,12 +256,17 @@ describe("concept2 store fake: withLinkLock 'store' clears a previously-set need
 // exercises the `tz IS NULL` guard at all; mirrored against real Postgres
 // in stores.integration.test.ts.
 describe("logs fake: recordTz only writes when the column is null", () => {
-  it("a second recordTz call for the same row is a no-op (tz IS NULL guard)", async () => {
+  it("a second recordTz call for the same row is a no-op (tz IS NULL guard), and its return value proves it (M1)", async () => {
     const logs = makeFakeStores().logs;
     const id = await seedEligibleLog(logs, userA.id, { tz: null });
 
-    await logs.recordTz(userA.id, id, "America/Los_Angeles");
-    await logs.recordTz(userA.id, id, "UTC");
+    const first = await logs.recordTz(userA.id, id, "America/Los_Angeles");
+    expect(first).toBe("America/Los_Angeles");
+    // Fix round 1, M1: `recordTz` returns the EFFECTIVE stored zone, never
+    // `void` — the second call must report the zone that actually won
+    // (the first one), never echo its own "UTC" argument.
+    const second = await logs.recordTz(userA.id, id, "UTC");
+    expect(second).toBe("America/Los_Angeles");
 
     const row = await logs.get(userA.id, id);
     expect(row?.tz).toBe("America/Los_Angeles");
@@ -366,6 +368,23 @@ describe("mint (POST /api/concept2/connect)", () => {
     expect(client.authorizeUrl).toHaveBeenCalledTimes(1);
   });
 
+  // Fix round 1, I3: nothing previously asserted the nonce's actual shape
+  // or that two mints produce different ones — `randomBytes(32).toString
+  // ("hex")` could be replaced with a constant or a shorter/predictable
+  // value and every existing test would still pass.
+  it("the minted nonce is 64 hex characters (randomBytes(32).toString('hex'))", async () => {
+    const { app } = buildApp();
+    const state = await mintAndGetState(app);
+    expect(state).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("two mints produce DIFFERENT nonces", async () => {
+    const { app } = buildApp();
+    const first = await mintAndGetState(app);
+    const second = await mintAndGetState(app, asB);
+    expect(first).not.toBe(second);
+  });
+
   it("rejects a weightClass outside H|L, field-named", async () => {
     const { app } = buildApp();
     const res = await asA(
@@ -385,6 +404,10 @@ describe("mint (POST /api/concept2/connect)", () => {
     expect(res.body.field).toBe("weightClass");
   });
 
+  // Fix round 1, I3: pinned with the INDEPENDENT literal 900_000 (15
+  // minutes in ms), not the imported `ATTEMPT_MAX_AGE_MS` — retuning the
+  // production constant used to retune this assertion right along with it
+  // (RF21), so the test could never catch a wrong value.
   it("garbage-collects expired/own attempts before creating a new one (no cron)", async () => {
     const store = makeFakeConcept2Store();
     const gcExpired = vi.spyOn(store, "deleteExpiredAttempts");
@@ -393,7 +416,7 @@ describe("mint (POST /api/concept2/connect)", () => {
     await asA(
       request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
     );
-    expect(gcExpired).toHaveBeenCalledWith(ATTEMPT_MAX_AGE_MS);
+    expect(gcExpired).toHaveBeenCalledWith(900_000);
     expect(gcOwn).toHaveBeenCalledWith(userA.id);
   });
 });
@@ -461,14 +484,42 @@ describe("callback (GET /api/concept2/callback)", () => {
     expect(client.exchangeCode).toHaveBeenCalledTimes(1);
   });
 
-  it("an expired attempt -> 400 (injected clock)", async () => {
+  // Fix round 1, I3: pinned with INDEPENDENT literal ms values (14:59 =
+  // 899_000, 15:01 = 901_000), never the imported `ATTEMPT_MAX_AGE_MS` —
+  // the same RF21 reasoning as the GC test above, applied to the boundary
+  // itself rather than just "eventually expires".
+  it("an attempt 14:59 old is still fresh (literal ms)", async () => {
+    let t = 0;
+    const clock = () => new Date(t);
+    const store = makeFakeConcept2Store(clock);
+    const client = makeStubClient();
+    vi.mocked(client.exchangeCode).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "at-1",
+        refreshToken: "rt-1",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    vi.mocked(client.fetchMe).mockResolvedValue({ ok: true, c2UserId: 2211 });
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+
+    t += 899_000;
+    const res = await request(app).get(
+      `/api/concept2/callback?state=${state}&code=abc123`,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("an attempt 15:01 old is expired (literal ms)", async () => {
     let t = 0;
     const clock = () => new Date(t);
     const store = makeFakeConcept2Store(clock);
     const { app } = buildApp({ store });
     const state = await mintAndGetState(app);
 
-    t += ATTEMPT_MAX_AGE_MS + 1000;
+    t += 901_000;
     const res = await request(app).get(
       `/api/concept2/callback?state=${state}&code=abc123`,
     );
@@ -549,6 +600,19 @@ describe("callback (GET /api/concept2/callback)", () => {
     );
     expect(res.status).toBe(200);
     expect((await store.getLink(userA.id))?.needsReauthAt).toBeNull();
+  });
+
+  // Fix round 1, M4: a two-line gate against future reflection — today's
+  // callback pages are STATIC constants (`page()`'s own comment) that
+  // never interpolate `state`/`code`, so this passes trivially now, but it
+  // reddens the moment anyone starts building a page from request input.
+  it("never reflects state/code into the HTML response (static pages only)", async () => {
+    const { app } = buildApp();
+    const res = await request(app).get(
+      `/api/concept2/callback?state=${encodeURIComponent("<script>alert(1)</script>")}&code=${encodeURIComponent("<img src=x onerror=alert(2)>")}`,
+    );
+    expect(res.text).not.toContain("<script>alert(1)</script>");
+    expect(res.text).not.toContain("<img src=x onerror=alert(2)>");
   });
 });
 
@@ -783,6 +847,54 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(posted[1].timezone).toBe("America/Los_Angeles");
   });
 
+  // Fix round 1, I1: the missing matrix cell — `completedAt` SET but `tz`
+  // null (distinct from the fully-legacy row above, which has BOTH null
+  // and so never reaches `buildC2Payload`'s "paired" branch at all). The
+  // bug this closes: the route used to snapshot the mapping row BEFORE
+  // `recordTz` wrote the resolved zone, so `mappingRow.tz` stayed `null`
+  // on attempt 1 (falling to `loggedAt` + the request's own zone) while a
+  // later attempt read `row.tz` fresh, non-null, and the PAIRED branch
+  // fired instead (`completedAt` + the now-stored zone) — two different
+  // dates for the same row, breaking the exact dedup-stability property
+  // this persist-on-first-use design exists for.
+  it("a row with completedAt SET but tz null posts the SAME completedAt-based date on a first attempt and a retry", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    const posted: Record<string, unknown>[] = [];
+    vi.mocked(client.postResult).mockImplementation(
+      async (_token: string, payload: Record<string, unknown>) => {
+        posted.push(payload);
+        if (posted.length === 1) return { ok: false, kind: "c2_error" };
+        return { ok: true, resultId: 9001 };
+      },
+    );
+    const { app, logs } = buildApp({ store, client });
+    // FINISHED_LOG_INPUT's own completedAt (non-null), tz forced null.
+    const id = await seedEligibleLog(logs, userA.id, { tz: null });
+
+    const first = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/Los_Angeles" }),
+    );
+    expect(first.status).toBe(502);
+
+    const second = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(second.status).toBe(200);
+
+    expect(posted).toHaveLength(2);
+    expect(posted[0].date).toBe(posted[1].date);
+    expect(posted[0].timezone).toBe("America/Los_Angeles");
+    // The completedAt-based date, not a loggedAt-based one — proves the
+    // PAIRED branch fired on attempt 1, not just that both attempts agree.
+    expect(posted[0].date).toBe(
+      formatC2Date(FINISHED_LOG_INPUT.completedAt!, "America/Los_Angeles"),
+    );
+  });
+
   it("an expired token refreshes and stores the rotated pair before posting", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(
@@ -820,6 +932,67 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(link?.accessToken).toBe("new-at");
     expect(link?.refreshToken).toBe("new-rt");
     expect(link?.expiresAt).toStrictEqual(newExpiry);
+  });
+
+  // Fix round 1, I3: nothing previously landed a case INSIDE the 60s skew
+  // window — pinned with INDEPENDENT literal offsets (30s inside, 90s
+  // outside), never the imported `TOKEN_REFRESH_SKEW_MS`, so retuning the
+  // production constant can't retune these assertions along with it.
+  it("TOKEN_REFRESH_SKEW_MS boundary: a token expiring in 30s (inside the 60s skew) is refreshed", async () => {
+    const fixedNow = new Date("2026-01-01T00:00:00.000Z");
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(
+      userA.id,
+      freshLink({ expiresAt: new Date(fixedNow.getTime() + 30_000) }),
+    );
+    const client = makeStubClient();
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "rotated-at",
+        refreshToken: "rotated-rt",
+        expiresAt: new Date(fixedNow.getTime() + 3600_000),
+      },
+    });
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+    const { app, logs } = buildApp({ store, client, now: () => fixedNow });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    expect(client.refreshTokens).toHaveBeenCalledTimes(1);
+  });
+
+  it("TOKEN_REFRESH_SKEW_MS boundary: a token expiring in 90s (outside the 60s skew) is used as-is, no refresh", async () => {
+    const fixedNow = new Date("2026-01-01T00:00:00.000Z");
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(
+      userA.id,
+      freshLink({
+        expiresAt: new Date(fixedNow.getTime() + 90_000),
+        accessToken: "still-fresh-at",
+      }),
+    );
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+    const { app, logs } = buildApp({ store, client, now: () => fixedNow });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    expect(client.refreshTokens).not.toHaveBeenCalled();
+    expect(client.postResult).toHaveBeenCalledWith(
+      "still-fresh-at",
+      expect.anything(),
+    );
   });
 
   it("a dead refresh grant flags needs_reauth and keeps the link + weightClass (never deletes)", async () => {
@@ -923,13 +1096,31 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(res.body).toStrictEqual({ error: "c2_error" });
   });
 
-  it("an auth failure on postResult retries ONCE with a fresh token and succeeds", async () => {
+  // Fix round 1, I2: the ORIGINAL version of this test left `refreshTokens`
+  // unstubbed (it would throw) and still passed — the retry logic just
+  // re-checked freshness, saw the SAME unexpired `expiresAt`, and handed
+  // back the SAME token that had just been rejected, never calling
+  // `refreshTokens` at all. Now the retry FORCES a genuine refresh, so
+  // this asserts the two `postResult` calls actually used DIFFERENT
+  // tokens — the thing the title always claimed.
+  it("an auth failure on postResult forces a genuine refresh and retries ONCE with the NEW token", async () => {
     const store = makeFakeConcept2Store();
-    await store.upsertLink(userA.id, freshLink());
+    await store.upsertLink(
+      userA.id,
+      freshLink({ accessToken: "stale-at", refreshToken: "rt-1" }),
+    );
     const client = makeStubClient();
     vi.mocked(client.postResult)
       .mockResolvedValueOnce({ ok: false, kind: "auth" })
       .mockResolvedValueOnce({ ok: true, resultId: 55 });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "rotated-at",
+        refreshToken: "rotated-rt",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
 
@@ -941,13 +1132,32 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(res.status).toBe(200);
     expect(res.body).toStrictEqual({ resultId: 55 });
     expect(client.postResult).toHaveBeenCalledTimes(2);
+    expect(client.refreshTokens).toHaveBeenCalledTimes(1);
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls[0][0]).toBe("stale-at");
+    expect(calls[1][0]).toBe("rotated-at");
+    expect(calls[0][0]).not.toBe(calls[1][0]);
   });
 
-  it("an auth failure that repeats past the one retry ends in 502 (never a third attempt)", async () => {
+  // A 401 retry whose LOCKED re-read finds another request already rotated
+  // the pair (rather than this request's own refresh winning the race)
+  // uses that stored pair directly — no second wire call.
+  it("a 401 retry that finds another request already rotated the token skips a second wire refresh", async () => {
     const store = makeFakeConcept2Store();
-    await store.upsertLink(userA.id, freshLink());
+    await store.upsertLink(userA.id, freshLink({ accessToken: "stale-at" }));
     const client = makeStubClient();
-    vi.mocked(client.postResult).mockResolvedValue({ ok: false, kind: "auth" });
+    vi.mocked(client.postResult).mockImplementation(async (token) => {
+      if (token === "stale-at") {
+        // Simulate a concurrent request rotating the pair while THIS
+        // request's own (now-rejected) postResult call was in flight.
+        await store.upsertLink(
+          userA.id,
+          freshLink({ accessToken: "concurrently-rotated-at" }),
+        );
+        return { ok: false, kind: "auth" };
+      }
+      return { ok: true, resultId: 9 };
+    });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
 
@@ -956,8 +1166,49 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         .post(`/api/concept2/results/${id}`)
         .send({ tz: "America/New_York" }),
     );
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(200);
+    expect(res.body).toStrictEqual({ resultId: 9 });
+    expect(client.refreshTokens).not.toHaveBeenCalled();
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls[0][0]).toBe("stale-at");
+    expect(calls[1][0]).toBe("concurrently-rotated-at");
+  });
+
+  // Fix round 1, I2: a REPEAT 401 immediately after a GENUINE refresh is
+  // the same signal `refreshTokens`'s own `grantDead` gives — the grant
+  // itself is invalid, not merely stale-by-timing. The ORIGINAL version of
+  // this test asserted a plain 502 with `refreshTokens` unstubbed (never
+  // actually exercising a refresh); now it asserts the flag + 409.
+  it("a repeat 401 after a genuine refresh flags needs_reauth (never a third attempt)", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({ ok: false, kind: "auth" });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "rotated-at",
+        refreshToken: "rotated-rt",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
     expect(client.postResult).toHaveBeenCalledTimes(2);
+    expect(client.refreshTokens).toHaveBeenCalledTimes(1);
+
+    const link = await store.getLink(userA.id);
+    expect(link).not.toBeNull();
+    expect(link?.weightClass).toBe("H");
+    expect(link?.needsReauthAt).not.toBeNull();
   });
 
   it("recordC2Result returning false (row deleted concurrently) -> 502 (RF25 seam)", async () => {
@@ -1024,6 +1275,53 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(stored?.c2UserId).toBe(222);
   });
 
+  // Fix round 1, I4: `weightClass`/`c2UserId` for the payload AND for
+  // `recordC2Result` must come from the LOCKED re-read inside
+  // `withLinkLock`, never the earlier UNLOCKED `store.getLink` read — a
+  // relink landing in between would otherwise pair the OLD account's
+  // identity with the NEW account's token.
+  it("sources weightClass and c2UserId from the LOCKED read, not the earlier unlocked getLink", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(
+      userA.id,
+      freshLink({ c2UserId: 111, weightClass: "H" }),
+    );
+    const client = makeStubClient();
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    // Simulate a relink landing BETWEEN the route's initial unlocked
+    // `store.getLink` read (used only for the unlinked/needs_reauth/
+    // already-sent checks) and the LOCKED re-read inside `withLinkLock`:
+    // the spy intercepts only that one outer call and hands back the
+    // STALE link, while the store's real internal state — and therefore
+    // the locked read — already reflects the new account.
+    const staleLink = await store.getLink(userA.id);
+    vi.spyOn(store, "getLink").mockResolvedValueOnce(staleLink);
+    await store.upsertLink(
+      userA.id,
+      freshLink({ c2UserId: 222, weightClass: "L" }),
+    );
+
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 777,
+    });
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    expect(client.postResult).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ weight_class: "L" }),
+    );
+    const stored = await logs.get(userA.id, id);
+    expect(stored?.c2UserId).toBe(222);
+  });
+
   it("link deleted between the getLink check and the lock -> 409 unlinked (defensive branch)", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
@@ -1047,6 +1345,39 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(res.status).toBe(409);
     expect(res.body).toStrictEqual({ error: "unlinked" });
     expect(client.postResult).not.toHaveBeenCalled();
+  });
+
+  // Fix round 1, M2: a link flagged mid-flight (by a DIFFERENT concurrent
+  // request, between this route's own earlier unlocked needs_reauth check
+  // and the locked re-read) must not reach the wire with a token this
+  // route already knows is dead-or-flagged.
+  it("a link flagged needs_reauth between the unlocked check and the lock -> 409, never reaches the wire", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+    // The route's own earlier `store.getLink` check sees a healthy link
+    // (needsReauthAt null); the LOCKED re-read inside `withLinkLock` must
+    // see the flag a concurrent request set in between.
+    vi.spyOn(store, "withLinkLock").mockImplementation(async (uid, fn) => {
+      const flagged = {
+        ...(await store.getLink(uid))!,
+        needsReauthAt: new Date(),
+      };
+      const outcome = await fn(flagged);
+      return outcome.result;
+    });
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
+    expect(client.postResult).not.toHaveBeenCalled();
+    expect(client.refreshTokens).not.toHaveBeenCalled();
   });
 
   it("the retry's own token reacquisition can fail too — its status/body wins, no second postResult call", async () => {
