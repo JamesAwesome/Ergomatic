@@ -2222,6 +2222,75 @@ describe("ended: the surface hands off and unmounts", () => {
   });
 });
 
+// Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1, Gate 0
+// CLEARED 2026-08-31): the transient SESSION ENDED frame that paints before
+// the ended hand-off navigates away must not say "The monitor finished it."
+// when the erg itself dropped the program mid-row — that line promises a
+// completion the machine never reported. `session.closeReason` is the
+// TRANSPORT (published on the SAME patch as `phase: "ended"`, Task 2), read
+// here rather than `endedBy` — the drop is a third `endedBy: "machine"`
+// shape (RC-37), so `endedBy` alone cannot distinguish it from a real
+// finish. Assertions run synchronously right after `renderSurface`, the
+// same "hand it a session, read the DOM" idiom every other test in this
+// describe block already uses — no `onEnded` is awaited or unmounted here,
+// so this is the rendered-path check "before any route effect fires": the
+// frame the rower actually sees while React is still painting this commit.
+describe("the interim ended frame tells the truth about a program drop (Gate 0)", () => {
+  it("names the erg as the cause and counts what the erg kept", () => {
+    renderSurface({
+      phase: "ended",
+      endedBy: "machine",
+      closeReason: "program-dropped",
+      actuals: [actualOf(0, 480), actualOf(1, 428.4)],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "The erg dropped the workout. 2 intervals kept.",
+    );
+  });
+
+  it("counts one interval in the singular", () => {
+    renderSurface({
+      phase: "ended",
+      endedBy: "machine",
+      closeReason: "program-dropped",
+      actuals: [actualOf(0, 480)],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "The erg dropped the workout. 1 interval kept.",
+    );
+  });
+
+  it("says Nothing kept when the drop happened before anything was measured", () => {
+    renderSurface({
+      phase: "ended",
+      endedBy: "machine",
+      closeReason: "program-dropped",
+      actuals: [],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "The erg dropped the workout. Nothing kept.",
+    );
+  });
+
+  // The transport's own guard: a `null` closeReason (every OTHER ending —
+  // Task 2's own patch is the only writer of "program-dropped") still
+  // renders the existing machine-finished copy. This is also this test's
+  // own mutation target (Step 5, mutation i): forging `closeReason: null`
+  // onto a real program-dropped patch must make THIS assertion observe the
+  // false "The monitor finished it." line.
+  it("a null closeReason still renders the existing machine-finished copy — the drop branch never fires without it", () => {
+    renderSurface({
+      phase: "ended",
+      endedBy: "machine",
+      closeReason: null,
+      actuals: [actualOf(0, 480)],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "The monitor finished it. Your numbers are kept.",
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Held-error: the ended frame's FIRST-EVER interactive elements (AUD-016
 // Task 4, spec §4). Gate 0 approved (James, 2026-08-29) the strip text, the

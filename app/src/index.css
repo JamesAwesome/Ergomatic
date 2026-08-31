@@ -8786,6 +8786,56 @@ section:not(.news-pinned) .news-row:last-of-type {
      judge-slower on page (a slower row's pace/deviation/bar) 7.15:1
      ink on surface (the secondary save button) 17.11:1
    All comfortably clear the 4.5:1 AA floor. */
+/* THE DROP STRIP (Wave F PR 1 Task 4, design spec
+   2026-08-31-lifecycle-design.md §1, Gate 0 CLEARED 2026-08-31,
+   "PLACEMENT REVISED with the destination ruling — the strip sits at the
+   top of the LOG screen ... above the title, identical in both
+   orientations"). Rendered only when the loaded MonitorRun's own
+   `endedBy === "program-dropped"` (LogSession.tsx's own `droppedStrip`) —
+   the erg discarded its program mid-row, so the strip blames the machine
+   plainly rather than letting the ordinary summary imply a normal finish.
+   3px left rule matches the house's other "state marker" strips
+   (`.connected-keep-on`, `.plan-row-today`, `.step-card`) — a familiar
+   shape, not a new device invented for one strip.
+
+   Contrast, computed via the WCAG relative-luminance formula (never
+   eyeballed, house rule), all three against `--surface` (this strip's own
+   background, the only one it ever sits on):
+     --ink (title) on --surface: 17.11:1
+     --ink-3 (body) on --surface: 7.43:1
+     --ink-2 (the bold kept-count clause, `.log-dropped-body b`)
+       on --surface: 10.81:1
+   All three clear the 4.5:1 AA floor with wide headroom — the same three
+   pairings this file's own TraceChart comment (above) already computed for
+   this exact token trio on this exact background. */
+.log-dropped-strip {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  border-left: 3px solid var(--ink-3);
+  border-radius: 4px;
+}
+
+.log-dropped-title {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+
+.log-dropped-body {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.log-dropped-body b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
 .summary-eyebrow {
   margin: 0 0 6px;
   font-family: var(--font-mono);

@@ -537,6 +537,15 @@ export interface PostWorkoutSummaryProps {
    *  nothing more. */
   series?: SeriesData;
   backFallback?: string;
+  /** Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1,
+   *  Gate 0 CLEARED 2026-08-31, "PLACEMENT REVISED with the destination
+   *  ruling: the strip sits at the top of the LOG screen ... above the
+   *  title"). Caller-built and door-specific (only the monitor door's
+   *  `endedBy === "program-dropped"` case ever passes one — the timer/
+   *  manual doors have no PM5 to have dropped anything), same "self-
+   *  contained ReactNode this screen only places" idiom as `discardSlot`
+   *  above. `undefined` renders nothing extra, same as `children`. */
+  stripSlot?: ReactNode;
   /** The diagnostics rows (MONITOR LOG · COPY / RECORDING · DOWNLOAD) —
    *  §2F: "SURVIVE below the stack." Rendered as children rather than a
    *  named slot: both are self-contained, state-owning components in
@@ -575,6 +584,7 @@ export default function PostWorkoutSummary({
   discardSlot,
   series,
   backFallback = "/today",
+  stripSlot,
   children,
 }: PostWorkoutSummaryProps) {
   const { meta, heroes, rows, caption } = model;
@@ -644,6 +654,7 @@ export default function PostWorkoutSummary({
     <main className="screen">
       <p className="summary-eyebrow">WORKOUT COMPLETE</p>
       <BackLink fallback={backFallback} label="← DONE" />
+      {stripSlot}
       <SummaryMetaBlock title={title} meta={meta} />
 
       <SummaryHeroesBlock heroes={heroes} />

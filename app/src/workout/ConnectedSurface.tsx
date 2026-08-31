@@ -488,11 +488,27 @@ export default function ConnectedSurface({
                 // dishonesty the hold exists to avoid. Names the wait's
                 // reason: "monitor", never "PM5" (RC-18 standing rule).
                 "Getting the monitor's own numbers."
-              : kept === 0
-                ? "No numbers to keep."
-                : session.endedBy === "machine"
-                  ? "The monitor finished it. Your numbers are kept."
-                  : "Your numbers are kept."}
+              : // Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-
+                // design.md §1, Gate 0 CLEARED 2026-08-31): the erg
+                // dropping its own program mid-row is a THIRD
+                // `endedBy: "machine"` shape (RC-37) — `endedBy` alone
+                // cannot tell it apart from a real finish, so this branches
+                // on `session.closeReason`, the transport published on the
+                // SAME patch as `phase: "ended"` (Task 2's own comment at
+                // that write site: "so no frame can render 'ended' without
+                // it"). Ahead of the kept/endedBy branches below because it
+                // is a different CAUSE, not a different count — the count
+                // itself still comes from the one shared
+                // `measuredIntervalCount` rule, never a second notion.
+                session.closeReason === "program-dropped"
+                ? kept === 0
+                  ? "The erg dropped the workout. Nothing kept."
+                  : `The erg dropped the workout. ${kept} ${kept === 1 ? "interval" : "intervals"} kept.`
+                : kept === 0
+                  ? "No numbers to keep."
+                  : session.endedBy === "machine"
+                    ? "The monitor finished it. Your numbers are kept."
+                    : "Your numbers are kept."}
           </p>
         )}
       </main>

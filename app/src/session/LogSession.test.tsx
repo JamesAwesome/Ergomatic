@@ -4613,6 +4613,105 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   });
 });
 
+// Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1, Gate 0
+// CLEARED 2026-08-31, "PLACEMENT REVISED with the destination ruling: the
+// strip sits at the top of the LOG screen"): a `?from=monitor` arrival whose
+// DURABLE record has `endedBy === "program-dropped"` renders the strip —
+// the log door reads the STORED reason directly off `monitorRun`, never the
+// session's own `closeReason` (that field dies with the session at
+// navigation; the artifact's own words: "the record is the only authority
+// that survives the navigation"). `defaultActuals` in `buildMonitorFixture`
+// measures both work intervals, so the plain `buildMonitorFixture({
+// endedBy: "program-dropped" })` call is the kept-2 fixture; no override
+// needed for that case.
+describe("LogSession: the drop strip (Wave F PR 1 Task 4, Gate 0)", () => {
+  it("renders the frozen title and the kept-2 body, above the title", async () => {
+    const { run, workout } = buildMonitorFixture({
+      endedBy: "program-dropped",
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    const heading = await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const strip = document.querySelector(".log-dropped-strip");
+    expect(strip).not.toBeNull();
+    expect(strip!.querySelector(".log-dropped-title")!.textContent).toBe(
+      "THE ERG DROPPED THE WORKOUT.",
+    );
+    expect(strip!.querySelector(".log-dropped-body")!.textContent).toBe(
+      "2 intervals kept. The row below is what the erg measured before it stopped.",
+    );
+    // "above the title" (the artifact's own placement words) — the strip
+    // precedes the workout title in document order.
+    expect(
+      heading.compareDocumentPosition(strip!) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+  });
+
+  it("counts one interval in the singular", async () => {
+    const { run, workout } = buildMonitorFixture({
+      endedBy: "program-dropped",
+      actuals: [
+        {
+          index: 1,
+          elapsedSeconds: 705,
+          distanceMeters: 2000,
+          avgSplit: 140,
+          avgSpm: 24,
+          avgHeartRateBpm: 138,
+          restDistanceMeters: 0,
+        },
+      ],
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(document.querySelector(".log-dropped-body")!.textContent).toBe(
+      "1 interval kept. The row below is what the erg measured before it stopped.",
+    );
+  });
+
+  it("says Nothing kept when the drop happened before any interval was measured", async () => {
+    const { run, workout } = buildMonitorFixture({
+      endedBy: "program-dropped",
+      actuals: [],
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(document.querySelector(".log-dropped-body")!.textContent).toBe(
+      "Nothing kept. You had not finished an interval yet.",
+    );
+  });
+
+  // The gate itself: an ordinary machine finish renders no strip at all.
+  // This is also this test's own mutation target (Step 5, mutation ii):
+  // flipping the strip's own gate to `"program-failed"` must make this
+  // assertion fail (a `"finished"` fixture would then also render the
+  // strip).
+  it("renders no strip for an ordinary finished run", async () => {
+    const { run, workout } = buildMonitorFixture({ endedBy: "finished" });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(
+      document.querySelector(".log-dropped-strip"),
+    ).not.toBeInTheDocument();
+  });
+});
+
 // LT-0 (2026-08-18-target-truth-design.md §3, phase-open gates' own
 // diagnosis): the manual door's plain (non-monitor) render was the app's
 // only discard-less save surface — AND exactly where `monitorModeRun`'s
