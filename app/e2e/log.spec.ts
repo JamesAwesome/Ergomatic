@@ -1101,43 +1101,6 @@ test("§5.3 leg (b) re-point: deleting the middle (newest, non-terminal) holder 
 // shape that let this PR's own two P1s ship. One test, both directions,
 // driven entirely through the real API and the real screen.
 test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)", () => {
-  /** Creates a PERSONAL workout through the real route and returns its
-   *  id. Titles are not unique or reserved, so this is a supported row
-   *  that happens to share the prescribed test's name. */
-  async function createPersonalWorkout(
-    page: Page,
-    title: string,
-    type: string,
-  ): Promise<string> {
-    const result = await page.evaluate(
-      async (w) => {
-        const res = await fetch("/api/workouts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: w.title,
-            type: w.type,
-            difficulty: "hard",
-            pain: 5,
-            steps: [
-              {
-                k: "w",
-                duration: { kind: "distance", meters: 2000 },
-                ref: { effort: "max" },
-              },
-            ],
-          }),
-        });
-        return { ok: res.ok, status: res.status, body: await res.text() };
-      },
-      { title, type },
-    );
-    if (!result.ok) {
-      throw new Error(`workout create failed: ${result.status} ${result.body}`);
-    }
-    return (JSON.parse(result.body) as { id: string }).id;
-  }
-
   /** Waits until the plan-links fetch has actually landed on the
    *  checkpoint row.
    *
@@ -1193,31 +1156,48 @@ test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)
   // probeable on its own: it is the assertion that can go false-green,
   // and bundling it behind a positive-mark assertion in the same test
   // means a mutation trips the other one first.
-  test("a PERSONAL workout sharing the prescribed title is MARKED", async ({
+  // RETIRED with the 2026-08-31 reservation: the personal same-title case
+  // used to be gated here end-to-end, but its ONLY supported producer was
+  // POST /api/workouts, which now rejects the designated titles — the
+  // test below asserts exactly that. The legacy class (rows that took a
+  // reserved title before the check) keeps its gates at the layers that
+  // can still produce it: the store contracts (provenance) and
+  // Plan.test.tsx (rendering, mocked links). The cross-linked test at the
+  // end of this describe still exercises identity end-to-end through a
+  // producer that remains.
+  test("the reservation holds at the front door: a personal 2K Test cannot be created", async ({
     page,
   }, testInfo) => {
     await freshPlanTester(
       page,
-      `plan-identity-${testInfo.parallelIndex}@e2e.test`,
+      `plan-identity-reserved-${testInfo.parallelIndex}@e2e.test`,
     );
 
-    // The rower's OWN "2K Test", authored as an AN so neither title nor
-    // type can tell it apart from the prescribed one. Only identity can.
-    const personalId = await createPersonalWorkout(page, "2K Test", "AN");
-    await advanceToFirstCheckpoint(page);
-    await postLog(page, {
-      workoutTitle: "2K Test",
-      workoutType: "AN",
-      workoutId: personalId,
-      advancesPlan: true,
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/workouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "2K Test",
+          type: "AN",
+          difficulty: "hard",
+          pain: 5,
+          steps: [
+            {
+              k: "w",
+              duration: { kind: "distance", meters: 2000 },
+              ref: { effort: "max" },
+            },
+          ],
+        }),
+      });
+      return {
+        status: res.status,
+        body: (await res.json()) as { field?: string },
+      };
     });
-
-    await page.goto("/plan");
-    const row = await awaitCheckpointLinked(page);
-    await expect(row.locator(".plan-row-name")).toHaveText("2K Test");
-    await expect(row.locator(".plan-row-swap")).toHaveText(
-      "INSTEAD OF 2K Test",
-    );
+    expect(result.status).toBe(400);
+    expect(result.body.field).toBe("title");
   });
 
   test("the real GLOBAL prescribed test is not marked", async ({
