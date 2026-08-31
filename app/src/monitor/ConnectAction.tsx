@@ -1,5 +1,10 @@
 import { useState } from "react";
 import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
+import {
+  currentUnretired as currentUnretiredHandoff,
+  discardStagedRetire as discardStagedRetireHandoff,
+  stageRetire as stageRetireHandoff,
+} from "./handoffStore";
 
 /**
  * The Connect door and the lock in front of it (7B Task 2, spec §3 — "the
@@ -35,7 +40,15 @@ import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
  * (`monitorRun.ts`), whose `clearRun()` is unconditional and undoable, is
  * NOT called synchronously from here — `useMonitorSession.ts` deliberately
  * opens the record only at the first REAL ROWING FRAME, never at a mere
- * press or a successful pair, so a connect attempt that fails or is
+ * press or a successful pair. **CORRECTED (Task 5 re-review, F-1,
+ * 2026-08-30): "destroys nothing" below is true only of a `SessionRun`,
+ * and only PRE-armed for a `MonitorRun`** — a connect attempt that FAILS,
+ * or is Cancelled BEFORE the wire "armed" event, destroys nothing; a
+ * successful connect that reaches "armed" and is THEN Cancelled from the
+ * "ready" screen has already retired the staged `MonitorRun` (spec §5's
+ * "armed acceptance" row, sanctioned as the acceptance point) — see this
+ * file's own later "CORRECTED (Task 5 review fix round..." paragraph for
+ * the full mechanism. So a connect attempt that fails or is
  * abandoned before rowing starts destroys nothing (verified directly:
  * `e2e/session.spec.ts`'s "Connect anyway" test, and
  * `WorkoutDetail.test.tsx`'s real-transport-missing test, both against the
@@ -47,6 +60,45 @@ import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
  * rather than through `anyLiveSession()`; its own doc comment quotes
  * ROADMAP M-1 on why, and that choice is what the "route it through
  * `anyLiveSession()`" mutation targets.
+ *
+ * **CORRECTED (Task 5 review fix round, 2026-08-30): the paragraph above
+ * describes `SessionRun` truthfully but is no longer the whole picture
+ * for a `MonitorRun` — read `stagedRetireSet`'s own doc comment
+ * (`handoffStore.ts`) for the full account.** The FIRST version of this
+ * component's "Connect anyway" retired a staged `MonitorRun` entry
+ * IMMEDIATELY, at that press — before BLE, before programming, before
+ * either of `handleConnectProceed`'s own two synchronous early returns
+ * (a missing-baselines guard, a `CompileError`). The reviewer's own
+ * probe: seed a stale record, Connect, Connect anyway, a REAL
+ * transport-missing failure, Cancel — `currentUnretired()` and
+ * `loadMonitorRun()` both came back `null`. A real F5-class regression:
+ * every interstitial state's own Cancel doc comment says "nothing lost,"
+ * and this proved it false. **Fixed by moving EXECUTION downstream to
+ * the wire "armed" event** (`useMonitorSession.ts`) — strictly after
+ * `program()` succeeds, strictly before any rowing frame, and never
+ * reached by a FAILED attempt, or one Cancelled BEFORE it fires (the
+ * census's own words for the row-instead terminus: "Connect -> program ->
+ * armed | failure-card" — armed sits AFTER program, and failure-card is
+ * the ALTERNATIVE outcome, never a predecessor). **CORRECTED (Task 5
+ * re-review, F-1): "never reached" describes failed/pre-armed-cancelled
+ * attempts ONLY.** Armed IS reached, exactly once, by every attempt that
+ * SUCCEEDS — and per spec §5, reaching it is the acceptance point: a
+ * rower who then Cancels from the "ready" screen without ever rowing
+ * cannot undo the retire that already happened the instant "armed"
+ * fired. This is the design's own sanctioned behavior, not a residual
+ * leak — `ConnectedInterstitial.tsx`'s own `onExit` doc comment and
+ * `useMonitorSession.test.ts`'s "arm then Cancel: the accepted loss" pin
+ * both name it explicitly, so the next reader finds intent rather than
+ * this Critical recurring. `handleConnect` below still
+ * captures the AUTHORIZATION at stage time (the exact `{sessionKey,
+ * revision}` the guard saw), but now records it in the store
+ * (`stageRetire`) rather than local state, so the hook — a different
+ * file, with no prop path from here — can consume it later. **A
+ * consequence, verified rather than assumed:** after a missing-baselines
+ * or `CompileError` return from `handleConnectProceed`, the panel still
+ * reads "Connecting discards it," and with the retire moved this is now
+ * TRUE again — nothing has been destroyed at that point, the identical
+ * promise every OTHER early return already keeps.
  *
  * The staged confirm is `WorkoutDetail`'s own idiom, not a new one: the same
  * `.baseline-confirm` panel replacing the button in place, the same
@@ -68,8 +120,30 @@ export default function ConnectAction({
   // two can never disagree about which case triggered the stage.
   const [stage, setStage] = useState<ConnectGuardStage>(null);
 
+  // Task 5 review fix round: stages the AUTHORIZATION in the STORE, not
+  // local state — `handoffStore.ts`'s own `stagedRetireSet` doc comment
+  // has the full discipline (why the execution moved to the hook's
+  // "armed" event, why this call is UNCONDITIONAL on every press, and —
+  // added 2026-08-30 — why `ConnectedInterstitial.handleTryAgain` reaches
+  // "armed" WITHOUT passing through here and correctly inherits the
+  // original press's set: Try Again is the same attempt on the same
+  // record, not a second authorization). This component no longer retires
+  // anything itself — "Connect anyway" below goes straight to
+  // `onProceed`, the shape this component shipped with before the retire
+  // briefly (and wrongly) lived here at press time.
   function handleConnect() {
-    const staged = connectGuardStage();
+    const monitorEntry = currentUnretiredHandoff();
+    stageRetireHandoff(
+      monitorEntry !== null
+        ? [
+            {
+              sessionKey: monitorEntry.sessionKey,
+              revision: monitorEntry.revision,
+            },
+          ]
+        : [],
+    );
+    const staged = connectGuardStage(monitorEntry !== null);
     if (staged !== null) {
       setStage(staged);
       return;
@@ -86,19 +160,28 @@ export default function ConnectAction({
             : "A session is in progress. Replace it?"}
         </p>
         <div className="baseline-actions">
+          {/* Task 5 re-review (F-3, 2026-08-30): a refused confirm must
+              not leave a live authorization staged for some LATER,
+              unrelated Connect press to inherit — `discardStagedRetire`
+              is a no-op when `handleConnect` staged nothing (the common
+              case), and receipted when it discards something real (F-4). */}
           <button
             type="button"
             className="button-outline"
-            onClick={() => setStage(null)}
+            onClick={() => {
+              discardStagedRetireHandoff();
+              setStage(null);
+            }}
           >
             Cancel
           </button>
-          {/* Straight to `onProceed`, with no clearing of its own: the
-              destruction belongs to `createMonitorRun` downstream, exactly
-              as Start's own "Replace session" hands off to
-              `useStartWorkout.ts`'s `confirmReplace` (Phase 6I Task 4:
-              extracted from WorkoutDetail's own former `startSession`)
-              rather than reaching into storage from the panel. */}
+          {/* Task 5 review fix round: straight to `onProceed`, with no
+              clearing/retiring of its own — the destruction (of whatever
+              was staged in the store by `handleConnect` above) belongs
+              to `useMonitorSession.ts`'s own "armed" event handler, once
+              the connect attempt has actually succeeded. See this file's
+              own header comment, "CORRECTED (Task 5 review fix round...",
+              for why a retire at THIS press was wrong. */}
           <button type="button" className="button-primary" onClick={onProceed}>
             Connect anyway
           </button>

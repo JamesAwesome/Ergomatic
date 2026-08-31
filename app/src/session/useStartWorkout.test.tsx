@@ -16,6 +16,10 @@ import {
   saveMonitorRun,
   type MonitorRun,
 } from "../monitor/monitorRun";
+import {
+  commit as commitHandoff,
+  resetForTests as resetHandoffStoreForTests,
+} from "../monitor/handoffStore";
 import { compileProgram } from "../../domain/monitor/program.js";
 import { useStartWorkout, type StartableWorkout } from "./useStartWorkout";
 
@@ -87,6 +91,7 @@ function monitorRunFor(completedAt: string | null): MonitorRun {
 
 beforeEach(() => {
   localStorage.clear();
+  resetHandoffStoreForTests();
 });
 
 describe("useStartWorkout", () => {
@@ -202,6 +207,34 @@ describe("useStartWorkout", () => {
     expect(result.current.replaceStage).toBe("unlogged");
   });
 
+  // Hand-off store design spec §5, plan Task 5 (the P1-1 hole AT THIS
+  // SECOND DOOR, closed — §10 row 1's own "guard reads one tier -> fails"
+  // mutation target). A record whose DURABLE write was denied
+  // (memory-only) is exactly what Today's own store-backed row already
+  // renders for (Task 4) — Start's guard now agrees, where
+  // `loadMonitorRun()` (durable tier only) would have seen nothing.
+  it("stages 'unlogged' for a memory-only MonitorRun (durable write denied) — same visibility as Today's own row", async () => {
+    const { vi } = await import("vitest");
+    const memoryOnly = monitorRunFor(null);
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+    const created = commitHandoff(memoryOnly.startedAt, null, memoryOnly);
+    setItemSpy.mockRestore();
+    expect(created).toMatchObject({ accepted: true, verdict: "failed" });
+    expect(loadMonitorRun()).toBeNull();
+
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
+      wrapper,
+    });
+
+    act(() => result.current.handleStart());
+
+    expect(result.current.replaceStage).toBe("unlogged");
+  });
+
   it("cancelReplace clears the staged panel and touches no storage", () => {
     const live = monitorRunFor(null);
     saveMonitorRun(live);
@@ -247,6 +280,40 @@ describe("useStartWorkout", () => {
     expect(draft).not.toBeNull();
     expect(draft!.workoutId).toBe("w1");
     expect(draft!.startedAt).not.toBeNull();
+  });
+
+  // Hand-off store design spec §5, plan Task 5 (the NAMED Task 5 exit
+  // condition, ROADMAP's AUD-016 item): confirmReplace routes through
+  // `retire()`, not the legacy `clearMonitorRun()`, so the key is
+  // tombstoned — a late producer burst (the dead hook's own linger
+  // window) racing this confirm is REFUSED instead of resurrecting the
+  // record. Real UI path: `handleStart` -> `confirmReplace` via the
+  // returned hook API, exactly what the "Replace session" button calls.
+  it("the door leg — confirmReplace tombstones the key, so a late producer burst can no longer resurrect it", async () => {
+    const monitorRun = monitorRunFor("2026-08-05T12:41:00.000Z");
+    saveMonitorRun(monitorRun);
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
+      wrapper,
+    });
+    act(() => result.current.handleStart());
+    expect(result.current.replaceStage).toBe("unlogged");
+
+    act(() => result.current.confirmReplace());
+
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
+    expect(loadMonitorRun()).toBeNull();
+
+    // THE LATE BURST: the dead hook's own linger-window commit, racing the
+    // replace that already fired for the identical key/revision.
+    const lateBurst = {
+      ...monitorRun,
+      completedAt: "2026-08-05T12:41:05.000Z",
+    };
+    const result2 = commitHandoff(monitorRun.startedAt, 0, lateBurst);
+
+    expect(result2).toStrictEqual({ accepted: false, reason: "retired" });
+    // No resurrection.
+    expect(loadMonitorRun()).toBeNull();
   });
 
   it("no MonitorRun at all: the cross-clear inside confirmReplace is a no-op removeItem, not an error", async () => {

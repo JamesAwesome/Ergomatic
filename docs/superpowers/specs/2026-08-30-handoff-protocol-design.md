@@ -78,6 +78,33 @@ writes `MONITOR_RUN_KEY` or holds a module-level run.
   accepted → assign `runRef` and update the ref; refused → `runRef`
   UNCHANGED, receipt only. A refusal can therefore never diverge
   producer from store — the RF25 shape the unnamed-caller draft rebuilt.
+  **One named exception (ruled at Task 4's review, 2026-08-30): Today's
+  interrupted-session close (`handleLogIt`) is a SECOND committer.** Its
+  discipline, stated: it commits a CLOSE for a DEAD session — the
+  single-unretired invariant means no hook can hold that key, so there
+  is no `lastAcceptedRevisionRef` to diverge from; `expectedRevision`
+  comes from the mount snapshot; a refusal is receipted
+  (`commit-refused`) and degrades to the log door's own counted miss.
+  **A THIRD EXCEPTION, homed here at the final fix round (2026-08-30,
+  controller ruling, after the antagonist proved it undocumented and
+  unpinned in either direction): the CREATE path assigns `runRef`
+  unconditionally, refusal included** (`useMonitorSession.ts`'s
+  `createMonitorRun` commit). Its discipline, stated: a create is
+  `expectedRevision: null` and SEEDS `lastAcceptedRevisionRef` rather
+  than reading it, so on refusal (a tombstoned key, or a second key
+  against §1's invariant) the ref stays `null` while `runRef` holds the
+  new run — the one place in this design where producer and store may
+  legally disagree. It is bounded to the create-refusal path and it is
+  deliberate: the alternative (no `runRef`) is a rowing session with no
+  in-memory record at all, a strictly worse loss than a session whose
+  UI works while its store entry does not exist. The divergence is
+  receipted at the refusal and surfaces at release as
+  `verifyHandoffWritable`'s `cachedVerdict === undefined` branch, which
+  releases rather than holding (nothing is open to hold a write FOR).
+  Reachability is near-zero: it needs a full reconnect to a tombstoned
+  key inside the tombstone's process life. No FOURTH committer or
+  exception exists; any new one needs its discipline written here
+  first.
 - **`retryDurable(sessionKey)` (delta pass kill):** Retry's primitive.
   Re-attempts the durable write of the CURRENT memory entry; updates
   `durableRevision` and the cached verdict; **never bumps `revision`** —
@@ -178,10 +205,10 @@ base before coding. All route through `retire` with key-bound sets:
 | site | retire set | authorization |
 | --- | --- | --- |
 | armed acceptance | the entry staged at the Connect guard (key-bound; superseded revisions proceed + receipt) | `connectGuardStage` reads `currentUnretired()`; the shipped singular copy stays: "You have an unlogged session. Connecting discards it." |
-| `createMonitorRun` defense | whatever remains for the staged key; a different unretired key is structurally absent (§1 invariant) — if ever seen, refused + `store-second-key-refused` receipt | inherited from the armed set. **Also destroys the phone-timer `SessionRun` (`clearRun`, the third line of the same block)** — outside the store, but its authorization is the SAME guard stage: `connectGuardStage`'s first branch stages the SessionRun (`"unlogged"` on `loadRun()`), so the Replace confirmation covers it; stated here so the census has no unbound destroyer |
+| `createMonitorRun` defense | **AMENDED at Task 5's re-review (2026-08-30): the first-frame sweep is the sanctioned FALLBACK destroyer, receipted with its own reason — not a refusal.** The armed retire (row above) is the primary; when a leftover entry still exists at first pull (the armed retire did not fire, or a post-armed producer re-created state), the sweep retires it with a receipt naming the fallback reason, because refusing here would leave a ROWING session with no record at all — a worse loss than an over-broad retire whose entry the guard warned about one screen earlier. The old "refused + `store-second-key-refused`" prescription stands only for the store's create-commit path (§1), never for the sweep. | inherited from the armed set, with the fallback disclosed. **Also destroys the phone-timer `SessionRun` (`clearRun`, the third line of the same block)** — outside the store, but its authorization is the SAME guard stage: `connectGuardStage`'s first branch stages the SessionRun (`"unlogged"` on `loadRun()`), so the Replace confirmation covers it; stated here so the census has no unbound destroyer |
 | save-success | the claim's key (exempt from rejection; richer-at-save counted) | the rower's Save |
 | monitor discard | the claim's key (M+D) | two-tap arm |
-| manual-door discard | the stored key only (M untouched — it may await its own arrival; NOT tombstoned) | two-tap arm + fresh read |
+| manual-door discard | the discarded key, both tiers, tombstoned like every retire — **corrected at Task 2's review (2026-08-30): the old "M untouched / NOT tombstoned" parenthetical was a two-carrier leftover; under the single-unretired invariant the same-key case is the only reachable one and §10 row 6 already states it** | two-tap arm + fresh non-render read |
 | Today discard door | the entry its row rendered (key-bound) | Today's confirm — copy unchanged and still true ("Discard {title} without logging?") |
 | **row-instead (`WorkoutDetail.tsx:298`)** | the stored key | **CORRECTED (PM): this site has NO confirm of its own** — it is a single-tap escape in the interstitial's failure card; its real authorization is the Connect guard's Replace confirmation one screen earlier, making it a third terminus of the staged set (Connect → program → armed | failure-card). The spec routes the staged set to all three termini |
 | Start replace (`useStartWorkout.ts:99`) | the staged entry | Start's guard reads `currentUnretired()` (today it reads the durable tier only — the P1-1 hole at a second door, closed) |
@@ -283,7 +310,12 @@ surprise). The heal is receipted; Retry then succeeds instantly.
 5. **Today's memory-only unlogged row vanishes on reload**,
    indistinguishable from a durable one — receipted at hydration when a
    claimed-but-unpersisted session is absent (the flip side of the §5
-   product gain).
+   product gain). **What shipped (Task 4, ruled acceptable at its
+   review):** the pre-reload `commit-accepted{verdict:"failed"}` receipt
+   IS the counter, not a new hydration-time receipt — a fresh process has
+   no claim to detect against (claims are process-scoped, §1), so
+   "receipted at hydration" is satisfied by the ORIGINAL commit's own
+   receipt rather than a second one invented at the reload that follows.
 6. **Masked durable removal** — kept only as the tombstone's process
    behavior; retired as a live risk (WHATWG: `removeItem` has no throw
    condition). After reload a stale durable entry would serve; the
@@ -294,6 +326,29 @@ surprise). The heal is receipted; Retry then succeeds instantly.
    assumption; a stale same-tab memory copy outranks a second tab's
    fresher durable write for the same key.
 
+## §9A The receipts vocabulary (normative)
+
+The store's ONE side channel. Nothing here returns receipts from a
+method; every one goes through `setReceiptChannel`, and the hook pipes
+them into the diagnostic ring prefixed `store-receipt:<kind>` (never
+`handoff-*` — that namespace belongs to the hook's own hold entries).
+Enumerated because §10's exit criteria require it; the union itself
+lives in `handoffStore.ts` and this table is normative over it.
+
+| kind | emitted when | what it proves |
+| --- | --- | --- |
+| `commit-accepted` | every accepted `commit`, carrying `{sessionKey, revision, verdict}` | the memory tier took the write, and what the DURABLE attempt did (`saved` / `saved-without-series` / `failed`). The `failed` case is §9.2/§9.5's counter — the record is memory-only from here |
+| `commit-refused` | a `commit` refused `stale` or `retired`, with expected vs current revision | the CAS or the tombstone held; §1's "a refusal bumps nothing". Its presence is what distinguishes a refusal from a silent no-op |
+| `store-second-key-refused` | a create-commit while a DIFFERENT key is unretired | §1's single-unretired-session invariant firing — the counted impossible, never silent coexistence |
+| `retry-durable` | every `retryDurable`, with the fresh verdict | Retry re-attempted the durable write; carries NO revision, so it can never be mistaken for a commit (§1: "never bumps `revision`") |
+| `claim` | a consumer's commit effect registers `{sessionKey, renderedRevision}` | the snapshot the screen rendered is on record; claiming cannot fail (§6), so this is a state record, not an outcome |
+| `retire` | once per entry a `retire` set actually found, with authorized vs retired revision, `superseded`, claim state, and reason | the ONE destructive operation ran, on WHICH key, under WHOSE authorization. `superseded: true` is §1's "proceeds and records" case; `claimState: "claimed"` is §9.7's abandoned-claim drop |
+| `handoff-dropped` (`reason: "richer-at-save"`) | alongside (never instead of) a `save-success` retire whose current revision is richer than the claim | §9.4: the rower saved the numbers the screen showed and a richer revision was dropped doing it — counted, per ratified condition 1 |
+| `hydration-malformed` | at most once per process, when hydration finds unparseable durable bytes (preview + length, never the full payload) | §8: the key is treated as ABSENT and the bytes are LEFT ALONE for a later retire/commit to clear |
+| `storage-getter-error` (`get` \| `remove`) | the `localStorage` getter throws on hydration's read, or on a retire's physical removal | §1's WHATWG primary: the getter is the real hazard. `set` is deliberately absent — a failed write is already reported by its own `verdict: "failed"` |
+| `stage-retire-replaced` | `stageRetire` overwrites a non-empty staged set | an authorization was replaced before ever being acted on — nothing was destroyed in either tier |
+| `staged-retire-discarded` | `discardStagedRetire` (cancel, `programDropped`, the confirm panel's own Cancel) | an attempt died with an authorization still pending; distinct from the armed path's silent `takeStagedRetire`, whose own `retire` receipt tells that story |
+
 ## §10 The gate (self-contained; RF24-shaped; mutations of invariants)
 
 All rows start above the producer (replay harness over real capture
@@ -301,17 +356,156 @@ bytes, virtual clock, injected schedule; PAYLOAD-INSPECTING storage
 stubs — deny by content, never by count alone; the existing spy already
 receives the serialized value).
 
+**Scope of the real-bytes binding (controller ruling, 2026-08-30, at the
+final fix round — the antagonist read the header above as binding on
+every row and reported row 7's synthetic fixtures as a deviation).** The
+real-capture requirement binds the rows whose invariant involves WIRE
+SEMANTICS — what a frame means, when it arrives, how the machine's own
+numbers reconcile (rows 3, 8, 12 and the burst orderings of row 2).
+Storage-denial semantics are wire-independent: a `QuotaExceededError` on
+a `setItem` behaves identically whatever produced the record, so row 7's
+four shapes stay on synthetic fixtures by ruling, not by omission. A row
+that mixes the two (a denial landing on a specific wire-produced write,
+as row 8 does) takes the real-bytes requirement.
+
 1. **Guard sees what acceptance destroys:** unretired entry
    (memory-only / durable-only / both tiers, ONE key) → Connect and
    Start stage Replace with the shipped singular copy; armed retires the
    staged entry with its receipt; a superseded revision proceeds +
    receipt. Mutations: guard reads one tier → fails; armed retires
    without the staged set (unbound) → the receipt assertion fails.
-2. **Producer update after release, four orderings** (before/after
-   navigation × before/after teardown) — all reach `commit`; the
-   consumer's snapshot unaffected; receipts show accepted revisions.
-   Mutation: gate the post-release commit on a window predicate → the
-   excluded ordering fails.
+   **Note on the tier matrix (ANT-F7, 2026-08-30): it predates the
+   single-slot store and one of its three cells no longer names a
+   distinct state.** Post-hydration, "durable-only" and "both tiers" are
+   the SAME store state — hydration lifts a durable entry into `current`
+   at revision 0, and `read`'s precedence then returns the memory entry
+   in both cases. The genuine distinction the row still gates is
+   memory-only (a live record whose durable writes were denied — §5's
+   product gain) versus a hydrated one. The three-way wording stays as
+   history rather than being rewritten, with this sentence as its
+   correction.
+2. **Producer update after release — TWO orderings on the navigation
+   axis, gated at DIFFERENT strengths, and the row says which is which
+   (amended at #239's review round 6; its occupancy claim NARROWED at
+   round 8, per the reviewer's P1 — round 6 replaced an unevidenced "a
+   wire frame cannot occupy the interval" with an unevidenced "it
+   does", and neither was earned).** In both, the burst backstop
+   releases with no summary in hand and the machine's summary reaches
+   `commit` on both tiers inside `BURST_LINGER_MS`. They differ only in
+   where in React's flush the frame lands:
+   - **(i) INSIDE the interval** between the release's own commit
+     (`useMonitorSession.ts:2158` sets `handoffHeld: false`) and the
+     PASSIVE effect that navigates (`ConnectedSurface.tsx:352-358` →
+     `handleConnectedEnded`). Three facts, kept apart:
+     **(a) the gap is REAL** — React runs a passive effect after the
+     commit that scheduled it, never inside it (PRIMARY: React's
+     documented `useEffect` timing), and nothing text-shaped can close
+     it; **(b) production delivery is TASK-scheduled with no specified
+     order against the navigation task** — on web a notification
+     arrives as a `characteristicvaluechanged` event queued on the
+     **Bluetooth task source**, a task and not a microtask (PRIMARY:
+     `https://webbluetoothcg.github.io/web-bluetooth/#dfn-bluetooth-task-source`),
+     and on native it is a Capacitor plugin callback whose ordering is
+     UNEVIDENCED — we hold no source that pins it; so occupancy is
+     **PLAUSIBLE but not demonstrated**; **(c) the gate is a DEFENSIVE
+     SYNTHETIC ORDERING** — a test-only `MutationObserver` microtask
+     invoking the synchronous fake, which lands in the gap by
+     construction and therefore proves the app ACCEPTS a summary
+     delivered there (acceptance-if-delivered), not that a supported
+     wire producer occupies it. A gate on the task-source race itself
+     is deliberately NOT attempted: with two macrotask sources of
+     unspecified relative order, a deterministic one would be
+     manufactured. Gated at the hook by `useMonitorSession.test.ts`'s
+     `row 2, HOOK LAYER` arm (released, still mounted, still
+     subscribed, commit accepted and receipted after the release, on a
+     `manualSchedule` the test supplies) and at the route by tests 2
+     and 3 in `WorkoutDetail.postReleaseCommit.test.tsx`, which prove
+     WHERE THE WEDGE PUT THE FRAME with production's own released-frame
+     copy ("No numbers to keep." renders only on the `!handoffHeld`
+     branch) beside an unmounted consumer.
+   - **(ii) AFTER the navigation** — the first test in that file, which
+     needs no wedge and carries no such caveat.
+   **The consumer question (i) raises is not a third state.** No
+   consumer exists during the interval; `LogSession` is what the
+   navigation mounts, and its snapshot is taken by a once-only
+   `useState` initializer AT mount. So the only question is which side
+   of the fold-in that mount falls on, and **both sides are now driven
+   through the ORIGINAL navigation, with the WIRE deciding which one
+   happens** (corrected at round 8, per the reviewer's finding 3 — the
+   mount-after-fold-in side used to be gated by an unmount and a fresh
+   router, which is re-entry equivalence and not this ordering):
+   0x0039 delivered ALONE leaves `driver.ts`'s
+   `noteTerminateObservations` holding its observations emit for up to
+   `HASH_SUBWINDOW_MS` (200 ms) waiting for the verification byte, so
+   the mount lands FIRST — the reader's screen does not move and its
+   Save posts what was shown, the machine fields the store now holds
+   absent from that POST (test 2); 0x0039 followed by its 0x003F
+   flushes that emit synchronously (0x003F's own subscriber, driver
+   call site 5), so the FOLD-IN lands first and the consumer the
+   original navigation mounts shows `DISTANCE 244` and Saves exactly
+   those numbers (test 3). Contract A holds on both sides. Test 4 keeps
+   the RE-ENTRY case — a cold door onto an already-folded store — as
+   what it is: equivalence, not ordering. **The receipt
+   requirement names what production actually emits.**
+   `commit-accepted` is NOT observable here: the departing hook's
+   unmount cleanup calls `setReceiptChannel(null)`
+   (`useMonitorSession.ts:4119-4127`), so a post-teardown commit
+   receipts into nothing. The row is therefore gated on production's
+   OWN ring — the stash `teardown` writes and the linger re-writes to
+   `sessionStorage`, whose `summary-recorded` entry is the app's record
+   of the fold-in and the instrument a walk reads. Mutation: gate the
+   post-release commit on a window predicate → the route leg fails.
+   **The evidence is SPLIT across two legs, and neither is the whole
+   claim: the capture leg validates real-byte decoding before release;
+   the route leg validates post-release timing with a CSAFE-correct
+   synthetic summary.** Capture leg:
+   `handoffStoreReplay.test.ts` over
+   `walk-2026-08-25/rests-finished-recording.jsonl.gz`. Route leg:
+   `src/workout/WorkoutDetail.postReleaseCommit.test.tsx` (real
+   `WorkoutDetail` → real `handleConnectedEnded` → real `LogSession`),
+   on production observables only — `currentUnretired()`, the durable
+   bytes, the ring, the rendered screen, and the POST body. There is no
+   single real-capture post-release ordering, and §9.1 says why: the
+   burst corpus is 271-542 ms, entirely inside the 2000 ms backstop, so
+   no recording we hold observed a post-RELEASE producer update at all.
+   The release-relative axis is produced by the backstop timing out
+   (the burst never arriving), never by shifting real bytes later on
+   the clock.
+   **Why the original 2x2 is gone (amended at #239's review round 3,
+   per the reviewer's P1 — "amend the matrix to reachable production
+   orderings and gate those through the actual destination seam"),
+   kept as the reason rather than as a contradiction:** navigation and
+   teardown are ONE React commit — `WorkoutDetail.tsx`'s
+   `handleConnectedEnded`, the only door out of a finished connected
+   session, runs `setConnecting(null)` and `navigate(...)` in a single
+   handler — so there is no after-teardown/before-navigation cell to
+   reach; the release is followed by the navigation with no rower tap in
+   between, since `ConnectedSurface.tsx:352-358` fires `onEnded` the
+   instant `phase === "ended" && !handoffHeld` (**round 6's correction:
+   "no rower tap" is not "no wire frame" — the passive-effect boundary
+   between them is ordering (i) above, whose BEHAVIOUR is gated on a
+   synthetic delivery rather than argued away, and whose real-wire
+   occupancy is left open and labelled**);
+   and the after-navigation/before-teardown gap belongs to row
+   3, whose own note already rules that "an arbitrary driver callback
+   cannot be scheduled there" — scheduling one from a test is the
+   RF24-shaped move that note forbids, and round 1 made it.
+   **How that reduction is established, stated because round 4 caught
+   it being implied instead (reviewer finding 2): it is a
+   SOURCE-REVIEWED reachability assumption about those two named
+   handlers, not a production observable the route leg pins.** The
+   reviewer wrapped `navigate(...)` in `setTimeout(..., 0)` and the
+   route leg stayed green — `waitFor` cannot tell a same-commit route
+   change from one a macrotask later. The assumption therefore carries
+   its own gate: source-shape pins in the route leg's file assert that
+   both handlers defer nothing, and go red on exactly that mutation.
+   **What those pins never covered (round 6, restated at round 8):**
+   they exclude ADDITIONAL deferral written into the handler or the
+   effect; they cannot close React's own passive-effect boundary, and
+   nothing text-shaped could. That gap is ordering (i): the app's
+   behaviour inside it is DRIVEN (synthetically) rather than assumed
+   away, while whether a real wire frame lands there stays open, per
+   (i)(b) above.
 3. **The claim race, with its producer NAMED:** R0 render → **R1
    committed from the OLD hook's passive-cleanup teardown** (the only
    occupant React allows between the new render and its mount effect —
@@ -351,8 +545,18 @@ receives the serialized value).
    `main`'s `recordActual` (`origin/main:monitorRun.ts:832`) before the
    rewrite — demonstrated on the fresh branch's first commit.
 9. **Reload residuals** asserted as residuals (durable serves;
-   denied+reload = counted loss; Today's memory-only row present before
-   reload, absent + receipted after).
+   denied+reload = counted loss, ONE test spanning the producer's denied
+   commit, the reload, and the log door's `no-run` miss — RF24's shape;
+   Today's memory-only row present before reload, absent after).
+   **RECONCILED with §9.5's committed amendment (ANT-F3b, 2026-08-30):
+   "receipted after" is satisfied by the PRE-reload
+   `commit-accepted{verdict:"failed"}` receipt, not by a hydration-time
+   receipt.** The design ruled that out — claims are process-scoped, so a
+   fresh process has nothing to detect the absence against — and this row
+   asked for it anyway. What a test may assert about receipts here is
+   forensic evidence captured BEFORE the reload; the vanish itself is
+   gated by the DOM pair (row present, then absent), never by a receipt
+   the reloaded process was never going to emit.
 10. **Abandon path:** claim, unmount without saving, next acceptance →
     per-entry receipt counts claimed-not-consumed.
 11. **Invariant mutations, each with its named detector:** reuse a
@@ -361,6 +565,43 @@ receives the serialized value).
     old reference); reorder tier precedence → row 8 fails; drop a
     receipt kind → its named row fails; write the durable key from
     outside the store → a module-boundary lint/grep gate fails.
+    **Scope of the boundary gate (amended at #239's review round 1, per
+    the reviewer's P2; its module-scope half REWRITTEN at round 4, per
+    the reviewer's P2 on the column-zero heuristic):** the gate is two
+    self-tested detectors of DIFFERENT strength, and it says which is
+    which. The WRITE detectors are TEXT over named syntactic forms — the
+    key by constant, by literal, by `key:`-property indirection, plus
+    legacy-writer call sites; their blind spots (an aliased key
+    variable, `app/scripts/**` unscanned, a `//` inside a string
+    literal) are pinned by MISSES self-tests rather than claimed
+    covered. The MODULE-SCOPE detector is genuinely SCOPE-AWARE, and
+    since #239's round 5 it is a HOISTING traversal rather than a walk of
+    top-level statements — the distinction matters per keyword, which is
+    the whole point: every `var` anywhere in the module's own function
+    scope is collected (top-level blocks, `if`/`try`/`switch` bodies and
+    all three for-heads included), stopping at any node that opens a new
+    `var` scope (function, method, accessor, constructor, class static
+    block, namespace body), while `let` is collected only as a top-level
+    statement, because a block-scoped `let` can never outlive its block
+    and is not a module-level carrier. So `if (x) { var run = null; }`
+    IS caught, `for (var …)` heads and destructuring patterns are caught,
+    `for (let …)` heads and `let`s in top-level blocks correctly are not,
+    and a `let` inside a string or a comment cannot false-flag. Each
+    scanned file is parsed EXACTLY ONCE, and that invariant is gated by
+    what it actually needs (round 8, superseding round 7's weaker claim):
+    a `parseModule` INVOCATION count asserted equal to the number of
+    scanned files, plus a detector-input IDENTITY check (the `fileName`
+    the detector was handed, asserted equal to each scanned path). Round
+    7's single-definition-site count alone did NOT close this — a
+    detector-only reparse through the same helper with a wrong name kept
+    the site count at one and the suite green — so the stronger gates
+    exist and that exact reparse mutation now fails both of them.
+    Its own residuals are named and pinned as MISSES too: a
+    `const`-object carrier and a closure-held run (both syntax-invisible
+    to any keyword-scope check), plus an aliased-key carrier, which
+    belongs to the WRITE detectors' text half rather than to this one.
+    Per-door tests and §1's review discipline carry the semantic half of
+    "nothing else writes."
 12. **The binding route gate:** `WorkoutDetail.connectedRecovery.test.tsx`
     restored AS A FILE and RETARGETED (its two `MONITOR_RUN_KEY`
     assertions survive; its slot-vocabulary comments get the budgeted

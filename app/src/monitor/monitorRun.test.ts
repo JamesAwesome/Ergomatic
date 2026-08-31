@@ -179,10 +179,10 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
     expect(loadMonitorRun()).toBeNull();
   });
 
-  it("returns null and clears the key for garbage JSON", () => {
+  it("returns null for garbage JSON and LEAVES THE BYTES ALONE", () => {
     localStorage.setItem(MONITOR_RUN_KEY, "{not json");
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("{not json");
   });
 
   // 7C Task 1: this test used `v: 2` as its "unknown version" fixture before
@@ -190,49 +190,50 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
   // `v: 3` now plays that role instead, so the test still proves what its
   // name says rather than accidentally asserting the opposite of the new
   // behavior.
-  it("returns null and clears the key for an unknown version, leaving a SessionRun (a separate key) untouched", () => {
+  it("returns null for an unknown version, leaving BOTH its own bytes and a SessionRun (a separate key) untouched", () => {
     const run = freshMonitorRun();
     const sessionRun = fakeSessionRun(null);
     saveRun(sessionRun);
-    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ ...run, v: 3 }));
+    const raw = JSON.stringify({ ...run, v: 3 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
 
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
     expect(loadRun()).toStrictEqual(sessionRun);
   });
 
-  it("returns null and clears the key for a bare {v:1} with none of the load-bearing fields", () => {
+  it("returns null for a bare {v:1} with none of the load-bearing fields, bytes intact", () => {
     localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ v: 1 }));
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(
+      JSON.stringify({ v: 1 }),
+    );
   });
 
-  it("returns null and clears the key for valid JSON that isn't a plain record (a bare number)", () => {
+  it("returns null for valid JSON that isn't a plain record (a bare number), bytes intact", () => {
     localStorage.setItem(MONITOR_RUN_KEY, "42");
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("42");
   });
 
-  it("returns null and clears the key for valid JSON that's null", () => {
+  it("returns null for valid JSON that's null, bytes intact", () => {
     localStorage.setItem(MONITOR_RUN_KEY, "null");
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("null");
   });
 
-  it("returns null and clears the key for valid JSON that's an array, not an object", () => {
+  it("returns null for valid JSON that's an array, not an object, bytes intact", () => {
     localStorage.setItem(MONITOR_RUN_KEY, "[]");
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("[]");
   });
 
-  it("returns null for v:1 with workoutId as the wrong shape (a number — neither null nor a string)", () => {
+  it("returns null for v:1 with workoutId as the wrong shape (a number — neither null nor a string), bytes intact", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, workoutId: 5 }),
-    );
+    const raw = JSON.stringify({ ...run, workoutId: 5 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   // 7C Task 1 (spec §2: "a v1 record loads as today"). A hand-built v1 JSON
@@ -303,29 +304,72 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
 
   it("returns null for v:2 with logSeed as the wrong shape (a string, not an object)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, v: 2, logSeed: "nope" }),
-    );
+    const raw = JSON.stringify({ ...run, v: 2, logSeed: "nope" });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:2 with logSeed.steps as the wrong shape (an object, not an array)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, v: 2, logSeed: { steps: {}, paces: {} } }),
-    );
+    const raw = JSON.stringify({
+      ...run,
+      v: 2,
+      logSeed: { steps: {}, paces: {} },
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for an unrecognized v (3) — same discard as any other unknown version", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ ...run, v: 3 }));
+    const raw = JSON.stringify({ ...run, v: 3 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
+  });
+
+  // PR #239 review round 1, item 1 (P1). The getter itself can throw — a
+  // `SecurityError` from `localStorage` when the origin's storage is denied
+  // (WHATWG storage: a `SecurityError` on the attribute access itself).
+  // Until this round the `getItem` call sat OUTSIDE this function's `try`,
+  // so the throw escaped the loader entirely and, through `Today.tsx`'s
+  // mount effect, escaped React's render as an unhandled error. Spec §8
+  // rules the opposite for the durable tier the store now shares: "the
+  // storage GETTER (`SecurityError`) is wrapped by the store's accessor — a
+  // getter throw makes both tiers behave as absent-durable". The legacy
+  // loader now behaves the same way.
+  //
+  // Denial is NOT malformed bytes: nothing is cleared here either (there is
+  // nothing readable to judge), so §8's "never cleared during a read" rule
+  // is untouched — the self-clear stays deleted.
+  it("returns null when the storage GETTER itself throws — denial reads as absent, and nothing is cleared (spec §8)", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+    const real = Storage.prototype.getItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(function (this: Storage, key: string): string | null {
+        if (key === MONITOR_RUN_KEY) {
+          throw new DOMException("storage is denied", "SecurityError");
+        }
+        return real.call(this, key);
+      });
+    try {
+      expect(loadMonitorRun()).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    // ...and the record is still there once the denial lifts: an absent
+    // READ must never have been a destructive one.
+    expect(loadMonitorRun()).toStrictEqual(viaJson(run));
   });
 
   it("round-trips workoutId: null (a hand-built program, not a library workout) same as a real id", () => {
@@ -336,79 +380,82 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
 
   it("returns null for v:1 with title as the wrong shape (missing/non-string)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ ...run, title: 5 }));
+    const raw = JSON.stringify({ ...run, title: 5 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with program as the wrong shape (an array, not a record)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, program: [] }),
-    );
+    const raw = JSON.stringify({ ...run, program: [] });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with program.intervals as the wrong shape (an object, not an array)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, program: { intervals: {} } }),
-    );
+    const raw = JSON.stringify({ ...run, program: { intervals: {} } });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with actuals as the wrong shape (an object, not an array)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, actuals: {} }),
-    );
+    const raw = JSON.stringify({ ...run, actuals: {} });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with deviceName as the wrong shape (missing/non-string)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, deviceName: 5 }),
-    );
+    const raw = JSON.stringify({ ...run, deviceName: 5 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with startedAt as the wrong shape (missing/non-string)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, startedAt: 1 }),
-    );
+    const raw = JSON.stringify({ ...run, startedAt: 1 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with completedAt as the wrong shape (a number — neither null nor a string)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, completedAt: 5 }),
-    );
+    const raw = JSON.stringify({ ...run, completedAt: 5 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with terminated as the wrong shape (a string, not a boolean)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, terminated: "true" }),
-    );
+    const raw = JSON.stringify({ ...run, terminated: "true" });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("clearMonitorRun removes the stored run", () => {
@@ -465,7 +512,11 @@ describe("createMonitorRun", () => {
       completedAt: null,
       terminated: false,
     });
-    expect(loadMonitorRun()).toStrictEqual(viaJson(created));
+    // Hand-off store design spec §1, plan Task 3: `createMonitorRun` is now
+    // a PURE BUILDER — it no longer persists. The create-commit lives at
+    // its one production caller, `useMonitorSession.ts`'s hook (tested at
+    // the hook level, not here).
+    expect(loadMonitorRun()).toBeNull();
   });
 
   it("cross-clear: creating a MonitorRun clears an existing SessionRun outright", () => {
@@ -535,41 +586,36 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
     restDistanceMeters: 0,
   };
 
-  it("appends to a LIVE run, in arrival order, and persists the result", () => {
+  it("appends to a LIVE run, in arrival order — PURE (hand-off store design spec §1, plan Task 3): no longer persists", () => {
     const run = freshMonitorRun();
-    saveMonitorRun(run);
 
     const afterFirst = recordActual(run, actual1);
     const afterSecond = recordActual(afterFirst, actual2);
 
     expect(afterSecond.actuals).toStrictEqual([actual1, actual2]);
-    expect(loadMonitorRun()).toStrictEqual(viaJson(afterSecond));
+    expect(loadMonitorRun()).toBeNull();
     // A new record each time — the caller's own copy is never reached back
     // into (`session/engine.ts`'s idiom).
     expect(run.actuals).toStrictEqual([]);
     expect(afterFirst.actuals).toStrictEqual([actual1]);
   });
 
-  it("a CLOSED run is immutable: the same actual arriving after completedAt changes nothing, in memory or in storage", () => {
+  it("a CLOSED run is immutable: the same actual arriving after completedAt changes nothing", () => {
     // The record-side half of the run scoping. The driver already refuses
     // to normalize a post-run boundary into a finished workout (it emits
     // `index: null` + `boundary-out-of-run`), but a `MonitorRun` outlives
     // the driver instance that produced it, so the record refuses on its
-    // own terms too. Against a `recordActual` without the guard, both
-    // assertions below fail — the actual lands in a finished workout's
-    // record and gets persisted there.
+    // own terms too.
     const closed: MonitorRun = {
       ...freshMonitorRun(),
       actuals: [actual1],
       completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
     };
-    saveMonitorRun(closed);
 
     const after = recordActual(closed, actual2);
 
     expect(after).toBe(closed);
     expect(after.actuals).toStrictEqual([actual1]);
-    expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
   });
 
   it("refuses a closed run that was TERMINATED just the same — 'closed' is completedAt, not how it ended", () => {
@@ -607,106 +653,51 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
       ...freshMonitorRun(),
       completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
     };
-    saveMonitorRun(closed);
 
     const after = recordActual(closed, finalActual, { finalBoundary: true });
 
     expect(after).not.toBe(closed);
     expect(after.actuals).toStrictEqual([finalActual]);
-    // Persisted, not merely returned: 7C's log screen reads the RECORD.
-    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
     // And nothing else about the closed record moved.
     expect(after.completedAt).toBe(closed.completedAt);
     expect(after.terminated).toBe(false);
   });
 
-  it("storage-spine design spec §2's late side (Task 3): a finish-grace actual arriving after MONITOR_RUN_KEY was cleared out from under it — the resurrection race — is refused, not resurrected", () => {
-    // `useMonitorSession.ts`'s deferred teardown is the caller old enough
-    // for this to matter: a `run` object it decided was acceptable BEFORE
-    // the burst linger started can now be handed to `recordActual` up to
-    // `BURST_LINGER_MS` later, after the rower discarded or logged the
-    // run from a screen that has no idea this stale object still exists.
-    const closed: MonitorRun = {
-      ...freshMonitorRun(),
-      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
-    };
-    // Deliberately NOT saved to storage — storage holds nothing for this
-    // run at write time, exactly the `clearMonitorRun()` shape.
-    expect(loadMonitorRun()).toBeNull();
-
-    const after = recordActual(closed, finalActual, { finalBoundary: true });
-
-    expect(after).toBe(closed);
-    expect(after.actuals).toStrictEqual([]);
-    // Nothing resurrected: storage is still empty, not a record this
-    // caller's stale copy just wrote back into existence.
-    expect(loadMonitorRun()).toBeNull();
-  });
-
-  it("...and the identical refusal when storage now holds a DIFFERENT run — the finish-grace actual never lands on somebody else's record", () => {
-    const closed: MonitorRun = {
-      ...freshMonitorRun(),
-      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
-    };
-    const unrelated: MonitorRun = {
-      ...freshMonitorRun(),
-      startedAt: "2026-08-05T13:00:00.000Z",
-    };
-    saveMonitorRun(unrelated);
-
-    const after = recordActual(closed, finalActual, { finalBoundary: true });
-
-    expect(after).toBe(closed);
-    expect(after.actuals).toStrictEqual([]);
-    expect(loadMonitorRun()).toStrictEqual(viaJson(unrelated));
-  });
-
-  it("...but the ORDINARY case is unaffected: storage still holding this exact run accepts the finish-grace actual same as always", () => {
-    const closed: MonitorRun = {
-      ...freshMonitorRun(),
-      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
-    };
-    saveMonitorRun(closed);
-
-    const after = recordActual(closed, finalActual, { finalBoundary: true });
-
-    expect(after).not.toBe(closed);
-    expect(after.actuals).toStrictEqual([finalActual]);
-    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
-  });
-
-  // Final whole-branch review, LOW-1: the late-acceptance branch used to
-  // rebuild `next` by spreading the CALLER's `run` argument, discarding
-  // the record `stillLive` had just re-read from storage. This test makes
-  // the two provably different objects — a stale caller copy (an old
-  // `title`) versus what storage genuinely holds (a fresher one) — so a
-  // regression back to spreading `run` fails loudly instead of silently
-  // passing on the every-day case where the two happen to agree.
-  it("builds the late-acceptance write on the record `stillLive` just re-read from storage, not a stale copy the caller was holding (LOW-1)", () => {
+  // Hand-off store design spec §3, plan Task 3 — THE FIX FOR THE PROVEN
+  // `main` DEFECT, replacing the three tests this comment used to sit
+  // above (all of which pinned `stillLive`'s OWN re-read-storage
+  // behavior — now deleted, no callers remain). The base for the late/
+  // closed finish-grace write is now ALWAYS the caller's own `run`
+  // argument, never a storage re-read: a live→closed write that was
+  // DENIED earlier no longer resurrects a stale storage copy as this
+  // function's base, because there is no storage read here at all
+  // anymore. This is `handoffStoreReplay.test.ts`'s row-8 gate exercised
+  // at the pure-function level: the caller (the hook) is the one and
+  // only source of truth this function ever consults.
+  it("builds the late-acceptance write on the CALLER's own record, never a storage re-read — the §3 fix, at the pure-function level", () => {
     const staleCallerCopy: MonitorRun = {
       ...freshMonitorRun(),
-      title: "Stale title the caller was holding",
+      title: "The caller's own current record",
       completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
     };
-    // Storage holds a DIFFERENT object — same identity (`startedAt`), a
-    // fresher `title` — simulating a write that landed between the
-    // caller's own copy and this call (the up-to-2000ms burst-linger gap
-    // the guard above's own comment names).
-    const freshInStorage: MonitorRun = {
+    // Storage holds something ELSE entirely — a stale, unrelated write, or
+    // nothing at all. Either way this function must never consult it: its
+    // only base is the `run` argument.
+    const somethingElseInStorage: MonitorRun = {
       ...staleCallerCopy,
-      title: "Fresh title actually in storage",
+      title: "Whatever storage happens to hold — must be ignored",
     };
-    saveMonitorRun(freshInStorage);
+    saveMonitorRun(somethingElseInStorage);
 
     const after = recordActual(staleCallerCopy, finalActual, {
       finalBoundary: true,
     });
 
-    // The result reflects STORAGE's title, not the stale caller copy's.
-    expect(after.title).toBe("Fresh title actually in storage");
-    expect(after.title).not.toBe(staleCallerCopy.title);
+    // The result reflects the CALLER's own title, never storage's.
+    expect(after.title).toBe("The caller's own current record");
     expect(after.actuals).toStrictEqual([finalActual]);
-    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
+    // And this function never touched storage at all.
+    expect(loadMonitorRun()).toStrictEqual(viaJson(somethingElseInStorage));
   });
 
   it("...but ONE of them: a second flagged actual naming a DIFFERENT interval is refused, not filed", () => {
@@ -721,7 +712,6 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
       actuals: [finalActual],
       completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
     };
-    saveMonitorRun(closed);
 
     // An interval this record does NOT hold, so the not-already-filed check
     // alone would let it through — it is refused for naming interval 1 of a
@@ -731,7 +721,6 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
 
     expect(after).toBe(closed);
     expect(after.actuals).toStrictEqual([finalActual]);
-    expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
   });
 
   it("...and only for an interval it does not already hold — the flag is not a skeleton key", () => {
@@ -743,7 +732,6 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
       actuals: [finalActual],
       completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
     };
-    saveMonitorRun(closed);
 
     const repeat: IntervalActual = { ...actual2, index: lastIndex };
     const after = recordActual(closed, repeat, { finalBoundary: true });
@@ -767,7 +755,6 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
 
   it("a LIVE run is unaffected by the flag either way — the grace is a rule about CLOSED records", () => {
     const run = freshMonitorRun();
-    saveMonitorRun(run);
 
     const after = recordActual(run, actual1, { finalBoundary: true });
 
@@ -786,9 +773,8 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
 
   const finishedAt = new Date("2026-08-05T12:41:00.000Z");
 
-  it("stamps completedAt and how it ended, and persists the result", () => {
+  it("stamps completedAt and how it ended — PURE (hand-off store design spec §1, plan Task 3): no longer persists", () => {
     const run = { ...freshMonitorRun(), actuals: [actual1] };
-    saveMonitorRun(run);
 
     const done = completeMonitorRun(
       run,
@@ -803,7 +789,7 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
     // Phase LL Task 4: the new third field, stamped in the same call.
     expect(done.endedBy).toBe("finished");
     expect(done.actuals).toStrictEqual([actual1]);
-    expect(loadMonitorRun()).toStrictEqual(viaJson(done));
+    expect(loadMonitorRun()).toBeNull();
     // A new record, the caller's own copy untouched (`recordActual`'s
     // idiom).
     expect(run.completedAt).toBeNull();
@@ -835,7 +821,6 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
       completedAt: finishedAt.toISOString(),
       terminated: true,
     };
-    saveMonitorRun(closed);
     const later = new Date("2026-08-05T12:45:00.000Z");
 
     const after = completeMonitorRun(
@@ -851,12 +836,10 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
     // never stamps `endedBy` over whatever (nothing, here) the first close
     // left in place.
     expect(after.endedBy).toBeUndefined();
-    expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
   });
 
   it("a closed record refuses later actuals — completeMonitorRun is what turns the guard on", () => {
     const run = freshMonitorRun();
-    saveMonitorRun(run);
 
     const done = completeMonitorRun(
       run,
@@ -865,7 +848,6 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
     );
 
     expect(recordActual(done, actual1)).toBe(done);
-    expect(loadMonitorRun()?.actuals).toStrictEqual([]);
   });
 });
 
@@ -1118,7 +1100,6 @@ describe("RC-1 — work and rest, summed separately at natural close (storage-sp
       firstActual.distanceMeters + finalActual.distanceMeters,
     );
     expect(after.restMeters).toBe(10 + 0);
-    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
   });
 
   it("a late finish-grace actual arriving after a TERMINATE close never gets sums computed either — recordActual's own gate (endedBy === 'finished') mirrors completeMonitorRun's", () => {
@@ -1129,7 +1110,6 @@ describe("RC-1 — work and rest, summed separately at natural close (storage-sp
       terminated: true,
       endedBy: "rower",
     };
-    saveMonitorRun(terminated);
     const late: IntervalActual = { ...actual1, index: lastIndex };
 
     const after = recordActual(terminated, late, { finalBoundary: true });
@@ -1201,23 +1181,46 @@ describe("anyLiveSession: the coexistence truth table", () => {
 
 // Phase 7B Task 2, spec §3. The predicate half of the Connect guard; the
 // staged confirm it feeds is ConnectAction.test.tsx's.
+//
+// Hand-off store design spec §5, plan Task 5: `connectGuardStage` now
+// takes the MonitorRun half of its answer as a parameter (this file's own
+// doc comment on the function explains why it cannot read the store
+// itself — a circular import with `handoffStore.ts`). Every test below
+// still seeds via `saveMonitorRun` (the durable tier only, this file's own
+// long-standing fixture idiom) and derives the parameter from
+// `loadMonitorRun() !== null` — the real caller (`ConnectAction.tsx`)
+// derives the identical boolean from `currentUnretired()` instead, which
+// ALSO sees a memory-only entry; that broader visibility is
+// `ConnectAction.test.tsx`'s and `handoffStore.test.ts`'s to prove, not
+// this function's own descending-severity branching, which is all these
+// tests are about.
+//
+// STATED PLAINLY (Task 5 review fix round, 2026-08-30, folded in as a
+// disclosed ⚠ note): this describe block exercises the PARAMETER's own
+// branching — given a caller has ALREADY asserted "yes/no, an unretired
+// MonitorRun exists" — never the STORE's own tier visibility (whether a
+// memory-only, durable-write-denied record counts as "exists" at all).
+// A reader looking for the P1-1 memory-only-record proof will not find
+// it here by design; it lives in `ConnectAction.test.tsx`'s own
+// "a memory-only record (durable write denied) is visible to the guard"
+// test, and `useStartWorkout.test.tsx`'s sibling for the Start door.
 describe("connectGuardStage: the Connect door's lock", () => {
   beforeEach(() => localStorage.clear());
 
   const finishedAt = new Date("2026-08-05T13:00:00.000Z").toISOString();
 
   it("nothing on record: null — Connect proceeds with no ceremony", () => {
-    expect(connectGuardStage()).toBeNull();
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBeNull();
   });
 
   it("a finished-but-unlogged SessionRun: 'unlogged' — the F5 record", () => {
     saveRun(fakeSessionRun(finishedAt));
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("a live SessionRun: 'in-progress' — destroyed just as completely, lesser loss", () => {
     saveRun(fakeSessionRun(null));
-    expect(connectGuardStage()).toBe("in-progress");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("in-progress");
   });
 
   // Task 5 review, HIGH-1: `createMonitorRun`'s own `saveMonitorRun` call
@@ -1229,12 +1232,12 @@ describe("connectGuardStage: the Connect door's lock", () => {
   // ALSO clears it unconditionally. The guard reads it now.
   it("a finished-but-unlogged MonitorRun (no SessionRun on record): 'unlogged' — 7C's prefill input", () => {
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("a live MonitorRun (no SessionRun on record): 'unlogged' — dead-run truth: any MonitorRun visible at Connect's door is dead (the connected session lives on WorkoutDetail's surface, and reload/navigation tears it down), so completedAt === null here means interrupted, not running (F6 spec 2b, exit criterion 5)", () => {
     saveMonitorRun(freshMonitorRun());
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   // Pin, not a red-first case (antagonist correction #3): completedAt !==
@@ -1248,30 +1251,30 @@ describe("connectGuardStage: the Connect door's lock", () => {
       new Date(finishedAt),
     );
     saveMonitorRun(stamped);
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("a SessionRun on record wins over a MonitorRun — same descending-severity order handleStart already uses", () => {
     saveRun(fakeSessionRun(finishedAt));
     saveMonitorRun(freshMonitorRun());
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("both records finished-but-unlogged: staged ONCE, not twice — a single ConnectGuardStage value, the SessionRun's own sentence", () => {
     saveRun(fakeSessionRun(finishedAt));
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("garbage in RUN_KEY falls through to the MonitorRun check (loadRun's own Resilience #5)", () => {
     localStorage.setItem(RUN_KEY, "{{ not json");
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("garbage in both keys: null — nothing at risk", () => {
     localStorage.setItem(RUN_KEY, "{{ not json");
-    expect(connectGuardStage()).toBeNull();
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBeNull();
   });
 
   // THE MUTATION TARGET, stated as an assertion rather than left to a
@@ -1284,7 +1287,7 @@ describe("connectGuardStage: the Connect door's lock", () => {
     saveRun(fakeSessionRun(finishedAt));
 
     expect(anyLiveSession()).toBe("none");
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 
   it("still disagrees when BOTH records are stale — anyLiveSession()'s 'both-stale' row is still a discard for Connect", () => {
@@ -1292,7 +1295,7 @@ describe("connectGuardStage: the Connect door's lock", () => {
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
 
     expect(anyLiveSession()).toBe("none");
-    expect(connectGuardStage()).toBe("unlogged");
+    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
   });
 });
 
@@ -1376,12 +1379,12 @@ describe("endedBy: the additive close-reason marker (F6, widened Phase LL Task 4
 
   it("rejects a record whose endedBy is any other value — proves the widening did not open the gate to arbitrary strings", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, endedBy: "garbage" }),
-    );
+    const raw = JSON.stringify({ ...run, endedBy: "garbage" });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("rejects a record whose endedBy is a plausible-but-unlisted string (e.g. a future sixth value) — the validator is a closed set, not a type-only contract", () => {
@@ -1397,9 +1400,8 @@ describe("endedBy: the additive close-reason marker (F6, widened Phase LL Task 4
 describe("completeInterruptedRun: the rower's door (F6)", () => {
   beforeEach(() => localStorage.clear());
 
-  it("stamps completedAt from now and endedBy interrupted, persists, leaves terminated untouched", () => {
+  it("stamps completedAt from now and endedBy interrupted, leaves terminated untouched — PURE (hand-off store design spec §1, plan Task 3): no longer persists", () => {
     const run = { ...freshMonitorRun(), terminated: false };
-    saveMonitorRun(run);
 
     const out = completeInterruptedRun(
       run,
@@ -1409,8 +1411,9 @@ describe("completeInterruptedRun: the rower's door (F6)", () => {
     expect(out.completedAt).toBe("2026-08-16T10:00:00.000Z");
     expect(out.endedBy).toBe("interrupted");
     expect(out.terminated).toBe(false);
-    // Persisted, not merely returned: the record outlives this call.
-    expect(loadMonitorRun()?.endedBy).toBe("interrupted");
+    // Its one caller (`Today.tsx`'s `UnloggedMonitorRow`) persists the
+    // returned record itself now — this function no longer does.
+    expect(loadMonitorRun()).toBeNull();
     // A new record, the caller's own copy untouched (`recordActual`'s
     // and `completeMonitorRun`'s shared idiom).
     expect(run.completedAt).toBeNull();
@@ -1421,7 +1424,6 @@ describe("completeInterruptedRun: the rower's door (F6)", () => {
       ...freshMonitorRun(),
       completedAt: new Date("2026-08-16T09:00:00.000Z").toISOString(),
     };
-    saveMonitorRun(closed);
 
     const out = completeInterruptedRun(
       closed,
@@ -1431,7 +1433,6 @@ describe("completeInterruptedRun: the rower's door (F6)", () => {
     expect(out).toBe(closed);
     expect(out.completedAt).toBe(closed.completedAt);
     expect(out.endedBy).toBeUndefined();
-    expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
   });
 });
 
@@ -1656,12 +1657,12 @@ describe("series / seriesDropped: the additive fields (§2 storage-home, never-m
 
   it("rejects a record whose seriesDropped is any value other than true", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, seriesDropped: false }),
-    );
+    const raw = JSON.stringify({ ...run, seriesDropped: false });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 });
 
@@ -1878,10 +1879,10 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
     );
   }
 
-  it("writes summaryTotals and verificationBytes onto a naturally-closed record, preserving every other field byte-for-byte", () => {
+  it("writes summaryTotals and verificationBytes onto a naturally-closed record, preserving every other field byte-for-byte — PURE (hand-off store design spec §1/§3, plan Task 3): base is the CALLER's own record, never a storage re-read", () => {
     const closed = naturallyClosedRun();
 
-    const after = appendSummaryObservations(closed.startedAt, {
+    const after = appendSummaryObservations(closed, {
       totals,
       detail,
       verificationBytes,
@@ -1893,26 +1894,26 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
       summaryDetail: detail,
       verificationBytes,
     });
-    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
+    // No longer persists — the hook is the sole committer now.
+    expect(loadMonitorRun()).toBeNull();
   });
 
   it("writes summaryDetail in the same single write as summaryTotals", () => {
     const closed = naturallyClosedRun();
 
-    const next = appendSummaryObservations(closed.startedAt, {
+    const next = appendSummaryObservations(closed, {
       totals,
       detail,
       verificationBytes,
     });
 
     expect(next?.summaryDetail).toStrictEqual(detail);
-    expect(loadMonitorRun()?.summaryDetail).toStrictEqual(detail);
   });
 
   it("folds totals and detail alone when the burst produced no 0x003F bytes — verificationBytes is independently optional", () => {
     const closed = naturallyClosedRun();
 
-    const after = appendSummaryObservations(closed.startedAt, {
+    const after = appendSummaryObservations(closed, {
       totals,
       detail,
     });
@@ -1920,60 +1921,30 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
     expect(after?.summaryTotals).toStrictEqual(totals);
     expect(after?.summaryDetail).toStrictEqual(detail);
     expect(after?.verificationBytes).toBeUndefined();
-    expect(loadMonitorRun()?.verificationBytes).toBeUndefined();
   });
 
-  it("returns null, writing nothing, when MONITOR_RUN_KEY is empty — the clearMonitorRun() resurrection race", () => {
-    const closed = naturallyClosedRun();
-    clearMonitorRun();
+  // The FORMER "returns null when MONITOR_RUN_KEY is empty" and "returns
+  // null when the stored run's startedAt does not match" tests are DELETED
+  // here (hand-off store design spec §1/§3, plan Task 3): this function no
+  // longer reads storage at all, so it has no way to observe either
+  // condition — a caller passing the wrong `run` is the caller's own bug,
+  // not something this pure function can detect. The equivalent PRODUCTION
+  // concerns now live one layer up: a rower having already logged/
+  // discarded the run is the STORE's own tombstone refusing the hook's
+  // `commit` call (`handoffStore.test.ts`'s "retired" tests, spec §1), and
+  // a second `program()` re-arm overwriting the hook's own `runRef` before
+  // this write is a hook-level concern (`useMonitorSession.test.ts`'s own
+  // gate-row-5 tests).
 
-    const after = appendSummaryObservations(closed.startedAt, {
-      totals,
-      detail,
-    });
-
-    expect(after).toBeNull();
-    expect(loadMonitorRun()).toBeNull();
-  });
-
-  it("returns null when the stored run's startedAt does not match — a second program() re-arm overwrote it", () => {
-    const closed = naturallyClosedRun();
-    const burstStartedAt = closed.startedAt;
-    // A second program() call re-armed the hook with an unrelated run
-    // under the same key AFTER this burst's own run had already closed —
-    // the burst is now late against a record that isn't its own.
-    const rearmed: MonitorRun = {
-      ...freshMonitorRun(),
-      v: 2,
-      logSeed: TEST_SEED,
-      startedAt: "2026-08-05T13:00:00.000Z",
-    };
-    const other = completeMonitorRun(
-      rearmed,
-      { terminated: false, endedBy: "finished" },
-      finishedAt,
-    );
-
-    const after = appendSummaryObservations(burstStartedAt, {
-      totals,
-      detail,
-    });
-
-    expect(after).toBeNull();
-    expect(loadMonitorRun()).toStrictEqual(viaJson(other));
-  });
-
-  it("returns null when the stored run is still live — completedAt === null", () => {
+  it("returns null when the run passed in is still live — completedAt === null", () => {
     const run: MonitorRun = { ...freshMonitorRun(), v: 2, logSeed: TEST_SEED };
-    saveMonitorRun(run);
 
-    const after = appendSummaryObservations(run.startedAt, {
+    const after = appendSummaryObservations(run, {
       totals,
       detail,
     });
 
     expect(after).toBeNull();
-    expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
   });
 
   // Task 2 widens the door from "finished" alone to the complement of
@@ -1988,7 +1959,7 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
       finishedAt,
     );
 
-    const after = appendSummaryObservations(done.startedAt, {
+    const after = appendSummaryObservations(done, {
       totals,
       detail,
     });
@@ -1996,12 +1967,10 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
     expect(after).not.toBeNull();
     expect(after?.summaryTotals).toStrictEqual(totals);
     expect(after?.summaryDetail).toStrictEqual(detail);
-    expect(loadMonitorRun()?.summaryTotals).toStrictEqual(totals);
   });
 
   it("still refuses link-lost and program-failed closes", () => {
     for (const endedBy of ["link-lost", "program-failed"] as const) {
-      localStorage.clear();
       const run: MonitorRun = {
         ...freshMonitorRun(),
         v: 2,
@@ -2013,19 +1982,18 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
         finishedAt,
       );
 
-      const after = appendSummaryObservations(done.startedAt, {
+      const after = appendSummaryObservations(done, {
         totals,
         detail,
       });
 
       expect(after).toBeNull();
-      expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
     }
   });
 
-  it("write-once door still keyed on summaryTotals — returns null when summaryTotals already exists, even for a second burst's own numbers", () => {
+  it("write-once door still keyed on summaryTotals — returns null when the CALLER's own base already carries them, even for a second burst's own numbers", () => {
     const closed = naturallyClosedRun();
-    const first = appendSummaryObservations(closed.startedAt, {
+    const first = appendSummaryObservations(closed, {
       totals,
       detail,
     });
@@ -2040,26 +2008,32 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
       ...detail,
       avgStrokeRate: 30,
     };
-    const second = appendSummaryObservations(closed.startedAt, {
+    // The caller (the hook) passes its OWN latest record — which, in
+    // production, already reflects the first accepted write. Passing
+    // `first` here (not `closed`) is what makes this guard's write-once
+    // behavior observable at the pure-function level.
+    const second = appendSummaryObservations(first!, {
       totals: differentTotals,
       detail: differentDetail,
     });
 
     expect(second).toBeNull();
-    expect(loadMonitorRun()?.summaryTotals).toStrictEqual(totals);
-    expect(loadMonitorRun()?.summaryDetail).toStrictEqual(detail);
   });
 
   it("round-trips a record carrying observations through isMonitorRun — v stays 2, no migration", () => {
     const closed = naturallyClosedRun();
 
-    const after = appendSummaryObservations(closed.startedAt, {
+    const after = appendSummaryObservations(closed, {
       totals,
       detail,
       verificationBytes,
     });
     expect(after).not.toBeNull();
 
+    // No longer persisted automatically — prove the RESULT still
+    // round-trips through the real storage functions, exactly as the
+    // hook's own `applyProducerCommit`/`handoffStore.commit` will.
+    saveMonitorRun(after!);
     const loaded = loadMonitorRun();
 
     expect(loaded).not.toBeNull();

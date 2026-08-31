@@ -64,8 +64,29 @@ describe("Today's cold-start guard is untouched by Phase 7B (spec §3)", () => {
     // LATER phase legitimately changes this guard, update this constant
     // ... and say why") for the import line specifically, since the import
     // is asserted here as a SEPARATE claim from the guard block itself.
+    //
+    // Hand-off store design spec §1, plan Task 3: widened to bring in
+    // `saveMonitorRun` — `completeInterruptedRun` is now a PURE builder
+    // (`monitorRun.ts`'s own doc comment on it), so `UnloggedMonitorRow`'s
+    // `handleLogIt` persisted its returned record itself, as a STOPGAP until
+    // Task 4 rewrote this screen's own unlogged row onto the store. Still
+    // just an import-line widening; the guard block itself is untouched.
+    //
+    // Hand-off store design spec (rev 4), plan Task 4: NARROWED back down —
+    // `clearMonitorRun`/`saveMonitorRun`/`type MonitorRun` are gone from
+    // this import (the unlogged row's own discard/Log-it handlers now call
+    // the store, not these), and a SECOND import line brings in the store's
+    // own named functions. `loadMonitorRun` survives on its own, unchanged:
+    // it is still what THIS guard block (the pin above) reads directly, and
+    // it is a genuinely different call from anything the store's `read()`
+    // does (this guard needs a synchronous, un-hydrated, always-fresh raw
+    // read at effect time — see `monitorEntry`'s own doc comment in
+    // Today.tsx for why the MOUNT SNAPSHOT reads through the store instead).
     expect(source).toContain(
-      'import {\n  loadMonitorRun,\n  clearMonitorRun,\n  completeInterruptedRun,\n  type MonitorRun,\n} from "../monitor/monitorRun";',
+      'import { loadMonitorRun, completeInterruptedRun } from "../monitor/monitorRun";',
+    );
+    expect(source).toContain(
+      'import {\n  commit as commitHandoff,\n  hydrate as hydrateHandoff,\n  read as readHandoff,\n  retire as retireHandoff,\n  type HandoffEntry,\n} from "../monitor/handoffStore";',
     );
     expect(source).not.toMatch(/import\s*\{[^}]*\banyLiveSession\b/);
   });

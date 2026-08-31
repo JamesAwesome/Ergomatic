@@ -313,6 +313,13 @@ interface CaptureOptions {
    *  independent facts, not one ranked list" comment). Defaults false, so
    *  every existing capture is byte-identical. */
   frameSilence?: boolean;
+  /** AUD-016 Task 4: the durable hand-off's own hold. Defaults false/null,
+   *  so every existing capture is byte-identical. */
+  handoffHeld?: boolean;
+  /** AUD-016 Task 4 (spec §4): `"storage-failed"` draws the Gate 0 strip and
+   *  its two controls on the ended frame in place of the plain-held
+   *  reassurance. Defaults null. */
+  holdError?: MonitorSession["holdError"];
   /** Runs against the mounted surface before the markup is read — the
    *  diagnostics sheet has no prop of its own, it is opened by the same
    *  triple-tap a rower uses. */
@@ -330,7 +337,8 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     frame: liveFrame(options.frame),
     actuals: options.actuals ?? [],
     endedBy: options.endedBy ?? null,
-    handoffHeld: false,
+    handoffHeld: options.handoffHeld ?? false,
+    holdError: options.holdError ?? null,
     frozen: options.frozen ?? false,
     runOpen: true,
     frameSilence: options.frameSilence ?? false,
@@ -339,6 +347,8 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
+    retryHandoffSave: vi.fn().mockResolvedValue(undefined),
+    proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue(LOG_JSON),
   };
   // `session.frame` is `liveFrame(...)` a few lines up and never null; the
@@ -901,5 +911,25 @@ describe("screen fixtures for pnpm screenshots", () => {
         actuals: [actualFor(0, FIXTURE.program)],
       }),
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-ended.html");
+  });
+
+  it("the hand-off frame, held on a failed write (AUD-016 Task 4, spec §4, Gate 0)", async () => {
+    // The strip and its two controls replace the plain-held reassurance —
+    // this is what proves the LAYOUT `e2e/screenshots.spec.ts` photographs:
+    // strip on the gold `.connected-keep-on` device, then `.action-stack`
+    // with Retry (`.button-l2`) first and Log it anyway (`.button-l1`)
+    // second, coexisting with nothing else (the tab bar is already hidden
+    // on this surface). `ConnectedSurface.test.tsx` pins the strings and the
+    // wiring; this file's job is the frame real fonts and a real cascade
+    // draw, at real proportions, both orientations.
+    await expect(
+      capture("live", {
+        phase: "ended",
+        endedBy: "user",
+        handoffHeld: true,
+        holdError: "storage-failed",
+        actuals: [actualFor(0, FIXTURE.program)],
+      }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-ended-error.html");
   });
 });

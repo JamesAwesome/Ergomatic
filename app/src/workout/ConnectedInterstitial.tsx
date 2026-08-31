@@ -181,7 +181,19 @@ export interface ConnectedInterstitialProps {
    *  (there is no Confirm step in the Connect flow yet). */
   nudgedCount: number;
   /** Cancel, from any of states 4-7: "always lands back on Workout detail
-   *  with nothing lost" (handoff §2). */
+   *  with nothing lost" (handoff §2) — **true for states 4-6
+   *  (pairing/programming/failed), no longer true for state 7 (ready).
+   *  CORRECTED (Task 5 re-review, F-1, 2026-08-30): once "ready" ever
+   *  renders, the wire "armed" event has already retired the guard's
+   *  staged `MonitorRun` (`useMonitorSession.ts`'s own `event.kind ===
+   *  "armed"` handler, spec §5's "armed acceptance" row) — a consequence
+   *  of REACHING state 7, not of Cancel itself. Cancel from state 7 still
+   *  terminates the PM5 program and tears the hook down cleanly, but it
+   *  cannot un-retire a record that is already gone by the time this
+   *  screen ever painted. Spec §5 sanctions "armed" as the acceptance
+   *  point precisely so this is deliberate, not a leak — see
+   *  `useMonitorSession.test.ts`'s own "arm then Cancel: the accepted
+   *  loss" pin for the mechanism proven end to end. */
   onExit: () => void;
   /** State 6's "Row on the phone timer instead": hands off to the existing
    *  Start path with the SAME targets this screen was about to send. */

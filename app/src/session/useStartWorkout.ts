@@ -3,7 +3,10 @@ import { useNavigate } from "react-router-dom";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import { buildNudgedDraft, loadDraft, saveDraft, startDraft } from "./draft";
 import { clearRun, loadRun } from "./run";
-import { clearMonitorRun, loadMonitorRun } from "../monitor/monitorRun";
+import {
+  currentUnretired as currentUnretiredHandoff,
+  retire as retireHandoff,
+} from "../monitor/handoffStore";
 
 /** The shape `startSession`/`handleStart` actually need from a workout —
  *  structurally compatible with `useWorkouts.ts`'s `LibraryWorkout` (this
@@ -87,16 +90,35 @@ export function useStartWorkout(
   // from here on, now that no later screen stamps it for them). `saveDraft`
   // can fail (quota, private-mode Safari) without throwing; that's
   // surfaced inline rather than navigating to a countdown screen with
-  // nothing behind it. `clearRun`/`clearMonitorRun` run only AFTER a
-  // successful `saveDraft` — never before — so a save failure never
+  // nothing behind it. `clearRun`/the MonitorRun retire below run only
+  // AFTER a successful `saveDraft` — never before — so a save failure never
   // destroys a prior run record for nothing (the reviewer's F5 finding,
   // Phase 6B Task 4 fix round, and its Phase 7B Task 2 mirror for
   // `MonitorRun`).
+  //
+  // Hand-off store design spec section 5, plan Task 5: the legacy
+  // clearMonitorRun() is gone here. A fresh, non-render read of
+  // currentUnretired() (never the earlier existingMonitorEntry handleStart
+  // read below -- that value can be stale by the time this later press
+  // lands) finds whatever the store currently holds and retires it,
+  // key-bound. This is what closes the "proven interim asymmetry" ROADMAP's
+  // AUD-016 item named against this exact door: the legacy clearMonitorRun()
+  // call removed the record from storage but left the store's own
+  // current/tombstones untouched, so a late producer burst (the dead
+  // hook's own linger window) could commit the record straight back --
+  // retire() tombstones the key, which is what makes that late commit
+  // refused instead.
   function confirmReplace() {
     const draft = startDraft(buildNudgedDraft(workout, nudges));
     if (saveDraft(draft)) {
       clearRun();
-      clearMonitorRun();
+      const stale = currentUnretiredHandoff();
+      if (stale !== null) {
+        retireHandoff(
+          [{ sessionKey: stale.sessionKey, revision: stale.revision }],
+          "start-replace",
+        );
+      }
       navigate("/session/countdown");
     } else {
       setStartError("Couldn't start this session. Try again.");
@@ -110,19 +132,26 @@ export function useStartWorkout(
   // workout's own detail page, revisited after finishing it): that reads as
   // "unlogged," the accurate description, not "in progress."
   //
-  // ROADMAP M-1's "two exceptions untouched" rule: this reads
-  // `loadRun`/`loadMonitorRun` DIRECTLY, never rerouted through
-  // `anyLiveSession()`, which deliberately collapses to "none" and would
-  // silently downgrade "unlogged" to "none" — reintroducing the F5
-  // data-loss class in the other direction.
+  // ROADMAP M-1's "two exceptions untouched" rule: this reads `loadRun`
+  // DIRECTLY, never rerouted through `anyLiveSession()`, which deliberately
+  // collapses to "none" and would silently downgrade "unlogged" to "none"
+  // — reintroducing the F5 data-loss class in the other direction.
+  //
+  // Hand-off store design spec §5, plan Task 5: the MonitorRun half now
+  // reads `currentUnretired()` instead of `loadMonitorRun()` — the P1-1
+  // hole at this second door, closed the same way Connect's own guard
+  // closed it: `loadMonitorRun()` only ever saw the DURABLE tier, so a
+  // record whose durable write failed (memory-only — Today's own store
+  // read, Task 4, already renders a row for exactly this case) was
+  // invisible here.
   function handleStart() {
     const existingRun = loadRun();
     if (existingRun !== null && existingRun.completedAt !== null) {
       setReplaceStage("unlogged");
       return;
     }
-    const existingMonitorRun = loadMonitorRun();
-    if (existingMonitorRun !== null) {
+    const existingMonitorEntry = currentUnretiredHandoff();
+    if (existingMonitorEntry !== null) {
       // Always "unlogged", never "in-progress" (queue item 3, mirroring
       // `connectGuardStage`'s own F6 spec 2b fix): a MonitorRun visible at
       // THIS door is dead the same way it is at Connect's — the connected

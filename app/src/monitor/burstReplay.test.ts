@@ -221,6 +221,17 @@ interface ReplayOutcome {
  * after driving a freshly re-imported hook.
  */
 async function runReplay(events: RecordedEvent[]): Promise<ReplayOutcome> {
+  // Hand-off store design spec §1, plan Task 3: this file's own
+  // `vi.resetModules()` (below) forces a fresh `handoffStore` module
+  // instance each call, but PHYSICAL `localStorage` is a real global that
+  // survives a module reset, and this test's two `runReplay` calls (the
+  // real burst run, then the burst-stripped control) share the IDENTICAL
+  // `FIXED_NOW`-derived `sessionKey`. Without this, the control run's
+  // hydration finds the real run's still-present durable bytes under that
+  // same key, and the store's single-unretired-session invariant refuses
+  // the control's own create-commit (found empirically — `control.record`
+  // came back `null`, not the control's own record).
+  localStorage.clear();
   const recording: ParsedRecording = {
     header: KEYSTONE_CAPTURE.header,
     events,

@@ -21,7 +21,10 @@ import { buildNudgedDraft, saveDraft, startDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import { buildLogSeed } from "../session/logDraft";
 import { clearRun } from "../session/run";
-import { clearMonitorRun } from "../monitor/monitorRun";
+import {
+  currentUnretired as currentUnretiredHandoff,
+  retire as retireHandoff,
+} from "../monitor/handoffStore";
 import ConnectAction from "../monitor/ConnectAction";
 import type { RunIdentity } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
@@ -274,10 +277,17 @@ function WorkoutDetailView({
     });
   }
 
-  // Cancel, from any interstitial state: "always lands back on Workout
-  // detail with nothing lost" (handoff §2) — nothing here has committed a
-  // phone session, so there is nothing to clear beyond re-reading the
-  // caption in case this was the rower's first-ever successful pair.
+  // Cancel, from any interstitial state: lands back on Workout detail, and
+  // this function itself destroys nothing — it drops the interstitial and
+  // re-reads the caption in case this was the rower's first successful pair.
+  //
+  // "Nothing lost" is true of a `SessionRun` always, and of a `MonitorRun`
+  // only BEFORE the wire "armed" event: reaching armed IS the acceptance
+  // point (spec §5), so it has already retired the staged record and a
+  // Cancel from the "ready" screen cannot undo that. Sanctioned, not a leak
+  // — `ConnectAction.tsx`'s own corrected paragraphs carry the mechanism,
+  // and `useMonitorSession.test.ts`'s "arm then Cancel: the accepted loss"
+  // pins it.
   function handleInterstitialExit() {
     setConnecting(null);
     setLastDevice(loadLastDevice());
@@ -290,12 +300,42 @@ function WorkoutDetailView({
   // stamp exactly (fast-follow spec §3: every rewired entry point stamps
   // `startedAt` at the same moment it navigates to the countdown) — this
   // commits to a phone session just as surely.
+  //
+  // Hand-off store design spec §5, plan Task 5: the legacy `clearMonitorRun()`
+  // is gone. This is the CENSUS'S "row-instead" row: this site has no
+  // confirm of its own — it is a single-tap escape in the interstitial's
+  // failure card, reachable only after `program()` FAILED, which means
+  // the guard's own staged authorization was never executed here:
+  // `ConnectAction.tsx`'s "armed" retire (spec §5's "armed acceptance"
+  // row, `useMonitorSession.ts`) only fires on a SUCCESSFUL connect —
+  // "Connect -> program -> armed | failure-card" (spec §5's census), armed
+  // and failure-card are the two ALTERNATIVE outcomes of program(), never
+  // both. **CORRECTED (Task 5 review fix round, 2026-08-30): a first
+  // draft of this comment claimed the guard's retire "has usually already"
+  // run by the time this door fires — false; on this door's own path it
+  // never runs at all** (the staged set is DISCARDED, not retired, by
+  // `useMonitorSession.ts`'s own `cancel()` — `ConnectedInterstitial.tsx`'s
+  // own `handleRowInstead` calls `session.cancel()` immediately before
+  // `onRowInstead`, and `cancel()` runs synchronously to completion for a
+  // FAILED phase, so the discard has already happened by the time this
+  // function runs). This fresh, non-render `currentUnretired()` read is
+  // therefore the FIRST and ONLY thing that retires the leftover record
+  // on the fail-then-row-instead path — matching `useStartWorkout.ts`'s
+  // own `confirmReplace` (Task 5's other door): whatever remains gets
+  // retired, key-bound; "nothing found -> nothing emitted" (§1) only when
+  // there was genuinely nothing to protect in the first place.
   function handleRowInstead() {
     setConnecting(null);
     const draft = startDraft(buildNudgedDraft(workout, nudges));
     if (saveDraft(draft)) {
       clearRun();
-      clearMonitorRun();
+      const stale = currentUnretiredHandoff();
+      if (stale !== null) {
+        retireHandoff(
+          [{ sessionKey: stale.sessionKey, revision: stale.revision }],
+          "row-instead",
+        );
+      }
       navigate("/session/countdown");
     } else {
       setRowInsteadError("Couldn't start this session. Try again.");

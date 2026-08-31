@@ -33,13 +33,17 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
+import { loadMonitorRun, MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
 import {
-  clearMonitorRun,
-  loadMonitorRun,
-  MONITOR_RUN_KEY,
-  saveMonitorRun,
-  type MonitorRun,
-} from "./monitorRun";
+  resetForTests as resetHandoffStore,
+  currentUnretired as currentUnretiredHandoffForTest,
+  retire as retireHandoffForTest,
+  durableState as durableStateForTest,
+  commit as commitHandoffForTest,
+  read as readHandoffForTest,
+  stageRetire as stageRetireForTest,
+  takeStagedRetire as takeStagedRetireForTest,
+} from "./handoffStore";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
 import {
@@ -571,6 +575,14 @@ function finishedAt(atMs: number): FakeTimelineEvent {
 
 beforeEach(() => {
   localStorage.clear();
+  // Hand-off store design spec §1, plan Task 3: `handoffStore.ts` is a
+  // module-level singleton — `localStorage.clear()` alone leaves its
+  // in-memory `current`/`tombstones` state (and the fixed `t0` clock this
+  // file's tests overwhelmingly share) to leak between `it()` blocks that
+  // do not each get their own `vi.resetModules()`. See
+  // `resetForTests`'s own doc comment in `handoffStore.ts` for the full
+  // reasoning and the empirical evidence.
+  resetHandoffStore();
 });
 
 describe("useMonitorSession: connect", () => {
@@ -2484,87 +2496,23 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     });
   });
 
-  it("APPEND-REJECTED (Task 5, storage-spine design spec §2/§5): gate 4's write-once refusal still resolves the burst condition, with its own receipt — waiting longer cannot help a write that was refused", async () => {
-    // The writer gate (`appendSummaryObservations`'s `summaryTotals !==
-    // undefined` check, monitorRun.ts:1101) is documented DEFENSIVE — the
-    // opener already enforces the identical predicate, so a real script
-    // never reaches it. This test forces it directly: storage is seeded
-    // with `summaryTotals` already present, out of band, so the writer's
-    // OWN fresh re-read (`stillLive`, not the hook's in-memory `runRef`)
-    // finds the write-once door already shut when the real burst lands.
-    const timer = manualSchedule();
-    const driverTimer = manualSchedule();
-    const { result, fake } = harness(
-      {
-        program: ONE_INTERVAL,
-        events: [
-          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
-          status(200, {
-            workoutState: WORKOUTSTATE_TERMINATE,
-            elapsedSeconds: 40,
-            distanceMeters: 130,
-            spm: 0,
-            currentSplit: 0,
-          }),
-        ],
-      },
-      {
-        schedule: timer.schedule,
-        driverOptions: {
-          settleTicks: 0,
-          prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
-        },
-      },
-    );
-
-    await connect(result);
-    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
-    tick(fake, 100);
-    tick(fake, 100);
-
-    expect(result.current.phase).toBe("ended");
-    expect(result.current.endedBy).toBe("machine");
-    expect(result.current.handoffHeld).toBe(true);
-
-    // Seed the write-once door shut, bypassing the hook's own `runRef`
-    // entirely (which still, correctly, reads `summaryTotals: undefined`).
-    const beforeWrite = loadMonitorRun();
-    expect(beforeWrite).not.toBeNull();
-    saveMonitorRun({
-      ...beforeWrite!,
-      summaryTotals: { workElapsedSeconds: 1, workDistanceMeters: 1 },
-    });
-
-    act(() => {
-      fake.deliverSummary({ elapsedSeconds: 40, meters: 130 });
-    });
-    expect(driverTimer.pending()?.ms).toBe(200);
-    act(() => {
-      driverTimer.pending()!.fire();
-    });
-
-    // The condition resolves — waiting longer cannot help a refused write —
-    // and the hold, owing nothing else, is free.
-    expect(result.current.handoffHeld).toBe(false);
-    const entries = JSON.parse(result.current.exportLog()) as {
-      kind: string;
-      detail: string;
-    }[];
-    const rejected = entries.find((e) => e.kind === "summary-append-rejected");
-    expect(rejected?.detail).toContain(beforeWrite!.startedAt);
-    expect(rejected?.detail).toContain("refused");
-    // The RECEIPT distinguishes the rejection; the release reason is still
-    // `"burst-heard"` — the burst WAS heard off the wire (spec §2's own
-    // wording), regardless of what the writer did with it.
-    const released = entries.find((e) => e.kind === "handoff-released");
-    expect(released?.detail).toContain("burst-heard");
-    // Write-once held: the seeded totals survive untouched.
-    expect(loadMonitorRun()?.summaryTotals).toStrictEqual({
-      workElapsedSeconds: 1,
-      workDistanceMeters: 1,
-    });
-  });
+  // FORMERLY "APPEND-REJECTED": gate 4's write-once refusal, DELETED at the
+  // hook-integration level (hand-off store design spec §1/§3, plan Task 3).
+  // The original fixture forced the refusal by seeding `summaryTotals`
+  // directly onto STORAGE, bypassing the hook's own in-memory `runRef`
+  // entirely — that technique only worked because `appendSummaryObservations`
+  // used to re-read storage fresh (`stillLive`, now deleted). Under this
+  // design the pure gate reads whatever the CALLER (this hook) passes —
+  // its own `runRef.current` — never storage, so a raw storage write can no
+  // longer reach the guard at all. The only other way to reach it — the
+  // driver delivering `summary-observations` TWICE — is independently
+  // blocked by the driver's own "`reconcileSummary` runs AT MOST ONCE per
+  // run whichever site" contract (`driver.ts`), confirmed empirically: a
+  // second `fake.deliverSummary()` call in this same script never produces
+  // a second event at this hook at all. Gate 4's write-once behavior is
+  // still covered, at the layer that can actually exercise it directly:
+  // `monitorRun.test.ts`'s "write-once door still keyed on summaryTotals"
+  // test calls `appendSummaryObservations` twice with an explicit base.
 
   it("SUMMARY-NO-RUN (Task 5, storage-spine design spec §2/§5): a burst arriving with no run identity resolves nothing and opens nothing — the fourth code path, not an exit of its own", async () => {
     // The driver's OWN `activeRun` opens at ARM, independent of this hook's
@@ -2630,6 +2578,1458 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     const noRun = entries.find((e) => e.kind === "summary-no-run");
     expect(noRun?.detail).toContain("no run identity");
   });
+});
+
+// Hand-off store design spec §1/§7, plan Task 3's own gate rows (§10 rows
+// 4/5/7) — the hook's sole-committer discipline, the held-error state
+// machine, and `retryHandoffSave`/`proceedHandoff`. Row 5 (tombstone
+// refusal) lives in the "teardown — the burst linger" describe block above,
+// scenario (d) — retargeted there rather than duplicated here, since it
+// needs that block's own burst-linger fixture.
+describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 3)", () => {
+  /** Denies every `localStorage.setItem` call for `MONITOR_RUN_KEY`
+   *  matching `predicate` against the parsed payload — the same
+   *  payload-inspecting idiom `handoffStoreReplay.test.ts`'s own
+   *  `installClosedWriteDenial` established (spec §3: "deny by content,
+   *  never by count alone"). Returns the restore function. */
+  function installMonitorRunWriteDenial(
+    predicate: (parsed: unknown) => boolean,
+  ): () => void {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (
+      this: Storage,
+      key: string,
+      value: string,
+    ): void {
+      if (key === MONITOR_RUN_KEY) {
+        const parsed: unknown = JSON.parse(value);
+        if (predicate(parsed)) {
+          throw new Error("simulated storage failure");
+        }
+      }
+      original.call(this, key, value);
+    };
+    return () => {
+      Storage.prototype.setItem = original;
+    };
+  }
+
+  /** Drives ONE_INTERVAL live, then ends it through the ONE genuinely
+   *  no-conditions-owed door: End with the link already gone (`endSession`,
+   *  `endedBy: "link-lost"`). `openBurstHold`'s own predicate excludes
+   *  `link-lost` outright and `endSession` never calls `openHandoffHold`
+   *  at all — so NEITHER hold opens, and the verify runs synchronously in
+   *  this SAME `ended` patch, the exact row this describe block's tests
+   *  target (an existing pin, "End after the link is gone stores endedBy
+   *  link-lost", already proves `handoffHeld: false` for this shape on a
+   *  HEALTHY write; these tests are its denied-write sibling). */
+  async function driveToTerminatedEnd(): Promise<Session> {
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    act(() => {
+      fake.injectDisconnect();
+    });
+    expect(result.current.phase).toBe("disconnected");
+    await act(async () => {
+      await result.current.endSession();
+    });
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("user");
+    return result;
+  }
+
+  // ROW 7's FIRST SHAPE, added at the final fix round (2026-08-30) after
+  // the antagonist's §10 audit found it missing entirely — the row lists
+  // four storage shapes and only three had tests. Denied-from-OPEN is not
+  // a weaker denied-at-close: the durable tier never holds anything at
+  // all, so every downstream reader that falls back to it (Today's guard,
+  // a reload) sees nothing, and the ONLY copy of a live workout is the
+  // store's memory tier. That is §5's "product gain" and §9.5's residual
+  // in the same run, and until this test nothing exercised the shape.
+  it("a denial from the FIRST write on: the record lives in memory alone, the durable tier stays empty, and the failure is receipted at OPEN — row 7's first shape (denied-from-open)", async () => {
+    const restore = installMonitorRunWriteDenial(() => true);
+    try {
+      const { result, fake } = harness({
+        program: ONE_INTERVAL,
+        events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+      });
+      await connect(result);
+      await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+
+      // THE RECORD EXISTS — in memory, open, complete. `commit` writes the
+      // memory tier unconditionally and only ATTEMPTS the durable one
+      // (§1), so a session whose every durable write is refused is still a
+      // recoverable session for as long as this process lives (§4
+      // invariant 1).
+      const entry = currentUnretiredHandoffForTest();
+      expect(entry).not.toBeNull();
+      expect(entry!.run.completedAt).toBeNull();
+      expect(entry!.run.title).toBe(ONE_IDENTITY.title);
+      // ...and the durable tier holds NOTHING. Not stale bytes, not a
+      // partial write — the key was never successfully written once.
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+      expect(durableStateForTest(entry!.sessionKey)).toBeUndefined();
+
+      // THE FAILURE IS ALREADY RECEIPTED, at OPEN — the distinguishing
+      // observable of this shape. The denied-at-close shape's first
+      // `"failed"` verdict arrives at the close; this one's arrives with
+      // the create, before the rower has finished the first interval, and
+      // it is what §9.5 names as the counter for a memory-only session a
+      // later reload loses.
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      const accepted = entries.filter(
+        (e) => e.kind === "store-receipt:commit-accepted",
+      );
+      expect(accepted).not.toHaveLength(0);
+      expect(
+        accepted.every((e) => e.detail.includes('"verdict":"failed"')),
+      ).toBe(true);
+      // No hold has been entered — nothing has CLOSED yet. The held-error
+      // frame belongs to the close, and asserting its absence here is what
+      // keeps this test distinct from the denied-at-close one below rather
+      // than a second copy of it.
+      expect(result.current.holdError).toBeNull();
+      expect(result.current.handoffHeld).toBe(false);
+
+      // ...and when the run finally does close, still denied, THAT is when
+      // the rower is held — the two shapes chained, so the ordering is
+      // pinned rather than assumed.
+      act(() => {
+        fake.injectDisconnect();
+      });
+      await act(async () => {
+        await result.current.endSession();
+      });
+      expect(result.current.handoffHeld).toBe(true);
+      expect(result.current.holdError).toBe("storage-failed");
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it("a denied durable write on the no-conditions-owed close enters held-error, with a receipt — row 7's SECOND shape (denied-at-close)", async () => {
+    const restore = installMonitorRunWriteDenial(
+      (parsed) =>
+        (parsed as { completedAt: string | null }).completedAt !== null,
+    );
+    try {
+      const result = await driveToTerminatedEnd();
+      expect(result.current.handoffHeld).toBe(true);
+      expect(result.current.holdError).toBe("storage-failed");
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      expect(
+        entries.find((e) => e.kind === "hold-error-entered"),
+      ).toBeDefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it("retryHandoffSave heals a denied write, releases, and NEVER bumps revision — a follow-on producer commit is still accepted (the headline-loss case, pinned)", async () => {
+    let deny = true;
+    const restore = installMonitorRunWriteDenial(() => deny);
+    try {
+      const result = await driveToTerminatedEnd();
+      expect(result.current.holdError).toBe("storage-failed");
+      const beforeRetry = currentUnretiredHandoffForTest();
+      expect(beforeRetry).not.toBeNull();
+      // AN INDEPENDENT LITERAL, not a captured reference (antagonist §10
+      // audit, F-2b: comparing two reads of the same store is a mirror —
+      // it holds whatever the store did, including a bump). This test
+      // knows exactly how many producer commits it made: the create
+      // (`revision 0`, `createMonitorRun`'s own commit at the first live
+      // frame) and the close (`revision 1`, `endSession` -> `closeRecord`).
+      // No boundary lands in this script, so there is no third. The heal
+      // below must leave the number at THAT count.
+      const revisionBeforeRetry = beforeRetry!.revision;
+      expect(revisionBeforeRetry).toBe(1);
+
+      // Heals: the NEXT durable attempt (Retry's own) succeeds.
+      deny = false;
+      await act(async () => {
+        await result.current.retryHandoffSave();
+      });
+      expect(result.current.holdError).toBeNull();
+      expect(result.current.handoffHeld).toBe(false);
+      expect(loadMonitorRun()?.completedAt).not.toBeNull();
+
+      // THE PIN, asserted directly (not merely inferred from the release):
+      // the heal must NOT have bumped the store's own revision for this
+      // key — `retryDurable`'s own contract (spec §1: "modelling Retry as
+      // `commit` would stale the hook's own ref and refuse the next
+      // producer commit").
+      const afterRetry = currentUnretiredHandoffForTest();
+      expect(afterRetry).not.toBeNull();
+      expect(afterRetry!.revision).toBe(1);
+      expect(afterRetry!.revision).toBe(revisionBeforeRetry);
+
+      // THE HEADLINE-LOSS CASE ITSELF: a follow-on producer commit, using
+      // the SAME `expectedRevision` the hook's own `lastAcceptedRevisionRef`
+      // still believes (unbumped by the heal), must be ACCEPTED — modelling
+      // Retry as `commit` would have bumped the store's revision, making
+      // this late write's CAS check stale and refusing exactly the write
+      // the design's headline scenario depends on landing.
+      const followOn = commitHandoffForTest(
+        afterRetry!.sessionKey,
+        afterRetry!.revision,
+        { ...afterRetry!.run, title: "a late follow-on commit" },
+      );
+      expect(followOn.accepted).toBe(true);
+
+      // A no-op call once already released — idempotent, same posture as
+      // `releaseHandoff`/`resolveHandoffCondition`.
+      await act(async () => {
+        await result.current.retryHandoffSave();
+      });
+      expect(result.current.holdError).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it("retryHandoffSave that fails again STAYS held — no timer, no auto-exit", async () => {
+    const restore = installMonitorRunWriteDenial(() => true);
+    try {
+      const result = await driveToTerminatedEnd();
+      expect(result.current.holdError).toBe("storage-failed");
+
+      await act(async () => {
+        await result.current.retryHandoffSave();
+      });
+      // Still denied: stays held.
+      expect(result.current.holdError).toBe("storage-failed");
+      expect(result.current.handoffHeld).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it("proceedHandoff releases WITHOUT a confirmed write — no stash calls exist anymore, the memory tier is already current", async () => {
+    const restore = installMonitorRunWriteDenial(() => true);
+    try {
+      const result = await driveToTerminatedEnd();
+      expect(result.current.holdError).toBe("storage-failed");
+
+      await act(async () => {
+        await result.current.proceedHandoff();
+      });
+      expect(result.current.holdError).toBeNull();
+      expect(result.current.handoffHeld).toBe(false);
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      expect(
+        entries.find((e) => e.kind === "hold-error-proceed"),
+      ).toBeDefined();
+      // The durable tier is STILL denied — proceeding does not retry it.
+      expect(loadMonitorRun()).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it("retryHandoffSave/proceedHandoff are no-ops when nothing is held", async () => {
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.holdError).toBeNull();
+
+    await act(async () => {
+      await result.current.retryHandoffSave();
+    });
+    expect(result.current.holdError).toBeNull();
+
+    await act(async () => {
+      await result.current.proceedHandoff();
+    });
+    expect(result.current.holdError).toBeNull();
+  });
+
+  it("a `saved-without-series` heal is still a release, not a hold — a degraded-but-landed write is a landed write", async () => {
+    // Deny the FULL write (series present) but let the sacrifice retry
+    // (without series) land — `performDurableWrite`'s own ordering,
+    // `handoffStore.ts`. The verify reads the cached verdict, which is
+    // `"saved-without-series"`, not `"failed"` — no hold at all.
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (
+      this: Storage,
+      key: string,
+      value: string,
+    ): void {
+      if (key === MONITOR_RUN_KEY) {
+        const parsed = JSON.parse(value) as { series?: unknown };
+        if (parsed.series !== undefined) {
+          throw new Error("simulated quota error (series present)");
+        }
+      }
+      original.call(this, key, value);
+    };
+    try {
+      const result = await driveToTerminatedEnd();
+      // The sacrifice DID run — `SeriesRecorder`'s own "first-frame-wins
+      // bucket 0" guarantee means the one live frame this script delivers
+      // already left a sample by the time `endSession`'s `closeRecord`
+      // attaches it (`withSeries`), so the FULL write (with series) was
+      // genuinely denied and the smaller retry (without it) is what
+      // landed — confirmed directly, not inferred from a null holdError
+      // alone (which a script that never attached a series at all would
+      // also produce, for the wrong reason).
+      const stored = loadMonitorRun();
+      expect(stored?.series).toBeUndefined();
+      expect(stored?.seriesDropped).toBe(true);
+      // A degraded-but-landed write is still a landed write — no hold.
+      expect(result.current.holdError).toBeNull();
+      expect(result.current.handoffHeld).toBe(false);
+
+      // THE VERDICT ITSELF (antagonist §10 audit, F-2c: this path only
+      // ever pinned `durableState`, never the receipt row 7 names). §10
+      // row 7: "`saved-without-series` sets `durableComplete=false` and
+      // THE RECEIPT SAYS SO." Asserted on the receipt actually piped to
+      // the ring, so a verdict that degraded silently — or one that
+      // reported plain `"saved"` for a copy missing up to ~720 KB of
+      // trace, which is what the staleness metric downstream reads — goes
+      // red here.
+      const receipts = (
+        JSON.parse(result.current.exportLog()) as {
+          kind: string;
+          detail: string;
+        }[]
+      ).filter((e) => e.kind === "store-receipt:commit-accepted");
+      expect(receipts).not.toHaveLength(0);
+      expect(receipts[receipts.length - 1]!.detail).toContain(
+        '"verdict":"saved-without-series"',
+      );
+      const key = currentUnretiredHandoffForTest()!.sessionKey;
+      expect(durableStateForTest(key)?.durableComplete).toBe(false);
+    } finally {
+      Storage.prototype.setItem = original;
+    }
+  });
+
+  it("cached-verdict CURRENCY — row 7: the close write lands healthy, but the LATER burst write is denied; the release must read the verdict AS OF release time, not a stale snapshot taken at close", async () => {
+    // Deny ONLY the summary's own fold-in write (the one carrying
+    // `summaryTotals`) — the close write itself (no `summaryTotals` field
+    // yet) lands healthy. Spec §7's own words: "the release funnel reads
+    // the CACHED verdict — the last accepted commit's, not the close
+    // commit's ... up to two durable writes land between close and
+    // release." A verify that re-checked only the close's own verdict
+    // (rather than re-reading the cache fresh at release time) would
+    // wrongly release here.
+    const restore = installMonitorRunWriteDenial(
+      (parsed) =>
+        (parsed as { summaryTotals?: unknown }).summaryTotals !== undefined,
+    );
+    try {
+      const driverTimer = manualSchedule();
+      const { result, fake } = harness(
+        {
+          program: ONE_INTERVAL,
+          events: [
+            status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+            status(200, {
+              workoutState: WORKOUTSTATE_TERMINATE,
+              elapsedSeconds: 40,
+              distanceMeters: 130,
+              spm: 0,
+              currentSplit: 0,
+            }),
+          ],
+        },
+        {
+          driverOptions: {
+            settleTicks: 0,
+            prepareSettleTicks: 0,
+            schedule: driverTimer.schedule,
+          },
+        },
+      );
+
+      await connect(result);
+      await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+      tick(fake, 100);
+      tick(fake, 100); // the Menu press — closes healthy, burst hold opens
+      expect(result.current.phase).toBe("ended");
+      expect(result.current.handoffHeld).toBe(true);
+      // The CLOSE landed fine — proving this is not simply "everything is
+      // denied" (the earlier, broader-predicate test's own shape).
+      expect(loadMonitorRun()?.completedAt).not.toBeNull();
+      expect(result.current.holdError).toBeNull();
+
+      // The burst arrives and its OWN write is denied — the release
+      // funnel (`resolveHandoffCondition`) is what runs the verify here,
+      // and it must see THIS failure, not the close's own healthy one.
+      act(() => {
+        fake.deliverSummary({ elapsedSeconds: 40, meters: 130 });
+      });
+      expect(driverTimer.pending()?.ms).toBe(200);
+      act(() => {
+        driverTimer.pending()!.fire();
+      });
+
+      expect(result.current.handoffHeld).toBe(true);
+      expect(result.current.holdError).toBe("storage-failed");
+    } finally {
+      restore();
+    }
+  });
+
+  // §10 ROW 2, THE WIRE AXIS — added at the final fix round (2026-08-30)
+  // after the antagonist's §10 audit proved the row had NO gate at all: its
+  // OWN named mutation ("gate the post-release commit on a window
+  // predicate") passed 0 of 5638 tests even as a bare `throw`, because no
+  // test in the repo ever let a producer commit follow a release.
+  //
+  // **THE ROW'S DIRECTION, read off the spec rather than paraphrased.**
+  // §10 row 2: "Producer update after release, four orderings ... ALL REACH
+  // `commit`". §4 invariant 4: "Every accepted producer update AFTER
+  // RELEASE either reaches the current consumer, or remains recoverable."
+  // §9.1 names the only thing that stops one — the delivery window's own
+  // end, not the release. So the invariant is that a late producer update
+  // LANDS; the mutation the row names is what would break it. A guard
+  // refusing post-release commits is not the fix for this gap, it IS the
+  // mutation: it would delete §1's "headline case" (the late burst) and
+  // row 3's whole premise (R1 committed from the OLD hook's teardown,
+  // AFTER the new route rendered).
+  //
+  // **THIS IS THE HOOK-LAYER PIN, NOT A MATRIX CELL (PR #239 review round
+  // 3, reviewer finding 1).** Round 1 followed this test with three more
+  // that claimed to complete the row's before/after-navigation ×
+  // before/after-teardown 2x2; the reviewer rejected them as manufactured —
+  // one unmounted `renderHook` with no production navigation anywhere, one
+  // fired the driver from a test-only layout effect on a `null` destination
+  // component, and the post-teardown pair asserted on a receipt channel the
+  // app does not have once the hook has handed its own back. All three are
+  // DELETED. The row is now gated where its invariant actually lives:
+  //   - the REACHABLE production ordering, through the real destination
+  //     seam (real `WorkoutDetail` -> real `handleConnectedEnded` -> real
+  //     `LogSession`, late burst over the wire), in
+  //     `src/workout/WorkoutDetail.postReleaseCommit.test.tsx` — which also
+  //     records why the other three cells are not rower-reachable;
+  //   - the REAL-BYTES half (§10's header: "the burst orderings of row 2"),
+  //     in `handoffStoreReplay.test.ts`'s row-2 leg, over
+  //     `walk-2026-08-25/rests-finished-recording.jsonl.gz`.
+  // What is left here is the narrow hook-layer fact those two compose over,
+  // and it is the one this file is the right home for: with the hook still
+  // mounted and its subscription live, a producer commit made AFTER the
+  // release is accepted and receipted after the release in the ring's own
+  // ordering. No navigation is claimed, simulated, or implied.
+  //
+  // **AND THAT STATE IS THE INTERVAL ITSELF (PR #239 review round 6;
+  // NARROWED at round 8, reviewer finding 1).** Released, still mounted,
+  // still subscribed, no consumer yet — read in route terms, that is
+  // exactly after-release/before-navigation. Rounds 3-5 wrongly called that
+  // interval unoccupiable by a wire frame; round 6 then overcorrected into
+  // reading as though occupancy had been DEMONSTRATED. Neither is right.
+  // What this arm establishes is the app's behaviour GIVEN a commit in that
+  // state — acceptance-if-delivered — on a schedule the test supplies
+  // (`manualSchedule`), not evidence about when a real producer fires. The
+  // scheduling facts, and why a gate on the real race is deliberately not
+  // attempted, are stated once in
+  // `WorkoutDetail.postReleaseCommit.test.tsx`'s second test header; that
+  // file's tests 2 and 3 drive the same ordering through the real route,
+  // taking production's own released-frame copy plus an unmounted consumer
+  // as their proof of POSITION (where the wedge put the frame, not that the
+  // wire would).
+  it("row 2, HOOK LAYER — a producer commit made AFTER the hand-off released is accepted: the burst backstop frees the surface, THEN the machine's summary lands, and the store takes it (revision advances, receipt after the release)", async () => {
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+          finalBoundary(300),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100); // the natural finish — BOTH conditions open
+    tick(fake, 100); // the split lands, resolving the split condition only
+    expect(result.current.actuals).toHaveLength(1);
+    expect(result.current.handoffHeld).toBe(true);
+
+    // THE RELEASE, with nothing committed after it yet: the burst never
+    // came inside its own backstop, so the hold times out and the surface
+    // is freed (`handoff-released ... burst-timeout`).
+    act(() => {
+      timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)!.fire();
+    });
+    expect(result.current.handoffHeld).toBe(false);
+    const atRelease = currentUnretiredHandoffForTest();
+    expect(atRelease).not.toBeNull();
+    expect(atRelease!.run.summaryTotals).toBeUndefined();
+    const receiptsAtRelease = (
+      JSON.parse(result.current.exportLog()) as { kind: string }[]
+    ).filter((e) => e.kind === "store-receipt:commit-accepted").length;
+
+    // ...AND NOW THE MACHINE'S SUMMARY, off the wire, after all of that:
+    // the subscription is still up (no unmount, no disconnect), so the
+    // driver's own reconcile drains it and the hook folds it onto the
+    // record through `applyProducerCommit`.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
+    });
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    // THE ROW: the commit LANDED. Revision advanced by exactly one (an
+    // independent count — this test made exactly one further producer
+    // write, so the number is the test's own arithmetic, not a value read
+    // back out of production), the observations are on the record, and the
+    // durable tier carries them too.
+    const afterBurst = currentUnretiredHandoffForTest();
+    expect(afterBurst).not.toBeNull();
+    expect(afterBurst!.revision).toBe(atRelease!.revision + 1);
+    expect(afterBurst!.run.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 60,
+      workDistanceMeters: 200,
+    });
+    expect(loadMonitorRun()?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 60,
+      workDistanceMeters: 200,
+    });
+
+    // ...and it is genuinely AFTER the release in the ring's own ordering,
+    // not merely "at some point during the run": a fresh
+    // `store-receipt:commit-accepted` exists at an index BEYOND the last
+    // `handoff-released` entry. This is the half a mutation gating the
+    // commit on a release predicate cannot survive.
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const releasedAt = entries.findLastIndex(
+      (e) => e.kind === "handoff-released",
+    );
+    expect(releasedAt).toBeGreaterThanOrEqual(0);
+    const acceptedAfter = entries
+      .slice(releasedAt + 1)
+      .filter((e) => e.kind === "store-receipt:commit-accepted");
+    expect(acceptedAfter).toHaveLength(1);
+    expect(
+      entries.filter((e) => e.kind === "store-receipt:commit-accepted"),
+    ).toHaveLength(receiptsAtRelease + 1);
+    // The record itself says the fold-in happened, so a mutant that
+    // silently dropped the write while still emitting a receipt for some
+    // OTHER commit cannot pass on the receipt assertions alone.
+    expect(entries.some((e) => e.kind === "summary-recorded")).toBe(true);
+  });
+
+  it("stale-commit refusal: a commit racing UNDER the hook's own lastAcceptedRevisionRef is refused, runRef unchanged, with a receipt — row 4", async () => {
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [
+        status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+        finalBoundary(150),
+        status(200, {
+          workoutState: WORKOUTSTATE_WORKOUTEND,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          spm: 0,
+          currentSplit: 0,
+        }),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    const openedTitle = loadMonitorRun()?.title;
+    expect(openedTitle).toBeDefined();
+    expect(result.current.actuals).toHaveLength(0);
+
+    // Race the store DIRECTLY underneath the hook's own
+    // `lastAcceptedRevisionRef` — a commit this hook never made, bumping
+    // the key's revision to 1 while the hook still believes it is 0.
+    const current = currentUnretiredHandoffForTest();
+    expect(current).not.toBeNull();
+    const raced = commitHandoffForTest(current!.sessionKey, current!.revision, {
+      ...current!.run,
+      title: "RACED — not the hook's own write",
+    });
+    expect(raced.accepted).toBe(true);
+
+    // THE HOOK'S OWN NEXT PRODUCER COMMIT: a genuine boundary, driving
+    // `recordActual` -> `applyProducerCommit`. Its own `expectedRevision`
+    // (still 0, `lastAcceptedRevisionRef`'s own belief) is now stale
+    // against the store's real current (1, the RACED write's own) —
+    // refused. Checked at BOTH the store (storage) and the hook's own
+    // PUBLISHED state (`result.current.actuals`) — a mutant that lets
+    // `runRef`/`lastAcceptedRevisionRef` update anyway on refusal would
+    // pass the storage check alone (the racer already wrote *some* title
+    // there) but fail this one, since `actuals` would then show the
+    // boundary the store never actually accepted.
+    tick(fake, 50);
+    expect(loadMonitorRun()?.title).toBe("RACED — not the hook's own write");
+    expect(result.current.actuals).toHaveLength(0);
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:commit-refused" &&
+          e.detail.includes('"reason":"stale"'),
+      ),
+    ).toBe(true);
+
+    // A SECOND, INDEPENDENT observable: `runRef.current` itself must stay
+    // the pre-race value, not merely "the store wasn't touched" — the
+    // workout's own natural finish reads `runRef.current` DIRECTLY
+    // (`openHandoffHold`'s own `run.actuals.some(a => a.index ===
+    // lastIndex)` check) to decide whether the split hold still has
+    // something to wait for, with NO commit gating in between. If
+    // `runRef.current` had been corrupted to the REFUSED candidate (which
+    // already carries the boundary), this would wrongly see the split as
+    // already present and skip the hold.
+    tick(fake, 50);
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+    const holdEntries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      holdEntries.some(
+        (e) => e.kind === "handoff-hold" && e.detail.includes("unmeasured"),
+      ),
+    ).toBe(true);
+  });
+
+  it("the immutability pin: a committed entry is never mutated in place — an OLD reference to it, held across a LATER accepted commit, still reads its own original values (the exact comparison the store's own claim/snapshot discipline depends on)", async () => {
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [
+        status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+        finalBoundary(150),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+
+    // A consumer-shaped read, held across the NEXT accepted producer
+    // commit — exactly what `LogSession.tsx`'s own mount snapshot does
+    // (Task 4's scope; this hook must never break the guarantee that
+    // makes it safe: spec §6, "the snapshot retains the entry").
+    const held = readHandoffForTest(loadMonitorRun()!.startedAt);
+    expect(held).not.toBeNull();
+    const heldRun = held!.run;
+    const heldActualsLength = heldRun.actuals.length;
+    expect(heldActualsLength).toBe(0);
+    const heldRevision = held!.revision;
+
+    // THE BOUNDARY LANDS: a genuinely new object per `commit`'s own
+    // contract (`handoffStore.ts`: "commit stores `next` BY REFERENCE ...
+    // reference identity implements revision identity").
+    tick(fake, 50);
+    const after = readHandoffForTest(loadMonitorRun()!.startedAt);
+    expect(after).not.toBeNull();
+    expect(after!.revision).toBeGreaterThan(heldRevision);
+    expect(after!.run).not.toBe(heldRun);
+    expect(after!.run.actuals).toHaveLength(1);
+
+    // THE PIN: the OLD reference is untouched — its own `actuals` array
+    // (and the object itself) still reads exactly what it did the instant
+    // it was captured, proving the writer gates return NEW objects rather
+    // than mutating the one a consumer might still be holding.
+    expect(heldRun.actuals).toHaveLength(heldActualsLength);
+    expect(heldRun).toBe(held!.run);
+  });
+
+  // Task 5 review fix round (2026-08-30): §5's "armed acceptance" row,
+  // EXECUTION half. `ConnectAction.tsx`'s own tests (`ConnectAction.
+  // test.tsx`) prove the AUTHORIZATION half — staging at press time — but
+  // that file has no real hook/transport to reach the wire "armed" event
+  // with, so the retire itself is this describe block's own to prove. A
+  // first draft executed the retire at "Connect anyway" press time
+  // instead, which the reviewer's own probe showed destroyed a stale
+  // record even when the connect attempt then failed or was cancelled —
+  // these tests pin the corrected mechanism directly against the real
+  // driver/hook composition.
+  function fakeLeftoverRun(startedAt: string): MonitorRun {
+    return {
+      v: 2,
+      workoutId: "leftover-workout",
+      title: "Leftover",
+      program: ONE_INTERVAL,
+      logSeed: { steps: [], paces: {} },
+      actuals: [],
+      deviceName: "PM5 leftover",
+      startedAt,
+      completedAt: new Date(
+        new Date(startedAt).getTime() + 600_000,
+      ).toISOString(),
+      terminated: false,
+    };
+  }
+
+  it("the armed leg: a staged Connect-guard authorization is retired exactly at the wire 'armed' event, never earlier", async () => {
+    const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
+    const created = commitHandoffForTest(
+      leftoverKey,
+      null,
+      fakeLeftoverRun(leftoverKey),
+    );
+    expect(created.accepted).toBe(true);
+    // What `ConnectAction.tsx`'s own `handleConnect` would have staged at
+    // press time, well before this hook's own connect()/program() ever
+    // ran — the store, not a prop, is how that authorization survives to
+    // reach the hook (see `handoffStore.ts`'s own `stagedRetireSet` doc
+    // comment).
+    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(result);
+
+    // MID-FLIGHT (pairing/programming, before "armed"): UNTOUCHED — the
+    // regression the review caught destroyed this at "Connect anyway"
+    // press time, well before this point.
+    expect(currentUnretiredHandoffForTest()?.sessionKey).toBe(leftoverKey);
+
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    // ARMED HAS FIRED: retired, consumed, receipted.
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    expect(takeStagedRetireForTest()).toStrictEqual([]);
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:retire" &&
+          e.detail.includes(leftoverKey) &&
+          e.detail.includes('"reason":"connect-guard-armed"'),
+      ),
+    ).toBe(true);
+  });
+
+  it("a revision superseded between stage and armed still retires — superseded:true, receipted, not rejected (§1)", async () => {
+    const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
+    const created = commitHandoffForTest(
+      leftoverKey,
+      null,
+      fakeLeftoverRun(leftoverKey),
+    );
+    expect(created.accepted).toBe(true);
+    const createdRevision = created.accepted ? created.revision : -1;
+    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(result);
+
+    // THE RACE: an unrelated, already-torn-down hook's own linger-window
+    // burst lands WHILE this hook is still pairing/programming — after
+    // the guard staged revision 0, before "armed" ever consumes it.
+    const bumped = commitHandoffForTest(leftoverKey, createdRevision, {
+      ...fakeLeftoverRun(leftoverKey),
+      title: "Raced — a late burst",
+    });
+    expect(bumped).toMatchObject({ accepted: true, revision: 1 });
+
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const retireEntry = entries.find((e) => e.kind === "store-receipt:retire");
+    expect(retireEntry).toBeDefined();
+    const receipt = JSON.parse(retireEntry!.detail) as {
+      authorizedRevision: number;
+      retiredRevision: number;
+      superseded: boolean;
+    };
+    // Never rejected — §1: "a superseded revision... does NOT reject."
+    expect(receipt).toMatchObject({
+      authorizedRevision: 0,
+      retiredRevision: 1,
+      superseded: true,
+    });
+  });
+
+  it("cancel before armed DISCARDS the staged set — the record SURVIVES, both tiers (the reviewer's own probe, promoted to a permanent regression test)", async () => {
+    const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
+    commitHandoffForTest(leftoverKey, null, fakeLeftoverRun(leftoverKey));
+    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+
+    const { result } = harness({
+      program: ONE_INTERVAL,
+      events: [],
+    });
+    await connect(result);
+    // Never reaches "armed" — Cancel fires from mid-flight, the exact
+    // shape a real transport-missing/program failure or a rower's own
+    // Cancel press produces (every interstitial state's own doc comment:
+    // "Cancel... always lands back on Workout detail with nothing lost").
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    // THE PROBE: the leftover record is untouched on BOTH tiers — not
+    // retired, not superseded, simply still there.
+    const survivor = currentUnretiredHandoffForTest();
+    expect(survivor).not.toBeNull();
+    expect(survivor!.sessionKey).toBe(leftoverKey);
+    expect(survivor!.revision).toBe(0);
+    expect(loadMonitorRun()?.startedAt).toBe(leftoverKey);
+    // The staged set is DISCARDED, not merely "still there waiting" — a
+    // LATER, unrelated Connect attempt's own "armed" must not inherit it
+    // (rev-3 antagonist: "a set staged for attempt 1 must not authorize
+    // attempt 2's retire").
+    expect(takeStagedRetireForTest()).toStrictEqual([]);
+    // F-4 (Task 5 re-review, 2026-08-30): the discard itself is receipted
+    // ("the module receipts rarer things") — distinct from a `retire`
+    // receipt, since nothing was actually removed from either tier here.
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:staged-retire-discarded" &&
+          e.detail.includes(leftoverKey),
+      ),
+    ).toBe(true);
+  });
+
+  // Task 5 re-review (F-1, 2026-08-30): "arm then Cancel" is the ACCEPTED
+  // loss, not the Critical recurring — spec §5 sanctions "armed" as the
+  // acceptance point, so a rower who reaches the "ready" screen and then
+  // Cancels without ever rowing cannot get the staged record back. This
+  // pin exists so the next reader finds intent (the record is gone
+  // BECAUSE armed fired, verified by the retire receipt's own reason)
+  // rather than mistaking the sibling "cancel BEFORE armed" test above
+  // for the whole story.
+  it("arm then Cancel: the accepted loss — both tiers null, the retire receipt already named 'connect-guard-armed' before Cancel ever ran", async () => {
+    const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
+    commitHandoffForTest(leftoverKey, null, fakeLeftoverRun(leftoverKey));
+    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    // THE RETIRE ALREADY HAPPENED, before Cancel is ever pressed.
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    expect(loadMonitorRun()).toBeNull();
+    const entriesAtArmed = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entriesAtArmed.some(
+        (e) =>
+          e.kind === "store-receipt:retire" &&
+          e.detail.includes(leftoverKey) &&
+          e.detail.includes('"reason":"connect-guard-armed"'),
+      ),
+    ).toBe(true);
+
+    // Cancel from "ready" cannot undo it — still null on both tiers, no
+    // SECOND retire receipt (nothing left to retire again).
+    await act(async () => {
+      await result.current.cancel();
+    });
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    expect(loadMonitorRun()).toBeNull();
+    const entriesAfterCancel = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+    }[];
+    expect(
+      entriesAfterCancel.filter((e) => e.kind === "store-receipt:retire"),
+    ).toHaveLength(1);
+  });
+
+  it("nothing staged: an UNRELATED unretired entry survives armed untouched by THIS hook's own retire — proves armed is bound to the staged set, never a blind 'whatever's there' sweep (§10 row 1's own mutation target)", async () => {
+    // An entry that exists in the store but was NEVER staged by anything
+    // — the shape a mutant "armed retires currentUnretired() directly"
+    // would wrongly treat as fair game.
+    const unrelatedKey = new Date(t0.getTime() - 7_200_000).toISOString();
+    commitHandoffForTest(unrelatedKey, null, fakeLeftoverRun(unrelatedKey));
+    expect(takeStagedRetireForTest()).toStrictEqual([]); // nothing staged
+
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    // Still there after "armed" — the CORRECT armed handler found nothing
+    // staged and did nothing. `createMonitorRun`'s own unchanged defense
+    // (this describe block's OWN sibling test, immediately below) is what
+    // eventually clears it, at the first real rowing frame, labelled
+    // "createMonitorRun-defense" — a DIFFERENT reason than an armed-time
+    // retire would carry, which is exactly the observable a mutant
+    // collapsing the two would break.
+    const stillThere = currentUnretiredHandoffForTest();
+    expect(stillThere).not.toBeNull();
+    expect(stillThere!.sessionKey).toBe(unrelatedKey);
+    const entriesAtArmed = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entriesAtArmed.some(
+        (e) =>
+          e.kind === "store-receipt:retire" && e.detail.includes(unrelatedKey),
+      ),
+    ).toBe(false);
+
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    const entriesAfterFrame = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entriesAfterFrame.some(
+        (e) =>
+          e.kind === "store-receipt:retire" &&
+          e.detail.includes(unrelatedKey) &&
+          e.detail.includes('"reason":"createMonitorRun-defense"'),
+      ),
+    ).toBe(true);
+  });
+
+  it("createMonitorRun's own defense retire (spec §5): a leftover unretired entry for a DIFFERENT key is retired before the new create-commit, which then succeeds", async () => {
+    // Session 1 opens and is left OPEN (never retired) — the store is a
+    // process-wide singleton, so its leftover `current` entry is what
+    // session 2's own create is about to collide with.
+    const session1 = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(session1.result);
+    await programAndArm(
+      session1.result,
+      session1.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session1.fake, 100);
+    expect(session1.result.current.phase).toBe("live");
+    const firstKey = loadMonitorRun()?.startedAt;
+    expect(firstKey).toBe(t0.toISOString());
+
+    // Session 2, a SEPARATE hook instance, a DIFFERENT clock — a genuinely
+    // later session's own key, the real-world shape (two sessions never
+    // share a `startedAt`). Without the defense retire this create-commit
+    // would be refused `"second-key"` (the single-unretired-session
+    // invariant, spec §1) against session 1's still-unretired leftover.
+    // FOUND while writing this test, and FIXED at the review round (M6):
+    // using the SAME key here (this describe block's own `harness`
+    // default, `now: () => t0`) used to make the defense retire TOMBSTONE
+    // that exact key, so the create that followed was refused `"retired"`
+    // instead of succeeding. `createMonitorRun`'s own call site now
+    // detects that same-key case and adopts the entry's revision instead
+    // of retiring it — see the sibling test below ("the same-key defense
+    // guard") for that scenario directly; this one keeps the DIFFERENT-key
+    // shape its own title names.
+    const t1 = new Date(t0.getTime() + 60_000);
+    const session2 = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [status(100, { elapsedSeconds: 50, distanceMeters: 250 })],
+      },
+      { now: () => t1 },
+    );
+    await connect(session2.result);
+    await programAndArm(
+      session2.result,
+      session2.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session2.fake, 100);
+
+    expect(session2.result.current.phase).toBe("live");
+    // Session 2's own record is what's live now, at revision 0 again (a
+    // fresh create, not an update) — the defense retire's own receipt
+    // (`retire`, piped to the ring as `store-receipt:retire`) is what
+    // proves the leftover was cleared rather than silently overwritten.
+    const entries = JSON.parse(session2.result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:retire" &&
+          e.detail.includes("createMonitorRun-defense"),
+      ),
+    ).toBe(true);
+    expect(loadMonitorRun()?.startedAt).toBe(t1.toISOString());
+  });
+
+  it("the same-key defense guard (M6): a leftover entry sharing the NEW run's own key is ADOPTED (an update-shaped commit), never retired-then-refused", async () => {
+    // Session 1 opens and is left OPEN — same singleton-store shape as
+    // the sibling test above, but session 2 below reuses the IDENTICAL
+    // clock (`harness`'s own default `now: () => t0`), so its own
+    // `startedAt` collides with session 1's leftover key exactly.
+    const session1 = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(session1.result);
+    await programAndArm(
+      session1.result,
+      session1.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session1.fake, 100);
+    expect(session1.result.current.phase).toBe("live");
+    const collidingKey = loadMonitorRun()?.startedAt;
+    expect(collidingKey).toBe(t0.toISOString());
+
+    // Session 2, a SEPARATE hook instance, the SAME clock — the exact
+    // collision retiring-then-creating cannot survive (retire always
+    // tombstones; a create against a just-tombstoned key is refused
+    // "retired"). The defense at `createMonitorRun`'s own call site
+    // detects `stale.sessionKey === run.startedAt` and adopts the
+    // entry's own revision instead — an UPDATE, never a retire.
+    const session2 = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 50, distanceMeters: 250 })],
+    });
+    await connect(session2.result);
+    await programAndArm(
+      session2.result,
+      session2.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session2.fake, 100);
+
+    expect(session2.result.current.phase).toBe("live");
+    // Session 2's own record IS live now, at the NEXT revision (1) — an
+    // update over session 1's own revision-0 entry, not a fresh create
+    // (which would itself be refused "retired" if a retire had run).
+    const afterSession2 = currentUnretiredHandoffForTest();
+    expect(afterSession2).not.toBeNull();
+    expect(afterSession2!.sessionKey).toBe(collidingKey);
+    expect(afterSession2!.revision).toBe(1);
+    expect(loadMonitorRun()?.startedAt).toBe(collidingKey);
+    // No "createMonitorRun-defense" RETIRE receipt this time — the guard
+    // skipped it on purpose (retiring here would have tombstoned the key
+    // this very commit needed).
+    const entries = JSON.parse(session2.result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:retire" &&
+          e.detail.includes("createMonitorRun-defense"),
+      ),
+    ).toBe(false);
+    // The commit itself DID land, as an accepted update — confirmed via
+    // the store's own receipt rather than inferred from `phase` alone.
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:commit-accepted" &&
+          e.detail.includes(`"revision":1`),
+      ),
+    ).toBe(true);
+  });
+
+  // THE CREATE PATH'S THIRD COMMITTER EXCEPTION, PINNED IN THE DIRECTION
+  // IT SHIPS (final fix round, 2026-08-30; antagonist §10 audit, F-5,
+  // controller ruling: KEEP the shipped behaviour and pin it). The
+  // antagonist's finding was that NEITHER direction was pinned — honouring
+  // §1's ordinary discipline instead (skip the `runRef` assignment on a
+  // refused create) also passed all 5638 tests, so the code was free to
+  // flip either way unnoticed.
+  //
+  // The shipped direction: a create assigns `runRef` UNCONDITIONALLY, so a
+  // refused create still leaves the rower with a working session rather
+  // than a rowing erg and no in-memory record at all. Spec §1 now homes
+  // this as the third named exception with its discipline.
+  it("a REFUSED create still opens the session: `runRef` holds the run (the hold proves it), the refusal is receipted, and the store stays empty for that key — §1's third committer exception", async () => {
+    // Session 1 opens the record at the shared clock's key...
+    const session1 = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(session1.result);
+    await programAndArm(
+      session1.result,
+      session1.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session1.fake, 100);
+    const key = loadMonitorRun()?.startedAt;
+    expect(key).toBe(t0.toISOString());
+
+    // ...and a DOOR retires it (a Today discard, a save-success — any of
+    // §5's termini). `retire` tombstones unconditionally, and tombstones
+    // are process-scoped, so the key is now permanently un-creatable for
+    // the life of this process.
+    retireHandoffForTest([{ sessionKey: key!, revision: 0 }], "today-discard");
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+
+    // Session 2 — a fresh hook on the SAME clock, so the SAME key — is the
+    // "dead hook's late reconnect" shape `createMonitorRun`'s own commit
+    // documents. Its create-commit is refused `"retired"`.
+    const timer = manualSchedule();
+    const session2 = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 50, distanceMeters: 250 }),
+          finishedAt(200),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+    await connect(session2.result);
+    await programAndArm(
+      session2.result,
+      session2.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(session2.fake, 100);
+
+    // THE SHIPPED DIRECTION, half one: the rower is rowing. The session
+    // opened and published a live frame despite the store refusing it.
+    expect(session2.result.current.phase).toBe("live");
+    expect(session2.result.current.runOpen).toBe(true);
+    // THE STORE, meanwhile, holds NOTHING for that key — the divergence is
+    // real, not a store that quietly accepted after all.
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    const live = JSON.parse(session2.result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      live.some(
+        (e) =>
+          e.kind === "store-receipt:commit-refused" &&
+          e.detail.includes('"reason":"retired"'),
+      ),
+    ).toBe(true);
+
+    // THE SHIPPED DIRECTION, half two — the assertion that actually
+    // separates the two candidate behaviours. `openHandoffHold` reads
+    // `runRef.current` DIRECTLY and returns `false` when it is null, so
+    // the hold opening at this natural finish is only possible if the
+    // refused create assigned `runRef` anyway. The §1-honouring
+    // alternative (skip the assignment) produces no hold and no ring
+    // entry here at all.
+    tick(session2.fake, 100);
+    expect(session2.result.current.phase).toBe("ended");
+    expect(session2.result.current.handoffHeld).toBe(true);
+    const ended = JSON.parse(session2.result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      ended.some(
+        (e) => e.kind === "handoff-hold" && e.detail.includes("unmeasured"),
+      ),
+    ).toBe(true);
+
+    // AND THE CONSEQUENCE THE SPEC NAMES: at release, the verify reads the
+    // cached verdict for a key `retire` deleted — `undefined`, never
+    // `"failed"` — so the hand-off RELEASES rather than holding the rower
+    // in front of an error frame for a write nothing is waiting on.
+    //
+    // ONLY THE SPLIT CONDITION IS OWED HERE, and that is itself a
+    // consequence of the divergence rather than an accident of the
+    // script: `openBurstHold`'s predicate reads `runRef.current`, whose
+    // close-commit was REFUSED, so the in-memory run is still OPEN
+    // (`completedAt === null`) and burst-ineligible. The split backstop
+    // alone therefore releases the whole hold.
+    expect(timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)).toBeNull();
+    act(() => {
+      timer.pendingWithMs(3500)!.fire();
+    });
+    expect(session2.result.current.handoffHeld).toBe(false);
+    expect(session2.result.current.holdError).toBeNull();
+  });
+
+  it("the receipt-channel ownership guard (M7): an unmount racing a LATER mount must not clobber the successor's own channel", async () => {
+    // Session A mounts first and claims the channel via its own effect.
+    const sessionA = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(sessionA.result);
+
+    // Session B mounts SECOND, a genuinely separate hook instance — its
+    // own mount effect steals ownership of the ONE module-level channel
+    // (`handoffStore.ts`'s own "one process, one store" header).
+    const t1 = new Date(t0.getTime() + 120_000);
+    const sessionB = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [status(100, { elapsedSeconds: 50, distanceMeters: 250 })],
+      },
+      { now: () => t1 },
+    );
+    await connect(sessionB.result);
+
+    // Session A UNMOUNTS while B is still live — without the ownership
+    // guard, A's own cleanup would unconditionally null the channel B
+    // now owns.
+    sessionA.unmount();
+
+    // Drive B to `live` — its own create-commit emits a REAL receipt.
+    // Without the guard this receipt would go nowhere (the channel was
+    // nulled by A's unmount), and B's own ring would never see it.
+    await programAndArm(
+      sessionB.result,
+      sessionB.fake,
+      ONE_INTERVAL,
+      ONE_IDENTITY,
+    );
+    tick(sessionB.fake, 100);
+    expect(sessionB.result.current.phase).toBe("live");
+
+    const entries = JSON.parse(sessionB.result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:commit-accepted" &&
+          e.detail.includes(t1.toISOString()),
+      ),
+    ).toBe(true);
+  });
+
+  it("A REFUSED SUMMARY COMMIT MUST STILL RESOLVE THE BURST CONDITION (plan Task 3 review, I3 — the #228 invariant this task's own deletion of APPEND-REJECTED left with no assertion): the key is retired WHILE the burst hold is open, then the summary arrives — the store refuses the commit, but the hold still releases", async () => {
+    // Row 5's own "tombstone refusal reaching the hook's discipline" gets
+    // its FIRST real assertion here too: the SAME retire-while-open shape
+    // is exactly what a Save/Discard racing a still-lingering burst would
+    // produce once Task 4 routes those doors through `retire()`.
+    const driverTimer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 40,
+            distanceMeters: 130,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      {
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100); // the Menu press — closes healthy, burst hold opens
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+    expect(result.current.holdError).toBeNull();
+
+    // THE RACE: retire the key directly through the store WHILE the burst
+    // hold is still open — the shape a Save/Discard produces once Task 4
+    // routes those doors through `retire()` instead of the legacy
+    // `clearMonitorRun()` (ROADMAP's own AUD-016 open condition on Task 4).
+    const current = currentUnretiredHandoffForTest();
+    expect(current).not.toBeNull();
+    retireHandoffForTest(
+      [{ sessionKey: current!.sessionKey, revision: current!.revision }],
+      "test-simulated-save-while-burst-open",
+    );
+
+    // THE SUMMARY ARRIVES: the writer gate accepts (it still reads
+    // `runRef.current`, which has no idea it was just retired), but the
+    // STORE refuses the commit — tombstoned.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 40, meters: 130 });
+    });
+    expect(driverTimer.pending()?.ms).toBe(200);
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    // The refusal receipt, from the store itself (piped to the ring).
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:commit-refused" &&
+          e.detail.includes('"reason":"retired"'),
+      ),
+    ).toBe(true);
+    // THE INVARIANT ITSELF: a refused summary write still resolves the
+    // burst condition — "waiting longer cannot help a write that was
+    // refused" — so the hold does not strand the rower on a session that
+    // has already been dispatched elsewhere.
+    const released = entries.find((e) => e.kind === "handoff-released");
+    expect(released?.detail).toContain("burst-heard");
+    expect(result.current.handoffHeld).toBe(false);
+    expect(result.current.holdError).toBeNull();
+  });
+
+  it("the burst-first-race ordering (test (h)'s own shape) under denial: the summary's OWN commit is what's refused, and resolveHandoffCondition's release funnel is what catches it — endByMachine's own no-conditions-owed branch stays unreachable here (burst is still open when it runs)", async () => {
+    // CORRECTION, found empirically while building this test: `endByMachine`
+    // ALWAYS finds `run.summaryTotals === undefined` at its own
+    // `openBurstHold()` check, even in test (h)'s "whole burst before the
+    // Menu press" ordering — the driver emits `terminated` BEFORE
+    // `summary-observations` (test (h)'s own comment: the pickup "must run
+    // AFTER the `terminated` event or the record is still open and
+    // declines the write forever"), so `endByMachine`'s own verify branch
+    // ALWAYS sees the burst hold already open and is genuinely UNREACHABLE
+    // for a real run (documented at its own call site instead of forced
+    // here). What test (h)'s ordering DOES exercise under denial is
+    // `resolveHandoffCondition`'s own release funnel: the burst hold opens
+    // (summary not yet heard), then the summary's OWN commit — itself
+    // denied by this test's broad predicate — resolves the condition via
+    // `resolveHandoffCondition("burst", "burst-heard")`, whose own verify
+    // reads the now-`"failed"` cached verdict and holds instead of
+    // releasing. This is the SAME funnel the earlier "denied durable
+    // write" test exercises via `endSession`'s link-lost door — this one
+    // proves it ALSO catches the three-burst-holding-arms path, on real
+    // wire timing.
+    const restore = installMonitorRunWriteDenial(
+      (parsed) =>
+        (parsed as { completedAt: string | null }).completedAt !== null,
+    );
+    try {
+      const driverTimer = manualSchedule();
+      const { result, fake } = harness(
+        {
+          program: ONE_INTERVAL,
+          events: [
+            status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+            {
+              ...finalBoundary(150),
+              burst: { summaryAtMsOffset: 10, verificationAtMsOffset: 20 },
+            },
+            status(200, {
+              workoutState: WORKOUTSTATE_TERMINATE,
+              elapsedSeconds: 60,
+              distanceMeters: 200,
+              spm: 0,
+              currentSplit: 0,
+            }),
+          ],
+        },
+        {
+          driverOptions: {
+            settleTicks: 0,
+            prepareSettleTicks: 0,
+            schedule: driverTimer.schedule,
+          },
+        },
+      );
+
+      await connect(result);
+      await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+      tick(fake, 100); // t=100: rowing
+      tick(fake, 50); // t=150: the final split
+      tick(fake, 20); // t=170: 0x0039 (buffered) and 0x003F (stored on the run)
+      tick(fake, 30); // t=200: the Menu press; burst opens, then resolves same tick
+
+      expect(result.current.phase).toBe("ended");
+      expect(result.current.endedBy).toBe("machine");
+      expect(result.current.handoffHeld).toBe(true);
+      expect(result.current.holdError).toBe("storage-failed");
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      // The burst DID open — confirming the correction above, not silently
+      // dropping the original (wrong) expectation.
+      expect(entries.find((e) => e.kind === "handoff-hold")).toBeDefined();
+      expect(
+        entries.find((e) => e.kind === "hold-error-entered"),
+      ).toBeDefined();
+    } finally {
+      restore();
+    }
+  });
+
+  // NOT COVERED HERE, disclosed rather than forced (RF13's own rule):
+  // the continuity-reset close is a THIRD genuinely-reachable no-hold
+  // site (`link-lost` is never burst-eligible, so it never opens a hold
+  // either) — architecturally identical code to the two sites tested
+  // above (the SAME `verifyHandoffWritable()` call, at a third call
+  // site). Reaching it at the hook level requires latching `frameSilence`
+  // first, which this file's own existing tests only ever do via the
+  // heavier `vi.doMock("../adapters/appLifecycle")` + `Date.now()`-spoofing
+  // resume-gap harness (`resumeAfterGap`, further down this file) — the
+  // simple `harness()`/fake-timeline composition this describe block uses
+  // has no injection point for the REAL watchdog clock `frameSilence`
+  // latches on, confirmed by trying (`tick()` only advances the FAKE's own
+  // scripted wire time, never real wall-clock milliseconds). Judged not
+  // worth replicating that separate harness for a call site that reuses,
+  // verbatim, a function two OTHER tests in this describe block already
+  // exercise both ways.
 });
 
 describe("useMonitorSession: teardown — the burst linger (storage-spine design spec §2, PR 1 Task 3)", () => {
@@ -3039,7 +4439,20 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(stored).not.toHaveProperty("verificationBytes");
   });
 
-  it("(d) THE RESURRECTION RACE: MONITOR_RUN_KEY is cleared during the linger — the burst's own appendSummaryObservations declines, and nothing reappears in storage", async () => {
+  it("(d) THE RESURRECTION RACE, RETARGETED (hand-off store design spec §1, plan Task 3): the run is RETIRED (tombstoned) during the linger — the burst's own commit is refused by the store, and nothing reappears in storage", async () => {
+    // RETARGETED from `clearMonitorRun()` (the legacy raw key-removal
+    // `LogSession.tsx`/`Today.tsx` still call today, Tasks 4/5's own scope)
+    // to `handoffStore.retire()` — the mechanism THIS hook's own commits
+    // actually answer to (spec §1's tombstone). `clearMonitorRun()` alone no
+    // longer has this effect under the new design: `appendSummaryObservations`
+    // is pure and builds on the hook's own `runRef.current`, never a
+    // storage re-read (`stillLive` is deleted), so a raw physical removal
+    // the store's own bookkeeping never hears about would NOT stop the
+    // hook's own late-burst commit from landing (a real, but TEMPORARY,
+    // gap this branch's own sequencing closes: Task 4 retargets
+    // `LogSession.tsx`'s save-success/monitor-discard onto
+    // `handoffStore.retire()`, at which point this exact door produces the
+    // tombstone this test now simulates directly).
     const driverTimer = manualSchedule();
     const burstTimer = manualSchedule();
     const boundaryWithBurst: FakeBoundaryEvent = {
@@ -3076,9 +4489,15 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
 
     // THE ROWER DISCARDS OR LOGS THIS RUN from another screen, entirely
-    // independent of this (unmounted) hook instance — `LogSession.tsx`/
-    // `Today.tsx`'s own clear sites, cited in the spec.
-    clearMonitorRun();
+    // independent of this (unmounted) hook instance — retired through the
+    // STORE directly, the mechanism `LogSession.tsx`/`Today.tsx` route
+    // through once Task 4/5 land.
+    const staged = currentUnretiredHandoffForTest();
+    expect(staged).not.toBeNull();
+    retireHandoffForTest(
+      [{ sessionKey: staged!.sessionKey, revision: staged!.revision }],
+      "test-simulated-discard",
+    );
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
 
     // THEN the burst arrives (`FakeBurst`'s own keystone offsets off the
@@ -3090,8 +4509,8 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     tick(fake, 40); // t=460: past the hash's 457.8ms due time
     expect(driverTimer.pending()).toBeNull();
 
-    // `appendSummaryObservations` re-reads storage fresh and finds nothing
-    // to append to — it declines silently, and nothing reappears.
+    // The commit lands on a TOMBSTONED key — the store refuses it
+    // (`reason: "retired"`) and nothing reappears.
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
   });
 

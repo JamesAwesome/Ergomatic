@@ -646,6 +646,24 @@ export interface FakeControls {
       Omit<WorkoutSummary, "elapsedSeconds" | "meters">
     >,
   ): void;
+  /** Delivers one LOGGED-WORKOUT VERIFICATION (0x003F) notification RIGHT
+   *  NOW, regardless of the script/clock — `deliverSummary`'s sibling, and
+   *  the other half of the burst a scripted `FakeBurst` delivers on the
+   *  tick. Defaults to the keystone's own captured bytes
+   *  (`KEYSTONE_VERIFICATION_BYTES`, the same default `FakeBurst` uses), so
+   *  the two on-demand controls together reproduce a real burst's PAIR
+   *  rather than only its first frame.
+   *
+   *  **Why a test would want it (PR #239 review round 8).** 0x003F is not
+   *  decoration on the terminate path: `driver.ts`'s
+   *  `noteTerminateObservations` holds the observations emit for up to
+   *  `HASH_SUBWINDOW_MS` waiting for exactly this byte, and flushes the
+   *  instant it lands. So a 0x0039 delivered ALONE folds onto the record
+   *  ~200 ms later, while a 0x0039 followed by its 0x003F folds
+   *  SYNCHRONOUSLY — the difference between a consumer that mounts before
+   *  the fold-in and one that mounts after it, on the same wire ordering
+   *  the machine actually sends. */
+  deliverVerification(bytes?: Uint8Array): void;
   /** Clears the disconnected flag and immediately flushes the fake's
    *  current (possibly time-jumped) state as a fresh status/boundary
    *  notification — "the machine's next status frame" the driver's
@@ -2695,6 +2713,14 @@ export function createFakeTransport(script: FakeScript): Transport &
           ...totals,
         }),
       );
+    },
+    /** 0x003F on demand — the interface's own doc comment carries the
+     *  reasoning. Gated on `linkDown` exactly as `deliverSummary` is: the
+     *  machine sends it either way, but a phone with no radio does not hear
+     *  it. */
+    deliverVerification(bytes: Uint8Array = KEYSTONE_VERIFICATION_BYTES): void {
+      if (linkDown) return;
+      notify(LOGGED_WORKOUT_UUID, bytes);
     },
     injectGarbledFrame(): void {
       // Two bytes where 0x0031 (General Status) requires 19 — always too

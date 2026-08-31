@@ -32,11 +32,17 @@ import {
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
 import {
-  clearMonitorRun,
-  loadMonitorRun,
   type MachineSummaryDetail,
   type MonitorRun,
 } from "../monitor/monitorRun";
+import {
+  claim as claimHandoff,
+  currentUnretired as currentUnretiredHandoff,
+  hydrate as hydrateHandoff,
+  read as readHandoff,
+  retire as retireHandoff,
+  type HandoffEntry,
+} from "../monitor/handoffStore";
 import type { SeriesData } from "../monitor/seriesRecorder";
 import type { MonitorLogEntry } from "../monitor/eventLog";
 import { useStagedDiscard } from "./useStagedDiscard";
@@ -46,6 +52,33 @@ import { buildSummaryModel, type SummaryModel } from "./summaryModel";
 import { postTestOffer, type PostTestOffer } from "./postTestOffer";
 import PostTestPrompt from "./PostTestPrompt";
 import { recordTestResult } from "../api/testHistory";
+
+// Hand-off store design spec (rev 4), §8/§1: this route's own hydration
+// boundary. `monitorModeEntry`/`connectedArrivalWithNoRecord` below are both
+// called from `useState` LAZY INITIALIZERS inside `ManualDoorLog` —
+// RENDER-CONTEXT reads that must never trigger hydration themselves
+// (`handoffStore.ts`'s own module header states this as a REQUIREMENT for
+// this task: "Today.tsx and LogSession.tsx's mount snapshots are both
+// render-context reads ... Either screen's mount effect (or a shared
+// route-level guard upstream of both) MUST call hydrate() before that
+// render runs"). This module-scope statement is a genuinely NON-RENDER
+// site — plain JS module evaluation, never re-invoked by React the way a
+// component body can be (StrictMode/concurrent rendering may call a
+// component's function more than once before a commit; a module's
+// top-level code runs exactly once per module instance) — and it always
+// precedes either door component's own function body: at real app
+// startup (`AppRoutes.tsx` imports this module eagerly; this app has no
+// route loader or code-splitting to hang a "loader" hydrate off of
+// instead — checked, there is none), or, in this file's own tests
+// (`LogSession.test.tsx`'s own `beforeEach: vi.resetModules()` plus every
+// render helper's `await import("./LogSession")`), at each fresh dynamic
+// re-import, which re-evaluates this exact line against whatever
+// localStorage the test has already seeded before calling that helper.
+// `hydrate()` is documented idempotent (`handoffStore.ts`), so re-running
+// it on a later import generation (or, in production, a later render of
+// this same never-reloaded module instance) costs nothing beyond the
+// first call.
+hydrateHandoff();
 
 /** PACES LOCKED panel (README.md §7's own literal example: "PACES LOCKED AT
  *  2K 1:52.0 · 6K 2:02.0"). UNVERIFIED judgment call (Task 2 brief flagged
@@ -270,7 +303,7 @@ function recordLogDoorMiss(condition: string): void {
  *  1. the `from=monitor` search param is present — the flag is an INTENT,
  *     not evidence on its own (a reload after a successful save, or a
  *     stale/shared URL, still carries it with nothing behind it);
- *  2. `loadMonitorRun()` returns a record, and it's finished
+ *  2. the hand-off store's `read()` returns a record, and it's finished
  *     (`completedAt !== null`) — the evidence the flag alone can't supply;
  *  3. that record's own `workoutId` matches THIS route's `:id` — a
  *     connected session for a DIFFERENT workout must never prefill this
@@ -304,9 +337,22 @@ function recordLogDoorMiss(condition: string): void {
  *
  *  Exported for tests (task brief): each condition gets its own
  *  independent-removal test against this one function, cheaper than
- *  driving the whole screen four times over. Reads `localStorage` via
- *  `loadMonitorRun()` the same way `loadRun`/`loadDraft` already do at this
- *  screen's other call sites, never a hook of its own.
+ *  driving the whole screen four times over.
+ *
+ *  **Hand-off store design spec (rev 4), plan Task 4: reads via the store,
+ *  never `loadMonitorRun()`.** `read()` (never hydrates on its own — see
+ *  this module's own top-level `hydrateHandoff()` call for why that is
+ *  already handled by the time this runs) replaces the old raw-storage
+ *  read; everything else about the four-condition gate — the order
+ *  checked, what each condition means, the miss vocabulary recorded below —
+ *  is unchanged. `monitorModeEntry` (private) does the real work and
+ *  returns the STORE'S OWN entry (`{sessionKey, revision, run}`), not just
+ *  the bare `MonitorRun` — `ManualDoorLog`'s own mount snapshot needs the
+ *  revision to claim/retire against later (§6); `monitorModeRun` below is
+ *  simply that entry's `.run` projection, kept as its own exported name
+ *  since it is what this function's existing tests already assert against
+ *  (a bare `MonitorRun`, unchanged) and what the miss-recording behaviour
+ *  documented below was written against.
  *
  *  **Task 1 (lost-monitor design spec): no longer side-effect-free.** A
  *  `from=monitor` arrival that finds no usable record is exactly the
@@ -319,32 +365,39 @@ function recordLogDoorMiss(condition: string): void {
  *  twice under StrictMode in dev, which duplicates at most one diagnostic
  *  entry — harmless for a best-effort append, same posture every other
  *  writer onto this stash already takes. */
+function monitorModeEntry(
+  search: URLSearchParams,
+  workoutId: string,
+): HandoffEntry | null {
+  if (search.get("from") !== "monitor") return null;
+  const entry = readHandoff();
+  if (entry === null) {
+    recordLogDoorMiss("no-run");
+    return null;
+  }
+  if (entry.run.completedAt === null) {
+    recordLogDoorMiss("not-completed");
+    return null;
+  }
+  if (entry.run.workoutId !== workoutId) {
+    recordLogDoorMiss("workout-id-mismatch");
+    return null;
+  }
+  try {
+    buildMonitorLogSteps(entry.run);
+  } catch {
+    recordLogDoorMiss("log-steps-build-failed");
+    return null;
+  }
+  return entry;
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function monitorModeRun(
   search: URLSearchParams,
   workoutId: string,
 ): MonitorRun | null {
-  if (search.get("from") !== "monitor") return null;
-  const run = loadMonitorRun();
-  if (run === null) {
-    recordLogDoorMiss("no-run");
-    return null;
-  }
-  if (run.completedAt === null) {
-    recordLogDoorMiss("not-completed");
-    return null;
-  }
-  if (run.workoutId !== workoutId) {
-    recordLogDoorMiss("workout-id-mismatch");
-    return null;
-  }
-  try {
-    buildMonitorLogSteps(run);
-  } catch {
-    recordLogDoorMiss("log-steps-build-failed");
-    return null;
-  }
-  return run;
+  return monitorModeEntry(search, workoutId)?.run ?? null;
 }
 
 /** Phase LM PR 1 Task 4 (lost-monitor design spec): the flagship arrival,
@@ -360,12 +413,16 @@ export function monitorModeRun(
  *  another workout, or one whose `logSeed` no longer aligns can carry real
  *  PM5 readings we simply cannot render here. Saying "no reading" over
  *  those would be a claim we have not earned, so they keep the
- *  door-ambiguous `LOGGED BY HAND` they render today. The one rule this
- *  file already trusts for the same storage read applies: read
- *  `loadMonitorRun()` directly, never a state var.
+ *  door-ambiguous `LOGGED BY HAND` they render today.
+ *
+ *  **Hand-off store design spec (rev 4), plan Task 4: reads via the store's
+ *  `read()`, never `loadMonitorRun()` and never a state var** — the same
+ *  swap `monitorModeEntry` above makes, for the identical reason (a
+ *  render-context read must never hydrate on its own; this module's
+ *  top-level `hydrateHandoff()` call is what makes that safe here).
  *
  *  Known and accepted: a RELOAD of this URL after a successful monitor-mode
- *  save also lands here (that save clears the record), and this predicate
+ *  save also lands here (that save retires the record), and this predicate
  *  cannot tell it from the flagship. Both are "we hold no reading for the
  *  row you are about to save", which is what the label says — and the same
  *  pair `recordLogDoorMiss("no-run")` above already records as one class.
@@ -373,7 +430,7 @@ export function monitorModeRun(
  *  Exported for tests, same reasoning as `monitorModeRun` above. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function connectedArrivalWithNoRecord(search: URLSearchParams): boolean {
-  return search.get("from") === "monitor" && loadMonitorRun() === null;
+  return search.get("from") === "monitor" && readHandoff() === null;
 }
 
 /** Resolves the POST body's `workoutType` — `SessionRun` itself doesn't
@@ -1446,17 +1503,17 @@ function SessionDoorLog() {
  *  (`monitorModeRun`'s own doc comment has the full four-condition gate).
  *  The hard constraint above still holds for the ORIGINAL manual path —
  *  baselines-gated, no `MonitorRun` in sight — and for the monitor branch's
- *  OWN records (it reads/writes `MONITOR_RUN_KEY` only, never
+ *  OWN records (it reads/retires the hand-off store only, never
  *  `./draft`/`./run` — the M-2 coexistence contract, spec §5). The one
  *  qualified exception is `useStagedDiscard` (imported for its `armed`/
  *  `arm`/`disarm` timing machine, the session door's own idiom, spec §4's
  *  own words): its `fire()` method calls `clearDraft`/`clearRun`
  *  internally, so BOTH doors' own discard handlers below call `disarm()`
- *  plus their own, narrower `clearMonitorRun()` directly, never `fire()` —
- *  the one call that would break the constraint.
+ *  plus their own, narrower `retireHandoff()` call, never `fire()` — the
+ *  one call that would break the constraint.
  *
  *  **LT-0 (2026-08-18-target-truth-design.md §3): the PLAIN-manual render
- *  (below, once `monitorRun` is proven `null`) needs the identical
+ *  (below, once `monitorEntry` is proven `null`) needs the identical
  *  discipline, for a reason that isn't obvious from its name.**
  *  `monitorModeRun`'s own "hijack pin" doc comment says a miss on ANY of
  *  its four conditions "falls straight through to today's manual form,
@@ -1464,11 +1521,11 @@ function SessionDoorLog() {
  *  off-app door, it is also where a REAL, completed `MonitorRun` lands the
  *  instant its `workoutId` mismatches this route, its `logSeed` fails
  *  `buildMonitorLogSteps`' alignment check, or the catch-all swallows an
- *  unanticipated exception. That branch's own discard reads
- *  `loadMonitorRun()` fresh at fire time (never the `monitorRun` state
- *  var, which this branch has already proven `null`) and clears it the
- *  same qualified-exception way, so the record this door was originally
- *  trying to log for the rower doesn't survive as an invisible orphan once
+ *  unanticipated exception. That branch's own discard reads the store's
+ *  `currentUnretired()` fresh at fire time (never `monitorEntry`, which
+ *  this branch has already proven `null`) and retires it the same
+ *  qualified-exception way, so the record this door was originally trying
+ *  to log for the rower doesn't survive as an invisible orphan once
  *  they've explicitly asked to discard. */
 function ManualDoorLog({ workoutId }: { workoutId: string }) {
   const navigate = useNavigate();
@@ -1481,16 +1538,37 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // 7C spec §4: computed once at mount (`useState` lazy init, the same
   // idiom `SessionDoorLog`'s own `run`/`draft` already use) — a reload of
   // THIS screen after a successful save must not re-detect a monitor run
-  // that `clearMonitorRun()` (below) already retired; re-deriving on every
-  // render would do exactly that the instant the record disappeared out
-  // from under a still-mounted component.
-  const [monitorRun] = useState<MonitorRun | null>(() =>
-    monitorModeRun(searchParams, workoutId),
+  // that this door's own save-success/discard retire (below) already
+  // removed; re-deriving on every render would do exactly that the instant
+  // the record disappeared out from under a still-mounted component.
+  //
+  // Hand-off store design spec (rev 4), §6, plan Task 4: THE MOUNT SNAPSHOT
+  // IS THE RETAINED COPY (contract A) — this `HandoffEntry`, not a bare
+  // `MonitorRun`, is what this component retains for its whole lifetime.
+  // The store does not duplicate this itself (§6: "the store does not
+  // duplicate it — a store-side retained token is a second strong
+  // reference buying nothing"); THIS state var is the one and only retained
+  // reference, and every later save/discard/claim call below authorizes
+  // itself against ITS revision, never a fresh re-read.
+  const [monitorEntry] = useState<HandoffEntry | null>(() =>
+    monitorModeEntry(searchParams, workoutId),
   );
 
+  // Hand-off store design spec (rev 4), §6, plan Task 4 (BINDING, from Task
+  // 2's review): "The commit effect claims: registers {sessionKey,
+  // renderedRevision} ... with the SNAPSHOT's revision, never a re-read."
+  // `monitorEntry` never changes identity after mount (the lazy init above
+  // runs once), so this effect claims exactly once in practice; `claim()`
+  // is documented idempotent BY VALUE, so StrictMode's double-invoke of
+  // this effect in dev is a genuine no-op, not a second receipt.
+  useEffect(() => {
+    if (monitorEntry === null) return;
+    claimHandoff(monitorEntry.sessionKey, monitorEntry.revision);
+  }, [monitorEntry]);
+
   // Task 4: computed once at mount, the same lazy-init idiom and for the
-  // same reason as `monitorRun` above — this reads storage, and a later
-  // render (a successful save clears the record) must not change what the
+  // same reason as `monitorEntry` above — this reads the store, and a later
+  // render (a successful save retires the record) must not change what the
   // screen already told the rower. Only ever consumed in the plain-manual
   // branch below; the monitor branch returns before it is read.
   const [connectedNoRecord] = useState<boolean>(() =>
@@ -1546,7 +1624,23 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     saveError,
     submit,
   } = useLogForm((logId) => {
-    if (monitorRun !== null) clearMonitorRun();
+    // Hand-off store design spec (rev 4), §5/§6, plan Task 4 (BINDING):
+    // save-success retires the CLAIMED key/revision, never a fresh re-read
+    // — `retire`'s own "save-success" reason is EXEMPT from rejection by
+    // construction (§1/§6): a richer store revision at this exact moment
+    // (the claim race, §10 row 3) still retires and is counted via
+    // `handoff-dropped reason=richer-at-save`, never refused.
+    if (monitorEntry !== null) {
+      retireHandoff(
+        [
+          {
+            sessionKey: monitorEntry.sessionKey,
+            revision: monitorEntry.revision,
+          },
+        ],
+        "save-success",
+      );
+    }
     const offer = pendingOfferRef.current;
     if (offer !== null) {
       // James's ruling (spec rev 2): the record fires on the SAVE, before
@@ -1577,7 +1671,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // toggle just appears once the plan resolves with an active plan.
   //
   // 7C: `baselinesState`'s own loading/error gates moved BELOW the
-  // `monitorRun !== null` branch (further down this function) — the
+  // `monitorEntry !== null` branch (further down this function) — the
   // monitor branch never calls `buildManualLogSteps` and has no use for
   // baselines at all (`PACES LOCKED` reads `logSeed.paces`, frozen at
   // Connect), so a monitor-mode run must not sit at LOADING… (or an error
@@ -1670,7 +1764,20 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     );
   }
 
-  if (monitorRun !== null) {
+  if (monitorEntry !== null) {
+    // Hand-off store design spec (rev 4), §6: `monitorRun` here is the
+    // SNAPSHOT's own run — the exact object `monitorModeEntry` returned at
+    // mount, never re-read from the store. Everything below this line is
+    // UNCHANGED from before the store rewrite (still a plain `MonitorRun`
+    // local, same name) other than this one derivation; the render/save
+    // body posts this reference (§6: "Save posts the SNAPSHOT").
+    const monitorRun = monitorEntry.run;
+    // Same narrowing idiom as `activeWorkout`/`activeRun` elsewhere in this
+    // file: TS narrowing from the `monitorEntry !== null` guard above
+    // doesn't survive into a function DECLARED later in this block
+    // (`handleMonitorDiscardClick`, below) — a separately-typed `const`
+    // alias is the fix, not a non-null assertion at each use site.
+    const activeMonitorEntry: HandoffEntry = monitorEntry;
     // 7C spec §4: the monitor mode's own render — `buildMonitorLogSteps`
     // never throws here (`monitorModeRun` already proved it wouldn't, by
     // calling it once itself; this is the SAME pure function against the
@@ -1781,15 +1888,36 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     // (spec §4: "in the session door's idiom") — deliberately does NOT
     // call `discard.fire()`, which would also clear `./draft`/`./run` (this
     // door's own hard constraint, header comment above): `disarm()` resets
-    // the armed state, and `clearMonitorRun()` is this branch's own,
-    // narrower destruction. Navigates back to the workout's OWN detail
-    // screen (spec §4: "navigates back to the detail"), not `/today` — the
-    // session door's discard lands on `/today` because it has no other
-    // natural home; this one does.
+    // the armed state, and the retire below is this branch's own, narrower
+    // destruction. Navigates back to the workout's OWN detail screen (spec
+    // §4: "navigates back to the detail"), not `/today` — the session
+    // door's discard lands on `/today` because it has no other natural
+    // home; this one does.
+    //
+    // Hand-off store design spec (rev 4), §5, plan Task 4: routes through
+    // `retire()` — key-bound to the SNAPSHOT's own `{sessionKey, revision}`
+    // (§5's census row: "monitor discard | the claim's key (M+D) | two-tap
+    // arm"), never a direct `clearMonitorRun()`. `activeMonitorEntry` is
+    // the same narrowed alias `activeWorkout` uses above, needed here for
+    // the identical reason (a nested function declaration doesn't inherit
+    // the enclosing `if`'s narrowing). Task 3's own I1 finding named the OLD
+    // direct `clearMonitorRun()` call here as the cause of the row-5
+    // resurrection regression (a late producer burst racing this discard
+    // would find no tombstone and write the record straight back); routing
+    // through `retire()` is the fix, since a post-retire commit for this
+    // key is now refused (`reason:"retired"`), receipted.
     function handleMonitorDiscardClick() {
       if (discard.armed) {
         discard.disarm();
-        clearMonitorRun();
+        retireHandoff(
+          [
+            {
+              sessionKey: activeMonitorEntry.sessionKey,
+              revision: activeMonitorEntry.revision,
+            },
+          ],
+          "monitor-discard",
+        );
         navigate(`/library/${workoutId}`);
       } else {
         discard.arm();
@@ -1845,7 +1973,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     );
   }
 
-  // 7C: from here on `monitorRun` is provably `null` (the branch above
+  // 7C: from here on `monitorEntry` is provably `null` (the branch above
   // always returns) — the ORIGINAL manual path's own baselines gate lives
   // here, not up with `workoutsState`'s, so a monitor-mode run is never
   // blocked on a fetch it has no use for (this function's own comment,
@@ -1969,22 +2097,30 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // `summary-discard`/`summary-discard-armed`, `DISCARD WITHOUT SAVING`/
   // `Tap again to discard`) as `handleDiscardClick`/
   // `handleMonitorDiscardClick` above. Reaching this render already proves
-  // `monitorRun === null` — but that only means `monitorModeRun`'s OWN
+  // `monitorEntry === null` — but that only means `monitorModeRun`'s OWN
   // four-condition gate missed, not that nothing is stored: this is
   // exactly the fallthrough target `monitorModeRun`'s own "hijack pin" doc
   // comment describes, so a real, completed `MonitorRun` can be sitting in
-  // `MONITOR_RUN_KEY` right now (a mismatched `workoutId`, a misaligned
-  // `logSeed`, or the catch-all all land here with the record still real).
-  // Reading `loadMonitorRun()` fresh at fire time — never the `monitorRun`
-  // state var, fixed `null` in this branch by construction — is what
-  // catches it, the same "read the key directly" discipline
-  // `monitorModeRun`'s own doc comment already applies one call site up.
-  // Same qualified exception this component's header comment names:
-  // `clearMonitorRun()` directly, never `discard.fire()`, which would also
-  // clear `./draft`/`./run` — this component's own hard constraint — and
-  // could nuke an unrelated in-progress session elsewhere. A pure by-hand
-  // entry (nothing ever stored under either key) leaves storage
-  // byte-identical; the form state itself simply dies with this
+  // the store right now (a mismatched `workoutId`, a misaligned `logSeed`,
+  // or the catch-all all land here with the record still real).
+  //
+  // Hand-off store design spec (rev 4), §5, plan Task 4 — the spec's own
+  // CORRECTED §5 row ("manual-door discard... the discarded key, both
+  // tiers, tombstoned like every retire... two-tap arm + fresh non-render
+  // read"): `currentUnretired()` — a fresh NON-render read at fire time
+  // (never `monitorEntry`, fixed `null` in this branch by construction, and
+  // never the render-context `read()`/`hydrate()` pair) — is what catches
+  // this fallen-through record, the same "read the store directly" idiom
+  // `monitorModeEntry`'s own doc comment already applies one call site up,
+  // now key-bound: the set names EXACTLY the key/revision this read just
+  // observed, so the retire can never touch a DIFFERENT session even if one
+  // somehow existed. Same qualified exception this component's header
+  // comment names: a direct store call, never `discard.fire()`, which would
+  // also clear `./draft`/`./run` — this component's own hard constraint —
+  // and could nuke an unrelated in-progress session elsewhere. A pure
+  // by-hand entry (nothing ever stored under either key) leaves storage
+  // byte-identical (`currentUnretired()` returns null, `retire` is never
+  // called at all); the form state itself simply dies with this
   // component's unmount, the same as an ordinary Back press already
   // silently does today. Navigates to the workout's own detail screen —
   // the same target `handleMonitorDiscardClick` above uses, for the same
@@ -1992,7 +2128,18 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   function handleManualDiscardClick() {
     if (discard.armed) {
       discard.disarm();
-      if (loadMonitorRun() !== null) clearMonitorRun();
+      const fallenThrough = currentUnretiredHandoff();
+      if (fallenThrough !== null) {
+        retireHandoff(
+          [
+            {
+              sessionKey: fallenThrough.sessionKey,
+              revision: fallenThrough.revision,
+            },
+          ],
+          "manual-discard",
+        );
+      }
       navigate(`/library/${workoutId}`);
     } else {
       discard.arm();

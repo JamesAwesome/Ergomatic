@@ -352,6 +352,311 @@ rower's work silently.
         level; not chased further. **Needs a PM final-PR gate before merge
         (TRIAD: a stored shape, `MonitorRun.summaryTotals`/`series`/the
         slot) and James's explicit approval — not struck until then.**
+      - **Implementation progress (plan `docs/superpowers/plans/2026-08-30-handoff-store.md`):**
+        Task 1 (row-8 red leg) and Task 2 (the store module) landed; Task 3
+        (the producer rewrite — `monitorRun.ts`'s writer gates made pure,
+        `useMonitorSession.ts` as sole committer, the held-error state
+        machine rebuilt against the store) landed 2026-08-30, its own
+        review round folded in the same day. Task 4 (the consumer rewrite
+        — `LogSession.tsx`'s reader on `read`/claims, `Today.tsx`'s
+        unlogged row on the store) landed 2026-08-30.
+        **NARROWED BY TASK 4 (2026-08-30), NOT closed — corrected at
+        Task 4's review: closed at LogSession/Today (their doors route
+        through `retire()`), but `useStartWorkout.ts:99` (confirmReplace)
+        and `WorkoutDetail.tsx:298` (row-instead) still legacy-clear, and
+        the reviewer PROVED the interim asymmetry those two create: a
+        legacy clear no longer removes the record from Today's
+        store-backed view, so Today renders a row for a session the rower
+        just replaced, and LOG IT commits it back into the tier the clear
+        emptied. RF24's shape (session.spec's replace test asserts
+        storage and never returns to Today). NAMED TASK 5 EXIT
+        CONDITION: those two doors route through `retire()`, with a leg
+        entering at each door; Task 6's module-boundary gate covers
+        REMOVERS as well as writers. Also Task 5's: `connectGuardStage`
+        and `monitorRunState` still read the durable tier only — a
+        memory-only record renders on Today while invisible to the
+        Connect/Start guards. **Two report-only carries from Task 4,
+        moved here per RF14 so they have a life past the PR:** (1) the
+        row-10 abandon-path test (`LogSession.test.tsx`, "the abandon
+        path — claim survives unmount...") stands in with a direct
+        `handoffStore.retire()` call for "the next acceptance," since no
+        real door supplies an armed-acceptance defense retire on this
+        branch yet — Task 5 re-points that test at whichever door lands
+        it. (2) `Today.test.tsx`'s own row-9 "denied+reload counted"
+        residual test (a durable write denied, then a genuine reload)
+        has no `LogSession.tsx`-side twin — owed to Task 5 or Task 6's
+        own close-out. Original finding, for the record: a burst
+        landing in the linger after a Save/Discard through the legacy
+        clears RESURRECTED the dispatched session.**
+        Proven at the time by reverting the reviewer's own probe test to
+        production's real mechanism (`clearMonitorRun()` in place of the
+        store's `retire()`): it failed. Under the OLD design
+        `appendSummaryObservations` re-read storage fresh and found it
+        empty, declining; under this design it builds on the hook's own
+        `runRef.current` (unaware of the external clear) and the
+        resulting commit succeeds — nothing told the store's own
+        `current`/`tombstones` that the door's clear happened, so
+        `commit()` found no tombstone and wrote the record back. **The
+        doors' own legacy clears were the CAUSE of this gap, not a
+        mitigation for it** — an earlier framing in Task 3's own report
+        said the opposite and was corrected. **Task 4 closed it**: every
+        door's discard/save-success (`LogSession.tsx`'s monitor-discard,
+        manual-discard, save-success; `Today.tsx`'s discard door) now
+        routes through `handoffStore.retire()` instead of
+        `clearMonitorRun()`/`saveMonitorRun()` — that retire is what
+        plants the tombstone a late burst's commit needs to be refused
+        against. The leg landed AT the door (retire happens, then the
+        physical clear falls out of `retire()`'s own removal), not inside
+        `retire()` itself, matching the diagnosis above. Gated by a
+        dedicated door-leg test (`LogSession.test.tsx`, "the door leg —
+        Discard tombstones the key…") that drives Discard through the
+        real UI, then attempts a late producer-style commit for the same
+        key and asserts it is refused (`reason:"retired"`) rather than
+        resurrecting the record; mutation-probed by reverting the door to
+        the legacy `clearMonitorRun()` — the test failed (the late burst
+        was accepted, `accepted:true, revision:1`), confirming it bites.
+        **Task 5 (the doors + the #230 restoration) landed 2026-08-30,
+        CLOSING the "NARROWED BY TASK 4" condition above.**
+        `useStartWorkout.ts:99` (confirmReplace) and
+        `WorkoutDetail.tsx:298` (row-instead) now route through
+        `handoffStore.retire()` (a fresh, non-render `currentUnretired()`
+        read, key-bound) instead of `clearMonitorRun()` — the proven
+        interim asymmetry is gone; a door-leg test at each (real UI path)
+        drives Discard/Replace/Row-Instead through the real component,
+        then races a producer-style commit for the same key and asserts
+        it is refused (`reason:"retired"`); mutation-probed by reverting
+        each door to the legacy clear — both door-leg tests failed
+        exactly as expected (the late burst was accepted,
+        `revision: 1`/`verdict: "saved"`), confirming they bite.
+        `connectGuardStage` (`monitorRun.ts`) now takes the MonitorRun
+        half of its answer as a boolean PARAMETER rather than calling
+        `loadMonitorRun()` itself (it cannot import `handoffStore.ts` —
+        the same circular-import constraint Task 3's own doc comment
+        states for the create-commit); both callers (`ConnectAction.tsx`,
+        `useStartWorkout.ts`'s `handleStart`) now derive it from
+        `currentUnretired()`, closing the P1-1 memory-only-record hole at
+        both guard doors — a dedicated test per door seeds a record
+        through the store with the DURABLE write denied and confirms the
+        guard stages "unlogged" where `loadMonitorRun()` would have seen
+        nothing; mutation-probed by reverting each guard's own call site
+        back to `loadMonitorRun()` — both memory-only tests failed, each
+        alone. **`monitorRunState()`/`anyLiveSession()` were LEFT
+        UNCHANGED, a deliberate deviation from the spec's literal
+        wording**, not a silent gap: `anyLiveSession()` has zero
+        production callers (Task 3's own header comment on this file, M-2)
+        and fixing it would require the identical parameter-threading
+        change against a 9-cell truth-table test file with no
+        corresponding product benefit — judged disproportionate per
+        CLAUDE.md's own "spend proportionally" rule; flagged for whoever
+        next touches this function, not chased further here.
+        **CORRECTED AT REVIEW, same day: the armed retire's EXECUTION
+        POINT moved from "Connect anyway" press to the wire "armed"
+        event.** A first draft had `ConnectAction.tsx`'s own
+        `handleConnectAnyway` retire the staged store entry immediately,
+        at that press, before `onProceed` even ran — before BLE, before
+        programming, before either of `handleConnectProceed`'s own two
+        synchronous early returns (missing baselines, `CompileError`).
+        The reviewer's own probe proved this a real F5-class regression:
+        seed a stale record, Connect, Connect anyway, a REAL
+        transport-missing failure, Cancel — `currentUnretired()` and
+        `loadMonitorRun()` both came back `null`, even though nothing was
+        ever created to replace it, contradicting every interstitial
+        state's own doc comment ("Cancel... always lands back on
+        Workout detail with nothing lost"). **Fixed**: `ConnectAction.tsx`
+        now only STAGES the authorization in the store
+        (`handoffStore.stageRetire`, a new process-scoped slot,
+        unconditionally overwritten on every Connect press so a stale set
+        from an abandoned earlier press can never survive to authorize a
+        later one — the rev-3 antagonist's own words, "a set staged for
+        attempt 1 must not authorize attempt 2's retire"); the actual
+        retire moved to `useMonitorSession.ts`'s own `event.kind ===
+        "armed"` handler (`handoffStore.takeStagedRetire`, reason
+        `"connect-guard-armed"`) — the wire acceptance point a failed or
+        cancelled program never reaches at all (census: "Connect ->
+        program -> armed | failure-card", armed strictly after program).
+        `cancel()` and the `programDropped` reset both DISCARD (not
+        retire) whatever is staged, so a dead attempt's own authorization
+        never leaks into a later one. `createMonitorRun`'s own
+        pre-existing "whatever remains" defense retire at the first real
+        rowing frame is UNCHANGED (kept as the narrower backstop for the
+        residual armed-to-first-frame window; removing it would reopen a
+        real `store-second-key-refused` risk the design's own "no
+        rendered change" exit criterion forbids) — its own doc comment
+        now states plainly that it is genuinely redundant in the ordinary
+        case, not merely "should be." Five dedicated hook-level tests in
+        `useMonitorSession.test.ts` (retires exactly at armed, not
+        earlier; a superseded revision proceeds and receipts; cancel
+        discards and the record survives; an unstaged unrelated entry
+        survives armed untouched — proving the retire is bound to the
+        staged set, never a blind sweep) plus a permanent UI-level
+        regression test in `WorkoutDetail.test.tsx` (the reviewer's own
+        probe, promoted verbatim: Connect, Connect anyway, a real
+        failure, Cancel, record survives on both tiers) and four
+        retargeted `ConnectAction.test.tsx` tests (staging only — this
+        component no longer retires anything itself). Task 4's row-10
+        abandon-path stand-in is RE-POINTED AGAIN: it drives the real
+        `ConnectAction` component for the authorization half (Connect
+        stages) and stands in for the hook's own two-call armed
+        consumption (`takeStagedRetire` then `retire`) for the execution
+        half, since this LogSession-focused file has no real
+        hook/transport to reach "armed" with. Mutation-probed: retire at
+        press time again (the door-leg-style reversion) fails the new
+        "Connect anyway, a real failure, Cancel" permanent test; an
+        "unbound" armed retire (consuming `currentUnretired()` directly
+        instead of the staged set) is what the dedicated
+        "nothing staged: an unrelated entry survives" test exists to
+        catch. Both run against the committed fix, confirmed to fail, then
+        reverted: retire-at-press-time failed exactly 3 tests (the
+        WorkoutDetail.test.tsx abandon leg plus two ConnectAction.test.tsx
+        staging-only tests, which now saw a retire that should not have
+        happened); the unbound-set mutation failed exactly 4 tests (the
+        named staged-set leg plus the superseded/M6/create-defense tests
+        it also collaterally broke, since an unconditional
+        `currentUnretired()`-based retire fires even where nothing was
+        staged).
+        **Two further findings folded in at the same review:** (1)
+        `Today.tsx`'s own stale-draft-discard guard effect
+        (`Today.tsx:370`, `loadMonitorRun()` direct) is a THIRD legacy
+        read alongside `monitorRunState()`/`anyLiveSession()` above — Task
+        4's own report already disclosed it as "left unchanged, out of
+        scope" (a different, `useEffect`-fired liveness check, safe under
+        §8 since it never runs during render); added here so Task 6's own
+        module-boundary sweep has all three named in one place rather than
+        split across two tasks' reports. (2) `monitorRun.test.ts`'s own
+        `connectGuardStage` describe block gained a header comment stating
+        plainly that its tests exercise the FUNCTION's descending-severity
+        branching given an asserted boolean, never the STORE's own
+        broader tier-visibility (memory-only vs durable-only) — that
+        broader claim is `ConnectAction.test.tsx`'s and
+        `handoffStore.test.ts`'s own to prove, and always was; the
+        comment exists so a future reader doesn't mistake one test file's
+        scope for the other's.
+        **The #230 restoration** (spec §11): `ConnectedSurface.tsx` (the
+        Gate-0 approved held-error frame — the "COULD NOT KEEP THE RECORD
+        ON THIS PHONE." strip, Retry/Log it anyway, reachable now that
+        Task 3 already shipped its producer), `ConnectedSurface.test.tsx`,
+        `ConnectedSurface.screens.test.tsx`, `ConnectedInterstitial.test.tsx`,
+        `ConnectionLogSheet.test.tsx`, `PaneGrid.test.tsx`, the
+        `connected-ended-error` e2e fixture + screenshots-loop entry, and
+        the two captures all restored verbatim from
+        `origin/wave-f-aud016-spec` — every one of these files had either
+        ZERO drift from the shared merge-base on this branch, or a drift
+        (the mechanical `holdError`/`retryHandoffSave`/`proceedHandoff`
+        fake-session widening) byte-identical to what Task 3 made
+        independently, so nothing on this branch was lost.
+        `WorkoutDetail.connectedRecovery.test.tsx` (new file, the binding
+        route gate, spec §10 row 12) passed UNMODIFIED against the store
+        substrate on its first run; every "the slot" comment retargeted to
+        "the store's memory tier" (the module-slot mechanism it narrates
+        is deleted by this design — spec §2). **`WorkoutDetail.test.tsx`
+        needed NO restoration at all**, contradicting a literal reading of
+        the spec's own restore list: its only difference from the
+        reference branch was the identical mechanical widening, already
+        present in substance on this branch — checked via a three-way diff
+        against the shared merge-base, not assumed.
+        Gates (re-run in full after the review fix round): `pnpm test
+        --project unit --project client` green (5572/5573 tests, 1
+        skipped, 200 files; two unrelated pre-existing flakes observed
+        once each in `server/routes/data.test.ts` — a different
+        individual test both times — gone on re-run, confirmed unrelated
+        to this diff); `pnpm e2e` 420/420, re-run after the review fix
+        since `ConnectAction.tsx`/`useMonitorSession.ts` behavior changed;
+        `pnpm screenshots` 82/83 (the one failure, `releases`, is a stale
+        `v0.26.0` version pin against a `v0.27.0`-tagged main — unrelated
+        to this task, not fixed here); the two `connected-ended-error`
+        captures opened and inspected (RF7) — legible, correct button
+        order and copy, no overlap — and came back BYTE-IDENTICAL to the
+        restored reference bytes, confirming the restoration renders
+        pixel-for-pixel as #230's own Gate-0 approval; lint/format/
+        typecheck clean throughout. 19 unrelated screenshot files that
+        changed from environmental/date-dependent rendering noise
+        (today/you/log/news/post-workout-summary screens, none touched by
+        this task's diff) were reverted per the task's own "revert
+        unrelated churn" instruction.
+        **Task 6 (close-out) landed 2026-08-30 — the plan's own six tasks
+        are now ALL complete.** The module-boundary gate (spec §10 row 11)
+        finally lands (`scripts/handoffStoreBoundary.test.ts`): nothing
+        under `src/` outside `handoffStore.ts` (plus a disclosed
+        allowlist — `monitorRun.ts`'s own legacy `saveMonitorRun`/
+        `clearMonitorRun`, zero production callers, kept for the large
+        pre-existing test-fixture convention that calls them directly) or
+        `e2e/` (design.spec.ts/screenshots.spec.ts/session.spec.ts, plus
+        `connected.spec.ts` — a genuine fourth writer this close-out found
+        that the close-out brief did not name) writes or removes the
+        durable key; mutation-probed twice (a non-store src file, a
+        non-allowlisted e2e spec), both go red, both revert clean.
+        **Fix round 1/5 (2026-08-30) widened it after review:** the
+        realistic bypass — a new door calling the legacy, allowlisted
+        `saveMonitorRun`/`clearMonitorRun` directly, which held the only
+        raw key writes and gave the ORIGINAL gate zero signal, exactly the
+        regression already reproduced 4x across Tasks 4-5's own record —
+        now gets its own check (comment-stripped first, so the four
+        production files that merely NAME `clearMonitorRun()` in prose
+        don't false-flag); mutation-probed (a `saveMonitorRun` call added
+        to a non-store file), goes red, reverts clean. The full spec §10
+        mutation ledger is now consolidated (Tasks 1-5's own recorded
+        mutations, plus six run fresh at close-out and its fix round: row
+        2's post-release window-predicate gate, row 5's
+        tombstone-refusal-bumps-revision leg (plus a spoken skip — `read`/
+        `currentUnretired` never consult tombstones in this
+        implementation; Task 2's own `retire`-nulls-`current` mutation is
+        row 5's real detector), row 11's revision-reuse, row 11's
+        module-boundary writes (both checks), and **row 11's
+        tier-precedence reorder — CORRECTED at fix round 1/5: the
+        single-line mutation is a genuine non-bite, but the row's
+        invariant IS pinned by a reachable COMPOUND mutation (removing the
+        `if (hydrated) return` re-entrancy guard together with forcing the
+        population guard true) — 6 files / 40 tests fail, including
+        `useMonitorSession.test.ts`'s "S1 — the write-count witness"
+        (`expected 2 to be 6`) and `LogSession.test.tsx`'s claim-race test
+        (`retiredRevision` 1→0, `superseded` true→false). Producer purity
+        (Task 1/3's own mutations) is a DIFFERENT invariant and is no
+        longer cited here as a substitute.**)
+        `pnpm screenshots` now passes 83/83 (the stale `v0.26.0`
+        release-notes pin bumped to this branch's own `v0.27.0` tag).
+        Running it also surfaced one genuinely stale, unrelated capture —
+        `connected-interstitial-ready{,-landscape}.png` still showed
+        PR #227's retired "KEEP THE SCREEN ON" copy, never refreshed
+        against the source's actual, already-shipped "KEEP YOUR PHONE
+        SCREEN ON" — refreshed here since it corrects drift rather than
+        adding noise; 21 other environmental/date-dependent diffs
+        (today/you/log/news/post-workout-summary, Task 5's own named
+        category) were reverted again, unchanged in kind. `monitorRunState()`/
+        `anyLiveSession()` and Today.tsx's own stale-draft-discard guard's
+        `loadMonitorRun()` read (the THIRD legacy read Task 5's review
+        named) are both left in place, with a citing comment each:
+        deleting either would orphan the cross-file anti-pattern
+        documentation naming them by design (M-1's own reference pattern,
+        `todayGuard.pin.test.ts`'s binding pin) — exactly the "unrelated
+        churn" this close-out's own brief says to avoid dragging in.
+        Per-file coverage on all ten store-touching files:
+        `handoffStore.ts` 100/98.91/100/100, `useMonitorSession.ts`
+        98.55/95.82/98.79/99.65, `monitorRun.ts` 100/98.13/100/100,
+        `LogSession.tsx` 99.04/95.73/96.61/98.97, `Today.tsx`
+        99.36/97.67/100/100, `ConnectAction.tsx` 100/100/100/100,
+        `WorkoutDetail.tsx` 91.37/90.42/100/91.07, `useStartWorkout.ts`
+        100/100/100/100, `ConnectedSurface.tsx` 100/100/100/100,
+        `ConnectedInterstitial.tsx` 100/100/100/100 — none under 90 on any
+        axis (RF2). Full gates green: `pnpm lint`/`format:check`/
+        `typecheck` clean; `pnpm test --project unit --project client` 201
+        files / 5576 passed + 1 skipped (5577); `pnpm test:coverage` (all
+        three projects) 219 files / 5824 passed + 1 skipped (5825),
+        aggregate 98.93/97.45/98.98/99.35; `pnpm e2e` 420/420; `pnpm
+        screenshots` 83/83. **AUD-016 stays NOT STRUCK** — the line above
+        ("Needs a PM final-PR gate before merge... not struck until
+        then") still governs, unchanged by this close-out task.
+      - **STRIKE CONTRACT (#239's PM gate, 2026-08-30, binding on the
+        strike commit):** when James's approval strikes this item, the
+        same commit REMOVES the Task 1-6 narration above (ROADMAP's own
+        head rule: corrections are applied, not appended; a struck item
+        does not keep its progress log) and FIRST lifts the
+        forward-looking residuals into the open-item register: the
+        memory-only row that vanishes on reload indistinguishably from a
+        durable one; the three surviving legacy reads (`monitorRunState()`,
+        `anyLiveSession()`, `Today.tsx`'s guard read); and the row-11
+        tier-precedence compound mutation as the store's standing probe.
+        The register already carries the first-tester-report ring-decode
+        obligation.
 - [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
@@ -381,6 +686,26 @@ rower's work silently.
       getter is a loop. Open research line for the spec: whether the getter
       can throw in a Capacitor WKWebView on its own origin (the WHATWG
       authority is vetted; the native-layer reachability is not).
+      **NARROWED AGAIN by the hand-off store's final fix round
+      (2026-08-30, adversarial F-2): `loadMonitorRun`'s SELF-CLEAR is gone
+      — the read now returns `null` and leaves malformed bytes for the
+      store's §8 deferred clear.** That was a genuine defect on this
+      branch, not a residual: `Today.tsx`'s mount effect calls the loader,
+      so opening Today destroyed a malformed record the store was
+      deliberately preserving.
+      **CLOSED FOR THIS LOADER at PR #239's review round 1 (item 1):
+      `loadMonitorRun`'s `localStorage.getItem` now sits INSIDE its own
+      `try`, so a denied getter reads as absent instead of escaping
+      `Today.tsx`'s mount effect.** Gated at both layers — the loader
+      (`monitorRun.test.ts`, "the storage GETTER itself throws") and the
+      composed screen (`Today.test.tsx`, "survives a DENIED storage getter
+      on the monitor key"), the latter key-scoped because a blanket denial
+      still dies at `loadRun` first. **So this chunk's unguarded set is now
+      exactly three loaders — `loadRun`, `loadDraft`, `loadTodayPick` —
+      matching the §8 reshaping above; `loadMonitorRun` is off the list.**
+      Everything else here is unchanged and still owed: the three anchor
+      spec conditions, the Retry surface's Gate 0, AUD-015's Countdown
+      durability, and the Capacitor-WKWebView reachability research line.
 
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 
@@ -782,6 +1107,13 @@ X" is a real disposition — most of these are single files.
 
 ## Codebase-audit owners
 
+- **First tester report after the hand-off store ships: decode the ring
+  for `commit-accepted{verdict:"failed"}` before anything else** (#239's
+  PM gate, 2026-08-30). The defect AUD-016's fix addresses has zero
+  observed instances; the store's receipts are the first instrument that
+  can see a rejected write, and they ship WITH the fix rather than ahead
+  of it. Evidence: `handoffStore.ts`'s receipt ring (stashed to
+  sessionStorage at teardown), decoded via the connection log sheet.
 - **AUD-002 — bound History's successful top-level response.** A parseable
   non-array 200 must enter the existing error/Retry state rather than reaching
   `.map`. No real producer was found, so this remains P2/Probable and rides the
@@ -793,6 +1125,31 @@ X" is a real disposition — most of these are single files.
   TRIAD: Gate 0 decides leading-rest validity and renders both orientations
   before implementation. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`.
+
+## Tooling
+
+- **13 of the 83 committed screenshots are NOT byte-stable across two
+  consecutive `pnpm screenshots` runs of identical code.** Measured at the
+  hand-off store's final fix round (2026-08-30): two back-to-back runs at the
+  same commit produced differing bytes for `log-delete-confirm`,
+  `log-detail`, `log-detail-legacy`, `log-monitor`, `log-monitor-landscape`,
+  `post-workout-summary`, `post-workout-summary-landscape`, and all six
+  `you-*` captures. Two causes seen by eye: a trace chart whose axis ticks
+  follow a series recorded over REAL elapsed test time (`log-monitor`:
+  `0:00/0:05/0:10/0:15` one run, `0:00/0:10/0:20` the next), and a focus-
+  dependent hint that comes and goes (`you-derive-offer-accepted`:
+  `ESTIMATED · TYPE TO ADJUST` vs `ESTIMATED`). A further ~10 differ from
+  the committed bytes only by the seeded DATE STAMP (`AUG 25` → `AUG 30`),
+  which is stable per-day and re-churns on every calendar day.
+  **Why it matters:** capture triage currently cannot distinguish a real
+  rendering regression from run-to-run noise without re-running the suite
+  twice and diffing run-against-run, which is what this round had to do.
+  Rides the next PR touching the screenshots harness. **The measurement is
+  written out above rather than cited**, because the round's own report
+  lives under git-excluded `.superpowers/` and a citation into it is
+  unreachable to anyone but the session that wrote it (recurring failure
+  16's corollary). To reproduce: run `pnpm screenshots` twice at the same
+  commit, saving the first run's PNGs, and diff run against run.
 
 ## Needs a decision from James
 
@@ -895,7 +1252,12 @@ new.
      P2b review and REMOVED at the 2026-08-30 pause ruling: it describes
      a screen v0.27.0 does not contain. It returns with the hand-off
      store's PR** (the gate that lands a condition owns removing it when
-     its subject stops shipping — pm-ledger, 2026-08-30).
+     its subject stops shipping — pm-ledger, 2026-08-30). **Bound at
+     #239's PM gate (2026-08-30): the sentence lands in the v0.30.0
+     notes PR that follows #239's merge and precedes its tag** — this
+     repo's notes ship as their own pre-tag PR (the #231 shape), so the
+     restoring PR is the notes PR, written against the full
+     `git log v0.29.0..main --oneline` range per RF15.
 - **The log-delete accepted gap** — a session with a wrong number has exactly
   one remedy, delete and re-log by hand, and `logged_at` is a DB default rather
   than settable, so a mistake found the next day cannot be re-dated onto its own

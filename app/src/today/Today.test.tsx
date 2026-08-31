@@ -2084,6 +2084,104 @@ describe("Today (stale draft discard on mount)", () => {
     await screen.findByRole("heading", { name: "Today" });
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
   });
+
+  // THE COMPOSED §8 GATE (final fix round, 2026-08-30; adversarial pass
+  // F-2). Spec §8: "malformed durable bytes are never cleared during a
+  // read." Every existing test of that rule lives at the STORE — and the
+  // store was never the reader that broke it. `Today.tsx`'s mount effect
+  // calls `loadMonitorRun()`, whose read path used to fall through to
+  // `clearMonitorRun()` on any unparseable or unrecognised blob, so simply
+  // OPENING Today destroyed the bytes. That is the store's own recorded
+  // rule falsified in the composed app, and it also falsified this
+  // component's own justification comment ("never setItem/removeItem ...
+  // destroys nothing"). Starts UPSTREAM of the destroyer (bytes on disk,
+  // nothing mounted) and asserts downstream of it — RF24's shape.
+  it("a MALFORMED monitor record SURVIVES a Today mount, byte-for-byte — the guard's read destroys nothing (spec §8)", async () => {
+    const garbage = '{"v":2,"startedAt":"2026-08-30T09:00:00.000Z"';
+    localStorage.setItem(MONITOR_RUN_KEY, garbage);
+    const stale = makeDraft({
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      startedAt: null,
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(stale));
+
+    mockReady();
+    await renderToday();
+    await screen.findByRole("heading", { name: "Today" });
+
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(garbage);
+    // ...and the guard still ANSWERS: an unreadable record is not a live
+    // session, so the stale draft is discarded exactly as it would be with
+    // no record at all. Surviving bytes must not come at the cost of the
+    // guard silently treating garbage as "something is running".
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
+  });
+
+  it("an unrecognised-VERSION monitor record survives a Today mount too — the shape check is a different branch from the JSON parse", async () => {
+    const futureVersion = JSON.stringify({
+      ...makeMonitorRun({ completedAt: null }),
+      v: 99,
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, futureVersion);
+    mockReady();
+    await renderToday();
+    await screen.findByRole("heading", { name: "Today" });
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(futureVersion);
+  });
+
+  // PR #239 review round 1, item 1 (P1) — THE MOUNTED-TODAY GETTER GATE.
+  // Spec §8 says a storage-getter `SecurityError` "makes both tiers behave
+  // as absent-durable ... never an unhandled throw", and names this exact
+  // loader as the thing the store's accessor absorbs. The store's own reads
+  // were wrapped from day one; `Today.tsx:418`'s legacy `loadMonitorRun()`
+  // was not — its `localStorage.getItem` sat outside the loader's `try`, so
+  // a denied getter escaped the mount effect and took the whole screen down.
+  // Starts UPSTREAM of the reader (denial armed, nothing mounted) and
+  // asserts downstream of it, RF24's shape.
+  //
+  // SCOPED TO THIS KEY ON PURPOSE, said aloud rather than left implied: the
+  // spy denies `MONITOR_RUN_KEY` only. A blanket denial still takes Today
+  // down at `loadRun()` (`Today.tsx:280`) before this loader is ever
+  // reached — that is AUD-011's remaining three loaders (`loadRun`,
+  // `loadDraft`, `loadTodayPick`), tracked in ROADMAP and NOT this branch's
+  // scope. A key-scoped spy is the only shape that can go red on the
+  // loader this branch actually owns; a blanket one would be red before and
+  // after the fix and would prove nothing about it.
+  it("survives a DENIED storage getter on the monitor key: Today mounts, and the durable record reads as absent (spec §8)", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: null })),
+    );
+    const stale = makeDraft({
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      startedAt: null,
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(stale));
+
+    const real = Storage.prototype.getItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(function (this: Storage, key: string): string | null {
+        if (key === MONITOR_RUN_KEY) {
+          throw new DOMException("storage is denied", "SecurityError");
+        }
+        return real.call(this, key);
+      });
+    try {
+      mockReady();
+      await renderToday();
+      // Mounts cleanly — the throw is absorbed, not surfaced.
+      await screen.findByRole("heading", { name: "Today" });
+      // ...and the guard ANSWERS, treating the denied durable tier as
+      // absent: a LIVE record would have protected this stale draft, so its
+      // discard is the observable consequence of "absent", not merely of
+      // "did not crash". A mutant that swallowed the throw but returned the
+      // record anyway would leave the draft in place and fail here.
+      expect(real.call(localStorage, DRAFT_KEY)).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("Today (loading/error states)", () => {
@@ -2682,6 +2780,111 @@ describe("Today (2b): the interrupted connected session row", () => {
         name: "Discard connected session without logging",
       }),
     ).toBeVisible();
+  });
+});
+
+// Hand-off store design spec (rev 4), §5/§9.5, §10 row 9, plan Task 4: "the
+// §5 product gain: a memory-only record renders a row" and its own flip
+// side, "Today's memory-only row present before reload, absent + receipted
+// after." Unlike every OTHER test in this file (which seeds a durable
+// record via `localStorage.setItem(MONITOR_RUN_KEY, ...)` before a fresh
+// `renderToday()` — indistinguishable, from the store's own perspective,
+// from a genuinely durable record surviving a real reload), this test
+// drives the store directly so the record is committed with its DURABLE
+// WRITE DENIED — genuinely memory-only, the case the old `loadMonitorRun()`
+// mount snapshot could never see at all (the escape-hatch gap #230's own
+// gate filed).
+describe("Today (§10 row 9): a memory-only unlogged row, present before reload and honestly gone after", () => {
+  it("renders while the durable write stays denied, then a reload sees nothing — receipted at the ORIGINAL commit, not invented at hydration", async () => {
+    mockReady();
+    const { handoffStore, setReceiptChannel } =
+      await import("../monitor/handoffStore");
+    const receipts: unknown[] = [];
+    setReceiptChannel((r) => receipts.push(r));
+
+    const run = makeMonitorRun({
+      completedAt: null,
+      workoutId: "w-warmfront",
+    });
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("simulated quota failure");
+      });
+    const result = handoffStore.commit(run.startedAt, null, run);
+    setItemSpy.mockRestore();
+
+    // Fixture sanity: memory accepted it, durable genuinely never landed.
+    expect(result).toStrictEqual({
+      accepted: true,
+      revision: 0,
+      verdict: "failed",
+    });
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+
+    // BEFORE reload, same process: the §5 product gain — a record durable
+    // storage never saw still renders the row. Dynamically imported, same
+    // reason every other render in this file is (this file's own
+    // `beforeEach: vi.resetModules()` + per-test `await import("./Today")`
+    // convention) — `Today`'s default export is never a static top-level
+    // binding here.
+    const { default: TodayBeforeReload } = await import("./Today");
+    const before = render(
+      <MemoryRouter>
+        <TodayBeforeReload />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("heading", { name: "Today" });
+    expect(screen.getByText(/interrupted connected session\./)).toBeVisible();
+    // Unmount before the second render — RTL does not auto-clean between
+    // two renders inside the SAME test, only between tests.
+    before.unmount();
+
+    // "RELOAD": a genuinely fresh module instance — `vi.resetModules()`
+    // mid-test, matching this file's own `beforeEach` convention, plus a
+    // fresh dynamic re-import (Today's own module-scope `hydrateHandoff()`
+    // runs again, against whatever is ACTUALLY durable — nothing).
+    vi.resetModules();
+    mockReady();
+    const { default: TodayReloaded } = await import("./Today");
+    render(
+      <MemoryRouter>
+        <TodayReloaded />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("heading", { name: "Today" });
+    expect(
+      screen.queryByText(/interrupted connected session/),
+    ).not.toBeInTheDocument();
+
+    // §9.5, stated plainly (review correction): `receipts` was captured
+    // via `setReceiptChannel` on the PRE-reload module instance, and this
+    // assertion reads that same array — it is forensic evidence about the
+    // ORIGINAL commit, not a check on the reload path itself, and it
+    // CANNOT bite on a reload-mechanism regression (a fresh module after
+    // `vi.resetModules()` has no receipt channel wired to this array at
+    // all, so nothing the reloaded process does could ever appear here
+    // either way). THE GATE for "the vanish is real" is the pair of DOM
+    // assertions above: the row visible before reload
+    // (`screen.getByText(/interrupted connected session\./)`,
+    // pre-`unmount()`) and absent after
+    // (`queryByText(...).not.toBeInTheDocument()`, post-reload) — that
+    // pair is what a broken hydrate() or a broken reload would actually
+    // flip (see the dedicated "Today renders without hydrate" mutation
+    // probe, task-4-report.md). What THIS assertion adds on top: it
+    // explains WHY the vanish is honest rather than a bug — the vanish is
+    // not a NEW event hydration invents, it is explained by the ORIGINAL
+    // commit's own receipt, already carrying `verdict:"failed"` (spec's
+    // own words: "coordinate with what the store already emits, don't
+    // duplicate" — no new receipt kind exists for this residual).
+    const commitReceipt = receipts.find(
+      (r) => (r as { kind?: string }).kind === "commit-accepted",
+    );
+    expect(commitReceipt).toMatchObject({
+      sessionKey: run.startedAt,
+      revision: 0,
+      verdict: "failed",
+    });
   });
 });
 

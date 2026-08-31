@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -8,7 +8,16 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, type SessionRun } from "../session/run";
-import { createMonitorRun, loadMonitorRun } from "./monitorRun";
+import { createMonitorRun, loadMonitorRun, saveMonitorRun } from "./monitorRun";
+import {
+  commit as commitHandoff,
+  currentUnretired as currentUnretiredHandoff,
+  resetForTests as resetHandoffStoreForTests,
+  setReceiptChannel,
+  stageRetire as stageRetireHandoffForTest,
+  takeStagedRetire as takeStagedRetireHandoff,
+  type HandoffReceipt,
+} from "./handoffStore";
 import ConnectAction from "./ConnectAction";
 
 // 7C Task 1: `createMonitorRun`'s `logSeed` arg is required now. This
@@ -78,11 +87,17 @@ function liveSessionRun(): SessionRun {
  * (`useMonitorSession.ts`), not synchronously on this press). What this
  * DOES model, faithfully, is the one thing this file's own tests are
  * about: the destructive step `createMonitorRun`'s `clearRun()` performs,
- * reduced to a single call so the guard can be proven against a REAL
- * localStorage round trip rather than a "was the callback called"
- * assertion. Task 5's own proof that its real wiring defers this
- * destruction lives in `WorkoutDetail.test.tsx` and `e2e/session.spec.ts`,
- * not here.
+ * reduced to (as of hand-off store design spec §1, plan Task 3 — see that
+ * function's own doc comment in `monitorRun.ts`: it is now a PURE BUILDER,
+ * and its one production caller, `useMonitorSession.ts`'s hook, is what
+ * commits the result through the store) two calls instead of one, so the
+ * guard can still be proven against a REAL localStorage round trip rather
+ * than a "was the callback called" assertion — `saveMonitorRun` is the
+ * SAME general-purpose writer `Today.tsx`/`LogSession.tsx`/
+ * `useStartWorkout.ts` still call directly today, not a re-introduction of
+ * anything this task removed. Task 5's own proof that its real wiring
+ * defers this destruction lives in `WorkoutDetail.test.tsx` and
+ * `e2e/session.spec.ts`, not here.
  */
 function connectAsTaskFiveWill(): void {
   const w = libraryWorkout("Filling Low");
@@ -96,15 +111,17 @@ function connectAsTaskFiveWill(): void {
   if ("code" in compiled) {
     throw new Error(`fixture failed to compile: ${compiled.code}`);
   }
-  createMonitorRun(
-    {
-      workoutId: "fl-connect",
-      title: w.title,
-      program: compiled,
-      deviceName: "PM5 430123456",
-      logSeed: TEST_SEED,
-    },
-    t0,
+  saveMonitorRun(
+    createMonitorRun(
+      {
+        workoutId: "fl-connect",
+        title: w.title,
+        program: compiled,
+        deviceName: "PM5 430123456",
+        logSeed: TEST_SEED,
+      },
+      t0,
+    ),
   );
 }
 
@@ -113,7 +130,10 @@ function renderConnect() {
 }
 
 describe("ConnectAction: the destruction it stands in front of", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
 
   // The proof, first and on its own: with no lock, the walk from Connect to
   // an erased finished session is one function call long. Every guard test
@@ -130,7 +150,10 @@ describe("ConnectAction: the destruction it stands in front of", () => {
 });
 
 describe("ConnectAction: the guard", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
 
   it("nothing on record: Connect proceeds immediately, no confirm", async () => {
     renderConnect();
@@ -317,5 +340,181 @@ describe("ConnectAction: the guard", () => {
     ).toBeInTheDocument();
     expect(loadRun()).not.toBeNull();
     expect(loadMonitorRun()).toBeNull();
+  });
+
+  // Hand-off store design spec §5, plan Task 5 (the P1-1 hole, closed —
+  // §10 row 1's own "guard reads one tier -> fails" mutation target). A
+  // record whose DURABLE write was denied (memory-only) is exactly what
+  // Today's own store-backed row already renders for (Task 4) — this
+  // proves Connect's guard now agrees, where `loadMonitorRun()` (durable
+  // tier only) would have seen nothing at all.
+  it("a memory-only record (durable write denied) is visible to the guard, same as Today's own row", async () => {
+    const w = libraryWorkout("Filling Low");
+    const draft = buildDraft({
+      id: "fl-memory-only",
+      title: w.title,
+      type: w.type as WorkoutType,
+      steps: w.steps,
+    });
+    const compiled = compileProgram(buildRun(draft, baselines, t0).phases);
+    if ("code" in compiled) {
+      throw new Error(`fixture failed to compile: ${compiled.code}`);
+    }
+    const run = createMonitorRun(
+      {
+        workoutId: "fl-memory-only",
+        title: w.title,
+        program: compiled,
+        deviceName: "PM5 430123456",
+        logSeed: TEST_SEED,
+      },
+      t0,
+    );
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+    const created = commitHandoff(run.startedAt, null, run);
+    setItemSpy.mockRestore();
+    expect(created).toMatchObject({ accepted: true, verdict: "failed" });
+    // Confirms the fixture is genuinely memory-only: nothing durable.
+    expect(loadMonitorRun()).toBeNull();
+
+    renderConnect();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      screen.getByText("You have an unlogged session. Connecting discards it."),
+    ).toBeInTheDocument();
+  });
+});
+
+// Hand-off store design spec §5, plan Task 5 review fix round
+// (2026-08-30): the "armed acceptance" row's AUTHORIZATION half only —
+// this component STAGES the guard's own read; it never retires anything
+// itself any more (a first draft did, at "Connect anyway" press time,
+// and the reviewer proved that destroyed a stale record even when the
+// connect attempt then failed or was cancelled — a real F5-class
+// regression, since every interstitial state's own Cancel promises
+// "nothing lost"). The EXECUTION half (the actual retire, at the wire
+// "armed" event) is `useMonitorSession.test.ts`'s own "hand-off store"
+// describe block to prove — this file has no real hook/transport to
+// reach "armed" with.
+describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+
+  it("Connect stages the current MonitorRun entry in the store — key-bound, not yet retired", async () => {
+    connectAsTaskFiveWill();
+    const before = currentUnretiredHandoff();
+    expect(before).not.toBeNull();
+    renderConnect();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    // Staged, not retired: the record is untouched, on both tiers.
+    expect(currentUnretiredHandoff()).toStrictEqual(before);
+    expect(loadMonitorRun()).not.toBeNull();
+    const staged = takeStagedRetireHandoff();
+    expect(staged).toStrictEqual([
+      { sessionKey: before!.sessionKey, revision: before!.revision },
+    ]);
+  });
+
+  // Task 5 re-review (F-3, 2026-08-30): a refused confirm must not leave
+  // a live authorization sitting in the store for a LATER, unrelated
+  // Connect press to inherit.
+  it("Cancel (the confirm panel's own) discards the staged set", async () => {
+    connectAsTaskFiveWill();
+    renderConnect();
+
+    // Stages, unconsumed — the panel shows and takes over the trigger.
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+  });
+
+  it("neither Connect anyway nor a direct proceed ever retires anything from this component — no retire receipt fires either way", async () => {
+    connectAsTaskFiveWill();
+    const receipts: HandoffReceipt[] = [];
+    setReceiptChannel((r) => receipts.push(r));
+    renderConnect();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect anyway" }),
+    );
+
+    // `connectAsTaskFiveWill` (this test's `onProceed`) writes a fresh
+    // MonitorRun of its own via `saveMonitorRun`/`createMonitorRun`
+    // directly — never through the store — so no COMMIT receipt is
+    // expected here either; the point is specifically the absence of any
+    // RETIRE receipt, which only the hook's own "armed" handler may emit.
+    expect(receipts.filter((r) => r.kind === "retire")).toStrictEqual([]);
+    // The staged set from the press above is still sitting in the store,
+    // exactly where `useMonitorSession.ts`'s own "armed" handler expects
+    // to find and consume it — nothing here already took it.
+    const staged = takeStagedRetireHandoff();
+    expect(staged.length).toBe(1);
+    setReceiptChannel(null);
+  });
+
+  it("a revision that changes while the confirm panel sits on screen is captured at STAGE time, not re-read at press time", async () => {
+    connectAsTaskFiveWill();
+    const before = currentUnretiredHandoff();
+    renderConnect();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    // THE RACE: the dead hook's own linger-window burst lands WHILE the
+    // confirm panel sits on screen — after `handleConnect` staged
+    // revision 0, before "Connect anyway" is ever pressed.
+    const bumped = commitHandoff(before!.sessionKey, 0, before!.run);
+    expect(bumped).toMatchObject({ accepted: true, revision: 1 });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect anyway" }),
+    );
+
+    // The STAGED set still names revision 0 — the value `handleConnect`
+    // captured at stage time — never the superseded revision 1 the race
+    // above produced. This is what lets the hook's own retire report
+    // `superseded: true` truthfully later, instead of trivially matching
+    // whatever is current (see `handoffStore.stagedRetireSet`'s own doc
+    // comment on why a fresh re-read at press time would defeat this).
+    expect(takeStagedRetireHandoff()).toStrictEqual([
+      { sessionKey: before!.sessionKey, revision: 0 },
+    ]);
+  });
+
+  it("nothing to protect: Connect stages an EMPTY set, clearing any stale set from an earlier, abandoned press", async () => {
+    // A stale set from an earlier press (a different workout's Connect,
+    // since cancelled/abandoned) must not survive to authorize THIS
+    // press's own eventual "armed" event (rev-3 antagonist: "a set
+    // staged for attempt 1 must not authorize attempt 2's retire").
+    stageRetireHandoffForTest([
+      { sessionKey: "2020-01-01T00:00:00.000Z", revision: 7 },
+    ]);
+    renderConnect();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+  });
+
+  it("nothing staged (a SessionRun-only stage): the guard shows the confirm, but stages an empty set — no MonitorRun to protect", async () => {
+    saveRun(unloggedSessionRun());
+    expect(currentUnretiredHandoff()).toBeNull();
+    renderConnect();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      screen.getByText("You have an unlogged session. Connecting discards it."),
+    ).toBeInTheDocument();
+    expect(takeStagedRetireHandoff()).toStrictEqual([]);
   });
 });
