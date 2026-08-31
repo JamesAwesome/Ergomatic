@@ -314,7 +314,21 @@ const claims = new Map<string, { renderedRevision: number }>();
  *  press's own "armed" event. `useMonitorSession.ts`'s own `cancel()`/
  *  `programDropped` paths also clear it via `takeStagedRetire` (consumed,
  *  not retired) -- the rev-3 antagonist's own words: "a set staged for
- *  attempt 1 must not authorize attempt 2's retire." */
+ *  attempt 1 must not authorize attempt 2's retire."
+ *
+ *  **THE RETRY PATH, named (adversarial pass note, 2026-08-30 — correct
+ *  behaviour that this comment did not previously account for, which is
+ *  how a future reader mistakes it for a leak).**
+ *  `ConnectedInterstitial.tsx`'s `handleTryAgain` reaches `connect()` —
+ *  and from there "armed" — WITHOUT going through `ConnectAction.tsx`'s
+ *  `handleConnect`, so it never re-stages. The set from the ORIGINAL
+ *  press deliberately survives and authorizes the retry's own armed
+ *  retire. That is right, not a hole: Try Again is the SAME attempt on
+ *  the SAME record the rower was already warned about one screen earlier
+ *  (a failed pair, a dropped link), not a second authorization. The set
+ *  is only discarded when the attempt genuinely DIES -- `cancel()`,
+ *  `programDropped`, the confirm panel's own Cancel -- each of which
+ *  emits `staged-retire-discarded`. */
 let stagedRetireSet: readonly { sessionKey: string; revision: number }[] = [];
 
 /** Records the Connect guard's own authorization at stage time. See

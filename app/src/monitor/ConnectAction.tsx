@@ -123,10 +123,14 @@ export default function ConnectAction({
   // Task 5 review fix round: stages the AUTHORIZATION in the STORE, not
   // local state — `handoffStore.ts`'s own `stagedRetireSet` doc comment
   // has the full discipline (why the execution moved to the hook's
-  // "armed" event, why this call is UNCONDITIONAL on every press). This
-  // component no longer retires anything itself — "Connect anyway" below
-  // goes straight to `onProceed`, the shape this component shipped with
-  // before the retire briefly (and wrongly) lived here at press time.
+  // "armed" event, why this call is UNCONDITIONAL on every press, and —
+  // added 2026-08-30 — why `ConnectedInterstitial.handleTryAgain` reaches
+  // "armed" WITHOUT passing through here and correctly inherits the
+  // original press's set: Try Again is the same attempt on the same
+  // record, not a second authorization). This component no longer retires
+  // anything itself — "Connect anyway" below goes straight to
+  // `onProceed`, the shape this component shipped with before the retire
+  // briefly (and wrongly) lived here at press time.
   function handleConnect() {
     const monitorEntry = currentUnretiredHandoff();
     stageRetireHandoff(

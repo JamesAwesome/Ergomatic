@@ -1016,10 +1016,13 @@ export function completeMonitorRun(
  * `completeContinuityReset`'s one caller (`useMonitorSession.ts`'s own
  * continuity-reset branch) commits through the hook's own
  * `applyProducerCommit` discipline; `completeInterruptedRun`'s one caller
- * (`Today.tsx`'s `UnloggedMonitorRow`) still calls `saveMonitorRun`
- * directly on the returned record as a STOPGAP — Task 4 owns `Today.tsx`'s
- * full store rewrite (plan Task 4: "Today.tsx unlogged row on the store"),
- * and that call site's own comment says so.
+ * (`Today.tsx`'s `UnloggedMonitorRow`) commits through the store as well —
+ * it is spec §1's named SECOND committer (`handleLogIt`, an interrupted
+ * session's close for a key no hook can hold). The STOPGAP sentence that
+ * used to sit here — "still calls `saveMonitorRun` directly ... Task 4
+ * owns Today.tsx's full store rewrite" — described the tree between Tasks
+ * 3 and 4 and was stale from the moment Task 4 landed (whole-branch
+ * review, LOW-1).
  */
 function completeWithoutWireEvidence(
   run: MonitorRun,
