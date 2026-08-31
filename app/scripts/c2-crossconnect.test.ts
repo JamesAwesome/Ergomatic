@@ -38,6 +38,7 @@ import {
   buildResultPost,
   c2Tenths,
   cmdAuth,
+  cmdProbeRed,
   diffRowVsResult,
   evaluateFreshPost,
   exchangeCode,
@@ -589,5 +590,114 @@ describe("cmdAuth", () => {
         String(c[0]).includes("State receipt"),
       ),
     ).toBe(true);
+  });
+});
+
+// P1 fix (PR0 re-review, James, verbatim): "Production now correctly calls
+// redProofVerdict and exits for a non-MISMATCH … but every new test invokes
+// only the extracted helper. Deleting or negating the command's
+// `if (!verdict.ok)` branch leaves all 37 tests green and lets
+// match/UNPROVEN reach the success log." These drive cmdProbeRed itself end
+// to end — a fresh 201 post plus an id-matching GET — so that branch at the
+// command's own call site is what is under test, not only redProofVerdict.
+describe("cmdProbeRed", () => {
+  const sessionJson = JSON.stringify({
+    tokens: { access_token: "session-tok", refresh_token: "r", expires_in: 1 },
+    obtainedAt: "2026-08-31T00:00:00.000Z",
+    stateEchoed: true,
+    stateReceipt: {
+      nonceSha256: "x",
+      echoedSha256: "x",
+      equal: true,
+      at: "2026-08-31T00:00:00.000Z",
+    },
+  });
+
+  let logSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fsMocks.readFile.mockReset().mockResolvedValue(sessionJson);
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const sawSuccessLine = (calls: unknown[][]) =>
+    calls.some((c) => String(c[0]).includes("MISMATCH confirmed"));
+
+  // The POST always succeeds fresh (201, an id) in every case below — only
+  // the GET-back diff's "time" verdict varies, which is exactly what
+  // redProofVerdict (and the command branch reading it) decides on.
+  const stubPostThenGet = (getTimeField: { time?: number }) => {
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        call += 1;
+        if (call === 1) {
+          return {
+            ok: true,
+            status: 201,
+            text: async () => JSON.stringify({ data: { id: 90909 } }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({ data: { id: 90909, ...getTimeField } }),
+        };
+      }) as unknown as typeof fetch,
+    );
+  };
+
+  it("time MATCHES on the fresh GET: exits 1, no success line — a deleted/negated command guard would let this through", async () => {
+    stubPostThenGet({ time: 2548 }); // c2Tenths(FIXTURE.workSeconds) — independent literal, not derived (RF21)
+
+    await cmdProbeRed(cfg);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(sawSuccessLine(logSpy.mock.calls)).toBe(false);
+    expect(
+      errorSpy.mock.calls.some((c: unknown[]) =>
+        String(c[0]).includes(
+          "RED-PROOF FAILED: time verdict is match (cameBack=2548), required MISMATCH",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("time is invisible/missing on the fresh GET: exits 1, no success line", async () => {
+    stubPostThenGet({}); // no "time" key at all in the GET body
+
+    await cmdProbeRed(cfg);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(sawSuccessLine(logSpy.mock.calls)).toBe(false);
+    expect(
+      errorSpy.mock.calls.some((c: unknown[]) =>
+        String(c[0]).includes(
+          "RED-PROOF FAILED: time verdict is invisible-to-result-object (cameBack=undefined), required MISMATCH",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("time MISMATCHES on the fresh GET: succeeds, no exit(1)", async () => {
+    stubPostThenGet({ time: 255 }); // the classic wrong-encoding value (raw seconds, not tenths) — independent literal (RF21)
+
+    await cmdProbeRed(cfg);
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(sawSuccessLine(logSpy.mock.calls)).toBe(true);
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

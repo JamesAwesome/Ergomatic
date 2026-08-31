@@ -188,7 +188,25 @@ P1 round (red proof bound to its own fresh post), same protocol:
 | guard | mutation | exact failure |
 | --- | --- | --- |
 | `fetchResult` id equality | deleted the `String(data.id) !== String(id)` check + throw | `promise resolved "{ id: 445566, distance: 935 }" instead of rejecting` |
-| `redProofVerdict` hard gate | body replaced with `return { ok: true }` | 3 tests red: missing-time arm (`expected { ok: true } to strictly equal { ok: false, …}` wanting `no 'time' field in the diff`), UNPROVEN arm (`time verdict is invisible-to-result-object (cameBack=undefined), required MISMATCH`), match arm (`time verdict is match (cameBack=100), required MISMATCH`) |
+| `redProofVerdict` hard gate (pure helper only — see below) | body replaced with `return { ok: true }` | 3 tests red: missing-time arm (`expected { ok: true } to strictly equal { ok: false, …}` wanting `no 'time' field in the diff`), UNPROVEN arm (`time verdict is invisible-to-result-object (cameBack=undefined), required MISMATCH`), match arm (`time verdict is match (cameBack=100), required MISMATCH`) |
+
+**Command seam correction (P1b, #244 re-review, James, verbatim):**
+"Production now correctly calls `redProofVerdict` and exits for a
+non-MISMATCH … but every new test invokes only the extracted helper.
+Deleting or negating the command's `if (!verdict.ok)` branch leaves all
+37 tests green and lets match/UNPROVEN reach the success log." The row
+above proves `redProofVerdict` is correct in isolation; it proves nothing
+about `cmdProbeRed`'s own call site. Closed with three command-level
+tests (`cmdProbeRed`, stubbed fetch: a fresh 201 post, then an
+id-matching GET) exercising the match, invisible, and MISMATCH arms end
+to end:
+
+| guard | mutation | exact failure |
+| --- | --- | --- |
+| `cmdProbeRed`'s own `if (!verdict.ok)` branch | deleted the branch (its `console.error`, `process.exit(1)`, and `return`) entirely | 2 of the 3 new command tests red — match arm: `expected "Mock" to be called with arguments: [ 1 ] … Number of calls: 0` (no `exit(1)`); invisible/missing-time arm: same failure. The MISMATCH-arm test stayed green (it never asserted `exit` was called), which is expected — that arm proves the command still succeeds correctly, not that the guard exists. |
+
+The command seam is now covered: a deleted or negated guard at either
+layer — the pure predicate or the command's own branch — goes red.
 
 (Earlier task-loop mutations — c2Tenths `expected 60 to be 600`,
 formatC2Date zone drop, rest-guard inversion, timezone-key drop,

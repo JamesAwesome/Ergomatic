@@ -502,7 +502,14 @@ export function redProofVerdict(
   return { ok: true };
 }
 
-async function cmdProbeRed(cfg: C2Config): Promise<void> {
+// Exported (P1 fix, PR0 re-review): the command itself must be under test,
+// not only redProofVerdict — a deleted or negated `if (!verdict.ok)` branch
+// here is invisible to a helper-only test suite (James's re-review finding).
+// No deps-injection seam is added: cmdAuth's existing tests already stub the
+// module's real globals (`vi.stubGlobal("fetch", …)`, `vi.spyOn(process,
+// "exit")`, the `node:fs/promises` module mock) rather than threading a deps
+// object through, so this follows the same convention.
+export async function cmdProbeRed(cfg: C2Config): Promise<void> {
   // RF21: prove the diff can go red. Post the fixture with time encoded in
   // SECONDS (the classic wrong encoding). I-3: the verdict must NOT be read
   // off the POST echo — C2's create response is not guaranteed to be the
