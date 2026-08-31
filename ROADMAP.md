@@ -307,7 +307,10 @@ rower's work silently.
         saved on James's phone from v0.27.0 or later comes back
         machine-confirmed. Re-run the prod count after the next TestFlight
         build reaches him — the first nonzero is the proof, and a second
-        0-of-N is a live defect, not a null result.
+        0-of-N is a live defect, not a null result. **DISCHARGED
+        2026-08-31: the first machine-confirmed prod row landed** (5x750m
+        /1:30r, `CODE 050E-273C 1B69-9691` on both the PM5 and the phone);
+        the register entry below carries the evidence.
 
 - [x] **Audit AUD-016 — measured connected work survives storage failure.**
       **SHIPPED: PR #239, merged 2026-08-31 (`89006404`).** A completed PM5
@@ -829,7 +832,11 @@ X" is a real disposition — most of these are single files.
   `commit-accepted{verdict:"failed"}` before anything else** (#239's PM gate,
   2026-08-30). The defect AUD-016's fix addresses has zero observed instances;
   the store's receipts are the first instrument that can see a rejected write,
-  and they shipped WITH the fix rather than ahead of it. Evidence:
+  and they shipped WITH the fix rather than ahead of it. **Status
+  2026-08-31: the first post-release row (the field-proof row above) saved
+  durably and reached Log with its summary — no symptom, so the ring was
+  not decoded; this item stands for the first report that carries one, or
+  the next time James copies a connection log for any reason.** Evidence:
   `handoffStore.ts`'s receipt ring (stashed to sessionStorage at teardown),
   decoded via the connection log sheet.
 - **The hand-off store's three residuals, lifted here by #239's STRIKE
@@ -857,14 +864,27 @@ X" is a real disposition — most of these are single files.
      (`expected 2 to be 6`). Producer purity is a DIFFERENT invariant and is
      not a substitute for it. Evidence: PR #239's consolidated §10 mutation
      ledger.
-- **The machine-summary FIELD PROOF, lifted here 2026-08-31 when Wave F's
-  machine-totals item was struck.** Every gate behind that fix is the app
-  agreeing with the app (RF11); it is proven only when a row saved on James's
-  phone from v0.27.0 or later comes back machine-confirmed. **Re-run the prod
-  count after the next TestFlight build reaches him.** The first nonzero is the
-  proof; a second 0-of-N is a live defect, not a null result. Evidence: the
-  2026-08-30 count (0 of 18) and `walk-2026-08-28/`'s
-  `summary-never-stored-ring.json`.
+- **The machine-summary FIELD PROOF — DISCHARGED 2026-08-31.** Lifted here
+  when Wave F's machine-totals item was struck: every gate behind that fix
+  was the app agreeing with the app (RF11), and it was proven only when a
+  row saved on James's phone from v0.27.0 or later came back
+  machine-confirmed. **It did — the first machine-confirmed row in prod.**
+  James rowed 5x750m/1:30r on 2026-08-31 and photographed the PM5's own
+  View Detail beside the phone: the PM5 reads `15:49.0 · 3750m ·
+  Verification 050E-273C 1B69-9691`; the app's Log renders
+  `MACHINE CONFIRMED · WORK ONLY · 15:49.0 work · 3750m · CODE 050E-273C
+  1B69-9691`. Per-interval paces agree to the tenth on every row the PM5
+  screen showed (2:08.8 / 2:07.7 / 2:06.6 / 2:05.3) and the interval times
+  agree to the second (3:13.3→3:13, 3:11.6→3:12, 3:10.0→3:10, 3:08.0→3:08).
+  This is RF11's real oracle, not a mirror: the code is minted by the
+  monitor and the app cannot compute it. The prod re-count is now a
+  formality (it was the proxy for exactly this photograph); run it at the
+  next DB touch and expect ≥1 of N. Which build produced the row is
+  INFERENCE — `ios:release` for v0.30.0 ran earlier the same day, but the
+  screenshot carries no build stamp; the code alone proves ≥ v0.27.0.
+  Evidence: the two 2026-08-31 photographs (PM5 View Detail + Log detail,
+  in James's session), the 2026-08-30 count (0 of 18) as the baseline it
+  moved from.
 - **AUD-002 — bound History's successful top-level response.** A parseable
   non-array 200 must enter the existing error/Retry state rather than reaching
   `.map`. No real producer was found, so this remains P2/Probable and rides the
@@ -977,6 +997,24 @@ in both orientations.**
 - **The interrupted TOTAL line** — an interrupted session can show a rest clause
   LIVE and none STORED for the identical row. Silent. Lifted here from
   "accepted, pinned" on 2026-08-31. (`phase-rc.md`)
+- **The rest bands are only as wide as the rower kept the flywheel moving
+  (James, 2026-08-31: _"it's weird the rests only show in the bottom graph
+  if I rowed. It makes it look like the rests were different lengths"_).**
+  Seen on the first machine-confirmed prod row: five identical 1:30 rests
+  drew five bands of visibly different widths, two of them slivers. The
+  mechanism is two known facts meeting on one screen: the chart's `t` is
+  conditional on rower behaviour during rests — a frozen rest contributes
+  nothing to the axis (`traceModel.ts:37-46`) — and the pace series drops
+  `p === 0` samples before the band is derived from contiguous rest-marked
+  points (`traceModel.ts:181`, `TraceChart.tsx`'s `restBandsForSegment`).
+  So a rest where the rower sat still has no width at all, and the legend
+  `BAND = REST` is read as "band width = rest length", which it never was.
+  **Belongs in this pass, not alone:** it is the chart's-axes bullet above
+  made visible, and any fix (a work-only clock with rests as fixed-width
+  gaps, or bands sized from the interval's own rest seconds rather than
+  from samples) changes what the axis MEANS, so it rides this Gate 0.
+  Evidence: the 2026-08-31 Log-detail photograph; `traceModel.ts`'s own
+  header ("NEITHER `t` NOR `d` IS A WORK-ONLY QUANTITY").
 
 ## Rides the next PR touching the connected surface
 
