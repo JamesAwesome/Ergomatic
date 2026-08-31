@@ -110,6 +110,14 @@ test("just-row-observer", async ({ page }) => {
   });
 });
 
+// NO capture for the connecting/failed states, deliberately. Both are pinned
+// by `JustRowObserver.test.tsx` instead, where the transport is injectable.
+// Driving them here would mean depending on what headless Chromium does with
+// `requestDevice()` and no adapter — measured 2026-08-31: it exposes
+// `navigator.bluetooth`, opens a chooser that never resolves, and parks the
+// screen on "Connecting to monitor" with its Cancel control until the test
+// times out. A gate whose green depends on a hang is not a gate.
+
 // Landscape is the orientation a laptop walk actually runs in — the medium
 // `RUNSHEET.md` names. Same reference frame as the other landscape captures.
 test("just-row-observer-landscape", async ({ page }) => {
