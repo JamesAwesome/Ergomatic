@@ -240,13 +240,22 @@ requirements).
     bigger PR is cheaper to run gates on but harder to review. When
     grouping would force a reviewer to reason about a stored-shape change
     and an unrelated redesign in one pass, split. Otherwise group.
-- **CLOSE THE INVARIANT BEFORE REQUESTING RE-REVIEW.** A fix round closes
+- **CLOSE THE INVARIANT AND KEEP THE REVIEW RECORD CURRENT.** A fix round closes
   every finding's underlying invariant, not only its latest counterexample.
   Every factual claim in a report, review comment, or code comment names
   either the command and relevant output that established it or a citation.
   Label an inference and cite the observations it rests on; an unsupported
   claim is invention that will be read as evidence. These rules bind the
-  controller that asks for the next review:
+  controller that requests review or merge:
+  - **A review record describes the current head, not the head where it was
+    written.** After any scope-changing push and immediately before initial
+    review, re-review, or merge, name the current head SHA and reconcile the PR
+    body against `gh pr diff --name-only` (or the equivalent current
+    base-to-head range). Replace stale claims about file scope, captures,
+    gates, tests, and finding disposition; never append a correction beneath a
+    contradiction. A push is scope-changing when it adds or removes files,
+    changes behavior, risk class, or test surface, or changes a finding's
+    disposition. Copy-only corrections do not trigger another census.
   - **Name the authority and lifetime of every predicate input.** When a
     classification combines a saved snapshot with a linked or freshly fetched
     entity, state which record owns identity and whether the inputs can legally
