@@ -189,10 +189,16 @@ rower's work silently.
       spec's PR 1, shipping alone.** The scoping premise that justified
       ignoring a live drop — the handler's own "the walk's trigger is READY,
       never a live session" — is FALSIFIED: the 2026-08-28 walk produced the
-      same signature with no Menu press, after a 67 s background. Closes
-      through the existing `endByMachine` machinery with a fifth
-      `CloseReason`, `"program-dropped"` (James, 2026-08-31); no migration.
-      **TRIAD** (stored close reason). Gate 0 on the exit copy.
+      same signature with no Menu press, after a 67 s background. Closes as
+      a normal ended session with a fifth `CloseReason`,
+      `"program-dropped"` (James, 2026-08-31), and hands off to the log.
+      **Carries a server migration** — `ended_by` is a Postgres `pgEnum`, a
+      hard 400 validator names the five values, and the server's `EndedBy`
+      union is a hand-copied mirror; all three widen in one commit, gated by
+      a `POST /api/logs` seam test (this row said "no migration" until
+      James's rev-2 review; that was the client-side story only). **TRIAD**
+      (stored close reason + the enum migration). Gate 0: words cleared,
+      log-screen placement delta pending.
 - [ ] **The pocketed-phone window's two co-producers. RE-SCOPED on evidence
       2026-08-31 — one is not a defect.** `pause-declared` at 66 spm while
       rowing is real and stays here, owned by

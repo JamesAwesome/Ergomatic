@@ -14,9 +14,12 @@ and deliberately declines to guess at the two we cannot yet see.
 
 The fix that ships first is small and deterministic: when the erg throws away
 the workout mid-row, the app now notices — it already does, at READY — closes
-the record, keeps every interval the rower actually rowed, and takes them back
-to the workout. Today it notices and does nothing, because the handler that
-sees the event returns early on any live session.
+the record, keeps every **completed** interval (an in-flight interval is still
+discarded until §5 lands behind the `door` column, and on a single-interval
+piece that means nothing is kept — stated, not glossed), and hands off to the
+log screen like every other connected ending. Today it notices and does
+nothing, because the handler that sees the event returns early on any live
+session.
 
 Everything else here is measurement before treatment. The reason is recorded in
 §0: the evidence that would settle the remaining questions **no longer exists
@@ -247,6 +250,19 @@ that already exists: the ended frame renders, `WorkoutDetail.tsx`'s
 and the log door — the record's owner per `Today.tsx`'s own stated premise —
 receives it.
 
+**The interim ended frame must not lie (James's review of rev 2, P1-2).**
+React renders the ended frame before the passive effect calls `onEnded()`, so
+for at least one visible frame the rower sees the ended surface — and
+`ConnectedSurface`'s machine-ended copy says `The monitor finished it. Your
+numbers are kept.`, which is false here: the erg dropped the workout. The
+ended frame for a program-dropped close therefore renders **the approved Gate
+0 words** — `THE ERG DROPPED THE WORKOUT.` plus the kept count — branching on
+the RUN's `endedBy === "program-dropped"` (the same authority the log strip
+uses; never a new session-state value). This is the strip's copy appearing one
+screen early, not a new surface, and it is on the Gate 0 artifact. **Owed
+test: a rendered-path test that inspects the ended frame BEFORE the route
+effect fires** and asserts the drop copy, not the finish copy.
+
 - **No split hold.** Corrected reason, per the antagonist's item 5: the first
   draft claimed "the machine has left mid-interval, so CSAFE-DEF footnote 12
   applies verbatim" — but at detection the machine is NOT mid-interval.
@@ -324,7 +340,13 @@ testers already know: `2 intervals kept.` / `Nothing kept.`, counted by
 `summaryModel.ts`'s `measuredIntervalCount(actuals)` — the same function the
 LOST THE MONITOR banner names, never a second notion of "kept".
 
-**GATE 0 CLEARED — James, 2026-08-31**, on the rendered artifact
+**GATE 0 STATUS: the WORDS are cleared; the current PLACEMENT is PENDING**
+(James's review of rev 2, P1-5: an approval of the workout-screen artifact
+does not carry to the log-screen delta — the gate is the approval of the
+rendered thing, and the rendered thing changed). What stands approved and
+what awaits are separated below.
+
+**Approved — James, 2026-08-31**, on the rendered artifact
 `docs/superpowers/specs/2026-08-31-lifecycle-exit-gate.html` (before/after in
 portrait, the nothing-kept variant, landscape, the existing failed-write state,
 and every pairing's contrast computed against the ground it sits on). Approved
@@ -342,10 +364,12 @@ The approved surface, binding on implementation:
 - **PLACEMENT REVISED with the destination ruling ("Just go to log", James
   2026-08-31): the strip sits at the top of the LOG screen** on the
   program-dropped arrival, not the workout screen — the words, register,
-  tokens and contrast pairings approved above carry over unchanged, and the
-  revised placement is a **Gate 0 delta re-rendered for James on the same
-  artifact** (its log-screen section) before implementation. The workout
-  screen gets no new surface after all.
+  tokens and contrast pairings approved above carry over unchanged. **The
+  revised placement, the new body line ("The row below is what the erg
+  measured before it stopped."), and the interim ended frame's drop copy are
+  the PENDING Gate 0 delta**, rendered on the same artifact's log-screen
+  section and awaiting James's explicit approval — no §1 implementation
+  starts before it. The workout screen gets no new surface after all.
 - **No banner on the live screen.** James's RC-37 ruling ("loose any new
   banners") holds; the one line is added only because something was rowed.
 - Contrast, computed and on the artifact: title `--ink` on `--surface`
@@ -391,10 +415,19 @@ was FALSE** — see "The migration, owned" above for the three sites (`pgEnum`,
 the 400 validator, the hand-copied `EndedBy` union) and the seam test that
 gates them. Client-side the never-migrate contract holds unchanged.
 
-**Rendering is unchanged in this PR.** `"program-dropped"` renders wherever
-`"program-failed"` renders today; any wording that distinguishes them belongs
-to the `door` column's Gate 0, not here. The one new surface is the log
-screen's strip, which reads the SESSION, not the stored reason.
+**Rendering is otherwise unchanged in this PR.** `"program-dropped"` renders
+wherever `"program-failed"` renders today in the STORED views (History, the
+saved row); any wording that distinguishes them there belongs to the `door`
+column's Gate 0, not here. The two surfaces this PR does add — the log
+screen's strip and the interim ended frame's drop copy — both read
+**`monitorRun.endedBy === "program-dropped"`, the DURABLE record**.
+(Rev 2 said the strip "reads the SESSION, not the stored reason" — WRONG, and
+James's review P1-1 caught it: `handleConnectedEnded` navigates with no route
+state, the connected hook unmounts, and `LogSession` receives only the
+hand-off `MonitorRun` — the session value is gone by arrival, and `"machine"`
+could not distinguish a drop from a real finish anyway. The record is the only
+authority that survives the navigation, and it is also the one that survives a
+relaunch, so a rower who reopens the log later still gets the true story.)
 
 ### Test obligation — recurring failure 24
 
@@ -424,18 +457,35 @@ for this composition). It asserts:
    invisible to every client-side gate, and the hand-copied server union
    makes the compiler blind to the widening.
 
-**On the fixture's honesty:** no committed recording emits `programDropped`
-naturally, and none can today (§0.4) — the detector's own gates are RC-37's
-and already exist. What is new here is the *handler*, so the event is
-synthesised while every frame, actual and storage write beneath it is real.
-That is stated rather than glossed, and it still satisfies RF24: the test
-begins before the producer writes and asserts after the reader reads.
+**The producer is the DRIVER, and the gate drives it for real (corrected per
+James's review of rev 2, P1-3 — rev 2 claimed "starts upstream of the
+producer" while synthesising the event, which proves the handler and storage
+path but not the driver→hook seam a live session actually crosses).** The
+production event is emitted inside `driver.ts`'s armed-watch and reaches the
+hook through the driver's listener; a synthesised event enters below that
+seam. So the gate is two tests with honestly-scoped claims:
+
+- **The seam test drives the REAL driver until IT emits.** After the committed
+  capture has built the live session, the transport feeds constructed wire
+  frames carrying RC-37's documented signature — `state === "armed"` with all
+  three `expectedArmedStructure` fields diverged, held past the detector's
+  ≥3-tick / ≥2 s window — and the assertion is that `driver.ts`'s own
+  armed-watch emits `programDropped` and the live hook receives it through
+  its real listener. The BYTES are constructed (no committed recording
+  carries this shape mid-live, §0.4); the DETECTOR, the emit, the listener
+  seam, and everything downstream are real. This is the honest boundary,
+  stated: constructed input, real producer.
+- **The handler test synthesises the event** for the failure-branch matrix
+  (assertion 4's forced write failure and its mutations), where driving the
+  full detector adds nothing to what is being asserted.
 
 **Every assertion above gets a mutation that makes it fail, and the report
 states what was mutated and what the failure said** (RF21). Assertion 4's
 mutation forges the durable verdict at the seam, not below it — a hook-level
 mutation alone would not prove the hand-off is gated. Assertion 5's mutation
-narrows the server union back and watches the 400.
+narrows the server union back and watches the 400. The seam test's mutation
+breaks the listener wiring (the hook's `programDropped` case) and watches the
+driver's real emit go unhandled.
 
 ## §2 — The ring becomes readable and durable (**prerequisite**)
 
@@ -535,14 +585,23 @@ becomes available from ordinary use. Rides §3's ring work.
 
 | PR | Contents | Gates |
 | --- | --- | --- |
-| 1 | §1 live drop arm + `"program-dropped"` | TRIAD; Gate 0 on the exit copy; antagonist delta pass |
-| 2 | §2 ring history + ungated door, §3 resume instrument, §6 latch counter | one coherent chunk: all three are ring work |
+| 1 | §1 live drop arm + `"program-dropped"` + server migration | TRIAD; Gate 0 (words cleared; log-screen placement delta PENDING); antagonist delta pass |
+| 2 | §2 ring history + ungated door, §3 resume instrument, §6 latch counter | one coherent chunk: all three are ring work. **Gate 0 on the ring door** (James's review P2-6: a new always-available screen listing saved rings is user-visible layout and copy, and rev 2 gave it no design gate) |
 | 3 | §4 freeze predicate | opens only when §3 has reported |
 | 4 | §5 partial metres | behind the `door` column's migration |
 
 PR 1 ships alone: it carries TRIAD weight and bundling it would make its own
 gate harder to run. PRs 2's three parts group deliberately — one reviewer, one
 risk model, per the standing "group the work" rule.
+
+**This slate is a Wave F SUB-slate, not the wave's exit (James's review
+P2-6).** Mapped against the four exit clauses: *a link dropped mid-piece* —
+partially discharged by PR 1 (the program-drop trigger family) and fully only
+with §5; *phone locked before the first pull* and *backgrounded mid-piece* —
+NOT discharged here; they need correct resume (§0.6, deliberately separate)
+and what §3's measurements teach; *the row says which door it came in by* —
+the `door` column's own item, outside this spec. The wave closes when those
+land, not when these four PRs do.
 
 **The three stale Wave F riders** (the `warmup` `DROP COLUMN`, the legacy
 `LogSeed.kind` guards, RC-12's unreconciled comment) ride the **`door`
