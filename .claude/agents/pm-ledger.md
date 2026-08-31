@@ -3521,3 +3521,76 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   sites that still key on the string. **Record it with its retirement trigger
   (a stable seed key) rather than as a product principle**, or the app takes
   the next name it needs the same way.
+## TRIAD final-PR gate, 2026-08-30 (the hand-off store, #239 — PASS with conditions)
+
+- **The countable presentation rule WORKED, and the residual failure is a
+  different one.** #228 was ~270 words above the fold, #230 was 266, #239 is
+  **148** — the numeric budget landed at #230's gate cut the overage from ~150
+  words to 28. What survives is not length: it is bullets that name a mechanism
+  with no rower on the other end. #239's two overspends were "CAS commits,
+  key-bound retire sets, staged destroy authorization" (23 words, zero product)
+  and a branch-inflicted-then-fixed regression presented as a product gain (17
+  words, zero rower-visible difference either way). **Cutting the bullets that
+  fail "so what?" fixes the word count as a side effect — count first, then cut
+  by so-what, and the number lands on its own.**
+- **The body under-sold the product on exactly the two axes the PM gate exists
+  to check.** #239 shipped a new rower-facing screen (`COULD NOT KEEP THE
+  RECORD ON THIS PHONE.` + two buttons + two committed captures) and closed the
+  escape-hatch gap this ledger filed at #230's own gate — and named NEITHER
+  anywhere in the body, while claiming "each destroy path warns first" (false at
+  `WorkoutDetail.tsx:298`, which the spec's own §5 records as having no confirm,
+  and new at none — every warning shipped earlier). **A PR that over-sells
+  hygiene and omits the screen is the normal shape when the author has been
+  inside the mechanism for six tasks. Check the rendered surfaces against the
+  body's bullets before reading either.**
+- **A "Try it" that works on `main` is RF13 at the presentation layer.**
+  #239's was "finish a connected row, don't log it, kill and reopen; the row is
+  on Today" — true, and true on main since `origin/main:Today.tsx:288`. It is
+  also the only line James will actually execute. **When none of a PR's fixes is
+  hand-reproducible (here: all three need storage denied), say that and point at
+  the red-then-green gate. A smoke test dressed as a demo teaches the reviewer
+  the change is smaller than it is.**
+- **Post-approval spec amendments: five faithful, one a reversal, and only the
+  reversal needs his eye.** Rev 4's §5 row 2 said a second unretired key is
+  "refused + `store-second-key-refused` receipt"; the branch amended it to a
+  receipted fallback **retire** (unbound `currentUnretired()` at the first
+  rowing frame). The ruling is right — refusing strands a ROWING session with no
+  record, the worse loss — but it moves in the DESTRUCTIVE direction on a cell
+  James read. **Triage amendments by direction, not count: an amendment that
+  makes the system more permissive about destroying a record is the one that
+  gets a clause above the fold; refinements that add exceptions with stated
+  discipline do not.**
+- **ROADMAP grew ~298 lines of task-by-task implementation narration inside one
+  unchecked box**, three months after the rebalance deleted 7,868 lines of
+  exactly that. The file's own contract ("a phase that closes leaves";
+  "corrections are APPLIED, not appended") makes the strike commit the owner of
+  the removal. **Ruled: the commit that strikes an audit item removes its
+  narration and FIRST lifts the forward-looking residuals into the open-item
+  register.** RF14 pushes findings out of PR bodies into ROADMAP; it is not a
+  licence to make ROADMAP the progress log.
+- **Four `.superpowers/` citations landed in tracked ROADMAP prose in the same
+  round that wrote a measurement out longhand to avoid doing so** — and
+  `.superpowers/` is in `.git/info/exclude`, not even a committed ignore file.
+  RF16's corollary was known, applied once, broken four times ten lines away.
+  **At any gate touching ROADMAP, grep the diff for `.superpowers/` — it is a
+  one-command check and this is its second appearance.**
+- **A consolidated mutation ledger can attribute a neighbour's failures to an
+  ungated row.** #239's §10 row 2 was recorded as gated; the antagonist's named
+  mutation passed with 0 failures because the ledger had scored a neighbouring
+  probe's 17 failures against it. RF21 hiding in the ledger rather than in a
+  test. **When a mutation ledger consolidates rounds, spot-check that each row's
+  recorded failure text names a test belonging to THAT row.**
+- **Release: v0.30.0 (MINOR) on merge.** Main is at v0.29.0 (`b2581a4a`), not
+  v0.28.0 — a branch rebased onto a tag is not evidence of the current tag.
+  The failed-write-screen notes sentence returns here: the ROADMAP notes-owed
+  row says in terms that it "returns with the hand-off store's PR", and
+  `releaseNotes.ts:41-44` points at that row from the code. **The gate that
+  removed a notes condition at a pause owns restoring it at the un-pause, and
+  the restoring PR is the one that ships the screen** (bound at this gate to
+  the v0.30.0 notes PR, the #231 shape).
+- **Still unmeasured after 8,124 lines: whether this defect has ever happened.**
+  The producer (a rejected `setItem`) has zero observed instances and no
+  instrument outside this PR. The "ship the instrument first" argument lost on
+  timing twice and is now spent. **Forward obligation, filed rather than
+  remembered: the first tester report after this tag gets its ring decoded for
+  `commit-accepted{verdict:"failed"}` before anything else.**

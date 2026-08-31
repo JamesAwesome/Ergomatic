@@ -415,7 +415,6 @@ rower's work silently.
         resurrecting the record; mutation-probed by reverting the door to
         the legacy `clearMonitorRun()` — the test failed (the late burst
         was accepted, `accepted:true, revision:1`), confirming it bites.
-        Full detail in `.superpowers/sdd/2026-08-30-handoff-store/task-4-report.md`.
         **Task 5 (the doors + the #230 restoration) landed 2026-08-30,
         CLOSING the "NARROWED BY TASK 4" condition above.**
         `useStartWorkout.ts:99` (confirmReplace) and
@@ -573,8 +572,7 @@ rower's work silently.
         changed from environmental/date-dependent rendering noise
         (today/you/log/news/post-workout-summary screens, none touched by
         this task's diff) were reverted per the task's own "revert
-        unrelated churn" instruction. Full detail in
-        `.superpowers/sdd/2026-08-30-handoff-store/task-5-report.md`.
+        unrelated churn" instruction.
         **Task 6 (close-out) landed 2026-08-30 — the plan's own six tasks
         are now ALL complete.** The module-boundary gate (spec §10 row 11)
         finally lands (`scripts/handoffStoreBoundary.test.ts`): nothing
@@ -613,8 +611,7 @@ rower's work silently.
         (`expected 2 to be 6`) and `LogSession.test.tsx`'s claim-race test
         (`retiredRevision` 1→0, `superseded` true→false). Producer purity
         (Task 1/3's own mutations) is a DIFFERENT invariant and is no
-        longer cited here as a substitute.**) — full table in
-        `.superpowers/sdd/2026-08-30-handoff-store/task-6-report.md`.
+        longer cited here as a substitute.**)
         `pnpm screenshots` now passes 83/83 (the stale `v0.26.0`
         release-notes pin bumped to this branch's own `v0.27.0` tag).
         Running it also surfaced one genuinely stale, unrelated capture —
@@ -647,9 +644,19 @@ rower's work silently.
         aggregate 98.93/97.45/98.98/99.35; `pnpm e2e` 420/420; `pnpm
         screenshots` 83/83. **AUD-016 stays NOT STRUCK** — the line above
         ("Needs a PM final-PR gate before merge... not struck until
-        then") still governs, unchanged by this close-out task. Full
-        detail in
-        `.superpowers/sdd/2026-08-30-handoff-store/task-6-report.md`.
+        then") still governs, unchanged by this close-out task.
+      - **STRIKE CONTRACT (#239's PM gate, 2026-08-30, binding on the
+        strike commit):** when James's approval strikes this item, the
+        same commit REMOVES the Task 1-6 narration above (ROADMAP's own
+        head rule: corrections are applied, not appended; a struck item
+        does not keep its progress log) and FIRST lifts the
+        forward-looking residuals into the open-item register: the
+        memory-only row that vanishes on reload indistinguishably from a
+        durable one; the three surviving legacy reads (`monitorRunState()`,
+        `anyLiveSession()`, `Today.tsx`'s guard read); and the row-11
+        tier-precedence compound mutation as the store's standing probe.
+        The register already carries the first-tester-report ring-decode
+        obligation.
 - [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
@@ -1090,6 +1097,13 @@ X" is a real disposition — most of these are single files.
 
 ## Codebase-audit owners
 
+- **First tester report after the hand-off store ships: decode the ring
+  for `commit-accepted{verdict:"failed"}` before anything else** (#239's
+  PM gate, 2026-08-30). The defect AUD-016's fix addresses has zero
+  observed instances; the store's receipts are the first instrument that
+  can see a rejected write, and they ship WITH the fix rather than ahead
+  of it. Evidence: `handoffStore.ts`'s receipt ring (stashed to
+  sessionStorage at teardown), decoded via the connection log sheet.
 - **AUD-002 — bound History's successful top-level response.** A parseable
   non-array 200 must enter the existing error/Retry state rather than reaching
   `.map`. No real producer was found, so this remains P2/Probable and rides the
@@ -1228,7 +1242,12 @@ new.
      P2b review and REMOVED at the 2026-08-30 pause ruling: it describes
      a screen v0.27.0 does not contain. It returns with the hand-off
      store's PR** (the gate that lands a condition owns removing it when
-     its subject stops shipping — pm-ledger, 2026-08-30).
+     its subject stops shipping — pm-ledger, 2026-08-30). **Bound at
+     #239's PM gate (2026-08-30): the sentence lands in the v0.30.0
+     notes PR that follows #239's merge and precedes its tag** — this
+     repo's notes ship as their own pre-tag PR (the #231 shape), so the
+     restoring PR is the notes PR, written against the full
+     `git log v0.29.0..main --oneline` range per RF15.
 - **The log-delete accepted gap** — a session with a wrong number has exactly
   one remedy, delete and re-log by hand, and `logged_at` is a DB default rather
   than settable, so a mistake found the next day cannot be re-dated onto its own

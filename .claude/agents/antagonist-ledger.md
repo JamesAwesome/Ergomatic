@@ -4184,3 +4184,54 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   absence on asynchronously enriched UI, wait for a positive readiness witness
   owned by that enrichment (the resolved anchor in this case), then make the
   identity source wrong and confirm the absence assertion turns red.**
+
+## 2026-08-30 — the hand-off store's §10 gate matrix (branch `handoff-store`, HEAD 28196b51)
+
+- **CLAIM (false): "§10 row 2 is substantially covered by the existing burst-linger
+  and last-split describe blocks; no dedicated test needed" (task-3-report,
+  carried into the consolidated ledger).** Believed because a mutation was run and 17
+  tests failed. **Technique that settled it: run the row's OWN named mutation, not a
+  neighbour's.** The ledger's mutation disabled `openBurstHold` (the hold never
+  engages); the row's named mutation is "gate the post-release commit on a window
+  predicate." Running the real one — a `releasedRef` set at both release points,
+  checked in `applyProducerCommit` — gave **0 failures / 5638 tests**, and still 0 when
+  escalated from `return false` to `throw`. **Probe-bites check, and it is what made
+  the finding safe to report: throwing at the RELEASE point instead failed 33 tests
+  across 5 files**, proving releases fire everywhere and that not one is followed by a
+  producer commit. Corroborating one-liner: `grep -c "MemoryRouter\|useNavigate\|navigate("
+  useMonitorSession.test.ts` returns **0**, so the row's navigation axis does not exist
+  in the file at all — the 2×2 matrix is a 1×2 with one column driven.
+- **Generalised rule: a mutation that fails N tests proves those N tests exist, not that
+  the row's invariant is gated.** Read the failing test TITLES against the row's own
+  text. Here every named failure belonged to rows 3 and 7 and to the burst-hold
+  mechanism. The ledger looked densest exactly where it was emptiest.
+- **CLAIM (true but under-read): "the §1 committer discipline holds — a refusal can never
+  diverge producer from store."** The spec homed two exceptions and missed a third:
+  the create path assigns `runRef.current = run` unconditionally, refused or not.
+  **Technique: probe the divergence in the direction that RESTORES the spec.**
+  Rewriting the create path to honour §1 produced 0 failures — so neither the shipped
+  behaviour nor the spec's text was pinned, and the code comment justifying the
+  divergence was an untested assertion. (Both directions now resolved: §1 homes the
+  exception and a test pins the shipped direction.)
+- **Technique: check the report's SHAs against `git merge-base --is-ancestor` before
+  trusting any recorded gate number.** Every SHA in the close-out report was a
+  pre-rebase commit and none an ancestor of HEAD; the report's `Tests 5576` was 62
+  short of HEAD's `Tests 5638` at an identical 201 files. A rebase the report itself
+  listed as "NOT done" had happened by the time it was read.
+- **Technique for "receipted" claims: ask WHICH PROCESS the receipt channel was wired
+  to.** A row-9 test asserted a `commit-accepted` receipt on a channel installed before
+  `vi.resetModules()` — forensic evidence about the pre-reload commit, structurally
+  unable to bite on a reload regression. The file disclosed this honestly; §9.5 was
+  amended to rule it acceptable; §10 row 9's text was never reconciled and still
+  demanded a post-reload receipt nobody built. **A spec amendment that resolves a
+  residual must also amend the GATE ROW that tests it, or the matrix keeps asking for
+  something the design decided not to build.** (Row 9 now reconciled.)
+- **HELD under attack (worth knowing):** row 8 (`handoffStoreReplay.test.ts`) — real
+  walk bytes, real hook, payload-inspecting sticky denial, asserted against the
+  ATTEMPTED write because a sticky content-keyed denial makes a storage read structurally
+  unable to distinguish bug from fix; red-then-green genuinely on the record at commit
+  `e84d781f`. Row 12 (`WorkoutDetail.connectedRecovery.test.tsx`) — RF24 hunted and
+  not found: no key seeding, no direct `commit`, the POSTed machine numbers traceable
+  to `deliverSummary` frames. And the staged-authorization leak has no producer, because
+  `ConnectAction.handleConnect` calls `stageRetire` UNCONDITIONALLY on every press,
+  staging `[]` when there is nothing to protect.
