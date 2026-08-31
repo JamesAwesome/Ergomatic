@@ -129,7 +129,33 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 ## Phase JR — Just Row
 
-**Status: Active — PR 0a observe-only instrument; PR 0b capture is James-scheduled; PR 1/2 remain blocked on the capture answers.** This is a deliberate household exception to the stranger-first ordering, requested by James on 2026-08-31. The capture session is housed at `docs/monitor/sessions/walk-phase-jr-capture/RUNSHEET.md`.
+**Status: Active — PR 0a instrument built; PR 0b capture DONE 2026-08-31, all
+seven OPEN questions answered; PR 1/2 now blocked on a design RE-OPEN, not on
+evidence.** This is a deliberate household exception to the stranger-first
+ordering, requested by James on 2026-08-31. Walk record and full decodes:
+`docs/monitor/sessions/walk-2026-08-31-justrow/README.md`; runsheet at
+`docs/monitor/sessions/walk-phase-jr-capture/RUNSHEET.md`.
+
+**The headline is good: 0x0031's elapsed and distance do NOT reset at the
+5-minute auto-split**, so a long free row stores as its true length and PR 2's
+two headline numbers are safe. **Two capture findings re-open design,
+though, and they must be settled before PR 1 tags its enum** (both are
+written up in the spec's own CLOSED section):
+
+- **The PM5 does not advertise while a Just Row is open**, so the app cannot
+  connect mid-row and cannot reconnect after a mid-row link drop. The spec's
+  "already mid-Just-Row at connect" path is struck; the Today recovery row can
+  only mean "log what we have", never "resume".
+- **A free row nobody ends never closes on the wire** — the workout stayed
+  active for ~15 minutes after the rower stopped, with frames still arriving
+  and no auto-terminate. The proposed `ended_by: "idle"` member describes an
+  event that did not occur, and PR 2 needs its own inactivity rule.
+
+Smaller reconciliations owed: `domain/monitor/pm5/uuids.ts` says 0x003F "has
+never been recorded" and one now has been; status frames arrive at 1.00/s, not
+the ~2.2/s the tooling assumes; and the observer heading renders
+`PM5 432331249 Row connected` because the advertised BLE name already ends in
+"Row".
 
 **Honest distance: three to five weeks of working sessions.** Waves D and B
 ship a tester nothing, so they release alongside C rather than alone — two
@@ -959,7 +985,8 @@ Each needs erg time or a deliberate recording session.
   `webView.reload()`, destroying the driver, the recorder, and up to 30 s of
   unflushed series. _"'terminated no' disposes of force-quit, not of memory
   pressure."_ (`phase-ll.md`)
-- **JR PR 0b's capture walk** — see `docs/monitor/sessions/walk-phase-jr-capture/RUNSHEET.md`.
+- ~~**JR PR 0b's capture walk**~~ — DONE 2026-08-31, all seven OPENs answered;
+  record at `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`.
 - **The hardware session shopping list** — three pairing and programming latency
   spans, the unrowed question from §17 item 5, §18's readings-still-owed, a
   genuine mid-piece disconnect, and **one `.5` pace target on the wire**

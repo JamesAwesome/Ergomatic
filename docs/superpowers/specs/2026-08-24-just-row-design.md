@@ -113,33 +113,67 @@ captures and transcriptions. This section is the corrected record.
   70:00 (PRIMARY, concept2.com). **The auto-splits create the phase's
   single highest-value open question — see OPEN 1.**
 
-### OPEN — closed by PR 0b's capture before PR 2 merges
+### CLOSED — answered by PR 0b's capture, 2026-08-31
 
-1. **Do 0x0031's elapsed/distance RESET at a Just Row auto-split?** If
-   they reset the way programmed interval boundaries reset, every free
-   row over five minutes would store the current split, not the row — a
-   30-minute row landing as ~5 minutes. This decides both headline
-   numbers. (Companion code fact, testable without hardware: with
-   `programLength <= 0` the series recorder's interval key pins at 0 and
-   an elapsed reset would silence the trace after the first split —
-   `intervalIndex.ts:183`. PR 2 must fix or bypass this regardless.)
-2. Do the auto-splits fire live on 0x0037/0x0038?
-3. Does the elapsed clock tick or hold through the 6 s Paused window, and
-   what does workoutState read when the 220 s timeout fires — is there an
-   auto-TERMINATE before power-off?
-4. Does a Menu-end emit 0x0039? (Stay connected ≥90 s after.)
-5. Does pulling from the main menu auto-enter Just Row with the app
-   connected?
-6. Does the post-Terminate auto-rearm cycle (Terminate → Rearm →
-   WaitToBegin, unaided) produce frame sequences that could re-trip a
-   naive motion detector? (The design guards against this — see
-   Detection — the capture confirms the guard's shape.)
-7. Can a real Just Row ever reach the `"finished"`-mapped state (12)?
+**All seven are answered.** Evidence and full decodes:
+`docs/monitor/sessions/walk-2026-08-31-justrow/README.md`. Scope, per that
+README: PM5 serial 432331249, firmware not captured, one session — these
+are findings for this device and these runs, not firmware-general truths.
 
-**No genuine unprogrammed Just Row capture exists** — every recording in
-`docs/monitor/sessions/` is a programmed workout (verified frame-by-frame
-at the anchor pass). PR 0b's capture is both the evidence and PR 2's
-permanent replay fixture.
+1. **Do 0x0031's elapsed/distance RESET at a Just Row auto-split? NO.**
+   Row-cumulative, straight through the boundary: 302.09 s / 1074.0 m at
+   the split, still climbing to 393.58 s / 1396.6 m at the end, with no
+   non-monotonic step anywhere inside the row. **Both headline numbers are
+   safe.** (The companion code fact stands and is untouched by this: with
+   `programLength <= 0` the series recorder's interval key pins at 0 —
+   `intervalIndex.ts:183` — which PR 2 must still fix or bypass.)
+2. **Do the auto-splits fire live on 0x0037/0x0038? YES**, twice, each
+   paired with its 0x0038. The split's own fields are per-split
+   (300.0 s / 1074 m, then 93.6 s / 323 m); the frame's own elapsed and
+   distance are cumulative.
+3. **The clock HOLDS through a pause; there is NO idle auto-terminate
+   while a central is connected.** The deliberate stop froze elapsed at
+   185.81 s across ~50 s of wall time — elapsed is rowing time, not wall
+   time. The timeout half is a **negative result**: after the rower
+   stopped, `workoutState` stayed at 1 for ~897 s with frames still
+   arriving, and nothing terminated. **The 220 s premise is not supported.**
+   See N2 below — this invalidates the `idle` closer as specced.
+4. **Does a Menu-end emit 0x0039? YES**, with 0x003A and a 0x003F, 0.4 s
+   after the terminate. Its filed totals (393.60 s / 1396.0 m) agree with
+   the live stream (393.58 s / 1396.6 m) to 0.6 m. **This retires rev 2's
+   "0x0039 has appeared in zero of our five captures" claim.**
+5. **Does pulling from the main menu auto-enter Just Row? YES.**
+6. **Does the post-Terminate cycle risk re-tripping a motion detector?
+   NO.** The trace is `0 → 1 → 11 (two frames) → 0`. No rearm churn.
+7. **Can a real Just Row reach state 12? NOT on a Menu end** — only
+   states 0, 1 and 11 appeared across 1660 status frames. The idle closer
+   could not be tested because it does not occur (see 3).
+
+#### Two findings the OPEN list did not anticipate — both bind PR 2
+
+**N1. The PM5 does not advertise while a Just Row is open, so a mid-row
+connect is impossible.** Isolated by a discriminating test at the erg: not
+discoverable with a row open, discoverable the instant Menu returned it to
+the main menu, nothing else changed. **This falsifies the Live-surface
+section's "If the rower is already mid-Just-Row at connect, frames show
+motion immediately" outright** — our transport's `connect(id)` only accepts
+an id its own `scan()` returned, so every connection needs discovery.
+**It also breaks recovery-by-reconnect:** the End-semantics promise that a
+mid-row link drop leaves a recoverable run assumes the app can get back,
+and it cannot while the row is still open. PR 2 designs for that or states
+plainly that a dropped link ends the app's involvement in that row.
+
+**N2. A free row nobody ends never closes on the wire.** Following from 3:
+the workout stays open indefinitely with frames still arriving. PR 2 needs
+its own inactivity rule or a Just Row session stays open forever, and the
+proposed new `ended_by: "idle"` member describes an event this walk could
+not produce. **Both are re-opened design questions, not implementation
+details — they want a brainstorm before PR 1 tags its enum**, since `idle`
+is one of the stored shapes PR 1 was going to migrate.
+
+Two smaller reconciliations owed: `domain/monitor/pm5/uuids.ts` says 0x003F
+"has never been recorded" and one now has been; and status frames arrive at
+1.00/s, not the ~2.2/s this repo's tooling assumes.
 
 ## Design
 
@@ -179,9 +213,15 @@ and series recorder. States: **Connecting → Ready ("pull to begin") →
 Live (elapsed, distance, current pace, SPM; a 44 px Done control) →
 Ended (summary of recorded numbers; Log it / discard)**.
 
-If the rower is already mid-Just-Row at connect, frames show motion
+~~If the rower is already mid-Just-Row at connect, frames show motion
 immediately: straight to Live with the machine's accumulated numbers —
-the record is the machine's whole row, not "since we connected."
+the record is the machine's whole row, not "since we connected."~~
+
+**FALSIFIED by the 2026-08-31 capture walk (finding N1 above).** The PM5
+does not advertise while a Just Row is open, so this state cannot be
+entered at all: the rower cannot connect mid-row. PR 2 must either require
+that the app is connected before the row starts, or say plainly that a row
+already underway is not joinable. Do not build against the struck text.
 
 **PR 2 rebuilds, not inherits, the session concerns that live in
 `useMonitorSession` rather than the driver** — priced into its size:
@@ -226,6 +266,13 @@ A mid-row link drop or app death persists a recoverable `MonitorRun` so
 Today offers recovery. **Today's unlogged-run row currently renders
 discard-only for a null-workout run** (the documented latent) — PR 2
 gives it a real "Log it" path to the new log door.
+
+**NARROWED by the 2026-08-31 capture walk (finding N1 above).** Recovery
+here can only ever mean "log what we already have". It cannot mean
+reconnecting to finish the row: the monitor stops advertising while the row
+is open, so the app cannot get back in until the rower ends it on the erg.
+Whatever PR 2 offers on that Today row must not imply the session can be
+resumed.
 
 ### Stored shape (TRIAD — PR 1, tagged BEFORE PR 2)
 
