@@ -374,6 +374,41 @@ async function cmdProbeDedup(cfg: C2Config): Promise<void> {
   await postResult(cfg, buildResultPost(FIXTURE, at(86_400_000)));
 }
 
+async function cmdProbeZeroRest(cfg: C2Config): Promise<void> {
+  // Spec §PR0 probe 3 (anchor F11): a continuous piece declaring an interval
+  // workout_type while omitting rest fields — accepted or rejected decides
+  // whether workout_type omission is forced for continuous rows.
+  await postResult(
+    cfg,
+    buildResultPost(
+      { ...FIXTURE, restSeconds: 0, restMeters: 0 },
+      {
+        ...FIXTURE_OPTS,
+        date: new Date("2026-09-03T14:00:00Z"),
+        workoutType: "VariableInterval",
+      },
+    ),
+  );
+}
+
+async function cmdProbeVerification(cfg: C2Config): Promise<void> {
+  // Stretch (spec §PR0 probe 5). Only meaningful AFTER the date mapping
+  // proved out (anchor K3). The executor formats the fixture capture's
+  // verificationBytes per C2's documented example shape
+  // (1234-5678-90AB-CDEF-) and posts with verification_code; any 4xx body
+  // is the finding. If the fixture capture carries no verificationBytes,
+  // record "no bytes on the fixture capture" — that is the result.
+  const code = process.argv[3];
+  if (!code) throw new Error("usage: … probe-verification <formatted-code>");
+  await postResult(cfg, {
+    ...buildResultPost(FIXTURE, {
+      ...FIXTURE_OPTS,
+      date: new Date("2026-09-04T14:00:00Z"),
+    }),
+    verification_code: code,
+  });
+}
+
 const [, , command] = process.argv;
 const commands: Record<string, () => Promise<void>> = {
   auth: () => cmdAuth(readConfig()),
@@ -381,6 +416,8 @@ const commands: Record<string, () => Promise<void>> = {
   diff: () => cmdDiff(readConfig()),
   "probe-red": () => cmdProbeRed(readConfig()),
   "probe-dedup": () => cmdProbeDedup(readConfig()),
+  "probe-zerorest": () => cmdProbeZeroRest(readConfig()),
+  "probe-verification": () => cmdProbeVerification(readConfig()),
 };
 if (command && commands[command]) {
   commands[command]().catch((e: unknown) => {
