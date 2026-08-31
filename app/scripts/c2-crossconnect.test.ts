@@ -150,14 +150,26 @@ describe("diffRowVsResult", () => {
     time: 2548,
     weight_class: "H",
   };
-  it("matches a faithful round-trip and marks the result-object-blind fields", () => {
+  it("COMPARES a field the result carries — measured live 2026-08-31: C2 returns rest/stroke fields, the blind-list research claim was wrong", () => {
+    const diffs = diffRowVsResult(row, opts, {
+      ...result,
+      rest_time: 1800,
+      rest_distance: 64,
+      stroke_rate: 24,
+    });
+    expect(diffs.find((d) => d.field === "rest_time")?.verdict).toBe("match");
+    expect(diffs.find((d) => d.field === "stroke_rate")?.verdict).toBe("match");
+  });
+  it("goes RED on a present-but-wrong rest field", () => {
+    const diffs = diffRowVsResult(row, opts, { ...result, rest_time: 999 });
+    expect(diffs.find((d) => d.field === "rest_time")?.verdict).toBe(
+      "MISMATCH",
+    );
+  });
+  it("marks a field genuinely absent from the response invisible, not matched", () => {
     const diffs = diffRowVsResult(row, opts, result);
     expect(diffs.find((d) => d.field === "distance")?.verdict).toBe("match");
-    expect(diffs.find((d) => d.field === "time")?.verdict).toBe("match");
     expect(diffs.find((d) => d.field === "rest_time")?.verdict).toBe(
-      "invisible-to-result-object",
-    );
-    expect(diffs.find((d) => d.field === "stroke_rate")?.verdict).toBe(
       "invisible-to-result-object",
     );
   });

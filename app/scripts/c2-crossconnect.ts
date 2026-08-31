@@ -140,16 +140,13 @@ export interface FieldDiff {
   verdict: "match" | "MISMATCH" | "invisible-to-result-object";
 }
 
-// The result object C2 returns has NO top-level stroke_rate/rest_time/
-// rest_distance (spec §Research record) — those fields are named
-// invisible rather than silently skipped, so the report says which oracle
-// saw which field (anchor F10).
-const RESULT_OBJECT_BLIND = new Set([
-  "rest_time",
-  "rest_distance",
-  "stroke_rate",
-]);
-
+// MEASURED LIVE 2026-08-31 (result 85557 on log-dev, PR0 report): the
+// result object DOES return rest_time/rest_distance/stroke_rate at top
+// level — the research-pass claim that it omits them was wrong. Visibility
+// is therefore decided per response, not from a hardcoded list: a field
+// the result carries is COMPARED; only a field genuinely absent from the
+// response is named invisible rather than silently skipped, so the report
+// still says which oracle saw which field (anchor F10).
 export function diffRowVsResult(
   row: StoredRowFixture,
   opts: PostOpts,
@@ -160,7 +157,8 @@ export function diffRowVsResult(
     timeOverrideTenths: undefined,
   });
   return Object.entries(expected).map(([field, want]) => {
-    if (RESULT_OBJECT_BLIND.has(field)) {
+    const got = result[field];
+    if (got === undefined) {
       return {
         field,
         expected: want,
@@ -168,7 +166,6 @@ export function diffRowVsResult(
         verdict: "invisible-to-result-object" as const,
       };
     }
-    const got = result[field];
     return {
       field,
       expected: want,
