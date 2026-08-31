@@ -3159,6 +3159,72 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // (rev-3 antagonist: "a set staged for attempt 1 must not authorize
     // attempt 2's retire").
     expect(takeStagedRetireForTest()).toStrictEqual([]);
+    // F-4 (Task 5 re-review, 2026-08-30): the discard itself is receipted
+    // ("the module receipts rarer things") — distinct from a `retire`
+    // receipt, since nothing was actually removed from either tier here.
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:staged-retire-discarded" &&
+          e.detail.includes(leftoverKey),
+      ),
+    ).toBe(true);
+  });
+
+  // Task 5 re-review (F-1, 2026-08-30): "arm then Cancel" is the ACCEPTED
+  // loss, not the Critical recurring — spec §5 sanctions "armed" as the
+  // acceptance point, so a rower who reaches the "ready" screen and then
+  // Cancels without ever rowing cannot get the staged record back. This
+  // pin exists so the next reader finds intent (the record is gone
+  // BECAUSE armed fired, verified by the retire receipt's own reason)
+  // rather than mistaking the sibling "cancel BEFORE armed" test above
+  // for the whole story.
+  it("arm then Cancel: the accepted loss — both tiers null, the retire receipt already named 'connect-guard-armed' before Cancel ever ran", async () => {
+    const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
+    commitHandoffForTest(leftoverKey, null, fakeLeftoverRun(leftoverKey));
+    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    // THE RETIRE ALREADY HAPPENED, before Cancel is ever pressed.
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    expect(loadMonitorRun()).toBeNull();
+    const entriesAtArmed = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entriesAtArmed.some(
+        (e) =>
+          e.kind === "store-receipt:retire" &&
+          e.detail.includes(leftoverKey) &&
+          e.detail.includes('"reason":"connect-guard-armed"'),
+      ),
+    ).toBe(true);
+
+    // Cancel from "ready" cannot undo it — still null on both tiers, no
+    // SECOND retire receipt (nothing left to retire again).
+    await act(async () => {
+      await result.current.cancel();
+    });
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    expect(loadMonitorRun()).toBeNull();
+    const entriesAfterCancel = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+    }[];
+    expect(
+      entriesAfterCancel.filter((e) => e.kind === "store-receipt:retire"),
+    ).toHaveLength(1);
   });
 
   it("nothing staged: an UNRELATED unretired entry survives armed untouched by THIS hook's own retire — proves armed is bound to the staged set, never a blind 'whatever's there' sweep (§10 row 1's own mutation target)", async () => {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
 import {
   currentUnretired as currentUnretiredHandoff,
+  discardStagedRetire as discardStagedRetireHandoff,
   stageRetire as stageRetireHandoff,
 } from "./handoffStore";
 
@@ -39,7 +40,15 @@ import {
  * (`monitorRun.ts`), whose `clearRun()` is unconditional and undoable, is
  * NOT called synchronously from here — `useMonitorSession.ts` deliberately
  * opens the record only at the first REAL ROWING FRAME, never at a mere
- * press or a successful pair, so a connect attempt that fails or is
+ * press or a successful pair. **CORRECTED (Task 5 re-review, F-1,
+ * 2026-08-30): "destroys nothing" below is true only of a `SessionRun`,
+ * and only PRE-armed for a `MonitorRun`** — a connect attempt that FAILS,
+ * or is Cancelled BEFORE the wire "armed" event, destroys nothing; a
+ * successful connect that reaches "armed" and is THEN Cancelled from the
+ * "ready" screen has already retired the staged `MonitorRun` (spec §5's
+ * "armed acceptance" row, sanctioned as the acceptance point) — see this
+ * file's own later "CORRECTED (Task 5 review fix round..." paragraph for
+ * the full mechanism. So a connect attempt that fails or is
  * abandoned before rowing starts destroys nothing (verified directly:
  * `e2e/session.spec.ts`'s "Connect anyway" test, and
  * `WorkoutDetail.test.tsx`'s real-transport-missing test, both against the
@@ -67,9 +76,20 @@ import {
  * and this proved it false. **Fixed by moving EXECUTION downstream to
  * the wire "armed" event** (`useMonitorSession.ts`) — strictly after
  * `program()` succeeds, strictly before any rowing frame, and never
- * reached by a failed or cancelled attempt (the census's own words for
- * the row-instead terminus: "Connect -> program -> armed |
- * failure-card" — armed sits AFTER program). `handleConnect` below still
+ * reached by a FAILED attempt, or one Cancelled BEFORE it fires (the
+ * census's own words for the row-instead terminus: "Connect -> program ->
+ * armed | failure-card" — armed sits AFTER program, and failure-card is
+ * the ALTERNATIVE outcome, never a predecessor). **CORRECTED (Task 5
+ * re-review, F-1): "never reached" describes failed/pre-armed-cancelled
+ * attempts ONLY.** Armed IS reached, exactly once, by every attempt that
+ * SUCCEEDS — and per spec §5, reaching it is the acceptance point: a
+ * rower who then Cancels from the "ready" screen without ever rowing
+ * cannot undo the retire that already happened the instant "armed"
+ * fired. This is the design's own sanctioned behavior, not a residual
+ * leak — `ConnectedInterstitial.tsx`'s own `onExit` doc comment and
+ * `useMonitorSession.test.ts`'s "arm then Cancel: the accepted loss" pin
+ * both name it explicitly, so the next reader finds intent rather than
+ * this Critical recurring. `handleConnect` below still
  * captures the AUTHORIZATION at stage time (the exact `{sessionKey,
  * revision}` the guard saw), but now records it in the store
  * (`stageRetire`) rather than local state, so the hook — a different
@@ -136,10 +156,18 @@ export default function ConnectAction({
             : "A session is in progress. Replace it?"}
         </p>
         <div className="baseline-actions">
+          {/* Task 5 re-review (F-3, 2026-08-30): a refused confirm must
+              not leave a live authorization staged for some LATER,
+              unrelated Connect press to inherit — `discardStagedRetire`
+              is a no-op when `handleConnect` staged nothing (the common
+              case), and receipted when it discards something real (F-4). */}
           <button
             type="button"
             className="button-outline"
-            onClick={() => setStage(null)}
+            onClick={() => {
+              discardStagedRetireHandoff();
+              setStage(null);
+            }}
           >
             Cancel
           </button>

@@ -186,7 +186,28 @@ export type HandoffReceipt =
   // both must swallow and fail gracefully, and both already do, via that
   // verdict) — a second receipt for the same write would double-report
   // it under two kinds.
-  | { kind: "storage-getter-error"; operation: "get" | "remove" };
+  | { kind: "storage-getter-error"; operation: "get" | "remove" }
+  // Task 5 re-review (F-4, 2026-08-30): "the module receipts rarer
+  // things" — a `stageRetire` call that OVERWRITES a non-empty slot is
+  // rare (the ordinary case is staging over an empty one) and silently
+  // dropping the old set would be a genuine information loss if it ever
+  // happened for a reason other than the expected "same key, refreshed
+  // revision" restage. Named distinctly from `retire`'s own kind: nothing
+  // was actually removed from either persistence tier here — only the
+  // AUTHORIZATION was replaced, before ever being acted on.
+  | {
+      kind: "stage-retire-replaced";
+      discarded: readonly { sessionKey: string; revision: number }[];
+    }
+  // Task 5 re-review (F-4): `discardStagedRetire` is the "this attempt
+  // died with an authorization still pending" path (`cancel()`,
+  // `programDropped`, the confirm panel's own Cancel — F-3) — distinct
+  // from the ordinary, silent `takeStagedRetire` the armed handler uses,
+  // whose own subsequent `retire` receipt already tells that story.
+  | {
+      kind: "staged-retire-discarded";
+      discarded: readonly { sessionKey: string; revision: number }[];
+    };
 
 type ReceiptChannel = (receipt: HandoffReceipt) => void;
 
@@ -297,18 +318,26 @@ const claims = new Map<string, { renderedRevision: number }>();
 let stagedRetireSet: readonly { sessionKey: string; revision: number }[] = [];
 
 /** Records the Connect guard's own authorization at stage time. See
- *  `stagedRetireSet`'s own doc comment above for the full discipline. */
+ *  `stagedRetireSet`'s own doc comment above for the full discipline.
+ *  Task 5 re-review (F-4): a non-empty slot being overwritten is
+ *  receipted (`stage-retire-replaced`) -- the ordinary case (staging over
+ *  an empty slot) stays silent. */
 export function stageRetire(
   set: readonly { sessionKey: string; revision: number }[],
 ): void {
+  if (stagedRetireSet.length > 0) {
+    emit({ kind: "stage-retire-replaced", discarded: stagedRetireSet });
+  }
   stagedRetireSet = set;
 }
 
-/** Consumes (returns AND clears) whatever is currently staged -- called
- *  exactly once per outcome: `useMonitorSession.ts`'s own `armed` event
- *  handler calls this to retire what it returns; the `cancel()`/
- *  `programDropped` cleanup paths call this too, discarding the result,
- *  so a dead attempt's own staged set can never outlive it. */
+/** Consumes (returns AND clears) whatever is currently staged -- the
+ *  PRODUCTIVE path: `useMonitorSession.ts`'s own `armed` event handler
+ *  calls this to retire what it returns, and that call's own `retire`
+ *  receipt already tells the story, so this function stays silent by
+ *  design. For the "this attempt died with something still staged" path,
+ *  use `discardStagedRetire` below instead -- never this one, discarding
+ *  its result. */
 export function takeStagedRetire(): readonly {
   sessionKey: string;
   revision: number;
@@ -316,6 +345,23 @@ export function takeStagedRetire(): readonly {
   const set = stagedRetireSet;
   stagedRetireSet = [];
   return set;
+}
+
+/** Task 5 re-review (F-3/F-4, 2026-08-30): the DISCARD path -- a dead
+ *  connect attempt's own still-pending authorization, thrown away rather
+ *  than acted on. Called from `useMonitorSession.ts`'s `cancel()` and
+ *  `programDropped` reset, and `ConnectAction.tsx`'s own confirm-panel
+ *  Cancel (F-3: a refused confirm must not leave a live authorization
+ *  sitting in the store for some LATER attempt to inherit). Receipted
+ *  when non-empty (F-4: "the module receipts rarer things") -- a no-op,
+ *  silent discard is the overwhelmingly common case (nothing was ever
+ *  staged in the first place), so only a genuine discard is worth a
+ *  receipt. */
+export function discardStagedRetire(): void {
+  const set = takeStagedRetire();
+  if (set.length > 0) {
+    emit({ kind: "staged-retire-discarded", discarded: set });
+  }
 }
 
 /** §8: "Tracked durable state: per key, `durableRevision` ... and
@@ -921,4 +967,5 @@ export const handoffStore = {
   cachedVerdict,
   stageRetire,
   takeStagedRetire,
+  discardStagedRetire,
 };

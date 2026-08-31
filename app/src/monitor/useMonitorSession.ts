@@ -78,6 +78,7 @@ import {
   retryDurable as retryDurableHandoff,
   setReceiptChannel,
   takeStagedRetire as takeStagedRetireHandoff,
+  discardStagedRetire as discardStagedRetireHandoff,
   type HandoffReceipt,
 } from "./handoffStore";
 import { check as checkContinuity } from "./continuity";
@@ -2955,10 +2956,10 @@ export function useMonitorSession(
         // authorize attempt 2's retire." Discards whatever the Connect
         // guard staged for THIS hook instance rather than leaving it to
         // be wrongly consumed by some LATER, unrelated Connect press's
-        // own "armed" event (`takeStagedRetireHandoff`'s own doc comment
-        // in `handoffStore.ts`). The return value is intentionally
-        // unused — this is a discard, not a retire.
-        takeStagedRetireHandoff();
+        // own "armed" event. `discardStagedRetireHandoff` (F-3/F-4,
+        // re-review), not the bare `takeStagedRetireHandoff` the armed
+        // handler uses — this path receipts a genuine discard.
+        discardStagedRetireHandoff();
         update({ ...INITIAL_STATE, programDropped: true });
         return;
       }
@@ -4055,9 +4056,15 @@ export function useMonitorSession(
     // attempt (whatever phase it reached: `picking`/`pairing`/
     // `programming`/`ready`/`failed`/`disconnected`) is over, so whatever
     // the Connect guard staged for it must not survive to authorize a
-    // LATER, unrelated attempt's own "armed" event. A no-op when nothing
-    // was ever staged (the common case: Cancel with nothing at risk).
-    takeStagedRetireHandoff();
+    // LATER, unrelated attempt's own "armed" event. `discardStagedRetireHandoff`
+    // (F-3/F-4, re-review) — a silent no-op when nothing was ever staged
+    // (the common case: Cancel with nothing at risk), receipted when it
+    // discards something real. Reaches here even from "ready" (post-armed,
+    // the F-1 "accepted loss" case): `takeStagedRetireHandoff` already ran
+    // at "armed" itself, so this is a no-op then too — the accepted loss
+    // already happened, receipted with `"connect-guard-armed"`, before
+    // this function ever runs.
+    discardStagedRetireHandoff();
     update(INITIAL_STATE);
   }, [teardown, update]);
 

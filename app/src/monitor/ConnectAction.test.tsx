@@ -424,6 +424,20 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     ]);
   });
 
+  // Task 5 re-review (F-3, 2026-08-30): a refused confirm must not leave
+  // a live authorization sitting in the store for a LATER, unrelated
+  // Connect press to inherit.
+  it("Cancel (the confirm panel's own) discards the staged set", async () => {
+    connectAsTaskFiveWill();
+    renderConnect();
+
+    // Stages, unconsumed — the panel shows and takes over the trigger.
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+  });
+
   it("neither Connect anyway nor a direct proceed ever retires anything from this component — no retire receipt fires either way", async () => {
     connectAsTaskFiveWill();
     const receipts: HandoffReceipt[] = [];
