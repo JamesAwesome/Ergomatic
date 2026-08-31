@@ -345,16 +345,12 @@ export interface MonitorRun {
 // this wave exists to fix, on the records of the rowers most likely to be
 // mid-session. Do that only together with the version bump or the
 // migration, and price the loss above first.
-// Task 2 (hand-off store, design spec §8): EXPORTED — no behavior change,
-// only visibility — so `handoffStore.ts`'s own hydration path can validate
-// raw durable bytes with the IDENTICAL rule this file's own `loadMonitorRun`
-// uses, without routing through `loadMonitorRun` itself. That function
-// self-clears on a malformed shape (`clearMonitorRun()` below, unconditional
-// on read) — exactly the anti-pattern §8 forbids for a store read ("Malformed
-// durable bytes are never cleared during a read"). Reusing this validator
-// instead of a second, hand-maintained copy is the DRY call: two shape
-// checks for the same stored type drifting apart is its own defect class
-// (CLAUDE.md RF23's shape, one mechanism disagreeing with another).
+// EXPORTED (hand-off store, design spec §8) so `handoffStore.ts`'s hydration
+// path validates raw durable bytes with the IDENTICAL rule `loadMonitorRun`
+// uses, rather than keeping a second, hand-maintained copy — two shape checks
+// for one stored type drifting apart is its own defect class (RF23). Both
+// readers now obey §8's "malformed durable bytes are never cleared during a
+// read": neither this validator nor `loadMonitorRun` clears anything.
 export function isPlainRecord(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -465,19 +461,17 @@ export function isMonitorRun(value: unknown): value is MonitorRun {
  *  lets that escape uncaught. Unlike `saveRun`, this reports nothing back —
  *  the brief's own interface fixes `saveMonitorRun`'s return type at `void`.
  *
- *  **Hand-off store design spec §1, plan Task 3 — no longer the writer
- *  behind `createMonitorRun`/`recordActual`/`completeMonitorRun`/
- *  `appendSummaryObservations`.** Those four are pure now; the sole
- *  production committer is `useMonitorSession.ts`'s hook, through
- *  `handoffStore.ts`'s own `commit`/`retryDurable` (which duplicate this
- *  function's sacrifice ordering, ported verbatim — see
- *  `handoffStore.ts`'s `performDurableWrite`). This function stays exported
- *  and still backs every OTHER `MONITOR_RUN_KEY` writer this task's scope
- *  does not touch (`Today.tsx`/`LogSession.tsx`/`useStartWorkout.ts` — Tasks
- *  4/5's own store rewrites) — it has no different action to take on a
- *  failed write than a successful one regardless of caller: the in-memory
- *  session keeps running either way, only the localStorage mirror would be
- *  stale.
+ *  **NO PRODUCTION CALLERS (hand-off store design spec §1).** Every
+ *  production write of `MONITOR_RUN_KEY` goes through `handoffStore.ts`'s
+ *  `commit`/`retryDurable`, which port this function's sacrifice ordering
+ *  verbatim (`performDurableWrite`); `createMonitorRun`/`recordActual`/
+ *  `completeMonitorRun`/`appendSummaryObservations` are pure builders, and
+ *  the doors (`Today.tsx`/`LogSession.tsx`/`useStartWorkout.ts`) commit and
+ *  retire through the store. This stays exported for the dozens of test
+ *  files that seed a fixture with it. Its `void` return is therefore a
+ *  fixture-seeder's contract, not a production one — the caller that DOES
+ *  need to branch on a failed durable write is the store's committer, which
+ *  reports it (§8's receipts).
  *
  *  **THE SACRIFICE (Phase LT spec 2 §3, ruling 3's own caution section):**
  *  a ~720 KB worst-case series (ruling 2's cap) changes the odds of the
@@ -1423,14 +1417,13 @@ export type ConnectGuardStage = "unlogged" | "in-progress" | null;
  * severity ordering, and the identical pair of sentences, that
  * `WorkoutDetail`'s `handleStart` already applies at the other door.
  *
- * **Task 5 review, HIGH-1 — widened to read `loadMonitorRun()` too, the
- * moment Connect actually got mounted.** `createMonitorRun` above is not
- * this function's only downstream hazard once a rower can press Connect
- * for real: Task 5's own `WorkoutDetail.handleRowInstead` calls
- * `clearMonitorRun()` unconditionally, and `createMonitorRun` itself
- * OVERWRITES `MONITOR_RUN_KEY` via `saveMonitorRun` without ever checking
- * for a live one already there (this file's own doc comment on
- * `createMonitorRun`: "deliberately NOT idempotent-checked"). A
+ * **This guard covers the `MonitorRun` side too, not just the
+ * `SessionRun`.** Everything downstream of a Connect press now destroys
+ * that record through the store rather than raw storage —
+ * `WorkoutDetail.handleRowInstead` retires whatever it finds (key-bound),
+ * and the create-commit at `useMonitorSession`'s "ready" branch retires the
+ * staged key before opening a new one — but a retire is still a
+ * destruction, so a rower must be ASKED first. A
  * finished-but-unlogged `MonitorRun` is 7C's entire prefill input — exactly
  * the same class of record the `SessionRun` check above exists to protect,
  * on the OTHER side of the coexistence line. `WorkoutDetail.handleStart`

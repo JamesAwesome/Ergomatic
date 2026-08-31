@@ -277,10 +277,17 @@ function WorkoutDetailView({
     });
   }
 
-  // Cancel, from any interstitial state: "always lands back on Workout
-  // detail with nothing lost" (handoff §2) — nothing here has committed a
-  // phone session, so there is nothing to clear beyond re-reading the
-  // caption in case this was the rower's first-ever successful pair.
+  // Cancel, from any interstitial state: lands back on Workout detail, and
+  // this function itself destroys nothing — it drops the interstitial and
+  // re-reads the caption in case this was the rower's first successful pair.
+  //
+  // "Nothing lost" is true of a `SessionRun` always, and of a `MonitorRun`
+  // only BEFORE the wire "armed" event: reaching armed IS the acceptance
+  // point (spec §5), so it has already retired the staged record and a
+  // Cancel from the "ready" screen cannot undo that. Sanctioned, not a leak
+  // — `ConnectAction.tsx`'s own corrected paragraphs carry the mechanism,
+  // and `useMonitorSession.test.ts`'s "arm then Cancel: the accepted loss"
+  // pins it.
   function handleInterstitialExit() {
     setConnecting(null);
     setLastDevice(loadLastDevice());
