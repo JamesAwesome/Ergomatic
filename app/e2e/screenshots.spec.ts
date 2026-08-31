@@ -99,7 +99,9 @@ test("just-row-observer", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("1284 events captured")).toBeVisible();
   await expect(
-    page.getByText("Observing only. No workout is sent to the monitor."),
+    page.getByText(
+      "Records raw monitor frames to a file, not to your log. Start the row on the erg.",
+    ),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Download capture" }),

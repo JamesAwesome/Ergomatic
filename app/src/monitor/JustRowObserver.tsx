@@ -154,8 +154,15 @@ export default function JustRowObserver({
             {capture.events} events captured
           </p>
         )}
+        {/* Says what the screen IS, because nothing else on it does and the
+            first version ("Observing only…") left that to be guessed. Both
+            halves are load-bearing for the operator: this produces a
+            diagnostic FILE and no log entry (the logged Just Row is PR 2's
+            job, not this instrument's), and because it never programs the
+            erg, the row is started on the monitor rather than here. */}
         <p className="connected-body-line">
-          Observing only. No workout is sent to the monitor.
+          Records raw monitor frames to a file, not to your log. Start the row
+          on the erg.
         </p>
       </div>
       <div className="action-stack connected-interstitial-actions">
