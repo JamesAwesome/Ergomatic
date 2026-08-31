@@ -2886,6 +2886,126 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     }
   });
 
+  // §10 ROW 2, THE WIRE AXIS — added at the final fix round (2026-08-30)
+  // after the antagonist's §10 audit proved the row had NO gate at all: its
+  // OWN named mutation ("gate the post-release commit on a window
+  // predicate") passed 0 of 5638 tests even as a bare `throw`, because no
+  // test in the repo ever let a producer commit follow a release.
+  //
+  // **THE ROW'S DIRECTION, read off the spec rather than paraphrased.**
+  // §10 row 2: "Producer update after release, four orderings ... ALL REACH
+  // `commit`". §4 invariant 4: "Every accepted producer update AFTER
+  // RELEASE either reaches the current consumer, or remains recoverable."
+  // §9.1 names the only thing that stops one — the delivery window's own
+  // end, not the release. So the invariant is that a late producer update
+  // LANDS; the mutation the row names is what would break it. A guard
+  // refusing post-release commits is not the fix for this gap, it IS the
+  // mutation: it would delete §1's "headline case" (the late burst) and
+  // row 3's whole premise (R1 committed from the OLD hook's teardown,
+  // AFTER the new route rendered).
+  //
+  // The ordering driven here is release-before-teardown, before navigation:
+  // the burst backstop times the hold out while the rower is still on the
+  // connected surface and the subscription is still live, and the machine's
+  // summary arrives afterwards. The store must take it.
+  it("row 2 — A PRODUCER UPDATE ARRIVING AFTER THE HAND-OFF RELEASED STILL REACHES `commit`: the burst backstop frees the surface, THEN the machine's summary lands, and the store accepts it (revision advances, receipt after the release)", async () => {
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+          finalBoundary(300),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100); // the natural finish — BOTH conditions open
+    tick(fake, 100); // the split lands, resolving the split condition only
+    expect(result.current.actuals).toHaveLength(1);
+    expect(result.current.handoffHeld).toBe(true);
+
+    // THE RELEASE, with nothing committed after it yet: the burst never
+    // came inside its own backstop, so the hold times out and the surface
+    // is freed (`handoff-released ... burst-timeout`).
+    act(() => {
+      timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)!.fire();
+    });
+    expect(result.current.handoffHeld).toBe(false);
+    const atRelease = currentUnretiredHandoffForTest();
+    expect(atRelease).not.toBeNull();
+    expect(atRelease!.run.summaryTotals).toBeUndefined();
+    const receiptsAtRelease = (
+      JSON.parse(result.current.exportLog()) as { kind: string }[]
+    ).filter((e) => e.kind === "store-receipt:commit-accepted").length;
+
+    // ...AND NOW THE MACHINE'S SUMMARY, off the wire, after all of that:
+    // the subscription is still up (no unmount, no disconnect), so the
+    // driver's own reconcile drains it and the hook folds it onto the
+    // record through `applyProducerCommit`.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
+    });
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    // THE ROW: the commit LANDED. Revision advanced by exactly one (an
+    // independent count — this test made exactly one further producer
+    // write, so the number is the test's own arithmetic, not a value read
+    // back out of production), the observations are on the record, and the
+    // durable tier carries them too.
+    const afterBurst = currentUnretiredHandoffForTest();
+    expect(afterBurst).not.toBeNull();
+    expect(afterBurst!.revision).toBe(atRelease!.revision + 1);
+    expect(afterBurst!.run.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 60,
+      workDistanceMeters: 200,
+    });
+    expect(loadMonitorRun()?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 60,
+      workDistanceMeters: 200,
+    });
+
+    // ...and it is genuinely AFTER the release in the ring's own ordering,
+    // not merely "at some point during the run": a fresh
+    // `store-receipt:commit-accepted` exists at an index BEYOND the last
+    // `handoff-released` entry. This is the half a mutation gating the
+    // commit on a release predicate cannot survive.
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const releasedAt = entries.findLastIndex(
+      (e) => e.kind === "handoff-released",
+    );
+    expect(releasedAt).toBeGreaterThanOrEqual(0);
+    const acceptedAfter = entries
+      .slice(releasedAt + 1)
+      .filter((e) => e.kind === "store-receipt:commit-accepted");
+    expect(acceptedAfter).toHaveLength(1);
+    expect(
+      entries.filter((e) => e.kind === "store-receipt:commit-accepted"),
+    ).toHaveLength(receiptsAtRelease + 1);
+    // The record itself says the fold-in happened, so a mutant that
+    // silently dropped the write while still emitting a receipt for some
+    // OTHER commit cannot pass on the receipt assertions alone.
+    expect(entries.some((e) => e.kind === "summary-recorded")).toBe(true);
+  });
+
   it("stale-commit refusal: a commit racing UNDER the hook's own lastAcceptedRevisionRef is refused, runRef unchanged, with a receipt — row 4", async () => {
     const { result, fake } = harness({
       program: ONE_INTERVAL,
