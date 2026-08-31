@@ -210,8 +210,32 @@ so we build the RFC 8252 shape:
    Network errors, 5xx, timeouts are `c2_error`, retryable, link intact —
    a DNS blip must not un-link a user and re-ask the one PII question.
 7. **Env:** `C2_BASE_URL` (defaults `https://log-dev.concept2.com`),
-   `C2_CLIENT_ID`, `C2_CLIENT_SECRET`. Real env only. Prod cutover is
-   env + the write-approval check.
+   `C2_CLIENT_ID`, `C2_CLIENT_SECRET`, and `C2_LINK_ENABLED` (default
+   OFF). Real env only. Prod cutover is env + the write-approval check.
+8. **Visibility flag (James, 2026-08-31: "gate the visibility... in case
+   we want to go live without it").** The whole surface is gated
+   server-side: available iff `C2_LINK_ENABLED=1` AND both credentials
+   present. `GET /api/concept2/link` returns `available: false`
+   otherwise; the client renders NO Concept2 card and NO Send affordance
+   when unavailable, and every link/upload route refuses server-side too
+   — a capability gate, not a cosmetic hide. Server-driven rather than a
+   `VITE_` build flag on purpose: one build ships everywhere (no second
+   iOS binary, no RF13 disarmed-flag class), and flipping prod live is
+   an env change, not a release. Client code ships in the bundle either
+   way — hidden, not absent; nothing in it is secret. Lifecycle rule:
+   turning the flag OFF after users linked hides the surface but deletes
+   nothing — links and per-row sent state persist as history.
+9. **Prod write approval ORDERS the cutover (James's portal quote,
+   PRIMARY, 2026-08-31: "By default, the scopes granted to a client in
+   the live environment are user:read and results:read. To create a
+   client with write access, please go to log-dev.concept2.com.").**
+   The live client is READ-ONLY until Concept2 approves write access
+   (ranking@concept2.com), and the one-way scope rule means a grant made
+   through a read-only client may be stuck narrow — a tester who links
+   too early would have to unlink and relink. Therefore
+   `C2_LINK_ENABLED` stays OFF on prod until write approval is
+   CONFIRMED, not merely requested; approval-before-first-link is the
+   ordering, not approval-before-first-upload.
 
 ## Stored shapes (TRIAD)
 
@@ -356,9 +380,11 @@ computed).
   branch.**
 - **PR1 — server:** migration (`concept2_links`, `concept2_auth_attempts`,
   four `session_logs` columns), mint/link/exchange-or-callback routes per
-  the branch PR0 chose, upload route, mapping module (pure), refresh
-  logic, save-path additions (`completed_at`, `tz` through the POST
-  validator). TRIAD gates.
+  the branch PR0 chose (Branch A), upload route, mapping module (pure),
+  refresh logic, save-path additions (`completed_at`, `tz` through the
+  POST validator), and the `C2_LINK_ENABLED` availability gate on every
+  route (§Architecture 8) with a test proving unavailable refuses both
+  link AND upload. TRIAD gates.
 - **PR1.5 — the native link flow** (PM condition 1's split: a reviewer
   should not hold a token-broker migration and an iOS deep-link contract
   in one pass): `@capacitor/browser` dependency, foreground re-fetch
