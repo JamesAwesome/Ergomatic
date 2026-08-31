@@ -947,6 +947,22 @@ describe("POST /api/workouts/bulk", () => {
     expect(res.body.errors.length).toBeGreaterThan(0);
   });
 
+  // PM gate on #238, C1: the reservation guarded two of the validator's
+  // three callers; this route — one tap from the Library header as
+  // IMPORT — was the unguarded third, and could still create a personal
+  // "2K Test" while the PR record said the producer was gone. Same
+  // all-or-nothing posture as every other bulk error.
+  it("rejects a reserved title in a paste, creating NOTHING — the bulk door is guarded too", async () => {
+    const text = `1 | 2K Test | AN | hard | 5\nw 2000m max\n\n2 | Steady | O2 | easy | 1\nw 20' 2k+10`;
+    const res = await asA(
+      request(appFor(makeStores())).post("/api/workouts/bulk"),
+    ).send({ text });
+    expect(res.status).toBe(200);
+    expect(res.body.created).toHaveLength(0);
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0].message).toContain("title is reserved");
+  });
+
   it("reports domain validation failures for syntactically-valid but out-of-bounds workouts, creating nothing", async () => {
     const text = `1 | Bad Pain | AT | medium | 9\nwu 10\nw 1' 6k @20`;
     const res = await asA(
@@ -4166,9 +4182,10 @@ describe("GET /api/today", () => {
       type: todayCode,
     });
     // Seeded through the STORE, not the route: since the 2026-08-31
-    // reservation, POST /api/workouts rejects the designated titles, so
-    // the only remaining producer of a personal row with one is history —
-    // rows created before the check. This test now guards exactly that
+    // reservation ALL THREE workout-writing routes (POST, PUT, bulk —
+    // the PM gate caught bulk unguarded) reject the designated titles,
+    // so the only remaining producer of a personal row with one is
+    // history — rows created before the check. This test now guards exactly that
     // legacy class: such a row STAYS suggestable, and only the GLOBAL is
     // excluded from the pool.
     const custom = await stores.workouts.create("user-a", {

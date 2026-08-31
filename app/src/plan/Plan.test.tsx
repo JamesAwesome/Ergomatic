@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -795,8 +795,16 @@ describe("Plan (done-row workout names and swap marks)", () => {
     // Same element, same class: the box inherits the real badge's box
     // model rather than approximating it.
     expect(box).toHaveClass("type-badge");
-    // No type text — two no-break spaces keep the two-character width.
-    expect(box!.textContent).toBe("\u00A0\u00A0");
+    // The box is the sole carrier of this state, so it must NOT be
+    // aria-hidden (James's review) — AT hears the visually-hidden twin
+    // while the nbsp spacing pair stays hidden.
+    expect(box!.getAttribute("aria-hidden")).toBeNull();
+    expect(box!.querySelector(".visually-hidden")?.textContent).toBe(
+      "type unknown",
+    );
+    expect(box!.querySelector('[aria-hidden="true"]')?.textContent).toBe(
+      "\u00A0\u00A0",
+    );
     // The plan's own type appears NOWHERE on this row's badge slot.
     expect(rowAt(3).querySelector(".type-badge")?.textContent).not.toBe("TR");
     expect(rowAt(3).querySelector(".plan-row-swap")).toBeNull();
@@ -898,6 +906,14 @@ describe("Plan (done-row workout names and swap marks)", () => {
 // mocked here and nowhere else in this file. The mock replaces exactly one
 // session's `prescribe`; the sequence itself stays the real 84 codes.
 describe("Plan (a globalOnly: false prescription — mocked, the only producer)", () => {
+  // James's review (P2): `vi.resetModules()` does NOT clear the mock
+  // registry (vitest's own docs), so without this the synthetic preset
+  // leaks into every later dynamic import of Plan in this file.
+  afterEach(() => {
+    vi.doUnmock("../../domain/plans");
+    vi.resetModules();
+  });
+
   async function renderWithFalseRef(links: Map<number, PlanLink>) {
     const real =
       await vi.importActual<typeof import("../../domain/plans")>(

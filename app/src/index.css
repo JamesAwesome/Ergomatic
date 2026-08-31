@@ -2746,14 +2746,21 @@ button.back-link:disabled,
    Composes WITH `.type-badge` — same element, same class — so font,
    padding and the two-nbsp content give it a real two-letter badge's
    exact box; the 1px border is compensated in padding (3px 7px minus
-   1px each side) to keep the outer box identical. Colours are the two
-   neutral rules: this is decorative rhythm under WCAG 1.4.11 (the row's
-   meaning lives in the name; swap logic never reads the box), border
-   1.53:1 on --page stated for the record. Only a pre-validation row can
-   render this — the POST route validates types since #233. */
+   1px each side) to keep the outer box identical.
+   The border is `--ink-4`, NOT a rule token: James's review correctly
+   called this a MEANINGFUL cue (it is the sole visual carrier of
+   "stored type unreadable", with a visually-hidden text twin for AT),
+   so WCAG 1.4.11's 3:1 non-text floor applies — --ink-4 #6f6a5f
+   measures 4.76:1 on --page and 4.48:1 on --surface-sunken, both
+   clear; the first cut's --rule-3 border was 1.53:1 under a comment
+   calling it decorative, which the component's own test contradicted.
+   Pinned by design.spec.ts's injected-badge assertion (computed
+   colours + outer geometry), which goes red if this rule is deleted.
+   Only a pre-validation row can render this — the POST route validates
+   types since #233. */
 .plan-row-badge-unknown {
   background: var(--rule-2);
-  border: 1px solid var(--rule-3);
+  border: 1px solid var(--ink-4);
   padding: 2px 6px;
 }
 

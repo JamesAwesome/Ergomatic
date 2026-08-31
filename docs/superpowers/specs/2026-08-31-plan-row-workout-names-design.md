@@ -48,13 +48,23 @@ home the artifacts and PR bodies point to.
    2026-08-31). The workout's own name in its own case; a type code
    uppercase because it genuinely is one.
 
-6. **The designated titles are RESERVED** (James, 2026-08-31, after
-   verifying name conflicts are otherwise allowed — `workouts.title`
-   carries no unique constraint). `POST`/`PUT /api/workouts` reject
-   "2K Test"/"6K Test" for personal rows, field-named 400; the Builder
-   mirrors it at the field. Exact match. Legacy rows keep rendering,
-   stay suggestable, and are separated by decision 3. General title
-   conflicts remain allowed.
+6. **The designated titles are RESERVED at all three workout-writing
+   doors** (James, 2026-08-31, after verifying name conflicts are
+   otherwise allowed — `workouts.title` carries no unique constraint).
+   `POST`, `PUT`, and `POST /api/workouts/bulk` reject "2K Test"/
+   "6K Test" for personal rows — bulk was unguarded in the first cut and
+   the PM gate caught it (its C1: enumerate the VALIDATOR's callers, not
+   the routes you changed). One message, `title is reserved. Pick
+   another name` (James's pick, discharging the copy's Gate 0), mirrored
+   at the Builder field. Exact match. Legacy rows keep rendering, stay
+   suggestable, and are separated by decision 3 — and editing one
+   WITHOUT renaming it is rejected too (James, declining the narrower
+   changed-into rule: "I don't want to engineer a solution to an
+   imaginary problem"). General title conflicts remain allowed. **This
+   reservation is a fence around the app's string-keyed identity for its
+   test workouts, not a product principle** (PM gate): the retirement
+   trigger is a stable seed key replacing `isOnboardingTitle`'s
+   remaining call sites, at which point the names can be released.
 
 7. **Type validation at the writer.** `POST /api/logs` validates
    `workoutType` against the union (the O2→AT drift is between valid
@@ -76,8 +86,10 @@ home the artifacts and PR bodies point to.
   plan-links response → hook → rendered row: the cross-linked falsifier,
   the global no-mark case (gated on the resolved link — the false-green
   fix from #235's review lineage), and the reservation at the front
-  door. The personal same-title e2e RETIRED with the reservation, its
-  producer gone; that class keeps store+client gates.
+  door. The personal same-title e2e RETIRED with the reservation — its
+  supported producers all guarded (the PM gate corrected the first
+  "producer gone" claim, which had missed bulk); the legacy class keeps
+  store+client gates.
 - `globalOnly: false` is pinned via a mocked prescription — its only
   producer.
 - Every new assertion has a recorded biting mutation (RF21) in the PR

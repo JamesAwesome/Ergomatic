@@ -415,11 +415,14 @@ function PlanView({
                   measurement. An UNLINKED row has no stored type at all;
                   its badge is the plan's own claim and stays. */}
               {link !== undefined && rowedType(link) === undefined ? (
-                <span
-                  className="type-badge plan-row-badge-unknown"
-                  aria-hidden="true"
-                >
-                  {"\u00A0\u00A0"}
+                // James's review (P1): the box is the SOLE carrier of
+                // "stored type unreadable", so it cannot be aria-hidden —
+                // AT hears "type unknown" via the house visually-hidden
+                // idiom while the nbsp pair (hidden from AT, it is
+                // spacing) keeps the two-character badge width.
+                <span className="type-badge plan-row-badge-unknown">
+                  <span aria-hidden="true">{"\u00A0\u00A0"}</span>
+                  <span className="visually-hidden">type unknown</span>
                 </span>
               ) : (
                 <TypeBadge type={rowedType(link) ?? item.code} />

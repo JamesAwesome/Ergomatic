@@ -2563,6 +2563,50 @@ test.describe("plan screen (a plan active)", () => {
       expect(rowBox.x + rowBox.width).toBeLessThanOrEqual(page_.clientWidth);
     });
 
+    // The unknown-type box (edge-marks PR; James's review made it a
+    // meaningful cue). NO supported writer can produce a row rendering
+    // it — POST /api/logs validates types since #233 — so this test
+    // INJECTS the badge markup into the live Plan screen and measures it
+    // against the SERVED stylesheet, which is the one thing jsdom
+    // cannot do. Deleting the `.plan-row-badge-unknown` rule turns the
+    // computed colours transparent and this red — the class-name checks
+    // in Plan.test.tsx alone could not (James's review, verbatim:
+    // "deleting the entire CSS rule stays green").
+    test("the unknown-type box: computed colours meet 1.4.11 and its outer geometry equals a real badge's", async ({
+      page,
+    }) => {
+      const m = await page.evaluate(() => {
+        const row = document.querySelector(".plan-row");
+        const real = row!.querySelector(".type-badge") as HTMLElement;
+        const box = document.createElement("span");
+        box.className = "type-badge plan-row-badge-unknown";
+        box.innerHTML =
+          '<span aria-hidden="true">\u00A0\u00A0</span>' +
+          '<span class="visually-hidden">type unknown</span>';
+        real.insertAdjacentElement("afterend", box);
+        const bs = getComputedStyle(box);
+        const rb = real.getBoundingClientRect();
+        const bb = box.getBoundingClientRect();
+        return {
+          background: bs.backgroundColor,
+          borderColor: bs.borderTopColor,
+          borderWidth: bs.borderTopWidth,
+          heightDelta: Math.abs(rb.height - bb.height),
+          // Widths: a real 2-char badge vs the 2-nbsp box — same font,
+          // same effective padding. Allow sub-pixel glyph variance.
+          widthDelta: Math.abs(rb.width - bb.width),
+        };
+      });
+      expect(m.background).toBe("rgb(222, 216, 201)"); // --rule-2
+      expect(m.borderColor).toBe("rgb(111, 106, 95)"); // --ink-4
+      expect(m.borderWidth).toBe("1px");
+      // --ink-4 #6f6a5f on --page #f4f1e8 computes 4.76:1 (>= the 3:1
+      // non-text floor); the value is pinned above, the ratio recorded
+      // in index.css's own comment.
+      expect(m.heightDelta).toBeLessThanOrEqual(0.5);
+      expect(m.widthDelta).toBeLessThanOrEqual(2);
+    });
+
     // The swap mark: index 0 is an O2 day in the real sprint sequence and
     // the seeded log is an AT, so this fixture IS a swapped row.
     test("the swapped row names what the plan asked for, at the vetted --ink-3 token", async ({

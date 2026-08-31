@@ -377,7 +377,7 @@ export function toSteps(
     // the rower hears it at the field, not as a failed save. Exact match,
     // isOnboardingTitle's no-fuzz rule; a legacy row already holding a
     // reserved title must be renamed to save further edits.
-    errors.title = "this name belongs to the app's own test workout";
+    errors.title = "title is reserved. Pick another name";
   }
 
   if (f.pain === null || !isInt(f.pain, 1, 5)) {

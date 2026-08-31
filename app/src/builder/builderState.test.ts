@@ -108,9 +108,7 @@ describe("toSteps title reservation", () => {
     const out = toSteps(formWith({ title }));
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
-    expect(out.errors.title).toBe(
-      "this name belongs to the app's own test workout",
-    );
+    expect(out.errors.title).toBe("title is reserved. Pick another name");
   });
 
   it("accepts a near-miss title — reservation is exact-match", () => {

@@ -1023,16 +1023,29 @@ Each needs erg time or a deliberate recording session.
   The deletion case is RELATED but is NOT covered by this ruling — it has its
   own entry above, because Gate 0 accepted preset edits and nothing else.
 
-- **RULED (edge-marks gate, James, 2026-08-31): the self-contradicting mark
-  keeps `INSTEAD OF` everywhere (option D), and the two designated test
-  titles are now RESERVED** — `POST`/`PUT /api/workouts` reject "2K Test"/
-  "6K Test" for personal rows, mirrored at the Builder field. With the
-  common producer gone, the contradiction (`2K Test` above `INSTEAD OF 2K
-  Test`) needs a malformed self-owned request or a legacy row; both keep
-  rendering, separated by the linked-row identity check. Name conflicts in
-  general REMAIN allowed (verified 2026-08-31: `workouts.title` has no
-  unique constraint) — only these two titles are reserved, because they are
-  the app's only identity for its test workouts.
+- **RULED (edge-marks gate + PM gate, James, 2026-08-31): the
+  self-contradicting mark keeps `INSTEAD OF` everywhere (option D), and the
+  two designated test titles are RESERVED at ALL THREE workout-writing
+  doors** — `POST`, `PUT`, and `POST /api/workouts/bulk` (the PM gate caught
+  bulk unguarded in the first cut), one message (`title is reserved. Pick
+  another name`, James's pick), mirrored at the Builder field. Legacy rows
+  keep rendering and stay suggestable; **editing one without renaming it is
+  ALSO rejected** — James's explicit ruling, declining the narrower
+  changed-into rule ("I don't want to engineer a solution to an imaginary
+  problem"). **The reservation is a fence around the string-keyed test
+  identity, not a product principle** (PM): retirement trigger = a stable
+  seed key replacing `isOnboardingTitle`'s remaining call sites. Name
+  conflicts in general REMAIN allowed.
+
+- **The reservation is a NON-ADDITIVE API change with a bounded exposure
+  window (PM gate C3).** A request that used to 201 now 400s, and the
+  shipped v0.28.0 client has no pre-check — its Builder renders the generic
+  "Couldn't save this workout. Try again." retry loop for a permanent 400.
+  `docs/RELEASING.md`'s additive-only rule generalises here: ask which
+  shipped build SENDS the request, not only which reads the column. Exposure
+  runs from the merge (web deploys continuously) to the next tag. **The next
+  tag's notes MUST name the reservation** ("2K Test" and "6K Test" are the
+  app's own; pick another name) — that sentence closes this item.
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
   clears thumbs previously set to a real value`, then `GET/PUT /api/prefs` >

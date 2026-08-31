@@ -918,18 +918,30 @@ export function createDataRouter({
   // Reservation (James, 2026-08-31): the designated test titles are the
   // app's ONLY identity for its test workouts (domain/onboarding.ts), and
   // a personal row taking one was the common producer of the checkpoint
-  // confusion #233 fixed downstream. Exact match, same no-fuzz rule as
-  // isOnboardingTitle itself. Applied to create and update; rows that
-  // took a reserved title before this check keep rendering (reads stay
-  // tolerant, the same posture as the workoutType validation) and the
-  // linked-row identity check still tells them apart.
+  // confusion #238's PM gate traced through #233. Exact match, same
+  // no-fuzz rule as isOnboardingTitle itself.
+  //
+  // ONE message, THREE doors (PM gate C1): `validateWorkoutInput` has
+  // exactly three callers — POST, PUT, and POST /bulk — and the first
+  // version of this guard covered two, leaving IMPORT (one tap from the
+  // Library header) able to create a personal "2K Test" while the record
+  // claimed the producer was gone. The check lives HERE at the route
+  // rather than inside the validator because the validator also judges
+  // the GLOBAL rows that legitimately carry these titles; reservation is
+  // a personal-write policy, not a shape rule.
+  //
+  // Rows that took a reserved title before this check keep rendering and
+  // stay suggestable (reads stay tolerant, the same posture as the
+  // workoutType validation); the linked-row identity check still tells
+  // them apart. Editing such a row without renaming it is ALSO rejected —
+  // James's ruling, 2026-08-31, declining the narrower changed-into rule:
+  // "it's highly unlikely this has happened. I don't want to engineer a
+  // solution to an imaginary problem." The next tag's notes carry the
+  // reservation (PM gate condition).
+  const RESERVED_TITLE_MESSAGE = "title is reserved. Pick another name";
   function reservedTitle(res: Response, title: string): boolean {
     if (isOnboardingTitle(title)) {
-      badRequest(
-        res,
-        "this title is reserved for the app's own test workout",
-        "title",
-      );
+      badRequest(res, RESERVED_TITLE_MESSAGE, "title");
       return true;
     }
     return false;
@@ -1031,6 +1043,16 @@ export function createDataRouter({
         errors.push({
           line: null,
           message: `workout "${workout.title}": ${validated.errors.join("; ")}`,
+        });
+        continue;
+      }
+      // The bulk door's arm of the reservation — same message, per-line
+      // shape (this route collects errors; it never writes a bare 400 for
+      // a body-level fault). See RESERVED_TITLE_MESSAGE's own comment.
+      if (isOnboardingTitle(validated.workout.title)) {
+        errors.push({
+          line: null,
+          message: `workout "${validated.workout.title}": ${RESERVED_TITLE_MESSAGE}`,
         });
         continue;
       }
