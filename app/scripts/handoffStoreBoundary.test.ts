@@ -59,7 +59,11 @@
 //     scope and IS collected. Its residuals are narrower and named at
 //     `moduleScopeMutables`: a run held in a `const` object's mutable
 //     property, and anything outside `src/monitor/`. Both pinned as
-//     MISSES below.
+//     MISSES below. Each scanned file is parsed EXACTLY ONCE, at
+//     `parseModule` — this file's only `ts.createSourceFile` call site,
+//     asserted as such — and the detector, the diagnostics pin and the
+//     statement-count check all read that one tree, so none of them can
+//     be looking at a differently-named parse than the others.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
 // The compiler the repo already builds with (`app/package.json`
@@ -247,12 +251,22 @@ function bindingNames(name: ts.BindingName): string[] {
 }
 
 /**
- * THE ONE PARSE both the detector below and its diagnostics pin go
- * through (PR #239 review round 5, finding 3b). Deliberately a single
- * shared call rather than two `ts.createSourceFile`s: a mutation to the
- * parser call — dropping `fileName`, hardcoding it to `module.ts`,
- * changing the target — must be visible to BOTH, or the plumbing pin is
- * asserting on its own copy of the arguments instead of on the detector's.
+ * THE ONLY PARSE SITE IN THIS FILE (PR #239 review round 5 finding 3b,
+ * hardened at round 7). Everything downstream — the module-scope
+ * detector, the diagnostics accessor, the statement-count check — takes
+ * the resulting `ts.SourceFile`, never source text, so there is no second
+ * `ts.createSourceFile` for a file-name (or target, or `setParentNodes`)
+ * regression to diverge across.
+ *
+ * **Why by construction and not by convention.** Round 6 had three parse
+ * calls behind one helper, and the reviewer's mutation — changing ONLY
+ * the detector's call to a hardcoded `"module.ts"` — passed the focused
+ * suite 23/23, because the diagnostics pin was parsing its own,
+ * correctly-named copy. The pin was asserting on arguments the detector
+ * did not use. With one call site that mutation is unrepresentable: it
+ * moves the file name for the detector AND the diagnostics AND the real
+ * scan at once, and all three go red. The "exactly one call site" claim
+ * is itself gated, by the self-scan test at the bottom of this file.
  *
  * `scriptKind` comes from the file name (TypeScript's own
  * `ensureScriptKind` fallback), so a `.tsx` file's JSX parses as JSX
@@ -264,9 +278,10 @@ function parseModule(source: string, fileName: string): ts.SourceFile {
 }
 
 /**
- * The SYNTACTIC diagnostics of a parse, used as the "did this actually
- * parse as the language we think it is" check (PR #239 review round 5,
- * finding 3b).
+ * The SYNTACTIC diagnostics OF AN ALREADY-PARSED FILE, used as the "did
+ * this actually parse as the language we think it is" check (PR #239
+ * review round 5, finding 3b; takes a `ts.SourceFile` rather than source
+ * text since round 7 — see `parseModule`).
  *
  * **`parseDiagnostics` is INTERNAL** — it is not on the public
  * `ts.SourceFile` type, so reaching it needs a cast. The public route
@@ -280,10 +295,9 @@ function parseModule(source: string, fileName: string): ts.SourceFile {
  * self-test below.
  */
 function parseDiagnosticsOf(
-  source: string,
-  fileName: string,
+  sourceFile: ts.SourceFile,
 ): readonly ts.Diagnostic[] {
-  const parsed = parseModule(source, fileName) as unknown as {
+  const parsed = sourceFile as unknown as {
     parseDiagnostics?: readonly ts.Diagnostic[];
   };
   const diagnostics = parsed.parseDiagnostics;
@@ -316,15 +330,16 @@ function opensVarScope(node: ts.Node): boolean {
 }
 
 /**
- * §1's SECOND clause: every module-scope `let`/`var` declared in `source`,
- * by NAME. Extracted from the test that used to inline it (PR #239 review
- * round 1, item 3) so the detector can be fed synthetic sources and pinned
- * in BOTH directions — what it catches, and what it provably does not.
+ * §1's SECOND clause: every module-scope `let`/`var` declared in
+ * `sourceFile`, by NAME. Extracted from the test that used to inline it
+ * (PR #239 review round 1, item 3) so the detector can be fed synthetic
+ * sources and pinned in BOTH directions — what it catches, and what it
+ * provably does not.
  *
  * **THIS IS A SYNTAX-AWARE SCOPE CHECK, NOT A TEXT HEURISTIC (PR #239
- * review round 4, reviewer finding 3).** It parses `source` with the
- * TypeScript compiler API, so "module scope" means the parser's own answer
- * rather than a claim about indentation. What that buys:
+ * review round 4, reviewer finding 3).** It reads the TypeScript
+ * compiler's own parse tree, so "module scope" means the parser's own
+ * answer rather than a claim about indentation. What that buys:
  *  - `let { run } = slot;` at the top level is CAUGHT (the previous regex
  *    required an identifier immediately after the keyword and walked
  *    straight past every destructuring pattern);
@@ -366,9 +381,13 @@ function opensVarScope(node: ts.Node): boolean {
  * through a closure returned by a factory. All three are pinned or named
  * below; the `var`-in-a-block miss this comment used to disclose is now
  * CAUGHT, and pinned as such.
+ *
+ * **Takes a PARSED file, not source text (round 7).** The caller parses,
+ * once, through `parseModule`; this detector cannot choose a file name of
+ * its own, so it cannot disagree with the diagnostics pin about which
+ * language the bytes are in.
  */
-function moduleScopeMutables(source: string, fileName = "module.ts"): string[] {
-  const sourceFile = parseModule(source, fileName);
+function moduleScopeMutables(sourceFile: ts.SourceFile): string[] {
   const names: string[] = [];
   // `NodeFlags.Const` and `NodeFlags.Let` are the only flags that
   // distinguish the three keywords: `var` sets neither.
@@ -529,7 +548,12 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
       const rel = toPosixRelative(file);
       if (!rel.startsWith("src/monitor/")) continue;
       if (TEST_FILE.test(rel) || rel === STORE_FILE) continue;
-      const source = readFileSync(file, "utf8");
+      // ONE parse per file, and all three checks below read THAT tree
+      // (PR #239 review round 7). The diagnostics pin can no longer be
+      // asserting on a differently-named copy than the detector consumes,
+      // because there is no copy: `parseModule` is the file's only
+      // `ts.createSourceFile` call site, gated as such below.
+      const sourceFile = parseModule(readFileSync(file, "utf8"), rel);
       // RF21 insurance, in the only form that can actually go red on a
       // broken parse (PR #239 review round 5, finding 3b). The previous
       // `statements.length > 0` check could not: a `.tsx` file parsed as
@@ -539,7 +563,7 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
       // it is what makes `parseModule`'s file-name plumbing load-bearing:
       // hardcode that argument and every `.tsx` file here goes red.
       expect(
-        parseDiagnosticsOf(source, rel).map((d) =>
+        parseDiagnosticsOf(sourceFile).map((d) =>
           ts.flattenDiagnosticMessageText(d.messageText, " "),
         ),
         `${rel} did not parse cleanly — the detector is blind, not clean`,
@@ -548,13 +572,13 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
       // that produced no statements AND no diagnostics (an empty file)
       // would satisfy the check above on its own.
       expect(
-        parseModule(source, rel).statements.length,
+        sourceFile.statements.length,
         `${rel} parsed to zero statements — the detector is blind, not clean`,
       ).toBeGreaterThan(0);
       // Identified by NAME, never by line number: a line-pinned gate would
       // go red on any unrelated edit further up the file — a gate that
       // cries wolf is the thing this round is removing, not adding.
-      for (const name of moduleScopeMutables(source, rel)) {
+      for (const name of moduleScopeMutables(sourceFile)) {
         found.push(`${rel}: ${name}`);
       }
     }
@@ -701,16 +725,20 @@ describe("the boundary detectors themselves (both directions)", () => {
   });
 
   describe("moduleScopeMutables, both directions", () => {
+    // The detector takes a PARSED file (round 7's single-parse-site fix),
+    // so the synthetic-source cases below go through `parseModule` — the
+    // same and only call site the real scan uses. A file name is supplied
+    // where the case is ABOUT the file name (the `.tsx` pair); everywhere
+    // else `module.ts` is fine, since none of those fixtures contain JSX.
+    const mutablesOf = (source: string, fileName = "module.ts"): string[] =>
+      moduleScopeMutables(parseModule(source, fileName));
+
     it("catches a module-scope binding under any keyword, exported or not", () => {
-      expect(moduleScopeMutables("let cached = null;")).toStrictEqual([
-        "cached",
+      expect(mutablesOf("let cached = null;")).toStrictEqual(["cached"]);
+      expect(mutablesOf("var legacySlot;")).toStrictEqual(["legacySlot"]);
+      expect(mutablesOf("export let sharedRun = null;")).toStrictEqual([
+        "sharedRun",
       ]);
-      expect(moduleScopeMutables("var legacySlot;")).toStrictEqual([
-        "legacySlot",
-      ]);
-      expect(moduleScopeMutables("export let sharedRun = null;")).toStrictEqual(
-        ["sharedRun"],
-      );
     });
 
     // THE THREE CASES THAT KILLED THE COLUMN-ZERO HEURISTIC (PR #239
@@ -720,16 +748,17 @@ describe("the boundary detectors themselves (both directions)", () => {
       // module-level `run` as surely as `let run = slot.run;` does, and
       // the previous regex required an identifier immediately after the
       // keyword, so it returned [] here.
-      expect(moduleScopeMutables("let { run } = slot;")).toStrictEqual(["run"]);
+      expect(mutablesOf("let { run } = slot;")).toStrictEqual(["run"]);
       // ...and every shape a pattern can wear: renamed, nested, rest,
       // array, with holes.
       expect(
-        moduleScopeMutables("let { run: heldRun, meta: { key } } = slot;"),
+        mutablesOf("let { run: heldRun, meta: { key } } = slot;"),
       ).toStrictEqual(["heldRun", "key"]);
-      expect(moduleScopeMutables("let [first, , third] = runs;")).toStrictEqual(
-        ["first", "third"],
-      );
-      expect(moduleScopeMutables("var { a, ...rest } = slot;")).toStrictEqual([
+      expect(mutablesOf("let [first, , third] = runs;")).toStrictEqual([
+        "first",
+        "third",
+      ]);
+      expect(mutablesOf("var { a, ...rest } = slot;")).toStrictEqual([
         "a",
         "rest",
       ]);
@@ -737,52 +766,46 @@ describe("the boundary detectors themselves (both directions)", () => {
 
     it("catches a top-level `for (var …)` head — `var` hoists to module scope — and NOT a `for (let …)` head, which is block-scoped", () => {
       // The reviewer's case 2.
-      expect(
-        moduleScopeMutables("for (var run = null; false; ) {}"),
-      ).toStrictEqual(["run"]);
-      expect(moduleScopeMutables("for (var k in slot) {}")).toStrictEqual([
-        "k",
+      expect(mutablesOf("for (var run = null; false; ) {}")).toStrictEqual([
+        "run",
       ]);
-      expect(moduleScopeMutables("for (var r of runs) {}")).toStrictEqual([
-        "r",
-      ]);
+      expect(mutablesOf("for (var k in slot) {}")).toStrictEqual(["k"]);
+      expect(mutablesOf("for (var r of runs) {}")).toStrictEqual(["r"]);
       // The deliberate NOT: a `let` in a for-head cannot outlive the loop,
       // so it is not a module-level carrier and is not reported. This is
       // the half that makes the check a scope statement rather than a
       // keyword census.
-      expect(moduleScopeMutables("for (let q = 0; false; ) {}")).toStrictEqual(
-        [],
-      );
-      expect(moduleScopeMutables("for (const r of runs) {}")).toStrictEqual([]);
+      expect(mutablesOf("for (let q = 0; false; ) {}")).toStrictEqual([]);
+      expect(mutablesOf("for (const r of runs) {}")).toStrictEqual([]);
     });
 
     it("does NOT flag a `let` sitting at column zero inside a multiline template literal — it is a string, not a declaration", () => {
       // The reviewer's case 3, and the one no amount of line-oriented
       // regex plus comment-stripping could ever get right.
       expect(
-        moduleScopeMutables(
+        mutablesOf(
           "const snippet = `\nlet nestedLocal = 1;\n`;\nexport default snippet;",
         ),
       ).toStrictEqual([]);
       // Same for a `let` named inside a comment — free, now that the
       // parser rather than `stripComments` decides.
       expect(
-        moduleScopeMutables("// let smuggledRun = null;\nconst a = 1;"),
+        mutablesOf("// let smuggledRun = null;\nconst a = 1;"),
       ).toStrictEqual([]);
     });
 
     it("ignores a `let` inside a function body — a function-local, which is not a module-level carrier, at ANY indentation", () => {
-      expect(
-        moduleScopeMutables("function f() {\n  let local = 1;\n}"),
-      ).toStrictEqual([]);
+      expect(mutablesOf("function f() {\n  let local = 1;\n}")).toStrictEqual(
+        [],
+      );
       // Written at column zero, which the previous detector false-flagged.
       // Indentation no longer participates in the answer at all.
       expect(
-        moduleScopeMutables("function f() {\nlet local = 1;\nreturn local;\n}"),
+        mutablesOf("function f() {\nlet local = 1;\nreturn local;\n}"),
       ).toStrictEqual([]);
       // ...and the converse: an INDENTED module-scope declaration, which
       // the previous detector missed, is now caught.
-      expect(moduleScopeMutables("  let smuggledRun = null;")).toStrictEqual([
+      expect(mutablesOf("  let smuggledRun = null;")).toStrictEqual([
         "smuggledRun",
       ]);
     });
@@ -801,15 +824,20 @@ describe("the boundary detectors themselves (both directions)", () => {
       // The diagnostics are the discriminator: as `.tsx` there are none,
       // as `.ts` there are several. Both halves asserted, so the "clean"
       // half cannot be satisfied by a parser that never complains.
+      //
+      // ROUND 7: the name assertion and the clean-parse assertion now
+      // read the SAME `ts.SourceFile`, so this pin cannot drift from the
+      // detector the way round 6's separate parses allowed. Hardcode the
+      // file name inside `parseModule` and the `.tsx` half goes RED (the
+      // JSX is read as a type assertion and diagnostics appear where none
+      // are asserted), together with every `.tsx` file the real scan
+      // touches — one mutation, three failing places.
       const tsx = "let held = null;\nconst el = <div className='x' />;\n";
-      expect(moduleScopeMutables(tsx, "src/monitor/Thing.tsx")).toStrictEqual([
-        "held",
-      ]);
-      expect(parseDiagnosticsOf(tsx, "src/monitor/Thing.tsx")).toStrictEqual(
-        [],
-      );
+      const asTsx = parseModule(tsx, "src/monitor/Thing.tsx");
+      expect(moduleScopeMutables(asTsx)).toStrictEqual(["held"]);
+      expect(parseDiagnosticsOf(asTsx)).toStrictEqual([]);
       expect(
-        parseDiagnosticsOf(tsx, "src/monitor/Thing.ts").length,
+        parseDiagnosticsOf(parseModule(tsx, "src/monitor/Thing.ts")).length,
       ).toBeGreaterThan(0);
     });
 
@@ -821,11 +849,30 @@ describe("the boundary detectors themselves (both directions)", () => {
       // defaulting to clean, and this is the positive half proving the
       // property is really there and really populated.
       expect(
-        parseDiagnosticsOf("const = ;\nfunction (", "module.ts").length,
+        parseDiagnosticsOf(parseModule("const = ;\nfunction (", "module.ts"))
+          .length,
       ).toBeGreaterThan(0);
-      expect(parseDiagnosticsOf("const a = 1;\n", "module.ts")).toStrictEqual(
-        [],
-      );
+      expect(
+        parseDiagnosticsOf(parseModule("const a = 1;\n", "module.ts")),
+      ).toStrictEqual([]);
+    });
+
+    // THE SINGLE-PARSE PROPERTY, ASSERTED RATHER THAN ASSUMED (PR #239
+    // review round 7). Everything above rests on there being exactly one
+    // place in this file where a `ts.SourceFile` is created: that is what
+    // makes a file-name regression unrepresentable instead of merely
+    // unlikely. Round 6 had three parse calls behind one helper and the
+    // reviewer's detector-only mutation passed 23/23 — the diagnostics
+    // pin was asserting on its own correctly-named copy. This test is
+    // that structural claim, in the only form text can carry it: count
+    // the `ts.createSourceFile` call sites in this file's own source,
+    // comments stripped (the header and the doc comments name the API in
+    // prose several times). A second parse site — anywhere, including a
+    // well-meant convenience helper — moves the number and fails here,
+    // which is the moment to ask what it is allowed to disagree about.
+    it("creates a ts.SourceFile at EXACTLY ONE call site — a second parse is where a file-name regression could hide", () => {
+      const self = stripComments(readFileSync(import.meta.filename, "utf8"));
+      expect(self.match(/ts\.createSourceFile\(/g)).toHaveLength(1);
     });
 
     it("MISSES a run held in a `const` object's mutable property (header: 'what it cannot see')", () => {
@@ -834,9 +881,7 @@ describe("the boundary detectors themselves (both directions)", () => {
       // genuinely immutable; what it POINTS AT is not — which is why §1's
       // second clause is only half-gated and the scan test above says so
       // in its name.
-      expect(moduleScopeMutables("const slot = { run: null };")).toStrictEqual(
-        [],
-      );
+      expect(mutablesOf("const slot = { run: null };")).toStrictEqual([]);
     });
 
     // THE FORMER RESIDUAL, NOW CAUGHT (PR #239 review round 5, finding
@@ -846,30 +891,28 @@ describe("the boundary detectors themselves (both directions)", () => {
     // The walk is now a `var`-scope traversal and the shape is caught.
     it("CATCHES a `var` hoisting out of a top-level BLOCK — `if (flag) { var run = null; }` is a module-level binding", () => {
       expect(
-        moduleScopeMutables("if (flag) {\n  var smuggledRun = null;\n}"),
+        mutablesOf("if (flag) {\n  var smuggledRun = null;\n}"),
       ).toStrictEqual(["smuggledRun"]);
       // The identical declaration as a top-level statement, unchanged.
-      expect(moduleScopeMutables("var smuggledRun = null;")).toStrictEqual([
+      expect(mutablesOf("var smuggledRun = null;")).toStrictEqual([
         "smuggledRun",
       ]);
       // ...and every other block shape a `var` can hide in at module
       // level, since `if` is not special — a bare block, `try`/`catch`/
       // `finally`, `switch`, and a loop body all hoist the same way.
-      expect(moduleScopeMutables("{\n  var inBlock = null;\n}")).toStrictEqual([
+      expect(mutablesOf("{\n  var inBlock = null;\n}")).toStrictEqual([
         "inBlock",
       ]);
       expect(
-        moduleScopeMutables(
+        mutablesOf(
           "try {\n  var inTry = null;\n} catch {\n  var inCatch = null;\n}",
         ),
       ).toStrictEqual(["inTry", "inCatch"]);
       expect(
-        moduleScopeMutables("while (flag) {\n  var inLoop = null;\n}"),
+        mutablesOf("while (flag) {\n  var inLoop = null;\n}"),
       ).toStrictEqual(["inLoop"]);
       expect(
-        moduleScopeMutables(
-          "switch (x) {\n  case 1: {\n    var inCase = null;\n  }\n}",
-        ),
+        mutablesOf("switch (x) {\n  case 1: {\n    var inCase = null;\n  }\n}"),
       ).toStrictEqual(["inCase"]);
     });
 
@@ -877,21 +920,21 @@ describe("the boundary detectors themselves (both directions)", () => {
     // `var`-scope traversal rather than "collect every `var` anywhere".
     it("does NOT flag a `var` inside a function — `var` hoists to the nearest FUNCTION scope, which is where it stops", () => {
       expect(
-        moduleScopeMutables("function f() {\n  var local = null;\n}"),
+        mutablesOf("function f() {\n  var local = null;\n}"),
       ).toStrictEqual([]);
       // Nested a block deep inside the function, so the exclusion is the
       // function boundary and not merely "one level down".
       expect(
-        moduleScopeMutables(
+        mutablesOf(
           "function f() {\n  if (flag) {\n    var local = null;\n  }\n}",
         ),
       ).toStrictEqual([]);
       // Every other node that opens a `var` scope, on the same rule.
       expect(
-        moduleScopeMutables("const f = () => {\n  var local = null;\n};"),
+        mutablesOf("const f = () => {\n  var local = null;\n};"),
       ).toStrictEqual([]);
       expect(
-        moduleScopeMutables(
+        mutablesOf(
           "class C {\n  m() {\n    var local = null;\n  }\n  get g() {\n    var inGetter = null;\n    return inGetter;\n  }\n}",
         ),
       ).toStrictEqual([]);
@@ -903,15 +946,13 @@ describe("the boundary detectors themselves (both directions)", () => {
     // collecting it would be a false positive, not a tightening.
     it("does NOT flag a `let` inside a top-level BLOCK — `let` is block-scoped, so it never reaches module scope", () => {
       expect(
-        moduleScopeMutables("if (flag) {\n  let blockLocal = null;\n}"),
+        mutablesOf("if (flag) {\n  let blockLocal = null;\n}"),
       ).toStrictEqual([]);
-      expect(
-        moduleScopeMutables("{\n  let blockLocal = null;\n}"),
-      ).toStrictEqual([]);
+      expect(mutablesOf("{\n  let blockLocal = null;\n}")).toStrictEqual([]);
       // The discriminator, side by side: same block, same name, `var`
       // instead of `let`, and it IS collected.
       expect(
-        moduleScopeMutables("if (flag) {\n  var blockLocal = null;\n}"),
+        mutablesOf("if (flag) {\n  var blockLocal = null;\n}"),
       ).toStrictEqual(["blockLocal"]);
     });
   });

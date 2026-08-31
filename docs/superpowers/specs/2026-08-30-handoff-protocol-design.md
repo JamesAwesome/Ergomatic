@@ -540,15 +540,32 @@ as row 8 does) takes the real-bytes requirement.
     legacy-writer call sites; their blind spots (an aliased key
     variable, `app/scripts/**` unscanned, a `//` inside a string
     literal) are pinned by MISSES self-tests rather than claimed
-    covered. The MODULE-SCOPE detector is genuinely SCOPE-AWARE: it
-    parses each scanned file with the TypeScript compiler API and walks
-    `sourceFile.statements`, so destructuring patterns and top-level
-    `for (var …)` heads are caught, block-scoped `for (let …)` heads
-    correctly are not, and a `let` inside a string or a comment cannot
-    false-flag. Its own residuals (a `const`-object carrier, a
-    closure-held run, a `var` hoisting out of a top-level block) are
-    pinned as MISSES too. Per-door tests and §1's review discipline
-    carry the semantic half of "nothing else writes."
+    covered. The MODULE-SCOPE detector is genuinely SCOPE-AWARE, and
+    since #239's round 5 it is a HOISTING traversal rather than a walk of
+    top-level statements — the distinction matters per keyword, which is
+    the whole point: every `var` anywhere in the module's own function
+    scope is collected (top-level blocks, `if`/`try`/`switch` bodies and
+    all three for-heads included), stopping at any node that opens a new
+    `var` scope (function, method, accessor, constructor, class static
+    block, namespace body), while `let` is collected only as a top-level
+    statement, because a block-scoped `let` can never outlive its block
+    and is not a module-level carrier. So `if (x) { var run = null; }`
+    IS caught, `for (var …)` heads and destructuring patterns are caught,
+    `for (let …)` heads and `let`s in top-level blocks correctly are not,
+    and a `let` inside a string or a comment cannot false-flag. Each
+    scanned file is parsed EXACTLY ONCE (round 7): the detector, the
+    zero-syntactic-diagnostics parse-health pin and the statement-count
+    check all read one `ts.SourceFile`, produced at the file's only
+    `ts.createSourceFile` call site — itself asserted, so a second parse
+    site cannot reintroduce the divergence round 6 carried, where a
+    detector-only file-name regression passed the whole focused suite
+    because the diagnostics pin was parsing its own correctly-named copy.
+    Its own residuals are named and pinned as MISSES too: a
+    `const`-object carrier and a closure-held run (both syntax-invisible
+    to any keyword-scope check), plus an aliased-key carrier, which
+    belongs to the WRITE detectors' text half rather than to this one.
+    Per-door tests and §1's review discipline carry the semantic half of
+    "nothing else writes."
 12. **The binding route gate:** `WorkoutDetail.connectedRecovery.test.tsx`
     restored AS A FILE and RETARGETED (its two `MONITOR_RUN_KEY`
     assertions survive; its slot-vocabulary comments get the budgeted
