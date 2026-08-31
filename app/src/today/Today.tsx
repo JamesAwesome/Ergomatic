@@ -384,11 +384,24 @@ export default function Today() {
   // read — they only fail to FORBID it.** §8's render-time ban and §4/§5's
   // destroyer census are both silent on a plain, non-render GETTER outside
   // the store; that silence is not an endorsement, only an absence of a
-  // rule this read happens to fall outside of (never `setItem`/
-  // `removeItem`; fired from a `useEffect` with an empty dependency array,
-  // never during render; destroys nothing, so it is not itself a census
-  // row). The actual justification for KEEPING it is the pin above, not
-  // these sections.
+  // rule this read happens to fall outside of (fired from a `useEffect`
+  // with an empty dependency array, never during render). The actual
+  // justification for KEEPING it is the pin above, not these sections.
+  //
+  // **CORRECTED AGAIN (final fix round, 2026-08-30; adversarial pass
+  // F-2), because the sentence that used to sit here — "never `setItem`/
+  // `removeItem` ... destroys nothing" — was FALSE when it was written.**
+  // `loadMonitorRun()` fell through to `clearMonitorRun()` on any
+  // malformed blob, so this line WAS a `removeItem` on the durable tier,
+  // reached by simply opening Today: an unparseable record the store was
+  // deliberately preserving (§8: "malformed durable bytes are never
+  // cleared during a read") was destroyed by this guard's mount effect,
+  // and no test in the composed app could see it because every §8 test
+  // lived at the store. The claim is true NOW only because the loader was
+  // fixed in the same round — `monitorRun.ts`'s `loadMonitorRun` returns
+  // `null` and clears nothing — and it is pinned by
+  // `Today.test.tsx`'s own "a MALFORMED monitor record SURVIVES a Today
+  // mount" test, not by this comment. Do not restore the self-heal.
   //
   // The one real gap this leaves is NEWLY OBSERVABLE, DELIBERATELY NOT
   // CONSULTED — not "not worsened by this branch": pre-store, a monitor

@@ -2084,6 +2084,50 @@ describe("Today (stale draft discard on mount)", () => {
     await screen.findByRole("heading", { name: "Today" });
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
   });
+
+  // THE COMPOSED §8 GATE (final fix round, 2026-08-30; adversarial pass
+  // F-2). Spec §8: "malformed durable bytes are never cleared during a
+  // read." Every existing test of that rule lives at the STORE — and the
+  // store was never the reader that broke it. `Today.tsx`'s mount effect
+  // calls `loadMonitorRun()`, whose read path used to fall through to
+  // `clearMonitorRun()` on any unparseable or unrecognised blob, so simply
+  // OPENING Today destroyed the bytes. That is the store's own recorded
+  // rule falsified in the composed app, and it also falsified this
+  // component's own justification comment ("never setItem/removeItem ...
+  // destroys nothing"). Starts UPSTREAM of the destroyer (bytes on disk,
+  // nothing mounted) and asserts downstream of it — RF24's shape.
+  it("a MALFORMED monitor record SURVIVES a Today mount, byte-for-byte — the guard's read destroys nothing (spec §8)", async () => {
+    const garbage = '{"v":2,"startedAt":"2026-08-30T09:00:00.000Z"';
+    localStorage.setItem(MONITOR_RUN_KEY, garbage);
+    const stale = makeDraft({
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      startedAt: null,
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(stale));
+
+    mockReady();
+    await renderToday();
+    await screen.findByRole("heading", { name: "Today" });
+
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(garbage);
+    // ...and the guard still ANSWERS: an unreadable record is not a live
+    // session, so the stale draft is discarded exactly as it would be with
+    // no record at all. Surviving bytes must not come at the cost of the
+    // guard silently treating garbage as "something is running".
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
+  });
+
+  it("an unrecognised-VERSION monitor record survives a Today mount too — the shape check is a different branch from the JSON parse", async () => {
+    const futureVersion = JSON.stringify({
+      ...makeMonitorRun({ completedAt: null }),
+      v: 99,
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, futureVersion);
+    mockReady();
+    await renderToday();
+    await screen.findByRole("heading", { name: "Today" });
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(futureVersion);
+  });
 });
 
 describe("Today (loading/error states)", () => {

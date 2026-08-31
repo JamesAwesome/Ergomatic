@@ -179,10 +179,10 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
     expect(loadMonitorRun()).toBeNull();
   });
 
-  it("returns null and clears the key for garbage JSON", () => {
+  it("returns null for garbage JSON and LEAVES THE BYTES ALONE", () => {
     localStorage.setItem(MONITOR_RUN_KEY, "{not json");
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("{not json");
   });
 
   // 7C Task 1: this test used `v: 2` as its "unknown version" fixture before
@@ -190,49 +190,50 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
   // `v: 3` now plays that role instead, so the test still proves what its
   // name says rather than accidentally asserting the opposite of the new
   // behavior.
-  it("returns null and clears the key for an unknown version, leaving a SessionRun (a separate key) untouched", () => {
+  it("returns null for an unknown version, leaving BOTH its own bytes and a SessionRun (a separate key) untouched", () => {
     const run = freshMonitorRun();
     const sessionRun = fakeSessionRun(null);
     saveRun(sessionRun);
-    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ ...run, v: 3 }));
+    const raw = JSON.stringify({ ...run, v: 3 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
 
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
     expect(loadRun()).toStrictEqual(sessionRun);
   });
 
-  it("returns null and clears the key for a bare {v:1} with none of the load-bearing fields", () => {
+  it("returns null for a bare {v:1} with none of the load-bearing fields, bytes intact", () => {
     localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ v: 1 }));
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(
+      JSON.stringify({ v: 1 }),
+    );
   });
 
-  it("returns null and clears the key for valid JSON that isn't a plain record (a bare number)", () => {
+  it("returns null for valid JSON that isn't a plain record (a bare number), bytes intact", () => {
     localStorage.setItem(MONITOR_RUN_KEY, "42");
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("42");
   });
 
-  it("returns null and clears the key for valid JSON that's null", () => {
+  it("returns null for valid JSON that's null, bytes intact", () => {
     localStorage.setItem(MONITOR_RUN_KEY, "null");
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("null");
   });
 
-  it("returns null and clears the key for valid JSON that's an array, not an object", () => {
+  it("returns null for valid JSON that's an array, not an object, bytes intact", () => {
     localStorage.setItem(MONITOR_RUN_KEY, "[]");
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe("[]");
   });
 
-  it("returns null for v:1 with workoutId as the wrong shape (a number — neither null nor a string)", () => {
+  it("returns null for v:1 with workoutId as the wrong shape (a number — neither null nor a string), bytes intact", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, workoutId: 5 }),
-    );
+    const raw = JSON.stringify({ ...run, workoutId: 5 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   // 7C Task 1 (spec §2: "a v1 record loads as today"). A hand-built v1 JSON
@@ -303,29 +304,36 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
 
   it("returns null for v:2 with logSeed as the wrong shape (a string, not an object)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, v: 2, logSeed: "nope" }),
-    );
+    const raw = JSON.stringify({ ...run, v: 2, logSeed: "nope" });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:2 with logSeed.steps as the wrong shape (an object, not an array)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, v: 2, logSeed: { steps: {}, paces: {} } }),
-    );
+    const raw = JSON.stringify({
+      ...run,
+      v: 2,
+      logSeed: { steps: {}, paces: {} },
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for an unrecognized v (3) — same discard as any other unknown version", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ ...run, v: 3 }));
+    const raw = JSON.stringify({ ...run, v: 3 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("round-trips workoutId: null (a hand-built program, not a library workout) same as a real id", () => {
@@ -336,79 +344,82 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
 
   it("returns null for v:1 with title as the wrong shape (missing/non-string)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ ...run, title: 5 }));
+    const raw = JSON.stringify({ ...run, title: 5 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with program as the wrong shape (an array, not a record)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, program: [] }),
-    );
+    const raw = JSON.stringify({ ...run, program: [] });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with program.intervals as the wrong shape (an object, not an array)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, program: { intervals: {} } }),
-    );
+    const raw = JSON.stringify({ ...run, program: { intervals: {} } });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with actuals as the wrong shape (an object, not an array)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, actuals: {} }),
-    );
+    const raw = JSON.stringify({ ...run, actuals: {} });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with deviceName as the wrong shape (missing/non-string)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, deviceName: 5 }),
-    );
+    const raw = JSON.stringify({ ...run, deviceName: 5 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with startedAt as the wrong shape (missing/non-string)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, startedAt: 1 }),
-    );
+    const raw = JSON.stringify({ ...run, startedAt: 1 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with completedAt as the wrong shape (a number — neither null nor a string)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, completedAt: 5 }),
-    );
+    const raw = JSON.stringify({ ...run, completedAt: 5 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("returns null for v:1 with terminated as the wrong shape (a string, not a boolean)", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, terminated: "true" }),
-    );
+    const raw = JSON.stringify({ ...run, terminated: "true" });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("clearMonitorRun removes the stored run", () => {
@@ -1332,12 +1343,12 @@ describe("endedBy: the additive close-reason marker (F6, widened Phase LL Task 4
 
   it("rejects a record whose endedBy is any other value — proves the widening did not open the gate to arbitrary strings", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, endedBy: "garbage" }),
-    );
+    const raw = JSON.stringify({ ...run, endedBy: "garbage" });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
   it("rejects a record whose endedBy is a plausible-but-unlisted string (e.g. a future sixth value) — the validator is a closed set, not a type-only contract", () => {
@@ -1610,12 +1621,12 @@ describe("series / seriesDropped: the additive fields (§2 storage-home, never-m
 
   it("rejects a record whose seriesDropped is any value other than true", () => {
     const run = freshMonitorRun();
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, seriesDropped: false }),
-    );
+    const raw = JSON.stringify({ ...run, seriesDropped: false });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
     expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The rejected bytes SURVIVE the read (spec §8 — see
+    // `loadMonitorRun`'s own doc comment).
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 });
 

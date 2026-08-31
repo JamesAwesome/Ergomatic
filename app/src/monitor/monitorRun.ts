@@ -515,9 +515,29 @@ export function saveMonitorRun(r: MonitorRun): void {
   }
 }
 
-/** Loads the run. Garbage JSON or an unrecognized version/shape is
- *  discarded (the key is cleared) rather than crashing the caller — the
- *  same "Resilience #5" discipline `loadRun` documents on its own key. */
+/** Loads the run. Garbage JSON or an unrecognized version/shape reads back
+ *  as `null` rather than crashing the caller — the same "Resilience #5"
+ *  discipline `loadRun` documents on its own key.
+ *
+ *  **THIS READ DESTROYS NOTHING (changed at the hand-off store's final fix
+ *  round, 2026-08-30; adversarial pass F-2).** Until then this function
+ *  fell through to `clearMonitorRun()` on the malformed path — a READ that
+ *  performed a `removeItem`. Hand-off store design spec §8 rules the
+ *  opposite for the durable tier it now shares: "malformed durable bytes
+ *  are never cleared during a read ... the store records the malformed
+ *  state, treats the key as absent, receipts it, and clears at the next
+ *  retire or accepted commit for the key." The store honoured that; this
+ *  legacy loader did not, and `Today.tsx`'s mount effect calls it — so
+ *  merely OPENING Today wiped bytes the store was deliberately preserving,
+ *  falsifying §8 in the composed app (and falsifying Today's own
+ *  "destroys nothing" comment). The self-heal bought nothing that the
+ *  store's own deferred clear does not already provide, and no caller ever
+ *  depended on it: `monitorRunState` (legacy, zero production callers) and
+ *  `Today.tsx`'s guard both only ever read the RETURN VALUE, which is
+ *  unchanged at `null`.
+ *
+ *  `clearMonitorRun` stays exported and unchanged — deliberate,
+ *  authorized clears still route through it. */
 export function loadMonitorRun(): MonitorRun | null {
   const raw = localStorage.getItem(MONITOR_RUN_KEY);
   if (raw === null) return null;
@@ -536,7 +556,9 @@ export function loadMonitorRun(): MonitorRun | null {
   } catch {
     // fall through: garbage JSON is handled the same as an unknown shape
   }
-  clearMonitorRun();
+  // NO CLEAR HERE — see this function's own doc comment. The key is
+  // reported ABSENT to the caller and left on disk for the store's §8
+  // deferred clear (its next retire or accepted commit for the key).
   return null;
 }
 
