@@ -336,6 +336,42 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
   });
 
+  // PR #239 review round 1, item 1 (P1). The getter itself can throw — a
+  // `SecurityError` from `localStorage` when the origin's storage is denied
+  // (WHATWG storage: a `SecurityError` on the attribute access itself).
+  // Until this round the `getItem` call sat OUTSIDE this function's `try`,
+  // so the throw escaped the loader entirely and, through `Today.tsx`'s
+  // mount effect, escaped React's render as an unhandled error. Spec §8
+  // rules the opposite for the durable tier the store now shares: "the
+  // storage GETTER (`SecurityError`) is wrapped by the store's accessor — a
+  // getter throw makes both tiers behave as absent-durable". The legacy
+  // loader now behaves the same way.
+  //
+  // Denial is NOT malformed bytes: nothing is cleared here either (there is
+  // nothing readable to judge), so §8's "never cleared during a read" rule
+  // is untouched — the self-clear stays deleted.
+  it("returns null when the storage GETTER itself throws — denial reads as absent, and nothing is cleared (spec §8)", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+    const real = Storage.prototype.getItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(function (this: Storage, key: string): string | null {
+        if (key === MONITOR_RUN_KEY) {
+          throw new DOMException("storage is denied", "SecurityError");
+        }
+        return real.call(this, key);
+      });
+    try {
+      expect(loadMonitorRun()).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    // ...and the record is still there once the denial lifts: an absent
+    // READ must never have been a destructive one.
+    expect(loadMonitorRun()).toStrictEqual(viaJson(run));
+  });
+
   it("round-trips workoutId: null (a hand-built program, not a library workout) same as a real id", () => {
     const run = { ...freshMonitorRun(), workoutId: null };
     saveMonitorRun(run);

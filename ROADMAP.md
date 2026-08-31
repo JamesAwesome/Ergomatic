@@ -692,10 +692,20 @@ rower's work silently.
       store's §8 deferred clear.** That was a genuine defect on this
       branch, not a residual: `Today.tsx`'s mount effect calls the loader,
       so opening Today destroyed a malformed record the store was
-      deliberately preserving. What this chunk still owes for that loader
-      is only the GETTER guard (the `SecurityError` arm), which §8's
-      accessor covers for the store's own reads but not for the legacy
-      loader's direct `localStorage.getItem`.
+      deliberately preserving.
+      **CLOSED FOR THIS LOADER at PR #239's review round 1 (item 1):
+      `loadMonitorRun`'s `localStorage.getItem` now sits INSIDE its own
+      `try`, so a denied getter reads as absent instead of escaping
+      `Today.tsx`'s mount effect.** Gated at both layers — the loader
+      (`monitorRun.test.ts`, "the storage GETTER itself throws") and the
+      composed screen (`Today.test.tsx`, "survives a DENIED storage getter
+      on the monitor key"), the latter key-scoped because a blanket denial
+      still dies at `loadRun` first. **So this chunk's unguarded set is now
+      exactly three loaders — `loadRun`, `loadDraft`, `loadTodayPick` —
+      matching the §8 reshaping above; `loadMonitorRun` is off the list.**
+      Everything else here is unchanged and still owed: the three anchor
+      spec conditions, the Retry surface's Gate 0, AUD-015's Countdown
+      durability, and the Capacitor-WKWebView reachability research line.
 
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 

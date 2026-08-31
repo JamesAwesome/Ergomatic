@@ -2128,6 +2128,60 @@ describe("Today (stale draft discard on mount)", () => {
     await screen.findByRole("heading", { name: "Today" });
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(futureVersion);
   });
+
+  // PR #239 review round 1, item 1 (P1) — THE MOUNTED-TODAY GETTER GATE.
+  // Spec §8 says a storage-getter `SecurityError` "makes both tiers behave
+  // as absent-durable ... never an unhandled throw", and names this exact
+  // loader as the thing the store's accessor absorbs. The store's own reads
+  // were wrapped from day one; `Today.tsx:418`'s legacy `loadMonitorRun()`
+  // was not — its `localStorage.getItem` sat outside the loader's `try`, so
+  // a denied getter escaped the mount effect and took the whole screen down.
+  // Starts UPSTREAM of the reader (denial armed, nothing mounted) and
+  // asserts downstream of it, RF24's shape.
+  //
+  // SCOPED TO THIS KEY ON PURPOSE, said aloud rather than left implied: the
+  // spy denies `MONITOR_RUN_KEY` only. A blanket denial still takes Today
+  // down at `loadRun()` (`Today.tsx:280`) before this loader is ever
+  // reached — that is AUD-011's remaining three loaders (`loadRun`,
+  // `loadDraft`, `loadTodayPick`), tracked in ROADMAP and NOT this branch's
+  // scope. A key-scoped spy is the only shape that can go red on the
+  // loader this branch actually owns; a blanket one would be red before and
+  // after the fix and would prove nothing about it.
+  it("survives a DENIED storage getter on the monitor key: Today mounts, and the durable record reads as absent (spec §8)", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: null })),
+    );
+    const stale = makeDraft({
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      startedAt: null,
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(stale));
+
+    const real = Storage.prototype.getItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(function (this: Storage, key: string): string | null {
+        if (key === MONITOR_RUN_KEY) {
+          throw new DOMException("storage is denied", "SecurityError");
+        }
+        return real.call(this, key);
+      });
+    try {
+      mockReady();
+      await renderToday();
+      // Mounts cleanly — the throw is absorbed, not surfaced.
+      await screen.findByRole("heading", { name: "Today" });
+      // ...and the guard ANSWERS, treating the denied durable tier as
+      // absent: a LIVE record would have protected this stale draft, so its
+      // discard is the observable consequence of "absent", not merely of
+      // "did not crash". A mutant that swallowed the throw but returned the
+      // record anyway would leave the draft in place and fail here.
+      expect(real.call(localStorage, DRAFT_KEY)).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("Today (loading/error states)", () => {

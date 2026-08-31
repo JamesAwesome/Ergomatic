@@ -537,9 +537,27 @@ export function saveMonitorRun(r: MonitorRun): void {
  *  unchanged at `null`.
  *
  *  `clearMonitorRun` stays exported and unchanged — deliberate,
- *  authorized clears still route through it. */
+ *  authorized clears still route through it.
+ *
+ *  **THE GETTER IS INSIDE THE GUARD TOO (PR #239 review round 1, item 1).**
+ *  `localStorage.getItem` can itself throw a `SecurityError` when the
+ *  origin's storage is denied, and this call used to sit OUTSIDE the `try`
+ *  below — so the throw escaped straight through `Today.tsx`'s mount
+ *  effect and took the screen down. Spec §8 rules that a getter throw
+ *  "makes both tiers behave as absent-durable ... never an unhandled
+ *  throw", and names this loader as the one the store's accessor absorbs;
+ *  this is the same rule enforced at the loader itself, so `Today.tsx`'s
+ *  guard — which needs a synchronous, un-hydrated, always-fresh raw read
+ *  and so cannot route through the store — gets it too. Denial is NOT
+ *  malformed bytes: nothing is cleared on this path either. */
 export function loadMonitorRun(): MonitorRun | null {
-  const raw = localStorage.getItem(MONITOR_RUN_KEY);
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(MONITOR_RUN_KEY);
+  } catch {
+    // Storage denied. Absent, not malformed — no clear, nothing thrown.
+    return null;
+  }
   if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
