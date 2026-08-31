@@ -3523,6 +3523,11 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   the next name it needs the same way.
 ## TRIAD final-PR gate, 2026-08-30 (the hand-off store, #239 — PASS with conditions)
 
+_All word counts and body quotes below measure the PRE-REWRITE body the
+gate judged; the five conditions were executed on the branch the same
+day (body rewritten, disclosures and ROADMAP landed), so the live PR
+does not match these numbers._
+
 - **The countable presentation rule WORKED, and the residual failure is a
   different one.** #228 was ~270 words above the fold, #230 was 266, #239 is
   **148** — the numeric budget landed at #230's gate cut the overage from ~150

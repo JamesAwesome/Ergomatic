@@ -448,6 +448,14 @@ as row 8 does) takes the real-bytes requirement.
     old reference); reorder tier precedence → row 8 fails; drop a
     receipt kind → its named row fails; write the durable key from
     outside the store → a module-boundary lint/grep gate fails.
+    **Scope of the boundary gate (amended at #239's review round 1, per
+    the reviewer's P2):** the gate is a self-tested TEXT gate over named
+    syntactic forms — the key by constant, by literal, by `key:`-property
+    indirection, plus legacy-writer call sites and module-scope
+    `let`/`var` declarations. Its blind spots (an aliased key variable, a
+    `const`-object carrier, closure-held runs) are pinned by MISSES
+    self-tests rather than claimed covered; per-door tests and §1's
+    review discipline carry the semantic half of "nothing else writes."
 12. **The binding route gate:** `WorkoutDetail.connectedRecovery.test.tsx`
     restored AS A FILE and RETARGETED (its two `MONITOR_RUN_KEY`
     assertions survive; its slot-vocabulary comments get the budgeted
