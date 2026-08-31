@@ -100,6 +100,23 @@ function formWith(over: Partial<BuilderForm> = {}): BuilderForm {
   };
 }
 
+// Reservation (James, 2026-08-31): the designated test titles cannot be
+// taken by a personal workout. The client mirrors the route so the error
+// lands on the field; the near-miss case pins the exact-match rule.
+describe("toSteps title reservation", () => {
+  it.each(["2K Test", "6K Test"])("rejects the reserved title %s", (title) => {
+    const out = toSteps(formWith({ title }));
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors.title).toBe("title is reserved. Pick another name");
+  });
+
+  it("accepts a near-miss title — reservation is exact-match", () => {
+    const result = toSteps(formWith({ title: "2K Test Prep" }));
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe("rows", () => {
   it("adds a row of the requested kind", () => {
     const f = addRow(EMPTY_FORM, "r");

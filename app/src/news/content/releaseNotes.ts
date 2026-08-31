@@ -5,6 +5,23 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.29.0 (2026-08-31): the tag lands on #238's own merge — the
+    // reservation is a NON-ADDITIVE API change (a request that used to
+    // succeed now 400s), and docs/RELEASING.md requires the notes in the
+    // tagged commit with a coordinated tag, so the notes ride the same
+    // PR rather than a follow-up. Range v0.28.0..this merge = this PR
+    // alone, accounted per RF15. Item 2 carries James's strict-edit
+    // ruling (no changed-into carve-out). The unknown-type box is NOT
+    // noted: it renders only for pre-validation rows, which no current
+    // account can produce.
+    version: "v0.29.0",
+    date: "2026-08-31",
+    items: [
+      "2K Test and 6K Test are the app's own workouts now. You can no longer name one of your workouts either of those, in the builder or the import screen: title is reserved. Pick another name.",
+      "If you already made a workout with one of those names, it still works and still shows everywhere it did. Editing it asks you to rename it first.",
+    ],
+  },
+  {
     // v0.28.0 (2026-08-31): range v0.27.0..main = 3 merges before this
     // notes PR, each accounted per RF15 (`git log v0.27.0..main --oneline`,
     // no --merges). #233 is all three items. No note: #234 (agent

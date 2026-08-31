@@ -1,0 +1,179 @@
+<title>Plan Row Edge Marks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:wght@500&display=swap">
+
+<style>
+  :root {
+    --d-ground: #f6f7f9; --d-panel: #ffffff; --d-ink: #151820; --d-ink-2: #3b424f;
+    --d-muted: #5c6472; --d-hair: #e3e6eb; --d-accent: #2f5d8a; --d-accent-soft: #e8eff6;
+    --d-good: #1c6b4f; --d-good-soft: #e6f2ec;
+    --d-shadow: 0 1px 2px rgba(21,24,32,.06), 0 8px 24px rgba(21,24,32,.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --d-ground: #101318; --d-panel: #171b22; --d-ink: #e7eaef; --d-ink-2: #b9c0cc;
+      --d-muted: #8d95a3; --d-hair: #272d37; --d-accent: #7fadda; --d-accent-soft: #1b2733;
+      --d-good: #62c39c; --d-good-soft: #16261f;
+      --d-shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --d-ground: #101318; --d-panel: #171b22; --d-ink: #e7eaef; --d-ink-2: #b9c0cc;
+    --d-muted: #8d95a3; --d-hair: #272d37; --d-accent: #7fadda; --d-accent-soft: #1b2733;
+    --d-good: #62c39c; --d-good-soft: #16261f;
+    --d-shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
+  }
+  body { background: var(--d-ground); color: var(--d-ink); font-family: "Archivo", system-ui, sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 52px 24px 90px; display: flex; flex-direction: column; gap: 44px; }
+  .eyebrow { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--d-accent); margin: 0 0 10px; }
+  h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 700; letter-spacing: -.025em; line-height: 1.1; margin: 0 0 12px; text-wrap: balance; }
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.015em; margin: 0 0 6px; text-wrap: balance; }
+  h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 12px; max-width: 66ch; color: var(--d-ink-2); }
+  p:last-child { margin-bottom: 0; }
+  strong { color: var(--d-ink); }
+  .rule { height: 1px; background: var(--d-hair); border: 0; margin: 0; }
+  .strip { overflow-x: auto; padding: 4px 4px 12px; margin: 0 -4px; }
+  .frames { display: flex; gap: 26px; align-items: flex-start; width: max-content; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .lab { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted); display: flex; gap: 8px; align-items: center; }
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: 10px; letter-spacing: .1em; }
+  .tag-rec { background: var(--d-good-soft); color: var(--d-good); }
+  .tag-alt { background: var(--d-accent-soft); color: var(--d-accent); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+  .card { background: var(--d-panel); border: 1px solid var(--d-hair); border-radius: 4px; padding: 14px 16px; }
+  .card p { font-size: 14px; margin: 0; }
+  .decision { background: var(--d-panel); border: 1px solid var(--d-hair); border-left: 3px solid var(--d-accent); border-radius: 4px; padding: 16px 18px; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .9em; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--d-hair); }
+  th { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted); }
+  td.num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .pass { color: var(--d-good); font-weight: 600; }
+
+  /* App frame — Ergomatic tokens verbatim, fixed light (the app ships no dark theme). */
+  .e {
+    --page:#f4f1e8; --surface:#fffdf7; --sunken:#efeade; --ink:#1b1a17; --ink-3:#57544c;
+    --rule-2:#ded8c9; --rule-3:#c9c3b2; --accent:#b5341f; --on:#fffdf7;
+    --o2:#2a6275; --at:#8a5f18; --an:#5c4382; --tr:#1b1a17;
+    width: 372px; background: var(--page); color: var(--ink);
+    font-family: "Archivo", system-ui, sans-serif; font-size: 16px; line-height: normal;
+    border-radius: 3px; box-shadow: var(--d-shadow); padding: 14px 10px; flex-shrink: 0;
+  }
+  .e ul { list-style: none; margin: 0; padding: 0; }
+  .e-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 10px; border-bottom: 1px solid var(--rule-2); }
+  .e ul li:last-child .e-row, .e ul li:last-child .e-row2 { border-bottom: none; }
+  .e-idx { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .04em; color: var(--ink-3); width: 24px; text-align: right; flex-shrink: 0; }
+  .e-badge { display: inline-block; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; font-weight: 600; color: var(--on); padding: 3px 7px; flex-shrink: 0; }
+  .b-o2 { background: var(--o2); } .b-at { background: var(--at); } .b-an { background: var(--an); } .b-tr { background: var(--tr); }
+  .e-badge-unknown { background: var(--rule-2); border: 1px solid var(--rule-3); padding: 2px 6px; }
+  .e-badge-unknown-v2 { background: var(--rule-2); border: 1px solid #6f6a5f; padding: 2px 6px; }
+  .e-land { width: 700px; }
+  .e-name { flex: 1; min-width: 0; font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .e-check { flex: 0 0 auto; text-align: right; color: var(--accent); font-weight: 600; margin-left: auto; }
+  .e-swap { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .04em; color: var(--ink-3); white-space: nowrap; }
+  .e-row2 { display: grid; grid-template-columns: 24px auto 1fr auto; column-gap: 10px; row-gap: 2px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--rule-2); }
+  .e-row2 .e-swap { grid-column: 2 / -1; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Gate 0 · design approval</p>
+    <h1>Plan Row Edge Marks</h1>
+    <p>Two small decisions #233 left behind ROADMAP triggers, pulled forward on James's word: the badge for a row whose stored type we cannot read, and the mark's wording when a row's link contradicts its own title.</p>
+  </header>
+
+  <hr class="rule">
+
+  <section>
+    <h2>1 · The unknown-type badge — corrected after James's review</h2>
+    <p>The box is the sole visual carrier of "stored type unreadable", so it is a <strong>meaningful cue</strong>: WCAG 1.4.11's 3:1 non-text floor applies, and the first approved border (<span class="mono">--rule-3</span>, 1.53:1) fails it. Corrected: <span class="mono">--ink-4</span> border, 4.76:1 on <span class="mono">--page</span>. AT hears a visually-hidden "type unknown". Row 3 is the unreadable-type row.</p>
+
+    <div class="strip"><div class="frames">
+      <div class="col">
+        <div class="lab"><span class="tag">Approved 1st cut (preserved)</span> --rule-3 border, 1.53:1</div>
+        <div class="e"><ul>
+          <li><div class="e-row"><span class="e-idx">2</span><span class="e-badge b-at">AT</span><span class="e-name">Occluded Front</span><span class="e-check">&check;</span></div></li>
+          <li><div class="e-row"><span class="e-idx">3</span><span class="e-badge e-badge-unknown">&nbsp;&nbsp;</span><span class="e-name">Sea Fret</span><span class="e-check">&check;</span></div></li>
+          <li><div class="e-row"><span class="e-idx">4</span><span class="e-badge b-o2">O2</span><span class="e-name">Slack Tide</span><span class="e-check">&check;</span></div></li>
+        </ul></div>
+      </div>
+      <div class="col">
+        <div class="lab"><span class="tag tag-rec">Corrected — needs your approval</span> --ink-4 border, 4.76:1</div>
+        <div class="e"><ul>
+          <li><div class="e-row"><span class="e-idx">2</span><span class="e-badge b-at">AT</span><span class="e-name">Occluded Front</span><span class="e-check">&check;</span></div></li>
+          <li><div class="e-row"><span class="e-idx">3</span><span class="e-badge e-badge-unknown-v2">&nbsp;&nbsp;</span><span class="e-name">Sea Fret</span><span class="e-check">&check;</span></div></li>
+          <li><div class="e-row"><span class="e-idx">4</span><span class="e-badge b-o2">O2</span><span class="e-name">Slack Tide</span><span class="e-check">&check;</span></div></li>
+        </ul></div>
+      </div>
+      <div class="col">
+        <div class="lab"><span class="tag tag-rec">Corrected, landscape</span> same row column, wider page</div>
+        <div class="e e-land"><ul>
+          <li><div class="e-row"><span class="e-idx">2</span><span class="e-badge b-at">AT</span><span class="e-name">Occluded Front</span><span class="e-check">&check;</span></div></li>
+          <li><div class="e-row"><span class="e-idx">3</span><span class="e-badge e-badge-unknown-v2">&nbsp;&nbsp;</span><span class="e-name">Sea Fret</span><span class="e-check">&check;</span></div></li>
+          <li><div class="e-row"><span class="e-idx">4</span><span class="e-badge b-o2">O2</span><span class="e-name">Slack Tide</span><span class="e-check">&check;</span></div></li>
+        </ul></div>
+      </div>
+    </div></div>
+
+    <div class="cards">
+      <div class="card"><h3>Why A (revised)</h3><p>James, 2026-08-31: a shaded box instead of the em-dash. A shaded box with a border (James, revised again): fill <span class="mono">--rule-2</span>, border <span class="mono">--rule-3</span>, no glyph. Sized EXACTLY like its neighbours by construction, not by eye — it is the same <span class="mono">.type-badge</span> box with two no-break spaces as content (two mono characters wide, same font, same padding, the 1px border compensated in padding). Since #233's type validation, no supported writer can create such a row, so the equality is pinned by class-sharing in a client test rather than measured live.</p></div>
+      <div class="card"><h3>Why not B</h3><p>Dropping the badge ragged-lefts the name against its neighbours and makes the absence look like a rendering bug rather than a statement. B is honest but reads as broken.</p></div>
+      <div class="card"><h3>Swap logic unchanged</h3><p>Either way, an unreadable type still never manufactures a swap mark — this decision is only about what the badge slot shows.</p></div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <section>
+    <h2>2 · The self-contradicting mark</h2>
+    <p>A row can be LINKED to one workout while its saved title claims another (a malformed request, or a client bug). Identity decides the mark, display keeps the snapshot — so today such a row reads <span class="mono">2K Test</span> with <span class="mono">INSTEAD OF 2K Test</span> beneath it. True, but it reads as a contradiction. It also has an honest sibling that is common: a personal workout genuinely titled 2K Test produces the same wording.</p>
+
+    <div class="strip"><div class="frames">
+      <div class="col">
+        <div class="lab"><span class="tag">Now</span> contradiction</div>
+        <div class="e"><ul>
+          <li><div class="e-row2"><span class="e-idx">7</span><span class="e-badge b-an">AN</span><span class="e-name">2K Test</span><span class="e-check">&check;</span><span class="e-swap">INSTEAD OF 2K Test</span></div></li>
+        </ul></div>
+      </div>
+      <div class="col">
+        <div class="lab"><span class="tag tag-rec">C · recommended</span> the mark names the miss, not the title</div>
+        <div class="e"><ul>
+          <li><div class="e-row2"><span class="e-idx">7</span><span class="e-badge b-an">AN</span><span class="e-name">2K Test</span><span class="e-check">&check;</span><span class="e-swap">NOT THE PRESCRIBED 2K Test</span></div></li>
+        </ul></div>
+      </div>
+      <div class="col">
+        <div class="lab"><span class="tag tag-alt">D</span> keep INSTEAD OF everywhere</div>
+        <div class="e"><ul>
+          <li><div class="e-row2"><span class="e-idx">7</span><span class="e-badge b-an">AN</span><span class="e-name">2K Test</span><span class="e-check">&check;</span><span class="e-swap">INSTEAD OF 2K Test</span></div></li>
+        </ul></div>
+      </div>
+    </div></div>
+
+    <div class="cards">
+      <div class="card"><h3>Why C, and its scope</h3><p>Only when the displayed name EQUALS the prescription it missed: the mark switches to <span class="mono">NOT THE PRESCRIBED 2K Test</span>, which is true of both producers (the personal same-title workout, and the cross-linked row). Every other swap keeps <span class="mono">INSTEAD OF &lt;x&gt;</span> unchanged.</p></div>
+      <div class="card"><h3>Why not D</h3><p>D costs nothing but leaves a rower who authored their own 2K Test reading a sentence that contradicts itself on the plan's three most important days.</p></div>
+      <div class="card"><h3>Width</h3><p><span class="mono">NOT THE PRESCRIBED 2K Test</span> is 25 characters of 11px mono on its own variant-B line: ~165px of 330 available. No clipping in either orientation.</p></div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <section>
+    <h2>Contrast (computed, WCAG 2.1)</h2>
+    <table>
+      <tr><th>Element</th><th>Pair</th><th>Ratio</th><th>AA</th></tr>
+      <tr><td>Unknown badge border (corrected — meaningful cue, 1.4.11 applies)</td><td class="mono">--ink-4 #6f6a5f on --page #f4f1e8 / --surface-sunken #efeade</td><td class="num">4.76:1 / 4.48:1</td><td class="pass">Pass (3:1 floor). The rejected 1st cut's --rule-3 measured 1.53:1 under a "decorative" claim James's review overturned.</td></tr>
+      <tr><td>Mark copy (C) — unchanged token</td><td class="mono">--ink-3 on --page</td><td class="num">6.69:1</td><td class="pass">Pass</td></tr>
+    </table>
+    <p style="margin-top:10px">No new colour anywhere; both changes reuse tokens already carrying text on these exact backgrounds.</p>
+  </section>
+
+  <hr class="rule">
+
+  <section class="decision">
+    <h3>The decisions this gate needs</h3>
+    <p><strong>A or B</strong> for the unknown badge, and <strong>C or D</strong> for the mark. Also in the same PR, no design needed: the <span class="mono">globalOnly: false</span> test (mocked prescription — the only producer that exists) and failure-capture instrumentation on the two flaked unit tests.</p>
+  </section>
+</div>

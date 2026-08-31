@@ -3,6 +3,7 @@ import {
   parseClock,
   parseDurationToken,
 } from "../../domain/duration.js";
+import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { estimationSplit, isEffortRef, refLabel } from "../../domain/pace.js";
 import type {
   Baselines,
@@ -371,6 +372,12 @@ export function toSteps(
 
   if (f.title.length < 1 || f.title.length > 80) {
     errors.title = "title must be 1..80 characters";
+  } else if (isOnboardingTitle(f.title)) {
+    // Reservation (James, 2026-08-31): mirrors the route's own check so
+    // the rower hears it at the field, not as a failed save. Exact match,
+    // isOnboardingTitle's no-fuzz rule; a legacy row already holding a
+    // reserved title must be renamed to save further edits.
+    errors.title = "title is reserved. Pick another name";
   }
 
   if (f.pain === null || !isInt(f.pain, 1, 5)) {

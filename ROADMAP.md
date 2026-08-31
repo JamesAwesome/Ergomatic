@@ -964,16 +964,11 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **`swapMark`'s `globalOnly: false` arm has no test that can fail.** The
-  checkpoint predicate reads `ref.globalOnly` rather than assuming it
-  (mirroring `resolvePrescribed`), but every shipped ref sets it `true`, so
-  no fixture built from real `PLANS` data can distinguish the two versions —
-  only mocking `domain/plans` with a synthetic false ref could, which trades
-  a real fixture for a contrived one. Flagged at #233's final review as
-  latent, not blocking. **Trigger: the first `globalOnly: false` ref or the
-  plan-authoring UI — whichever lands first writes the test in the same
-  change.** **S**
-
+- **RESOLVED (2026-08-31): `swapMark`'s `globalOnly: false` arm is pinned**
+  — trigger pulled forward by James. The arm's only producer is synthetic,
+  so `Plan.test.tsx` mocks one session's prescription (and nothing else);
+  mutating the predicate to demand a global fails exactly the
+  personal-match case.
 - **RESOLVED (in the same PR that filed it): `stack-env.sh` now refuses an
   empty `REPO_ROOT`** with `: "${REPO_ROOT:?...}"` instead of hashing the
   empty string into the phantom `ergomatic-67295` stack. Probed both ways:
@@ -996,18 +991,16 @@ Each needs erg time or a deliberate recording session.
   **Revisit only if a rower actually hits it**; the shape is documented in
   `swapMark`'s own comment.
 
-- **A pre-validation row with an unreadable `workoutType` renders a confident
-  plan badge.** `Plan.tsx` falls back to the plan's own type and claims no
-  swap, which is safe but asserts a type nobody recorded. **The WRITER is now
-  fixed** (#233 re-review): `POST /api/logs` validates `workoutType` against
-  the `WorkoutType` union, so no new row can carry a bad value. The earlier
-  refusal to do this was argued from a false premise — the cited O2 -> AT drift
-  is between two VALID union members, so checking the union accepts the whole
-  documented drift and rejects only values no client has ever sent. Reads stay
-  tolerant because rows written before the check exist. What remains is
-  cosmetic and only for those rows: a neutral or unknown badge instead of a
-  confident one, which is a **new visual state and carries a design gate**.
-  Only worth doing if such a row is ever actually observed. **S**
+- **RESOLVED (edge-marks gate + James's re-review, 2026-08-31): a
+  pre-validation row with an unreadable `workoutType` renders a bordered
+  shaded box that is a MEANINGFUL, accessible cue** — `--rule-2` fill,
+  `--ink-4` border (4.76:1 / 4.48:1, clearing 1.4.11's 3:1 non-text
+  floor; the first cut's 1.53:1 "decorative" framing was rejected on
+  review), with a visually-hidden "type unknown" twin for AT. Box model
+  equals a real badge's by construction (shared `.type-badge`, two
+  no-break spaces, border compensated in padding) AND by measurement:
+  `design.spec.ts` injects the badge into the live screen and asserts
+  computed colours, an in-test 3:1 computation, and sub-pixel geometry.
 
 - **DISPOSED (post-#233 follow-ons, rationale corrected at #235's review):
   the real store's `id DESC` tiebreak stays unpinned as LOW-VALUE — not, as
@@ -1034,15 +1027,36 @@ Each needs erg time or a deliberate recording session.
   The deletion case is RELATED but is NOT covered by this ruling — it has its
   own entry above, because Gate 0 accepted preset edits and nothing else.
 
-- **A cross-linked log renders a self-contradictory row.** A log LINKED to
-  the global 6K Test while claiming a `2K Test` snapshot renders
-  `2K Test` with `INSTEAD OF 2K Test` beneath it, which reads as a
-  contradiction. Non-blocking at #233's final review and correctly so: it
-  needs a malformed self-owned request or a client bug to reach, and the
-  explicitly-required personal-same-title case produces the same wording by
-  design. **Revisit only alongside a wording change to the mark itself** —
-  fixing it in isolation would mean the mark stops naming the prescription,
-  which is what makes it useful on every other row. **S**
+- **RULED (edge-marks gate + PM gate, James, 2026-08-31): the
+  self-contradicting mark keeps `INSTEAD OF` everywhere (option D), and the
+  two designated test titles are RESERVED at ALL THREE workout-writing
+  doors** — `POST`, `PUT`, and `POST /api/workouts/bulk` (the PM gate caught
+  bulk unguarded in the first cut), one message (`title is reserved. Pick
+  another name`, James's pick), mirrored at the Builder field. Legacy rows
+  keep rendering and stay suggestable; **editing one without renaming it is
+  ALSO rejected** — James's explicit ruling, declining the narrower
+  changed-into rule ("I don't want to engineer a solution to an imaginary
+  problem"). **The reservation is a fence around the string-keyed test
+  identity, not a product principle** (PM): retirement trigger = a stable
+  seed key replacing `isOnboardingTitle`'s remaining call sites. Name
+  conflicts in general REMAIN allowed.
+
+- **The reservation is a NON-ADDITIVE API change: coordinated tag, and an
+  honestly-named residual (PM gate C3, corrected twice at James's
+  reviews).** A request that used to 201 now 400s. First disposition
+  ("ride the next tag") broke RELEASING.md's breaking-change rule; the
+  second overclaimed that the tag CLOSES the exposure. It does not: an
+  installed v0.28.0 client keeps sending the now-rejected request until
+  its owner updates — there is no version negotiation or forced-update
+  path — and sees the Builder's generic "Couldn't save this workout. Try
+  again." retry loop. What the coordinated tag does buy: the notes ship
+  in the SAME tagged commit (#238 carries its own v0.29.0 notes), so the
+  moment a build exists that explains the rule, it is the newest build.
+  **Residual: pre-update clients hitting a reserved title get the generic
+  copy, for as long as they stay un-updated. Accepted by James with his
+  merge approval of #238, which presented this text.** Building version
+  negotiation for two reserved strings was considered and declined as
+  disproportionate.
 
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null

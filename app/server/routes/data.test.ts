@@ -16,6 +16,28 @@ import { createDataRouter, type Stores } from "./data.js";
 // tests). This file is the API contract that exercises them.
 const makeStores = makeFakeStores;
 
+// Flake capture (ROADMAP "TWO unit-project flakes, cause UNKNOWN"): two
+// tests in this file have each failed exactly once with `expected
+// undefined to be <value>` on a response-body field, and fifteen clean
+// reruns later the mechanism is still unattributed because the assertion
+// error carries neither the status nor the raw body. This prints both,
+// ONLY when the about-to-fail shape is present, so the next occurrence
+// self-reports instead of being re-run past. Deliberately a console.error
+// plus the ordinary assertion — never a retry, never a softened check:
+// ROADMAP's own binding is that the flake must still fail loudly.
+function captureIfUndefined(
+  res: request.Response,
+  field: string,
+  where: string,
+): void {
+  if ((res.body as Record<string, unknown>)?.[field] === undefined) {
+    console.error(
+      `FLAKE CAPTURE [${where}] status=${res.status} type=${res.type} ` +
+        `headers=${JSON.stringify(res.headers)} text=${JSON.stringify(res.text)}`,
+    );
+  }
+}
+
 const userA: SessionUser = { id: "user-a", email: "a@x.com", name: "A" };
 const userB: SessionUser = { id: "user-b", email: "b@x.com", name: "B" };
 
@@ -504,6 +526,43 @@ describe("workouts CRUD", () => {
     expect(list.body).toHaveLength(1);
   });
 
+  // Reservation (James, 2026-08-31, at the edge-marks gate): the two
+  // designated test titles are the ONLY identity the app has for its test
+  // workouts (domain/onboarding.ts — "the ONLY identity the rest of the
+  // app uses to recognize them"), and a personal row taking one was the
+  // common producer of checkpoint-identity confusion (#233's P1). New
+  // writes reject; rows created before this check keep rendering and are
+  // still separated by the linked-row identity check.
+  it.each(["2K Test", "6K Test"])(
+    "POST rejects the reserved title %s with 400, field named",
+    async (title) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/workouts"),
+      ).send(validWorkoutBody({ title }));
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("title");
+    },
+  );
+
+  it("PUT rejects renaming a personal workout TO a reserved title", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody(),
+    );
+    const res = await asA(
+      request(app).put(`/api/workouts/${created.body.id}`),
+    ).send(validWorkoutBody({ title: "2K Test" }));
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("title");
+  });
+
+  it("reservation is exact-match: a near-miss title is accepted", async () => {
+    const res = await asA(
+      request(appFor(makeStores())).post("/api/workouts"),
+    ).send(validWorkoutBody({ title: "2K Test Prep" }));
+    expect(res.status).toBe(201);
+  });
+
   it("POST rejects an invalid workout with 400", async () => {
     const res = await asA(
       request(appFor(makeStores())).post("/api/workouts"),
@@ -886,6 +945,47 @@ describe("POST /api/workouts/bulk", () => {
     expect(res.status).toBe(200);
     expect(res.body.created).toHaveLength(0);
     expect(res.body.errors.length).toBeGreaterThan(0);
+  });
+
+  // PM gate on #238, C1: the reservation guarded two of the validator's
+  // three callers; this route — one tap from the Library header as
+  // IMPORT — was the unguarded third, and could still create a personal
+  // "2K Test" while the PR record said the producer was gone. Same
+  // all-or-nothing posture as every other bulk error.
+  it("rejects a reserved title in a paste, creating NOTHING — the bulk door is guarded too", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    const text = `1 | 2K Test | AN | hard | 5\nw 2000m max\n\n2 | Steady | O2 | easy | 1\nw 20' 2k+10`;
+    const res = await asA(request(app).post("/api/workouts/bulk")).send({
+      text,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.created).toHaveLength(0);
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0].message).toContain("title is reserved");
+    // The STORE, not just the response: "created NOTHING" is a claim
+    // about persistence (re-review of dc6ea3ed) — a route that created
+    // rows and reported [] would pass the body assertions alone.
+    expect(await stores.workouts.list("user-a")).toHaveLength(0);
+  });
+
+  // The strict legacy-edit ruling (James: no changed-into carve-out) has
+  // to be pinned by a row that EXISTS under a reserved title — a
+  // changed-into-only implementation passes every rename test. Seeded
+  // through the store: the only producer class left.
+  it("PUT of a legacy same-titled row is rejected even when the title is UNCHANGED", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    const legacy = await stores.workouts.create("user-a", {
+      ...validWorkoutBody({ title: "2K Test", type: "AN" }),
+      source: "user",
+    });
+
+    const res = await asA(request(app).put(`/api/workouts/${legacy.id}`)).send(
+      validWorkoutBody({ title: "2K Test", type: "AN", pain: 4 }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("title");
   });
 
   it("reports domain validation failures for syntactically-valid but out-of-bounds workouts, creating nothing", async () => {
@@ -3198,6 +3298,7 @@ describe("GET/POST /api/logs", () => {
         const res = await asA(
           request(app).patch(`/api/logs/${created.body.id}`),
         ).send({ [field]: null });
+        captureIfUndefined(res, field, "PATCH null-clears");
         expect(res.status).toBe(200);
         expect(res.body[field]).toBeNull();
       },
@@ -3747,9 +3848,12 @@ describe("GET/PUT /api/prefs", () => {
     const put = await asA(request(app).put("/api/prefs")).send({
       accentColor: "#00ff00",
     });
+    captureIfUndefined(put, "accentColor", "prefs PUT");
     expect(put.status).toBe(200);
     expect(put.body.accentColor).toBe("#00ff00");
     const get = await asA(request(app).get("/api/prefs"));
+    captureIfUndefined(get, "accentColor", "prefs GET-after-PUT");
+    expect(get.status).toBe(200);
     expect(get.body.accentColor).toBe("#00ff00");
   });
 
@@ -4102,16 +4206,24 @@ describe("GET /api/today", () => {
       title: ONBOARDING_TITLES.k6,
       type: todayCode,
     });
-    const custom = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ title: ONBOARDING_TITLES.k6, type: todayCode }),
-    );
-    expect(custom.body.isGlobal).toBe(false);
+    // Seeded through the STORE, not the route: since the 2026-08-31
+    // reservation ALL THREE workout-writing routes (POST, PUT, bulk —
+    // the PM gate caught bulk unguarded) reject the designated titles,
+    // so the only remaining producer of a personal row with one is
+    // history — rows created before the check. This test now guards exactly that
+    // legacy class: such a row STAYS suggestable, and only the GLOBAL is
+    // excluded from the pool.
+    const custom = await stores.workouts.create("user-a", {
+      ...validWorkoutBody({ title: ONBOARDING_TITLES.k6, type: todayCode }),
+      source: "user",
+    });
+    expect(custom.isGlobal).toBe(false);
 
     const res = await asA(request(app).get("/api/today"));
     expect(res.status).toBe(200);
     expect(res.body.pool).not.toContain(onboarding.id);
-    expect(res.body.pool).toContain(custom.body.id);
-    expect(res.body.recommendation).toBe(custom.body.id);
+    expect(res.body.pool).toContain(custom.id);
+    expect(res.body.recommendation).toBe(custom.id);
   });
 
   it("uses the selected plan and doneN, not the fallback, and reports the real planKey", async () => {

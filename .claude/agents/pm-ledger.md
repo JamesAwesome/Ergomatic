@@ -3472,3 +3472,52 @@ v0.26.0^{commit}`), and the walk that reproduced the P1 ran on v0.25.0
   stands, and rev 3 strengthens it — the pause is now a design plus an
   approval plus a from-scratch implementation. The notes-owed row must lose
   its failed-write sentence before the notes PR starts.
+
+## PM final-PR gate, 2026-08-31 (PR #238 — the reserved test titles)
+
+- **A "no supported producer remains" claim is settled by enumerating every
+  caller of the shared VALIDATOR, not by naming the route you just changed.**
+  #238 reserved "2K Test"/"6K Test" at `POST` and `PUT /api/workouts` and then
+  said so three times — in the PR body, in a spec published as the citable
+  record, and in a test comment — while `POST /api/workouts/bulk`
+  (`data.ts`) called the same `validateWorkoutInput` unguarded and sat one
+  tap away at the Library's **IMPORT**. One command finds it:
+  `grep -n validateWorkoutInput` over the ROUTES returns three
+  request-writing call sites (the repo carries two more in
+  `app/scripts/library-moves.ts`, a curation script that writes no user
+  rows — James's re-review caught the unqualified count); `grep -n
+  reservedTitle` returned two. **The tell is a producer claim written in the
+  same breath as the fix**, and the cost here was an end-to-end gate retired
+  on it plus a false line in the record that supersedes the Gate 0 artifacts.
+- **Adding a REJECTION to an existing route is a cross-version break, and this
+  generalises the 2026-08-17 PW nullable ruling.** That ruling asked which
+  SHIPPED build reads the column; ask also which shipped build SENDS the
+  request. The client pre-check ships in the new build only, so the installed
+  build renders its generic failure copy — a retry loop for a permanent 400.
+  `docs/RELEASING.md`'s additive-only rule covers this: the exposure runs
+  from merge (web deploys continuously) to the next tag, not to the tester's
+  next update.
+- **A decision taken conversationally AFTER a Gate 0 closes brings copy the
+  gate never showed.** #238's Gate 0 artifact contains options A/B and C/D
+  and no error message anywhere; the reservation and its strings arrived
+  after it. The standing copy gate is about the rendered thing, so a
+  post-gate decision that adds user-visible words re-opens the gate for those
+  words — cheaply, at the PM verdict, but deliberately. (Discharged here:
+  James picked the final string from rendered options.)
+- **A restriction is not a capability — but a NON-ADDITIVE restriction takes a
+  coordinated tag, not a deferred note.** The first ruling here ("ride the
+  next tag") was corrected at James's re-review: `docs/RELEASING.md` is
+  explicit that a breaking change forces a coordinated tag, and "mention it
+  in a later note" leaves shipped clients in a retry loop meanwhile. Final
+  disposition: #238 merges with its notes PR immediately behind and the tag
+  on that — the capability question decides the VERSION (no new capability =
+  no minor celebration in the notes' framing), the compatibility rule decides
+  the TIMING. A rower loses a name they had; that is a release note even
+  though nothing was gained.
+- **Before reserving a name, ask why the app is keyed on a string at all.**
+  `domain/onboarding.ts` calls the two titles "the ONLY identity the rest of
+  the app uses to recognize them". #233 already replaced that with a
+  `(title, isGlobal)` pair at the checkpoint; the reservation fences the call
+  sites that still key on the string. **Record it with its retirement trigger
+  (a stable seed key) rather than as a product principle**, or the app takes
+  the next name it needs the same way.

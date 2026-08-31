@@ -68,11 +68,12 @@ function rowedType(link: PlanLink | undefined): WorkoutType | undefined {
  *  both facts off ONE workout row, and this is that predicate one layer
  *  down. Each part was a live defect before it was here:
  *
- *  - **Title alone is not identity.** A rower may author their own
- *    workout called "2K Test" — titles are not unique, nothing excludes
- *    the onboarding names, and `isOnboardingTitle`'s own comment says
- *    such a row is "real, ownable" and must stay suggestable. Rowing it
- *    on the checkpoint day is NOT doing the prescribed test, and a
+ *  - **Title alone is not identity.** A LEGACY personal workout may be
+ *    called "2K Test" — titles carry no unique constraint, and until
+ *    the 2026-08-31 reservation (all three workout-writing routes now
+ *    reject the designated titles) nothing excluded the onboarding
+ *    names. Such legacy rows are real, stay suggestable, and rowing one
+ *    on the checkpoint day is NOT doing the prescribed test — a
  *    title-only check called it one.
  *  - **Type must NOT enter this branch.** It looks like a cheap extra
  *    guard and it is actively wrong: the global 6K Test was reclassified
@@ -403,7 +404,32 @@ function PlanView({
               <span className="plan-row-index mono-status">
                 {item.index + 1}
               </span>
-              <TypeBadge type={rowedType(link) ?? item.code} />
+              {/* Edge-marks gate (James, 2026-08-31): a LINKED row whose
+                  stored type is unreadable gets the shaded box, not the
+                  plan's badge — the old fallback asserted a type nobody
+                  recorded. Only pre-validation rows can be this (the POST
+                  route now checks the union). The box IS a `.type-badge`
+                  (same class, two no-break spaces of content), so its box
+                  model matches every neighbour by construction — AND by
+                  measurement: `design.spec.ts` injects this exact markup
+                  into the live screen (no supported writer can produce
+                  the row itself) and asserts computed colours, an
+                  in-test 3:1 ratio, and sub-pixel outer geometry against
+                  a real badge. An UNLINKED row has no stored type at
+                  all; its badge is the plan's own claim and stays. */}
+              {link !== undefined && rowedType(link) === undefined ? (
+                // James's review (P1): the box is the SOLE carrier of
+                // "stored type unreadable", so it cannot be aria-hidden —
+                // AT hears "type unknown" via the house visually-hidden
+                // idiom while the nbsp pair (hidden from AT, it is
+                // spacing) keeps the two-character badge width.
+                <span className="type-badge plan-row-badge-unknown">
+                  <span aria-hidden="true">{"\u00A0\u00A0"}</span>
+                  <span className="visually-hidden">type unknown</span>
+                </span>
+              ) : (
+                <TypeBadge type={rowedType(link) ?? item.code} />
+              )}
               {/* ONE name per row, in one treatment (James, 2026-08-30:
                   "a 2k test is just a specific workout on a specific
                   day"). Which workout it names depends on whether the day

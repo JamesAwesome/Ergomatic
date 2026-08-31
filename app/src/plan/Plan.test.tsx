@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -646,11 +646,12 @@ describe("Plan (done-row workout names and swap marks)", () => {
   });
 
   // P1 (review of b21f147d). The prescription is `globalOnly`, and titles
-  // are neither unique nor reserved — `isOnboardingTitle`'s own comment
-  // calls a rower's same-titled workout "real, ownable" and insists it
-  // stays suggestable. So a personal AN workout called "2K Test" passes
-  // both a title check and a type check while being emphatically NOT the
-  // prescribed test. Provenance is the only thing that separates them.
+  // carry no unique constraint. Since the 2026-08-31 reservation, new
+  // personal rows cannot take the designated titles — but LEGACY rows
+  // created before it can hold one, pass both a title check and a type
+  // check, and still be emphatically NOT the prescribed test. Provenance
+  // is the only thing that separates them, which is why this fixture
+  // remains a real population, not history-proofing.
   it("a checkpoint rowed as a PERSONAL workout sharing the prescribed title is marked", async () => {
     await readyWithLinks(
       new Map([
@@ -774,10 +775,15 @@ describe("Plan (done-row workout names and swap marks)", () => {
   });
 
   // `session_logs.workout_type` is plain text, not the workouts table's
-  // enum. The POST route now rejects values outside the union, so this
-  // covers rows written BEFORE that check — the only ones that can carry
-  // an unreadable type. A type we cannot read is not evidence of a swap.
-  it("an unreadable stored type falls back to the plan's own badge and claims no swap", async () => {
+  // enum. The POST route rejects values outside the union, so this covers
+  // rows written BEFORE that check — the only ones that can carry an
+  // unreadable type. Edge-marks gate (James, 2026-08-31): such a row
+  // shows the SHADED BOX, not the plan's badge — the old fallback
+  // confidently asserted a type nobody recorded. The box shares
+  // `.type-badge` (same box model by construction — that class IS the
+  // size check, since no supported writer can produce this row for a
+  // live measurement any more) and claims no swap either way.
+  it("an unreadable stored type renders the unknown box, not the plan's badge, and claims no swap", async () => {
     await readyWithLinks(
       new Map([
         [3, link({ workoutTitle: "Slack Tide", workoutType: "nonsense" })],
@@ -785,15 +791,40 @@ describe("Plan (done-row workout names and swap marks)", () => {
       ]),
     );
 
-    // Index 3 is a TR day; the badge falls back rather than rendering an
-    // unstyled/unknown type.
-    expect(rowAt(3).querySelector(".type-badge")?.textContent).toBe("TR");
+    const box = rowAt(3).querySelector(".plan-row-badge-unknown");
+    expect(box).not.toBeNull();
+    // Same element, same class: the box inherits the real badge's box
+    // model rather than approximating it.
+    expect(box).toHaveClass("type-badge");
+    // The box is the sole carrier of this state, so it must NOT be
+    // aria-hidden (James's review) — AT hears the visually-hidden twin
+    // while the nbsp spacing pair stays hidden.
+    expect(box!.getAttribute("aria-hidden")).toBeNull();
+    expect(box!.querySelector(".visually-hidden")?.textContent).toBe(
+      "type unknown",
+    );
+    expect(box!.querySelector('[aria-hidden="true"]')?.textContent).toBe(
+      "\u00A0\u00A0",
+    );
+    // The plan's own type appears NOWHERE on this row's badge slot.
+    expect(rowAt(3).querySelector(".type-badge")?.textContent).not.toBe("TR");
     expect(rowAt(3).querySelector(".plan-row-swap")).toBeNull();
     // Index 4 is an AT day rowed as O2 — the control proving the mark is
     // reachable in this render.
     expect(rowAt(4).querySelector(".plan-row-swap")?.textContent).toBe(
       "INSTEAD OF AT",
     );
+  });
+
+  // The box is only for a LINKED row whose stored type is unreadable. An
+  // UNLINKED row has no stored type at all — its badge is the plan's own
+  // claim, legitimately.
+  it("an unlinked row keeps the plan's badge — the box is not a general fallback", async () => {
+    await readyWithLinks(new Map([[0, link()]]));
+
+    // Index 1 is done but unlinked.
+    expect(rowAt(1).querySelector(".plan-row-badge-unknown")).toBeNull();
+    expect(rowAt(1).querySelector(".type-badge")?.textContent).toBe("AT");
   });
 
   it("a done row with no stored link renders exactly as it did before: plan badge, no name, no mark", async () => {
@@ -865,6 +896,115 @@ describe("Plan (done-row workout names and swap marks)", () => {
     expect(rowAt(0).querySelector(".plan-row-name")?.textContent).toBe(
       longTitle,
     );
+  });
+});
+
+// The `globalOnly: false` arm (filed at #233's final review as latent —
+// "fix with the first false ref or authoring UI"; James pulled the
+// trigger forward 2026-08-31). Every SHIPPED ref sets `globalOnly: true`,
+// so no fixture built from the real `PLANS` can reach this arm — the ONLY
+// producer is a synthetic prescription, which is why `domain/plans` is
+// mocked here and nowhere else in this file. The mock replaces exactly one
+// session's `prescribe`; the sequence itself stays the real 84 codes.
+describe("Plan (a globalOnly: false prescription — mocked, the only producer)", () => {
+  // James's review (P2): `vi.resetModules()` does NOT clear the mock
+  // registry (vitest's own docs), so without this the synthetic preset
+  // leaks into every later dynamic import of Plan in this file.
+  afterEach(() => {
+    vi.doUnmock("../../domain/plans");
+    vi.resetModules();
+  });
+
+  async function renderWithFalseRef(links: Map<number, PlanLink>) {
+    const real =
+      await vi.importActual<typeof import("../../domain/plans")>(
+        "../../domain/plans",
+      );
+    const sessions = real.PLANS.sprint.sessions.map((day, i) =>
+      i === 6
+        ? {
+            ...day,
+            prescribe: {
+              ref: {
+                kind: "title" as const,
+                title: "My Own Test",
+                globalOnly: false,
+              },
+              reason: "synthetic: the false-ref arm's only producer",
+            },
+          }
+        : day,
+    );
+    vi.doMock("../../domain/plans", () => ({
+      ...real,
+      PLANS: {
+        ...real.PLANS,
+        sprint: { ...real.PLANS.sprint, sessions },
+      },
+    }));
+    mockUsePlan({
+      state: "ready",
+      plan: SPRINT_ACTIVE,
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    return renderPlan(links);
+  }
+
+  it("accepts a PERSONAL workout matching the title — a false ref does not demand a global", async () => {
+    await renderWithFalseRef(
+      new Map([
+        [
+          6,
+          link({
+            workoutTitle: "My Own Test",
+            workoutType: "AN",
+            workoutIsGlobal: false,
+          }),
+        ],
+      ]),
+    );
+
+    const row = document.querySelectorAll<HTMLElement>(".plan-row")[6]!;
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe(
+      "My Own Test",
+    );
+    expect(row.querySelector(".plan-row-swap")).toBeNull();
+  });
+
+  it("still marks a DIFFERENT workout against a false ref — the title half keeps working", async () => {
+    await renderWithFalseRef(
+      new Map([[6, link({ workoutTitle: "Sea Fret", workoutType: "O2" })]]),
+    );
+
+    const row = document.querySelectorAll<HTMLElement>(".plan-row")[6]!;
+    expect(row.querySelector(".plan-row-swap")?.textContent).toContain(
+      "My Own Test",
+    );
+  });
+});
+
+// CANARY for the mock cleanup above (re-review of dc6ea3ed: deleting the
+// doUnmock left the suite green, so the cleanup itself was ungated). This
+// test runs AFTER the mocked describe in file order and asserts the REAL
+// preset is back: sprint index 6 prescribes "2K Test". With the synthetic
+// preset leaked, this row would name "My Own Test" instead and go red.
+describe("Plan (the real presets are restored after the mocked describe)", () => {
+  it("an upcoming checkpoint names the REAL prescribed test again", async () => {
+    mockUsePlan({
+      state: "ready",
+      plan: {
+        planKey: "sprint",
+        doneN: 0,
+        sequence: realSequence("sprint", 0),
+      },
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    await renderPlan();
+
+    const row = document.querySelectorAll<HTMLElement>(".plan-row")[6]!;
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe("2K Test");
   });
 });
 
