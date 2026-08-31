@@ -32,6 +32,24 @@
 // asked to be checked, not trusted): `src/monitor/monitorRun.ts` and
 // `e2e/connected.spec.ts` are genuine, disclosed additions the brief's list
 // did not name.
+//
+// KNOWN EVASION SHAPES this gate does NOT catch (fix round 1/5, L-4 —
+// named rather than silently accepted, so a future tightening pass knows
+// where to look):
+//  1. A key held in a variable whose name isn't literally `key` escapes
+//     `INDIRECT_CALL` entirely. `e2e/connected.spec.ts:1294`'s own cleanup
+//     loop, `for (const k of keys) localStorage.removeItem(k);`, is this
+//     exact shape today — harmless here (the loop's own `keys` never
+//     contains the monitor-run key; that removal is the separate, literal
+//     `localStorage.removeItem("ergomatic.monitorRun")` two lines below,
+//     which IS caught), but nothing in this gate would notice if some
+//     FUTURE file laundered the key through an arbitrarily-named variable
+//     on purpose or by accident.
+//  2. `app/scripts/**` is not scanned at all (only `src/` and `e2e/`).
+//     Currently benign — `pm5-lab.ts`, the one file there that touches
+//     `localStorage`-adjacent browser APIs, never references this key —
+//     but a future dev-harness script under `scripts/` writing the key
+//     directly would get zero signal from either check in this file.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -122,16 +140,58 @@ const DIRECT_LITERAL = new RegExp(
 const INDIRECT_CALL = /localStorage\.(setItem|removeItem)\(\s*key\b/;
 
 /**
- * True when `source` writes or removes the durable key, by any of the
- * three shapes this repo actually uses (verified against the current tree,
- * not invented): the direct constant, the direct literal string (single-
- * or multi-line — `\s*` already spans newlines), or `design.spec.ts`/
- * `screenshots.spec.ts`'s own `page.evaluate(({key, value}) =>
- * localStorage.setItem(key, value), {key: MONITOR_RUN_KEY, ...})` idiom,
- * where the call site and the key literal sit on different lines.
+ * Task 6 fix round, M-2 (reviewer finding, reproduced 4x across Tasks
+ * 4-5's own record before this gate existed): `monitorRun.ts`'s exported
+ * legacy `saveMonitorRun`/`clearMonitorRun` (allowlisted above precisely
+ * BECAUSE they hold the only raw key writes left outside the store) are
+ * themselves a realistic bypass — any NEW production door calling one of
+ * them writes/removes the durable key exactly as directly as a raw
+ * `localStorage.setItem` would, and the checks above give it no signal at
+ * all, since neither function's own call site ever mentions `setItem`,
+ * `removeItem`, `MONITOR_RUN_KEY`, or the literal string. `\b` on both
+ * sides so this matches a bare call (`saveMonitorRun(x)`) without also
+ * matching an unrelated identifier that merely CONTAINS one of these
+ * names as a substring.
  */
-function writesOrRemovesKey(source: string): boolean {
-  if (DIRECT_IDENTIFIER.test(source) || DIRECT_LITERAL.test(source)) {
+const LEGACY_WRITER_CALL = /\b(saveMonitorRun|clearMonitorRun)\s*\(/;
+
+/**
+ * Strips `//` line comments and `/* *\/` block comments before any pattern
+ * below runs. Needed specifically for `LEGACY_WRITER_CALL`: this repo's
+ * own prose comments name `` `clearMonitorRun()` `` verbatim in at least
+ * four production files (`Today.tsx`, `LogSession.tsx`,
+ * `WorkoutDetail.tsx`, `useStartWorkout.ts` — each explaining that the
+ * file does NOT call it any more), and a naive scan false-flagged exactly
+ * those four the first time this check was run (see M-2's own fix-round
+ * report entry). A crude regex stripper, not a real tokenizer — it cannot
+ * tell a `//` inside a string literal from a real comment start, which is
+ * a known, accepted limitation for a gate this narrow (see this file's
+ * own header comment on other known evasions).
+ */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+}
+
+/**
+ * True when `source` writes or removes the durable key, by any of the
+ * three raw shapes this repo actually uses (verified against the current
+ * tree, not invented): the direct constant, the direct literal string
+ * (single- or multi-line — `\s*` already spans newlines), or
+ * `design.spec.ts`/`screenshots.spec.ts`'s own `page.evaluate(({key,
+ * value}) => localStorage.setItem(key, value), {key: MONITOR_RUN_KEY,
+ * ...})` idiom, where the call site and the key literal sit on different
+ * lines — OR by calling the legacy `saveMonitorRun`/`clearMonitorRun`
+ * writers directly (M-2 above). Comments are stripped first (see
+ * `stripComments`'s own doc comment for why that specifically matters
+ * here).
+ */
+function writesOrRemovesKey(rawSource: string): boolean {
+  const source = stripComments(rawSource);
+  if (
+    DIRECT_IDENTIFIER.test(source) ||
+    DIRECT_LITERAL.test(source) ||
+    LEGACY_WRITER_CALL.test(source)
+  ) {
     return true;
   }
   return (

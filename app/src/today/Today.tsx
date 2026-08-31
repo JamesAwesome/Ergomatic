@@ -366,29 +366,40 @@ export default function Today() {
   // rewiring is expected to consume `anyLiveSession()` mechanically where
   // that distinction doesn't matter; this one 7A-owned line does not.
   //
-  // Task 6 close-out ruling (hand-off store plan, 2026-08-30): this is the
-  // THIRD legacy `loadMonitorRun()` read the review named alongside
-  // `monitorRunState()`/`anyLiveSession()` (ROADMAP.md's AUD-016 item) —
-  // swept and LEFT AS-IS, not rerouted onto `handoffStore`. Two reasons,
-  // not one: (1) `todayGuard.pin.test.ts` pins this exact block BYTE-
-  // IDENTICAL as Phase 7B's own named reference pattern for "read the
-  // record directly, never through a collapsing helper" — routing it
-  // through the store would be exactly the kind of helper-indirection that
-  // pin exists to catch, and its own header says a legitimate change here
-  // updates the pin "in the same commit and say why," which this ruling
-  // does not do. (2) It reads nothing the store's own write-side invariants
-  // govern: this is a plain GETTER read (never `setItem`/`removeItem`), it
-  // fires from a `useEffect` with an empty dependency array (never during
-  // render — the only case §8's hydration model actually forbids, "never
-  // during render... the malformed-bytes self-clear anti-pattern"), and it
-  // participates in none of §4/§5's destroyer census (only `retire`
-  // destroys; this function destroys nothing). The one real gap this
-  // leaves — a durable-write-denied LIVE monitor session is invisible to
-  // this specific guard, where the store's memory tier would have seen it
-  // — is a narrower instance of a durability risk this guard already
-  // carried before the store existed (a live run whose EVERY durable write
-  // fails was never visible to a durable-only read); not worsened by this
-  // branch, and not chased further here.
+  // Task 6 close-out ruling (hand-off store plan, 2026-08-30; reworded at
+  // fix round 1/5, L-2): this is the THIRD legacy `loadMonitorRun()` read
+  // the review named alongside `monitorRunState()`/`anyLiveSession()`
+  // (ROADMAP.md's AUD-016 item) — swept and LEFT AS-IS, not rerouted onto
+  // `handoffStore`. The load-bearing reason is `todayGuard.pin.test.ts`'s
+  // own stated one (its "still reads the monitor record DIRECTLY, never
+  // through anyLiveSession()" test): "this guard needs a synchronous,
+  // un-hydrated, always-fresh raw read at effect time... a genuinely
+  // different call from anything the store's `read()` does." Rerouting it
+  // onto `handoffStore` would be exactly the helper-indirection Phase 7B's
+  // own pin (this exact block, BYTE-IDENTICAL) exists to catch, and its own
+  // header says a legitimate change here updates the pin "in the same
+  // commit and say why," which this ruling does not do.
+  //
+  // **CORRECTED (fix round 1/5, L-2): §8 and §4/§5 do not SANCTION this
+  // read — they only fail to FORBID it.** §8's render-time ban and §4/§5's
+  // destroyer census are both silent on a plain, non-render GETTER outside
+  // the store; that silence is not an endorsement, only an absence of a
+  // rule this read happens to fall outside of (never `setItem`/
+  // `removeItem`; fired from a `useEffect` with an empty dependency array,
+  // never during render; destroys nothing, so it is not itself a census
+  // row). The actual justification for KEEPING it is the pin above, not
+  // these sections.
+  //
+  // The one real gap this leaves is NEWLY OBSERVABLE, DELIBERATELY NOT
+  // CONSULTED — not "not worsened by this branch": pre-store, a monitor
+  // session whose every durable write failed left no record ANYWHERE a
+  // durable-only read like this one could have found, live or not — the
+  // gap was unreachable in practice. Post-store, that same session's
+  // record exists, live, in the store's own memory tier, and this guard
+  // still reads only the durable tier — the gap is now a real,
+  // in-principle-visible state this reader chooses not to look at, per the
+  // pin's own reasoning above, rather than a state that could not have
+  // existed either way. Not chased further here.
   useEffect(() => {
     const draft = loadDraft();
     const monitorRun = loadMonitorRun();

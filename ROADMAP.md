@@ -586,17 +586,34 @@ rower's work silently.
         `connected.spec.ts` — a genuine fourth writer this close-out found
         that the close-out brief did not name) writes or removes the
         durable key; mutation-probed twice (a non-store src file, a
-        non-allowlisted e2e spec), both go red, both revert clean. The
-        full spec §10 mutation ledger is now consolidated (Tasks 1-5's own
-        recorded mutations, plus four run fresh at close-out: row 2's
-        post-release window-predicate gate, row 5's
-        tombstone-refusal-bumps-revision leg, row 11's revision-reuse, and
-        row 11's tier-precedence reorder — the last confirmed GENUINELY
-        UNREACHABLE at the store's own hydration guard by construction,
-        matching Task 2's own disclosed limitation; row 8's actual
-        guarantee is independently mutation-tested at the producer-purity
-        layer instead, Task 1's probes 1-2 and Task 3's mutation 2) — full
-        table in
+        non-allowlisted e2e spec), both go red, both revert clean.
+        **Fix round 1/5 (2026-08-30) widened it after review:** the
+        realistic bypass — a new door calling the legacy, allowlisted
+        `saveMonitorRun`/`clearMonitorRun` directly, which held the only
+        raw key writes and gave the ORIGINAL gate zero signal, exactly the
+        regression already reproduced 4x across Tasks 4-5's own record —
+        now gets its own check (comment-stripped first, so the four
+        production files that merely NAME `clearMonitorRun()` in prose
+        don't false-flag); mutation-probed (a `saveMonitorRun` call added
+        to a non-store file), goes red, reverts clean. The full spec §10
+        mutation ledger is now consolidated (Tasks 1-5's own recorded
+        mutations, plus six run fresh at close-out and its fix round: row
+        2's post-release window-predicate gate, row 5's
+        tombstone-refusal-bumps-revision leg (plus a spoken skip — `read`/
+        `currentUnretired` never consult tombstones in this
+        implementation; Task 2's own `retire`-nulls-`current` mutation is
+        row 5's real detector), row 11's revision-reuse, row 11's
+        module-boundary writes (both checks), and **row 11's
+        tier-precedence reorder — CORRECTED at fix round 1/5: the
+        single-line mutation is a genuine non-bite, but the row's
+        invariant IS pinned by a reachable COMPOUND mutation (removing the
+        `if (hydrated) return` re-entrancy guard together with forcing the
+        population guard true) — 6 files / 40 tests fail, including
+        `useMonitorSession.test.ts`'s "S1 — the write-count witness"
+        (`expected 2 to be 6`) and `LogSession.test.tsx`'s claim-race test
+        (`retiredRevision` 1→0, `superseded` true→false). Producer purity
+        (Task 1/3's own mutations) is a DIFFERENT invariant and is no
+        longer cited here as a substitute.**) — full table in
         `.superpowers/sdd/2026-08-30-handoff-store/task-6-report.md`.
         `pnpm screenshots` now passes 83/83 (the stale `v0.26.0`
         release-notes pin bumped to this branch's own `v0.27.0` tag).
