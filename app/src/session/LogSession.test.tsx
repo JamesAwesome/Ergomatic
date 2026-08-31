@@ -32,6 +32,7 @@ import {
   connectGuardStage,
   loadMonitorRun,
   saveMonitorRun,
+  MONITOR_RUN_KEY,
   type MachineSummaryDetail,
   type MonitorRun,
 } from "../monitor/monitorRun";
@@ -2767,6 +2768,63 @@ describe("LogSession: monitorModeRun logs which condition missed onto the log-do
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=monitor");
     monitorModeRun(search, MONITOR_WORKOUT_ID);
+    const entries = missEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "no-run",
+    });
+  });
+
+  // §10 ROW 9's COUNTED LOSS, AS A SEAM (final fix round, 2026-08-30;
+  // antagonist §10 audit, F-3a). The "no record at all" test directly
+  // above starts from an EMPTY store — downstream of every producer — so
+  // it proves the door's first condition and nothing about the residual
+  // §9.2 names: "reload during a durable-tier failure loses the session;
+  // counted via the `no-run` door miss." That sentence spans a producer
+  // (a commit whose durable write is denied), a process boundary, and a
+  // reader; RF24's rule is that ONE test has to start before the producer
+  // and assert after the reader, or the claim is untested however green
+  // both halves are.
+  it("SEAM — denied durable write, then a real reload: the door that FOUND the session before finds nothing after, and COUNTS the miss as no-run (§9.2's residual, asserted as itself)", async () => {
+    const { run } = buildMonitorFixture();
+    const search = new URLSearchParams("from=monitor");
+
+    // THE PRODUCER, upstream: a commit whose durable write is refused, so
+    // the record exists in the memory tier ALONE — the shape a reload
+    // cannot survive.
+    const storeBefore = await import("../monitor/handoffStore");
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("simulated quota failure");
+      });
+    const committed = storeBefore.commit(run.startedAt, null, run);
+    setItemSpy.mockRestore();
+    expect(committed).toStrictEqual({
+      accepted: true,
+      revision: 0,
+      verdict: "failed",
+    });
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+
+    // BEFORE THE RELOAD the door FINDS it — the half that makes the
+    // assertion after the reload mean something. Without this leg, a door
+    // that could never find a memory-only record at all would pass the
+    // "counts the miss" assertion below for entirely the wrong reason.
+    const { monitorModeRun: runBeforeReload } = await import("./LogSession");
+    expect(runBeforeReload(search, MONITOR_WORKOUT_ID)).toStrictEqual(run);
+    expect(missEntries()).toHaveLength(0);
+
+    // THE RELOAD: a genuinely fresh module graph (the store's memory tier
+    // is process-scoped, §9.2), against a durable tier that never received
+    // anything.
+    vi.resetModules();
+    const { monitorModeRun: runAfterReload } = await import("./LogSession");
+
+    // THE COUNTED LOSS: the session is gone, and the door SAYS SO in the
+    // one place the residual promises it will — not silently.
+    expect(runAfterReload(search, MONITOR_WORKOUT_ID)).toBeNull();
     const entries = missEntries();
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({

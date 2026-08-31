@@ -85,8 +85,26 @@ writes `MONITOR_RUN_KEY` or holds a module-level run.
   is no `lastAcceptedRevisionRef` to diverge from; `expectedRevision`
   comes from the mount snapshot; a refusal is receipted
   (`commit-refused`) and degrades to the log door's own counted miss.
-  No third committer exists; any new one needs its discipline written
-  here first.
+  **A THIRD EXCEPTION, homed here at the final fix round (2026-08-30,
+  controller ruling, after the antagonist proved it undocumented and
+  unpinned in either direction): the CREATE path assigns `runRef`
+  unconditionally, refusal included** (`useMonitorSession.ts`'s
+  `createMonitorRun` commit). Its discipline, stated: a create is
+  `expectedRevision: null` and SEEDS `lastAcceptedRevisionRef` rather
+  than reading it, so on refusal (a tombstoned key, or a second key
+  against §1's invariant) the ref stays `null` while `runRef` holds the
+  new run — the one place in this design where producer and store may
+  legally disagree. It is bounded to the create-refusal path and it is
+  deliberate: the alternative (no `runRef`) is a rowing session with no
+  in-memory record at all, a strictly worse loss than a session whose
+  UI works while its store entry does not exist. The divergence is
+  receipted at the refusal and surfaces at release as
+  `verifyHandoffWritable`'s `cachedVerdict === undefined` branch, which
+  releases rather than holding (nothing is open to hold a write FOR).
+  Reachability is near-zero: it needs a full reconnect to a tombstoned
+  key inside the tombstone's process life. No FOURTH committer or
+  exception exists; any new one needs its discipline written here
+  first.
 - **`retryDurable(sessionKey)` (delta pass kill):** Retry's primitive.
   Re-attempts the durable write of the CURRENT memory entry; updates
   `durableRevision` and the cached verdict; **never bumps `revision`** —
@@ -308,6 +326,29 @@ surprise). The heal is receipted; Retry then succeeds instantly.
    assumption; a stale same-tab memory copy outranks a second tab's
    fresher durable write for the same key.
 
+## §9A The receipts vocabulary (normative)
+
+The store's ONE side channel. Nothing here returns receipts from a
+method; every one goes through `setReceiptChannel`, and the hook pipes
+them into the diagnostic ring prefixed `store-receipt:<kind>` (never
+`handoff-*` — that namespace belongs to the hook's own hold entries).
+Enumerated because §10's exit criteria require it; the union itself
+lives in `handoffStore.ts` and this table is normative over it.
+
+| kind | emitted when | what it proves |
+| --- | --- | --- |
+| `commit-accepted` | every accepted `commit`, carrying `{sessionKey, revision, verdict}` | the memory tier took the write, and what the DURABLE attempt did (`saved` / `saved-without-series` / `failed`). The `failed` case is §9.2/§9.5's counter — the record is memory-only from here |
+| `commit-refused` | a `commit` refused `stale` or `retired`, with expected vs current revision | the CAS or the tombstone held; §1's "a refusal bumps nothing". Its presence is what distinguishes a refusal from a silent no-op |
+| `store-second-key-refused` | a create-commit while a DIFFERENT key is unretired | §1's single-unretired-session invariant firing — the counted impossible, never silent coexistence |
+| `retry-durable` | every `retryDurable`, with the fresh verdict | Retry re-attempted the durable write; carries NO revision, so it can never be mistaken for a commit (§1: "never bumps `revision`") |
+| `claim` | a consumer's commit effect registers `{sessionKey, renderedRevision}` | the snapshot the screen rendered is on record; claiming cannot fail (§6), so this is a state record, not an outcome |
+| `retire` | once per entry a `retire` set actually found, with authorized vs retired revision, `superseded`, claim state, and reason | the ONE destructive operation ran, on WHICH key, under WHOSE authorization. `superseded: true` is §1's "proceeds and records" case; `claimState: "claimed"` is §9.7's abandoned-claim drop |
+| `handoff-dropped` (`reason: "richer-at-save"`) | alongside (never instead of) a `save-success` retire whose current revision is richer than the claim | §9.4: the rower saved the numbers the screen showed and a richer revision was dropped doing it — counted, per ratified condition 1 |
+| `hydration-malformed` | at most once per process, when hydration finds unparseable durable bytes (preview + length, never the full payload) | §8: the key is treated as ABSENT and the bytes are LEFT ALONE for a later retire/commit to clear |
+| `storage-getter-error` (`get` \| `remove`) | the `localStorage` getter throws on hydration's read, or on a retire's physical removal | §1's WHATWG primary: the getter is the real hazard. `set` is deliberately absent — a failed write is already reported by its own `verdict: "failed"` |
+| `stage-retire-replaced` | `stageRetire` overwrites a non-empty staged set | an authorization was replaced before ever being acted on — nothing was destroyed in either tier |
+| `staged-retire-discarded` | `discardStagedRetire` (cancel, `programDropped`, the confirm panel's own Cancel) | an attempt died with an authorization still pending; distinct from the armed path's silent `takeStagedRetire`, whose own `retire` receipt tells that story |
+
 ## §10 The gate (self-contained; RF24-shaped; mutations of invariants)
 
 All rows start above the producer (replay harness over real capture
@@ -315,12 +356,34 @@ bytes, virtual clock, injected schedule; PAYLOAD-INSPECTING storage
 stubs — deny by content, never by count alone; the existing spy already
 receives the serialized value).
 
+**Scope of the real-bytes binding (controller ruling, 2026-08-30, at the
+final fix round — the antagonist read the header above as binding on
+every row and reported row 7's synthetic fixtures as a deviation).** The
+real-capture requirement binds the rows whose invariant involves WIRE
+SEMANTICS — what a frame means, when it arrives, how the machine's own
+numbers reconcile (rows 3, 8, 12 and the burst orderings of row 2).
+Storage-denial semantics are wire-independent: a `QuotaExceededError` on
+a `setItem` behaves identically whatever produced the record, so row 7's
+four shapes stay on synthetic fixtures by ruling, not by omission. A row
+that mixes the two (a denial landing on a specific wire-produced write,
+as row 8 does) takes the real-bytes requirement.
+
 1. **Guard sees what acceptance destroys:** unretired entry
    (memory-only / durable-only / both tiers, ONE key) → Connect and
    Start stage Replace with the shipped singular copy; armed retires the
    staged entry with its receipt; a superseded revision proceeds +
    receipt. Mutations: guard reads one tier → fails; armed retires
    without the staged set (unbound) → the receipt assertion fails.
+   **Note on the tier matrix (ANT-F7, 2026-08-30): it predates the
+   single-slot store and one of its three cells no longer names a
+   distinct state.** Post-hydration, "durable-only" and "both tiers" are
+   the SAME store state — hydration lifts a durable entry into `current`
+   at revision 0, and `read`'s precedence then returns the memory entry
+   in both cases. The genuine distinction the row still gates is
+   memory-only (a live record whose durable writes were denied — §5's
+   product gain) versus a hydrated one. The three-way wording stays as
+   history rather than being rewritten, with this sentence as its
+   correction.
 2. **Producer update after release, four orderings** (before/after
    navigation × before/after teardown) — all reach `commit`; the
    consumer's snapshot unaffected; receipts show accepted revisions.
@@ -365,8 +428,18 @@ receives the serialized value).
    `main`'s `recordActual` (`origin/main:monitorRun.ts:832`) before the
    rewrite — demonstrated on the fresh branch's first commit.
 9. **Reload residuals** asserted as residuals (durable serves;
-   denied+reload = counted loss; Today's memory-only row present before
-   reload, absent + receipted after).
+   denied+reload = counted loss, ONE test spanning the producer's denied
+   commit, the reload, and the log door's `no-run` miss — RF24's shape;
+   Today's memory-only row present before reload, absent after).
+   **RECONCILED with §9.5's committed amendment (ANT-F3b, 2026-08-30):
+   "receipted after" is satisfied by the PRE-reload
+   `commit-accepted{verdict:"failed"}` receipt, not by a hydration-time
+   receipt.** The design ruled that out — claims are process-scoped, so a
+   fresh process has nothing to detect the absence against — and this row
+   asked for it anyway. What a test may assert about receipts here is
+   forensic evidence captured BEFORE the reload; the vanish itself is
+   gated by the DOM pair (row present, then absent), never by a receipt
+   the reloaded process was never going to emit.
 10. **Abandon path:** claim, unmount without saving, next acceptance →
     per-entry receipt counts claimed-not-consumed.
 11. **Invariant mutations, each with its named detector:** reuse a
