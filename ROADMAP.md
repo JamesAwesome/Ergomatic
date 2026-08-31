@@ -733,8 +733,13 @@ a hand from us.
 
 ## Wave E — The Concept2 logbook
 
-**Status:** Opens 2026-08-29 (James: _"we can open the logbook Saturday"_).
-Interleaved — it runs on its own date rather than in the F→A→D→B+C line. **M.**
+**Status:** OPEN 2026-08-31 (James: _"we can open the logbook Saturday"_;
+opened at the brainstorm two days later). Interleaved — it runs on its own
+date rather than in the F→A→D→B+C line. **Scope widened at open (James,
+2026-08-31): the in-app "Connect to Concept2" surface is IN** — manual
+per-row send, monitor-connected `finished` rows only; auto-upload is a
+named follow-on phase. Spec:
+`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`. **M→L.**
 
 **Goal:** the first contact with the authority this project has been reasoning
 about for two phases without ever talking to it.
@@ -763,7 +768,16 @@ oracle that shares your definition is a mirror.** Before trusting any number
 this wave pulls back, state what it measures and confirm it is the same thing we
 are trying to be right about.
 
-**Exit:** to be transcribed from RC exit criterion (d) verbatim at wave open.
+**Exit — RC exit criterion (d) transcribed VERBATIM at open, per the close
+gate's binding:** _"a row posted to the Concept2 sandbox comes back through
+`export/` matching what we stored, or the reason it cannot is documented."_
+Plus, from the widened scope: a linked user sends an eligible row from the
+app and C2's result id is stored on it, with the duplicate (409) and failure
+states each observed for real at least once; `weight_class` asked exactly
+once, at link time, H/L, nothing more (minimal-PII kept); RC-9(b)'s live
+ring verdict lands; and the dedup-granularity and verification-code
+questions each carry a measured answer in PR0's report — "unknown" leaves
+the wave open.
 
 ---
 
