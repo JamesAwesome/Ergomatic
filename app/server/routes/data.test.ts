@@ -1904,6 +1904,141 @@ describe("GET/POST /api/logs", () => {
     expect(got.body.machineSummary).toBeNull();
   });
 
+  // Wave E PR1 Task 2 (2026-08-31-concept2-logbook-design.md §Stored
+  // shapes, TRIAD): `completedAt`/`tz`, optional/nullable, same
+  // additive-only-between-tags posture as every other field on this
+  // route. `completedAt` is the run's own close stamp (C2's `date` is the
+  // END of the workout — spec anchor K3); `tz` is checked for IANA
+  // membership, not merely "Intl accepts it" (see `tzError`'s own
+  // comment in data.ts).
+  it("accepts a valid completedAt + tz and round-trips both through GET", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      completedAt: "2026-08-30T12:00:00.000Z",
+      tz: "America/New_York",
+    });
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBe(
+      new Date("2026-08-30T12:00:00.000Z").toISOString(),
+    );
+    expect(got.body.tz).toBe("America/New_York");
+  });
+
+  it("POST with neither completedAt nor tz still 201s and stores both null (pre-PR1 body shape, additive-only between tags)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send(validLogBody());
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBeNull();
+    expect(got.body.tz).toBeNull();
+  });
+
+  it.each([
+    ["not-a-date", "not-a-date"],
+    ["a non-ISO human date string", "March 5, 2020"],
+    ["a number, not a string", 12345],
+  ])(
+    "rejects a malformed completedAt (%s) with 400, field named",
+    async (_label, value) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        completedAt: value,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("completedAt");
+      expect(res.body.error).toBe(
+        "completedAt must be an ISO 8601 timestamp string or null",
+      );
+    },
+  );
+
+  // RF25's shape (a wrong device clock must never cost the rower the
+  // save): a PARSEABLE stamp outside the plausible band is coerced to
+  // null, not rejected — the save still 201s and the upload mapping's own
+  // `loggedAt` fallback covers the missing stamp.
+  it("a parseable completedAt before 2020 is accepted with 201, stored as null (wrong device clock, not a client bug)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      completedAt: "2019-12-31T23:59:59.000Z",
+    });
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBeNull();
+  });
+
+  it("a parseable completedAt more than 48h in the future is accepted with 201, stored as null (wrong device clock, not a client bug)", async () => {
+    const app = appFor(makeStores());
+    const farFuture = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      completedAt: farFuture,
+    });
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBeNull();
+  });
+
+  it("accepts an explicit null completedAt", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        completedAt: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it.each([
+    ["an unknown zone name", "Not/AZone"],
+    ["a raw UTC offset, not a zone name", "+05:00"],
+    [
+      "a legacy alias Intl also accepts but IANA doesn't canonically list",
+      "GMT+5",
+    ],
+  ])(
+    "rejects an invalid tz (%s) with 400, field named",
+    async (_label, value) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        tz: value,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("tz");
+      expect(res.body.error).toBe("tz must be an IANA timezone name or null");
+    },
+  );
+
+  it("accepts tz: 'UTC' (the client's resolvedOptions().timeZone can legitimately produce this)", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        tz: "UTC",
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts an explicit null tz", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        tz: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
   it("rejects an invalid pain value with 400, still naming the field, when pain is present", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {

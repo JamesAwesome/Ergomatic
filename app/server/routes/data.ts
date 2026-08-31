@@ -237,6 +237,57 @@ function notesError(value: unknown): string | null {
   return null;
 }
 
+// Wave E PR1: completedAt is the run's own close stamp (C2's `date` is the
+// END of the workout — spec anchor K3). Malformed input is a client BUG and
+// 400s; a PARSEABLE stamp outside the plausible band is a wrong device
+// clock, and the save must survive it — the caller coerces to null (the
+// column is nullable and the upload mapping already has a loggedAt
+// fallback). This band is a save-time sanity bound only; C2's own
+// future-date bound applies at UPLOAD time to a different instant.
+const COMPLETED_AT_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const COMPLETED_AT_MIN_MS = Date.parse("2020-01-01T00:00:00Z");
+const COMPLETED_AT_FUTURE_SKEW_MS = 48 * 3600 * 1000;
+type CompletedAtCheck =
+  { ok: true; value: Date | null } | { ok: false; message: string };
+function checkCompletedAt(
+  value: unknown,
+  now: () => number = Date.now,
+): CompletedAtCheck {
+  if (value === undefined || value === null) return { ok: true, value: null };
+  if (
+    typeof value !== "string" ||
+    !COMPLETED_AT_RE.test(value) ||
+    Number.isNaN(Date.parse(value))
+  ) {
+    return {
+      ok: false,
+      message: "completedAt must be an ISO 8601 timestamp string or null",
+    };
+  }
+  const ms = Date.parse(value);
+  if (ms < COMPLETED_AT_MIN_MS || ms > now() + COMPLETED_AT_FUTURE_SKEW_MS) {
+    return { ok: true, value: null }; // wrong clock: drop the stamp, keep the save
+  }
+  return { ok: true, value: new Date(ms) };
+}
+
+// IANA membership, not "Intl accepts it" — Intl.DateTimeFormat also accepts
+// offsets ("+05:00") and legacy aliases, and C2's `timezone` feeds their
+// date_utc derivation, so only canonical zone names (plus "UTC", which the
+// client's resolvedOptions().timeZone can legitimately produce) pass.
+export const IANA_ZONES = new Set<string>([
+  ...Intl.supportedValuesOf("timeZone"),
+  "UTC",
+]);
+export function tzError(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !IANA_ZONES.has(value)) {
+    return "tz must be an IANA timezone name or null";
+  }
+  return null;
+}
+
 // Bounds for a logged step: 30-600s/500m spans "sprinting" to "recovery
 // paddle"; spm 10..60 covers rest to a max-rate finish sprint; meters
 // mirrors validateSteps' distance-step bound; seconds caps at 4 hours.
@@ -1526,6 +1577,20 @@ export function createDataRouter({
       return;
     }
 
+    // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes,
+    // TRIAD): the client's MonitorRun.completedAt and IANA zone, same
+    // optional/nullable, field-named-400 pattern as every field above.
+    const completedAtCheck = checkCompletedAt(body.completedAt);
+    if (!completedAtCheck.ok) {
+      badRequest(res, completedAtCheck.message, "completedAt");
+      return;
+    }
+    const tzErr = tzError(body.tz);
+    if (tzErr) {
+      badRequest(res, tzErr, "tz");
+      return;
+    }
+
     const baselines = await stores.baselines.get(req.user!.id);
     const { id } = await stores.logs.create(req.user!.id, {
       workoutId,
@@ -1556,6 +1621,8 @@ export function createDataRouter({
       machineWorkMeters:
         (body.machineWorkMeters as number | null | undefined) ?? null,
       machineSummary: machineSummaryResult.summary,
+      completedAt: completedAtCheck.value,
+      tz: (body.tz as string | null | undefined) ?? null,
     });
     res.status(201).json({ id });
   });
