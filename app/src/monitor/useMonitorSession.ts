@@ -937,6 +937,11 @@ export interface MonitorSession {
    *  never sticks, and never needs clearing back to `false` itself (the
    *  component it's read from unmounts right after). */
   programDropped: boolean;
+  /** Wave F PR 1 Task 2 (design spec 2026-08-31-lifecycle-design.md §1): a
+   *  record-derived mirror set only by the live-drop close, in the SAME
+   *  patch that flips the phase — spec §1 Mechanism; null everywhere
+   *  else. */
+  closeReason: CloseReason | null;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
@@ -1433,6 +1438,11 @@ interface SessionState {
    *  truth, `state` is what React reads" split every other field in this
    *  interface already follows. */
   programDropped: boolean;
+  /** `MonitorSession.closeReason`'s own doc comment carries the full
+   *  reasoning — mirrored here as internal state for the same "the ref is
+   *  truth, `state` is what React reads" split every other field in this
+   *  interface already follows. */
+  closeReason: CloseReason | null;
 }
 
 const INITIAL_STATE: SessionState = {
@@ -1448,6 +1458,7 @@ const INITIAL_STATE: SessionState = {
   runOpen: false,
   frameSilence: false,
   programDropped: false,
+  closeReason: null,
 };
 
 /** Everything a rejected `program()` can throw, mapped onto the typed
@@ -2910,13 +2921,41 @@ export function useMonitorSession(
       if (event.kind === "programDropped") {
         // RC-37 ([R5], design spec 2026-08-27-link-authority-design.md §1):
         // the detector fired — the PM5 already left the program it was
-        // holding (confirmed trigger: Menu at READY). Meaningful only
-        // pre-live, the same states Cancel itself is valid from
-        // (`cancel()`'s own `armed` check just below in this file) — a
-        // structural mismatch reported once a run is already live or ended
-        // is outside this task's own scope (the walk's trigger is READY,
-        // never a live session) and is left alone rather than guessed at.
+        // holding. `driver.ts`'s own armedWatch is independent of this
+        // hook's `phase` (it runs off raw wire ticks alone), so the SAME
+        // event can arrive at READY (Menu press, the walk's own confirmed
+        // trigger — handled below, unchanged) or mid-row (the live arm
+        // immediately below). Wave F PR 1 Task 2 (design spec
+        // 2026-08-31-lifecycle-design.md §1, §0.2): the live case is no
+        // longer left alone — §0.2 falsifies the premise an earlier
+        // revision of this comment scoped it out on.
         const phase = stateRef.current.phase;
+        if (phase === "live") {
+          // Spec §1 (lifecycle design, rev 4): the erg dropped its own
+          // program mid-row. A third endByMachine-shaped close: keep what
+          // was rowed, no terminate (RC-37 ruling — the machine already
+          // left), no holds (there will never be another boundary, and a
+          // burst can neither arrive nor be stored for this close reason),
+          // synchronous verify.
+          const run = runRef.current;
+          if (run !== null && run.completedAt !== null) return; // P3b pin
+          closeRecord(true, "program-dropped");
+          const { handoffHeld, holdError } = noHoldCloseVerdict(false);
+          // closeReason rides the SAME patch as the phase flip so no frame
+          // can render "ended" without it (review P1-1's transport).
+          // programDropped stays false: that flag is the pre-row exit
+          // signal and would arm ConnectedInterstitial's onExit effect
+          // against this navigation.
+          update({
+            phase: "ended",
+            endedBy: "machine",
+            closeReason: "program-dropped",
+            handoffHeld,
+            holdError,
+            runOpen: false,
+          });
+          return;
+        }
         if (phase !== "programming" && phase !== "ready") return;
         // [R5], James's own words: "Loose any new banners. Just take it
         // back here and remember any nudges." Exit exactly like Cancel
@@ -3126,6 +3165,8 @@ export function useMonitorSession(
       update,
       withSeries,
       applyProducerCommit,
+      closeRecord,
+      noHoldCloseVerdict,
     ],
   );
 
@@ -4141,6 +4182,7 @@ export function useMonitorSession(
     runOpen: state.runOpen,
     frameSilence: state.frameSilence,
     programDropped: state.programDropped,
+    closeReason: state.closeReason,
     connect,
     program,
     endSession,

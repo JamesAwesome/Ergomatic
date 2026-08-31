@@ -9,12 +9,19 @@ import {
   WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
 import { buildTerminate } from "../../domain/monitor/pm5/commands.js";
-import { buildGeneralStatusBytes } from "../../domain/monitor/pm5/statusFrames.js";
+import {
+  buildGeneralStatusBytes,
+  buildSplitIntervalDataBytes,
+  buildAdditionalSplitIntervalDataBytes,
+} from "../../domain/monitor/pm5/statusFrames.js";
 import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
 import {
   ADDITIONAL_STATUS_1_UUID,
+  ADDITIONAL_STATUS_2_UUID,
+  ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
+  SPLIT_INTERVAL_DATA_UUID,
   TRANSMIT_CHARACTERISTIC_UUID,
 } from "../../domain/monitor/pm5/uuids.js";
 import {
@@ -5700,6 +5707,458 @@ describe("RC-37: the programDropped consumer guard, outside programming/ready", 
     expect(result.current.endedBy).toBe("user");
     expect(result.current.programDropped).toBe(false);
     expect(loadMonitorRun()).toBeNull();
+  });
+});
+
+// Wave F PR 1 Task 2 (design spec 2026-08-31-lifecycle-design.md §1,
+// "Mechanism — reuse the ENDED path, not the READY exit"): the LIVE arm of
+// `programDropped` — the erg dropping its own program MID-ROW, not at
+// READY. `driver.ts`'s own armedWatch (RC-37's mechanism, immediately
+// above) is entirely independent of this hook's own `phase`: it fires off
+// raw wire ticks alone, so a genuine structural mismatch can still land
+// while the hook's own state reads `"live"`. A hand-rolled stub transport
+// is required for the identical reason the RC-37 block above needs one —
+// `transports/fake.ts` derives its armed structure honestly from whatever
+// program is armed and cannot be scripted to report a wrong one.
+describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-08-31-lifecycle-design.md §1)", () => {
+  /** A minimal hand-rolled `Transport` — the RC-37 block's own
+   *  `rawTransport()`, redeclared here per this file's own
+   *  per-describe-block convention (no cross-describe-block helper
+   *  sharing — see that block's own doc comment). */
+  function rawTransport(): Transport & {
+    notify(uuid: string, bytes: Uint8Array): void;
+    writes: { uuid: string; bytes: Uint8Array }[];
+  } {
+    const subs = new Map<string, Set<(bytes: Uint8Array) => void>>();
+    const writes: { uuid: string; bytes: Uint8Array }[] = [];
+    return {
+      writes,
+      scan: () => Promise.resolve([{ id: "stub", name: "PM5 STUB" }]),
+      connect: () => Promise.resolve(),
+      write(uuid, bytes) {
+        writes.push({ uuid, bytes });
+        return Promise.resolve();
+      },
+      subscribe(uuid, cb) {
+        let set = subs.get(uuid);
+        if (!set) {
+          set = new Set();
+          subs.set(uuid, set);
+        }
+        set.add(cb);
+        return () => set!.delete(cb);
+      },
+      disconnect: () => Promise.resolve(),
+      onDisconnect: () => () => undefined,
+      notify(uuid, bytes) {
+        for (const cb of subs.get(uuid) ?? []) cb(bytes);
+      },
+    };
+  }
+
+  /** A single 60s/time interval, matching RC-37's own `RAW_MINIMAL_PROGRAM`
+   *  shape — one interval is all leg (a) needs to record "≥1 completed
+   *  interval actual". */
+  const LIVE_DROP_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+
+  /** The healthy armed readback for `LIVE_DROP_PROGRAM` — session 4a's own
+   *  TIME-interval-0 encoding (`60s -> 6000`, duration type 0), same as
+   *  the RC-37 block's own `armedStatus()`. */
+  function armedStatus(): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+  }
+
+  /** The rower's first pull — flywheel evidence declared honestly
+   *  (`rowingState: 1` decodes to `rowingActive: true`, `pm5/parse.ts`),
+   *  which is what the hook's own READY -> LIVE gate requires
+   *  (`useMonitorSession.ts`'s "FIRST ROWING FRAME WITH FLYWHEEL EVIDENCE"
+   *  comment: a rowing-mapped state, the machine's own Active declaration,
+   *  and banked distance — all three). */
+  function liveFrame(
+    elapsedSeconds: number,
+    distanceMeters: number,
+  ): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds,
+      distanceMeters,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      rowingState: 1,
+      strokeState: 1,
+      totalWorkDistanceMeters: distanceMeters,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+  }
+
+  /** A WaitToBegin (armed) readback holding a structure that does NOT
+   *  match `LIVE_DROP_PROGRAM` — the same "empty arm" positive shape the
+   *  RC-37 block's own `wrongArmedStatus()` carries (session 4a:
+   *  workoutType=1/durationRaw=0/durationType=128). `elapsedSeconds`/
+   *  `distanceMeters` are the CALLER's to hold at the run's last real
+   *  reading (never zeroed) on purpose: a genuine Terminate->Rearm cycle
+   *  DOES reset these on the wire, but zeroing them here would ALSO
+   *  satisfy `continuity.ts`'s own reset signature (TWD+elapsed+distance
+   *  all strictly BACKWARD in the same reading) and close the run through
+   *  that unrelated door before the structural mismatch this fixture
+   *  exists to test ever gets its 3 ticks. This fixture's only job is the
+   *  structural mismatch, in isolation. */
+  function wrongArmedStatus(
+    elapsedSeconds: number,
+    distanceMeters: number,
+  ): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds,
+      distanceMeters,
+      workoutType: 1,
+      intervalType: 1,
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: distanceMeters,
+      workoutDurationRaw: 0,
+      workoutDurationType: 128,
+      dragFactor: 130,
+    });
+  }
+
+  /** 0x0037 — `driver.test.ts`'s own `splitHalf` shape, redeclared here
+   *  per this file's per-describe-block convention. */
+  function splitHalf(
+    boundary: number,
+    seconds: number,
+    meters: number,
+  ): Uint8Array {
+    return buildSplitIntervalDataBytes({
+      elapsedSeconds: seconds,
+      distanceMeters: meters,
+      splitIntervalTimeSeconds: seconds,
+      splitIntervalDistanceMeters: meters,
+      intervalRestTimeSeconds: 0,
+      intervalRestDistanceMeters: 0,
+      splitIntervalType: 0,
+      splitIntervalNumber: boundary,
+    });
+  }
+
+  /** 0x0038 — `driver.test.ts`'s own `asSplitHalf` shape, redeclared here
+   *  per this file's per-describe-block convention. */
+  function asSplitHalf(boundary: number, avgSpm: number): Uint8Array {
+    return buildAdditionalSplitIntervalDataBytes({
+      elapsedSeconds: 0,
+      splitIntervalAvgStrokeRate: avgSpm,
+      splitIntervalWorkHeartRateBpm: 150,
+      splitIntervalRestHeartRateBpm: 120,
+      splitIntervalAvgPace: 120,
+      splitIntervalTotalCalories: 0,
+      splitIntervalAvgCalories: 0,
+      splitIntervalSpeedMetersPerSecond: 0,
+      splitIntervalPowerWatts: 0,
+      splitAvgDragFactor: 130,
+      splitIntervalNumber: boundary,
+      // RC-8 (storage-spine design spec §3): the real machine reads 0 in
+      // 3448 of 3448 committed frames — same citation as the RC-37 block's
+      // own `asSplitHalf`-shaped fixtures elsewhere in this file.
+      ergMachineType: 0,
+    });
+  }
+
+  /** A hand-advanced ms clock for `DriverOptions.now` — `STRUCTURE_MISMATCH_
+   *  WINDOW_MS` needs REAL elapsed time between ticks, redeclared here per
+   *  this file's own per-describe-block convention (the RC-37 block's own
+   *  `manualClock`). */
+  function manualClock(startMs = 0): {
+    now: () => number;
+    advance(by: number): void;
+  } {
+    let ms = startMs;
+    return {
+      now: () => ms,
+      advance(by: number): void {
+        ms += by;
+      },
+    };
+  }
+
+  async function waitUntil(check: () => boolean, maxTicks = 50): Promise<void> {
+    for (let i = 0; i < maxTicks && !check(); i += 1) {
+      await Promise.resolve();
+    }
+  }
+
+  /** Denies every `localStorage.setItem` call for `MONITOR_RUN_KEY`
+   *  matching `predicate` against the parsed payload — the same
+   *  payload-inspecting idiom the hand-off store describe block's own
+   *  `installMonitorRunWriteDenial` uses, redeclared here per this file's
+   *  per-describe-block convention. Returns the restore function. */
+  function installMonitorRunWriteDenial(
+    predicate: (parsed: unknown) => boolean,
+  ): () => void {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (
+      this: Storage,
+      key: string,
+      value: string,
+    ): void {
+      if (key === MONITOR_RUN_KEY) {
+        const parsed: unknown = JSON.parse(value);
+        if (predicate(parsed)) {
+          throw new Error("simulated storage failure");
+        }
+      }
+      original.call(this, key, value);
+    };
+    return () => {
+      Storage.prototype.setItem = original;
+    };
+  }
+
+  /** Programs `LIVE_DROP_PROGRAM` through to `"ready"` on a raw stub
+   *  transport (the RC-37 block's own ack sequence: a refused prepare —
+   *  never-observed on hardware, `sendPrepare` swallows anything but a
+   *  disconnect — then the real send's own `"ok"` ack, then a fresh armed
+   *  readback for `verifyArmed`), then rows: one live frame carrying
+   *  banked distance (the hook's own READY -> LIVE gate) and one completed
+   *  interval actual over a real 0x0037/0x0038 pair — leg (a)'s own "≥1
+   *  completed interval actual". Returns once `phase === "live"` with the
+   *  actual recorded. */
+  async function driveLiveWithActual(
+    result: Session,
+    transport: ReturnType<typeof rawTransport>,
+  ): Promise<void> {
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // `maybeEmitFrame`'s own gate (`driver.ts:2133`): a `frame` event never
+    // fires until General Status AND both Additional Status characteristics
+    // have each been seen once — `driver.test.ts`'s own idiom for
+    // satisfying it with a stub transport, redeclared here. Without this,
+    // `liveFrame()` below is merged into `raw` but produces no `frame`
+    // event at all, and the hook's own READY -> LIVE gate (which reads
+    // only `frame` events) never runs.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    const sentCount = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const prepareChunkCount = buildTerminate()[0]!.length;
+    await act(async () => {
+      const start = sentCount();
+      const pending = result.current.program(LIVE_DROP_PROGRAM, TWO_IDENTITY);
+      await waitUntil(() => sentCount() > start);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "reject" }),
+      );
+      await waitUntil(() => sentCount() > start + prepareChunkCount);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "ok" }),
+      );
+      for (let i = 0; i < 50; i += 1) await Promise.resolve();
+      transport.notify(GENERAL_STATUS_UUID, armedStatus());
+      await pending;
+    });
+    expect(result.current.phase).toBe("ready");
+
+    act(() => {
+      transport.notify(GENERAL_STATUS_UUID, liveFrame(30, 100));
+    });
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(0, 30, 100));
+      transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(0, 22));
+    });
+    expect(result.current.actuals.length).toBeGreaterThanOrEqual(1);
+  }
+
+  /** Drives `driver.ts`'s own armedWatch (RC-37's mechanism) to a genuine
+   *  `programDropped`: three consecutive, STABLE, wrong-structure WaitToBegin
+   *  ticks, 1000ms apart (both `STRUCTURE_MISMATCH_TICKS`/`_WINDOW_MS`
+   *  thresholds — RC-37's own driver-level tests pin the exact numbers).
+   *  `elapsedSeconds`/`distanceMeters` are held at the run's last real
+   *  reading throughout (`wrongArmedStatus`'s own doc comment) so this
+   *  cannot also trip a continuity reset. */
+  function triggerLiveDrop(
+    transport: ReturnType<typeof rawTransport>,
+    clock: ReturnType<typeof manualClock>,
+    elapsedSeconds: number,
+    distanceMeters: number,
+  ): void {
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1000);
+      act(() => {
+        transport.notify(
+          GENERAL_STATUS_UUID,
+          wrongArmedStatus(elapsedSeconds, distanceMeters),
+        );
+      });
+    }
+  }
+
+  function buildSession(
+    transport: ReturnType<typeof rawTransport>,
+    clock: ReturnType<typeof manualClock>,
+  ): Session {
+    return renderHook(() =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: clock.now,
+        },
+      }),
+    ).result;
+  }
+
+  it("(a) a live drop closes the record through the ENDED path — actuals kept, closeReason published, no terminate sent, programDropped stays false", async () => {
+    const transport = rawTransport();
+    const clock = manualClock();
+    const result = buildSession(transport, clock);
+    await driveLiveWithActual(result, transport);
+
+    const receiveWrites = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const writesBeforeDrop = receiveWrites();
+
+    triggerLiveDrop(transport, clock, 30, 100);
+
+    // THE SESSION SURFACE: the third `endByMachine`-shaped close (spec §1's
+    // own "Mechanism" section), landing through the exact same `ended`
+    // patch every other machine close uses.
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    expect(result.current.closeReason).toBe("program-dropped");
+    expect(result.current.runOpen).toBe(false);
+    // The pre-row exit signal must NOT fire here — it would wrongly arm
+    // `ConnectedInterstitial`'s `onExit` effect against this navigation
+    // (spec §1's own "does NOT set programDropped: true").
+    expect(result.current.programDropped).toBe(false);
+
+    // THE RECORD: kept, closed, honestly reasoned.
+    const stored = loadMonitorRun();
+    expect(stored).not.toBeNull();
+    expect(stored?.completedAt).not.toBeNull();
+    expect(stored?.terminated).toBe(true);
+    expect(stored?.endedBy).toBe("program-dropped");
+    expect(stored?.actuals.length).toBeGreaterThanOrEqual(1);
+
+    // NO TERMINATE: James's RC-37 ruling — the machine already left, so
+    // sending one anyway is the one thing it rules out. Asserted on the
+    // wire itself, the same before/after idiom this file's other
+    // `wireWrites` assertions already use.
+    expect(receiveWrites()).toBe(writesBeforeDrop);
+  });
+
+  it("(b) a denied durable write on the live drop's close enters held-error — the ended patch, not a healthy release", async () => {
+    const restore = installMonitorRunWriteDenial(
+      (parsed) =>
+        (parsed as { completedAt: string | null }).completedAt !== null,
+    );
+    try {
+      const transport = rawTransport();
+      const clock = manualClock();
+      const result = buildSession(transport, clock);
+      await driveLiveWithActual(result, transport);
+
+      triggerLiveDrop(transport, clock, 30, 100);
+
+      expect(result.current.phase).toBe("ended");
+      expect(result.current.endedBy).toBe("machine");
+      expect(result.current.closeReason).toBe("program-dropped");
+      // THE ENDED PATCH ITSELF carries the held verdict — not a later,
+      // separate update (spec §1: "Durability gates the hand-off — through
+      // the machinery that exists").
+      expect(result.current.handoffHeld).toBe(true);
+      expect(result.current.holdError).toBe("storage-failed");
+    } finally {
+      restore();
+    }
+  });
+
+  it("(c) the P3b pin holds: once the live drop has closed the record, further identical wire noise leaves published state and the stored record unchanged", async () => {
+    const transport = rawTransport();
+    const clock = manualClock();
+    const result = buildSession(transport, clock);
+    await driveLiveWithActual(result, transport);
+
+    triggerLiveDrop(transport, clock, 30, 100);
+    expect(result.current.phase).toBe("ended");
+    const snapshot = {
+      phase: result.current.phase,
+      endedBy: result.current.endedBy,
+      closeReason: result.current.closeReason,
+      runOpen: result.current.runOpen,
+      handoffHeld: result.current.handoffHeld,
+      holdError: result.current.holdError,
+    };
+    const storedBefore = loadMonitorRun();
+
+    // NOTE (SDLC item 10 — a brief/observation mismatch, reported rather
+    // than silently worked around): the brief's own leg (c) wording is
+    // "a run already closed (completedAt set) ignores a late
+    // programDropped." The handler's own `run.completedAt !== null` guard
+    // inside the NEW `phase === "live"` branch cannot actually be reached
+    // by any sequence this driver/hook pair can produce: EVERY path that
+    // sets `run.completedAt` in this file also flips `phase` off `"live"`
+    // in the SAME `update()` call (this close included — see the branch
+    // just below), so `phase === "live"` and `run.completedAt !== null`
+    // can never coexist for the SAME run. And `driver.ts`'s own
+    // `armedWatchFired` guard (RC-37's own idempotency pin,
+    // `driver.test.ts`: "more of the identical wrong structure keeps
+    // arriving ... must not double-fire") means no SECOND `programDropped`
+    // event is even possible from this session without an intervening
+    // SUCCESSFUL re-arm — which would itself open a BRAND NEW run with
+    // `completedAt: null`, not this one. What this test proves instead is
+    // the OBSERVABLE guarantee the brief names: once the live drop has
+    // closed the record, more of the same wire noise (which a real radio
+    // keeps sending regardless of what the app decided) changes nothing —
+    // published state and the stored record both hold. The `run.completedAt
+    // !== null` line itself is therefore defensive, unreachable code, the
+    // same class as several other "not reachable from this file's own test
+    // suite" guards already accepted in this codebase (e.g. `endByMachine`'s
+    // own identical-shaped P3b pin, and `startSeriesFlush`'s own
+    // belt-and-braces `next === run` guard).
+    triggerLiveDrop(transport, clock, 30, 100);
+
+    expect(result.current.phase).toBe(snapshot.phase);
+    expect(result.current.endedBy).toBe(snapshot.endedBy);
+    expect(result.current.closeReason).toBe(snapshot.closeReason);
+    expect(result.current.runOpen).toBe(snapshot.runOpen);
+    expect(result.current.handoffHeld).toBe(snapshot.handoffHeld);
+    expect(result.current.holdError).toBe(snapshot.holdError);
+    expect(loadMonitorRun()).toStrictEqual(storedBefore);
   });
 });
 

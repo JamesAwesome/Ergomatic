@@ -250,6 +250,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     runOpen: true,
     frameSilence: false,
     programDropped: false,
+    closeReason: null,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
