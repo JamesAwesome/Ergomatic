@@ -5,6 +5,24 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.30.0 (2026-08-31): range v0.29.0..main = #239 alone, accounted
+    // per RF15 (`git log v0.29.0..main --oneline`, no --merges). The
+    // hand-off store: one module now owns the connected record on both
+    // persistence tiers. Item 1 is the sentence the ROADMAP notes-owed
+    // row has carried since the #230 pause ruling ("it returns with the
+    // hand-off store's PR"); the screen was Gate-0 approved at #230 and
+    // restored byte-identical. Item 3's defect is the §3 proven-on-main
+    // truncation (failed close write, finish-grace re-open, actuals
+    // 3->1) with a red-then-green replay gate over real walk bytes.
+    version: "v0.30.0",
+    date: "2026-08-31",
+    items: [
+      "If your phone cannot save a finished connected session, the app now says so instead of losing it: COULD NOT KEEP THE RECORD ON THIS PHONE., with two buttons. Retry tries the save again; Log it anyway takes the row to the log screen with the numbers you saw.",
+      "A finished session whose record never reached your phone's storage now still shows up on Today as an unlogged row, and the connect screens warn before anything would replace it. Before, nothing pointed back to it.",
+      "Fixed: a brief save failure at the finish could quietly cut a saved session's intervals short. The record you save now is the record that stays.",
+    ],
+  },
+  {
     // v0.29.0 (2026-08-31): the tag lands on #238's own merge — the
     // reservation is a NON-ADDITIVE API change (a request that used to
     // succeed now 400s), and docs/RELEASING.md requires the notes in the
