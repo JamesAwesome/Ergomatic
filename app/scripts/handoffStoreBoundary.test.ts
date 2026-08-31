@@ -52,6 +52,11 @@
 //     directly would get zero signal from either check in this file.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
+// The SAME formatter `pnpm format:check` runs (`app/package.json`:
+// `prettier --check .`), resolved from the same devDependency — see "the
+// Prettier normalization this gate composes with" at the bottom of this
+// file for why the assumption is tested rather than asserted.
+import { format } from "prettier";
 import { describe, expect, it } from "vitest";
 
 const APP_ROOT = join(import.meta.dirname, "..");
@@ -217,6 +222,38 @@ function writesOrRemovesKey(rawSource: string): boolean {
  * used to inline it (PR #239 review round 1, item 3) so the detector can be
  * fed synthetic sources and pinned in BOTH directions — what it catches,
  * and what it provably does not.
+ *
+ * **THE CONTRACT IS COLUMN ZERO OF PRETTIER-NORMALIZED SOURCE, NOT SCOPE
+ * (PR #239 review round 3, reviewer finding 2).** This regex is anchored at
+ * `^` with no leading-whitespace class, so what it decides is "does a
+ * `let`/`var` declaration START AT COLUMN ZERO" — a syntactic fact, not a
+ * scope analysis. Said out loud rather than implied, because the two come
+ * apart in BOTH directions on arbitrary text: an indented top-level
+ * declaration is module-scope and evades this, and a column-zero `let`
+ * nested inside a function would be function-scope and false-flag.
+ *
+ * Column zero is nevertheless sound as a module-scope test over the tree
+ * this gate actually scans, and the reason is a COMPOSED assumption with a
+ * gate of its own rather than an eyeball. Two halves:
+ *  1. Every `.ts`/`.tsx` file under `app/` is Prettier-normalized, enforced
+ *     twice — `.github/workflows/ci.yml:68` runs `pnpm format:check`
+ *     (`app/package.json`: `prettier --check .`) in the `app` job, and the
+ *     repo-root `package.json`'s `lint-staged` block runs
+ *     `pnpm --dir app exec prettier --write` over every staged `.ts`/`.tsx`
+ *     file under `app/` at pre-commit (`.husky/pre-commit`).
+ *  2. Prettier indents declarations inside a block and leaves module-scope
+ *     declarations at column zero.
+ * Half 2 is the assumption this gate composes with, so it is not taken on
+ * trust either: `the Prettier normalization this gate composes with` below
+ * runs the REAL formatter over a fixture holding both shapes and asserts
+ * the indentation it produces. If Prettier ever stopped indenting block
+ * bodies, that self-test goes red HERE rather than this gate silently going
+ * blind over there.
+ *
+ * The residual evasion — a module-scope declaration artificially indented
+ * in source — cannot survive `format:check`, so it cannot exist in the
+ * scanned tree. It is pinned as a MISS below anyway, so the boundary is a
+ * fact with a test behind it rather than a claim in a comment.
  */
 const MODULE_SCOPE_MUTABLE = /^(?:export\s+)?(?:let|var)\s+([A-Za-z_$][\w$]*)/;
 
@@ -323,7 +360,15 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
   // intended trade — a failure means: justify the binding and add it to
   // the pinned list below, a cheap, once-per-binding cost against a
   // carrier class that has already cost this project two review waves.
-  it("no production file under src/monitor/ outside the store DECLARES a module-scope `let`/`var` — the text-visible half of §1's 'or holds a module-level run'", () => {
+  //
+  // WHAT "MODULE-SCOPE" MEANS HERE, EXACTLY (PR #239 review round 3,
+  // finding 2): a `let`/`var` at COLUMN ZERO of Prettier-normalized
+  // source. Not a scope analysis — see `MODULE_SCOPE_MUTABLE`'s own doc
+  // comment for the composed assumption (`format:check` in CI + `prettier
+  // --write` at pre-commit make the scanned tree normalized; Prettier
+  // indents block bodies) and for the self-test that pins the Prettier
+  // half of it rather than assuming it.
+  it("no production file under src/monitor/ outside the store DECLARES a `let`/`var` AT COLUMN ZERO OF PRETTIER-NORMALIZED SOURCE — the text-visible half of §1's 'or holds a module-level run'", () => {
     const found: string[] = [];
     for (const file of listFiles(SRC_ROOT, [".ts", ".tsx"])) {
       const rel = toPosixRelative(file);
@@ -507,6 +552,85 @@ describe("the boundary detectors themselves (both directions)", () => {
       expect(moduleScopeMutables("const slot = { run: null };")).toStrictEqual(
         [],
       );
+    });
+
+    // THE DISCLOSED EVASION, PINNED (PR #239 review round 3, finding 2).
+    // The detector's contract is COLUMN ZERO, not scope, so a module-scope
+    // declaration written with leading whitespace walks straight through.
+    // It cannot exist in the scanned tree — `format:check` would reject the
+    // file (see the `format:check` self-test below, which proves Prettier
+    // un-indents exactly this shape) — but the boundary is asserted here
+    // rather than merely described, so a future tightening pass has to come
+    // and change the claim on purpose.
+    it("MISSES a module-scope declaration that is artificially INDENTED — the contract is column zero, and only `format:check` makes that mean 'module scope'", () => {
+      expect(moduleScopeMutables("  let smuggledRun = null;")).toStrictEqual(
+        [],
+      );
+      // ...and the identical declaration at column zero IS caught, so the
+      // miss above is the indentation and not a broken detector.
+      expect(moduleScopeMutables("let smuggledRun = null;")).toStrictEqual([
+        "smuggledRun",
+      ]);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // THE COMPOSED ASSUMPTION, TESTED (PR #239 review round 3, finding 2).
+  //
+  // The reviewer's objection: equating column zero with module scope is an
+  // assumption, and this file asserted it rather than testing it. The gate
+  // is deliberately NOT made scope-aware (no AST — a vitest `unit` project
+  // would have to pull a TypeScript parser in for one assertion); instead
+  // the contract is bound EXPLICITLY to Prettier-normalized source, above,
+  // and the half of that composition this file does not own — "Prettier
+  // indents block bodies and leaves module-scope declarations at column
+  // zero" — is pinned right here, by running the real formatter.
+  //
+  // WHY THE REAL FORMATTER AND NOT A HAND-WRITTEN FIXTURE: a fixture that
+  // merely LOOKS Prettier-formatted proves nothing about what Prettier
+  // does; it is this file's own author asserting the assumption a second
+  // time. `prettier.format` is the authority the repo's `format:check` gate
+  // actually runs (`app/package.json`: `prettier --check .`), resolved from
+  // the same `prettier` devDependency, so this test goes red if a Prettier
+  // upgrade ever changes the indentation behaviour the gate composes with.
+  // ---------------------------------------------------------------------
+  describe("the Prettier normalization this gate composes with", () => {
+    // One fixture holding BOTH shapes the composition depends on: a
+    // module-scope `let` and a `let` nested inside a function body, each
+    // written at the WRONG indentation so the formatter has to move them.
+    const FIXTURE = [
+      "  let moduleScopeRun = null;",
+      "function holdIt() {",
+      "let nestedLocal = 1;",
+      "return nestedLocal;",
+      "}",
+    ].join("\n");
+
+    it("puts a module-scope `let` at column zero and INDENTS a `let` inside a function body — the assumption `MODULE_SCOPE_MUTABLE` composes with", async () => {
+      const formatted = await format(FIXTURE, { parser: "typescript" });
+      const lines = formatted.split("\n");
+
+      const moduleLine = lines.find((l) => l.includes("moduleScopeRun"));
+      const nestedLine = lines.find((l) => l.includes("nestedLocal = 1"));
+      expect(moduleLine).toBeDefined();
+      expect(nestedLine).toBeDefined();
+      // The module-scope declaration is UN-indented by the formatter...
+      expect(moduleLine).toBe("let moduleScopeRun = null;");
+      // ...and the nested one is INDENTED by it, from column zero.
+      expect(nestedLine!.startsWith(" ")).toBe(true);
+      expect(nestedLine!.trim()).toBe("let nestedLocal = 1;");
+    });
+
+    it("and the detector run over that formatted output sees exactly the module-scope one — the composition, end to end", async () => {
+      const formatted = await format(FIXTURE, { parser: "typescript" });
+      // The whole point: on Prettier-normalized source, column zero and
+      // module scope agree. Both of this fixture's declarations were
+      // written at the wrong indentation; after the gate's own precondition
+      // is applied, the detector's answer is correct for the right reason.
+      expect(moduleScopeMutables(formatted)).toStrictEqual(["moduleScopeRun"]);
+      // And on the UNFORMATTED source it is wrong in both directions at
+      // once — the miss and the false-flag this contract exists to bound.
+      expect(moduleScopeMutables(FIXTURE)).toStrictEqual(["nestedLocal"]);
     });
   });
 });
