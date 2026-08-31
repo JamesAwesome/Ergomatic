@@ -578,6 +578,13 @@ test("Just Row observer: VITE-enabled route, accessibility, controls, and shell"
   ).toBeVisible();
   const connect = page.getByRole("button", { name: "Connect" });
   await expect(connect).toBeVisible();
+  // Swept BEFORE the tap as well as after: offline is the state the operator
+  // actually lands on, and it is the only one carrying the accent-filled L1.
+  await assertNoA11yViolations(page);
+  const connectBox = await stableBoundingBox(connect);
+  expect(connectBox).not.toBeNull();
+  expect(connectBox!.width).toBeGreaterThanOrEqual(44);
+  expect(connectBox!.height).toBeGreaterThanOrEqual(44);
   await connect.click();
 
   await expect(
