@@ -3,10 +3,13 @@
 ## Medium and entry
 
 Laptop Chrome with Web Bluetooth only. No phone and no heart-rate requirement.
-Run `bash scripts/walk-lab.sh up`, use the printed backdoor login, then open
-`/justrow/observe`. Confirm **JUST ROW OBSERVER** and `<PM5 name> connected`
-before pulling. This screen subscribes but never programs, so pulling from the
-PM5 main menu is the native Just Row entry.
+From the feature worktree's `app/` directory, run `bash scripts/walk-lab.sh
+up`, use the printed backdoor login, then open `/justrow/observe`. Confirm
+**JUST ROW OBSERVER** and `<PM5 name> connected` before pulling. This screen
+subscribes but never programs, so pulling from the PM5 main menu is the native
+Just Row entry. The printed card's generic **LOG SCREEN** download instruction
+does not apply here: this observe-only screen creates no MonitorRun or Log
+screen; use its **Download capture** control instead.
 
 ## Budget
 

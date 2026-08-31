@@ -24,6 +24,29 @@ const originalStorageDescriptor = Object.getOwnPropertyDescriptor(
   navigator,
   "storage",
 );
+const diagnosticStorageKeys = [
+  "ergomatic:last-monitor-log",
+  "ergomatic:last-rowed-log",
+  "ergomatic:last-session-log",
+] as const;
+
+function seedDiagnosticStorage(): void {
+  sessionStorage.setItem(diagnosticStorageKeys[0], "monitor-sentinel");
+  sessionStorage.setItem(diagnosticStorageKeys[1], "rowed-sentinel");
+  localStorage.setItem(diagnosticStorageKeys[2], "session-sentinel");
+}
+
+function expectDiagnosticStorageUnchanged(): void {
+  expect(sessionStorage.getItem(diagnosticStorageKeys[0])).toBe(
+    "monitor-sentinel",
+  );
+  expect(sessionStorage.getItem(diagnosticStorageKeys[1])).toBe(
+    "rowed-sentinel",
+  );
+  expect(localStorage.getItem(diagnosticStorageKeys[2])).toBe(
+    "session-sentinel",
+  );
+}
 
 function libraryProgram() {
   const workout = LIBRARY_WORKOUTS.find(({ title }) => title === "Sea Fret");
@@ -102,6 +125,10 @@ function observeTransport(connectGate?: Promise<void>) {
 afterEach(() => {
   cleanup();
   delete window.__pm5Recording__;
+  for (const key of diagnosticStorageKeys) {
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+  }
   Reflect.deleteProperty(navigator, "storage");
   if (originalStorageDescriptor) {
     Object.defineProperty(navigator, "storage", originalStorageDescriptor);
@@ -199,5 +226,48 @@ describe("JustRowObserver", () => {
     expect(
       screen.queryByRole("button", { name: "Download capture" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("leaves diagnostic storage untouched after disconnect", async () => {
+    const transport = observeTransport();
+    const user = userEvent.setup();
+    seedDiagnosticStorage();
+    render(
+      <JustRowObserver
+        deps={{
+          createTransport: () => transport,
+          driverOptions: { schedule: () => () => undefined },
+        }}
+      />,
+    );
+
+    await screen.findByRole("heading", {
+      name: `${DEVICE_NAME} connected`,
+    });
+    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await waitFor(() => expect(transport.disconnects).toBe(1));
+
+    expectDiagnosticStorageUnchanged();
+  });
+
+  it("leaves diagnostic storage untouched on unmount", async () => {
+    const transport = observeTransport();
+    seedDiagnosticStorage();
+    const rendered = render(
+      <JustRowObserver
+        deps={{
+          createTransport: () => transport,
+          driverOptions: { schedule: () => () => undefined },
+        }}
+      />,
+    );
+
+    await screen.findByRole("heading", {
+      name: `${DEVICE_NAME} connected`,
+    });
+    rendered.unmount();
+    await waitFor(() => expect(transport.disconnects).toBe(1));
+
+    expectDiagnosticStorageUnchanged();
   });
 });

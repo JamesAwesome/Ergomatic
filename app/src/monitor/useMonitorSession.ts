@@ -942,6 +942,9 @@ export interface MonitorSessionDeps {
   /** Requests durable browser storage after a successful connection unless
    *  explicitly disabled. Defaults to `true`. */
   requestStoragePersistence?: boolean;
+  /** Writes the teardown diagnostic snapshot to browser storage unless
+   *  explicitly disabled. Defaults to `true`. */
+  requestDiagnosticStash?: boolean;
   /** Builds the radio. `null` means "this platform/build has none" →
    *  `transport-missing`. May return a `Promise` — `connect()` always
    *  `await`s the result, so a caller building a real, synchronous
@@ -2885,6 +2888,7 @@ export function useMonitorSession(
       // evidence — the instrument would erase exactly the result it
       // exists to catch.
       const stash = (): void => {
+        if (depsRef.current.requestDiagnosticStash === false) return;
         const log = logRef.current;
         if (log === null) return;
         try {

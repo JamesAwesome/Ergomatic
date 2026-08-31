@@ -37,6 +37,7 @@ export default function JustRowObserver({
   const session = useMonitorSession({
     ...deps,
     requestStoragePersistence: false,
+    requestDiagnosticStash: false,
   });
 
   useEffect(() => {
