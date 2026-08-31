@@ -5,11 +5,14 @@ import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
 import { createNativeVerifier } from "./auth/nativeVerify.js";
 import { createSessionStore } from "./auth/sessions.js";
 import { createUserStore } from "./auth/users.js";
+import { computeAvailable } from "./concept2/availability.js";
+import { createC2Client } from "./concept2/client.js";
 import { createDb } from "./db/index.js";
 import { checkDb } from "./db/pool.js";
 import { seedGlobalLibrary } from "./seed/seed.js";
 import { createArticleReadsStore } from "./stores/articleReads.js";
 import { createBaselinesStore } from "./stores/baselines.js";
+import { createConcept2Store } from "./stores/concept2.js";
 import { StoreConflictError } from "./stores/errors.js";
 import { createLogsStore } from "./stores/logs.js";
 import { createPlanStateStore } from "./stores/planState.js";
@@ -105,6 +108,40 @@ const stores: Stores = {
   articleReads: createArticleReadsStore(db),
 };
 
+// Wave E PR1 Task 7 (task-7-brief.md): the concept2 broker is wired ALWAYS
+// (never behind a runtime `if`) — `computeAvailable` gates BEHAVIOR (every
+// concept2 route re-checks `available()`), never mounting, so
+// `C2_LINK_ENABLED` unset in production leaves the deployed shape unchanged
+// end-to-end: a live router answering 403/{available:false} on every route,
+// the spec's own "safe end state" (task-7-brief.md's "Produces" line).
+const c2BaseUrl = process.env.C2_BASE_URL ?? "https://log-dev.concept2.com";
+const c2ClientId = process.env.C2_CLIENT_ID ?? "";
+const c2ClientSecret = process.env.C2_CLIENT_SECRET ?? "";
+const c2LinkEnabled = process.env.C2_LINK_ENABLED;
+const c2Available = computeAvailable(c2LinkEnabled, c2ClientId, c2ClientSecret);
+if (c2LinkEnabled === "1" && !c2Available) {
+  console.warn(
+    "WARNING: C2_LINK_ENABLED=1 but C2_CLIENT_ID / C2_CLIENT_SECRET not fully set — Concept2 linking is DISABLED",
+  );
+} else if (c2LinkEnabled !== "1" && c2ClientId && c2ClientSecret) {
+  console.warn(
+    "WARNING: C2_CLIENT_ID / C2_CLIENT_SECRET are set but C2_LINK_ENABLED is not '1' — Concept2 linking stays DISABLED",
+  );
+}
+// Google precedent (index.ts:69, above): the callback path is fixed and
+// derived from the same siteUrl every other redirect uses.
+const c2RedirectUri = new URL("/api/concept2/callback", siteUrl).href;
+const concept2 = {
+  available: () => c2Available,
+  store: createConcept2Store(db),
+  client: createC2Client({
+    baseUrl: c2BaseUrl,
+    clientId: c2ClientId,
+    clientSecret: c2ClientSecret,
+    redirectUri: c2RedirectUri,
+  }),
+};
+
 const port = Number(process.env.PORT ?? 8080);
 createApp({
   checkDb: () => checkDb(pool),
@@ -116,6 +153,7 @@ createApp({
   siteUrl,
   stores,
   testAuthSecret,
+  concept2,
 }).listen(port, () => {
   console.log(`ergomatic api listening on :${port}`);
 });
