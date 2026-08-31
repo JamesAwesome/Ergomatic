@@ -178,7 +178,7 @@ export function diffRowVsResult(
   });
 }
 
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -191,6 +191,10 @@ interface Session {
   obtainedAt: string;
   c2UserId?: number;
   stateEchoed: boolean;
+}
+
+async function loadSession(): Promise<Session> {
+  return JSON.parse(await readFile(SESSION_PATH, "utf8")) as Session;
 }
 
 async function cmdAuth(cfg: C2Config): Promise<void> {
@@ -220,9 +224,134 @@ async function cmdAuth(cfg: C2Config): Promise<void> {
   console.log(`Session saved to ${SESSION_PATH} (user ${me.data?.id}).`);
 }
 
+// FIXTURE: docs/monitor/sessions/walk-2026-08-25/rests-finished-recording.jsonl.gz
+// — piece 1 ("Walk Rests", `w 1' r1 / w 500m r1 / w 1'`), natural finish.
+// Chosen because it is the capture `oracleCorpusReplay.test.ts:682` cites as
+// "254.8 s / 935 m on both sides" (RC close, RC-9(b)). Values transcribed
+// from the stored-form numbers that test and its capture assert — never
+// invented (RF16):
+//   - workSeconds=254.8, workMeters=935: 0x0039's own end-of-workout totals,
+//     WORK-ONLY (rest-exclusive — the test's own headline claim, settled at
+//     oracleCorpusReplay.test.ts:704-716 and independently by the walk
+//     README's finding W-5). Decoded raw bytes + summary-totals line:
+//     docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json:65-67
+//     ("0x0039 decoded: elapsed=254.8s distance=935m").
+//   - restSeconds=120: the program's two 60 s rests (after intervals 1 and
+//     2), both programmed AND taken — walk README finding W-9's table
+//     (60 + 60 + 0 = 120 s) and independently confirmed by
+//     oracleCorpusReplay.test.ts:708-712 ("a rest-inclusive reading would be
+//     374.8 s" = 254.8 + 120).
+//   - restMeters=274: 0x003A's Total Rest Distance, REST-ONLY, agreeing with
+//     our own accumulator to the metre —
+//     oracleCorpusReplay.test.ts:485 ("machine(0x003A)=274m ours=274m
+//     delta=0m") and walk README finding W-9's table (130 + 144 = 274 m).
+//   - avgStrokeRate=24: 0x0039 byte 10 on THIS (natural-finish) capture only
+//     — docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json:65
+//     raw byte 10 = `18` hex = 24. The walk README's W-3 flags 0x0039's
+//     average stroke rate as unreliable (reads 2x) ONLY on a TERMINATED
+//     piece; this capture is a natural finish, and W-3's own table lists
+//     "Piece 1 (finished) | 24", matching the raw byte independently.
+// date/tz: the 0x0039 summary's own wall-clock stamp —
+//     docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json:66
+//     ("wall=2026-08-25T21:42:03.110Z"); tz per the walk README's own walk
+//     (James, America/Los_Angeles — no override stated for this session).
+// See PR0 report §fixture.
+export const FIXTURE: StoredRowFixture = {
+  workSeconds: 254.8,
+  workMeters: 935,
+  restSeconds: 120,
+  restMeters: 274,
+  avgStrokeRate: 24,
+};
+export const FIXTURE_OPTS: PostOpts = {
+  weightClass: "H",
+  date: new Date("2026-08-25T21:42:03.110Z"),
+  tz: "America/Los_Angeles",
+};
+
+async function authedFetch(
+  cfg: C2Config,
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const session = await loadSession();
+  const res = await fetch(new URL(path, cfg.baseUrl), {
+    ...init,
+    headers: {
+      ...init?.headers,
+      authorization: `Bearer ${session.tokens.access_token}`,
+      ...(init?.body ? { "content-type": "application/json" } : {}),
+      accept: "application/json",
+    },
+  });
+  return res;
+}
+
+async function postResult(
+  cfg: C2Config,
+  body: Record<string, unknown>,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const res = await authedFetch(cfg, "/api/users/me/results", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  console.log(`POST → ${res.status}`);
+  console.log(JSON.stringify(json, null, 2));
+  return { status: res.status, json };
+}
+
+async function cmdPost(cfg: C2Config): Promise<void> {
+  await postResult(cfg, buildResultPost(FIXTURE, FIXTURE_OPTS));
+}
+
+async function cmdDiff(cfg: C2Config): Promise<void> {
+  const id = process.argv[3];
+  if (!id) throw new Error("usage: … diff <result_id>");
+  const res = await authedFetch(cfg, `/api/users/me/results/${id}`);
+  const wrapper = (await res.json()) as { data?: Record<string, unknown> };
+  const result = wrapper.data ?? (wrapper as Record<string, unknown>);
+  for (const d of diffRowVsResult(FIXTURE, FIXTURE_OPTS, result)) {
+    console.log(
+      `${d.verdict.padEnd(28)} ${d.field}: expected ${String(d.expected)} got ${String(d.cameBack)}`,
+    );
+  }
+  for (const type of ["csv", "fit", "tcx"] as const) {
+    const ex = await authedFetch(
+      cfg,
+      `/api/users/me/results/${id}/export/${type}`,
+    );
+    console.log(
+      `export/${type} → ${ex.status} ${ex.headers.get("content-type")}`,
+    );
+    if (type === "csv" && ex.ok) console.log(await ex.text());
+  }
+}
+
+async function cmdProbeRed(cfg: C2Config): Promise<void> {
+  // RF21: prove the diff can go red. Post the fixture with time encoded in
+  // SECONDS (the classic wrong encoding), then diff — `time` must MISMATCH.
+  const wrong = buildResultPost(FIXTURE, {
+    ...FIXTURE_OPTS,
+    date: new Date(FIXTURE_OPTS.date.getTime() + 86_400_000), // avoid 409 with the real post
+    timeOverrideTenths: Math.round(FIXTURE.workSeconds),
+  });
+  const { json } = await postResult(cfg, wrong);
+  const result = (json as { data?: Record<string, unknown> }).data ?? json;
+  const timeDiff = diffRowVsResult(FIXTURE, FIXTURE_OPTS, result).find(
+    (d) => d.field === "time",
+  );
+  console.log(
+    `PROBE red-proof: time verdict = ${timeDiff?.verdict} (MUST be MISMATCH)`,
+  );
+}
+
 const [, , command] = process.argv;
 const commands: Record<string, () => Promise<void>> = {
   auth: () => cmdAuth(readConfig()),
+  post: () => cmdPost(readConfig()),
+  diff: () => cmdDiff(readConfig()),
+  "probe-red": () => cmdProbeRed(readConfig()),
 };
 if (command && commands[command]) {
   commands[command]().catch((e: unknown) => {
