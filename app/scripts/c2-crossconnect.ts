@@ -476,13 +476,38 @@ export function evaluateFreshPost(
   };
 }
 
+// P1 fix (PR0 re-review, James): the red-proof was only bound to the STATUS
+// of the fresh POST (evaluateFreshPost), never to the CONTENT of what came
+// back on the fetch. A "match" or "UNPROVEN" verdict logged and still
+// exited 0 — the plan requires anything but MISMATCH to stop the sequence.
+// Pure so the three non-MISMATCH arms (missing time field, cameBack
+// undefined/invisible, and an outright match) are unit-testable without
+// process.exit wiring.
+export function redProofVerdict(
+  diffs: FieldDiff[],
+): { ok: true } | { ok: false; reason: string } {
+  const timeDiff = diffs.find((d) => d.field === "time");
+  if (timeDiff === undefined) {
+    return {
+      ok: false,
+      reason: "no 'time' field in the diff — nothing to prove red",
+    };
+  }
+  if (timeDiff.verdict !== "MISMATCH") {
+    return {
+      ok: false,
+      reason: `time verdict is ${timeDiff.verdict} (cameBack=${String(timeDiff.cameBack)}), required MISMATCH`,
+    };
+  }
+  return { ok: true };
+}
+
 async function cmdProbeRed(cfg: C2Config): Promise<void> {
   // RF21: prove the diff can go red. Post the fixture with time encoded in
   // SECONDS (the classic wrong encoding). I-3: the verdict must NOT be read
   // off the POST echo — C2's create response is not guaranteed to be the
   // same shape a later GET returns. Self-contained instead: fetch the
-  // stored result back (the same path cmdDiff uses) and diff THAT, only
-  // trusting a MISMATCH when cameBack is actually defined and wrong.
+  // stored result back (the same path cmdDiff uses) and diff THAT.
   const wrong = buildResultPost(FIXTURE, {
     ...FIXTURE_OPTS,
     date: new Date(FIXTURE_OPTS.date.getTime() + 86_400_000), // avoid 409 with the real post
@@ -498,16 +523,22 @@ async function cmdProbeRed(cfg: C2Config): Promise<void> {
   }
   const id = evaluated.id;
   console.log(`PROBE red-proof: posted id=${id}, fetching it back`);
+  // fetchResult itself now requires the fetched row's id to equal `id` — a
+  // stale/wrong row can no longer supply this diff (P1 fix).
   const result = await fetchResult(cfg, id);
-  const timeDiff = diffRowVsResult(FIXTURE, FIXTURE_OPTS, result).find(
-    (d) => d.field === "time",
-  );
-  const proven = timeDiff !== undefined && timeDiff.cameBack !== undefined;
-  const verdict = proven
-    ? timeDiff.verdict
-    : `UNPROVEN — cameBack is ${String(timeDiff?.cameBack)}, not a defined-and-wrong value`;
+  const diffs = diffRowVsResult(FIXTURE, FIXTURE_OPTS, result);
+  const timeDiff = diffs.find((d) => d.field === "time");
   console.log(
-    `PROBE red-proof: time verdict (from a fresh GET of id=${String(id)}, not the POST echo) = ${verdict} (MUST be MISMATCH; double-check by hand with \`diff ${String(id)}\`)`,
+    `PROBE red-proof: time verdict (from a fresh GET of id=${id}, id-checked, not the POST echo) = ${timeDiff?.verdict ?? "MISSING"} (cameBack=${String(timeDiff?.cameBack)})`,
+  );
+  const verdict = redProofVerdict(diffs);
+  if (!verdict.ok) {
+    console.error(`RED-PROOF FAILED: ${verdict.reason}`);
+    process.exit(1);
+    return;
+  }
+  console.log(
+    `PROBE red-proof: MISMATCH confirmed on a fresh GET of a row matching id=${id} — the gate can go red.`,
   );
 }
 

@@ -42,9 +42,11 @@ import {
   evaluateFreshPost,
   exchangeCode,
   fetchResult,
+  type FieldDiff,
   formatC2Date,
   parseCallbackUrl,
   readConfig,
+  redProofVerdict,
   verifyState,
 } from "./c2-crossconnect.js";
 
@@ -382,7 +384,11 @@ describe("fetchResult", () => {
     );
   });
 
-  it("returns data on a well-formed 2xx body", async () => {
+  // P1 fix (PR0 re-review, James): this test used to accept response id
+  // 445566 for a fetchResult("778899") call — a stale/wrong row could
+  // therefore supply the red-proof's "evidence". It now pins the opposite:
+  // a mismatched id must throw, naming both ids.
+  it("throws on an id mismatch — a stale/wrong row must not stand in for the requested one", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -392,10 +398,68 @@ describe("fetchResult", () => {
           JSON.stringify({ data: { id: 445566, distance: 935 } }),
       })) as unknown as typeof fetch,
     );
-    await expect(fetchResult(cfg, "778899")).resolves.toStrictEqual({
+    await expect(fetchResult(cfg, "778899")).rejects.toThrow(
+      "fetchResult id mismatch: requested 778899, got 445566",
+    );
+  });
+
+  it("returns data on a well-formed 2xx body whose id matches the request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({ data: { id: 445566, distance: 935 } }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(fetchResult(cfg, "445566")).resolves.toStrictEqual({
       id: 445566,
       distance: 935,
     });
+  });
+});
+
+// P1 fix (PR0 re-review, James): cmdProbeRed used to log `match` or
+// `UNPROVEN` and still exit 0. redProofVerdict is the pure decision it now
+// wires up — anything but a MISMATCH on the "time" field must stop the
+// evidence sequence.
+describe("redProofVerdict", () => {
+  it("rejects when the time field is missing from the diff entirely", () => {
+    expect(redProofVerdict([])).toStrictEqual({
+      ok: false,
+      reason: "no 'time' field in the diff — nothing to prove red",
+    });
+  });
+  it("rejects when cameBack is undefined — invisible-to-result-object, the UNPROVEN arm", () => {
+    const diffs: FieldDiff[] = [
+      {
+        field: "time",
+        expected: 100,
+        cameBack: undefined,
+        verdict: "invisible-to-result-object",
+      },
+    ];
+    expect(redProofVerdict(diffs)).toStrictEqual({
+      ok: false,
+      reason:
+        "time verdict is invisible-to-result-object (cameBack=undefined), required MISMATCH",
+    });
+  });
+  it("rejects on a match — the red-proof exists to prove MISMATCH, not agreement", () => {
+    const diffs: FieldDiff[] = [
+      { field: "time", expected: 100, cameBack: 100, verdict: "match" },
+    ];
+    expect(redProofVerdict(diffs)).toStrictEqual({
+      ok: false,
+      reason: "time verdict is match (cameBack=100), required MISMATCH",
+    });
+  });
+  it("accepts a MISMATCH — independent literals, not derived from the fixture (RF21)", () => {
+    const diffs: FieldDiff[] = [
+      { field: "time", expected: 700, cameBack: 701, verdict: "MISMATCH" },
+    ];
+    expect(redProofVerdict(diffs)).toStrictEqual({ ok: true });
   });
 });
 
