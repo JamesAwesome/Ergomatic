@@ -384,43 +384,64 @@ as row 8 does) takes the real-bytes requirement.
    product gain) versus a hydrated one. The three-way wording stays as
    history rather than being rewritten, with this sentence as its
    correction.
-2. **Producer update after release, four orderings** (before/after
-   navigation × before/after teardown) — all reach `commit`; the
-   consumer's snapshot unaffected; receipts show accepted revisions.
-   Mutation: gate the post-release commit on a window predicate → the
-   excluded ordering fails.
-   **Scope of the matrix (amended at #239's review round 3, per the
-   reviewer's P1 — "amend the matrix to reachable production orderings
-   and gate those through the actual destination seam"): the 2x2 is not
-   a 2x2 in the shipped code, and the row is gated on the cells that
-   exist rather than on four manufactured ones.** Navigation and
+2. **Producer update after release — ONE ordering, because production
+   has one.** The burst backstop releases with no summary in hand; the
+   release navigates and tears the connected surface down in a single
+   handler; the machine's summary arrives on the wire AFTERWARDS,
+   inside `BURST_LINGER_MS`, and still reaches `commit` on both tiers.
+   The consumer's snapshot is unaffected: the reader is already mounted
+   behind a once-only `useState` initializer, so nothing it renders
+   moves, and its Save posts what was shown — the machine fields the
+   store now holds are absent from that POST. **The receipt
+   requirement names what production actually emits.**
+   `commit-accepted` is NOT observable here: the departing hook's
+   unmount cleanup calls `setReceiptChannel(null)`
+   (`useMonitorSession.ts:4119-4127`), so a post-teardown commit
+   receipts into nothing. The row is therefore gated on production's
+   OWN ring — the stash `teardown` writes and the linger re-writes to
+   `sessionStorage`, whose `summary-recorded` entry is the app's record
+   of the fold-in and the instrument a walk reads. Mutation: gate the
+   post-release commit on a window predicate → the route leg fails.
+   **The evidence is SPLIT across two legs, and neither is the whole
+   claim: the capture leg validates real-byte decoding before release;
+   the route leg validates post-release timing with a CSAFE-correct
+   synthetic summary.** Capture leg:
+   `handoffStoreReplay.test.ts` over
+   `walk-2026-08-25/rests-finished-recording.jsonl.gz`. Route leg:
+   `src/workout/WorkoutDetail.postReleaseCommit.test.tsx` (real
+   `WorkoutDetail` → real `handleConnectedEnded` → real `LogSession`),
+   on production observables only — `currentUnretired()`, the durable
+   bytes, the ring, the rendered screen, and the POST body. There is no
+   single real-capture post-release ordering, and §9.1 says why: the
+   burst corpus is 271-542 ms, entirely inside the 2000 ms backstop, so
+   no recording we hold observed a post-RELEASE producer update at all.
+   The release-relative axis is produced by the backstop timing out
+   (the burst never arriving), never by shifting real bytes later on
+   the clock.
+   **Why the original 2x2 is gone (amended at #239's review round 3,
+   per the reviewer's P1 — "amend the matrix to reachable production
+   orderings and gate those through the actual destination seam"),
+   kept as the reason rather than as a contradiction:** navigation and
    teardown are ONE React commit — `WorkoutDetail.tsx`'s
    `handleConnectedEnded`, the only door out of a finished connected
    session, runs `setConnecting(null)` and `navigate(...)` in a single
    handler — so there is no after-teardown/before-navigation cell to
-   reach. The release IS the navigation:
+   reach; the release IS the navigation, since
    `ConnectedSurface.tsx:352-358` fires `onEnded` from an effect the
    instant `phase === "ended" && !handoffHeld`, with no rower tap in
-   between. And the after-navigation/before-teardown gap belongs to row
+   between; and the after-navigation/before-teardown gap belongs to row
    3, whose own note already rules that "an arbitrary driver callback
    cannot be scheduled there" — scheduling one from a test is the
-   RF24-shaped move that note forbids, and round 1 made it. What
-   remains is one reachable ordering — the late burst arriving inside
-   `BURST_LINGER_MS` after the navigation-teardown commit, §1's own
-   headline case — gated end to end through the real seam in
-   `src/workout/WorkoutDetail.postReleaseCommit.test.tsx` (real
-   `WorkoutDetail` → real `handleConnectedEnded` → real `LogSession`),
-   asserted on production observables only: `currentUnretired()`, the
-   durable bytes, and the ring stash `teardown` writes to
-   `sessionStorage`. The header's real-bytes requirement is met by a
-   separate leg in `handoffStoreReplay.test.ts` over
-   `walk-2026-08-25/rests-finished-recording.jsonl.gz`. **What no
-   capture can supply, stated rather than faked:** §9.1's own burst
-   corpus is 271-542 ms, entirely inside the 2000 ms backstop, so a
-   post-RELEASE producer update is not an ordering any recording we
-   hold observed; the release-relative axis is produced from the
-   backstop timing out (the burst never arriving), never by shifting
-   real bytes later on the clock.
+   RF24-shaped move that note forbids, and round 1 made it.
+   **How that reduction is established, stated because round 4 caught
+   it being implied instead (reviewer finding 2): it is a
+   SOURCE-REVIEWED reachability assumption about those two named
+   handlers, not a production observable the route leg pins.** The
+   reviewer wrapped `navigate(...)` in `setTimeout(..., 0)` and the
+   route leg stayed green — `waitFor` cannot tell a same-commit route
+   change from one a macrotask later. The assumption therefore carries
+   its own gate: source-shape pins in the route leg's file assert that
+   both handlers defer nothing, and go red on exactly that mutation.
 3. **The claim race, with its producer NAMED:** R0 render → **R1
    committed from the OLD hook's passive-cleanup teardown** (the only
    occupant React allows between the new render and its mount effect —

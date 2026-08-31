@@ -36,10 +36,7 @@
 //    handler, so the interstitial subtree is dropped in the same commit
 //    that changes the URL. There is no "teardown, then navigation": the
 //    navigation IS what tears the surface down. **That kills the
-//    after-teardown/before-navigation cell outright**, and it is pinned
-//    below by production observables — the moment the connected surface is
-//    gone, the screen is `LogSession`, never `WorkoutDetail`'s own detail
-//    view with its Connect button back.
+//    after-teardown/before-navigation cell outright.**
 //
 //  - **The release IS the navigation.** `ConnectedSurface.tsx:352-358`
 //    fires `onEnded` from an effect the instant
@@ -48,8 +45,22 @@
 //    change, so "after release, before navigation" is not an interval a
 //    rower or a wire frame can occupy — it is the gap inside React's own
 //    flush between the release's commit and the passive effect that
-//    navigates. Pinned below as well: nothing but the backstop firing
-//    happens in this test, and the real `LogSession` is what comes back.
+//    navigates.
+//
+//  - **HOW THOSE TWO BULLETS ARE ESTABLISHED, said exactly (PR #239
+//    review round 4, reviewer finding 2).** They are a SOURCE-REVIEWED
+//    REACHABILITY ASSUMPTION about two named handlers — NOT a production
+//    observable the behavioural test below pins. The reviewer proved the
+//    difference: wrapping `navigate(...)` in `setTimeout(..., 0)` inside
+//    `handleConnectedEnded` leaves that test GREEN, because `waitFor`
+//    cannot tell a same-commit route change from one a macrotask later.
+//    What the behavioural test DOES establish is the weaker,
+//    still-load-bearing fact that the connected surface is gone and the
+//    real `LogSession` replaced it — never `WorkoutDetail`'s own detail
+//    view with its Connect button back. The one-commit claim itself is
+//    gated separately and honestly, by the source-shape pins in "the
+//    reduction's premise, pinned at the source it was reviewed at" at
+//    the bottom of this file, which go red on exactly that mutation.
 //
 //  - **After navigation, before teardown** is a real gap — React renders
 //    the new route before the old subtree's passive cleanup — but the spec
@@ -114,6 +125,8 @@
 // a full route tree; the two halves are deliberately split, and each says
 // so.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -244,6 +257,16 @@ function rowedLogKinds(): string[] {
   const raw = sessionStorage.getItem("ergomatic:last-rowed-log");
   if (raw === null) return [];
   return (JSON.parse(raw) as { kind: string }[]).map((e) => e.kind);
+}
+
+/** Everything the rower can read on the current screen, as one string —
+ *  the coarsest possible "did anything on this screen change" instrument,
+ *  chosen deliberately over naming individual numbers so a late commit
+ *  moving ANY rendered figure (a hero, a row, the total line, a caption)
+ *  fails the comparison rather than only the two fields this test knows
+ *  to look for. */
+function screenText(): string {
+  return document.querySelector("main")?.textContent ?? "";
 }
 
 beforeEach(() => {
@@ -381,6 +404,23 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     expect(atRelease!.run.summaryTotals).toBeUndefined();
     expect(durableRun()?.summaryTotals).toBeUndefined();
 
+    // WHAT THE ROWER IS LOOKING AT, captured at release time so the
+    // post-burst comparison below has something independent to be
+    // measured against (contract A's consumer half — see that block for
+    // what it is for). Captured, never hard-coded: the point is that this
+    // string does not MOVE, not what it happens to say.
+    const shownAtRelease = screenText();
+    expect(shownAtRelease).not.toBe("");
+    // The machine's own figures are NOT on screen now, so "unchanged"
+    // below is a real claim rather than a tautology about numbers that
+    // were never going to appear. This run's record carries no boundary
+    // actuals — a rower who presses End mid-interval, which is exactly
+    // how this test got here — so `summaryModel.ts`'s tier B has no
+    // measured distance to render, and `summaryTotals` landing on the
+    // record is what would make a DISTANCE hero of 244 m appear.
+    expect(shownAtRelease).not.toContain(String(LATE_SUMMARY.meters));
+    expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
+
     // ...and the departing hook really did hand its receipt channel back,
     // which is WHY this test asserts on the store and the stash instead of
     // on receipts. Asserted, not assumed: the ring stash `teardown` wrote
@@ -427,5 +467,151 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     await waitFor(() => {
       expect(rowedLogKinds()).toContain("summary-recorded");
     });
+
+    // ---------------------------------------------------------------
+    // "THE CONSUMER'S SNAPSHOT UNAFFECTED" — the half of §10 row 2 the
+    // store assertions above do not touch, and the half the ratified
+    // product contract is actually about: **renders snapshot; recording
+    // actions post what was shown.**
+    //
+    // The reader is ALREADY MOUNTED. Its record came from a `useState`
+    // lazy initializer (`LogSession.tsx:1553` — `useState<HandoffEntry |
+    // null>(() => currentUnretired())`) that runs once and never
+    // re-reads, so the commit that just advanced the store must not
+    // advance the screen. `summaryModel.ts:919` makes the alternative
+    // concrete: with `summaryTotals` present, its tier-A branch renders
+    // the machine's own totals VERBATIM, so a re-reading consumer would
+    // sprout a DISTANCE hero reading 244 m under a rower who had already
+    // arrived on this screen.
+    // ---------------------------------------------------------------
+    expect(screenText()).toBe(shownAtRelease);
+    expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(String(LATE_SUMMARY.meters)),
+    ).not.toBeInTheDocument();
+
+    // ...and the RECORDING ACTION posts what was shown. Save is where the
+    // divergence would become PERMANENT: `LogSession.tsx`'s
+    // `handleMonitorSave` builds its body from `monitorEntry.run` and
+    // spreads the machine fields on when `summaryTotals !== undefined` —
+    // which the store now satisfies and this screen's snapshot does not.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
+    await waitFor(() => {
+      expect(apiFn).toHaveBeenCalled();
+    });
+    const [path, init] = apiFn.mock.calls.at(-1)!;
+    expect(path).toBe("/api/logs");
+    const body = JSON.parse(String(init!.body)) as Record<string, unknown>;
+    // The three fields that spread would have added, all absent: the late
+    // commit reached the store (asserted above) and stopped there.
+    expect(body).not.toHaveProperty("machineWorkSeconds");
+    expect(body).not.toHaveProperty("machineWorkMeters");
+    expect(body).not.toHaveProperty("machineSummary");
+    // THE POSITIVE HALF, so those three absences cannot be satisfied by
+    // an empty, failed, or wrong-door POST: the body is this session's
+    // own, carrying the snapshot's identity and its one measured sample.
+    expect(body.workoutId).toBe(WORKOUT.id);
+    expect(body.deviceName).toBe(DEVICE);
+    expect(body.endedBy).toBe("rower");
+    expect(body.series).toStrictEqual(atRelease!.run.series);
   }, 20000);
+
+  // ---------------------------------------------------------------------
+  // THE REDUCTION'S PREMISE, PINNED AS WHAT IT ACTUALLY IS (PR #239 review
+  // round 4, reviewer finding 2).
+  //
+  // The reviewer wrapped `navigate(...)` in `setTimeout(..., 0)` inside
+  // `handleConnectedEnded` and the behavioural test above STILL PASSED —
+  // correctly, because `waitFor` does not care whether the route change
+  // landed in the release's own commit or one macrotask later. So this
+  // file's matrix reduction rests on a claim its own behavioural gate
+  // cannot fail on, and the header now says so. These two tests are the
+  // honest complement: a gate that DOES go red on that mutation.
+  //
+  // WHAT THIS IS AND IS NOT: a TEXT pin on the shape of two named
+  // handlers, not a scheduler claim and not a behavioural observation. It
+  // cannot see a deferral introduced through a helper it does not read.
+  // What it does catch is a deferral written into either handler — the
+  // move that would make the "unreachable" cells reachable again and
+  // silently invalidate the reduction.
+  describe("the reduction's premise, pinned at the source it was reviewed at", () => {
+    const readSource = (rel: string): string =>
+      readFileSync(join(import.meta.dirname, rel), "utf8");
+
+    /** The body of a named handler, by brace matching from its
+     *  declaration — so a RENAME throws here (loudly, with the reason)
+     *  rather than silently pinning an empty string. */
+    function handlerBody(source: string, declaration: string): string {
+      const start = source.indexOf(declaration);
+      if (start === -1) {
+        throw new Error(
+          `handler not found: \`${declaration}\` — renamed or reshaped, so this pin's premise needs re-reviewing at the source before the reduction can stand`,
+        );
+      }
+      let depth = 0;
+      for (let i = source.indexOf("{", start); i < source.length; i += 1) {
+        if (source[i] === "{") depth += 1;
+        else if (source[i] === "}") {
+          depth -= 1;
+          if (depth === 0) return source.slice(start, i + 1);
+        }
+      }
+      throw new Error(`unbalanced braces reading \`${declaration}\``);
+    }
+
+    /** `//` line comments only — the crude stripper this repo's other
+     *  source-shape gate already uses. Enough here: neither handler body
+     *  contains a block comment or a string with a `//` in it, and the
+     *  statement-count pin below would notice if one appeared. */
+    const stripLineComments = (s: string): string => s.replace(/\/\/.*$/gm, "");
+
+    const DEFERRAL =
+      /setTimeout|setInterval|queueMicrotask|requestAnimationFrame|\bawait\b|\.then\s*\(|Promise\./;
+
+    it("`handleConnectedEnded` releases and navigates in ONE synchronous statement block — nothing defers either half", () => {
+      const body = stripLineComments(
+        handlerBody(
+          readSource("./WorkoutDetail.tsx"),
+          "function handleConnectedEnded()",
+        ),
+      );
+      // Both statements present, release first.
+      const release = body.indexOf("setConnecting(null)");
+      const navigate = body.indexOf("navigate(");
+      expect(release).toBeGreaterThan(-1);
+      expect(navigate).toBeGreaterThan(release);
+      // And nothing defers them. THIS is the assertion the reviewer's
+      // `setTimeout(() => navigate(...), 0)` mutation trips.
+      expect(body).not.toMatch(DEFERRAL);
+      // The handler is exactly those two statements — no third has
+      // quietly appeared between them, deferring or not.
+      const statements = body
+        .slice(body.indexOf("{") + 1, body.lastIndexOf("}"))
+        .split(";")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      expect(statements).toHaveLength(2);
+    });
+
+    it("`ConnectedSurface`'s ended effect calls `onEnded` synchronously — the release IS the navigation, with no scheduler hop between them", () => {
+      const source = readSource("./ConnectedSurface.tsx");
+      // Located by the guard clause that is the effect's first statement,
+      // so a change to the guard's own inputs fails here too.
+      const marker = 'if (session.phase !== "ended" || session.handoffHeld';
+      const at = source.indexOf(marker);
+      expect(at).toBeGreaterThan(-1);
+      const effect = stripLineComments(handlerBody(source, marker));
+      // The call is in the effect body, and nothing between the guard and
+      // it defers the call.
+      const onEnded = source.indexOf("onEnded();", at);
+      expect(onEnded).toBeGreaterThan(-1);
+      expect(stripLineComments(source.slice(at, onEnded))).not.toMatch(
+        DEFERRAL,
+      );
+      // The guard is a bare early return, not a deferral of its own.
+      expect(effect).not.toMatch(DEFERRAL);
+    });
+  });
 });
