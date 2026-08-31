@@ -266,6 +266,15 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
     // deleted write and keep the total at three.
     expect(matches!.filter((m) => m.includes("setItem"))).toHaveLength(2);
     expect(matches!.filter((m) => m.includes("removeItem"))).toHaveLength(1);
+    // The offender loop skips this file, so the count above is its only
+    // gate — and the count matches the IDENTIFIER form only. A raw write
+    // here against the string literal would evade both; assert that form
+    // to zero explicitly.
+    expect(
+      source.match(
+        /localStorage\.(setItem|removeItem)\(\s*["'`]ergomatic\.monitorRun["'`]/g,
+      ),
+    ).toBeNull();
   });
 
   // §1's SECOND clause, checked at last (ANT-F4b): "Nothing else writes
@@ -285,9 +294,9 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
   // `src/workout/`), or one smuggled through a closure returned by a
   // factory. It also over-approximates in the other direction: ANY new
   // module-scope mutable here fails, run-holding or not. That is the
-  // intended trade — the failure message says to justify the binding and
-  // add it to this list, which is a cheap, once-per-binding cost against
-  // a carrier class that has already cost this project two review waves.
+  // intended trade — a failure means: justify the binding and add it to
+  // the pinned list below, a cheap, once-per-binding cost against a
+  // carrier class that has already cost this project two review waves.
   it("no production file under src/monitor/ outside the store holds a module-scope mutable binding (§1's 'or holds a module-level run')", () => {
     const found: string[] = [];
     for (const file of listFiles(SRC_ROOT, [".ts", ".tsx"])) {
@@ -302,7 +311,7 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
       for (const line of stripComments(readFileSync(file, "utf8")).split(
         "\n",
       )) {
-        const m = /^(?:let|var)\s+([A-Za-z_$][\w$]*)/.exec(line);
+        const m = /^(?:export\s+)?(?:let|var)\s+([A-Za-z_$][\w$]*)/.exec(line);
         if (m !== null) found.push(`${rel}: ${m[1]!}`);
       }
     }
