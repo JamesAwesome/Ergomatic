@@ -251,6 +251,26 @@ describe("concept2 store fake: withLinkLock 'store' clears a previously-set need
   });
 });
 
+// Plan deviation 2: same reasoning as the R2 describe above — the router's
+// own `row.tz === null` pre-check means a SECOND `recordTz` call for the
+// SAME row is unreachable through a sequential router test (by the second
+// request the router itself already sees a non-null tz and never calls
+// this method again). Only a DIRECT second call against the store
+// exercises the `tz IS NULL` guard at all; mirrored against real Postgres
+// in stores.integration.test.ts.
+describe("logs fake: recordTz only writes when the column is null", () => {
+  it("a second recordTz call for the same row is a no-op (tz IS NULL guard)", async () => {
+    const logs = makeFakeStores().logs;
+    const id = await seedEligibleLog(logs, userA.id, { tz: null });
+
+    await logs.recordTz(userA.id, id, "America/Los_Angeles");
+    await logs.recordTz(userA.id, id, "UTC");
+
+    const row = await logs.get(userA.id, id);
+    expect(row?.tz).toBe("America/Los_Angeles");
+  });
+});
+
 describe("availability matrix (spec §Architecture 8)", () => {
   it("mint: unavailable -> 403 before any store call", async () => {
     const store = makeFakeConcept2Store();
