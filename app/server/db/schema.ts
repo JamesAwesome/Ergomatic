@@ -329,6 +329,23 @@ export const sessionLogs = pgTable(
     // the shape authority (object, size-capped, `verificationBytes`
     // band-checked when present), not this column's type.
     machineSummary: jsonb("machine_summary"),
+    // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes):
+    // all four additive-optional, no default, no backfill — every
+    // existing row reads them back null. c2ResultId: C2's own result id,
+    // written ONLY after C2's 2xx (a 409 leaves it null). c2UserId: WHICH
+    // Concept2 account accepted it — the sent state renders only when
+    // this matches the live link's (anchor F8). Both server-written at
+    // upload, never client input.
+    c2ResultId: integer("c2_result_id"),
+    c2UserId: integer("c2_user_id"),
+    // completedAt: the client's MonitorRun.completedAt — C2's `date` is
+    // the END of the workout and logged_at is save-time, minutes-to-hours
+    // later (anchor K3). tz: the client's IANA zone; posted at save from
+    // PR2 on, or written by the upload route's first legacy send (plan
+    // deviation 2 — the payload's date must be stable across retries
+    // because C2's dedup key is second-granular).
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    tz: text("tz"),
   },
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),
@@ -439,3 +456,56 @@ export const articleReads = pgTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.slug] })],
 );
+
+// --- Wave E PR1: Concept2 stored shapes ---------------------------------
+
+// Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD).
+export const weightClassEnum = pgEnum("weight_class", ["H", "L"]);
+
+// One row per linked user. Tokens are plain columns behind the same trust
+// boundary every credential this app holds already lives behind (spec:
+// at-rest encryption with the key in the same process env is a lock taped
+// to its own key — attacked at the anchor; held). Never serialized to any
+// client response (routes/concept2.ts returns only {linked, weightClass,
+// needsReauth}).
+export const concept2Links = pgTable("concept2_links", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  c2UserId: integer("c2_user_id").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  weightClass: weightClassEnum("weight_class").notNull(),
+  // Set (never deleteLink) by any AUTOMATIC path when C2's token endpoint
+  // answers 400/401 on a refresh: C2 documents those statuses for OUR
+  // malformed request and OUR client credentials too (their 400 example
+  // says `Check the "client_secret" parameter`), so an automatic delete
+  // would destroy links — and re-ask the one PII question — on a server
+  // bug or a rotated C2_CLIENT_SECRET. With this flag a misclassified
+  // status costs a re-consent prompt, never the stored weight_class.
+  // Cleared by the callback's upsert on successful relink. Measured
+  // grounds: docs/monitor/c2-crossconnect-2026-09/refresh-probe-2026-08-31.md.
+  needsReauthAt: timestamp("needs_reauth_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Single-use, 15-minute link attempts: the browser hop carries no
+// credential, so the nonce IS the user binding (spec §Architecture 1).
+// No redirect_kind column — Branch A is chosen and the redirect URI is one
+// env-derived constant (plan deviation 1).
+export const concept2AuthAttempts = pgTable("concept2_auth_attempts", {
+  nonce: text("nonce").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  weightClass: weightClassEnum("weight_class").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

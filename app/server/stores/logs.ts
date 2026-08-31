@@ -211,10 +211,26 @@ export interface LogInput {
   machineWorkSeconds?: number | null;
   machineWorkMeters?: number | null;
   machineSummary?: Record<string, unknown> | null;
-  // Deliberately absent from this interface: `plan_key`/`plan_index` are
-  // NEVER client input. `create()` below derives them itself, inside the
-  // same transaction as the log insert, from the plan_state upsert's own
-  // `.returning()` — see that function's doc comment.
+  // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes):
+  // the client's MonitorRun.completedAt and IANA zone, optional/nullable,
+  // same convention as `deviceName`/`thumbs`/`endedBy` above — absent or
+  // explicit null both store null (an older client, or a save this phase
+  // doesn't post either field for, stores nothing). Posted at save from
+  // PR2 on; bounds-checked at the route before this type is ever
+  // constructed, same trust-boundary posture as every other field here.
+  completedAt?: Date | null;
+  tz?: string | null;
+  // Deliberately absent from this interface: `c2ResultId`/`c2UserId` are
+  // NEVER client input (see `db/schema.ts`'s `sessionLogs.c2ResultId`
+  // doc comment) — a later task's upload route writes them itself, after
+  // Concept2's own 2xx, the same "server-derived, not LogInput" posture
+  // `planKey`/`planIndex` already have below. `create()` does not set
+  // them yet; every row this task can produce reads them back null.
+  //
+  // Also absent: `plan_key`/`plan_index` are NEVER client input.
+  // `create()` below derives them itself, inside the same transaction as
+  // the log insert, from the plan_state upsert's own `.returning()` — see
+  // that function's doc comment.
 }
 
 // From-the-log spec (2026-08-18), §3: the API's first UPDATE. Every key is
@@ -305,6 +321,14 @@ const LOG_LIST_COLUMNS = {
   machineAvgPaceSecondsPer500m: sql<
     number | null
   >`case when jsonb_typeof(${sessionLogs.machineSummary}->'avgPaceSecondsPer500m') = 'number' then (${sessionLogs.machineSummary}->>'avgPaceSecondsPer500m')::double precision else null end`,
+  // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes):
+  // four more small scalars, same idiom as `endedBy`/the RC-1 pair
+  // above — included in the list projection (no jsonb blob to exclude
+  // here).
+  c2ResultId: sessionLogs.c2ResultId,
+  c2UserId: sessionLogs.c2UserId,
+  completedAt: sessionLogs.completedAt,
+  tz: sessionLogs.tz,
 };
 
 // Log-delete spec (2026-08-18), §2: the newest-wins resolution rule,
@@ -751,6 +775,8 @@ export function createLogsStore(db: Db) {
             machineWorkSeconds: input.machineWorkSeconds ?? null,
             machineWorkMeters: input.machineWorkMeters ?? null,
             machineSummary: input.machineSummary ?? null,
+            completedAt: input.completedAt ?? null,
+            tz: input.tz ?? null,
             planKey,
             planIndex,
           })
