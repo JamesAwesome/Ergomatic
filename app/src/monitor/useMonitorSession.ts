@@ -629,14 +629,14 @@ export function applyContinuityCheck(
 }
 
 /**
- * Phase LT spec 2, Task 2 (design spec §4, S6). Requests persistent storage
- * once per successful connect — free either way, and this hook is
- * deliberately NOT what decides whether it is granted: `persist()` itself
- * is (S6's own PRIMARY citation, WebKit's policy blog — heuristics decide,
- * and a Capacitor WKWebView is "probably DENIED" by them). Fire-and-forget
- * (`bestEffort`) and never gates anything downstream: denial is TOLERATED,
- * stated in the spec's own words as "NOT as mitigation" — nothing about
- * `connect()`'s own success or failure reads this outcome.
+ * Phase LT spec 2, Task 2 (design spec §4, S6). By default, requests
+ * persistent storage once per successful connect — free either way, and
+ * this hook is deliberately NOT what decides whether it is granted:
+ * `persist()` itself is (S6's own PRIMARY citation, WebKit's policy blog —
+ * heuristics decide, and a Capacitor WKWebView is "probably DENIED" by them).
+ * Fire-and-forget (`bestEffort`) and never gates anything downstream: denial
+ * is TOLERATED, stated in the spec's own words as "NOT as mitigation" —
+ * nothing about `connect()`'s own success or failure reads this outcome.
  *
  * `navigator.storage`/`persist` are both optional-chained rather than
  * feature-detected up front on purpose: some runtimes — this repo's own
@@ -934,11 +934,14 @@ export interface MonitorSession {
  * `driver.test.ts` uses — a model of the machine we MET, empty arm
  * included) with no radio and no wall clock.
  *
- * All four are optional and default to production behaviour, so
+ * All dependencies are optional and default to production behaviour, so
  * `useMonitorSession()` — the zero-argument call Tasks 5-7 make — is the
  * shipped path.
  */
 export interface MonitorSessionDeps {
+  /** Requests durable browser storage after a successful connection unless
+   *  explicitly disabled. Defaults to `true`. */
+  requestStoragePersistence?: boolean;
   /** Builds the radio. `null` means "this platform/build has none" →
    *  `transport-missing`. May return a `Promise` — `connect()` always
    *  `await`s the result, so a caller building a real, synchronous
@@ -3176,10 +3179,12 @@ export function useMonitorSession(
       // background/foreground pair (or an interrupted one that never saw
       // its matching foreground) left behind.
       framesWhileHiddenRef.current = null;
-      // S6: once per connect, straight into this session's own ring —
-      // see `requestStoragePersistence`'s own doc comment for the full
-      // reasoning.
-      requestStoragePersistence(log);
+      // S6: once per ordinary product connect, straight into this session's
+      // own ring — see `requestStoragePersistence`'s own doc comment for the
+      // full reasoning.
+      if (depsRef.current.requestStoragePersistence !== false) {
+        requestStoragePersistence(log);
+      }
       // Phase LL Task 3 (§3, F-6), "say so in the ring": the
       // already-connected guard has no log to write to at `scan()` time
       // (this session's log did not exist yet — it is created here, only

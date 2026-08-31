@@ -20,6 +20,10 @@ import { createFakeTransport } from "./transports/fake";
 import type { MonitorSessionDeps } from "./useMonitorSession";
 
 const DEVICE_NAME = "PM5 432331249";
+const originalStorageDescriptor = Object.getOwnPropertyDescriptor(
+  navigator,
+  "storage",
+);
 
 function libraryProgram() {
   const workout = LIBRARY_WORKOUTS.find(({ title }) => title === "Sea Fret");
@@ -98,6 +102,10 @@ function observeTransport(connectGate?: Promise<void>) {
 afterEach(() => {
   cleanup();
   delete window.__pm5Recording__;
+  Reflect.deleteProperty(navigator, "storage");
+  if (originalStorageDescriptor) {
+    Object.defineProperty(navigator, "storage", originalStorageDescriptor);
+  }
 });
 
 describe("JustRowObserver", () => {
@@ -111,6 +119,11 @@ describe("JustRowObserver", () => {
       createTransport: () => transport,
       driverOptions: { schedule: () => () => undefined },
     };
+    const persistMock = vi.fn().mockResolvedValue(true);
+    Object.defineProperty(navigator, "storage", {
+      configurable: true,
+      value: { persist: persistMock },
+    });
     const user = userEvent.setup();
     const rendered = render(<JustRowObserver deps={deps} />);
 
@@ -130,6 +143,7 @@ describe("JustRowObserver", () => {
 
     expect(transport.scans).toStrictEqual(1);
     expect(transport.connects).toStrictEqual(1);
+    expect(persistMock).not.toHaveBeenCalled();
     expect(transport.subscribed).toStrictEqual(
       expect.arrayContaining([
         SPLIT_INTERVAL_DATA_UUID,

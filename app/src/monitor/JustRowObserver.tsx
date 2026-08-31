@@ -34,7 +34,10 @@ export default function JustRowObserver({
 }: {
   deps?: MonitorSessionDeps;
 }) {
-  const session = useMonitorSession(deps);
+  const session = useMonitorSession({
+    ...deps,
+    requestStoragePersistence: false,
+  });
 
   useEffect(() => {
     void session.connect();

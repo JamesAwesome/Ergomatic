@@ -6937,6 +6937,39 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
     Reflect.deleteProperty(navigator, "storage");
   });
 
+  it("an explicit persistence opt-out reaches pairing without calling or logging Storage Manager", async () => {
+    const persistMock = vi.fn().mockResolvedValue(true);
+    Object.defineProperty(navigator, "storage", {
+      configurable: true,
+      value: { persist: persistMock },
+    });
+    const log = createEventLog();
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        createLog: () => log,
+        now: () => t0,
+        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        requestStoragePersistence: false,
+      }),
+    );
+
+    await connect(result);
+    await act(async () => {
+      await flush();
+    });
+
+    expect(result.current.phase).toBe("pairing");
+    expect(persistMock).not.toHaveBeenCalled();
+    expect(
+      log.entries().filter((entry) => entry.kind === "storage-persist"),
+    ).toStrictEqual([]);
+  });
+
   it("calls persist() exactly once per connect, and logs a GRANTED outcome to the ring", async () => {
     const persistMock = vi.fn().mockResolvedValue(true);
     Object.defineProperty(navigator, "storage", {
