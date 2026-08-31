@@ -211,10 +211,36 @@ function writesOrRemovesKey(rawSource: string): boolean {
   );
 }
 
+/**
+ * §1's SECOND clause, as far as text can see it: every module-scope
+ * `let`/`var` declared in `source`, by NAME. Extracted from the test that
+ * used to inline it (PR #239 review round 1, item 3) so the detector can be
+ * fed synthetic sources and pinned in BOTH directions — what it catches,
+ * and what it provably does not.
+ */
+const MODULE_SCOPE_MUTABLE = /^(?:export\s+)?(?:let|var)\s+([A-Za-z_$][\w$]*)/;
+
+function moduleScopeMutables(rawSource: string): string[] {
+  const names: string[] = [];
+  for (const line of stripComments(rawSource).split("\n")) {
+    const m = MODULE_SCOPE_MUTABLE.exec(line);
+    if (m !== null) names.push(m[1]!);
+  }
+  return names;
+}
+
 const TEST_FILE = /\.test\.tsx?$/;
 
+// TITLES SAY WHAT IS ENFORCED, NOT WHAT IS WISHED FOR (PR #239 review
+// round 1, item 3). These tests used to be named for §1's absolute
+// invariant — "nothing else writes MONITOR_RUN_KEY" — while this file's own
+// header disclosed, at length, the shapes they cannot see. A name is what a
+// future reader trusts when they are deciding whether a risk is already
+// covered, so each one now names the SYNTACTIC contract it actually
+// enforces. The disclosed gap between that contract and §1 is itself
+// pinned, by the detector self-tests at the bottom of this file.
 describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
-  it("no PRODUCTION file under src/ other than handoffStore.ts (and its own allowlist) writes or removes MONITOR_RUN_KEY", () => {
+  it("no PRODUCTION file under src/ outside the store and its allowlist writes or removes the durable key in any SCANNED syntactic form (constant, string literal, `key:`-property indirection, or a legacy-writer call)", () => {
     const offenders: string[] = [];
     for (const file of listFiles(SRC_ROOT, [".ts", ".tsx"])) {
       const rel = toPosixRelative(file);
@@ -225,7 +251,7 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
     expect(offenders).toStrictEqual([]);
   });
 
-  it("no e2e spec other than the named seeders writes or removes MONITOR_RUN_KEY", () => {
+  it("no e2e spec outside the named seeders writes or removes the durable key in any SCANNED syntactic form", () => {
     const offenders: string[] = [];
     for (const file of listFiles(E2E_ROOT, [".ts"])) {
       const rel = toPosixRelative(file);
@@ -297,7 +323,7 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
   // intended trade — a failure means: justify the binding and add it to
   // the pinned list below, a cheap, once-per-binding cost against a
   // carrier class that has already cost this project two review waves.
-  it("no production file under src/monitor/ outside the store holds a module-scope mutable binding (§1's 'or holds a module-level run')", () => {
+  it("no production file under src/monitor/ outside the store DECLARES a module-scope `let`/`var` — the text-visible half of §1's 'or holds a module-level run'", () => {
     const found: string[] = [];
     for (const file of listFiles(SRC_ROOT, [".ts", ".tsx"])) {
       const rel = toPosixRelative(file);
@@ -308,11 +334,8 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
       // a line-pinned gate would go red on any unrelated edit further up
       // the file — a gate that cries wolf is the thing this round is
       // removing, not adding.
-      for (const line of stripComments(readFileSync(file, "utf8")).split(
-        "\n",
-      )) {
-        const m = /^(?:export\s+)?(?:let|var)\s+([A-Za-z_$][\w$]*)/.exec(line);
-        if (m !== null) found.push(`${rel}: ${m[1]!}`);
+      for (const name of moduleScopeMutables(readFileSync(file, "utf8"))) {
+        found.push(`${rel}: ${name}`);
       }
     }
     // The two that exist today, both established long before this design
@@ -326,5 +349,164 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
       "src/monitor/transports/capacitorBle.ts: initPromise",
       "src/monitor/useMonitorSession.ts: receiptChannelOwner",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------
+// THE DETECTORS, TESTED AS DETECTORS (PR #239 review round 1, item 3).
+//
+// Every test above is a scan of the real tree, so all four are green
+// precisely because the tree is clean — none of them can tell "the
+// detector works and found nothing" apart from "the detector is broken
+// and found nothing". A regex that stopped matching, a `stripComments`
+// that ate the source, an inverted return: all silent. These feed each
+// detector synthetic sources and pin BOTH directions.
+//
+// The MISSES half is not padding and is not aspiration. This file's header
+// discloses the shapes the gate cannot see; a disclosure that nothing
+// asserts can silently WIDEN — someone tightens a regex, the blind spot
+// closes or moves, and the header (which the next reader trusts) is now
+// wrong in whichever direction nobody checked. Pinning the misses makes
+// the disclosed boundary a fact with a test behind it, so a future
+// tightening pass has to come here and change the claim on purpose.
+// ---------------------------------------------------------------------
+describe("the boundary detectors themselves (both directions)", () => {
+  describe("writesOrRemovesKey CATCHES each form the header claims", () => {
+    it("the direct constant, set and remove", () => {
+      expect(
+        writesOrRemovesKey(`localStorage.setItem(${KEY_IDENTIFIER}, blob);`),
+      ).toBe(true);
+      expect(
+        writesOrRemovesKey(`localStorage.removeItem(${KEY_IDENTIFIER});`),
+      ).toBe(true);
+    });
+
+    it("the direct string literal, in either quote style", () => {
+      expect(
+        writesOrRemovesKey(`localStorage.setItem("${KEY_LITERAL}", blob);`),
+      ).toBe(true);
+      expect(
+        writesOrRemovesKey(`localStorage.removeItem('${KEY_LITERAL}');`),
+      ).toBe(true);
+    });
+
+    it("the same call split across lines by the formatter", () => {
+      expect(
+        writesOrRemovesKey(
+          `localStorage.setItem(\n  ${KEY_IDENTIFIER},\n  JSON.stringify(run),\n);`,
+        ),
+      ).toBe(true);
+    });
+
+    it("the `page.evaluate({key, value})` indirection the e2e seeders use", () => {
+      expect(
+        writesOrRemovesKey(
+          `await page.evaluate(\n` +
+            `  ({ key, value }) => localStorage.setItem(key, value),\n` +
+            `  { key: ${KEY_IDENTIFIER}, value: raw },\n` +
+            `);`,
+        ),
+      ).toBe(true);
+      expect(
+        writesOrRemovesKey(
+          `await page.evaluate(\n` +
+            `  ({ key, value }) => localStorage.setItem(key, value),\n` +
+            `  { key: "${KEY_LITERAL}", value: raw },\n` +
+            `);`,
+        ),
+      ).toBe(true);
+    });
+
+    it("a call to either legacy writer, which bypasses the store just as directly", () => {
+      expect(writesOrRemovesKey("saveMonitorRun(run);")).toBe(true);
+      expect(writesOrRemovesKey("clearMonitorRun();")).toBe(true);
+    });
+
+    it("does NOT fire on a mere mention: a comment, or a read", () => {
+      // The false-positive class `stripComments` exists for — four
+      // production files name `clearMonitorRun()` in prose while calling
+      // nothing.
+      expect(
+        writesOrRemovesKey("// this file no longer calls clearMonitorRun()"),
+      ).toBe(false);
+      expect(
+        writesOrRemovesKey(`/* see saveMonitorRun(run) in monitorRun.ts */`),
+      ).toBe(false);
+      // Reading the key is not writing it — the whole gate is about
+      // WRITERS.
+      expect(
+        writesOrRemovesKey(
+          `const raw = localStorage.getItem(${KEY_IDENTIFIER});`,
+        ),
+      ).toBe(false);
+      // ...and a different key is not this key.
+      expect(writesOrRemovesKey(`localStorage.setItem(DRAFT_KEY, blob);`)).toBe(
+        false,
+      );
+    });
+  });
+
+  describe("writesOrRemovesKey MISSES exactly what the header says it misses", () => {
+    it("a key laundered through a variable that is not literally named `key` (header evasion 1)", () => {
+      // `INDIRECT_CALL` matches `localStorage.setItem(key` and nothing
+      // else, so any other identifier walks straight through. This is the
+      // shape `e2e/connected.spec.ts`'s own cleanup loop already has,
+      // harmlessly.
+      expect(
+        writesOrRemovesKey(
+          `const k = ${KEY_IDENTIFIER};\nlocalStorage.setItem(k, blob);`,
+        ),
+      ).toBe(false);
+      expect(
+        writesOrRemovesKey(`for (const k of keys) localStorage.removeItem(k);`),
+      ).toBe(false);
+    });
+
+    it("a legacy-writer call sharing a line with a `//` inside a string literal (the crude stripper's own limit)", () => {
+      // `stripComments` is a regex, not a tokenizer: the `//` in the URL
+      // starts a "comment" and eats the rest of the line, call included.
+      expect(
+        writesOrRemovesKey(
+          `const docs = "https://c2.example"; saveMonitorRun(run);`,
+        ),
+      ).toBe(false);
+      // ...and the identical call on its own line IS caught, so the miss
+      // above is genuinely the stripper and not a broken detector.
+      expect(
+        writesOrRemovesKey(
+          `const docs = "https://c2.example";\nsaveMonitorRun(run);`,
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe("moduleScopeMutables, both directions", () => {
+    it("catches a module-scope binding under any keyword, exported or not", () => {
+      expect(moduleScopeMutables("let cached = null;")).toStrictEqual([
+        "cached",
+      ]);
+      expect(moduleScopeMutables("var legacySlot;")).toStrictEqual([
+        "legacySlot",
+      ]);
+      expect(moduleScopeMutables("export let sharedRun = null;")).toStrictEqual(
+        ["sharedRun"],
+      );
+    });
+
+    it("ignores an INDENTED `let` — a function-local, which is not a module-level carrier", () => {
+      expect(
+        moduleScopeMutables("function f() {\n  let local = 1;\n}"),
+      ).toStrictEqual([]);
+    });
+
+    it("MISSES a run held in a `const` object's mutable property (header: 'what it cannot see')", () => {
+      // The exact carrier shape §2 deleted, wearing a `const`. Text alone
+      // cannot tell this from any other constant, which is why §1's second
+      // clause is only half-gated and the test above now says so in its
+      // name.
+      expect(moduleScopeMutables("const slot = { run: null };")).toStrictEqual(
+        [],
+      );
+    });
   });
 });
