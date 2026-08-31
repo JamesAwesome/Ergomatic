@@ -76,6 +76,108 @@ export async function exchangeCode(
   return (await res.json()) as TokenSet;
 }
 
+export interface StoredRowFixture {
+  workSeconds: number;
+  workMeters: number;
+  restSeconds: number;
+  restMeters: number;
+  avgStrokeRate?: number;
+}
+
+export interface PostOpts {
+  weightClass: "H" | "L";
+  date: Date;
+  tz: string;
+  workoutType?: string;
+  timeOverrideTenths?: number;
+}
+
+export function c2Tenths(seconds: number): number {
+  return Math.round(seconds * 10);
+}
+
+export function formatC2Date(instant: Date, tz: string): string {
+  // en-CA gives yyyy-mm-dd; hourCycle h23 avoids "24:00".
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(instant);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(instant);
+  return `${date} ${time}`;
+}
+
+export function buildResultPost(
+  row: StoredRowFixture,
+  opts: PostOpts,
+): Record<string, unknown> {
+  const post: Record<string, unknown> = {
+    type: "rower",
+    date: formatC2Date(opts.date, opts.tz),
+    timezone: opts.tz,
+    distance: row.workMeters,
+    time: opts.timeOverrideTenths ?? c2Tenths(row.workSeconds),
+    weight_class: opts.weightClass,
+  };
+  if (row.restSeconds > 0) post.rest_time = c2Tenths(row.restSeconds);
+  if (row.restMeters > 0) post.rest_distance = row.restMeters;
+  if (row.avgStrokeRate !== undefined) post.stroke_rate = row.avgStrokeRate;
+  if (opts.workoutType !== undefined) post.workout_type = opts.workoutType;
+  return post;
+}
+
+export interface FieldDiff {
+  field: string;
+  expected: unknown;
+  cameBack: unknown;
+  verdict: "match" | "MISMATCH" | "invisible-to-result-object";
+}
+
+// The result object C2 returns has NO top-level stroke_rate/rest_time/
+// rest_distance (spec §Research record) — those fields are named
+// invisible rather than silently skipped, so the report says which oracle
+// saw which field (anchor F10).
+const RESULT_OBJECT_BLIND = new Set([
+  "rest_time",
+  "rest_distance",
+  "stroke_rate",
+]);
+
+export function diffRowVsResult(
+  row: StoredRowFixture,
+  opts: PostOpts,
+  result: Record<string, unknown>,
+): FieldDiff[] {
+  const expected = buildResultPost(row, {
+    ...opts,
+    timeOverrideTenths: undefined,
+  });
+  return Object.entries(expected).map(([field, want]) => {
+    if (RESULT_OBJECT_BLIND.has(field)) {
+      return {
+        field,
+        expected: want,
+        cameBack: undefined,
+        verdict: "invisible-to-result-object" as const,
+      };
+    }
+    const got = result[field];
+    return {
+      field,
+      expected: want,
+      cameBack: got,
+      verdict: got === want ? ("match" as const) : ("MISMATCH" as const),
+    };
+  });
+}
+
 import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
