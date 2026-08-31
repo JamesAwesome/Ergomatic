@@ -896,18 +896,28 @@ X" is a real disposition — most of these are single files.
   corpus here is not evidence the bound is safe. Split off the TWD co-producer
   when that item was re-scoped, 2026-08-31 (the non-monotonic reading itself is
   correct behaviour — the documented F2a false kill). **Needs a capture whose
-  program has no distance-kind interval**, which no committed walk has.
-  Evidence: `app/src/monitor/continuity.ts`'s `check` doc comment,
+  program has no distance-kind interval — and one now EXISTS** (antagonist
+  pass, 2026-08-31): the VACUOUS comment dates to 2026-08-25, and
+  `walk-2026-08-28/rest-boundary-recording.jsonl.gz` is "TIME-ONLY by design
+  (no distance interval anywhere)" per its own walk README, with a real rest
+  boundary — so this may be answerable at the desk today. Evidence:
+  `app/src/monitor/continuity.ts`'s `check` doc comment,
   `.claude/agents/antagonist-ledger.md`'s "Phase RC delta pass".
-- **The recording tap and lifecycle events are mutually exclusive.** Recordings
-  (`pm5-recording/v1`) are the only replayable artifact, and `dist-grep.sh`
-  gates that string out of every production bundle — so they can only be made
-  on the laptop in Chrome, while lock/background/resume only happen on the
-  phone. **Zero of the eight committed recordings carry a lifecycle event, and
-  none ever can.** Recurring failure 19 one layer deeper than that entry states
-  it. Found while writing `2026-08-31-lifecycle-design.md` (its §0.4), which
-  routes around it by instrumenting the ring instead; this row exists because
-  the gap outlives that workaround and will bite the next lifecycle defect.
+- **The recording tap and lifecycle events are mutually exclusive — a
+  documented DEFERRAL, not an impossibility** (corrected at the antagonist
+  pass, 2026-08-31; the first version of this row said "none ever can" and
+  blamed `dist-grep.sh`, which proves the consequence, not the cause).
+  The cause is two adapter decisions: `adapters/monitorTransport.ts`'s
+  `isNative()` branch skips the tap, and `adapters/appLifecycle.ts`'s web arm
+  is a deliberate no-op. `recording.ts:44-59` already records it, verbatim:
+  "Both ends would have to change first — a recorder on the native arm, or a
+  web arm that reports transitions again — and neither is this task's to
+  decide." Until one end is deliberately built, recordings are laptop-only and
+  lifecycle events phone-only — **zero of the TEN committed recordings carry
+  one** (count corrected; the directory was listed this time). RF19 one layer
+  deeper. `2026-08-31-lifecycle-design.md` §0.4 routes around it by
+  instrumenting the ring; this row exists because the gap outlives that
+  workaround and will bite the next lifecycle defect.
 - **RC-9(b) — a LIVE ring verdict for 0x0039's totals against
   Σ`recordedActuals`**, the way (a) and (d) have one. Moved here from Wave E's
   exit at the PM open gate (2026-08-31): no shared mechanism, PR, or risk model

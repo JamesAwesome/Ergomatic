@@ -79,7 +79,11 @@ written — it settles the causal hypothesis". **It cannot be recovered.**
   consequence verbatim: it "is written on EVERY connected teardown including a
   failed pairing and a connect-then-cancel, and nothing ever clears it."
   **PRIMARY**, this repo's source.
-- One key, one slot, no history. Every later teardown overwrites.
+- One durable slot, no history. Every later teardown overwrites. (Precisely:
+  teardown writes TWO stashes — `sessionStorage["ergomatic:last-monitor-log"]`
+  as well — but the second is strictly MORE perishable, dying with the web
+  context, so it strengthens rather than weakens the claim. Antagonist pass,
+  attacked and held.)
 - Connected sessions demonstrably followed walk leg 4: the production count of
   connected rows went **16 (2026-08-28) → 18 (2026-08-30)**, and that counts
   only sessions that saved a row. Cancels and failed pairings overwrite too and
@@ -96,6 +100,10 @@ entries.length - capacity)`), so it can only ever lose a contiguous **head**;
 at seq 39 the cap never fired at all. **The gaps are not a lossy instrument.
 They are a lossy commit** — the whole ring was in hand and 13 of ~39 entries
 were hand-picked into the committed file. §2 exists so this cannot recur.
+**Upgraded from inference to PROVEN at the antagonist pass:** `eventLog.ts`'s
+`record()` pushes unconditionally with a monotonic `nextSeq` — no filter, no
+conditional, no skip — so interior gaps cannot be produced by the ring at all,
+and `git show` of the committing revision confirms the file was never fuller.
 
 ### 0.4 The structural blind spot: recordings and lifecycle events are disjoint
 
@@ -103,49 +111,71 @@ were hand-picked into the committed file. §2 exists so this cannot recur.
 
 Replayable recordings (`pm5-recording/v1`, raw wire bytes, driven through the
 real driver by `transports/replay.ts`) are the only artifact that can exercise
-a predicate over real frames. **Zero of the eight committed recordings carry a
-lifecycle event.** Verified by grep over `docs/monitor/sessions/`: the only
+a predicate over real frames. **Zero of the TEN committed recordings carry a
+lifecycle event** (count corrected at the antagonist pass — the first draft
+said eight without listing the directory; `find docs/monitor/sessions -name
+"*.jsonl.gz"` returns ten, each grepped, zero hits). The only
 lifecycle-bearing artifacts are *rings*, which record what our own code
 decided and cannot be replayed into it.
 
-The cause is structural and permanent under today's tooling:
+**CORRECTED at the antagonist pass: this is a documented SCOPING DEFERRAL, not
+an impossibility — and the repo had already written the honest version.** The
+first draft called it "structural and permanent … by construction … never",
+and attributed it to `dist-grep.sh`. Both wrong. `dist-grep.sh` proves the
+*consequence* (the tap is absent from production bundles); the *cause* is two
+adapter decisions: `adapters/monitorTransport.ts`'s `isNative()` branch takes
+native straight to Capacitor BLE without passing the tap, and
+`adapters/appLifecycle.ts`'s web arm is a deliberate no-op.
+`recording.ts:44-59` states it and ends with the load-bearing line, quoted:
 
-- The recording tap is **dev/web only**. `pm5-recording` is one of five
-  `dist-grep.sh` needles, a CI gate proving the string is absent from every
-  production bundle. Recordings can therefore only be made on the laptop, in
-  Chrome.
-- Lifecycle events — lock, background, resume, call — only meaningfully occur
-  **on the phone**, where the tap does not exist.
+> "Both ends would have to change first — a recorder on the native arm, or a
+> web arm that reports transitions again — and neither is this task's to
+> decide."
 
-**So we can never record wire bytes across a real iOS lifecycle event.** This
-is recurring failure 19 one layer deeper than that entry states it: not merely
-"our instruments sit at or below the transport seam", but "the two evidence
-streams we own are mutually exclusive by construction."
+**PRIMARY**, and already deferred under Phase LM. Re-deriving a recorded
+deferral as an impossibility is RF18's exact shape, committed while citing it.
 
-**Consequence, and it is binding on this spec:** any desk replay of a
-lifecycle-triggered defect would have to *synthesise* the staleness it then
-detects. That is recurring failure 11 in its purest form — the app agreeing
-with the app about a shape nobody has observed. §3 therefore instruments the
-**ring**, which does reach production, does reach the phone, and does already
-carry lifecycle events.
+What survives, restated honestly: **today, and until someone deliberately
+builds one of those two ends, no recording can carry a lifecycle event** —
+recordings are laptop-only and lifecycle events are phone-only. RF19 one layer
+deeper: the two evidence streams are currently mutually exclusive.
+
+**Consequence — a COST JUDGMENT, not an impossibility, and re-argued as one:**
+building either end (a native recorder, or a web lifecycle arm) is real work
+with its own risk, and even then a desk replay of a lifecycle defect would
+synthesise the staleness it detects until a real phone capture exists —
+recurring failure 11's shape. The ring already reaches production, already
+reaches the phone, and already carries lifecycle events. §3 therefore
+instruments the **ring** as the cheap, honest first move; the recorder gap
+itself is registered in the open-item register so the deferral stays visible.
 
 ### 0.5 Two ROADMAP items re-scoped on evidence
 
 **The non-monotonic TWD co-producer (52→0→64) is correct behaviour, not a
-defect.** `continuity.ts`'s `check` convicts a reset only when
-`totalWorkDistanceMeters` **and** `elapsedSeconds` **and** `distanceMeters` all
-read strictly backward in the same reading. TWD backward alone, with the other
-two advancing, is the documented **F2a false kill** the three-axis rule exists
-to prevent, and it correctly returns `"continuation"`. **PRIMARY**, that
-function's own doc comment.
+defect — with the mechanism stated precisely** (the first draft's version was
+corrected at the antagonist pass). `continuity.ts`'s `check` has TWO
+conviction signatures — the three-axis rule AND F2b's interval-count bound —
+and a distance-goal suppression in FRONT of both that short-circuits to
+`"continuation"` before either runs. The leg-4 reading fails the three-axis
+signature on its face (TWD backward, elapsed and distance both forward — the
+documented **F2a false kill** that rule exists to prevent), so the verdict is
+right either way; but the committed ring does not record the program's
+interval kinds, so **which branch actually produced it — the rule or the
+blanket suppression — is unestablished**, and the first draft credited the
+rule without knowing that. **PRIMARY**, the function's own body and doc
+comment.
 
-What the same comment does confess is worse and different, and it is what the
-item should become: the distance-goal suppression covers **every one of the six
-committed captures**, so the F2b count bound has been compared on **zero
-pairs** — "clean but VACUOUS", its own words, and the decision to keep the
-suppression was recorded rather than lifted. *This predicate has never been
-exercised on data it was not suppressed for.* That is a real gap; it is not
-this spec's, and it is re-filed to the open-item register.
+What the same comment confesses is what the item becomes: the distance-goal
+suppression covered every committed capture when that comment was written, so
+the F2b count bound had been compared on **zero pairs** — "clean but VACUOUS",
+its own words. **And that corpus fact has an expiry date the first draft
+missed, in the exact RF16-corollary shape this spec invokes elsewhere:** the
+comment dates to 2026-08-25, and
+`walk-2026-08-28/rest-boundary-recording.jsonl.gz` — landed three days later —
+is described by its own walk README as "**TIME-ONLY by design** (no distance
+interval anywhere)" with a real rest boundary. A committed, non-suppressed
+pair source now exists, so the re-filed item may be answerable at the desk
+today. Re-filed to the open-item register with that pointer.
 
 **RC-29's measured false-positive rate is pre-fix and no longer stands.** The
 ROADMAP entry cites "9 banners in 288 s over a link that never dropped
@@ -176,15 +206,24 @@ Per the antagonist's phase discipline, skips are spoken, never silent.
   proposed; unchanged by this spec.
 - **RC-29's threshold.** See §0.5. §6 measures; it does not tune.
 
-## §1 — The live program drop (TRIAD: a new stored close reason)
+## §1 — The live program drop (TRIAD: a new stored close reason AND a server migration)
+
+**REVISED after the 2026-08-31 antagonist full pass (verdict REVISE) and
+James's same-day destination ruling ("Just go to log").** The pass broke the
+first draft three ways: the workout-screen exit left the closed record with
+zero doors (both `?from=monitor` producers were suppressed or gated on an open
+run), the "reuse the READY exit AND hold #239's failure state" pair was
+structurally impossible (that exit is a full `INITIAL_STATE` reset, and the
+COULD-NOT-KEEP surface renders only inside `ConnectedSurface`'s ended frame),
+and "no migration" was false server-side. The destination ruling resolves the
+first two at once; the third is now owned honestly below.
 
 ### What the rower gets
 
 The erg throws the workout away mid-row. The app closes the record, keeps every
-interval actually rowed, and returns to the workout with nudged targets intact
-— the same destination James ruled for the READY case ("Loose any new banners.
-Just take it back here and remember any nudges."), extended to a live session,
-with a line saying what survived.
+interval actually rowed, and lands on the log screen with the row in front of
+them — the same hand-off every other connected ending already makes — under a
+strip saying what happened and what survived.
 
 ### Behaviour
 
@@ -193,46 +232,90 @@ The handler branches on phase instead of returning early:
 | phase | behaviour |
 | --- | --- |
 | `programming`, `ready` | RC-37's existing exit, **unchanged** |
-| `live` | close the record (below), then exit to the workout |
+| `live` | close as an ended session (below); the normal ended hand-off runs |
 | `ended` | ignore — the P3b pin, unchanged |
 
-### Mechanism — reuse, do not invent
+### Mechanism — reuse the ENDED path, not the READY exit
 
-A live drop is `endByMachine`'s terminate case in everything but name: the
-machine has left mid-interval, so CSAFE-DEF footnote 12's reasoning (the
-Split/Interval Number is unstable when a workout is terminated mid-interval)
-applies verbatim.
+The live arm is a third `endByMachine`-shaped close, not a variant of the
+READY exit. It runs `closeRecord(true, "program-dropped")` and flips
+`phase: "ended"` with `endedBy: "machine"` (the SESSION field — distinct from
+the record's `CloseReason`; the two vocabularies never mix, and the first
+draft failed to say which it meant). From there everything is the machinery
+that already exists: the ended frame renders, `WorkoutDetail.tsx`'s
+`handleConnectedEnded` navigates to `/library/:id/log?from=monitor` untouched,
+and the log door — the record's owner per `Today.tsx`'s own stated premise —
+receives it.
 
-- `closeRecord(true, "program-dropped")`.
-- **No split hold** — as with a terminate, there is no boundary of that kind to
-  wait for.
-- **`openBurstHold()` runs unconditionally** — the burst may still land, and
-  this is the same arm the corpus's worst case (542 ms, `smoke-terminated`)
-  lives on.
-- **No `terminate()` is sent.** The machine has already left the program; there
-  is nothing of ours left to terminate, and sending one anyway is the single
-  thing James's RC-37 ruling rules out. The live arm inherits that ruling.
+- **No split hold.** Corrected reason, per the antagonist's item 5: the first
+  draft claimed "the machine has left mid-interval, so CSAFE-DEF footnote 12
+  applies verbatim" — but at detection the machine is NOT mid-interval.
+  RC-37's emit site sits inside `toMonitorFrame(raw).state === "armed"`
+  (`driver.ts`), and the walk README confirms it on hardware (`frame
+  state=armed elapsed=50.81` beside RC-37's shape): the PM5 is already back at
+  WaitToBegin holding its unprogrammed default, ≥3 ticks and ≥2 s before we
+  hear about it. The stronger, correct reason: **there will never be another
+  boundary** — the program that would produce one is gone.
+- **No burst hold.** The first draft's "openBurstHold() runs unconditionally"
+  was a no-op as written — that function's own predicate is an allowlist of
+  two (`run.endedBy !== "finished" && run.endedBy !== "rower"` returns false),
+  which the draft mis-paraphrased as "keyed on finished". It was also
+  pointless: `appendSummaryObservations` admits only `"finished"`/`"rower"`,
+  so a burst could never be recorded onto this run — and no capture shows a
+  PM5 emitting a summary burst after an unattended drop (the machine is at
+  WaitToBegin with no WORKOUTEND; asserting a burst would be a claim on the
+  machine's behalf with no evidence — the PAUSED-state class of error).
+  **The close owes no hold conditions**, so `noHoldCloseVerdict(false)` runs
+  the durable verify synchronously in the same patch — by design now, where
+  the first draft got a synchronous verify only by accident.
+- **No `terminate()` is sent.** Unchanged: the machine has already left the
+  program; sending one anyway is the single thing James's RC-37 ruling rules
+  out. The live arm inherits that ruling.
 
-### Durability gates the exit
+### Durability gates the hand-off — through the machinery that exists
 
-**The exit does not happen until the record is durable.** `commit` returns a
-`DurableVerdict`; on `"failed"` the session holds in the state PR #239 already
-built and James already approved — `COULD NOT KEEP THE RECORD ON THIS PHONE.`
-with Retry / Log it anyway — exactly as a failed End does.
+Because the close goes through the normal ended patch, the durable verdict
+lands in `holdError` the same way a failed End's does, and a `"failed"` write
+renders #239's `COULD NOT KEEP THE RECORD ON THIS PHONE.` with Retry / Log it
+anyway **inside the ended frame, where that surface actually lives**. No new
+gating mechanism, no state the reset destroys. The hand-off to the log fires
+only on the paths it already fires on.
 
 Exiting on a failed write would navigate away from a record that never
-persisted. That is recurring failure 25, and it is the precise harm this whole
-item exists to stop.
+persisted — recurring failure 25, the precise harm this item exists to stop.
+The first draft promised this and specified a mechanism that could not deliver
+it; this one gets it from the ended frame for free.
 
-### Destination
+### The migration, owned
 
-**The workout, not the log.** This is the one place the ruling diverges from
-existing machinery: `phase: "ended"` normally hands off to
-`/library/:id/log?from=monitor` via `WorkoutDetail.tsx`'s
-`handleConnectedEnded`. This path suppresses that hand-off and unmounts the
-interstitial the way `programDropped` already does at READY. The row is saved
-and reachable from the log; the rower lands where they can send the workout
-again.
+**"No migration" was false.** Three server-side facts the first draft never
+looked at, all found by the antagonist pass and verified in source:
+
+1. `server/db/schema.ts:68` — `endedBy` is a **`pgEnum`**, a real Postgres
+   TYPE. The sixth value needs
+   `ALTER TYPE "public"."ended_by" ADD VALUE 'program-dropped';` — a
+   migration.
+2. `server/routes/data.ts:164` — `endedByError` hard-rejects any value outside
+   `ENDED_BY_VALUES` with a 400, and `LogSession.tsx` posts
+   `monitorRun.endedBy` straight through. **Unwidened, a program-dropped row
+   cannot be logged at all** — the validator fails the whole save.
+3. `server/stores/logs.ts:40` — `EndedBy` is a **hand-copied literal union**,
+   not derived from `CloseReason`. Widening the client union typechecks clean
+   and fails only at runtime on a phone. The widening must touch all three
+   sites in the same commit, and the PR adds the seam test that makes the
+   compiler's blindness irrelevant: drive a program-dropped row through
+   `POST /api/logs` and assert 200 (recurring failure 24 — "a seam gap gates
+   the PR that creates it"). Where cheap, derive the server union from a
+   shared source so the next widening cannot silently miss a site; if not
+   cheap, the seam test is the gate.
+
+Client-side, the never-migrate contract holds as originally stated:
+`monitorRun.ts`'s shallow membership check loads the new value, and `endedBy`
+is additive-optional on the stored record. The four client consumers the first
+draft enumerated are correct and unchanged (`storedSummary.ts`'s tier-B2
+allowlist fails closed by design; `postTestOffer`/`LogSession` gate on
+`"finished"`); the contract round-trip test (`storeContracts.ts`) widens with
+the union.
 
 ### Copy — **GATE 0**
 
@@ -256,10 +339,13 @@ The approved surface, binding on implementation:
 - `2 intervals kept.` / `Nothing kept.`, counted by `measuredIntervalCount` —
   the same function the LOST THE MONITOR banner names, never a second notion
   of "kept".
-- A new quiet strip at the top of the workout screen, above the title,
-  identical in both orientations. That screen has no notice area today; only
-  `.baseline-error` exists, and its red is wrong for a message whose point is
-  that the rower's work survived.
+- **PLACEMENT REVISED with the destination ruling ("Just go to log", James
+  2026-08-31): the strip sits at the top of the LOG screen** on the
+  program-dropped arrival, not the workout screen — the words, register,
+  tokens and contrast pairings approved above carry over unchanged, and the
+  revised placement is a **Gate 0 delta re-rendered for James on the same
+  artifact** (its log-screen section) before implementation. The workout
+  screen gets no new surface after all.
 - **No banner on the live screen.** James's RC-37 ruling ("loose any new
   banners") holds; the one line is added only because something was rowed.
 - Contrast, computed and on the artifact: title `--ink` on `--surface`
@@ -277,8 +363,8 @@ export type CloseReason =
 ```
 
 **Why a fifth rather than reusing `"program-failed"`** (ruled by James,
-2026-08-31, on the analysis below). Behaviourally the two are identical today —
-every consumer is an allowlist keyed on `"finished"`:
+2026-08-31, on the analysis below). Behaviourally the two are identical today
+on the CLIENT — every client consumer is an allowlist keyed on `"finished"`:
 
 - `storedSummary.ts`'s tier-B2 gate is TRUE only for `"finished"`, `null` and
   `undefined`. Its own fix-round-3 comment states the intent verbatim: an
@@ -288,6 +374,9 @@ every consumer is an allowlist keyed on `"finished"`:
 - `postTestOffer` / `LogSession.tsx` gate on `endedBy === "finished"`.
 - `appendSummaryObservations` admits only `"finished"`/`"rower"`, so neither
   option can ever carry machine totals.
+- `openBurstHold` admits only `"finished"`/`"rower"` — an allowlist of TWO,
+  which the first draft mis-read; see the Mechanism section, where §1 now
+  deliberately opens no hold.
 
 So this is not a behaviour choice. It is whether the stored row can tell the
 two program failures apart afterwards. `"program-failed"` means *our*
@@ -297,13 +386,15 @@ only durable field the next occurrence will leave behind**, and a conflated
 label makes a future count impossible — the same blindness that took a field
 proof to settle for machine summaries.
 
-**No migration.** The record's never-migrate contract holds: `monitorRun.ts`'s
-shallow membership check exists so new `CloseReason` values still load, and
-`endedBy` is additive-optional on the stored record.
+**The server half is a migration, and the first draft's "no migration" claim
+was FALSE** — see "The migration, owned" above for the three sites (`pgEnum`,
+the 400 validator, the hand-copied `EndedBy` union) and the seam test that
+gates them. Client-side the never-migrate contract holds unchanged.
 
 **Rendering is unchanged in this PR.** `"program-dropped"` renders wherever
 `"program-failed"` renders today; any wording that distinguishes them belongs
-to the `door` column's Gate 0, not here.
+to the `door` column's Gate 0, not here. The one new surface is the log
+screen's strip, which reads the SESSION, not the stored reason.
 
 ### Test obligation — recurring failure 24
 
@@ -313,16 +404,28 @@ exactly the condition that hides a broken seam.
 One test drives a committed recording through the **real** driver, hook and
 store, so the record and its actuals are built by the real pipeline — never a
 storage-seeded fixture — and then delivers the `programDropped` event into a
-live session. It asserts:
+live session (`WorkoutDetail.connectedRecovery.test.tsx` is the proven model
+for this composition). It asserts:
 
-1. the record is durable, and `endedBy === "program-dropped"`;
+1. the record is durable, and its `endedBy === "program-dropped"` (the
+   RECORD's `CloseReason`; the session's own `endedBy` reads `"machine"`);
 2. the kept count equals the intervals the capture actually completed;
-3. the destination is the workout, not the log;
-4. **under a forced durable-write failure, no exit occurs** and the
-   COULD-NOT-KEEP state renders.
+3. the ended hand-off navigates to `/library/:id/log?from=monitor` **and the
+   log door renders the row** — the assertion is about the READER existing,
+   not about a destination. The first draft asserted "the workout, not the
+   log", which would have passed green on the exact defect that stranded the
+   record (the antagonist's most dangerous finding: an assertion that pins a
+   removal without asserting its replacement cannot go red on the loss);
+4. **under a forced durable-write failure, no hand-off occurs** and the
+   COULD-NOT-KEEP state renders in the ended frame;
+5. **the seam test the migration owes** (RF24, "a seam gap gates the PR that
+   creates it"): a program-dropped row driven through `POST /api/logs`
+   returns 200 and reads back. Without it the server's 400 validator is
+   invisible to every client-side gate, and the hand-copied server union
+   makes the compiler blind to the widening.
 
 **On the fixture's honesty:** no committed recording emits `programDropped`
-naturally, and per §0.4 none ever can — the detector's own gates are RC-37's
+naturally, and none can today (§0.4) — the detector's own gates are RC-37's
 and already exist. What is new here is the *handler*, so the event is
 synthesised while every frame, actual and storage write beneath it is real.
 That is stated rather than glossed, and it still satisfies RF24: the test
@@ -331,7 +434,8 @@ begins before the producer writes and asserts after the reader reads.
 **Every assertion above gets a mutation that makes it fail, and the report
 states what was mutated and what the failure said** (RF21). Assertion 4's
 mutation forges the durable verdict at the seam, not below it — a hook-level
-mutation alone would not prove the exit is gated.
+mutation alone would not prove the hand-off is gated. Assertion 5's mutation
+narrows the server union back and watches the 400.
 
 ## §2 — The ring becomes readable and durable (**prerequisite**)
 
