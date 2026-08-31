@@ -3599,3 +3599,86 @@ does not match these numbers._
   timing twice and is now spent. **Forward obligation, filed rather than
   remembered: the first tester report after this tag gets its ring decoded for
   `commit-accepted{verdict:"failed"}` before anything else.**
+
+## Phase-open gate, 2026-08-31 (Wave E slate: the Concept2 logbook — TRIAD, auth + two stored shapes)
+
+- **A spec can pass every evidence rule and still design for the wrong SURFACE.**
+  Wave E's spec is the best-sourced this ledger has seen — verbatim C2 quotes, a
+  named does-it-exist section, RF25 seam ownership, RF24's upstream test called
+  out by name — and it contains **zero occurrences** of "native", "iOS",
+  "Capacitor", "WebView" or "deep link" while specifying a browser-redirect OAuth
+  flow for an app whose primary surface serves a LOCAL bundle
+  (`capacitor.config.ts` `webDir: "dist/client"`), authenticates with a Keychain
+  bearer on `fetch` and never on a navigation (`src/api.ts:9-19`), and carries
+  exactly ONE URL scheme, Google's (`Info.plist:21-32`), with no `appUrlOpen`
+  handler in `src/`. The callback has nowhere to land and the connect start
+  carries no credential. Google sign-in already solved this in-repo with a NATIVE
+  plugin flow instead of a redirect — the precedent was two files away.
+  **At every phase-open gate, ask which SURFACE each spec'd flow runs on and name
+  the file that proves it.** RF13 and RF18's layer trap, now in a third form:
+  external docs, our own code, and now our own shells.
+- **The wave's exit block carried the widened scope; the wave's ITEM LIST did
+  not.** Three checkboxes, all inherited from RC; the Connect card and the send
+  affordance existed only in a Status paragraph. Worse, inherited item 2 named
+  per-interval `rest_time` as a gate this wave answers while the spec ruled the
+  `intervals` array out of scope. **A widened scope edits the checkboxes, not
+  only the prose — and re-reads the INHERITED items for ones the new spec has
+  just contradicted.** RF17's sibling: presence in the file is not presence in
+  the list.
+- **"The follow-on will store it" can defer a WRONG NUMBER rather than a missing
+  feature, and the tell is that the better value already exists.** The spec
+  posts C2's `date` from `loggedAt` while quoting C2's own sentence that the
+  field is "the end of the workout, NOT the beginning" — and
+  `MonitorRun.completedAt` (`src/monitor/monitorRun.ts:133`) already exists
+  client-side, unstored, minutes closer, on a PR that is already writing a
+  migration. **Separate a deferred FEATURE from a deferred CORRECTION at every
+  slate gate.** (Same shape as the 2026-08-22 "separate a deferred
+  IMPLEMENTATION from a deferred DECISION"; the second is usually free and
+  usually upstream.)
+- **RF18 in its purest form: the residual that kills the follow-on was already
+  in the repo, in the file the spec cites the neighbouring claim from.**
+  `docs/monitor/pm5-ble-ecosystem-review.md:391` row (i): *"the wire is
+  MINUTE-resolution and Concept2 stores seconds, so the wire cannot supply C2's
+  dedup key as-is."* The spec cited RC exit (b)'s decode of that same field and
+  not this line — so its named remedy (store the machine's log date) cannot work
+  if the dedup key turns out to be second-granular. **When a spec proposes a
+  follow-on to fix a limit, grep the repo for whether the follow-on has already
+  been falsified.**
+- **A probe whose answer changes the product gets its responses pre-committed,
+  or it is a data point rather than a gate.** PR0 measures C2's dedup
+  granularity; the three outcomes have three different product answers (ship as
+  is / ship with a duplicate warning in the copy / narrow the wave) and the spec
+  named none. Live, not hypothetical: `ROADMAP.md:1337` records James connecting
+  via NFC in **ErgData** on the same day the wave opened, so C2 may already hold
+  the rows we are about to send.
+- **The eligible-population count is now a standing phase-open question for any
+  send/render affordance keyed on additive-nullable columns.** Wave E's send
+  button is fenced by three of them (`device_name`, `ended_by`, `work_*`) and its
+  `stroke_rate` reads `machineSummary` — the exact column the 2026-08-28 ad-hoc
+  gate counted at **zero of sixteen production rows**, whose v0.30.0 fix still
+  owes field proof. **One query before the surface is designed: how many rows
+  would qualify today?**
+- **Verdict: GO-WITH-CONDITIONS, split by PR.** PR0 (desk cross-connect)
+  unconditional and immediate — cheap, discharges RC exit (d), and answers what
+  gates everything after it. PR1/PR2 behind the five conditions above.
+  RC exit (d) transcription **VERIFIED VERBATIM** against
+  `docs/history/phase-rc.md:65-66` — the 2026-08-28 close-gate ruling worked as
+  designed, first time it has been tested.
+- **Exit criterion 4 (RC-9(b)'s live ring verdict) does not belong in a
+  Concept2 wave** — no shared mechanism, PR or risk model; as written it gates a
+  C2 release on an unrelated hardware walk. Its own text already says it rides
+  the next driver-area PR, which is a register disposition. **A criterion
+  inherited with a wave is not automatically a criterion OF that wave.**
+- **Release call: v0.31.0 MINOR, after PR2 — never after PR0 or PR1.** PR0 is a
+  dev script and a report; PR1 alone is a producer with no consumer, which the
+  2026-08-28 rebalance already ruled is unfinished work rather than a ship. The
+  note promises one sentence — link your logbook on You, send a finished
+  monitor-connected row, one at a time — plus the limits in plain words (no
+  splits, no stroke data, older and hand-logged rows ineligible, a row ErgData
+  already sent comes back refused). **The word "sync" is banned from this
+  wave's notes**: nothing here syncs, and the follow-on that would is named out
+  of scope.
+- **Counted: 39 unchecked on main, 5 checked** — down from 90 at the 2026-08-28
+  rebalance (67 at RC open, 24 on 2026-08-13). First large decrease ever
+  recorded here, and it is the archive doing the work rather than execution.
+  Roadmap presence **PASS** (spec + ROADMAP section in one commit, `066a36ef`).

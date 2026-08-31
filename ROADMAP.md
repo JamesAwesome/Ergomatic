@@ -750,16 +750,27 @@ gate was explicit that without the transcription the criterion evaporates on
 the rename — and Phase RC is titled "the row Concept2 would recognise" and
 closed with zero Concept2 contact.
 
-- [ ] **Post a reconciled row to `log-dev.concept2.com`, pull `export/` back,
-      and diff.** The cross-connect RC never ran. **M**
-- [ ] **The sandbox as a test oracle** (RC-10). Two gates the numeric work does
-      not cover: `weight_class` (RULED — a binary H/L asked only at C2 link
-      time, never at onboarding, and it is PII) and per-interval `rest_time`.
-- [ ] **A LIVE ring verdict for 0x0039's totals against Σ`recordedActuals`**
-      (RC-9(b)), the way (a) and (d) have one. **Narrowed and nearly done:** the
-      blocker expired and the corpus comparison is made and green on four
-      captures (rests-finished 254.8 s / 935 m exact). Only the live verdict is
-      left. **S**
+- [ ] **PR0 — post a reconciled row to `log-dev.concept2.com`, pull `export/`
+      back, and diff.** The cross-connect RC never ran. Carries the wave's six
+      pre-committed probes (spec §PR0): `state` echo, dedup date granularity,
+      zero-rest post, the wrong-value red-proof, the verification stretch, and
+      the eligible-population count. **M**
+- [ ] **PR1 — the server broker.** `concept2_links` + auth attempts + four
+      `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
+      `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**
+- [ ] **PR1.5 — the native link flow**, on device: system-browser consent,
+      foreground re-fetch, and (branch B only) the URL scheme + `appUrlOpen`
+      handler. Split from PR1 so one reviewer never holds a token-broker
+      migration and an iOS deep-link contract in one pass. **S**
+- [ ] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
+      (Connect + H/L ask + Unlink) and the log row's Send action with
+      sent/duplicate/failed states and a View-on-Concept2 link-out. **M**
+- [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open: the
+      `weight_class` gate is answered by the link flow (RULED — a binary H/L
+      asked only at C2 link time, never at onboarding, and it is PII); the
+      per-interval `rest_time` gate is NOT answered this wave — RC-1 stored the
+      session-level split only, `LogStep` carries no per-interval rest, so the
+      `intervals` array is out of scope and rides the auto-upload follow-on.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
@@ -771,13 +782,17 @@ are trying to be right about.
 **Exit — RC exit criterion (d) transcribed VERBATIM at open, per the close
 gate's binding:** _"a row posted to the Concept2 sandbox comes back through
 `export/` matching what we stored, or the reason it cannot is documented."_
-Plus, from the widened scope: a linked user sends an eligible row from the
-app and C2's result id is stored on it, with the duplicate (409) and failure
-states each observed for real at least once; `weight_class` asked exactly
-once, at link time, H/L, nothing more (minimal-PII kept); RC-9(b)'s live
-ring verdict lands; and the dedup-granularity and verification-code
-questions each carry a measured answer in PR0's report — "unknown" leaves
-the wave open.
+The hatch is bounded (PM open gate): "cannot" is acceptable for a field C2
+rejects or does not return, never for a field we chose not to send. Plus,
+from the widened scope: a linked user sends an eligible row from the app ON
+THE PHONE and C2's result id is stored on it, with the duplicate (409) and
+failure states each observed for real at least once; the link flow's
+request bodies carry exactly ONE new user attribute, `weight_class` (the
+countable form of minimal-PII); and the dedup-granularity, `state`-echo and
+zero-rest-post questions each carry a measured answer in PR0's report —
+"unknown" leaves the wave open. (RC-9(b)'s live ring verdict moved OUT to
+the open-item register at the PM open gate: no shared mechanism, PR, or
+risk model with this wave.)
 
 ---
 
@@ -792,6 +807,14 @@ promoted into a wave, or it is killed with a reason. "Rides the next PR touching
 X" is a real disposition — most of these are single files.
 
 ## Codebase-audit owners
+
+- **RC-9(b) — a LIVE ring verdict for 0x0039's totals against
+  Σ`recordedActuals`**, the way (a) and (d) have one. Moved here from Wave E's
+  exit at the PM open gate (2026-08-31): no shared mechanism, PR, or risk model
+  with the Concept2 work. Narrowed and nearly done — the corpus comparison is
+  made and green on four captures (rests-finished 254.8 s / 935 m exact); only
+  the live verdict is left. **Rides the next PR touching the driver area.**
+  Evidence: docs/history/phase-rc.md (RC-9), the oracle corpus test.
 
 - **DUE NOW — the store SHIPPED (#239, merged 2026-08-31): at the first
   tester report on v0.30.0, decode the ring for
