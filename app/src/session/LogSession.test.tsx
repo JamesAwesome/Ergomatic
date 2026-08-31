@@ -5857,20 +5857,29 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     expect(handoffStore.read()?.sessionKey).toBe(run.startedAt);
 
     // "Next acceptance": some LATER destructive authorization retires this
-    // same, still-claimed key. Task 5's own armed-acceptance retire is now
-    // production-reachable: RE-POINTED (plan Task 5, carried from
-    // ROADMAP's AUD-016 item) at the REAL door — `ConnectAction.tsx`'s own
-    // `handleConnectAnyway`, driven through its real UI, standing in for a
+    // same, still-claimed key. RE-POINTED (plan Task 5, carried from
+    // ROADMAP's AUD-016 item; retargeted again at the Task 5 review fix
+    // round once the retire's EXECUTION moved off "Connect anyway" and
+    // onto the hook's own wire "armed" event) at the REAL door's
+    // AUTHORIZATION half: `ConnectAction.tsx`'s own `handleConnect`,
+    // driven through its real UI, stages this key — standing in for a
     // rower who abandons this log and then presses Connect on the same
-    // (still-unretired) workout. The CONSUMER-side claim discipline this
+    // (still-unretired) workout. This file has no real hook/transport to
+    // drive all the way to "armed" (that mechanism's own dedicated home
+    // is `useMonitorSession.test.ts`'s "hand-off store" describe block),
+    // so the EXECUTION half is the same two calls the armed handler
+    // itself makes — `takeStagedRetireHandoff` then `retire` — standing
+    // in for that one step only. The CONSUMER-side claim discipline this
     // row exists to prove is unaffected by which door eventually calls
-    // it, but this is no longer a store-level stand-in for one.
+    // it, but this is no longer a bare store-level stand-in for the
+    // whole thing: the AUTHORIZATION half is real UI now.
     const { default: ConnectAction } = await import("../monitor/ConnectAction");
     render(<ConnectAction onProceed={() => undefined} />);
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Connect anyway" }),
-    );
+
+    const staged = handoffStore.takeStagedRetire();
+    expect(staged.length).toBe(1);
+    handoffStore.retire(staged, "connect-guard-armed");
 
     const retireReceipt = receipts.find(
       (r) => (r as { kind?: string }).kind === "retire",

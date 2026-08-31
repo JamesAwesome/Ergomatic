@@ -14,6 +14,8 @@ import {
   currentUnretired as currentUnretiredHandoff,
   resetForTests as resetHandoffStoreForTests,
   setReceiptChannel,
+  stageRetire as stageRetireHandoffForTest,
+  takeStagedRetire as takeStagedRetireHandoff,
   type HandoffReceipt,
 } from "./handoffStore";
 import ConnectAction from "./ConnectAction";
@@ -388,20 +390,42 @@ describe("ConnectAction: the guard", () => {
   });
 });
 
-// Hand-off store design spec §5, plan Task 5: the "armed acceptance" row —
-// `handleConnectAnyway`'s own retire, the acceptance point that makes
-// Connect's Replace confirmation binding (real UI path — the door leg the
-// task brief names, mutation-probed in the task report).
-describe("ConnectAction: the armed retire (hand-off store §5 row 1)", () => {
+// Hand-off store design spec §5, plan Task 5 review fix round
+// (2026-08-30): the "armed acceptance" row's AUTHORIZATION half only —
+// this component STAGES the guard's own read; it never retires anything
+// itself any more (a first draft did, at "Connect anyway" press time,
+// and the reviewer proved that destroyed a stale record even when the
+// connect attempt then failed or was cancelled — a real F5-class
+// regression, since every interstitial state's own Cancel promises
+// "nothing lost"). The EXECUTION half (the actual retire, at the wire
+// "armed" event) is `useMonitorSession.test.ts`'s own "hand-off store"
+// describe block to prove — this file has no real hook/transport to
+// reach "armed" with.
+describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", () => {
   beforeEach(() => {
     localStorage.clear();
     resetHandoffStoreForTests();
   });
 
-  it("Connect anyway retires the staged store entry — key-bound, receipted", async () => {
+  it("Connect stages the current MonitorRun entry in the store — key-bound, not yet retired", async () => {
     connectAsTaskFiveWill();
-    const staged = currentUnretiredHandoff();
-    expect(staged).not.toBeNull();
+    const before = currentUnretiredHandoff();
+    expect(before).not.toBeNull();
+    renderConnect();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    // Staged, not retired: the record is untouched, on both tiers.
+    expect(currentUnretiredHandoff()).toStrictEqual(before);
+    expect(loadMonitorRun()).not.toBeNull();
+    const staged = takeStagedRetireHandoff();
+    expect(staged).toStrictEqual([
+      { sessionKey: before!.sessionKey, revision: before!.revision },
+    ]);
+  });
+
+  it("neither Connect anyway nor a direct proceed ever retires anything from this component — no retire receipt fires either way", async () => {
+    connectAsTaskFiveWill();
     const receipts: HandoffReceipt[] = [];
     setReceiptChannel((r) => receipts.push(r));
     renderConnect();
@@ -411,68 +435,72 @@ describe("ConnectAction: the armed retire (hand-off store §5 row 1)", () => {
       screen.getByRole("button", { name: "Connect anyway" }),
     );
 
-    // Retired BEFORE `onProceed` (`connectAsTaskFiveWill`) runs its own
-    // `saveMonitorRun`/`createMonitorRun` pair — the retire receipt for
-    // the OLD key must exist independently of whatever the new session
-    // then writes.
-    const retireReceipts = receipts.filter((r) => r.kind === "retire");
-    expect(retireReceipts).toContainEqual({
-      kind: "retire",
-      sessionKey: staged!.sessionKey,
-      authorizedRevision: 0,
-      retiredRevision: 0,
-      superseded: false,
-      claimState: "unclaimed",
-      reason: "connect-guard-armed",
-    });
+    // `connectAsTaskFiveWill` (this test's `onProceed`) writes a fresh
+    // MonitorRun of its own via `saveMonitorRun`/`createMonitorRun`
+    // directly — never through the store — so no COMMIT receipt is
+    // expected here either; the point is specifically the absence of any
+    // RETIRE receipt, which only the hook's own "armed" handler may emit.
+    expect(receipts.filter((r) => r.kind === "retire")).toStrictEqual([]);
+    // The staged set from the press above is still sitting in the store,
+    // exactly where `useMonitorSession.ts`'s own "armed" handler expects
+    // to find and consume it — nothing here already took it.
+    const staged = takeStagedRetireHandoff();
+    expect(staged.length).toBe(1);
     setReceiptChannel(null);
   });
 
-  it("a revision superseded between stage and press still retires — superseded:true, receipted, not rejected (§1)", async () => {
+  it("a revision that changes while the confirm panel sits on screen is captured at STAGE time, not re-read at press time", async () => {
     connectAsTaskFiveWill();
-    const staged = currentUnretiredHandoff();
-    expect(staged).not.toBeNull();
+    const before = currentUnretiredHandoff();
     renderConnect();
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     // THE RACE: the dead hook's own linger-window burst lands WHILE the
-    // confirm panel sits on screen — after `handleConnect` captured
-    // revision 0, before "Connect anyway" is pressed.
-    const bumped = commitHandoff(staged!.sessionKey, 0, staged!.run);
+    // confirm panel sits on screen — after `handleConnect` staged
+    // revision 0, before "Connect anyway" is ever pressed.
+    const bumped = commitHandoff(before!.sessionKey, 0, before!.run);
     expect(bumped).toMatchObject({ accepted: true, revision: 1 });
-    const receipts: HandoffReceipt[] = [];
-    setReceiptChannel((r) => receipts.push(r));
 
     await userEvent.click(
       screen.getByRole("button", { name: "Connect anyway" }),
     );
 
-    const retireReceipt = receipts.find((r) => r.kind === "retire");
-    expect(retireReceipt).toMatchObject({
-      sessionKey: staged!.sessionKey,
-      authorizedRevision: 0,
-      retiredRevision: 1,
-      superseded: true,
-      reason: "connect-guard-armed",
-    });
-    // Never rejected — §1: "a superseded revision... does NOT reject."
-    expect(currentUnretiredHandoff()).toBeNull();
-    setReceiptChannel(null);
+    // The STAGED set still names revision 0 — the value `handleConnect`
+    // captured at stage time — never the superseded revision 1 the race
+    // above produced. This is what lets the hook's own retire report
+    // `superseded: true` truthfully later, instead of trivially matching
+    // whatever is current (see `handoffStore.stagedRetireSet`'s own doc
+    // comment on why a fresh re-read at press time would defeat this).
+    expect(takeStagedRetireHandoff()).toStrictEqual([
+      { sessionKey: before!.sessionKey, revision: 0 },
+    ]);
   });
 
-  it("nothing staged (a SessionRun-only stage): the retire is a no-op, no retire receipt fires", async () => {
-    saveRun(unloggedSessionRun());
-    expect(currentUnretiredHandoff()).toBeNull();
-    const receipts: HandoffReceipt[] = [];
-    setReceiptChannel((r) => receipts.push(r));
+  it("nothing to protect: Connect stages an EMPTY set, clearing any stale set from an earlier, abandoned press", async () => {
+    // A stale set from an earlier press (a different workout's Connect,
+    // since cancelled/abandoned) must not survive to authorize THIS
+    // press's own eventual "armed" event (rev-3 antagonist: "a set
+    // staged for attempt 1 must not authorize attempt 2's retire").
+    stageRetireHandoffForTest([
+      { sessionKey: "2020-01-01T00:00:00.000Z", revision: 7 },
+    ]);
     renderConnect();
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Connect anyway" }),
-    );
 
-    expect(receipts.filter((r) => r.kind === "retire")).toStrictEqual([]);
-    setReceiptChannel(null);
+    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+  });
+
+  it("nothing staged (a SessionRun-only stage): the guard shows the confirm, but stages an empty set — no MonitorRun to protect", async () => {
+    saveRun(unloggedSessionRun());
+    expect(currentUnretiredHandoff()).toBeNull();
+    renderConnect();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      screen.getByText("You have an unlogged session. Connecting discards it."),
+    ).toBeInTheDocument();
+    expect(takeStagedRetireHandoff()).toStrictEqual([]);
   });
 });

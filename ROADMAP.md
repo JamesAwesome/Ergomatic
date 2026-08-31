@@ -450,23 +450,80 @@ rower's work silently.
         corresponding product benefit — judged disproportionate per
         CLAUDE.md's own "spend proportionally" rule; flagged for whoever
         next touches this function, not chased further here.
-        `ConnectAction.tsx`'s "Connect anyway" now retires the STAGED
-        store entry (reason `"connect-guard-armed"`, matching the
-        illustrative reason string Task 2's own `handoffStore.test.ts`
-        already used) before calling `onProceed` — the acceptance point
-        that makes the Replace confirmation binding, captured at STAGE
-        time (not re-read at press time) so a revision that moves while
-        the confirm panel is on screen is honestly reported as
-        `superseded: true` rather than silently overwritten; three
-        dedicated tests (ordinary retire+receipt, a superseded revision
-        proceeding, a no-op when nothing was staged); mutation-probed by
-        skipping the retire entirely — 3 tests failed (the two
-        `ConnectAction.test.tsx` tests plus `LogSession.test.tsx`'s
-        re-pointed row-10 test below), confirming all three are
-        genuinely sensitive to this one call. Task 4's row-10 abandon-path
-        stand-in is RE-POINTED: it now drives the real
-        `ConnectAction` component (Connect -> Connect anyway) instead of
-        calling `handoffStore.retire()` directly.
+        **CORRECTED AT REVIEW, same day: the armed retire's EXECUTION
+        POINT moved from "Connect anyway" press to the wire "armed"
+        event.** A first draft had `ConnectAction.tsx`'s own
+        `handleConnectAnyway` retire the staged store entry immediately,
+        at that press, before `onProceed` even ran — before BLE, before
+        programming, before either of `handleConnectProceed`'s own two
+        synchronous early returns (missing baselines, `CompileError`).
+        The reviewer's own probe proved this a real F5-class regression:
+        seed a stale record, Connect, Connect anyway, a REAL
+        transport-missing failure, Cancel — `currentUnretired()` and
+        `loadMonitorRun()` both came back `null`, even though nothing was
+        ever created to replace it, contradicting every interstitial
+        state's own doc comment ("Cancel... always lands back on
+        Workout detail with nothing lost"). **Fixed**: `ConnectAction.tsx`
+        now only STAGES the authorization in the store
+        (`handoffStore.stageRetire`, a new process-scoped slot,
+        unconditionally overwritten on every Connect press so a stale set
+        from an abandoned earlier press can never survive to authorize a
+        later one — the rev-3 antagonist's own words, "a set staged for
+        attempt 1 must not authorize attempt 2's retire"); the actual
+        retire moved to `useMonitorSession.ts`'s own `event.kind ===
+        "armed"` handler (`handoffStore.takeStagedRetire`, reason
+        `"connect-guard-armed"`) — the wire acceptance point a failed or
+        cancelled program never reaches at all (census: "Connect ->
+        program -> armed | failure-card", armed strictly after program).
+        `cancel()` and the `programDropped` reset both DISCARD (not
+        retire) whatever is staged, so a dead attempt's own authorization
+        never leaks into a later one. `createMonitorRun`'s own
+        pre-existing "whatever remains" defense retire at the first real
+        rowing frame is UNCHANGED (kept as the narrower backstop for the
+        residual armed-to-first-frame window; removing it would reopen a
+        real `store-second-key-refused` risk the design's own "no
+        rendered change" exit criterion forbids) — its own doc comment
+        now states plainly that it is genuinely redundant in the ordinary
+        case, not merely "should be." Five dedicated hook-level tests in
+        `useMonitorSession.test.ts` (retires exactly at armed, not
+        earlier; a superseded revision proceeds and receipts; cancel
+        discards and the record survives; an unstaged unrelated entry
+        survives armed untouched — proving the retire is bound to the
+        staged set, never a blind sweep) plus a permanent UI-level
+        regression test in `WorkoutDetail.test.tsx` (the reviewer's own
+        probe, promoted verbatim: Connect, Connect anyway, a real
+        failure, Cancel, record survives on both tiers) and four
+        retargeted `ConnectAction.test.tsx` tests (staging only — this
+        component no longer retires anything itself). Task 4's row-10
+        abandon-path stand-in is RE-POINTED AGAIN: it drives the real
+        `ConnectAction` component for the authorization half (Connect
+        stages) and stands in for the hook's own two-call armed
+        consumption (`takeStagedRetire` then `retire`) for the execution
+        half, since this LogSession-focused file has no real
+        hook/transport to reach "armed" with. Mutation-probed: retire at
+        press time again (the door-leg-style reversion) fails the new
+        "Connect anyway, a real failure, Cancel" permanent test; an
+        "unbound" armed retire (consuming `currentUnretired()` directly
+        instead of the staged set) is what the dedicated
+        "nothing staged: an unrelated entry survives" test exists to
+        catch — both confirmed red before the fix, green after.
+        **Two further findings folded in at the same review:** (1)
+        `Today.tsx`'s own stale-draft-discard guard effect
+        (`Today.tsx:370`, `loadMonitorRun()` direct) is a THIRD legacy
+        read alongside `monitorRunState()`/`anyLiveSession()` above — Task
+        4's own report already disclosed it as "left unchanged, out of
+        scope" (a different, `useEffect`-fired liveness check, safe under
+        §8 since it never runs during render); added here so Task 6's own
+        module-boundary sweep has all three named in one place rather than
+        split across two tasks' reports. (2) `monitorRun.test.ts`'s own
+        `connectGuardStage` describe block gained a header comment stating
+        plainly that its tests exercise the FUNCTION's descending-severity
+        branching given an asserted boolean, never the STORE's own
+        broader tier-visibility (memory-only vs durable-only) — that
+        broader claim is `ConnectAction.test.tsx`'s and
+        `handoffStore.test.ts`'s own to prove, and always was; the
+        comment exists so a future reader doesn't mistake one test file's
+        scope for the other's.
         **The #230 restoration** (spec §11): `ConnectedSurface.tsx` (the
         Gate-0 approved held-error frame — the "COULD NOT KEEP THE RECORD
         ON THIS PHONE." strip, Retry/Log it anyway, reachable now that

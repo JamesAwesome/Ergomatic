@@ -34,8 +34,18 @@
 //     exposes that explicitly as `hydrate()` below, rather than leaving it
 //     as a side effect only reachable by calling `commit`/`retryDurable`/
 //     `retire`/`currentUnretired` for some other reason.
-// Flagged here for Task 3/4's review since the plan's verbatim-names list
-// covers neither.
+//  3. Task 5 review fix round (2026-08-30): §5's "armed acceptance" row
+//     names WHAT gets retired ("the entry staged at the Connect guard")
+//     but not HOW that authorization survives from the guard's own read
+//     (well before BLE/programming) to the wire "armed" event (well
+//     after) without being re-read (which would defeat the point — see
+//     `stagedRetireSet`'s own doc comment). This module exposes that as
+//     `stageRetire(set)`/`takeStagedRetire()`, the store's own call —
+//     the guard and the hook are different files/components with no
+//     prop path between them, so the store is the only place this
+//     hand-off can live without inventing a second mechanism.
+// Flagged here for Task 6's review since the plan's verbatim-names list
+// covers none of the three.
 //
 // **REQUIREMENT for Task 3/4 (task-2 review, finding I1):** `Today.tsx` and
 // `LogSession.tsx`'s mount snapshots are both `useState` lazy inits — i.e.
@@ -260,6 +270,53 @@ const tombstones = new Set<string>();
  *  (`deriveClaimState`), never stored as a third value. A retire always
  *  deletes its key's entry here (§6: "a retire releases"). */
 const claims = new Map<string, { renderedRevision: number }>();
+
+/** Task 5 review fix round (2026-08-30): the Connect guard's own
+ *  AUTHORIZATION, recorded at STAGE time (when the confirm panel is
+ *  shown) so its EXECUTION can move downstream to the wire "armed" event
+ *  -- well after the button press, after BLE pairing and programming --
+ *  without losing the exact `{sessionKey, revision}` the guard actually
+ *  saw. A retire at PRESS time (the shape this module originally
+ *  shipped) destroyed the record even when the connect attempt then
+ *  failed or was cancelled -- a real regression against every
+ *  interstitial state's own "Cancel: nothing lost" promise, caught by
+ *  review.
+ *
+ *  One process-scoped array, not per-key -- there is at most one Connect
+ *  guard in flight at a time (single-tab assumption, same as every other
+ *  piece of state in this module). Overwritten on every `stageRetire`
+ *  call (never accumulated): `ConnectAction.tsx`'s own `handleConnect`
+ *  calls this UNCONDITIONALLY on every press, staging an empty array
+ *  when nothing needs protecting -- so a stale set from an earlier,
+ *  abandoned press (the confirm panel cancelled, or a different
+ *  workout's own Connect) can never survive to wrongly authorize a LATER
+ *  press's own "armed" event. `useMonitorSession.ts`'s own `cancel()`/
+ *  `programDropped` paths also clear it via `takeStagedRetire` (consumed,
+ *  not retired) -- the rev-3 antagonist's own words: "a set staged for
+ *  attempt 1 must not authorize attempt 2's retire." */
+let stagedRetireSet: readonly { sessionKey: string; revision: number }[] = [];
+
+/** Records the Connect guard's own authorization at stage time. See
+ *  `stagedRetireSet`'s own doc comment above for the full discipline. */
+export function stageRetire(
+  set: readonly { sessionKey: string; revision: number }[],
+): void {
+  stagedRetireSet = set;
+}
+
+/** Consumes (returns AND clears) whatever is currently staged -- called
+ *  exactly once per outcome: `useMonitorSession.ts`'s own `armed` event
+ *  handler calls this to retire what it returns; the `cancel()`/
+ *  `programDropped` cleanup paths call this too, discarding the result,
+ *  so a dead attempt's own staged set can never outlive it. */
+export function takeStagedRetire(): readonly {
+  sessionKey: string;
+  revision: number;
+}[] {
+  const set = stagedRetireSet;
+  stagedRetireSet = [];
+  return set;
+}
 
 /** §8: "Tracked durable state: per key, `durableRevision` ... and
  *  `durableComplete`." Set only on a SUCCESSFUL durable write (including
@@ -832,6 +889,7 @@ export function resetForTests(): void {
   cachedVerdicts.clear();
   hydrated = false;
   durableMalformed = false;
+  stagedRetireSet = [];
   // Reuses `setReceiptChannel(null)` rather than duplicating its
   // `() => undefined` default inline: a second, hand-written copy of that
   // arrow function is a distinct function OBJECT the coverage tool tracks
@@ -861,4 +919,6 @@ export const handoffStore = {
   claim,
   durableState,
   cachedVerdict,
+  stageRetire,
+  takeStagedRetire,
 };

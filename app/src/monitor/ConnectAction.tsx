@@ -2,7 +2,7 @@ import { useState } from "react";
 import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
 import {
   currentUnretired as currentUnretiredHandoff,
-  retire as retireHandoff,
+  stageRetire as stageRetireHandoff,
 } from "./handoffStore";
 
 /**
@@ -52,6 +52,34 @@ import {
  * ROADMAP M-1 on why, and that choice is what the "route it through
  * `anyLiveSession()`" mutation targets.
  *
+ * **CORRECTED (Task 5 review fix round, 2026-08-30): the paragraph above
+ * describes `SessionRun` truthfully but is no longer the whole picture
+ * for a `MonitorRun` — read `stagedRetireSet`'s own doc comment
+ * (`handoffStore.ts`) for the full account.** The FIRST version of this
+ * component's "Connect anyway" retired a staged `MonitorRun` entry
+ * IMMEDIATELY, at that press — before BLE, before programming, before
+ * either of `handleConnectProceed`'s own two synchronous early returns
+ * (a missing-baselines guard, a `CompileError`). The reviewer's own
+ * probe: seed a stale record, Connect, Connect anyway, a REAL
+ * transport-missing failure, Cancel — `currentUnretired()` and
+ * `loadMonitorRun()` both came back `null`. A real F5-class regression:
+ * every interstitial state's own Cancel doc comment says "nothing lost,"
+ * and this proved it false. **Fixed by moving EXECUTION downstream to
+ * the wire "armed" event** (`useMonitorSession.ts`) — strictly after
+ * `program()` succeeds, strictly before any rowing frame, and never
+ * reached by a failed or cancelled attempt (the census's own words for
+ * the row-instead terminus: "Connect -> program -> armed |
+ * failure-card" — armed sits AFTER program). `handleConnect` below still
+ * captures the AUTHORIZATION at stage time (the exact `{sessionKey,
+ * revision}` the guard saw), but now records it in the store
+ * (`stageRetire`) rather than local state, so the hook — a different
+ * file, with no prop path from here — can consume it later. **A
+ * consequence, verified rather than assumed:** after a missing-baselines
+ * or `CompileError` return from `handleConnectProceed`, the panel still
+ * reads "Connecting discards it," and with the retire moved this is now
+ * TRUE again — nothing has been destroyed at that point, the identical
+ * promise every OTHER early return already keeps.
+ *
  * The staged confirm is `WorkoutDetail`'s own idiom, not a new one: the same
  * `.baseline-confirm` panel replacing the button in place, the same
  * Cancel-beside-a-primary pair, the same two sentences chosen by the same
@@ -71,56 +99,30 @@ export default function ConnectAction({
   // blocks the immediate `onProceed()` AND picks the panel's copy, so the
   // two can never disagree about which case triggered the stage.
   const [stage, setStage] = useState<ConnectGuardStage>(null);
-  // Hand-off store design spec §5, plan Task 5: whatever `currentUnretired()`
-  // showed AT STAGE TIME — captured here, not re-read at press time, so a
-  // revision that changes while the confirm panel sits on screen (the OLD
-  // hook's own linger-window burst racing this rower's hesitation) is
-  // exactly what "superseded" reports at the retire below. `null` means
-  // either nothing is staged, or the stage is the `SessionRun` case (that
-  // record carries no revision of its own — its destruction is
-  // `clearRun()`'s, authorized by this same guard stage; see
-  // `createMonitorRun`'s own doc comment in `monitorRun.ts`).
-  const [stagedEntry, setStagedEntry] = useState<{
-    sessionKey: string;
-    revision: number;
-  } | null>(null);
 
+  // Task 5 review fix round: stages the AUTHORIZATION in the STORE, not
+  // local state — `handoffStore.ts`'s own `stagedRetireSet` doc comment
+  // has the full discipline (why the execution moved to the hook's
+  // "armed" event, why this call is UNCONDITIONAL on every press). This
+  // component no longer retires anything itself — "Connect anyway" below
+  // goes straight to `onProceed`, the shape this component shipped with
+  // before the retire briefly (and wrongly) lived here at press time.
   function handleConnect() {
     const monitorEntry = currentUnretiredHandoff();
+    stageRetireHandoff(
+      monitorEntry !== null
+        ? [
+            {
+              sessionKey: monitorEntry.sessionKey,
+              revision: monitorEntry.revision,
+            },
+          ]
+        : [],
+    );
     const staged = connectGuardStage(monitorEntry !== null);
     if (staged !== null) {
-      setStagedEntry(monitorEntry);
       setStage(staged);
       return;
-    }
-    onProceed();
-  }
-
-  // The armed retire (spec §5's "armed acceptance" row): the moment this
-  // confirm becomes binding — "Connecting discards it" stops being a
-  // warning and becomes a fact. Key-bound to whatever `handleConnect`
-  // captured above; a revision that has since moved on (a late burst from
-  // the OLD hook's own linger window, or any other producer) still
-  // retires — `retire()`'s own key lookup finds and removes the CURRENT
-  // entry for that key regardless of the authorized revision, and reports
-  // the mismatch as `superseded` rather than refusing (§1: a superseded
-  // revision never rejects). Runs BEFORE `onProceed()` — well before
-  // `useMonitorSession.ts`'s own "createMonitorRun defense" retire, Task
-  // 3, which finds nothing left to do here in the ordinary case (Task 3's
-  // M6 same-key adopt guard handles the one case where this hasn't run:
-  // a genuine same-millisecond collision between the key retired here and
-  // the run about to be created there).
-  function handleConnectAnyway() {
-    if (stagedEntry !== null) {
-      retireHandoff(
-        [
-          {
-            sessionKey: stagedEntry.sessionKey,
-            revision: stagedEntry.revision,
-          },
-        ],
-        "connect-guard-armed",
-      );
     }
     onProceed();
   }
@@ -141,18 +143,14 @@ export default function ConnectAction({
           >
             Cancel
           </button>
-          {/* Hand-off store design spec §5, plan Task 5: `handleConnectAnyway`
-              retires the staged store entry here, then hands off to
-              `onProceed` — the analogue of Start's own "Replace session"
-              (`useStartWorkout.ts`'s `confirmReplace`), which destroys
-              immediately at its own press too, never reaching into storage
-              from the panel directly (the retire call lives in a named
-              function, not inline in this JSX). */}
-          <button
-            type="button"
-            className="button-primary"
-            onClick={handleConnectAnyway}
-          >
+          {/* Task 5 review fix round: straight to `onProceed`, with no
+              clearing/retiring of its own — the destruction (of whatever
+              was staged in the store by `handleConnect` above) belongs
+              to `useMonitorSession.ts`'s own "armed" event handler, once
+              the connect attempt has actually succeeded. See this file's
+              own header comment, "CORRECTED (Task 5 review fix round...",
+              for why a retire at THIS press was wrong. */}
+          <button type="button" className="button-primary" onClick={onProceed}>
             Connect anyway
           </button>
         </div>

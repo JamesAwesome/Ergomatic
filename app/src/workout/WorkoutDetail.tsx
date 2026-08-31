@@ -297,16 +297,26 @@ function WorkoutDetailView({
   // Hand-off store design spec §5, plan Task 5: the legacy `clearMonitorRun()`
   // is gone. This is the CENSUS'S "row-instead" row: this site has no
   // confirm of its own — it is a single-tap escape in the interstitial's
-  // failure card, and its real authorization is the Connect guard's own
-  // Replace confirmation one screen earlier (`ConnectAction.tsx`'s own
-  // "armed" retire, spec §5's "armed acceptance" row), which has usually
-  // already retired the record this door would otherwise find. A fresh,
-  // non-render read of `currentUnretired()` here is what makes this door a
-  // named terminus of the SAME staged set too — matching
-  // `useStartWorkout.ts`'s own `confirmReplace` (Task 5's other door):
-  // whatever remains gets retired, key-bound; usually nothing (a no-op —
-  // "nothing found -> nothing emitted", §1), but never silently left
-  // behind for a late producer burst to resurrect.
+  // failure card, reachable only after `program()` FAILED, which means
+  // the guard's own staged authorization was never executed here:
+  // `ConnectAction.tsx`'s "armed" retire (spec §5's "armed acceptance"
+  // row, `useMonitorSession.ts`) only fires on a SUCCESSFUL connect —
+  // "Connect -> program -> armed | failure-card" (spec §5's census), armed
+  // and failure-card are the two ALTERNATIVE outcomes of program(), never
+  // both. **CORRECTED (Task 5 review fix round, 2026-08-30): a first
+  // draft of this comment claimed the guard's retire "has usually already"
+  // run by the time this door fires — false; on this door's own path it
+  // never runs at all** (the staged set is DISCARDED, not retired, by
+  // `useMonitorSession.ts`'s own `cancel()` — `ConnectedInterstitial.tsx`'s
+  // own `handleRowInstead` calls `session.cancel()` immediately before
+  // `onRowInstead`, and `cancel()` runs synchronously to completion for a
+  // FAILED phase, so the discard has already happened by the time this
+  // function runs). This fresh, non-render `currentUnretired()` read is
+  // therefore the FIRST and ONLY thing that retires the leftover record
+  // on the fail-then-row-instead path — matching `useStartWorkout.ts`'s
+  // own `confirmReplace` (Task 5's other door): whatever remains gets
+  // retired, key-bound; "nothing found -> nothing emitted" (§1) only when
+  // there was genuinely nothing to protect in the first place.
   function handleRowInstead() {
     setConnecting(null);
     const draft = startDraft(buildNudgedDraft(workout, nudges));

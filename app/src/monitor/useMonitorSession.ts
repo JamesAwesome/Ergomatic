@@ -77,6 +77,7 @@ import {
   cachedVerdict as cachedHandoffVerdict,
   retryDurable as retryDurableHandoff,
   setReceiptChannel,
+  takeStagedRetire as takeStagedRetireHandoff,
   type HandoffReceipt,
 } from "./handoffStore";
 import { check as checkContinuity } from "./continuity";
@@ -2375,15 +2376,23 @@ export function useMonitorSession(
           // there — a circular import with `handoffStore.ts`). This is the
           // create-commit, `expectedRevision: null` unconditionally (spec
           // §1's own "the create case"), preceded by the "createMonitorRun
-          // defense" retire spec §5 names: whatever remains unretired —
-          // structurally, per the single-unretired-session invariant, this
-          // should be nothing at all by the time the Connect guard's own
-          // armed-acceptance retire has run (Task 5's own "doors" scope on
-          // this substrate — Task 2's census found NO existing defensive
-          // clear here at all, "deliberately NOT idempotent-checked" per
-          // `createMonitorRun`'s own doc comment) — but a defensive sweep
-          // right before the create is cheap insurance, and `retire`'s own
-          // per-entry receipt makes it visible if it ever finds anything.
+          // defense" retire spec §5 names: whatever remains unretired.
+          //
+          // **FOLDED with the armed-acceptance retire (Task 5 review fix
+          // round, 2026-08-30): this IS now genuinely redundant in the
+          // ordinary case, not merely "structurally should be."**
+          // `useMonitorSession.ts`'s own `event.kind === "armed"` handler,
+          // above in this same file, already retired the Connect guard's
+          // staged set the moment the machine confirmed holding this
+          // program — strictly before this frame could ever arrive. This
+          // block stays anyway, unchanged, as the narrower backstop for
+          // the one window that retire cannot see: something UNSTAGED
+          // appearing between "armed" and this, the first real rowing
+          // frame — without it, that narrow case would refuse the
+          // create-commit below as `store-second-key-refused` instead of
+          // the rower simply starting to row (the design's own "no
+          // rendered change" exit criterion). `retire`'s own per-entry
+          // receipt still makes it visible if it ever finds anything.
           // Plan Task 3 review (M6): if the leftover entry's OWN key
           // already equals the run we are about to create (a genuine
           // clock-resolution collision — the exact shape this task's own
@@ -2773,6 +2782,35 @@ export function useMonitorSession(
         // machine is holding OUR program (structure and all) — so "ready"
         // means ready, not "the ack came back".
         //
+        // Hand-off store design spec §5's "armed acceptance" row, plan
+        // Task 5 review fix round: THE ACCEPTANCE POINT. `ConnectAction.tsx`
+        // stages the guard's own authorization in the store at PRESS time
+        // (`stageRetire`) but does not retire anything itself — a retire
+        // there destroyed the record even when the connect attempt then
+        // failed or was cancelled (the reviewer's own probe: seed, Connect,
+        // Connect anyway, a real transport-missing failure, Cancel — the
+        // record was already gone). This event is the first point a
+        // failed or cancelled attempt CANNOT reach (census: "Connect ->
+        // program -> armed | failure-card" — armed sits strictly after a
+        // successful `program()`), which is what makes retiring HERE safe:
+        // by the time this fires, the rower has genuinely connected and
+        // programmed a new workout, and every earlier exit (Cancel from
+        // any prior state, the failure-card's "Row on the phone timer
+        // instead") has destroyed nothing.
+        //
+        // `takeStagedRetireHandoff()` consumes (returns AND clears) the
+        // set unconditionally — a no-op array when `ConnectAction.tsx`
+        // never had anything to stage. Key-bound to whatever was staged:
+        // `retire()`'s own key lookup finds and removes the CURRENT entry
+        // for that key regardless of the authorized revision, reporting a
+        // mismatch as `superseded` rather than refusing (§1: a superseded
+        // revision never rejects) — a late burst from an unrelated, torn-
+        // down hook racing the rower's own hesitation on the confirm panel
+        // is exactly the case this protects.
+        const staged = takeStagedRetireHandoff();
+        if (staged.length > 0) {
+          retireHandoff(staged, "connect-guard-armed");
+        }
         // The `error: null` is belt-and-braces and known to be so (task-4
         // review, LOW-5: a mutant removing it survives). `program()` has
         // already cleared the error on its way in, and under the
@@ -2912,6 +2950,15 @@ export function useMonitorSession(
         // applies to this ref, for the identical reason — see that
         // function's own comment.
         lastAcceptedRevisionRef.current = null;
+        // Task 5 review fix round: this attempt DIED here — the rev-3
+        // antagonist's own words, "a set staged for attempt 1 must not
+        // authorize attempt 2's retire." Discards whatever the Connect
+        // guard staged for THIS hook instance rather than leaving it to
+        // be wrongly consumed by some LATER, unrelated Connect press's
+        // own "armed" event (`takeStagedRetireHandoff`'s own doc comment
+        // in `handoffStore.ts`). The return value is intentionally
+        // unused — this is a discard, not a retire.
+        takeStagedRetireHandoff();
         update({ ...INITIAL_STATE, programDropped: true });
         return;
       }
@@ -4003,6 +4050,14 @@ export function useMonitorSession(
     // only opens at the `ready` -> `live` transition), so this ref was
     // already `null` too; reset for symmetry with `runRef` itself.
     lastAcceptedRevisionRef.current = null;
+    // Task 5 review fix round: same discard `event.kind === "mismatch"`'s
+    // own handler performs above, for the identical reason — this
+    // attempt (whatever phase it reached: `picking`/`pairing`/
+    // `programming`/`ready`/`failed`/`disconnected`) is over, so whatever
+    // the Connect guard staged for it must not survive to authorize a
+    // LATER, unrelated attempt's own "armed" event. A no-op when nothing
+    // was ever staged (the common case: Cancel with nothing at risk).
+    takeStagedRetireHandoff();
     update(INITIAL_STATE);
   }, [teardown, update]);
 

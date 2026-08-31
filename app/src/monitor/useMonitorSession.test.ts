@@ -40,6 +40,8 @@ import {
   retire as retireHandoffForTest,
   commit as commitHandoffForTest,
   read as readHandoffForTest,
+  stageRetire as stageRetireForTest,
+  takeStagedRetire as takeStagedRetireForTest,
 } from "./handoffStore";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
@@ -3004,6 +3006,212 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // than mutating the one a consumer might still be holding.
     expect(heldRun.actuals).toHaveLength(heldActualsLength);
     expect(heldRun).toBe(held!.run);
+  });
+
+  // Task 5 review fix round (2026-08-30): §5's "armed acceptance" row,
+  // EXECUTION half. `ConnectAction.tsx`'s own tests (`ConnectAction.
+  // test.tsx`) prove the AUTHORIZATION half — staging at press time — but
+  // that file has no real hook/transport to reach the wire "armed" event
+  // with, so the retire itself is this describe block's own to prove. A
+  // first draft executed the retire at "Connect anyway" press time
+  // instead, which the reviewer's own probe showed destroyed a stale
+  // record even when the connect attempt then failed or was cancelled —
+  // these tests pin the corrected mechanism directly against the real
+  // driver/hook composition.
+  function fakeLeftoverRun(startedAt: string): MonitorRun {
+    return {
+      v: 2,
+      workoutId: "leftover-workout",
+      title: "Leftover",
+      program: ONE_INTERVAL,
+      logSeed: { steps: [], paces: {} },
+      actuals: [],
+      deviceName: "PM5 leftover",
+      startedAt,
+      completedAt: new Date(
+        new Date(startedAt).getTime() + 600_000,
+      ).toISOString(),
+      terminated: false,
+    };
+  }
+
+  it("the armed leg: a staged Connect-guard authorization is retired exactly at the wire 'armed' event, never earlier", async () => {
+    const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
+    const created = commitHandoffForTest(
+      leftoverKey,
+      null,
+      fakeLeftoverRun(leftoverKey),
+    );
+    expect(created.accepted).toBe(true);
+    // What `ConnectAction.tsx`'s own `handleConnect` would have staged at
+    // press time, well before this hook's own connect()/program() ever
+    // ran — the store, not a prop, is how that authorization survives to
+    // reach the hook (see `handoffStore.ts`'s own `stagedRetireSet` doc
+    // comment).
+    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(result);
+
+    // MID-FLIGHT (pairing/programming, before "armed"): UNTOUCHED — the
+    // regression the review caught destroyed this at "Connect anyway"
+    // press time, well before this point.
+    expect(currentUnretiredHandoffForTest()?.sessionKey).toBe(leftoverKey);
+
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    // ARMED HAS FIRED: retired, consumed, receipted.
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    expect(takeStagedRetireForTest()).toStrictEqual([]);
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.some(
+        (e) =>
+          e.kind === "store-receipt:retire" &&
+          e.detail.includes(leftoverKey) &&
+          e.detail.includes('"reason":"connect-guard-armed"'),
+      ),
+    ).toBe(true);
+  });
+
+  it("a revision superseded between stage and armed still retires — superseded:true, receipted, not rejected (§1)", async () => {
+    const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
+    const created = commitHandoffForTest(
+      leftoverKey,
+      null,
+      fakeLeftoverRun(leftoverKey),
+    );
+    expect(created.accepted).toBe(true);
+    const createdRevision = created.accepted ? created.revision : -1;
+    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(result);
+
+    // THE RACE: an unrelated, already-torn-down hook's own linger-window
+    // burst lands WHILE this hook is still pairing/programming — after
+    // the guard staged revision 0, before "armed" ever consumes it.
+    const bumped = commitHandoffForTest(leftoverKey, createdRevision, {
+      ...fakeLeftoverRun(leftoverKey),
+      title: "Raced — a late burst",
+    });
+    expect(bumped).toMatchObject({ accepted: true, revision: 1 });
+
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+
+    expect(currentUnretiredHandoffForTest()).toBeNull();
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const retireEntry = entries.find((e) => e.kind === "store-receipt:retire");
+    expect(retireEntry).toBeDefined();
+    const receipt = JSON.parse(retireEntry!.detail) as {
+      authorizedRevision: number;
+      retiredRevision: number;
+      superseded: boolean;
+    };
+    // Never rejected — §1: "a superseded revision... does NOT reject."
+    expect(receipt).toMatchObject({
+      authorizedRevision: 0,
+      retiredRevision: 1,
+      superseded: true,
+    });
+  });
+
+  it("cancel before armed DISCARDS the staged set — the record SURVIVES, both tiers (the reviewer's own probe, promoted to a permanent regression test)", async () => {
+    const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
+    commitHandoffForTest(leftoverKey, null, fakeLeftoverRun(leftoverKey));
+    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+
+    const { result } = harness({
+      program: ONE_INTERVAL,
+      events: [],
+    });
+    await connect(result);
+    // Never reaches "armed" — Cancel fires from mid-flight, the exact
+    // shape a real transport-missing/program failure or a rower's own
+    // Cancel press produces (every interstitial state's own doc comment:
+    // "Cancel... always lands back on Workout detail with nothing lost").
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    // THE PROBE: the leftover record is untouched on BOTH tiers — not
+    // retired, not superseded, simply still there.
+    const survivor = currentUnretiredHandoffForTest();
+    expect(survivor).not.toBeNull();
+    expect(survivor!.sessionKey).toBe(leftoverKey);
+    expect(survivor!.revision).toBe(0);
+    expect(loadMonitorRun()?.startedAt).toBe(leftoverKey);
+    // The staged set is DISCARDED, not merely "still there waiting" — a
+    // LATER, unrelated Connect attempt's own "armed" must not inherit it
+    // (rev-3 antagonist: "a set staged for attempt 1 must not authorize
+    // attempt 2's retire").
+    expect(takeStagedRetireForTest()).toStrictEqual([]);
+  });
+
+  it("nothing staged: an UNRELATED unretired entry survives armed untouched by THIS hook's own retire — proves armed is bound to the staged set, never a blind 'whatever's there' sweep (§10 row 1's own mutation target)", async () => {
+    // An entry that exists in the store but was NEVER staged by anything
+    // — the shape a mutant "armed retires currentUnretired() directly"
+    // would wrongly treat as fair game.
+    const unrelatedKey = new Date(t0.getTime() - 7_200_000).toISOString();
+    commitHandoffForTest(unrelatedKey, null, fakeLeftoverRun(unrelatedKey));
+    expect(takeStagedRetireForTest()).toStrictEqual([]); // nothing staged
+
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    // Still there after "armed" — the CORRECT armed handler found nothing
+    // staged and did nothing. `createMonitorRun`'s own unchanged defense
+    // (this describe block's OWN sibling test, immediately below) is what
+    // eventually clears it, at the first real rowing frame, labelled
+    // "createMonitorRun-defense" — a DIFFERENT reason than an armed-time
+    // retire would carry, which is exactly the observable a mutant
+    // collapsing the two would break.
+    const stillThere = currentUnretiredHandoffForTest();
+    expect(stillThere).not.toBeNull();
+    expect(stillThere!.sessionKey).toBe(unrelatedKey);
+    const entriesAtArmed = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entriesAtArmed.some(
+        (e) =>
+          e.kind === "store-receipt:retire" && e.detail.includes(unrelatedKey),
+      ),
+    ).toBe(false);
+
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    const entriesAfterFrame = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entriesAfterFrame.some(
+        (e) =>
+          e.kind === "store-receipt:retire" &&
+          e.detail.includes(unrelatedKey) &&
+          e.detail.includes('"reason":"createMonitorRun-defense"'),
+      ),
+    ).toBe(true);
   });
 
   it("createMonitorRun's own defense retire (spec §5): a leftover unretired entry for a DIFFERENT key is retired before the new create-commit, which then succeeds", async () => {

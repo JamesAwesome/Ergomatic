@@ -1713,7 +1713,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       expect(loadMonitorRun()).toStrictEqual(connected);
     });
 
-    it("Connect anyway destroys it — deliberately, now with a warning first", async () => {
+    it("Connect anyway proceeds; a real failure's own Row Instead — never Connect anyway itself — destroys the stale record", async () => {
       mockHooks(BASELINES, [PERSONAL_WORKOUT]);
       const connected = monitorRunFor(FINISHED_AT);
       saveMonitorRun(connected);
@@ -1724,17 +1724,19 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
         screen.getByRole("button", { name: "Connect anyway" }),
       );
 
-      // The compiled PERSONAL_WORKOUT program is a different one than the
-      // stale connected record's own "Filling Low" — proceeding here
-      // replaces the stale record outright (this screen's own compile step
-      // never touches storage itself). Hand-off store design spec §5, plan
-      // Task 5: the destruction now happens at THIS "Connect anyway" press
-      // — `ConnectAction.tsx`'s own armed retire, not (any longer)
-      // `WorkoutDetail.handleRowInstead`'s below, which by the time it
-      // fires here finds the key already gone (a no-op — see this
-      // describe block's own dedicated "the door leg" test for
-      // `handleRowInstead`'s retire exercised where it actually finds
-      // something).
+      // CORRECTED (Task 5 review fix round, 2026-08-30): a first draft of
+      // this comment (and the code it described) claimed "Connect anyway"
+      // itself destroyed the stale record here. It never did on THIS
+      // path: the real transport-missing failure below means "armed" (the
+      // wire event `ConnectAction.tsx`'s own retire now waits for) never
+      // fires at all, and `useMonitorSession.ts`'s own `cancel()` — called
+      // by `ConnectedInterstitial.tsx`'s `handleRowInstead` immediately
+      // before `onRowInstead` — DISCARDS the staged authorization rather
+      // than retiring it. So the record survives the failure untouched,
+      // and it is `WorkoutDetail.handleRowInstead`'s OWN fresh
+      // `currentUnretired()` read + retire (this describe block's own
+      // dedicated "the door leg" test exercises that mechanism directly)
+      // that finally destroys it, right here, at THIS press.
       await screen.findByText("This device has no Bluetooth transport.", {
         selector: ".connected-serif-line",
       });
@@ -1743,6 +1745,42 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       );
 
       expect(loadMonitorRun()).toBeNull();
+    });
+
+    // THE REVIEWER'S OWN PROBE (Task 5 review fix round, 2026-08-30),
+    // promoted to a permanent regression test: a first draft of
+    // `ConnectAction.tsx` retired the staged record IMMEDIATELY at
+    // "Connect anyway" press — before BLE, before programming, before
+    // either of `handleConnectProceed`'s own two synchronous early
+    // returns. Seed, Connect, Connect anyway, a REAL transport-missing
+    // failure, Cancel: the record came back `null` on both
+    // `currentUnretired()` and `loadMonitorRun()` — gone, even though
+    // nothing was ever created to replace it, and every interstitial
+    // state's own doc comment promises Cancel "always lands back on
+    // Workout detail with nothing lost." Fixed by moving the retire's
+    // EXECUTION to the hook's own wire "armed" event, which a failed
+    // attempt never reaches.
+    it("Connect anyway, a real failure, Cancel: the stale record SURVIVES — nothing lost, on either tier", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail("/library/w3");
+      const { currentUnretired: currentUnretiredHandoff } =
+        await import("../monitor/handoffStore");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Connect anyway" }),
+      );
+      await screen.findByText("This device has no Bluetooth transport.", {
+        selector: ".connected-serif-line",
+      });
+
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      await screen.findByRole("button", { name: "Connect" });
+      expect(loadMonitorRun()).toStrictEqual(connected);
+      expect(currentUnretiredHandoff()?.sessionKey).toBe(connected.startedAt);
     });
 
     // Hand-off store design spec §5, plan Task 5 (the NAMED Task 5 exit

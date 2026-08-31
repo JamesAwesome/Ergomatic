@@ -1147,6 +1147,16 @@ describe("anyLiveSession: the coexistence truth table", () => {
 // `ConnectAction.test.tsx`'s and `handoffStore.test.ts`'s to prove, not
 // this function's own descending-severity branching, which is all these
 // tests are about.
+//
+// STATED PLAINLY (Task 5 review fix round, 2026-08-30, folded in as a
+// disclosed ⚠ note): this describe block exercises the PARAMETER's own
+// branching — given a caller has ALREADY asserted "yes/no, an unretired
+// MonitorRun exists" — never the STORE's own tier visibility (whether a
+// memory-only, durable-write-denied record counts as "exists" at all).
+// A reader looking for the P1-1 memory-only-record proof will not find
+// it here by design; it lives in `ConnectAction.test.tsx`'s own
+// "a memory-only record (durable write denied) is visible to the guard"
+// test, and `useStartWorkout.test.tsx`'s sibling for the Start door.
 describe("connectGuardStage: the Connect door's lock", () => {
   beforeEach(() => localStorage.clear());
 
