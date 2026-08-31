@@ -23,7 +23,16 @@ const CAPTURE_POLL_MS = 1000;
  * and no connect is in flight), and a link the frame watchdog has given up
  * on was reported with the same four words as a fresh screen.
  */
-type ObserverState = "offline" | "connecting" | "observing" | "lost" | "failed";
+/** `observing` carries the device name rather than leaving the component to
+ *  re-derive it: this function is the only place that establishes the name is
+ *  non-null (a live link with no name yet is still `connecting`), so carrying
+ *  it here is what keeps `headingFor` total with no unreachable fallback. */
+type ObserverState =
+  | { kind: "offline" }
+  | { kind: "connecting" }
+  | { kind: "observing"; deviceName: string }
+  | { kind: "lost" }
+  | { kind: "failed" };
 
 function observerState(session: MonitorSession): ObserverState {
   const axes = deriveAxes({
@@ -34,12 +43,20 @@ function observerState(session: MonitorSession): ObserverState {
     frameSilence: session.frameSilence,
   });
 
-  if (axes.program === "failed") return "failed";
-  if (axes.link === "connecting") return "connecting";
-  if (axes.link === "lost") return "lost";
-  if (axes.link === "up" && axes.program === "none" && axes.session === "none")
-    return session.deviceName === null ? "connecting" : "observing";
-  return "offline";
+  if (axes.program === "failed") return { kind: "failed" };
+  if (axes.link === "connecting") return { kind: "connecting" };
+  if (axes.link === "lost") return { kind: "lost" };
+  if (
+    axes.link === "up" &&
+    axes.program === "none" &&
+    axes.session === "none"
+  ) {
+    const { deviceName } = session;
+    return deviceName === null
+      ? { kind: "connecting" }
+      : { kind: "observing", deviceName };
+  }
+  return { kind: "offline" };
 }
 
 /** Short state phrase for the serif line. Deliberately NOT the error's own
@@ -49,14 +66,14 @@ function observerState(session: MonitorSession): ObserverState {
  *  mono body line below instead — the same split the connected screens use.
  *  "Lost the monitor" is `ConnectedSurface`'s own `LOST THE MONITOR` copy
  *  rather than a fifth phrasing invented here. */
-function headingFor(state: ObserverState, deviceName: string | null): string {
-  switch (state) {
+function headingFor(state: ObserverState): string {
+  switch (state.kind) {
     case "offline":
       return "Not connected";
     case "connecting":
       return "Connecting to monitor";
     case "observing":
-      return `${deviceName ?? "Monitor"} connected`;
+      return `${state.deviceName} connected`;
     case "lost":
       return "Lost the monitor";
     case "failed":
@@ -87,7 +104,7 @@ export default function JustRowObserver({
     requestDiagnosticStash: false,
   });
   const state = observerState(session);
-  const linkUp = state === "observing" || state === "lost";
+  const linkUp = state.kind === "observing" || state.kind === "lost";
 
   // `null` means "no recording tap on this build" — the button that hands
   // the operator the file is not rendered at all then, the same
@@ -128,10 +145,8 @@ export default function JustRowObserver({
     >
       <div className="connected-interstitial-body">
         <p className="connected-status-label">JUST ROW OBSERVER</p>
-        <h1 className="connected-serif-line">
-          {headingFor(state, session.deviceName)}
-        </h1>
-        {state === "failed" && session.error !== null && (
+        <h1 className="connected-serif-line">{headingFor(state)}</h1>
+        {state.kind === "failed" && session.error !== null && (
           <p className="connected-body-line">{session.error.detail}</p>
         )}
         {capture !== null && (
@@ -153,13 +168,13 @@ export default function JustRowObserver({
             Download capture
           </button>
         )}
-        {state === "offline" || state === "failed" ? (
+        {state.kind === "offline" || state.kind === "failed" ? (
           <button type="button" className="button-l1" onClick={connect}>
             Connect
           </button>
         ) : (
           <button type="button" className="button-l2" onClick={disconnect}>
-            {state === "connecting" ? "Cancel" : "Disconnect"}
+            {state.kind === "connecting" ? "Cancel" : "Disconnect"}
           </button>
         )}
       </div>
