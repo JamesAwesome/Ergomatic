@@ -374,7 +374,8 @@ rather than inferred:**
 
 - **After PR0:** production behavior is byte-identical to before it — a
   dev-only script under `app/scripts/` (never bundled; `ci-changes.sh`
-  runs the full gate but nothing ships) plus docs. Deploy any time.
+  causes CI's code jobs to run, and nothing ships) plus docs. Deploy any
+  time.
 - **After PR1:** the migration adds only additive-nullable columns and
   two new tables nothing reads; every new route refuses (availability
   matrix) because `C2_LINK_ENABLED` is unset in prod; no client change.
