@@ -1009,18 +1009,18 @@ Each needs erg time or a deliberate recording session.
   confident one, which is a **new visual state and carries a design gate**.
   Only worth doing if such a row is ever actually observed. **S**
 
-- **DISPOSED (post-#233 follow-ons): the real store's `id DESC` tiebreak
-  stays unpinned, on purpose.** `resolveNewestPlanLink` orders `plan_index,
-  logged_at DESC, id DESC`; the fake resolves a `loggedAt` tie by insertion
-  order. Aligning them was tried at #233's review and reverted with evidence
-  (two delete contract cases went red against the fake while real Postgres
-  kept passing). Pinning the real term would need a raw-SQL test forcing a
-  same-microsecond tie — a state no supported writer can produce, since
-  Postgres stores microseconds and ordinary saves never tie. That is a test
-  for an unreachable branch whose only job is determinism, bought at
-  integration-suite cost: not worth writing. `resolveNewestFakeLink`'s
-  comment carries the reasoning at the code; revisit only if a writer ever
-  batches inserts inside one transaction timestamp.
+- **DISPOSED (post-#233 follow-ons, rationale corrected at #235's review):
+  the real store's `id DESC` tiebreak stays unpinned as LOW-VALUE — not, as
+  this entry first claimed, unreachable.** The owning comment in
+  `stores/logs.ts` says a same-microsecond tie is "unlikely, not
+  impossible", and `contracts.real.integration.test.ts` already forces
+  exact ties on this table with raw SQL, so the test is writable with an
+  in-repo technique. What it would buy: determinism between two rows that
+  are, by construction, interchangeable candidates for one index — the
+  tiebreak is arbitrary-but-stable by its own comment, never "the later
+  insert". A test pinning an arbitrary choice earns integration-suite cost
+  only if some consumer starts depending on WHICH row wins; that is the
+  revisit trigger.
 - **The swap mark goes stale if a plan preset's session types are ever
   edited.** The Plan screen derives "you swapped this day" by comparing a
   log's stored type against `PLANS`' type for that slot TODAY, so editing
@@ -1044,32 +1044,23 @@ Each needs erg time or a deliberate recording session.
   fixing it in isolation would mean the mark stops naming the prescription,
   which is what makes it useful on every other row. **S**
 
-- **TWO unit-project flakes, each seen once and neither reproduced.** On
-  2026-08-30 during #233: `server/routes/data.test.ts` > `PATCH
-  /api/logs/:id` > `an explicit null clears thumbs previously set to a real
-  value`, then later `GET/PUT /api/prefs` > `PUT updates a field and GET
-  reflects the merge` (expected `#00ff00`, got undefined). Each passed on
-  every rerun — eight and four consecutive full runs respectively, plus
-  three more clean stress runs at the follow-on round (fifteen total). **Two
-  different tests, same shape: supertest against the in-memory fakes**, and
-  both failures read as `expected undefined to be <value>` on a response
-  body field — the shape of a non-JSON or failed response, not of wrong
-  data (the prefs fake is a plain per-instance Map with no async, no
-  clock, and no shared state; read directly, it cannot produce a partial
-  merge). The lead is therefore the transport under load — supertest's
-  ephemeral sockets while parallel vitest workers saturate the machine —
-  not the fakes. **This matters more than the known e2e flakes:** the
-  unit
-  project has no Docker, no browser and no network — it is fake stores and
-  supertest, and it should be deterministic. The test itself is self-contained
-  (fresh `makeStores()`, POST then PATCH, no shared fixture), so the
-  nondeterminism is somewhere below it: the fakes carry module-level mutable
-  state (`insertionSeq`, `logsInsertionSeq`) and `Date`-based ordering, which
-  is where to look first. **Not attributed to #233** — that PR's fake changes
-  are confined to `resolveNewestFakeLink`/`listPlanLinks`, which this path
-  never calls — but a single observation cannot rule it out either. Capture the
-  failure output next time it appears rather than re-running past it. **S**
-
+- **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
+  `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
+  clears thumbs previously set to a real value`, then `GET/PUT /api/prefs` >
+  `PUT updates a field and GET reflects the merge` (expected `#00ff00`, got
+  undefined). Fifteen clean full runs since, across both. What is OBSERVED:
+  two different tests, both supertest against the in-memory fakes, both
+  failing as `expected undefined to be <value>` on a response-body field.
+  What is INFERENCE, explicitly unchosen (#235's review: reruns do not pick
+  a mechanism, and `undefined` does not distinguish a transport failure
+  from wrong/partial JSON): a socket failure under parallel-worker load, or
+  shared state in the fakes (`insertionSeq`/`logsInsertionSeq`, `Date`
+  ordering). The prefs fake's read path is a synchronous per-instance Map,
+  which weighs against the second theory but does not eliminate it.
+  **Attribution waits for the next failure's captured status, body, and
+  stack — capture it rather than re-running past it.** This matters more
+  than the known e2e flakes: the unit project has no Docker, browser, or
+  network and should be deterministic. **S**
 - **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
   can no longer rot independently.** The class was two independent literals —
   `news.spec.ts`'s (CI-gated, bumped by every notes PR) and

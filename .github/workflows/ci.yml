@@ -158,6 +158,10 @@ jobs:
         run: |
           bash -n scripts/ci-changes.sh
           bash scripts/ci-changes.test.sh
+      - name: Lint + test the stack-env guard
+        run: |
+          bash -n app/scripts/stack-env.sh
+          bash app/scripts/stack-env.test.sh
 
   deploy:
     needs: [changes, root-hooks, app, docker, e2e, scripts]
