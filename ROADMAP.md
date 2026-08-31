@@ -199,6 +199,11 @@ rower's work silently.
       James's rev-2 review; that was the client-side story only). **TRIAD**
       (stored close reason + the enum migration). Gate 0 CLEARED in full
       (2026-08-31, with the spec PR's merge word).
+      **SHIPS as the live-drop PR from spec §1, 2026-08-31** — all five
+      tasks committed (union widened end to end + migration; the hook's
+      live arm publishing `closeReason`; the real-driver seam test; the
+      two Gate-0 surfaces; this composition drive-through). PR number
+      lands here once the controller opens it.
 - [ ] **The pocketed-phone window's two co-producers. RE-SCOPED on evidence
       2026-08-31 — one is not a defect.** `pause-declared` at 66 spm while
       rowing is real and stays here, owned by
