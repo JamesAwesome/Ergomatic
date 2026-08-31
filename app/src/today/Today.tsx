@@ -365,6 +365,30 @@ export default function Today() {
   // still running", not "should a resume card show." 7B's own guard
   // rewiring is expected to consume `anyLiveSession()` mechanically where
   // that distinction doesn't matter; this one 7A-owned line does not.
+  //
+  // Task 6 close-out ruling (hand-off store plan, 2026-08-30): this is the
+  // THIRD legacy `loadMonitorRun()` read the review named alongside
+  // `monitorRunState()`/`anyLiveSession()` (ROADMAP.md's AUD-016 item) —
+  // swept and LEFT AS-IS, not rerouted onto `handoffStore`. Two reasons,
+  // not one: (1) `todayGuard.pin.test.ts` pins this exact block BYTE-
+  // IDENTICAL as Phase 7B's own named reference pattern for "read the
+  // record directly, never through a collapsing helper" — routing it
+  // through the store would be exactly the kind of helper-indirection that
+  // pin exists to catch, and its own header says a legitimate change here
+  // updates the pin "in the same commit and say why," which this ruling
+  // does not do. (2) It reads nothing the store's own write-side invariants
+  // govern: this is a plain GETTER read (never `setItem`/`removeItem`), it
+  // fires from a `useEffect` with an empty dependency array (never during
+  // render — the only case §8's hydration model actually forbids, "never
+  // during render... the malformed-bytes self-clear anti-pattern"), and it
+  // participates in none of §4/§5's destroyer census (only `retire`
+  // destroys; this function destroys nothing). The one real gap this
+  // leaves — a durable-write-denied LIVE monitor session is invisible to
+  // this specific guard, where the store's memory tier would have seen it
+  // — is a narrower instance of a durability risk this guard already
+  // carried before the store existed (a live run whose EVERY durable write
+  // fails was never visible to a durable-only read); not worsened by this
+  // branch, and not chased further here.
   useEffect(() => {
     const draft = loadDraft();
     const monitorRun = loadMonitorRun();

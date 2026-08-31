@@ -1228,6 +1228,22 @@ function sessionRunState(): RecordState {
   return run.completedAt === null ? "live" : "unlogged";
 }
 
+// Task 6 close-out ruling (2026-08-30, hand-off store plan): `monitorRunState`
+// and `anyLiveSession` below are LEGACY, WITH ZERO PRODUCTION CALLERS as of
+// this branch (Task 3's review, finding M-2, confirmed again at Task 5 and
+// re-confirmed here via `grep -rn "anyLiveSession(" app/src` — the only
+// non-comment call sites are `anyLiveSession`'s own internal call to
+// `monitorRunState` and `monitorRun.test.ts`'s own truth-table suite).
+// NOT deleted: `anyLiveSession()`'s own doc comment, `connectGuardStage`'s
+// doc comment directly below, `ConnectAction.tsx`, `useMonitorSession.ts`,
+// `Today.tsx`, `useStartWorkout.ts`, `WorkoutDetail.test.tsx` and
+// `todayGuard.pin.test.ts` all cite this function BY NAME as the documented
+// anti-pattern a real, previously-shipped bug (ROADMAP M-1, the F5 data-loss
+// class) warns every future guard away from — deleting the function orphans
+// that whole cross-file contrast and is exactly the "unrelated churn" the
+// close-out brief's own item 4 says to avoid dragging in. Left in place,
+// unchanged, reading the durable tier only (§8's hydration model does not
+// apply to it — nothing here is a store consumer).
 function monitorRunState(): RecordState {
   const run = loadMonitorRun();
   if (run === null) return "absent";
