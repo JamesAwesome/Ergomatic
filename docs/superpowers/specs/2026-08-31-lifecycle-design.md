@@ -241,10 +241,31 @@ testers already know: `2 intervals kept.` / `Nothing kept.`, counted by
 `summaryModel.ts`'s `measuredIntervalCount(actuals)` — the same function the
 LOST THE MONITOR banner names, never a second notion of "kept".
 
-**James approves the rendered screen before implementation starts**, in both
-orientations, against what it replaces, with every colour pairing's contrast
-ratio computed and stated as a number. A number change is a design question
-too: the gate shows what a row looked like before and after.
+**GATE 0 CLEARED — James, 2026-08-31**, on the rendered artifact
+`docs/superpowers/specs/2026-08-31-lifecycle-exit-gate.html` (before/after in
+portrait, the nothing-kept variant, landscape, the existing failed-write state,
+and every pairing's contrast computed against the ground it sits on). Approved
+as presented, **including the register of the title copy**, which was the one
+thing flagged for challenge — it blames the machine plainly rather than
+softening, and the softer alternative was rejected as the way a rower fails to
+notice the row stopped.
+
+The approved surface, binding on implementation:
+
+- Title `THE ERG DROPPED THE WORKOUT.`, then the kept count.
+- `2 intervals kept.` / `Nothing kept.`, counted by `measuredIntervalCount` —
+  the same function the LOST THE MONITOR banner names, never a second notion
+  of "kept".
+- A new quiet strip at the top of the workout screen, above the title,
+  identical in both orientations. That screen has no notice area today; only
+  `.baseline-error` exists, and its red is wrong for a message whose point is
+  that the rower's work survived.
+- **No banner on the live screen.** James's RC-37 ruling ("loose any new
+  banners") holds; the one line is added only because something was rowed.
+- Contrast, computed and on the artifact: title `--ink` on `--surface`
+  17.11:1; body `--ink-3` on `--surface` 7.43:1; bold half `--ink-2` 10.81:1;
+  meta `--ink-3` on `--page` 6.69:1. `--ink-5` is excluded from text outright
+  (2.75:1 on `--surface`). All tap targets 44 px.
 
 ### The new close reason
 
