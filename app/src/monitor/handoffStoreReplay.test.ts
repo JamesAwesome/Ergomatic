@@ -58,9 +58,12 @@
 //     `recordActual`'s late branch exists for, on real wire bytes, not a
 //     hand-built fixture. (seq 2445-2447's 0x0039/0x003A/0x003F summary
 //     burst arrives later still, t≈417162-417164 — the OTHER post-close
-//     writer's territory, `appendSummaryObservations`, not this row's
-//     concern; left in the replayed event stream unstripped because it is
-//     harmless to every assertion below.)
+//     writer's territory, `appendSummaryObservations`. Row 8's own two
+//     `it()`s do not depend on it either way; **the row-2 leg added at
+//     PR #239's review round 3 DOES** — it is that leg's second late
+//     producer update, and its ~540 ms offset from the close is the
+//     measured fact that leg refuses to overstate. See the row-2 block
+//     comment at the bottom of this file.)
 //
 // THE PROGRAM, hand-transcribed and byte-verified against the capture's own
 // recorded programming frames (same discipline `burstReplay.test.ts`'s own
@@ -86,7 +89,7 @@
 // matching README.md's "w 1' r1 / w 500m r1 / w 1'" and the decoded
 // 0x0037/0x0038 rest fields (W-9: interval 1/2 both carry a 60 s trailing
 // rest, interval 3 carries 0). The replay's own `divergences` (asserted
-// empty in both `it()`s below, bug-independent first, same convention as
+// empty in every `it()` below, bug-independent first, same convention as
 // every other `src/monitor/*Replay.test.ts`) is the SECOND, independent
 // proof this transcription is right — a wrong duration/pace/rest fails
 // that assertion, not silently.
@@ -249,6 +252,54 @@ function installClosedWriteDenial(): { attempts: () => MonitorRun[] } {
 interface ReplayOutcome {
   divergences: string[];
   record: MonitorRun | null;
+  /** The ring, as the hook itself exported it — read by the row-2 leg to
+   *  place the late commits relative to `handoff-released`. */
+  entries: { kind: string; detail: string }[];
+}
+
+/** A snapshot of the store, taken on the replay's own VIRTUAL clock at a
+ *  chosen wire instant — the row-2 leg's instrument (see its own comment
+ *  for why a snapshot mid-replay is the only way to bind a commit to the
+ *  frame that caused it). */
+interface StoreSnapshot {
+  atMs: number;
+  revision: number | null;
+  actuals: number;
+  /** The most recent actual on the entry, so a revision bump can be tied to
+   *  the DECODED bytes that produced it rather than merely counted. */
+  lastActual: {
+    // `MonitorRun.actuals[].index` is nullable (an unattributed boundary);
+    // carried through as-is rather than coerced, so the row-2 leg's
+    // `toStrictEqual` below asserts the real value and a `null` would fail
+    // it rather than being silently normalised to a number.
+    index: number | null;
+    elapsedSeconds: number;
+    distanceMeters: number;
+  } | null;
+  completedAt: string | null | undefined;
+  summaryTotals: unknown;
+}
+
+function snapshotStore(
+  atMs: number,
+  entry: { revision: number; run: MonitorRun } | null,
+): StoreSnapshot {
+  const last = entry?.run.actuals.at(-1) ?? null;
+  return {
+    atMs,
+    revision: entry?.revision ?? null,
+    actuals: entry?.run.actuals.length ?? -1,
+    lastActual:
+      last == null
+        ? null
+        : {
+            index: last.index,
+            elapsedSeconds: last.elapsedSeconds,
+            distanceMeters: last.distanceMeters,
+          },
+    completedAt: entry?.run.completedAt,
+    summaryTotals: entry?.run.summaryTotals,
+  };
 }
 
 /**
@@ -259,8 +310,19 @@ interface ReplayOutcome {
  * imports another). `driverOptions.now`/`.schedule` bind to the SAME
  * `replay.clock` the recorded `t` values replay against, so `FINISH_GRACE_
  * MS` reads the identical clock the wire timing is scripted on.
+ *
+ * `snapshotAtMs` (row-2 leg): virtual-clock instants at which to record
+ * the store's own state, scheduled on `replay.clock` so they fire from
+ * inside `run()`'s own `advanceClock` — i.e. genuinely BETWEEN two
+ * recorded wire frames. **The store instance read there is the one the
+ * FRESH hook got**, obtained by importing `./handoffStore` inside this
+ * function's own `vi.resetModules()` epoch; the module-scope import at the
+ * top of a test file would be a different instance entirely and would
+ * report `null` forever.
  */
-async function runReplay(): Promise<ReplayOutcome> {
+async function runReplay(
+  snapshotAtMs: readonly number[] = [],
+): Promise<ReplayOutcome & { snapshots: StoreSnapshot[] }> {
   const replay = createReplayTransport(RESTS_CAPTURE);
   const transport = withLiveness(replay.transport, {
     now: () => replay.clock.now(),
@@ -279,6 +341,15 @@ async function runReplay(): Promise<ReplayOutcome> {
 
   const { useMonitorSession: freshUseMonitorSession } =
     await import("./useMonitorSession");
+  // SAME module epoch as the hook above — see this function's doc comment.
+  const freshStore = await import("./handoffStore");
+
+  const snapshots: StoreSnapshot[] = [];
+  for (const atMs of snapshotAtMs) {
+    replay.clock.schedule(() => {
+      snapshots.push(snapshotStore(atMs, freshStore.currentUnretired()));
+    }, atMs);
+  }
 
   const { result } = renderHook(() =>
     freshUseMonitorSession({
@@ -301,7 +372,23 @@ async function runReplay(): Promise<ReplayOutcome> {
     await pending;
   });
 
-  return { divergences: replayResult.divergences, record: loadMonitorRun() };
+  // The final read, taken the same way and from the same instance, once
+  // the capture has run out of bytes.
+  if (snapshotAtMs.length > 0) {
+    snapshots.push(
+      snapshotStore(replay.clock.now(), freshStore.currentUnretired()),
+    );
+  }
+
+  return {
+    divergences: replayResult.divergences,
+    record: loadMonitorRun(),
+    entries: JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[],
+    snapshots,
+  };
 }
 
 describe("the finish-grace boundary vs. a denied live→closed write (design spec §3, §10 row 8) — plan Task 1's own gate", () => {
@@ -443,5 +530,141 @@ describe("the finish-grace boundary vs. a denied live→closed write (design spe
       healthy.actuals.reduce((sum, a) => sum + a.distanceMeters, 0),
       5,
     );
+  });
+
+  // -------------------------------------------------------------------
+  // §10 ROW 2's REAL-BYTES LEG (PR #239 review round 3, reviewer finding
+  // 1). §10's header, as amended by the controller's 2026-08-30 scope
+  // ruling, binds the real-capture requirement to the rows whose invariant
+  // involves WIRE SEMANTICS — naming "the burst orderings of row 2"
+  // explicitly. Round 1 gated row 2 entirely on hand-built fake-transport
+  // fixtures; this leg is the missing binding, and it runs on the same
+  // natural-finish capture leg 1 above already decodes byte by byte.
+  //
+  // WHAT THIS LEG PROVES, precisely: a producer update arriving AFTER the
+  // record closed and while the ended hand-off is HELD reaches `commit` —
+  // on the wire's own timing, not a script's. Two of them do, and both are
+  // decoded in this file's header:
+  //   - the third interval's 0x0037/0x0038 pair (seq 2443/2444, t=416802.3,
+  //     ~180 ms after the finished frame at 416622.6), and
+  //   - the 0x0039 summary burst (seq 2445-2447, t≈417162, ~540 ms after).
+  //
+  // HOW A MID-REPLAY OBSERVATION IS TAKEN AT ALL: `runReplay`'s
+  // `snapshotAtMs` schedules reads on the REPLAY's own virtual clock, so
+  // they fire from inside `run()`'s `advanceClock` — genuinely between two
+  // recorded frames, at instants chosen from the decoded wire times above
+  // (`SNAPSHOT_*` below). A post-hoc read of the finished replay could
+  // only show the end state and could never tie a revision bump to the
+  // frame that caused it.
+  //
+  // **WHAT THIS CAPTURE DOES NOT SHOW, said out loud rather than implied.**
+  // These two commits are post-CLOSE, not post-RELEASE: in this recording
+  // the burst arrives ~540 ms after the close, well inside
+  // `BURST_HANDOFF_HOLD_MS` (2000), so it RESOLVES the hold rather than
+  // following its release — `handoff-released` is the last of the three in
+  // the ring, asserted below rather than assumed. That is not an accident
+  // of this one walk: §9.1's own corpus line is "n=10 web/foreground
+  // 271-542 ms", every one of them inside the backstop. **A post-release
+  // producer update is therefore not an ordering any capture we hold
+  // observed**, and manufacturing one by shifting these bytes later on the
+  // clock would be asserting a wire fact the corpus does not support. The
+  // release-relative axis is gated where it can be produced honestly —
+  // from the backstop timing out because the burst never came:
+  // `src/workout/WorkoutDetail.postReleaseCommit.test.tsx` (through the
+  // real route seam) and `useMonitorSession.test.ts`'s row-2 hook-layer
+  // pin. This leg carries the wire axis; those carry the release axis.
+  // -------------------------------------------------------------------
+
+  /** Between the finished frame (t=416622.6) and the late split pair
+   *  (t=416802.3) — both decoded in this file's header. */
+  const SNAPSHOT_AFTER_CLOSE_MS = 416700;
+  /** Between the late split pair and the 0x0039 burst (t≈417162). */
+  const SNAPSHOT_AFTER_LATE_SPLIT_MS = 416900;
+
+  it("row 2, THE WIRE AXIS ON REAL BYTES — the split landing ~180 ms after the close, and the burst ~540 ms after it, each reach `commit` while the ended hand-off is held: one revision per frame, the decoded values on the entry", async () => {
+    localStorage.clear();
+
+    const outcome = await runReplay([
+      SNAPSHOT_AFTER_CLOSE_MS,
+      SNAPSHOT_AFTER_LATE_SPLIT_MS,
+    ]);
+
+    // Bug-independent sanity first, this file's own convention: a wrong
+    // program transcription fails HERE, never in the assertions below.
+    expect(outcome.divergences).toStrictEqual([]);
+    expect(outcome.snapshots).toHaveLength(3);
+    const [afterClose, afterSplit, atEnd] = outcome.snapshots as [
+      StoreSnapshot,
+      StoreSnapshot,
+      StoreSnapshot,
+    ];
+
+    // 1. AFTER THE CLOSE, BEFORE THE LATE SPLIT. The record is closed and
+    //    carries only the two boundaries that arrived during the piece.
+    expect(afterClose.completedAt).not.toBeNull();
+    expect(afterClose.actuals).toBe(2);
+    expect(afterClose.revision).not.toBeNull();
+    const baseRevision = afterClose.revision!;
+
+    // 2. AFTER THE LATE SPLIT, BEFORE THE BURST. Exactly ONE further
+    //    revision, and the actual it carries is the DECODED third interval
+    //    from seq 2443/2444 — `splitIntervalNumber: 3` (zero-based index
+    //    2), `splitIntervalTimeSeconds: 60`, `splitIntervalDistanceMeters:
+    //    217`, this file's header. Tying the bump to those numbers is what
+    //    makes this a real-bytes assertion rather than a counter: a commit
+    //    carrying some other frame's values would pass a count and fail
+    //    here.
+    expect(afterSplit.revision).toBe(baseRevision + 1);
+    expect(afterSplit.actuals).toBe(3);
+    expect(afterSplit.lastActual).toStrictEqual({
+      index: 2,
+      elapsedSeconds: 60,
+      distanceMeters: 217,
+    });
+    // ...and the close survived the late commit — §3's own defect, still
+    // dead, now observed at the store rather than at a write attempt.
+    expect(afterSplit.completedAt).not.toBeNull();
+    // The burst has NOT been folded in yet at this instant, which is what
+    // makes step 3's bump attributable to the burst alone.
+    expect(afterSplit.summaryTotals).toBeUndefined();
+
+    // 3. AFTER THE BURST. One more revision, and the machine's own totals
+    //    are on the entry.
+    expect(atEnd.revision).toBe(baseRevision + 2);
+    expect(atEnd.summaryTotals).toBeDefined();
+    expect(atEnd.actuals).toBe(3);
+
+    // BOTH LATE COMMITS LANDED INSIDE THE ENDED HAND-OFF, and the ring
+    // says so in its own order: the hold opened, then a `record-actual`
+    // with its accepted-commit receipt, then the summary with its own,
+    // then the release. Read as indices so a mutant that dropped either
+    // commit — or moved the release ahead of them — cannot pass.
+    const kinds = outcome.entries.map((e) => e.kind);
+    const holdAt = kinds.indexOf("handoff-hold");
+    const releasedAt = kinds.indexOf("handoff-released");
+    const lateActualAt = kinds.lastIndexOf("record-actual");
+    const summaryAt = kinds.indexOf("summary-recorded");
+    expect(holdAt).toBeGreaterThanOrEqual(0);
+    expect(releasedAt).toBeGreaterThanOrEqual(0);
+    expect(lateActualAt).toBeGreaterThan(holdAt);
+    expect(summaryAt).toBeGreaterThan(lateActualAt);
+    // Each late producer write has its OWN accepted-commit receipt after
+    // it — the store took them, it did not merely fail to complain.
+    expect(
+      kinds
+        .slice(lateActualAt, summaryAt)
+        .filter((k) => k === "store-receipt:commit-accepted"),
+    ).toHaveLength(2);
+    // THE MEASURED FACT this leg refuses to overstate (see the block
+    // comment above): in THIS capture the release comes after both late
+    // commits, because the burst arrived inside the 2000 ms backstop and
+    // resolved the hold rather than following its timeout.
+    expect(releasedAt).toBeGreaterThan(summaryAt);
+
+    // Both tiers: the durable bytes carry the same late work, read back
+    // out of `localStorage` the way a reload would see them.
+    expect(outcome.record?.actuals).toHaveLength(3);
+    expect(outcome.record?.actuals[2]!.index).toBe(2);
+    expect(outcome.record?.summaryTotals).toBeDefined();
   });
 });
