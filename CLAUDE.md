@@ -754,6 +754,31 @@ often they recur.
     indistinguishable — a claim that gets the same evidence bar as any
     other, because every instance above falsified one.
 
+26. **Promoting a useful gate into a stronger product claim than it proves.**
+    PR #239 took nine review rounds; its last round changed comments and spec
+    prose only because the remaining defects were claims about the evidence,
+    not product behavior. Three green gates each proved something real and
+    were still over-sold: a test-only `MutationObserver` delivery proved
+    acceptance-if-delivered, not supported wire-producer reachability; a fresh
+    router proved re-entry, not the original navigation's first mount; one
+    `ts.createSourceFile` definition site did not prove one parse invocation.
+    The shared failure was collapsing behavior, reachability, and proof method
+    into one sentence, then letting the strongest reading become canonical.
+    **Before building or reviewing any non-trivial gate, write its five-part
+    proof contract:** (1) the production invariant; (2) the supported producer
+    and reachable ordering; (3) the independent observable; (4) the exact
+    deciding-source mutation and expected failure; and (5) the strongest
+    conclusion the spec, test title, comments, and PR body may state. A
+    synthetic ordering proves conditional acceptance only; re-entry proves
+    re-entry; a definition- or call-site census proves structure, not runtime
+    invocation. If the supported path cannot be gated, narrow the claim or
+    change production — do not manufacture an interleaving and promote it.
+    After every fix round, replace the superseded canonical claim instead of
+    appending a correction beneath it. Splitting behavior from its proof or
+    record makes this worse: all three stay in one review unit; the PM decides
+    earlier whether the underlying product work contains more than one safely
+    deployable invariant.
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;

@@ -60,6 +60,18 @@ has no product surface trains everyone to skip you on the one that does.
 
 - **Scope.** Is this one change or three? Is it finishing something or starting
   something? Does the ask, taken literally, produce the outcome wanted?
+- **PR shape.** At phase open, produce a PR map: each planned PR names one user
+  outcome, one governing invariant or risk model that its proof path can
+  independently falsify, and a safe deployable end state. Record the map in the
+  phase's approved spec slate (or the change's design spec when it stands
+  alone); the final gate quotes it rather than relying on session memory. The
+  default remains one PR per coherent chunk. Split when a reviewer would
+  otherwise have to hold two risk models and each piece is safe on its own;
+  keep the work atomic when the invariant cannot survive a partial migration.
+  Behavior, its gates, and its canonical record are one review unit and never
+  split across PRs. At the final-PR gate, reconcile the actual base-to-head diff
+  against that map: an added invariant or risk model is scope drift that
+  requires a split or an explicit atomicity ruling before `PASS`.
 - **Sequencing and dependency.** What must precede what, and why. Distinguish a
   real dependency from a preference.
 - **Exit criteria.** Phases here write their own exit. Check the WRITTEN text
