@@ -1,4 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
+import {
+  createElement,
+  useLayoutEffect,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WORKOUTSTATE_INTERVALREST,
@@ -43,6 +50,8 @@ import {
   read as readHandoffForTest,
   stageRetire as stageRetireForTest,
   takeStagedRetire as takeStagedRetireForTest,
+  setReceiptChannel as setHandoffReceiptChannelForTest,
+  type HandoffReceipt,
 } from "./handoffStore";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
@@ -331,57 +340,137 @@ function spyTransport(inner: Transport & FakeControls): Transport &
   return spy;
 }
 
+/**
+ * PR #239 review round 1, item 2: `renderHook`'s own `wrapper` option,
+ * threaded through so §10 row 2's NAVIGATION orderings can mount this hook
+ * under a real `MemoryRouter` route and then navigate away from it. Every
+ * existing caller passes nothing and gets the bare, router-less render it
+ * always had.
+ */
+type HarnessOptions = {
+  wrapper?: (props: { children?: ReactNode }) => ReactElement;
+};
+
 function harness(
   script: FakeScript,
   deps: Omit<MonitorSessionDeps, "createTransport"> = {},
+  options: HarnessOptions = {},
 ) {
   const fake = createFakeTransport({ deviceName: DEVICE_NAME, ...script });
   const transport = spyTransport(fake);
-  const rendered = renderHook(() =>
-    useMonitorSession({
-      createTransport: () => transport,
-      now: () => t0,
-      // The fake sends exactly one status alongside a terminate ack, and it
-      // arrives before `terminate()` has registered its settle wait — so
-      // the driver's default 3-tick settle would never resolve here.
-      // `driver.test.ts`'s own `harness` makes the same call for the same
-      // reason; the settle itself is pinned by that file, not this one.
-      //
-      // `prepareSettleTicks: 0` for the mirrored reason (session 4b's own
-      // "detection row" passes exactly this): a program DISPATCHED while
-      // the machine is still rowing — which every re-program test below
-      // does — otherwise has to walk a ten-status-tick budget that belongs
-      // to `driver.test.ts`'s subject, not this file's.
-      //
-      // TIMER HYGIENE (fix round 1, review Minor-4): the driver arms a real
-      // `setTimeout` at `FINISH_GRACE_MS` on every natural finish since the
-      // summary-fallback gate, and most tests in this file finish a workout
-      // without caring about it. This default stub means no test here
-      // leaves a live multi-second timer behind; the deadline simply never
-      // arrives, which is exactly what those tests already assumed. The one
-      // test that DOES care passes its own `driverOptions` (this whole
-      // object is replaced by `...deps` below when a test supplies one) and
-      // fires the deadline by hand. File-wide `vi.useFakeTimers()` was
-      // tried first and is not usable here — React Testing Library's `act`
-      // integration needs the real clock, and 19 tests fail under it.
-      driverOptions: {
-        settleTicks: 0,
-        prepareSettleTicks: 0,
-        schedule: () => (): void => undefined,
-      },
-      // TIMER HYGIENE, the identical reasoning one field up (storage-spine
-      // design spec §2's late side, Task 3): `teardown` now arms its own
-      // `BURST_LINGER_MS` timer at a natural-finish unmount whose burst has
-      // not yet landed, and most tests here reach exactly that unmount
-      // without caring about the burst at all. This default stub means the
-      // linger's timer is scheduled but never fires in any test that does
-      // not supply its own `burstLingerSchedule` — STEPS 1/3/4 simply stay
-      // deferred forever, which no assertion in those tests depends on.
-      burstLingerSchedule: () => (): void => undefined,
-      ...deps,
-    }),
+  const rendered = renderHook(
+    () =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        // The fake sends exactly one status alongside a terminate ack, and it
+        // arrives before `terminate()` has registered its settle wait — so
+        // the driver's default 3-tick settle would never resolve here.
+        // `driver.test.ts`'s own `harness` makes the same call for the same
+        // reason; the settle itself is pinned by that file, not this one.
+        //
+        // `prepareSettleTicks: 0` for the mirrored reason (session 4b's own
+        // "detection row" passes exactly this): a program DISPATCHED while
+        // the machine is still rowing — which every re-program test below
+        // does — otherwise has to walk a ten-status-tick budget that belongs
+        // to `driver.test.ts`'s subject, not this file's.
+        //
+        // TIMER HYGIENE (fix round 1, review Minor-4): the driver arms a real
+        // `setTimeout` at `FINISH_GRACE_MS` on every natural finish since the
+        // summary-fallback gate, and most tests in this file finish a workout
+        // without caring about it. This default stub means no test here
+        // leaves a live multi-second timer behind; the deadline simply never
+        // arrives, which is exactly what those tests already assumed. The one
+        // test that DOES care passes its own `driverOptions` (this whole
+        // object is replaced by `...deps` below when a test supplies one) and
+        // fires the deadline by hand. File-wide `vi.useFakeTimers()` was
+        // tried first and is not usable here — React Testing Library's `act`
+        // integration needs the real clock, and 19 tests fail under it.
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+        // TIMER HYGIENE, the identical reasoning one field up (storage-spine
+        // design spec §2's late side, Task 3): `teardown` now arms its own
+        // `BURST_LINGER_MS` timer at a natural-finish unmount whose burst has
+        // not yet landed, and most tests here reach exactly that unmount
+        // without caring about the burst at all. This default stub means the
+        // linger's timer is scheduled but never fires in any test that does
+        // not supply its own `burstLingerSchedule` — STEPS 1/3/4 simply stay
+        // deferred forever, which no assertion in those tests depends on.
+        burstLingerSchedule: () => (): void => undefined,
+        ...deps,
+      }),
+    options,
   );
   return { fake, transport, ...rendered };
+}
+
+// ---------------------------------------------------------------------
+// PR #239 review round 1, item 2 — the NAVIGATION rig for §10 row 2's
+// remaining orderings. `createElement` rather than JSX only because this
+// file is `.ts`; the components are ordinary ones and the router is the
+// real `react-router-dom` `MemoryRouter`, not a stand-in.
+//
+// `/connected` holds `renderHook`'s own test component (this hook), `/log`
+// holds the consumer the rower lands on — the shape
+// `WorkoutDetail.tsx:350-351` produces, where `setConnecting(null)` drops
+// the interstitial subtree and `navigate(...)` changes the URL in one
+// handler. Navigating therefore unmounts the hook, which is exactly the
+// production coupling these orderings need to be honest about.
+// ---------------------------------------------------------------------
+
+/** Set during the `/connected` route's render; the tests call it inside
+ *  `act` to perform a real route change. */
+let navigateOut: (() => void) | null = null;
+/** Proof the destination route actually mounted — a navigation assertion
+ *  that cannot pass if the route never changed. */
+let consumerRendered = false;
+/** Optional hook the consumer route runs in its LAYOUT effect, which React
+ *  commits BEFORE the departing subtree's passive cleanup (the hook's
+ *  `teardown`). Ordering 3 uses it to place a producer commit in exactly
+ *  that gap. */
+let onConsumerLayout: (() => void) | null = null;
+
+// Both components publish to the module-level rig state from EFFECTS, never
+// from render — `react-hooks/globals` rejects the render-time form, and it
+// is right to: a re-render would silently re-run it.
+function ConnectedRouteHost({ children }: { children?: ReactNode }): ReactNode {
+  const navigate = useNavigate();
+  useLayoutEffect(() => {
+    navigateOut = (): void => {
+      void navigate("/log");
+    };
+  }, [navigate]);
+  return children ?? null;
+}
+
+function ConsumerRoute(): ReactNode {
+  useLayoutEffect(() => {
+    consumerRendered = true;
+    onConsumerLayout?.();
+  }, []);
+  return null;
+}
+
+function routerWrapper({ children }: { children?: ReactNode }): ReactElement {
+  return createElement(
+    MemoryRouter,
+    { initialEntries: ["/connected"] },
+    createElement(
+      Routes,
+      null,
+      createElement(Route, {
+        path: "/connected",
+        element: createElement(ConnectedRouteHost, null, children),
+      }),
+      createElement(Route, {
+        path: "/log",
+        element: createElement(ConsumerRoute),
+      }),
+    ),
+  );
 }
 
 /** Drains the microtask queue generously — the whole prepare+send exchange
@@ -3111,6 +3200,256 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // silently dropped the write while still emitting a receipt for some
     // OTHER commit cannot pass on the receipt assertions alone.
     expect(entries.some((e) => e.kind === "summary-recorded")).toBe(true);
+  });
+
+  // §10 ROW 2, THE THREE REMAINING ORDERINGS (PR #239 review round 1,
+  // item 2). The row demands before/after navigation × before/after
+  // teardown, "all reach `commit`". The test above drives exactly ONE of
+  // those four cells (release before teardown, before navigation) with the
+  // real hook; row 3's `ProducerTeardownStandIn` is a DIRECT store commit,
+  // not the hook, so it cannot stand in for any of the other three. A
+  // suppression that dropped only post-release commits arriving after
+  // teardown or after navigation would have stayed green.
+  //
+  // **WHY THE WINDOW IS STILL OPEN AFTER TEARDOWN — the mechanism these
+  // three tests depend on, stated so a reader does not take them for
+  // wishful thinking.** `teardown()` does NOT unsubscribe on a
+  // burst-eligible record whose burst has not landed: it takes the LATE
+  // side (`burstEligible && !burstAlreadyHeard`), stashes the ring,
+  // schedules `finish` on `burstLingerSchedule`, and RETURNS — steps 1/3/4
+  // (reconcile, release, unsubscribe, disconnect) are all deferred to the
+  // earlier of the burst arriving or `BURST_LINGER_MS`. So the producer's
+  // subscription outlives the component, which is precisely §9.1's
+  // residual ("the window is bounded by the producer's subscription life")
+  // and precisely what makes a post-teardown producer update reachable at
+  // all. `harness`'s default `burstLingerSchedule` stub never fires, so in
+  // these tests the window simply stays open; in production it closes at
+  // `BURST_LINGER_MS`, and `finish` runs `unsubscribeAndDisconnect()`.
+  //
+  // Each ordering asserts the SAME three things (`expectLateCommitLanded`):
+  // the store's revision advanced by exactly one, the machine's totals are
+  // on both tiers, and a fresh `commit-accepted` receipt sits at a ring
+  // index BEYOND the last `handoff-released`.
+  async function releasedHandoffSession(options: HarnessOptions = {}) {
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const rendered = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+          finalBoundary(300),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+      options,
+    );
+    const { result, fake } = rendered;
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100); // the natural finish — both conditions open
+    tick(fake, 100); // the split lands; only the burst condition is left
+    expect(result.current.handoffHeld).toBe(true);
+    // THE RELEASE: the burst never came inside its own backstop, so the
+    // hold times out and the surface is freed, with nothing committed
+    // after it yet.
+    act(() => {
+      timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)!.fire();
+    });
+    expect(result.current.handoffHeld).toBe(false);
+    const atRelease = currentUnretiredHandoffForTest();
+    expect(atRelease).not.toBeNull();
+    expect(atRelease!.run.summaryTotals).toBeUndefined();
+    return { ...rendered, driverTimer, atRelease: atRelease! };
+  }
+
+  /** The same released session, but mounted under the real router rig
+   *  above so the test can perform an actual route change. */
+  async function releasedHandoffSessionInRouter() {
+    consumerRendered = false;
+    onConsumerLayout = null;
+    navigateOut = null;
+    const session = await releasedHandoffSession({ wrapper: routerWrapper });
+    expect(navigateOut).not.toBeNull();
+    expect(consumerRendered).toBe(false);
+    return { ...session, navigate: (): void => navigateOut!() };
+  }
+
+  /**
+   * The three assertions §10 row 2 asks for, once per ordering: the store's
+   * revision advanced by exactly one, the machine's totals are on BOTH
+   * tiers, and an accepted-commit receipt exists for that new revision,
+   * positioned after the release.
+   *
+   * **Where the receipt is read from depends on whether the hook is still
+   * mounted, and that is production behaviour rather than test
+   * convenience.** The hook owns the store's single receipt channel and
+   * hands it back at unmount (`setReceiptChannel(null)` in its own cleanup,
+   * M7's owner counter), so for a commit landing AFTER the component is
+   * gone the ring genuinely cannot carry the receipt — asserting on the
+   * ring there would be asserting on nothing. Those orderings install their
+   * own channel once the hook has released it and pass it in as `receipts`.
+   * The still-mounted ordering passes nothing and is asserted against the
+   * ring, exactly as the release-before-teardown test above is.
+   */
+  function expectLateCommitLanded(
+    result: Session,
+    atRelease: { revision: number },
+    receipts?: HandoffReceipt[],
+  ): void {
+    const totals = { workElapsedSeconds: 60, workDistanceMeters: 200 };
+    const after = currentUnretiredHandoffForTest();
+    expect(after).not.toBeNull();
+    // An independent count: each of these tests makes exactly one further
+    // producer write, so `+1` is the test's own arithmetic rather than a
+    // number read back out of production.
+    expect(after!.revision).toBe(atRelease.revision + 1);
+    expect(after!.run.summaryTotals).toStrictEqual(totals);
+    expect(loadMonitorRun()?.summaryTotals).toStrictEqual(totals);
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+    }[];
+    const releasedAt = entries.findLastIndex(
+      (e) => e.kind === "handoff-released",
+    );
+    expect(releasedAt).toBeGreaterThanOrEqual(0);
+    if (receipts === undefined) {
+      expect(
+        entries
+          .slice(releasedAt + 1)
+          .filter((e) => e.kind === "store-receipt:commit-accepted"),
+      ).toHaveLength(1);
+    } else {
+      expect(
+        receipts.filter(
+          (r) => r.kind === "commit-accepted" && r.revision === after!.revision,
+        ),
+      ).toHaveLength(1);
+    }
+    // The record itself says the fold-in happened, AFTER the release in the
+    // ring's own ordering — so a mutant that dropped the write while still
+    // receipting some OTHER commit cannot pass on the receipt alone, and a
+    // mutant that folded the summary in BEFORE the release cannot pass on
+    // the fold-in alone.
+    expect(
+      entries.slice(releasedAt + 1).some((e) => e.kind === "summary-recorded"),
+    ).toBe(true);
+  }
+
+  /** A receipt channel installed once the hook has handed its own back —
+   *  see `expectLateCommitLanded`'s doc comment. `resetForTests()` in this
+   *  file's `beforeEach` clears it again for the next test. */
+  function captureReceiptsAfterTeardown(): HandoffReceipt[] {
+    const receipts: HandoffReceipt[] = [];
+    setHandoffReceiptChannelForTest((r) => {
+      receipts.push(r);
+    });
+    return receipts;
+  }
+
+  it("row 2, ORDERING 2 — AFTER TEARDOWN, BEFORE NAVIGATION: the component unmounts with the burst still outstanding, the machine's summary then lands, and it still reaches `commit`", async () => {
+    const { result, fake, unmount, driverTimer, atRelease } =
+      await releasedHandoffSession();
+
+    // THE TEARDOWN, with no navigation involved at all — `renderHook`'s
+    // own unmount, which runs the hook's passive cleanup
+    // (`useEffect(() => teardown, [teardown])`) and nothing else. This is
+    // the teardown axis in isolation.
+    act(() => {
+      unmount();
+    });
+    const receipts = captureReceiptsAfterTeardown();
+
+    // ...and NOW the machine's summary, off the wire, with the component
+    // gone. It arrives because teardown deferred the unsubscribe (see this
+    // block's header), and it must still fold onto the record.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
+    });
+    // The driver took it: the subscription really did outlive the
+    // component, so the ordering under test is reachable at all.
+    expect(driverTimer.pending()).not.toBeNull();
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    expectLateCommitLanded(result, atRelease, receipts);
+  });
+
+  it("row 2, ORDERING 3 — AFTER NAVIGATION, BEFORE TEARDOWN: the consumer's route has already rendered and the old hook's passive cleanup has not run yet; the update still reaches `commit`", async () => {
+    // REAL navigation, through react-router, not a stand-in: the hook is
+    // rendered under a `/connected` route and the test navigates to
+    // `/log`, which is what `WorkoutDetail.tsx:350-351`
+    // (`handleConnectedEnded`) actually does — `setConnecting(null)` and
+    // `navigate(...)` in one handler, so the interstitial's subtree and
+    // the URL change in the same commit.
+    //
+    // The slot this test occupies is spec §1's structural fact 1: React
+    // renders the new route BEFORE the old subtree's passive unmount. The
+    // consumer route's LAYOUT effect runs in the commit phase, ahead of
+    // the passive phase where the old hook's teardown lives — so firing
+    // the driver's reconcile from there places the producer's commit
+    // strictly after navigation and strictly before teardown, which is
+    // the one cell no other test in this file reaches.
+    const { result, fake, driverTimer, atRelease, navigate } =
+      await releasedHandoffSessionInRouter();
+
+    // The burst is stashed at the driver but NOT yet drained: the pending
+    // reconcile is what the consumer's layout effect will fire.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
+    });
+    const pendingReconcile = driverTimer.pending();
+    expect(pendingReconcile).not.toBeNull();
+    onConsumerLayout = (): void => {
+      pendingReconcile!.fire();
+    };
+
+    act(() => {
+      navigate();
+    });
+    expect(consumerRendered).toBe(true);
+
+    // Asserted against the RING, and that choice is this test's own proof
+    // of position: the ring can only carry a `store-receipt:commit-accepted`
+    // while the hook still OWNS the store's receipt channel, which it hands
+    // back in its unmount cleanup. A receipt in the ring therefore means the
+    // commit landed before the departing hook's passive teardown — which is
+    // precisely the cell this ordering claims. (Orderings 2 and 4 cannot
+    // assert this way, and say so.)
+    expectLateCommitLanded(result, atRelease);
+  });
+
+  it("row 2, ORDERING 4 — AFTER NAVIGATION, AFTER TEARDOWN: the rower is on the next screen and the old hook is gone; the machine's summary still reaches `commit`", async () => {
+    const { result, fake, driverTimer, atRelease, navigate } =
+      await releasedHandoffSessionInRouter();
+
+    act(() => {
+      navigate();
+    });
+    expect(consumerRendered).toBe(true);
+    const receipts = captureReceiptsAfterTeardown();
+
+    // Nothing was outstanding at the driver when the route changed, so
+    // this summary arrives with the connected screen fully gone and its
+    // teardown already run — the latest of the four orderings.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
+    });
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    expectLateCommitLanded(result, atRelease, receipts);
   });
 
   it("stale-commit refusal: a commit racing UNDER the hook's own lastAcceptedRevisionRef is refused, runRef unchanged, with a receipt — row 4", async () => {
