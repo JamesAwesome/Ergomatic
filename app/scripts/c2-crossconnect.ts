@@ -346,12 +346,41 @@ async function cmdProbeRed(cfg: C2Config): Promise<void> {
   );
 }
 
+async function cmdProbeDedup(cfg: C2Config): Promise<void> {
+  // Spec §PR0 probe 2 — the three product branches are pre-committed in the
+  // spec; this prints the raw statuses the report interprets.
+  // Base date: unique day, away from Task 3's posts.
+  const base = new Date("2026-09-02T14:00:00Z");
+  const at = (deltaMs: number): PostOpts => ({
+    ...FIXTURE_OPTS,
+    date: new Date(base.getTime() + deltaMs),
+  });
+  console.log("A: fresh post (expect 201)");
+  await postResult(cfg, buildResultPost(FIXTURE, at(0)));
+  console.log("B: exact repost (expect 409 — proves dedup fires at all)");
+  await postResult(cfg, buildResultPost(FIXTURE, at(0)));
+  console.log(
+    "C: same day, +30 SECONDS (THE deciding case: 409 = day-granular, 201 = datetime-granular)",
+  );
+  await postResult(cfg, buildResultPost(FIXTURE, at(30_000)));
+  console.log(
+    "D: same date, time field +1 tenth (expect 201 — time is in the key)",
+  );
+  await postResult(cfg, {
+    ...buildResultPost(FIXTURE, at(60_000)),
+    time: c2Tenths(FIXTURE.workSeconds) + 1,
+  });
+  console.log("E: next day, identical values (expect 201 — sanity)");
+  await postResult(cfg, buildResultPost(FIXTURE, at(86_400_000)));
+}
+
 const [, , command] = process.argv;
 const commands: Record<string, () => Promise<void>> = {
   auth: () => cmdAuth(readConfig()),
   post: () => cmdPost(readConfig()),
   diff: () => cmdDiff(readConfig()),
   "probe-red": () => cmdProbeRed(readConfig()),
+  "probe-dedup": () => cmdProbeDedup(readConfig()),
 };
 if (command && commands[command]) {
   commands[command]().catch((e: unknown) => {
