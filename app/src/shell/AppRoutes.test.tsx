@@ -30,6 +30,9 @@ vi.mock("../session/Timer", () => ({
 vi.mock("../session/LogSession", () => ({
   default: () => <h1>Log Session</h1>,
 }));
+vi.mock("../monitor/JustRowObserver", () => ({
+  default: () => <h1>Just Row Observer</h1>,
+}));
 vi.mock("../news/News", () => ({
   default: () => <h1>News</h1>,
 }));
@@ -188,6 +191,20 @@ describe("AppRoutes", () => {
     );
     expect(
       await screen.findByRole("heading", { name: "Log Session" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("navigation", { name: "Main" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the build-enabled Just Row observer without the main tab bar", async () => {
+    render(
+      <MemoryRouter initialEntries={["/justrow/observe"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Just Row Observer" }),
     ).toBeVisible();
     expect(
       screen.queryByRole("navigation", { name: "Main" }),
@@ -391,6 +408,7 @@ describe("hidesTabBar", () => {
     "/session/run",
     "/session/complete",
     "/session/log",
+    "/justrow/observe",
     // Sub-paths of a hidden prefix stay hidden too (a future param/query
     // string on any of these routes never needs its own opt-out).
     "/session/run/foo",
@@ -414,6 +432,9 @@ describe("hidesTabBar", () => {
     // HIDDEN_TABBAR_PREFIXES (see AppRoutes.tsx's own comment on this
     // route), unlike its session-door sibling "/session/log" above.
     "/library/w1/log",
+    // PR 0a hides only the observer instrument. The eventual product route
+    // keeps its shell decision for PR 2.
+    "/justrow",
   ])("shows the tab bar for %s", (pathname) => {
     expect(hidesTabBar(pathname)).toBe(false);
   });

@@ -531,6 +531,48 @@ async function assertNoA11yViolations(page: Page): Promise<void> {
   expect(results.violations).toEqual([]);
 }
 
+async function injectJustRowObserverFake(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.__pm5FakeScript__ = {
+      program: { intervals: [] },
+      deviceName: "PM5 Observer",
+    };
+    window.__pm5Recording__ = {
+      lines: () => [],
+      eventCount: () => 0,
+      download: () => Promise.resolve(),
+    };
+  });
+}
+
+test("Just Row observer: VITE-enabled route, accessibility, controls, and shell", async ({
+  page,
+}) => {
+  await injectJustRowObserverFake(page);
+  await signInViaBackdoor(page, {
+    email: "design-just-row-observer@e2e.test",
+    name: "Observer Design Tester",
+  });
+  await page.goto("/justrow/observe");
+
+  await expect(
+    page.getByRole("heading", { name: "PM5 Observer connected" }),
+  ).toBeVisible();
+  const download = page.getByRole("button", { name: "Download capture" });
+  const disconnect = page.getByRole("button", { name: "Disconnect" });
+  await expect(download).toBeVisible();
+  await expect(disconnect).toBeVisible();
+  await assertNoA11yViolations(page);
+
+  for (const control of [download, disconnect]) {
+    const box = await stableBoundingBox(control);
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+  await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0);
+});
+
 // --ink-4's own rgb (tokens.css #6f6a5f) — computed once here rather than
 // re-derived per call site.
 const INK_4_RGB = "rgb(111, 106, 95)";

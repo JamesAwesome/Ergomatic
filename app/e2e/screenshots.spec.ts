@@ -50,6 +50,42 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
+async function injectJustRowObserverFake(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.__pm5FakeScript__ = {
+      program: { intervals: [] },
+      deviceName: "PM5 Observer",
+    };
+    window.__pm5Recording__ = {
+      lines: () => [],
+      eventCount: () => 0,
+      download: () => Promise.resolve(),
+    };
+  });
+}
+
+test("just-row-observer", async ({ page }) => {
+  await injectJustRowObserverFake(page);
+  await signInViaBackdoor(page, {
+    email: "screenshots-just-row-observer@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/justrow/observe");
+  await expect(
+    page.getByRole("heading", { name: "PM5 Observer connected" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Observing only — no workout is sent to the monitor."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Download capture" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Disconnect" })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "just-row-observer.png"),
+  });
+});
+
 // Phase WU (2026-08-21) deleted `setWarmup` (used to PUT the warm-up
 // preference for the "countdown", "you-warmup-on" and "post-workout-summary"
 // captures) along with the setting it drove. The countdown and

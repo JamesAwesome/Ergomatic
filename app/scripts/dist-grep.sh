@@ -10,7 +10,7 @@
 # record/replay stage A) — because a single gate that only ever grows is
 # easier to trust than several that might drift apart.
 #
-# FIVE needles, five different reasons — and every needle is a STRING
+# SIX needles, six different reasons — and every needle is a STRING
 # LITERAL from the source, deliberately never a function/variable
 # identifier: `vite build` minifies the production bundle, which renames
 # every identifier it can (verified empirically this task — grepping for
@@ -63,6 +63,10 @@
 #   `fakeMonitorEnabled` condition as `fake.ts`/`recording.ts` above — this
 #   string appearing in a production build means that gate failed the same
 #   way the `fake transport`/`pm5-recording` checks' would.
+# - `Just Row observer (instrument)` — the observer screen's stable
+#   `data-observer-kind` value. The screen is lazy-imported only behind the
+#   same build-time monitor-instrument condition; finding this literal means
+#   the observer module survived in a production chunk.
 #
 #   **NOT `__pm5HoldOpen__` (the global's own bare property name) — a
 #   correction of the brief this task was handed, recorded here rather
@@ -95,7 +99,7 @@ if [ ! -d "$DIST" ]; then
   exit 1
 fi
 
-NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)")
+NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)")
 FAILED=0
 
 for needle in "${NEEDLES[@]}"; do

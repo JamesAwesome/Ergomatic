@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import {
   Navigate,
   Route,
@@ -30,6 +31,12 @@ import You from "../You";
 import type { Me } from "../useMe";
 import TabBar from "./TabBar";
 
+const monitorInstrumentEnabled =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_FAKE_MONITOR === "1";
+const JustRowObserver = monitorInstrumentEnabled
+  ? lazy(() => import("../monitor/JustRowObserver"))
+  : null;
+
 // Routes whose screens own the whole viewport — the handoff's own rule
 // ("Tabs are hidden during countdown and timer," carried forward to
 // /session/complete by the 6B plan since it's the same full-bleed holder
@@ -43,6 +50,7 @@ const HIDDEN_TABBAR_PREFIXES = [
   // natural continuation past /session/complete, not an ordinary tabbed
   // screen a rower would navigate to directly.
   "/session/log",
+  "/justrow/observe",
   // Phase BL PR C: the three onboarding doors' flow screens (canvas
   // Question1/Question2/Recommendation/Experienced/RowPath draw no tab
   // bar — a setup flow, entered from Today's doors card and exited by
@@ -190,6 +198,16 @@ export default function AppRoutes({
         <Route path="/session/run" element={<Timer />} />
         <Route path="/session/complete" element={<CompleteRedirect />} />
         <Route path="/session/log" element={<LogSession />} />
+        {JustRowObserver && (
+          <Route
+            path="/justrow/observe"
+            element={
+              <Suspense fallback={null}>
+                <JustRowObserver />
+              </Suspense>
+            }
+          />
+        )}
         {user && onSignedOut && (
           <>
             <Route
