@@ -310,7 +310,13 @@ requirements).
   second; it is fail-fast. Pre-push runs unit + client tests only (fast,
   Docker-free — CI runs the full gate incl. integration/e2e). Both hooks fail
   loudly and block if the active Node major is below `.nvmrc`. Don't bypass with
-  `--no-verify`; fix the failure.
+  `--no-verify`; fix the failure. **Root markdown is NOT formatted by anything**
+  — lint-staged's globs are `app/**` only, so `ROADMAP.md`, `CLAUDE.md` and the
+  root docs have never been Prettier-formatted. Never run `prettier --write` on
+  them to "fix" a failing check: it reflows the whole file and buries a real
+  edit in ~100 lines of rewrapped prose (measured on `ROADMAP.md`, 2026-08-31 —
+  226/166 became 118/57 once the reflow was reverted). Wrap by hand to match the
+  surrounding text.
 - **CI skips the code jobs on documentation-only pushes.** `scripts/ci-changes.sh`
   (tested by `scripts/ci-changes.test.sh`, run in CI's `scripts` job) decides:
   if every changed path is under `docs/`, `.claude/`, or root markdown, then
