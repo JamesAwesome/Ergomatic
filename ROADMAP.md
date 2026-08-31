@@ -127,6 +127,10 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **C** | The submission surface      | L    | The most visible wave                       |
 | **E** | The Concept2 logbook        | M    | Only if it ships a send control             |
 
+## Phase JR — Just Row
+
+**Status: Active — PR 0a observe-only instrument; PR 0b capture is James-scheduled; PR 1/2 remain blocked on the capture answers.** This is a deliberate household exception to the stranger-first ordering, requested by James on 2026-08-31. The capture session is housed at `docs/monitor/sessions/walk-phase-jr-capture/RUNSHEET.md`.
+
 **Honest distance: three to five weeks of working sessions.** Waves D and B
 ship a tester nothing, so they release alongside C rather than alone — two
 consecutive empty release notes is how the invisible-but-necessary wave gets
@@ -955,8 +959,7 @@ Each needs erg time or a deliberate recording session.
   `webView.reload()`, destroying the driver, the recorder, and up to 30 s of
   unflushed series. _"'terminated no' disposes of force-quit, not of memory
   pressure."_ (`phase-ll.md`)
-- **JR PR 0b's capture walk** — see the deferred section; it rides the next erg
-  session regardless of whether JR is ever built.
+- **JR PR 0b's capture walk** — see `docs/monitor/sessions/walk-phase-jr-capture/RUNSHEET.md`.
 - **The hardware session shopping list** — three pairing and programming latency
   spans, the unrowed question from §17 item 5, §18's readings-still-owed, a
   genuine mid-piece disconnect, and **one `.5` pace target on the wire**
@@ -1162,16 +1165,6 @@ Each needs erg time or a deliberate recording session.
 Deferred, not killed. One line and one trigger each. No exits and no sizes — a
 trigger is the whole entry.
 
-- **Phase JR — Just Row.** Spec at rev 2 with both phase-open gates paid
-  (`docs/superpowers/specs/2026-08-24-just-row-design.md`); its "waits behind
-  RC's wave" blocker expired 2026-08-28. Four PRs including an L, TRIAD on PR 1.
-  Deferred because it is the deepest household feature in the file: it serves
-  someone who already owns a PM5, has paired it, and knows what Just Row is.
-  **Carve-out, and it is not deferred: PR 0b's capture walk rides your next erg
-  session.** It is erg time you are spending anyway, captures do not go stale,
-  and its headline question — do 0x0031's elapsed and distance RESET at the PM's
-  5-minute auto-splits — is a corpus fact worth owning either way. A naive
-  observer that gets this wrong stores about five minutes of a thirty-minute row.
 - **Phase PS — personal stats.** The app's stated purpose, and it matters most
   at day 30 and least at day 1: a stranger has no history to trend. **Trigger:**
   a tester has enough history for a trend to be honest. Carries a live hazard
