@@ -52,7 +52,18 @@
 # (81/81 ECONNREFUSED, and probes nearly trusted against the wrong
 # bundle). Every script consumer (e2e.sh, screenshots.sh, walk-lab.sh)
 # sets REPO_ROOT first, so this only fires on the mistake it names.
-: "${REPO_ROOT:?stack-env.sh: set REPO_ROOT (the worktree root) before sourcing}"
+# NOT `${REPO_ROOT:?}`: that expansion error aborts noninteractive shells
+# but interactive Bash prints it and CONTINUES (bash(1)) — reproduced at
+# #235's review: the message printed and the phantom stack was minted
+# anyway, through the exact manual-`source` workflow this guard exists
+# for. An explicit check with `return` stops the SOURCED file in both
+# shell modes before anything is exported; the `exit` arm covers direct
+# execution, where `return` is invalid. Pinned by stack-env.test.sh in
+# CI's scripts job — the `:?` form fails 3 of its 5 cases.
+if [ -z "${REPO_ROOT:-}" ]; then
+  echo "stack-env.sh: set REPO_ROOT (the worktree root) before sourcing" >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 STACK_HASH=$(printf %s "$REPO_ROOT" | cksum | cut -d' ' -f1)
 PORT_OFFSET=$((STACK_HASH % 400))
