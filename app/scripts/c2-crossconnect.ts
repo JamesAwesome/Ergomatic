@@ -383,6 +383,14 @@ export async function fetchResult(
   ) {
     throw new Error("malformed result response");
   }
+  // P1 fix (PR0 re-review): a stale or wrong row must never masquerade as
+  // fresh evidence for the id we asked for — require the response to name
+  // the SAME id we requested, not just SOME id.
+  if (String(data.id) !== String(id)) {
+    throw new Error(
+      `fetchResult id mismatch: requested ${id}, got ${String(data.id)}`,
+    );
+  }
   return data;
 }
 

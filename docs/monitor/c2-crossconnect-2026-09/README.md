@@ -170,6 +170,25 @@ needed on results. Token endpoint stays form-encoded. Future-date bound
 as measured above. Rows posted this run and left on log-dev (the dev DB
 is periodically reset by C2): 85557, 85559-85564.
 
+## Mutation ledger (durable record — #244 re-review asked for names, not adjectives)
+
+Fix-round guards, each mutation run against a committed tree and reverted
+green (suite 32/32 both sides):
+
+| guard | mutation | exact failure |
+| --- | --- | --- |
+| state enforcement (`verifyState`) | inverted mismatch check (`!==` → `===`) | 4 tests red, e.g. `expected { ok: false } to strictly equal { ok: true, receipt: {...} }` |
+| scope at token exchange | dropped the `scope` body key | `expected [...5 keys] to strictly equal [...6 keys]` (diff: `- scope`) |
+| session file 0600 | dropped `mode` option AND `chmod` | `expected undefined to strictly equal { mode: 384 }` (384 = 0o600) |
+| red-proof fresh-201 guard | dropped `status === 201` clause | `expected { ok: true, id: '998877' } to strictly equal { ok: false, message: "RED-PROOF ABORTED: expected fresh 201, got 409" }` |
+| fetchResult non-2xx throw | removed `if (!res.ok) throw` | `expected [Function] to throw error matching /fetchResult failed: 401.*invalid_token/ but got 'malformed result response'` |
+
+(Earlier task-loop mutations — c2Tenths `expected 60 to be 600`,
+formatC2Date zone drop, rest-guard inversion, timezone-key drop,
+verdict-always-match — are recorded in PR #244's Record block; the P1
+round's id-equality and red-verdict mutations are appended to this table
+in the P1 commit.)
+
 ## Verdict against RC exit (d)
 
 *"a row posted to the Concept2 sandbox comes back through `export/`
@@ -185,6 +204,7 @@ return the row because C2's export endpoint requires `stroke_data`,
 which this wave omits for RC-11's documented reason — a C2-side bound,
 within the exit's bounded hatch ("a field C2 rejects or does not
 return"). **Not yet exercised, owed to PR1:** the stored-row → upload
-route → GET seam (RF24). **Owed to close this report:** the
-single-process state receipt and the provenance-correct census above.
-The stroke_data follow-on reopens the export oracle.
+route → GET seam (RF24). The report's two operator residuals are CLOSED
+(2026-08-31): the single-process state receipt is committed above, and
+the census stands at 6 of 20 on the full predicate. The stroke_data
+follow-on reopens the export oracle.

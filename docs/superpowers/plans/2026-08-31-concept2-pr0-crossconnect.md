@@ -1,12 +1,18 @@
 # Wave E PR0 — Concept2 desk cross-connect Implementation Plan
 
-> **EXECUTION STATUS (2026-08-31, reconciled at James's #244 review,
-> finding 6):** Tasks 1-5 executed and reviewed (SDD ledger; commits
-> c099c5e6..cbf03182 + fix wave e379c33d). Task 6's live run happened
-> 2026-08-31 (report: `docs/monitor/c2-crossconnect-2026-09/`) with two
-> operator items still open: the single-process state receipt and the
-> provenance-correct eligibility census. Checkboxes below were tracked
-> in the SDD ledger rather than ticked in this file.
+> **ARCHIVED — EXECUTED IN FULL, 2026-08-31 (ruling at James's #244
+> re-review, finding 2: one authority, not two contracts).** This plan
+> is a historical execution record and is NOT authoritative for the
+> harness's current behavior. Authorities: the merged
+> `app/scripts/c2-crossconnect.ts` (code) and
+> `docs/monitor/c2-crossconnect-2026-09/README.md` (evidence). All
+> tasks including the live run completed; both operator residuals
+> (state receipt, full-predicate census 6/20) are CLOSED in the report.
+> Code blocks below are frozen at authoring time and two are KNOWN
+> SUPERSEDED: Task 2's hardcoded `RESULT_OBJECT_BLIND` list (replaced
+> by per-response visibility after the live run falsified it) and
+> Task 6's census SQL (lacks `device_name IS NOT NULL`; the report
+> carries the correct predicate). Do not execute from this file.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -40,9 +40,10 @@ exercises them.
 credential pair (`LOGBOOK_CLIENT_ID_DEV`/`LOGBOOK_CLIENT_SECRET_DEV` in
 the root `.env`), registered `http://localhost:8199/c2-callback` in the
 log-dev API-key portal, and authorized with a log-dev account (user
-2211). Values never enter a transcript or a committed file. Still open
-on the operator side: the single-process re-auth receipt (finding 1)
-and the corrected eligibility census (finding 4).
+2211). Values never enter a transcript or a committed file. The two
+operator residuals from the #244 review are CLOSED (2026-08-31): the
+single-process state receipt is committed in the PR0 report, and the
+census was recounted on the full predicate (6 of 20).
 
 ## Research record
 
@@ -337,8 +338,10 @@ field misreads) and never on MEANING, because C2 stores what we told it.
 PR0 therefore (a) proves the diff can go red by posting one deliberately
 wrong value (`time` in seconds, not tenths) and showing the flag (RF21),
 (b) reports per-field which oracle saw it (result object vs csv vs fit
-vs tcx — the result object cannot see `stroke_rate`/`rest_time`/
-`rest_distance`), and (c) names the one genuinely independent oracle:
+vs tcx — MEASURED at the live run: the result object sees EVERY field we
+send, including `stroke_rate`/`rest_time`/`rest_distance`, while
+`export/` sees none of a stroke-less row at all), and (c) names the one
+genuinely independent oracle:
 the SAME physical row posted by ErgData, compared against ours on C2 —
 which is also the dedup experiment.
 
@@ -363,6 +366,29 @@ Gate 0 (rendered, real proportions, both orientations, contrast
 computed).
 
 ## PR decomposition and gates
+
+**Safe deployable end states (added at #244 re-review, finding 4, per
+main's #243 review-unit rule) — each PR leaves main independently
+shippable, and the mechanism is the default-off gate, stated here per PR
+rather than inferred:**
+
+- **After PR0:** production behavior is byte-identical to before it — a
+  dev-only script under `app/scripts/` (never bundled; `ci-changes.sh`
+  runs the full gate but nothing ships) plus docs. Deploy any time.
+- **After PR1:** the migration adds only additive-nullable columns and
+  two new tables nothing reads; every new route refuses (availability
+  matrix) because `C2_LINK_ENABLED` is unset in prod; no client change.
+  Deployed prod behavior: unchanged.
+- **After PR1.5:** native browser plumbing exists but is reachable only
+  from a surface that does not render while `available:false`. Deployed
+  prod behavior: unchanged.
+- **After PR2:** the surface renders ONLY when the server reports
+  `available:true`; prod stays dark until write approval + flag flip
+  (§Architecture 9). Deployed prod behavior: unchanged until the
+  deliberate env change, which is the release act.
+
+**Atomicity ruling:** no PR in this wave depends on a later one to be
+safe; the flag, not PR ordering, is the safety mechanism.
 
 - **PR0 — the desk cross-connect** (discharges RC exit (d)). Dev-only
   script under `app/scripts/`, manual-paste OAuth against `log-dev`
