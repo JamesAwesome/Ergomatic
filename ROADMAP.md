@@ -964,6 +964,24 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **`swapMark`'s `globalOnly: false` arm has no test that can fail.** The
+  checkpoint predicate reads `ref.globalOnly` rather than assuming it
+  (mirroring `resolvePrescribed`), but every shipped ref sets it `true`, so
+  no fixture built from real `PLANS` data can distinguish the two versions —
+  only mocking `domain/plans` with a synthetic false ref could, which trades
+  a real fixture for a contrived one. Flagged at #233's final review as
+  latent, not blocking. **Trigger: the first `globalOnly: false` ref or the
+  plan-authoring UI — whichever lands first writes the test in the same
+  change.** **S**
+
+- **RESOLVED (in the same PR that filed it): `stack-env.sh` now refuses an
+  empty `REPO_ROOT`** with `: "${REPO_ROOT:?...}"` instead of hashing the
+  empty string into the phantom `ergomatic-67295` stack. Probed both ways:
+  unset -> loud refusal (exit 127, message names the fix); set -> the real
+  per-worktree id, and `pnpm e2e`/`pnpm screenshots` both boot and pass.
+  All three script consumers (`e2e.sh`, `screenshots.sh`, `walk-lab.sh`)
+  set `REPO_ROOT` before sourcing, verified by grep. Session memory
+  `stack-env-needs-repo-root` carries the incident.
 - **ACCEPTED (James, 2026-08-30): deleting a personal same-titled workout
   unmarks a completed plan row.** `session_logs.workout_id` is `ON DELETE SET
   NULL`, so a rower who authored their own `2K Test`, rowed it on a checkpoint
@@ -991,20 +1009,18 @@ Each needs erg time or a deliberate recording session.
   confident one, which is a **new visual state and carries a design gate**.
   Only worth doing if such a row is ever actually observed. **S**
 
-- **The real store's `id DESC` newest-wins tiebreak is pinned by nothing.**
-  `resolveNewestPlanLink` orders `plan_index, logged_at DESC, id DESC`; the
-  fake resolves a `loggedAt` tie by insertion order instead. Aligning the two
-  was tried at #233's review and **reverted with evidence** — it turned two
-  delete contract cases red against the fake while real Postgres kept passing
-  them, because Postgres keeps microseconds (so ordinary saves never tie and
-  `id DESC` is unreachable) while the fake's millisecond `Date` ties
-  constantly, and `seq` is what substitutes for that missing precision. The
-  reasoning is a comment on `resolveNewestFakeLink` so it is not retried. What
-  remains unpinned is the real term itself: pinning it needs a real-store-only
-  test that forces a same-microsecond tie with raw SQL, which the shared
-  contract suite cannot do. **Decide whether that is worth writing at all** —
-  the term is a total-order tiebreak whose only job is determinism. **S**
-
+- **DISPOSED (post-#233 follow-ons, rationale corrected at #235's review):
+  the real store's `id DESC` tiebreak stays unpinned as LOW-VALUE — not, as
+  this entry first claimed, unreachable.** The owning comment in
+  `stores/logs.ts` says a same-microsecond tie is "unlikely, not
+  impossible", and `contracts.real.integration.test.ts` already forces
+  exact ties on this table with raw SQL, so the test is writable with an
+  in-repo technique. What it would buy: determinism between two rows that
+  are, by construction, interchangeable candidates for one index — the
+  tiebreak is arbitrary-but-stable by its own comment, never "the later
+  insert". A test pinning an arbitrary choice earns integration-suite cost
+  only if some consumer starts depending on WHICH row wins; that is the
+  revisit trigger.
 - **The swap mark goes stale if a plan preset's session types are ever
   edited.** The Plan screen derives "you swapped this day" by comparing a
   log's stored type against `PLANS`' type for that slot TODAY, so editing
@@ -1028,39 +1044,34 @@ Each needs erg time or a deliberate recording session.
   fixing it in isolation would mean the mark stops naming the prescription,
   which is what makes it useful on every other row. **S**
 
-- **TWO unit-project flakes, each seen once and neither reproduced.** On
-  2026-08-30 during #233: `server/routes/data.test.ts` > `PATCH
-  /api/logs/:id` > `an explicit null clears thumbs previously set to a real
-  value`, then later `GET/PUT /api/prefs` > `PUT updates a field and GET
-  reflects the merge` (expected `#00ff00`, got undefined). Each passed on
-  every rerun — eight and four consecutive full runs respectively. **Two
-  different tests, same shape: supertest against the in-memory fakes.** That
-  pattern is the lead. **This matters more than the known e2e flakes:** the
-  unit
-  project has no Docker, no browser and no network — it is fake stores and
-  supertest, and it should be deterministic. The test itself is self-contained
-  (fresh `makeStores()`, POST then PATCH, no shared fixture), so the
-  nondeterminism is somewhere below it: the fakes carry module-level mutable
-  state (`insertionSeq`, `logsInsertionSeq`) and `Date`-based ordering, which
-  is where to look first. **Not attributed to #233** — that PR's fake changes
-  are confined to `resolveNewestFakeLink`/`listPlanLinks`, which this path
-  never calls — but a single observation cannot rule it out either. Capture the
-  failure output next time it appears rather than re-running past it. **S**
-
-- **The `screenshots` Playwright project is gated by nothing, and its version
-  pins rot silently.** CI's `e2e` job runs the `chromium` project only, so a
-  release-notes PR bumps `news.spec.ts`'s pins (which go red in CI if missed)
-  and leaves `screenshots.spec.ts`'s alone. Third occurrence: v0.18.0 (#166),
-  then v0.27.0 — #232 fixed the e2e pins and `pnpm screenshots` stayed red on
-  main until an unrelated PR needed to regenerate a capture and tripped over
-  it on 2026-08-30. **The pin is the symptom; the missing gate is the item.**
-  Options: run the screenshots project in CI (it costs a full capture pass),
-  derive the expected version from `package.json` instead of a literal, or
-  drop the pin's version specificity and assert only that a release entry
-  renders. Note the literal exists on purpose — it is what makes the capture
-  fail loudly rather than silently shooting a stale screen (recurring failure
-  7) — so "delete the assertion" is not one of the options. **S**
-
+- **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
+  `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
+  clears thumbs previously set to a real value`, then `GET/PUT /api/prefs` >
+  `PUT updates a field and GET reflects the merge` (expected `#00ff00`, got
+  undefined). Fifteen clean full runs since, across both. What is OBSERVED:
+  two different tests, both supertest against the in-memory fakes, both
+  failing as `expected undefined to be <value>` on a response-body field.
+  What is INFERENCE, explicitly unchosen (#235's review: reruns do not pick
+  a mechanism, and `undefined` does not distinguish a transport failure
+  from wrong/partial JSON): a socket failure under parallel-worker load, or
+  shared state in the fakes (`insertionSeq`/`logsInsertionSeq`, `Date`
+  ordering). The prefs fake's read path is a synchronous per-instance Map,
+  which weighs against the second theory but does not eliminate it.
+  **Attribution waits for the next failure's captured status, body, and
+  stack — capture it rather than re-running past it.** This matters more
+  than the known e2e flakes: the unit project has no Docker, browser, or
+  network and should be deterministic. **S**
+- **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
+  can no longer rot independently.** The class was two independent literals —
+  `news.spec.ts`'s (CI-gated, bumped by every notes PR) and
+  `screenshots.spec.ts`'s (no CI job, rotted at v0.18.0/#166 and
+  v0.27.0/#232). Both now import ONE constant, `e2e/releasePin.ts`, so the
+  ungated copy cannot drift from the gated one and CI still forces the bump
+  through `news.spec.ts`. Running the screenshots project in CI was
+  considered and not taken: it buys nothing this doesn't once the literals
+  cannot diverge, at the cost of a capture pass per push. Deriving the pin
+  from `RELEASE_NOTES` was rejected as a mirror (RF11) — the screen renders
+  that same module, so it could only ever catch render breakage.
 - **AUD-012 — correct the booting-replica claim.** Two complete servers really
   race before the seed lock on an empty database, but the supported deployment
   is explicitly serial and single-replica. This is Confirmed P3 documentation

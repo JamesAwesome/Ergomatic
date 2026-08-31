@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { NEWEST_RELEASE_VERSION } from "./releasePin";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
@@ -1373,16 +1374,13 @@ test("releases", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Release notes" }),
   ).toBeVisible();
-  // Bumped alongside each notes PR — #166 shipped the v0.18.0 entry
-  // without bumping this pin, which broke `pnpm screenshots` on main
-  // (caught 2026-08-23; e2e doesn't run this project, so nothing gated it).
-  // It recurred at v0.27.0: #232 corrected the pins in `news.spec.ts`
-  // (which CI's e2e job DOES run) and this one, in a project no job runs,
-  // stayed at v0.26.0 and kept `pnpm screenshots` red on main. Found here
-  // 2026-08-30 by an unrelated PR needing to regenerate a capture; fixed
-  // in passing rather than left for the next one to trip over.
+  // The shared pin (`releasePin.ts`): this project runs in no CI job, so
+  // its own copy of the literal rotted twice while `news.spec.ts`'s
+  // CI-gated copy got bumped (v0.18.0/#166, v0.27.0/#232), breaking
+  // `pnpm screenshots` on main both times. One literal cannot drift from
+  // itself, and CI still forces the bump through news.spec.ts.
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.27.0",
+    NEWEST_RELEASE_VERSION,
   );
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "releases.png"),
