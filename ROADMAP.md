@@ -136,8 +136,10 @@ skipped.
 
 ## Wave F — Lifecycle: the app stops losing rows
 
-**Status:** Next. **TRIAD** (stored shape: the `door` column). **L.**
-Absorbs the rest of Phase LM, whose PR 1 shipped as #198 / v0.24.0.
+**Status:** OPEN and shipping — two of its items are struck and released
+(#228 in v0.27.0, #239 in v0.30.0); the lifecycle spec, correct resume and the
+`door` column are what remain. **TRIAD** (stored shape: the `door` column).
+**L.** Absorbs the rest of Phase LM, whose PR 1 shipped as #198 / v0.24.0.
 
 **Goal:** a phone in a pocket, a phone that locks, and a link that drops all
 stop costing the rower the row they actually did.
@@ -986,16 +988,16 @@ new.
   connected rows", which discharges the no-backfill sentence — and item 4
   carries the v0.11.0 one. Item 2 discharges the post-End wait ("The wait is
   short, usually under a second").
-  **ONE THING IS STILL OWED, and #239's merge on 2026-08-31 made it due:** the
-  failed-write-state sentence (`COULD NOT KEEP THE RECORD ON THIS PHONE.`, its
-  two buttons), removed at the 2026-08-30 pause ruling because it described a
-  screen v0.27.0 did not contain. **#239 ships that screen**, so the sentence
-  lands in **the v0.30.0 notes PR — owed NOW**, written against the full
-  `git log v0.29.0..main --oneline` range per RF15 (no `--merges`; this repo
-  squash-merges and that flag returns empty). Bound at #239's PM gate: this
-  repo's notes ship as their own pre-tag PR (the #231 shape), so the restoring
-  PR is the notes PR and it precedes the tag. The gate that lands a condition
-  owns removing it when its subject stops shipping (pm-ledger, 2026-08-30).
+  **The last owed sentence DISCHARGED in v0.30.0, 2026-08-31 (#241) — nothing
+  in this row is owed.** The failed-write-state sentence
+  (`COULD NOT KEEP THE RECORD ON THIS PHONE.`, its two buttons) was pulled at
+  the 2026-08-30 pause ruling for describing a screen v0.27.0 did not contain;
+  #239 shipped that screen and the sentence returned as v0.30.0's item 1, in
+  its own pre-tag notes PR (the #231 shape) preceding the tag, as #239's PM
+  gate bound it. The range was accounted per RF15
+  (`git log v0.29.0..main --oneline`, no `--merges`; this repo squash-merges and
+  that flag returns empty): #239 earns the note, #240 and #241 are docs and
+  notes and earn none.
 - **The log-delete accepted gap** — a session with a wrong number has exactly
   one remedy, delete and re-log by hand, and `logged_at` is a DB default rather
   than settable, so a mistake found the next day cannot be re-dated onto its own
@@ -1332,6 +1334,34 @@ trigger is the whole entry.
 - **PWA installability.** **Trigger:** the web build stops being only a harness.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
+- **Phase NF — tap the monitor to connect** (NFC; James, 2026-08-31, after
+  connecting via NFC in Concept2's own ErgData). The PM5 "configures itself as a
+  Near Field Communication Tag A" whose first NDEF record,
+  `concept2.com:bleconnectinfo`, holds a 6-byte BLE address, an address type,
+  and **an advertising name up to 31 bytes** — `PM5 430343693` (PM5 Bluetooth
+  Smart Interface Definition v1.30, §"Near Field Communication NDEF Records",
+  PRIMARY, quoted from the PDF at
+  `concept2.com/files/pdf/us/monitors/PM5_BluetoothSmartInterfaceDefinition.pdf`;
+  our own `docs/monitor/` transcriptions do not cover this section). That name
+  is exactly what our connect path already filters on
+  (`capacitorBle.ts:480`, `namePrefix: "PM5"`), so a tap turns the modal device
+  sheet into one erg rather than twenty in a gym. **The MAC is dead weight on
+  iOS** — CoreBluetooth exposes opaque per-device UUIDs, never hardware
+  addresses (INFERENCE from the platform, to be confirmed at spec time) — and
+  the tag's second record is an Android Application Record (`android.com:pkg` →
+  `com.concept2.ergdata`) with no iOS equivalent, so this is an in-app "hold
+  your phone to the monitor" affordance, never a tap-with-the-app-closed launch.
+  **It does not remove the erg-side ritual**: the PM5 still has to be on its
+  Connect Device screen, because the tag is a lookup shortcut and not pairing.
+  Costs: the `com.apple.developer.nfc.readersession.formats` entitlement plus an
+  `NFCReaderUsageDescription`, which regenerates the provisioning profile the
+  CLI release path uses, and a plugin (`@capgo/capacitor-nfc` 8.2.5 tracks
+  Capacitor 8, which we are on — re-verify at install per the standing rule).
+  **First work of the phase is the unverified pair**: that iOS Core NFC reads
+  this external record off a real PM5 at all, and that the name the tag states
+  is byte-identical to what CoreBluetooth's scan reports. **Trigger:** anytime —
+  it is post-production polish for a household that already pairs fine, so it
+  waits behind the front door and then only needs James to ask. **S/M**
 - **The parametric workout generator** — "generate me a 45' AT workout".
   **Its trigger has FIRED** (Phase 6 closed the loop, and `patterns.json` is the
   exact fixture it would consume), so this is eligible to schedule whenever it is
