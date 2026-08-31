@@ -147,9 +147,14 @@ written up in the spec's own CLOSED section):
   "already mid-Just-Row at connect" path is struck; the Today recovery row can
   only mean "log what we have", never "resume".
 - **A free row nobody ends never closes on the wire** — the workout stayed
-  active for ~15 minutes after the rower stopped, with frames still arriving
-  and no auto-terminate. The proposed `ended_by: "idle"` member describes an
-  event that did not occur, and PR 2 needs its own inactivity rule.
+  active for 896.8 s after the rower stopped, with frames still arriving and
+  no auto-terminate. **Now PRIMARY-backed, not just observed:** CSAFE rev
+  0.31 Appendix E p.173 names JustRow and gives it Terminate as its ONLY
+  exit, so a row that never closes is documented behaviour. The proposed
+  `ended_by: "idle"` member has no signal to map, and PR 2 needs its own
+  inactivity rule. (The old "6 s → 220 s → power off" chain turned out to be
+  three different layers; the timeouts are CSAFE slave-state ones that never
+  governed an unprogrammed row in either connection state.)
 
 Smaller reconciliations owed: `domain/monitor/pm5/uuids.ts` says 0x003F "has
 never been recorded" and one now has been; status frames arrive at 1.00/s, not
