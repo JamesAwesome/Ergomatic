@@ -389,6 +389,38 @@ as row 8 does) takes the real-bytes requirement.
    consumer's snapshot unaffected; receipts show accepted revisions.
    Mutation: gate the post-release commit on a window predicate → the
    excluded ordering fails.
+   **Scope of the matrix (amended at #239's review round 3, per the
+   reviewer's P1 — "amend the matrix to reachable production orderings
+   and gate those through the actual destination seam"): the 2x2 is not
+   a 2x2 in the shipped code, and the row is gated on the cells that
+   exist rather than on four manufactured ones.** Navigation and
+   teardown are ONE React commit — `WorkoutDetail.tsx`'s
+   `handleConnectedEnded`, the only door out of a finished connected
+   session, runs `setConnecting(null)` and `navigate(...)` in a single
+   handler — so there is no after-teardown/before-navigation cell to
+   reach. The release IS the navigation:
+   `ConnectedSurface.tsx:352-358` fires `onEnded` from an effect the
+   instant `phase === "ended" && !handoffHeld`, with no rower tap in
+   between. And the after-navigation/before-teardown gap belongs to row
+   3, whose own note already rules that "an arbitrary driver callback
+   cannot be scheduled there" — scheduling one from a test is the
+   RF24-shaped move that note forbids, and round 1 made it. What
+   remains is one reachable ordering — the late burst arriving inside
+   `BURST_LINGER_MS` after the navigation-teardown commit, §1's own
+   headline case — gated end to end through the real seam in
+   `src/workout/WorkoutDetail.postReleaseCommit.test.tsx` (real
+   `WorkoutDetail` → real `handleConnectedEnded` → real `LogSession`),
+   asserted on production observables only: `currentUnretired()`, the
+   durable bytes, and the ring stash `teardown` writes to
+   `sessionStorage`. The header's real-bytes requirement is met by a
+   separate leg in `handoffStoreReplay.test.ts` over
+   `walk-2026-08-25/rests-finished-recording.jsonl.gz`. **What no
+   capture can supply, stated rather than faked:** §9.1's own burst
+   corpus is 271-542 ms, entirely inside the 2000 ms backstop, so a
+   post-RELEASE producer update is not an ordering any recording we
+   hold observed; the release-relative axis is produced from the
+   backstop timing out (the burst never arriving), never by shifting
+   real bytes later on the clock.
 3. **The claim race, with its producer NAMED:** R0 render → **R1
    committed from the OLD hook's passive-cleanup teardown** (the only
    occupant React allows between the new render and its mount effect —
