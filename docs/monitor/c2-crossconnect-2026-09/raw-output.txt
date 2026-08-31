@@ -1,0 +1,253 @@
+POST → 201
+{
+  "data": {
+    "id": 85557,
+    "user_id": 2211,
+    "date": "2026-08-25 17:42:03",
+    "timezone": "America/New_York",
+    "date_utc": "2026-08-25 21:42:03",
+    "distance": 935,
+    "type": "rower",
+    "time": 2548,
+    "time_formatted": "6:14.8",
+    "workout_type": "VariableInterval",
+    "source": "James Morelli",
+    "weight_class": "H",
+    "verified": false,
+    "ranked": false,
+    "comments": null,
+    "privacy": "partners",
+    "stroke_data": false,
+    "rest_distance": 274,
+    "rest_time": 1200,
+    "stroke_rate": 24,
+    "real_time": null
+  }
+}
+match                        type: expected rower got rower
+match                        date: expected 2026-08-25 17:42:03 got 2026-08-25 17:42:03
+match                        timezone: expected America/New_York got America/New_York
+match                        distance: expected 935 got 935
+match                        time: expected 2548 got 2548
+match                        weight_class: expected H got H
+invisible-to-result-object   rest_time: expected 1200 got undefined
+invisible-to-result-object   rest_distance: expected 274 got undefined
+invisible-to-result-object   stroke_rate: expected 24 got undefined
+match                        workout_type: expected VariableInterval got VariableInterval
+export/csv → 404 application/json
+export/fit → 404 application/json
+export/tcx → 404 application/json
+match                        type: expected rower got rower
+match                        date: expected 2026-08-25 17:42:03 got 2026-08-25 17:42:03
+match                        timezone: expected America/New_York got America/New_York
+match                        distance: expected 935 got 935
+match                        time: expected 2548 got 2548
+match                        weight_class: expected H got H
+match                        rest_time: expected 1200 got 1200
+match                        rest_distance: expected 274 got 274
+match                        stroke_rate: expected 24 got 24
+match                        workout_type: expected VariableInterval got VariableInterval
+export/csv → 404 application/json
+export/fit → 404 application/json
+export/tcx → 404 application/json
+=== probe-red ===
+POST → 201
+{
+  "data": {
+    "id": 85559,
+    "user_id": 2211,
+    "date": "2026-08-26 17:42:03",
+    "timezone": "America/New_York",
+    "date_utc": "2026-08-26 21:42:03",
+    "distance": 935,
+    "type": "rower",
+    "time": 255,
+    "time_formatted": "2:25.5",
+    "workout_type": "VariableInterval",
+    "source": "James Morelli",
+    "weight_class": "H",
+    "verified": false,
+    "ranked": false,
+    "comments": null,
+    "privacy": "partners",
+    "stroke_data": false,
+    "rest_distance": 274,
+    "rest_time": 1200,
+    "stroke_rate": 24,
+    "real_time": null
+  }
+}
+PROBE red-proof: posted id=85559, fetching it back
+PROBE red-proof: time verdict (from a fresh GET of id=85559, not the POST echo) = MISMATCH (MUST be MISMATCH; double-check by hand with `diff 85559`)
+=== probe-dedup ===
+A: fresh post (expect 201)
+POST → 201
+{
+  "data": {
+    "id": 85560,
+    "user_id": 2211,
+    "date": "2026-09-02 10:00:00",
+    "timezone": "America/New_York",
+    "date_utc": "2026-09-02 14:00:00",
+    "distance": 935,
+    "type": "rower",
+    "time": 2548,
+    "time_formatted": "6:14.8",
+    "workout_type": "VariableInterval",
+    "source": "James Morelli",
+    "weight_class": "H",
+    "verified": false,
+    "ranked": false,
+    "comments": null,
+    "privacy": "partners",
+    "stroke_data": false,
+    "rest_distance": 274,
+    "rest_time": 1200,
+    "stroke_rate": 24,
+    "real_time": null
+  }
+}
+B: exact repost (expect 409 — proves dedup fires at all)
+POST → 409
+{
+  "message": "Duplicate Result",
+  "id": 85560,
+  "status": 409
+}
+C: same day, +30 SECONDS (THE deciding case: 409 = coarser than seconds, 201 = datetime-granular — a +30s probe can't tell day from minute granularity; the wire date is minute-resolution, exactly the ErgData shape)
+POST → 201
+{
+  "data": {
+    "id": 85561,
+    "user_id": 2211,
+    "date": "2026-09-02 10:00:30",
+    "timezone": "America/New_York",
+    "date_utc": "2026-09-02 14:00:30",
+    "distance": 935,
+    "type": "rower",
+    "time": 2548,
+    "time_formatted": "6:14.8",
+    "workout_type": "VariableInterval",
+    "source": "James Morelli",
+    "weight_class": "H",
+    "verified": false,
+    "ranked": false,
+    "comments": null,
+    "privacy": "partners",
+    "stroke_data": false,
+    "rest_distance": 274,
+    "rest_time": 1200,
+    "stroke_rate": 24,
+    "real_time": null
+  }
+}
+D: SAME instant as A/B, time field +1 tenth (expect 201 — time is in the key)
+POST → 201
+{
+  "data": {
+    "id": 85562,
+    "user_id": 2211,
+    "date": "2026-09-02 10:00:00",
+    "timezone": "America/New_York",
+    "date_utc": "2026-09-02 14:00:00",
+    "distance": 935,
+    "type": "rower",
+    "time": 2549,
+    "time_formatted": "6:14.9",
+    "workout_type": "VariableInterval",
+    "source": "James Morelli",
+    "weight_class": "H",
+    "verified": false,
+    "ranked": false,
+    "comments": null,
+    "privacy": "partners",
+    "stroke_data": false,
+    "rest_distance": 274,
+    "rest_time": 1200,
+    "stroke_rate": 24,
+    "real_time": null
+  }
+}
+E: next day, identical values (expect 201 — sanity)
+POST → 422
+{
+  "message": "Could not create new result.",
+  "status_code": 422,
+  "errors": {
+    "date": [
+      "The date of the workout is too far in the future."
+    ]
+  }
+}
+=== probe-zerorest ===
+POST → 422
+{
+  "message": "Could not create new result.",
+  "status_code": 422,
+  "errors": {
+    "date": [
+      "The date of the workout is too far in the future."
+    ]
+  }
+}
+=== probe-zerorest take 2 ===
+POST → 201
+{
+  "data": {
+    "id": 85563,
+    "user_id": 2211,
+    "date": "2026-08-24 10:00:00",
+    "timezone": "America/New_York",
+    "date_utc": "2026-08-24 14:00:00",
+    "distance": 935,
+    "type": "rower",
+    "time": 2548,
+    "time_formatted": "4:14.8",
+    "workout_type": "VariableInterval",
+    "source": "James Morelli",
+    "weight_class": "H",
+    "verified": false,
+    "ranked": false,
+    "comments": null,
+    "privacy": "partners",
+    "stroke_data": false,
+    "stroke_rate": 24,
+    "real_time": null
+  }
+}
+POST → 422
+{
+  "message": "Could not create new result.",
+  "status_code": 422,
+  "errors": {
+    "date": [
+      "The date of the workout is too far in the future."
+    ]
+  }
+}
+POST → 201
+{
+  "data": {
+    "id": 85564,
+    "user_id": 2211,
+    "date": "2026-08-23 10:00:00",
+    "timezone": "America/New_York",
+    "date_utc": "2026-08-23 14:00:00",
+    "distance": 935,
+    "type": "rower",
+    "time": 2548,
+    "time_formatted": "6:14.8",
+    "workout_type": "VariableInterval",
+    "source": "James Morelli",
+    "weight_class": "H",
+    "verified": false,
+    "ranked": false,
+    "comments": null,
+    "privacy": "partners",
+    "stroke_data": false,
+    "rest_distance": 274,
+    "rest_time": 1200,
+    "stroke_rate": 24,
+    "real_time": null
+  }
+}

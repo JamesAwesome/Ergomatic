@@ -4235,3 +4235,125 @@ null`. The hand-arithmetic table, offered first, does NOT do this work — the
   to `deliverSummary` frames. And the staged-authorization leak has no producer, because
   `ConnectAction.handleConnect` calls `stageRetire` UNCONDITIONALLY on every press,
   staging `[]` when there is nothing to protect.
+
+## Wave E anchor pass (TRIAD), 2026-08-31 — "the Concept2 logbook"
+
+Spec: `docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`.
+Verdict REVISE: three kill-shots, five serious findings, fourteen claims held.
+
+**Falsified, and the technique that settled each**
+
+1. **"The OAuth link flow works on the primary surface."** BROKEN. The spec
+   specced the WEB redirect flow (302 → C2 → cookie-authed callback) for an
+   app whose native half has no cookie at all. Technique: **follow the
+   credential, not the route.** `api.ts` attaches a Keychain bearer on native
+   and `requireUser` accepts bearer OR cookie — so a top-level navigation
+   carries neither, and a `fetch` silently follows the 302 into a JS string
+   because `capacitor.config.ts` enables `CapacitorHttp`. The clincher was
+   internal precedent, not the spec: **`docs/deploy.md:105-108` step 5 exists
+   because steps 1-4 do not serve the native app** — the repo had already paid
+   for this lesson with Google and got a native SDK; Concept2 has none.
+   Primary: RFC 8252 §8.12 *"native apps MUST NOT use embedded user-agents"*;
+   C2's own token-endpoint example redirect is `myiphoneapp://oauth/callback`.
+   **Generalised rule: when a spec adds an OAuth provider, grep for how the
+   EXISTING provider is wired on native before believing the web arm generalises.**
+
+2. **"`stroke_rate` comes from `machineSummary.summaryDetail.avgStrokeRate`."**
+   BROKEN — that path exists on zero stored rows. The writer
+   (`LogSession.tsx:1863-1878`) SPREADS `summaryDetail` flat into
+   `machineSummary`; there is no nesting key. Technique: **read the WRITER, not
+   the column.** The spec cited `schema.ts machineSummary` — the line that
+   names the subject. Three independent corroborations at depth one: the schema
+   comment's own "the nine fields verbatim", `machineSummary.integration.test.ts`'s
+   realistic fixture, and `logs.ts`'s `machineSummary->'avgPaceSecondsPer500m'`
+   SQL projection. RF24 shape, and worse: the field is OPTIONAL, so nothing
+   ever goes red, and `machineSummary` is 0-of-18 on prod so no send would
+   exercise it either.
+
+3. **"The `date` deviation is minutes."** BROKEN — it is hours, and can be a
+   calendar day. Technique: **read the sibling fields in the response example,
+   not just the field you're mapping.** C2's result object carries `timezone`
+   and `date_utc` beside `date`, and **`timezone` is an accepted POST
+   parameter** — which proves `date` is LOCAL wall-clock. Our `logged_at` is
+   `defaultNow()` server UTC (`schema.ts:148`, and no `loggedAt` appears
+   anywhere in `routes/data.ts`), and `grep -rn timezone app/{src,server,domain}`
+   proves we store no zone for anyone. An evening Pacific row files with
+   Concept2 on the wrong day. The spec's Research record omitted `timezone`
+   and eight other POST fields; **enumerating the full POST parameter table
+   was what found it.**
+
+4. **"`state` is part of the authorize call."** UNPROVABLE, presented as
+   settled. The spec's own PRIMARY research block lists the authorize params as
+   client_id/scope/response_type/redirect_uri; the Architecture section two
+   pages later appends `&state={csrf}` under the same implied tag. `state`
+   appears NOWHERE on C2's page. **RF16 variant worth naming: an INFERENCE
+   inherits a PRIMARY tag by proximity when the research record and the design
+   section are in the same document.** Technique: diff the parameter list the
+   research section transcribed against the URL the architecture section builds.
+
+5. **"Everything runs against log-dev with the key already in `.env`."**
+   BROKEN. `.env` holds ONE line (`LOGBOOK_DEV_KEY`, 40 chars — measured with
+   `awk` printing only lengths, never the value); C2's token endpoint marks
+   `client_secret` **Required: Yes**. One credential cannot satisfy a
+   two-credential grant, and `.env` is gitignored so the WORKTREE has none at
+   all. Technique: **measure the shape of a secret without reading it**
+   (`awk -F= '{print length($2)}'`), then compare against the documented
+   credential count.
+
+6. **"`workout_type` is derived."** It is a constant.
+   `commands.ts:158` sets `WORKOUTTYPE_VARIABLE_INTERVAL` **unconditionally**
+   at index 0 — so the cited line proves the opposite of "derivation", and the
+   value describes OUR programming rather than the workout. The machine's own
+   `MachineSummaryDetail.workoutType` is already stored and is the field C2's
+   `verification_code` requires a match on. The sibling branch (`free row →
+   JustRow`) is unreachable: a JustRow opens no run and Phase JR's build has
+   not happened.
+
+7. **"Built FROM THE SERVER ROW ONLY, never from client-supplied numbers."**
+   False for the one machineSummary-sourced field. `validateMachineSummary`'s
+   own comment: *"the nine fields ride along VERBATIM, whatever their shape"*,
+   and `logs.ts` says *"an authenticated client can post ANYTHING under this
+   key."* **The distinction that matters is VALIDATED vs UNVALIDATED, not
+   server-row vs client-body — every column is client-supplied.**
+
+**Attacked and HELD (the wave's vetted ground)**
+
+RC (d)'s verbatim transcription (byte-compared against `phase-rc.md:163`);
+no-PKCE → server-broker; refresh rotation; explicit scopes and their
+one-way narrowing; no revocation endpoint; `workout` optional so a
+summary-level post is valid; per-interval rest genuinely absent from
+`LogStep` while present on `IntervalActual`; the tenths conversion at the
+doublePrecision boundary (**probed**: sums of tenths carry ~1e-12 against a
+0.05 margin — 12x32.7 → 3924 exact; only a true half-tenth breaks it and
+the wire cannot produce one); the 409 semantics and leaving the id null;
+`weight_class` unavailable from C2's user object (enumerated all 13 fields);
+`c2_result_id` as integer (`"id": 339`); RC-1's split genuinely matching C2's
+work-only definitions; PR0-before-PR1; RF25 seam ownership.
+
+**Techniques worth keeping**
+
+- **Follow the credential.** For any browser-mediated flow in a Capacitor app,
+  ask what carries auth on native. This repo answers it in two files
+  (`api.ts`, `auth/middleware.ts`) and the answer is "a bearer, and nothing
+  else."
+- **Internal precedent outranks external docs for "can we do this here?"**
+  `docs/deploy.md`'s Google step 5 settled K1 faster than RFC 8252 did.
+- **Read the WRITER for any jsonb path.** A blob column's shape is defined by
+  its producer, never by its schema comment; nesting bugs in untyped jsonb are
+  invisible to typecheck and to every optional-field test.
+- **Enumerate the whole POST parameter table, not the fields you planned to
+  send.** `timezone` was not in our design vocabulary, which is exactly why it
+  was the finding.
+- **Ask what the read-back CANNOT see.** ~~C2's result object returns no
+  top-level `stroke_rate`/`rest_time`/`rest_distance`~~ **FALSIFIED LIVE
+  at PR0 (2026-08-31, result 85557): the result object returns all
+  three** — this pass's enumeration of the response example was itself
+  under-read, the exact failure class it was hunting. The TECHNIQUE
+  stands (the question found a real limit one door over: `export/` 404s
+  entirely on stroke-less rows, "Stroke data not found"); the specific
+  claim does not. A doc-derived field list is a hypothesis until a live
+  response confirms it.
+- **An export of a row you just posted is an ECHO.** It can go red on
+  encoding (units, rounding, timezone) and never on meaning. The genuinely
+  independent oracle here is ErgData posting the same physical row and
+  comparing C2's two records — which is also the dedup experiment.
