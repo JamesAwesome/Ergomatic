@@ -1,12 +1,51 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Hoisted so the vi.mock factories below (hoisted above imports by vitest)
+// can close over shared, per-test-configurable mock fns.
+const readlineMocks = vi.hoisted(() => ({
+  question: vi.fn<() => Promise<string>>(),
+  close: vi.fn(),
+}));
+vi.mock("node:readline/promises", () => ({
+  createInterface: vi.fn(() => readlineMocks),
+}));
+
+const fsMocks = vi.hoisted(() => ({
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  chmod: vi.fn(),
+}));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    readFile: fsMocks.readFile,
+    writeFile: fsMocks.writeFile,
+    chmod: fsMocks.chmod,
+  };
+});
+
+const cryptoMocks = vi.hoisted(() => ({
+  randomBytes: vi.fn(),
+}));
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return { ...actual, randomBytes: cryptoMocks.randomBytes };
+});
+
 import {
   buildAuthorizeUrl,
   buildResultPost,
   c2Tenths,
+  cmdAuth,
   diffRowVsResult,
+  evaluateFreshPost,
+  exchangeCode,
+  fetchResult,
   formatC2Date,
   parseCallbackUrl,
   readConfig,
+  verifyState,
 } from "./c2-crossconnect.js";
 
 const cfg = {
@@ -176,5 +215,315 @@ describe("diffRowVsResult", () => {
   it("goes RED when C2's copy disagrees with the stored row (the gate can fail)", () => {
     const diffs = diffRowVsResult(row, opts, { ...result, time: 255 });
     expect(diffs.find((d) => d.field === "time")?.verdict).toBe("MISMATCH");
+  });
+});
+
+// Review #2: scope is required at token exchange, not just at authorize.
+describe("exchangeCode", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  it("posts the exact six token-exchange params — client_id, client_secret, grant_type, code, redirect_uri, scope", async () => {
+    let capturedBody: URLSearchParams | undefined;
+    const fetchSpy = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      capturedBody = init?.body as URLSearchParams;
+      return {
+        ok: true,
+        status: 200,
+        text: async () => "",
+        json: async () => ({
+          access_token: "tok-abc",
+          refresh_token: "ref-xyz",
+          expires_in: 3600,
+        }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const tokens = await exchangeCode(cfg, "the-code-999");
+
+    expect(tokens.access_token).toBe("tok-abc");
+    expect(capturedBody).toBeInstanceOf(URLSearchParams);
+    expect([...(capturedBody?.keys() ?? [])].sort()).toStrictEqual(
+      [
+        "client_id",
+        "client_secret",
+        "code",
+        "grant_type",
+        "redirect_uri",
+        "scope",
+      ].sort(),
+    );
+    expect(capturedBody?.get("client_id")).toBe("cid");
+    expect(capturedBody?.get("client_secret")).toBe("sec");
+    expect(capturedBody?.get("grant_type")).toBe("authorization_code");
+    expect(capturedBody?.get("code")).toBe("the-code-999");
+    expect(capturedBody?.get("redirect_uri")).toBe(cfg.redirectUri);
+    expect(capturedBody?.get("scope")).toBe("user:read,results:write");
+  });
+});
+
+// Review #1: cmdAuth must enforce state before any token exchange. verifyState
+// is the pure enforcement predicate cmdAuth wires up.
+describe("verifyState", () => {
+  it("rejects when the callback carries no state (Branch A requires it)", () => {
+    expect(verifyState("nonce-1", null)).toStrictEqual({
+      ok: false,
+      reason: "state missing from callback",
+    });
+  });
+  it("rejects when the echoed state does not match the nonce", () => {
+    expect(verifyState("nonce-1", "someone-elses-value")).toStrictEqual({
+      ok: false,
+      reason: "state mismatch: got someone-elses-value",
+    });
+  });
+  it("on a match, returns a receipt carrying independently-verifiable sha256 hex of both sides — FIPS 180-4's own published test vector, sha256('abc')", () => {
+    const fixedNow = new Date("2026-08-31T12:00:00.000Z");
+    const result = verifyState("abc", "abc", () => fixedNow);
+    expect(result).toStrictEqual({
+      ok: true,
+      receipt: {
+        nonceSha256:
+          "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        echoedSha256:
+          "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        equal: true,
+        at: "2026-08-31T12:00:00.000Z",
+      },
+    });
+  });
+});
+
+// Review #5a: a 409 (dedup) body can still carry an id, but it is not FRESH
+// evidence for the red-proof — only a genuine 201 is.
+describe("evaluateFreshPost", () => {
+  it("accepts a fresh 201 carrying an id", () => {
+    expect(evaluateFreshPost(201, 445566)).toStrictEqual({
+      ok: true,
+      id: "445566",
+    });
+  });
+  it("rejects a 409 even though the dedup body carries an id", () => {
+    expect(evaluateFreshPost(409, 998877)).toStrictEqual({
+      ok: false,
+      message: "RED-PROOF ABORTED: expected fresh 201, got 409",
+    });
+  });
+  it("rejects a 201 with no id in the body", () => {
+    expect(evaluateFreshPost(201, undefined)).toStrictEqual({
+      ok: false,
+      message: "RED-PROOF ABORTED: expected fresh 201, got 201",
+    });
+  });
+});
+
+// Review #5b: fetchResult must not launder a bad response into an
+// "invisible" verdict.
+describe("fetchResult", () => {
+  const sessionJson = JSON.stringify({
+    tokens: { access_token: "session-tok", refresh_token: "r", expires_in: 1 },
+    obtainedAt: "2026-08-31T00:00:00.000Z",
+    stateEchoed: true,
+    stateReceipt: {
+      nonceSha256: "x",
+      echoedSha256: "x",
+      equal: true,
+      at: "2026-08-31T00:00:00.000Z",
+    },
+  });
+
+  beforeEach(() => {
+    fsMocks.readFile.mockReset().mockResolvedValue(sessionJson);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("throws with the status and body on a non-2xx response — no laundered invisible verdict", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({ error: "invalid_token" }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(fetchResult(cfg, "778899")).rejects.toThrow(
+      /fetchResult failed: 401.*invalid_token/,
+    );
+  });
+
+  it("throws 'malformed result response' on a 2xx body with no data object", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => "{}",
+      })) as unknown as typeof fetch,
+    );
+    await expect(fetchResult(cfg, "778899")).rejects.toThrow(
+      "malformed result response",
+    );
+  });
+
+  it("throws 'malformed result response' when data is present but carries no id", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: { distance: 935 } }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(fetchResult(cfg, "778899")).rejects.toThrow(
+      "malformed result response",
+    );
+  });
+
+  it("returns data on a well-formed 2xx body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({ data: { id: 445566, distance: 935 } }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(fetchResult(cfg, "778899")).resolves.toStrictEqual({
+      id: 445566,
+      distance: 935,
+    });
+  });
+});
+
+// Review #1 (integration): cmdAuth wires verifyState in — abort before any
+// token exchange on failure, store+print a receipt on success.
+describe("cmdAuth", () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    readlineMocks.question.mockReset();
+    readlineMocks.close.mockReset();
+    fsMocks.writeFile.mockReset().mockResolvedValue(undefined);
+    fsMocks.chmod.mockReset().mockResolvedValue(undefined);
+    cryptoMocks.randomBytes.mockReset();
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("aborts BEFORE any token exchange when the callback carries no state", async () => {
+    cryptoMocks.randomBytes.mockReturnValue(Buffer.alloc(16, 0x11));
+    readlineMocks.question.mockResolvedValue(`${cfg.redirectUri}?code=abc123`);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await cmdAuth(cfg);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fsMocks.writeFile).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(
+      logSpy.mock.calls.some((c: unknown[]) =>
+        String(c[0]).includes("AUTH ABORTED: state missing from callback"),
+      ),
+    ).toBe(true);
+  });
+
+  it("aborts BEFORE any token exchange when the echoed state does not match the nonce", async () => {
+    cryptoMocks.randomBytes.mockReturnValue(Buffer.alloc(16, 0x22));
+    readlineMocks.question.mockResolvedValue(
+      `${cfg.redirectUri}?code=abc123&state=not-the-nonce`,
+    );
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await cmdAuth(cfg);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fsMocks.writeFile).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(
+      logSpy.mock.calls.some((c: unknown[]) =>
+        String(c[0]).includes(
+          "AUTH ABORTED: state mismatch: got not-the-nonce",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("on a matching state: exchanges the code, writes a 0600 session with a state receipt, chmods it, and prints the receipt", async () => {
+    const nonceBuf = Buffer.alloc(16, 0x33);
+    const nonceHex = nonceBuf.toString("hex");
+    cryptoMocks.randomBytes.mockReturnValue(nonceBuf);
+    readlineMocks.question.mockResolvedValue(
+      `${cfg.redirectUri}?code=abc123&state=${nonceHex}`,
+    );
+    let call = 0;
+    const fetchSpy = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => "",
+          json: async () => ({
+            access_token: "tok-1",
+            refresh_token: "ref-1",
+            expires_in: 3600,
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { id: 909 } }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await cmdAuth(cfg);
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fsMocks.writeFile).toHaveBeenCalledTimes(1);
+    const [path, contents, writeOpts] = fsMocks.writeFile.mock.calls[0] as [
+      unknown,
+      string,
+      { mode: number },
+    ];
+    expect(String(path)).toContain(".ergomatic-c2-dev.json");
+    expect(writeOpts).toStrictEqual({ mode: 0o600 });
+    const saved = JSON.parse(contents) as {
+      stateEchoed: boolean;
+      stateReceipt: {
+        equal: boolean;
+        nonceSha256: string;
+        echoedSha256: string;
+      };
+    };
+    expect(saved.stateEchoed).toBe(true);
+    expect(saved.stateReceipt.equal).toBe(true);
+    expect(saved.stateReceipt.nonceSha256).toBe(
+      saved.stateReceipt.echoedSha256,
+    );
+    expect(fsMocks.chmod).toHaveBeenCalledWith(
+      expect.stringContaining(".ergomatic-c2-dev.json"),
+      0o600,
+    );
+    expect(
+      logSpy.mock.calls.some((c: unknown[]) =>
+        String(c[0]).includes("State receipt"),
+      ),
+    ).toBe(true);
   });
 });

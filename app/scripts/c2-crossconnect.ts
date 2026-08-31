@@ -63,17 +63,54 @@ export async function exchangeCode(
   const res = await fetch(new URL("/oauth/access_token", cfg.baseUrl), {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
+    // Review #2: C2 marks `scope` required at the token-exchange step, not
+    // just at /oauth/authorize — do not rely on a default.
     body: new URLSearchParams({
       client_id: cfg.clientId,
       client_secret: cfg.clientSecret,
       grant_type: "authorization_code",
       code,
       redirect_uri: cfg.redirectUri,
+      scope: "user:read,results:write",
     }),
   });
   if (!res.ok)
     throw new Error(`token exchange failed: ${res.status} ${await res.text()}`);
   return (await res.json()) as TokenSet;
+}
+
+export interface StateReceipt {
+  nonceSha256: string;
+  echoedSha256: string;
+  equal: true;
+  at: string;
+}
+
+// Review #1: cmdAuth must ENFORCE state (Branch A requires it), not just
+// probe and log it. Pure so the enforcement logic is testable independent
+// of readline/process.exit wiring.
+export function verifyState(
+  nonce: string,
+  echoed: string | null,
+  now: () => Date = () => new Date(),
+): { ok: true; receipt: StateReceipt } | { ok: false; reason: string } {
+  if (echoed === null) {
+    return { ok: false, reason: "state missing from callback" };
+  }
+  if (echoed !== nonce) {
+    return { ok: false, reason: `state mismatch: got ${echoed}` };
+  }
+  const nonceSha256 = createHash("sha256").update(nonce).digest("hex");
+  const echoedSha256 = createHash("sha256").update(echoed).digest("hex");
+  return {
+    ok: true,
+    receipt: {
+      nonceSha256,
+      echoedSha256,
+      equal: true,
+      at: now().toISOString(),
+    },
+  };
 }
 
 export interface StoredRowFixture {
@@ -175,11 +212,11 @@ export function diffRowVsResult(
   });
 }
 
-import { readFile, writeFile } from "node:fs/promises";
+import { chmod, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 const SESSION_PATH = join(homedir(), ".ergomatic-c2-dev.json");
 
@@ -188,13 +225,14 @@ interface Session {
   obtainedAt: string;
   c2UserId?: number;
   stateEchoed: boolean;
+  stateReceipt: StateReceipt;
 }
 
 async function loadSession(): Promise<Session> {
   return JSON.parse(await readFile(SESSION_PATH, "utf8")) as Session;
 }
 
-async function cmdAuth(cfg: C2Config): Promise<void> {
+export async function cmdAuth(cfg: C2Config): Promise<void> {
   const state = randomBytes(16).toString("hex");
   console.log("\nOpen this in a browser, log in to log-dev, approve:\n");
   console.log(buildAuthorizeUrl(cfg, state));
@@ -202,10 +240,17 @@ async function cmdAuth(cfg: C2Config): Promise<void> {
   const pasted = await rl.question("\nPaste the FULL redirected URL: ");
   rl.close();
   const { code, state: echoed } = parseCallbackUrl(pasted.trim());
-  const stateEchoed = echoed === state;
   console.log(
-    `PROBE state-echo: ${stateEchoed ? "ECHOED" : `NOT ECHOED (got ${echoed})`}`,
+    `PROBE state-echo: ${echoed === state ? "ECHOED" : `NOT ECHOED (got ${echoed})`}`,
   );
+  // Review #1: Branch A requires state — enforce it, before any token
+  // exchange, rather than only logging the probe result.
+  const verified = verifyState(state, echoed);
+  if (!verified.ok) {
+    console.log(`AUTH ABORTED: ${verified.reason}`);
+    process.exit(1);
+    return;
+  }
   const tokens = await exchangeCode(cfg, code);
   const meRes = await fetch(new URL("/api/users/me", cfg.baseUrl), {
     headers: { authorization: `Bearer ${tokens.access_token}` },
@@ -215,10 +260,21 @@ async function cmdAuth(cfg: C2Config): Promise<void> {
     tokens,
     obtainedAt: new Date().toISOString(),
     c2UserId: me.data?.id,
-    stateEchoed,
+    stateEchoed: true,
+    stateReceipt: verified.receipt,
   };
-  await writeFile(SESSION_PATH, JSON.stringify(session, null, 2));
+  // Review #3: the session file carries live tokens — write it 0600, and
+  // chmod after (mode only applies at file creation, not on overwrite of an
+  // existing file from a prior run).
+  await writeFile(SESSION_PATH, JSON.stringify(session, null, 2), {
+    mode: 0o600,
+  });
+  await chmod(SESSION_PATH, 0o600);
   console.log(`Session saved to ${SESSION_PATH} (user ${me.data?.id}).`);
+  console.log(
+    "State receipt (hashes only, never raw tokens — paste into the walk report):",
+  );
+  console.log(JSON.stringify(verified.receipt, null, 2));
 }
 
 // FIXTURE: docs/monitor/sessions/walk-2026-08-25/rests-finished-recording.jsonl.gz
@@ -297,14 +353,37 @@ function resultsBase(session: Session): string {
     : "/api/users/me/results";
 }
 
-async function fetchResult(
+// Review #5b: must not launder a bad response into an "invisible" verdict —
+// a non-2xx or a malformed 2xx body throws, loudly, instead of being handed
+// to diffRowVsResult as if it were a real result record.
+export async function fetchResult(
   cfg: C2Config,
   id: string,
 ): Promise<Record<string, unknown>> {
   const session = await loadSession();
   const res = await authedFetch(cfg, `${resultsBase(session)}/${id}`);
-  const wrapper = (await res.json()) as { data?: Record<string, unknown> };
-  return wrapper.data ?? (wrapper as Record<string, unknown>);
+  const raw = await res.text();
+  if (!res.ok) throw new Error(`fetchResult failed: ${res.status} ${raw}`);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = { rawBody: raw };
+  }
+  const wrapper =
+    typeof parsed === "object" && parsed !== null
+      ? (parsed as { data?: Record<string, unknown> })
+      : undefined;
+  const data = wrapper?.data;
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    data.id === undefined ||
+    data.id === null
+  ) {
+    throw new Error("malformed result response");
+  }
+  return data;
 }
 
 async function authedFetch(
@@ -372,6 +451,23 @@ async function cmdDiff(cfg: C2Config): Promise<void> {
   }
 }
 
+// Review #5a: a 409 (dedup — the post already existed) can still carry an
+// `id` in its body, and that id is NOT fresh evidence for the red-proof —
+// only a genuine fresh 201 is. Pure so the guard is testable independent of
+// the network call.
+export function evaluateFreshPost(
+  status: number,
+  id: unknown,
+): { ok: true; id: string } | { ok: false; message: string } {
+  if (status === 201 && id !== undefined && id !== null) {
+    return { ok: true, id: String(id) };
+  }
+  return {
+    ok: false,
+    message: `RED-PROOF ABORTED: expected fresh 201, got ${status}`,
+  };
+}
+
 async function cmdProbeRed(cfg: C2Config): Promise<void> {
   // RF21: prove the diff can go red. Post the fixture with time encoded in
   // SECONDS (the classic wrong encoding). I-3: the verdict must NOT be read
@@ -384,17 +480,17 @@ async function cmdProbeRed(cfg: C2Config): Promise<void> {
     date: new Date(FIXTURE_OPTS.date.getTime() + 86_400_000), // avoid 409 with the real post
     timeOverrideTenths: Math.round(FIXTURE.workSeconds),
   });
-  const { json } = await postResult(cfg, wrong);
+  const { status, json } = await postResult(cfg, wrong);
   const posted = (json as { data?: Record<string, unknown> }).data ?? json;
-  const id = posted.id;
-  if (id === undefined || id === null) {
-    console.log(
-      `PROBE red-proof: FAILED to get an id back from the POST (raw: ${JSON.stringify(json)}) — cannot self-verify; run \`diff <id>\` by hand once you have one`,
-    );
+  const evaluated = evaluateFreshPost(status, posted.id);
+  if (!evaluated.ok) {
+    console.log(evaluated.message);
+    process.exit(1);
     return;
   }
-  console.log(`PROBE red-proof: posted id=${String(id)}, fetching it back`);
-  const result = await fetchResult(cfg, String(id));
+  const id = evaluated.id;
+  console.log(`PROBE red-proof: posted id=${id}, fetching it back`);
+  const result = await fetchResult(cfg, id);
   const timeDiff = diffRowVsResult(FIXTURE, FIXTURE_OPTS, result).find(
     (d) => d.field === "time",
   );
