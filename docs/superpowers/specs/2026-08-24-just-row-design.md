@@ -92,13 +92,25 @@ captures and transcriptions. This section is the corrected record.
   idle (SECONDARY, `pm5-session4a-final.log.gz` decoded at the anchor
   pass). The field identifies nothing we need. It is not part of this
   design.
-- **"JustRow ends only via Terminate" is UNVERIFIED.** The repo's Appendix
-  E transcription carries no JustRow attribution for the Terminate
-  sequence — the link was our own gloss — and this repo has already caught
-  Appendix E wrong about these exact ordinals (the keystone walk saw
-  5→12 with state 10 never appearing, `parse.ts:410-416`). Whether a real
-  Just Row can reach the `"finished"`-mapped state is a CAPTURE question,
-  and the design below tolerates either answer. INFERENCE until PR 0b.
+- **"JustRow ends only via Terminate" is PRIMARY** (promoted 2026-08-31
+  from UNVERIFIED). Rev 2 said the repo's Appendix E transcription carried
+  no JustRow attribution and that "the link was our own gloss." That was
+  true of OUR TRANSCRIPTION and false of the SOURCE. The CSAFE
+  Communication Definition rev 0.31, Appendix E "PM State Transitions"
+  p.173, verbatim:
+
+  > "For any fixed duration workout **or JustRow (no defined end)** that is
+  > terminated prior to reaching its defined end:
+  > `WaitToBegin->WorkoutRow->Terminate (user or command)->Rearm->WaitToBegin`"
+
+  It is the only Appendix E sequence naming JustRow and the only exit it
+  lists. `pm5-interface-notes.md:3496` quotes the fixed-duration block and
+  omits this one, which is how we came to call our own correct reading a
+  gloss. **Consequence: CLOSED 3's 897 seconds of `WORKOUTROW` is
+  DOCUMENTED behaviour, not an anomaly** — a JustRow has no timed exit to
+  wait for. The standing caution still applies (the keystone walk caught
+  Appendix E wrong about these ordinals, `parse.ts:410-416`), so this is
+  PRIMARY-and-corroborated-by-our-own-capture rather than PRIMARY alone.
 - **Terminate IS observable at the frame seam**: `parse.ts:439` maps
   ordinal 11 → `state: "terminated"`, sole producer. SECONDARY, vetted.
 - **0x0039 HAS been captured** — the 2026-08-23 keystone walk recorded an
@@ -106,19 +118,51 @@ captures and transcriptions. This section is the corrected record.
   deafness, per that walk's README (SECONDARY). Still: arrival is not
   guaranteed (ecosystem reports drops), so 0x0039 remains an opportunistic
   cross-check, never the record.
-- **Idle chain — FALSIFIED for the connected case (2026-08-31 capture).**
-  Rev 2 recorded: 6 s inactivity → Paused, 220 s → Finished, then the
-  monitor powers off ("a couple of minutes… count starts once the
-  flywheel stops"). Observed instead, with a central connected: the
-  workout stayed in its ACTIVE state for ~897 s after the rower stopped,
-  streaming throughout, with no Paused transition, no Finished, and no
-  power-off. The figures below are kept as the disconnected-case claim
-  they were sourced for; they do not describe a connected session. SECONDARY: the 6 s/220 s figures live in our own
-  research summary of the CSAFE slave state machine
-  (`docs/superpowers/research/2026-07-27-pm5-ble-research.md`), and the
-  power-off is concept2.com (PRIMARY). BLE-side effect of power-off
-  (link drop) is INFERENCE. Whether the timeout emits an auto-TERMINATE
-  first is an open assertion in `monitorRun.ts:145` — capture question.
+- **Idle chain — THREE LAYERS, and rev 2 collapsed them into one.** The
+  "6 s → 220 s → power off" chain was never a single mechanism. Corrected
+  2026-08-31 against the CSAFE Communication Definition rev 0.31 and the
+  walk. **An intermediate correction made on the walk day is itself
+  superseded and must not be reinstated:** it said the figures were
+  "FALSIFIED for the connected case" and "kept as the disconnected-case
+  claim they were sourced for." That preserved the layer error while
+  appearing to contain it — the figures do not apply in EITHER connection
+  state.
+
+  1. **6 s / 220 s belong to the PUBLIC CSAFE SLAVE state machine only**
+     (PRIMARY, rev 0.31 Table 16 p.47, under the heading "Public CSAFE
+     Default Configuration"): *"Inactivity During InUse State Timeout | 6
+     seconds"*, *"Inactivity During Pause State Timeout | 220 seconds …
+     before entering the Finished state"*. Table 17 p.49 narrows it
+     further: *"A timeout is employed to enter the Finished state in the
+     event **a configured workout** is never started or re-started."* A
+     Just Row is not a configured workout, and our observer sends no CSAFE
+     at all — the whole capture contains exactly one tx, the 1 Hz
+     sample-rate write. **These figures never governed an unprogrammed
+     Just Row. Connection state is irrelevant to why.**
+  2. **The WORKOUT state machine has no timed exit for a JustRow** — see
+     the Terminate entry above. This is the layer 0x0031 byte 8 reports,
+     and `OBJ_WORKOUTSTATE_T` (rev 0.31 pp.102-103) has **no Paused
+     member** at all, so "we saw no Paused transition" is not a finding
+     that field can deliver.
+  3. **Physical power-off is a separate layer, and the only one where
+     "a connection suppresses it" is a live hypothesis.** concept2.com
+     (PRIMARY): *"The PM turns off automatically after a couple of minutes
+     of inactivity. A spinning flywheel is considered activity, so the
+     count starts once the flywheel stops."* — and, notably, *"To keep
+     your monitor awake when you're taking a break during a long piece,
+     periodically press Display or Units on the monitor face."* We saw
+     neither the power-off nor any need for that mitigation across 897 s
+     connected. **Neither vendor document relates a BLE connection to any
+     timeout or to power state** (grepped: 10 "bluetooth" hits in rev
+     0.31, all transport/HR/byte-order). Concept2's own forum reports the
+     suppression consistently across years and several threads, but those
+     could not be read verbatim — SECONDARY, and weak. BLE-side effect of
+     a power-off (link drop) remains INFERENCE, untested.
+
+  **What this changes for the design: nothing softens.** PR 2 still needs
+  its own inactivity rule, and now for a stronger reason than "we saw no
+  timeout" — a JustRow has no documented timed exit at any layer we can
+  observe, and we are by definition never disconnected when we care.
 - **Auto-start**: the PM turns on and Just Row begins when the rower
   pulls (PRIMARY, concept2.com). Pull-from-menu auto-entry with the app
   already connected: INFERENCE, capture question.
@@ -146,13 +190,24 @@ are findings for this device and these runs, not firmware-general truths.
    paired with its 0x0038. The split's own fields are per-split
    (300.0 s / 1074 m, then 93.6 s / 323 m); the frame's own elapsed and
    distance are cumulative.
-3. **The clock HOLDS through a pause; there is NO idle auto-terminate
-   while a central is connected.** The deliberate stop froze elapsed at
-   185.81 s across ~50 s of wall time — elapsed is rowing time, not wall
-   time. The timeout half is a **negative result**: after the rower
-   stopped, `workoutState` stayed at 1 for ~897 s with frames still
-   arriving, and nothing terminated. **The 220 s premise is not supported.**
-   See N2 below — this invalidates the `idle` closer as specced.
+3. **The clock HOLDS through a pause, and no auto-terminate arrived
+   within 897 s.** The deliberate stop froze elapsed at 185.81 s across
+   ~50 s of wall time — elapsed is rowing time, not wall time. The timeout
+   half is a **bounded negative**: after the rower stopped, `workoutState`
+   stayed at 1 for 896.8 s with frames still arriving and nothing
+   terminating. **Bounded, not "never" — the capture ended because the
+   operator stopped it, not because the monitor did anything.**
+
+   **Read this WITH the corrected idle-chain entry above, not as a
+   standalone surprise.** Two claims that looked like findings on the walk
+   day are not: the 220 s figure never governed an unprogrammed Just Row
+   in the first place (it is a CSAFE slave-state timeout, and we send no
+   CSAFE), and "no Paused transition" is unobservable — `OBJ_WORKOUTSTATE_T`
+   has no Paused member. What survives, and is now PRIMARY-backed rather
+   than merely observed, is that **a JustRow has no documented timed exit**:
+   Appendix E gives it Terminate and nothing else. See N2 — the `idle`
+   closer as specced has no signal to map, and that conclusion is
+   strengthened, not weakened, by the documentation.
 4. **Does a Menu-end emit 0x0039? YES**, with 0x003A and a 0x003F, 0.4 s
    after the terminate. Its filed totals (393.60 s / 1396.0 m) agree with
    the live stream (393.58 s / 1396.6 m) to 0.6 m. **This retires rev 2's

@@ -155,7 +155,15 @@ export interface MonitorRun {
    *     finding; the spec now states it directly, with the "open
    *     assertion" that an inactivity auto-TERMINATE, if the PM5 ever
    *     emits one, would make this label an assertion of agency rather
-   *     than an observation — unverified either way, walk question W8).
+   *     than an observation — walk question W8, NARROWED not closed on
+   *     2026-08-31: no auto-TERMINATE arrived within 896.8 s on an
+   *     unprogrammed Just Row, one device, one run, with the capture
+   *     ended by the operator rather than by the monitor
+   *     (`docs/monitor/sessions/walk-2026-08-31-justrow/`). Documentation
+   *     agrees as far as it goes — CSAFE rev 0.31 Appendix E gives a
+   *     JustRow only a Terminate exit, no timed one — but "none within
+   *     896.8 s" is not "never", and a PROGRAMMED workout was not tested
+   *     at all. The assertion stays open for that case.
    *   - `"link-lost"` — the End button with `linkGone === true`, OR a
    *     continuity reset (`useMonitorSession.ts`'s `applyContinuityCheck`,
    *     `completeContinuityReset` below) — RULED at Task 4's review

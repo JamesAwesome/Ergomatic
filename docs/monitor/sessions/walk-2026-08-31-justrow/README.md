@@ -63,12 +63,35 @@ Piece 1's deliberate stop froze elapsed at 185.81 s and distance at 656.7 m
 across ~50 s of wall time, with `workoutState = 1` and `rowingState = 0`
 throughout. **Elapsed is rowing time, not wall time.**
 
-Piece 2 is the stronger half and it is a negative result. After the rower
-stopped at 81.9 s, the PM5 held `workoutState = 1` — an *active* workout — for
-the remaining ~897 seconds, streaming status frames continuously to the end of
-the capture. No 0x0037, no 0x0039, no terminate, no power-off. Elapsed stayed
-at 64.45 s and distance at 222.8 m. **The spec's 220 s timeout premise is not
-supported on this device while a central is connected.** See finding N2.
+Piece 2 is the stronger half and it is a **bounded** negative result. After the
+rower stopped at 81.9 s, the PM5 held `workoutState = 1` — an *active* workout —
+for the remaining 896.8 seconds, streaming status frames continuously to the
+end of the capture. No 0x0037, no 0x0039, no terminate, no power-off. Elapsed
+stayed at 64.45 s and distance at 222.8 m. See finding N2.
+
+**Three limits on what this proves, added 2026-08-31 after a documentation
+pass. Two of them correct over-claims made in the first draft of this file:**
+
+1. **Bounded at 896.8 s, not "never".** The capture ended because the operator
+   stopped it. Nothing here says what happens at 20 minutes.
+2. **"No Paused transition" was never observable and has been struck.**
+   `OBJ_WORKOUTSTATE_T` (CSAFE Communication Definition rev 0.31, pp.102-103)
+   has **no Paused member** — 0x0031 byte 8 cannot report one. The first draft
+   of this README listed its absence as a finding; it is not one.
+3. **We never observed the CSAFE slave state, so we cannot speak to it.** The
+   whole recording contains exactly one tx — `seq 12, char ce060034, hex "03"`,
+   the 1 Hz sample-rate write. **Zero CSAFE traffic on 0x0021.** The 6 s/220 s
+   timeouts belong to that slave state machine (rev 0.31 Table 16 p.47, and
+   Table 17 p.49 scopes the 220 s one to *"a configured workout"*), so they
+   never governed this row — connected or not. Calling them "not supported
+   while connected" framed a layer error as a connection difference.
+
+**What survives is stronger than the first draft claimed**, because it is now
+documented rather than merely observed: Appendix E p.173 gives a JustRow
+exactly one exit — *"`WaitToBegin->WorkoutRow->Terminate (user or command)->
+Rearm->WaitToBegin`"* — so 896.8 s of `WORKOUTROW` is expected behaviour, and
+PR 2 needs its own inactivity rule for a better reason than "we saw no
+timeout".
 
 SCREEN corroboration (operator report, CORRELATED not same-frame): the PM5's
 display showed those same frozen numbers throughout, matching the wire.
