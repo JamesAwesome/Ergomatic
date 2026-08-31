@@ -38,19 +38,41 @@
 //    navigation IS what tears the surface down. **That kills the
 //    after-teardown/before-navigation cell outright.**
 //
-//  - **The release IS the navigation.** `ConnectedSurface.tsx:352-358`
-//    fires `onEnded` from an effect the instant
-//    `phase === "ended" && !session.handoffHeld`, guarded once by
-//    `endedRef`. No rower tap sits between the release and the route
-//    change, so "after release, before navigation" is not an interval a
-//    rower or a wire frame can occupy — it is the gap inside React's own
-//    flush between the release's commit and the passive effect that
-//    navigates.
+//  - **The release LEADS to the navigation, but there is a real gap
+//    between them, and a wire frame CAN occupy it (PR #239 review round 6,
+//    reviewer's P1 addendum — this bullet used to claim the opposite).**
+//    `releaseHandoff` commits `handoffHeld: false`
+//    (`useMonitorSession.ts:2158`); `ConnectedSurface.tsx:352-358` then
+//    fires `onEnded` from a PASSIVE effect, which React runs after that
+//    commit, not inside it. No rower tap sits between them — but a wire
+//    frame is not a tap, and the source pins at the bottom of this file
+//    only exclude ADDITIONAL deferral inside the handler; they cannot
+//    close the passive-effect boundary itself. Rounds 3-5 asserted the
+//    interval was unoccupiable and offered no evidence for it. It is
+//    occupiable, MEASURED: the second test below delivers a summary in it
+//    and records production's own released-frame copy plus an unmounted
+//    consumer as its proof of position.
+//    **So the navigation axis carries TWO real orderings, both gated:**
+//    (i) delivery INSIDE the interval — this file's second test at the
+//    route layer, with `useMonitorSession.test.ts`'s `row 2, HOOK LAYER`
+//    arm carrying the same state at the hook (released, still mounted,
+//    still subscribed, commit accepted and receipted after the release);
+//    and (ii) delivery AFTER the navigation — this file's first test.
+//    **The consumer consequence of (i) is not a third state.** No consumer
+//    exists during the interval: `LogSession` is what the navigation
+//    mounts. So (i)'s consumer half is a MOUNT snapshot, and the only
+//    question is which side of the fold-in that mount falls on — mount
+//    first (what the driver's deferred summary reconcile actually
+//    produces, asserted in the second test) or fold-in first (the third
+//    test, where the screen shows the machine's numbers and Save posts
+//    them). Contract A is asserted on both sides.
 //
-//  - **HOW THOSE TWO BULLETS ARE ESTABLISHED, said exactly (PR #239
-//    review round 4, reviewer finding 2).** They are a SOURCE-REVIEWED
+//  - **HOW THE FIRST BULLET IS ESTABLISHED, said exactly (PR #239
+//    review round 4, reviewer finding 2).** It is a SOURCE-REVIEWED
 //    REACHABILITY ASSUMPTION about two named handlers — NOT a production
-//    observable the behavioural test below pins. The reviewer proved the
+//    observable the behavioural test below pins. (The second bullet no
+//    longer rests on it at all: the interval it names is now measured
+//    rather than reasoned about.) The reviewer proved the
 //    difference: wrapping `navigate(...)` in `setTimeout(..., 0)` inside
 //    `handleConnectedEnded` leaves that test GREEN, because `waitFor`
 //    cannot tell a same-commit route change from one a macrotask later.
@@ -75,13 +97,15 @@
 //    row 3 and is gated by row 3's own test; row 2 does not manufacture a
 //    driver callback into it.**
 //
-// What is left is ONE reachable cell, and it is the row's own headline
-// case (§1: "the late burst"; §9.1: "the window is bounded by the
-// producer's subscription life"): the hold times out on its own backstop,
-// the release navigates and tears the surface down in one commit, and the
-// machine's summary arrives on the wire AFTERWARDS, inside
-// `BURST_LINGER_MS`. That is the cell this file drives, end to end, with
-// no seam touched but the transport.
+// What is left is TWO reachable orderings, both of them the row's own
+// headline case (§1: "the late burst"; §9.1: "the window is bounded by the
+// producer's subscription life") differing only in WHERE in the flush the
+// frame lands: the hold times out on its own backstop, the release frees
+// the surface, and the machine's summary arrives on the wire either inside
+// the interval before the navigation (test 2) or after it (test 1), in
+// both cases inside `BURST_LINGER_MS`. This file drives both end to end,
+// with no seam touched but the transport, and test 3 carries the mount
+// side of the consumer question the two of them leave open.
 //
 // **Why the window is still open after teardown**, stated so the test does
 // not read as wishful thinking: `useMonitorSession.ts`'s `teardown` takes
@@ -269,6 +293,80 @@ function screenText(): string {
   return document.querySelector("main")?.textContent ?? "";
 }
 
+/** The fake this file's tests all script: one real rowing frame, nothing
+ *  else, so the burst hold has to time out on its own backstop. */
+function makeFake(): Transport & FakeControls {
+  return createFakeTransport({
+    program: programFor(WORKOUT, BASELINES),
+    deviceName: DEVICE,
+    events: [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 20,
+        distanceMeters: 70,
+        spm: 21,
+        currentSplit: 117.8,
+        heartRateBpm: 164,
+        programIntervalIndex: 0,
+      },
+    ],
+  });
+}
+
+/** The two production routes this file composes over, plus a Today stub —
+ *  identical in both tests, so the composition is stated once. */
+function renderRoutes(): ReturnType<typeof render> {
+  return render(
+    <MemoryRouter initialEntries={[`/library/${WORKOUT.id}`]}>
+      <Routes>
+        <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/library/:id/log" element={<LogSession />} />
+        <Route path="/today" element={<p>TODAY SCREEN</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+/** The rower's own path from the library screen to the burst hold: Connect,
+ *  the ack-gated programming exchange, one real rowing frame, then End
+ *  pressed twice. Every step is a production interaction; nothing here
+ *  asserts the row, and both tests below start from its end state. */
+async function rowToBurstHold(fake: Transport & FakeControls): Promise<void> {
+  await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+  // Pump the ack-gated programming exchange — microtask hops, never
+  // timed (`connectedRecovery`'s own identical loop).
+  for (let i = 0; i < 40; i += 1) {
+    await act(async () => {
+      fake.tick(0);
+      await Promise.resolve();
+    });
+    if (screen.queryByText("Ready when you pull")) break;
+  }
+  await screen.findByText("Ready when you pull");
+
+  await userEvent.click(
+    screen.getByRole("button", { name: "Show me the numbers" }),
+  );
+  // The scripted rowing frame: real flywheel evidence, so the rowing
+  // gate opens the record through the store's create-commit.
+  await act(async () => {
+    fake.tick(200);
+    await Promise.resolve();
+  });
+  await screen.findByRole("navigation", { name: "Connected panes" });
+
+  // A real, link-up End press — burst-eligible, so the hand-off HOLDS
+  // for the machine's own summary instead of releasing at once.
+  await userEvent.click(screen.getByRole("button", { name: "End session" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Tap again to end" }),
+  );
+  await screen.findByText("Getting the monitor's own numbers.");
+}
+
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
@@ -293,67 +391,10 @@ describe("§10 row 2 through the real destination seam: a producer update after 
   // the real composition. The backstop firing on its own real timer is the
   // production event; waiting for it is the honest way to observe it.
   it("the burst backstop releases, the REAL handleConnectedEnded replaces the connected surface with the REAL LogSession, and the machine's summary — arriving after all of it — still lands on the store, the durable tier, and the ring", async () => {
-    const program = programFor(WORKOUT, BASELINES);
-    const fake = createFakeTransport({
-      program,
-      deviceName: DEVICE,
-      events: [
-        {
-          atMs: 100,
-          kind: "status",
-          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
-          elapsedSeconds: 20,
-          distanceMeters: 70,
-          spm: 21,
-          currentSplit: 117.8,
-          heartRateBpm: 164,
-          programIntervalIndex: 0,
-        },
-      ],
-    });
+    const fake = makeFake();
     fakeForTest = fake;
-
-    render(
-      <MemoryRouter initialEntries={[`/library/${WORKOUT.id}`]}>
-        <Routes>
-          <Route path="/library/:id" element={<WorkoutDetail />} />
-          <Route path="/library/:id/log" element={<LogSession />} />
-          <Route path="/today" element={<p>TODAY SCREEN</p>} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
-
-    // Pump the ack-gated programming exchange — microtask hops, never
-    // timed (`connectedRecovery`'s own identical loop).
-    for (let i = 0; i < 40; i += 1) {
-      await act(async () => {
-        fake.tick(0);
-        await Promise.resolve();
-      });
-      if (screen.queryByText("Ready when you pull")) break;
-    }
-    await screen.findByText("Ready when you pull");
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Show me the numbers" }),
-    );
-    // The scripted rowing frame: real flywheel evidence, so the rowing
-    // gate opens the record through the store's create-commit.
-    await act(async () => {
-      fake.tick(200);
-      await Promise.resolve();
-    });
-    await screen.findByRole("navigation", { name: "Connected panes" });
-
-    // A real, link-up End press — burst-eligible, so the hand-off HOLDS
-    // for the machine's own summary instead of releasing at once.
-    await userEvent.click(screen.getByRole("button", { name: "End session" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Tap again to end" }),
-    );
-    await screen.findByText("Getting the monitor's own numbers.");
+    renderRoutes();
+    await rowToBurstHold(fake);
 
     // The state at the moment of the hold, read through the store's own
     // public API — the baseline every "+1" below is measured against.
@@ -571,6 +612,221 @@ describe("§10 row 2 through the real destination seam: a producer update after 
   }, 20000);
 
   // ---------------------------------------------------------------------
+  // ORDERING (i) — THE FRAME LANDS IN THE INTERVAL ITSELF (PR #239 review
+  // round 6).
+  //
+  // The interval is the one the header names: after `releaseHandoff`
+  // commits `handoffHeld: false` and the surface has RENDERED that release,
+  // and before `ConnectedSurface.tsx:352-358`'s passive effect fires
+  // `onEnded` and `handleConnectedEnded` navigates. Rounds 3-5 asserted no
+  // wire frame could occupy it; that claim had no evidence and is deleted.
+  // This test occupies it, and proves it did.
+  //
+  // **THE WEDGE, and why it is not the scaffolding the reviewer rejected.**
+  // A `MutationObserver` on `document.body` fires as a MICROTASK on the DOM
+  // mutation the release's own commit produces, while React's passive
+  // effects are scheduled on a later task — so the callback is guaranteed
+  // to run in the gap, ahead of the navigate. It observes the DOM from
+  // outside; it renders no component, mounts no effect into the production
+  // tree, and installs no channel the app lacks. The delivery it triggers
+  // goes through the SAME wire seam every other test in this file uses
+  // (`fake.deliverSummary`) — the observer supplies only the MOMENT.
+  //
+  // **The position is asserted, not assumed.** What the callback records at
+  // delivery time is the released ended frame's own copy —
+  // `ConnectedSurface.tsx:485-495` renders "No numbers to keep." ONLY on the
+  // `!session.handoffHeld` branch (the held branch is "Getting the monitor's
+  // own numbers.") — with no `LogSession` on screen. That pair IS
+  // after-release and before-navigation, in production's own strings.
+  it("IN THE INTERVAL: a summary delivered after the release's own commit and BEFORE the passive effect that navigates still reaches `commit` on both tiers, and the consumer that mounts a beat later keeps its own snapshot", async () => {
+    const fake = makeFake();
+    fakeForTest = fake;
+    renderRoutes();
+    await rowToBurstHold(fake);
+
+    const held = currentUnretired();
+    expect(held).not.toBeNull();
+    expect(held!.run.summaryTotals).toBeUndefined();
+    const heldRevision = held!.revision;
+
+    /** What the screen was showing at the instant the wire frame was
+     *  delivered — the whole of this test's claim about WHERE in the flush
+     *  the delivery happened. */
+    const atDelivery: { main: string; consumerMounted: boolean }[] = [];
+    let delivered = false;
+    const observer = new MutationObserver(() => {
+      // Every mutation while the hold is still open is skipped: the held
+      // branch's own caption is on screen, so this is not the release.
+      if (delivered) return;
+      if (screen.queryByText("Getting the monitor's own numbers.") !== null) {
+        return;
+      }
+      delivered = true;
+      atDelivery.push({
+        main: screenText(),
+        consumerMounted:
+          screen.queryByRole("button", { name: "Save without logging" }) !==
+          null,
+      });
+      fake.deliverSummary(LATE_SUMMARY);
+    });
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+
+    try {
+      // Nothing below causes the release: the burst never came inside
+      // `BURST_HANDOFF_HOLD_MS`, so the backstop fires on its own real
+      // timer, the observer above delivers the summary in the gap, and the
+      // real `handleConnectedEnded` navigates immediately after it.
+      await waitFor(
+        () => {
+          expect(
+            screen.getByRole("button", { name: "Save without logging" }),
+          ).toBeInTheDocument();
+        },
+        { timeout: BURST_HANDOFF_HOLD_MS + 3000 },
+      );
+    } finally {
+      observer.disconnect();
+    }
+
+    // WHERE THE FRAME LANDED. One delivery, made while the surface was
+    // showing the RELEASED ended frame (production's own `!handoffHeld`
+    // copy) and no consumer existed yet.
+    expect(atDelivery).toHaveLength(1);
+    expect(atDelivery[0]!.main).toContain("SESSION ENDED");
+    expect(atDelivery[0]!.main).toContain("No numbers to keep.");
+    expect(atDelivery[0]!.main).not.toContain(
+      "Getting the monitor's own numbers.",
+    );
+    expect(atDelivery[0]!.consumerMounted).toBe(false);
+
+    // WHAT THE CONSUMER MOUNTED WITH. Captured the moment the destination
+    // is on screen, before the fold-in has drained — non-vacuity for the
+    // "unchanged" claim below, exactly as the first test captures it at
+    // release.
+    const shownAtMount = screenText();
+    expect(shownAtMount).not.toContain(String(LATE_SUMMARY.meters));
+    expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
+    expect(rowedLogKinds()).toContain("handoff-released");
+
+    // THE ROW: a frame delivered inside the interval still reaches
+    // `commit`, on both tiers, with the same independent +1 arithmetic —
+    // this test makes exactly one producer write after the hold.
+    await waitFor(() => {
+      expect(currentUnretired()?.run.summaryTotals).toBeDefined();
+    });
+    const afterBurst = currentUnretired();
+    expect(afterBurst!.revision).toBe(heldRevision + 1);
+    expect(afterBurst!.run.summaryTotals).toStrictEqual({
+      workElapsedSeconds: LATE_SUMMARY.elapsedSeconds,
+      workDistanceMeters: LATE_SUMMARY.meters,
+    });
+    expect(durableRun()?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: LATE_SUMMARY.elapsedSeconds,
+      workDistanceMeters: LATE_SUMMARY.meters,
+    });
+    await waitFor(() => {
+      expect(rowedLogKinds()).toContain("summary-recorded");
+    });
+
+    // THE CONSUMER'S HALF, with a real rerender first so the equality is
+    // not satisfied by a screen that never re-ran (round 5's finding 1, the
+    // same feel chip and the same reason it rather than a pain chip carries
+    // the whole-screen equality).
+    await userEvent.click(
+      screen.getByRole("button", { name: "↑ MORE LIKE THIS" }),
+    );
+    expect(screenText()).toBe(shownAtMount);
+    expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(String(LATE_SUMMARY.meters)),
+    ).not.toBeInTheDocument();
+  }, 20000);
+
+  // ---------------------------------------------------------------------
+  // THE CONSUMER HALF OF ORDERING (i) THE ROUTE CANNOT SHOW (PR #239 review
+  // round 6).
+  //
+  // The test above pins where the FRAME landed; its consumer still mounted
+  // ahead of the fold-in, because the driver defers its summary reconcile
+  // past the same flush the navigation happens in. The other side of the
+  // interval — a consumer whose mount READS a store that already carries
+  // the late frame — is reachable without any wedge at all, and is the
+  // rower's ordinary case on a re-entry or a reload: the snapshot is taken
+  // by `LogSession.tsx`'s once-only `useState` initializer at MOUNT, so
+  // whichever side of the commit that mount falls on is the whole of the
+  // difference.
+  //
+  // Contract A ("renders snapshot; recording actions post what was shown")
+  // is the claim on BOTH sides, and it is not trivially true here: the
+  // screen now shows the machine's own numbers, so Save has to post THOSE.
+  it("A CONSUMER MOUNTING AFTER THE FOLD-IN shows the machine's numbers and saves exactly what it showed", async () => {
+    const fake = makeFake();
+    fakeForTest = fake;
+    const first = renderRoutes();
+    await rowToBurstHold(fake);
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole("button", { name: "Save without logging" }),
+        ).toBeInTheDocument();
+      },
+      { timeout: BURST_HANDOFF_HOLD_MS + 3000 },
+    );
+    await act(async () => {
+      fake.deliverSummary(LATE_SUMMARY);
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(currentUnretired()?.run.summaryTotals).toBeDefined();
+    });
+
+    // The door opens AFTER the fold-in. The first tree goes first so the
+    // fresh mount is the only consumer on screen.
+    first.unmount();
+    apiFn.mockClear();
+    render(
+      <MemoryRouter
+        initialEntries={[`/library/${WORKOUT.id}/log?from=monitor`]}
+      >
+        <Routes>
+          <Route path="/library/:id/log" element={<LogSession />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: "Save without logging" });
+
+    // WHAT IT SHOWS: the machine's own totals, `summaryModel.ts`'s tier-A
+    // branch rendering `summaryTotals` verbatim.
+    expect(screen.getByText("DISTANCE")).toBeInTheDocument();
+    expect(screen.getByText(String(LATE_SUMMARY.meters))).toBeInTheDocument();
+    expect(screen.queryByText(/NO MONITOR READING/)).not.toBeInTheDocument();
+
+    // ...AND WHAT IT SAVES: the same numbers. The three machine fields the
+    // first test asserts ABSENT (its consumer never saw them) are present
+    // here, carrying the shown values, with the identity fields as the
+    // positive half so this cannot be satisfied by some other POST.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
+    await waitFor(() => {
+      expect(apiFn).toHaveBeenCalled();
+    });
+    const [path, init] = apiFn.mock.calls.at(-1)!;
+    expect(path).toBe("/api/logs");
+    const body = JSON.parse(String(init!.body)) as Record<string, unknown>;
+    expect(body.machineWorkMeters).toBe(LATE_SUMMARY.meters);
+    expect(body.machineWorkSeconds).toBe(LATE_SUMMARY.elapsedSeconds);
+    expect(body.machineSummary).toBeDefined();
+    expect(body.workoutId).toBe(WORKOUT.id);
+    expect(body.deviceName).toBe(DEVICE);
+  }, 20000);
+
+  // ---------------------------------------------------------------------
   // THE REDUCTION'S PREMISE, PINNED AS WHAT IT ACTUALLY IS (PR #239 review
   // round 4, reviewer finding 2).
   //
@@ -586,8 +842,15 @@ describe("§10 row 2 through the real destination seam: a producer update after 
   // handlers, not a scheduler claim and not a behavioural observation. It
   // cannot see a deferral introduced through a helper it does not read.
   // What it does catch is a deferral written into either handler — the
-  // move that would make the "unreachable" cells reachable again and
-  // silently invalidate the reduction.
+  // move that would make the after-teardown/before-navigation cell
+  // reachable again and silently invalidate the reduction.
+  //
+  // **AND WHAT IT NEVER CLAIMED (PR #239 review round 6).** These pins
+  // exclude ADDITIONAL deferral inside the handler and the effect. They do
+  // NOT close React's own passive-effect boundary between the release's
+  // commit and the `onEnded` call — nothing text-shaped could. That gap is
+  // real, it is occupiable, and it is gated by the second test above
+  // rather than argued away here.
   describe("the reduction's premise, pinned at the source it was reviewed at", () => {
     const readSource = (rel: string): string =>
       readFileSync(join(import.meta.dirname, rel), "utf8");
@@ -647,7 +910,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
       expect(statements).toHaveLength(2);
     });
 
-    it("`ConnectedSurface`'s ended effect calls `onEnded` synchronously — the release IS the navigation, with no scheduler hop between them", () => {
+    it("`ConnectedSurface`'s ended effect calls `onEnded` with no deferral OF ITS OWN — React's passive-effect boundary is the only hop left between the release and the navigation", () => {
       const source = readSource("./ConnectedSurface.tsx");
       // Located by the guard clause that is the effect's first statement,
       // so a change to the guard's own inputs fails here too.

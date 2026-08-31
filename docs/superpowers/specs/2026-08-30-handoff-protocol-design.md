@@ -384,15 +384,38 @@ as row 8 does) takes the real-bytes requirement.
    product gain) versus a hydrated one. The three-way wording stays as
    history rather than being rewritten, with this sentence as its
    correction.
-2. **Producer update after release — ONE ordering, because production
-   has one.** The burst backstop releases with no summary in hand; the
-   release navigates and tears the connected surface down in a single
-   handler; the machine's summary arrives on the wire AFTERWARDS,
-   inside `BURST_LINGER_MS`, and still reaches `commit` on both tiers.
-   The consumer's snapshot is unaffected: the reader is already mounted
-   behind a once-only `useState` initializer, so nothing it renders
-   moves, and its Save posts what was shown — the machine fields the
-   store now holds are absent from that POST. **The receipt
+2. **Producer update after release — TWO orderings on the navigation
+   axis, both real, both gated (amended at #239's review round 6; the
+   row said "ONE ordering" and was wrong about which intervals a wire
+   frame can occupy).** In both, the burst backstop releases with no
+   summary in hand and the machine's summary reaches `commit` on both
+   tiers inside `BURST_LINGER_MS`. They differ only in where in React's
+   flush the frame lands:
+   - **(i) INSIDE the interval** between the release's own commit
+     (`useMonitorSession.ts:2158` sets `handoffHeld: false`) and the
+     PASSIVE effect that navigates (`ConnectedSurface.tsx:352-358` →
+     `handleConnectedEnded`). The interval is real — a passive effect
+     runs after the commit that scheduled it, not inside it — and a
+     wire frame can occupy it. Gated at the hook by
+     `useMonitorSession.test.ts`'s `row 2, HOOK LAYER` arm (released,
+     still mounted, still subscribed, commit accepted and receipted
+     after the release) and at the route by the second test in
+     `WorkoutDetail.postReleaseCommit.test.tsx`, which delivers there
+     and proves its position with production's own released-frame copy
+     ("No numbers to keep." renders only on the `!handoffHeld` branch)
+     beside an unmounted consumer.
+   - **(ii) AFTER the navigation** — the first test in that file.
+   **The consumer question (i) raises is not a third state.** No
+   consumer exists during the interval; `LogSession` is what the
+   navigation mounts, and its snapshot is taken by a once-only
+   `useState` initializer AT mount. So the only question is which side
+   of the fold-in that mount falls on, and both sides are gated:
+   mount-before-fold-in (what the driver's deferred summary reconcile
+   actually produces — the reader's screen does not move and its Save
+   posts what was shown, the machine fields the store now holds absent
+   from that POST) and mount-after-fold-in (the third test — the screen
+   shows the machine's numbers and Save posts exactly those). Contract
+   A holds on both sides. **The receipt
    requirement names what production actually emits.**
    `commit-accepted` is NOT observable here: the departing hook's
    unmount cleanup calls `setReceiptChannel(null)`
@@ -426,10 +449,12 @@ as row 8 does) takes the real-bytes requirement.
    `handleConnectedEnded`, the only door out of a finished connected
    session, runs `setConnecting(null)` and `navigate(...)` in a single
    handler — so there is no after-teardown/before-navigation cell to
-   reach; the release IS the navigation, since
-   `ConnectedSurface.tsx:352-358` fires `onEnded` from an effect the
-   instant `phase === "ended" && !handoffHeld`, with no rower tap in
-   between; and the after-navigation/before-teardown gap belongs to row
+   reach; the release is followed by the navigation with no rower tap in
+   between, since `ConnectedSurface.tsx:352-358` fires `onEnded` the
+   instant `phase === "ended" && !handoffHeld` (**round 6's correction:
+   "no rower tap" is not "no wire frame" — the passive-effect boundary
+   between them is ordering (i) above, gated rather than argued away**);
+   and the after-navigation/before-teardown gap belongs to row
    3, whose own note already rules that "an arbitrary driver callback
    cannot be scheduled there" — scheduling one from a test is the
    RF24-shaped move that note forbids, and round 1 made it.
@@ -442,6 +467,11 @@ as row 8 does) takes the real-bytes requirement.
    change from one a macrotask later. The assumption therefore carries
    its own gate: source-shape pins in the route leg's file assert that
    both handlers defer nothing, and go red on exactly that mutation.
+   **What those pins never covered (round 6):** they exclude ADDITIONAL
+   deferral written into the handler or the effect; they cannot close
+   React's own passive-effect boundary, and nothing text-shaped could.
+   That gap is ordering (i), and it is now driven rather than assumed
+   away.
 3. **The claim race, with its producer NAMED:** R0 render → **R1
    committed from the OLD hook's passive-cleanup teardown** (the only
    occupant React allows between the new render and its mount effect —
