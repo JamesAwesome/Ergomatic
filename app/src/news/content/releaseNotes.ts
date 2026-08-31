@@ -5,6 +5,24 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.28.0 (2026-08-31): range v0.27.0..main = 3 merges before this
+    // notes PR, each accounted per RF15 (`git log v0.27.0..main --oneline`,
+    // no --merges). #233 is all three items. No note: #234 (agent
+    // instruction docs) and #235 (test infrastructure and a shell guard),
+    // neither of which a tester receives. The swap mark is DERIVED (log
+    // vs PLANS plus linked-workout identity, #233's own record); the
+    // deletion-unmarks cost was accepted by James 2026-08-30 and is not
+    // mentioned here because no tester can hit it without deleting a
+    // same-titled personal workout they made themselves.
+    version: "v0.28.0",
+    date: "2026-08-31",
+    items: [
+      "Your plan now says what you actually rowed. Every completed day on the Plan screen names its workout next to a badge for the type you rowed.",
+      "Days where you went off plan say so. Row an easy piece on a rate-work day and the row reads INSTEAD OF TR under the workout's name. The three checkpoint days check the workout itself: do anything but the prescribed test and the row says INSTEAD OF 2K Test.",
+      "Checkpoint days name their test like any other workout. The 2K Test and 6K Test used to appear as uppercase labels; they are real workouts in your library, and the plan now shows them by name everywhere.",
+    ],
+  },
+  {
     // v0.27.0 (2026-08-30): range v0.26.0..main = 17 merges, each accounted
     // per RF15 (`git log v0.26.0..main --oneline`, no --merges). #228 is
     // items 1-2 and the reason corrections 3-4 can ship as a repair rather
