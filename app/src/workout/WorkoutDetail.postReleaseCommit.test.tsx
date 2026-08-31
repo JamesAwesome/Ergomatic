@@ -94,8 +94,8 @@
 //    review round 4, reviewer finding 2).** It is a SOURCE-REVIEWED
 //    REACHABILITY ASSUMPTION about two named handlers — NOT a production
 //    observable the behavioural test below pins. (The second bullet no
-//    longer rests on it at all: the interval it names is now measured
-//    rather than reasoned about.) The reviewer proved the
+//    longer rests on it at all: it names its own three facts and their
+//    separate strengths.) The reviewer proved the
 //    difference: wrapping `navigate(...)` in `setTimeout(..., 0)` inside
 //    `handleConnectedEnded` leaves that test GREEN, because `waitFor`
 //    cannot tell a same-commit route change from one a macrotask later.
