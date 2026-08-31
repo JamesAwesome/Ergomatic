@@ -481,13 +481,23 @@ as row 8 does) takes the real-bytes requirement.
     receipt kind → its named row fails; write the durable key from
     outside the store → a module-boundary lint/grep gate fails.
     **Scope of the boundary gate (amended at #239's review round 1, per
-    the reviewer's P2):** the gate is a self-tested TEXT gate over named
-    syntactic forms — the key by constant, by literal, by `key:`-property
-    indirection, plus legacy-writer call sites and module-scope
-    `let`/`var` declarations. Its blind spots (an aliased key variable, a
-    `const`-object carrier, closure-held runs) are pinned by MISSES
-    self-tests rather than claimed covered; per-door tests and §1's
-    review discipline carry the semantic half of "nothing else writes."
+    the reviewer's P2; its module-scope half REWRITTEN at round 4, per
+    the reviewer's P2 on the column-zero heuristic):** the gate is two
+    self-tested detectors of DIFFERENT strength, and it says which is
+    which. The WRITE detectors are TEXT over named syntactic forms — the
+    key by constant, by literal, by `key:`-property indirection, plus
+    legacy-writer call sites; their blind spots (an aliased key
+    variable, `app/scripts/**` unscanned, a `//` inside a string
+    literal) are pinned by MISSES self-tests rather than claimed
+    covered. The MODULE-SCOPE detector is genuinely SCOPE-AWARE: it
+    parses each scanned file with the TypeScript compiler API and walks
+    `sourceFile.statements`, so destructuring patterns and top-level
+    `for (var …)` heads are caught, block-scoped `for (let …)` heads
+    correctly are not, and a `let` inside a string or a comment cannot
+    false-flag. Its own residuals (a `const`-object carrier, a
+    closure-held run, a `var` hoisting out of a top-level block) are
+    pinned as MISSES too. Per-door tests and §1's review discipline
+    carry the semantic half of "nothing else writes."
 12. **The binding route gate:** `WorkoutDetail.connectedRecovery.test.tsx`
     restored AS A FILE and RETARGETED (its two `MONITOR_RUN_KEY`
     assertions survive; its slot-vocabulary comments get the budgeted

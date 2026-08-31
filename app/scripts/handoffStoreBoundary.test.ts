@@ -50,13 +50,22 @@
 //     `localStorage`-adjacent browser APIs, never references this key —
 //     but a future dev-harness script under `scripts/` writing the key
 //     directly would get zero signal from either check in this file.
+//  3. The MODULE-SCOPE detector (a separate detector, §1's second clause)
+//     is no longer text-shaped at all — it parses with the TypeScript
+//     compiler API and walks `sourceFile.statements`, so evasions 1-2
+//     above do not apply to it. Its own residual is named at
+//     `moduleScopeMutables`: a `var` declared inside a top-level BLOCK
+//     (`if (x) { var run = null; }`) hoists to module scope and is not
+//     collected, because the walk is top-level statements rather than a
+//     full hoisting analysis. Pinned as a MISS below.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
-// The SAME formatter `pnpm format:check` runs (`app/package.json`:
-// `prettier --check .`), resolved from the same devDependency — see "the
-// Prettier normalization this gate composes with" at the bottom of this
-// file for why the assumption is tested rather than asserted.
-import { format } from "prettier";
+// The compiler the repo already builds with (`app/package.json`
+// devDependency `typescript`, the same one `pnpm typecheck` runs) — used
+// here as a PARSER, never a type checker: `createSourceFile` is a
+// syntax-only, error-tolerant parse with no program, no `tsconfig`, and
+// no filesystem resolution, so scanning ~40 files costs milliseconds.
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const APP_ROOT = join(import.meta.dirname, "..");
@@ -217,51 +226,110 @@ function writesOrRemovesKey(rawSource: string): boolean {
 }
 
 /**
- * §1's SECOND clause, as far as text can see it: every module-scope
- * `let`/`var` declared in `source`, by NAME. Extracted from the test that
- * used to inline it (PR #239 review round 1, item 3) so the detector can be
- * fed synthetic sources and pinned in BOTH directions — what it catches,
- * and what it provably does not.
- *
- * **THE CONTRACT IS COLUMN ZERO OF PRETTIER-NORMALIZED SOURCE, NOT SCOPE
- * (PR #239 review round 3, reviewer finding 2).** This regex is anchored at
- * `^` with no leading-whitespace class, so what it decides is "does a
- * `let`/`var` declaration START AT COLUMN ZERO" — a syntactic fact, not a
- * scope analysis. Said out loud rather than implied, because the two come
- * apart in BOTH directions on arbitrary text: an indented top-level
- * declaration is module-scope and evades this, and a column-zero `let`
- * nested inside a function would be function-scope and false-flag.
- *
- * Column zero is nevertheless sound as a module-scope test over the tree
- * this gate actually scans, and the reason is a COMPOSED assumption with a
- * gate of its own rather than an eyeball. Two halves:
- *  1. Every `.ts`/`.tsx` file under `app/` is Prettier-normalized, enforced
- *     twice — `.github/workflows/ci.yml:68` runs `pnpm format:check`
- *     (`app/package.json`: `prettier --check .`) in the `app` job, and the
- *     repo-root `package.json`'s `lint-staged` block runs
- *     `pnpm --dir app exec prettier --write` over every staged `.ts`/`.tsx`
- *     file under `app/` at pre-commit (`.husky/pre-commit`).
- *  2. Prettier indents declarations inside a block and leaves module-scope
- *     declarations at column zero.
- * Half 2 is the assumption this gate composes with, so it is not taken on
- * trust either: `the Prettier normalization this gate composes with` below
- * runs the REAL formatter over a fixture holding both shapes and asserts
- * the indentation it produces. If Prettier ever stopped indenting block
- * bodies, that self-test goes red HERE rather than this gate silently going
- * blind over there.
- *
- * The residual evasion — a module-scope declaration artificially indented
- * in source — cannot survive `format:check`, so it cannot exist in the
- * scanned tree. It is pinned as a MISS below anyway, so the boundary is a
- * fact with a test behind it rather than a claim in a comment.
+ * Every name bound by one declaration's binding element, flattened.
+ * `let cached = null` yields `["cached"]`; `let { run } = slot` yields
+ * `["run"]`; `let { a, b: { c } , ...rest } = x` yields
+ * `["a", "c", "rest"]`; `let [first, , third] = xs` yields
+ * `["first", "third"]` (an omitted array element carries no name at all).
+ * Recursive because a binding pattern nests arbitrarily, and a carrier
+ * smuggled in as `let { run: heldRun } = ...` binds `heldRun`, not `run`.
  */
-const MODULE_SCOPE_MUTABLE = /^(?:export\s+)?(?:let|var)\s+([A-Za-z_$][\w$]*)/;
+function bindingNames(name: ts.BindingName): string[] {
+  if (ts.isIdentifier(name)) return [name.text];
+  const out: string[] = [];
+  for (const element of name.elements) {
+    if (ts.isOmittedExpression(element)) continue;
+    out.push(...bindingNames(element.name));
+  }
+  return out;
+}
 
-function moduleScopeMutables(rawSource: string): string[] {
+/**
+ * §1's SECOND clause: every module-scope `let`/`var` declared in `source`,
+ * by NAME. Extracted from the test that used to inline it (PR #239 review
+ * round 1, item 3) so the detector can be fed synthetic sources and pinned
+ * in BOTH directions — what it catches, and what it provably does not.
+ *
+ * **THIS IS A SYNTAX-AWARE SCOPE CHECK, NOT A TEXT HEURISTIC (PR #239
+ * review round 4, reviewer finding 3).** It parses `source` with the
+ * TypeScript compiler API and walks `sourceFile.statements` — the top
+ * level, by construction — so "module scope" means the parser's own answer
+ * rather than a claim about indentation. What that buys, stated as the
+ * three cases that motivated the rewrite:
+ *  - `let { run } = slot;` at the top level is CAUGHT (the previous regex
+ *    required an identifier immediately after the keyword and walked
+ *    straight past every destructuring pattern);
+ *  - `for (var run = null; false; ) {}` at the top level is CAUGHT — a
+ *    `var` in a for-head hoists to the enclosing FUNCTION scope, which at
+ *    the top level of a module is module scope;
+ *  - a `let` sitting at column zero INSIDE a multiline template literal is
+ *    not flagged, because it is a string, not a declaration. The previous
+ *    line-oriented regex could not tell the two apart, and its
+ *    `stripComments` pre-pass could not either.
+ * The converse holds too: `for (let q = 0; …)` is NOT collected. A `let`
+ * in a for-head is block-scoped to the loop and can never be a
+ * module-level carrier. And the whole Prettier composition the previous
+ * version depended on — `format:check` in CI plus `prettier --write` at
+ * pre-commit, with a self-test pinning that Prettier indents block bodies
+ * — is GONE, along with its self-test: indentation is now irrelevant to
+ * the answer in both directions.
+ *
+ * `scriptKind` comes from the file name (TypeScript's own
+ * `ensureScriptKind` fallback), so a `.tsx` file's JSX parses as JSX
+ * rather than as a cascade of type assertions. Callers scanning the real
+ * tree pass the real relative path for exactly that reason.
+ *
+ * RESIDUAL, named rather than implied (header evasion 3): a `var` inside a
+ * top-level BLOCK — `if (x) { var run = null; }` — hoists to module scope
+ * and is NOT collected, because this walks top-level statements rather
+ * than performing a full hoisting analysis. Pinned as a MISS below. Every
+ * `var` in the scanned tree today is top-level or function-local; the
+ * shape is disclosed so a future tightening pass knows where to look.
+ */
+function moduleScopeMutables(source: string, fileName = "module.ts"): string[] {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
   const names: string[] = [];
-  for (const line of stripComments(rawSource).split("\n")) {
-    const m = MODULE_SCOPE_MUTABLE.exec(line);
-    if (m !== null) names.push(m[1]!);
+  const collect = (list: ts.VariableDeclarationList): void => {
+    // `const` is not a carrier this clause is about: the binding cannot be
+    // re-pointed at a run. (What its VALUE can hold is a different, and
+    // disclosed, blind spot — see the `const slot = { run: null }` MISS
+    // pin below.) `NodeFlags.Const` is the only flag that distinguishes
+    // the three keywords in a way this check cares about: `let` sets
+    // `NodeFlags.Let`, `var` sets neither, and BOTH are mutable bindings.
+    if ((list.flags & ts.NodeFlags.Const) !== 0) return;
+    for (const declaration of list.declarations) {
+      names.push(...bindingNames(declaration.name));
+    }
+  };
+  for (const statement of sourceFile.statements) {
+    if (ts.isVariableStatement(statement)) {
+      collect(statement.declarationList);
+      continue;
+    }
+    // A for-head declaration. Only `var` hoists out of the loop to the
+    // module's own scope; `let`/`const` there are block-scoped to the
+    // loop and are skipped by the `Let` check below plus `collect`'s own
+    // `Const` check. `for…in`/`for…of` are included on the identical
+    // rule — a `var` in any of the three heads hoists the same way.
+    if (
+      ts.isForStatement(statement) ||
+      ts.isForInStatement(statement) ||
+      ts.isForOfStatement(statement)
+    ) {
+      const initializer = statement.initializer;
+      if (
+        initializer !== undefined &&
+        ts.isVariableDeclarationList(initializer) &&
+        (initializer.flags & ts.NodeFlags.Let) === 0
+      ) {
+        collect(initializer);
+      }
+    }
   }
   return names;
 }
@@ -354,32 +422,40 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
   // WHAT IT CANNOT SEE, named rather than implied: a module-level run
   // held in a `const` object's mutable property (`const slot = {run:
   // null}`), one held outside `src/monitor/` (`src/session/`,
-  // `src/workout/`), or one smuggled through a closure returned by a
-  // factory. It also over-approximates in the other direction: ANY new
-  // module-scope mutable here fails, run-holding or not. That is the
-  // intended trade — a failure means: justify the binding and add it to
-  // the pinned list below, a cheap, once-per-binding cost against a
-  // carrier class that has already cost this project two review waves.
+  // `src/workout/`), one smuggled through a closure returned by a
+  // factory, or a `var` hoisting out of a top-level block. It also
+  // over-approximates in the other direction: ANY new module-scope
+  // mutable here fails, run-holding or not. That is the intended trade —
+  // a failure means: justify the binding and add it to the pinned list
+  // below, a cheap, once-per-binding cost against a carrier class that
+  // has already cost this project two review waves.
   //
-  // WHAT "MODULE-SCOPE" MEANS HERE, EXACTLY (PR #239 review round 3,
-  // finding 2): a `let`/`var` at COLUMN ZERO of Prettier-normalized
-  // source. Not a scope analysis — see `MODULE_SCOPE_MUTABLE`'s own doc
-  // comment for the composed assumption (`format:check` in CI + `prettier
-  // --write` at pre-commit make the scanned tree normalized; Prettier
-  // indents block bodies) and for the self-test that pins the Prettier
-  // half of it rather than assuming it.
-  it("no production file under src/monitor/ outside the store DECLARES a `let`/`var` AT COLUMN ZERO OF PRETTIER-NORMALIZED SOURCE — the text-visible half of §1's 'or holds a module-level run'", () => {
+  // WHAT "MODULE-SCOPE" MEANS HERE, EXACTLY (PR #239 review round 4,
+  // finding 3): whatever the TypeScript PARSER says it is. The detector
+  // walks `sourceFile.statements`, so the answer is a real scope fact —
+  // destructuring patterns and top-level `for (var …)` heads included,
+  // string and comment contents excluded by construction. The column-zero
+  // heuristic this replaced, and the whole Prettier composition it leaned
+  // on, are gone; see `moduleScopeMutables`'s own doc comment.
+  it("no production file under src/monitor/ outside the store DECLARES a module-scope `let`/`var` — the syntax-visible half of §1's 'or holds a module-level run'", () => {
     const found: string[] = [];
     for (const file of listFiles(SRC_ROOT, [".ts", ".tsx"])) {
       const rel = toPosixRelative(file);
       if (!rel.startsWith("src/monitor/")) continue;
       if (TEST_FILE.test(rel) || rel === STORE_FILE) continue;
-      // Identified by NAME, never by line number: `stripComments` above
-      // collapses block comments and would shift every number anyway, and
-      // a line-pinned gate would go red on any unrelated edit further up
-      // the file — a gate that cries wolf is the thing this round is
-      // removing, not adding.
-      for (const name of moduleScopeMutables(readFileSync(file, "utf8"))) {
+      const source = readFileSync(file, "utf8");
+      // RF21 insurance: a parse that silently produced NOTHING would make
+      // this whole scan green for the worst possible reason. Every file
+      // here has content, so every file must yield statements.
+      expect(
+        ts.createSourceFile(rel, source, ts.ScriptTarget.Latest, true)
+          .statements.length,
+        `${rel} parsed to zero statements — the detector is blind, not clean`,
+      ).toBeGreaterThan(0);
+      // Identified by NAME, never by line number: a line-pinned gate would
+      // go red on any unrelated edit further up the file — a gate that
+      // cries wolf is the thing this round is removing, not adding.
+      for (const name of moduleScopeMutables(source, rel)) {
         found.push(`${rel}: ${name}`);
       }
     }
@@ -538,99 +614,116 @@ describe("the boundary detectors themselves (both directions)", () => {
       );
     });
 
-    it("ignores an INDENTED `let` — a function-local, which is not a module-level carrier", () => {
+    // THE THREE CASES THAT KILLED THE COLUMN-ZERO HEURISTIC (PR #239
+    // review round 4, finding 3 — the reviewer's own counterexamples).
+    it("catches a DESTRUCTURED module-scope binding, which the old regex walked straight past", () => {
+      // The reviewer's case 1. `let { run } = slot;` binds a mutable
+      // module-level `run` as surely as `let run = slot.run;` does, and
+      // the previous regex required an identifier immediately after the
+      // keyword, so it returned [] here.
+      expect(moduleScopeMutables("let { run } = slot;")).toStrictEqual(["run"]);
+      // ...and every shape a pattern can wear: renamed, nested, rest,
+      // array, with holes.
       expect(
-        moduleScopeMutables("function f() {\n  let local = 1;\n}"),
+        moduleScopeMutables("let { run: heldRun, meta: { key } } = slot;"),
+      ).toStrictEqual(["heldRun", "key"]);
+      expect(moduleScopeMutables("let [first, , third] = runs;")).toStrictEqual(
+        ["first", "third"],
+      );
+      expect(moduleScopeMutables("var { a, ...rest } = slot;")).toStrictEqual([
+        "a",
+        "rest",
+      ]);
+    });
+
+    it("catches a top-level `for (var …)` head — `var` hoists to module scope — and NOT a `for (let …)` head, which is block-scoped", () => {
+      // The reviewer's case 2.
+      expect(
+        moduleScopeMutables("for (var run = null; false; ) {}"),
+      ).toStrictEqual(["run"]);
+      expect(moduleScopeMutables("for (var k in slot) {}")).toStrictEqual([
+        "k",
+      ]);
+      expect(moduleScopeMutables("for (var r of runs) {}")).toStrictEqual([
+        "r",
+      ]);
+      // The deliberate NOT: a `let` in a for-head cannot outlive the loop,
+      // so it is not a module-level carrier and is not reported. This is
+      // the half that makes the check a scope statement rather than a
+      // keyword census.
+      expect(moduleScopeMutables("for (let q = 0; false; ) {}")).toStrictEqual(
+        [],
+      );
+      expect(moduleScopeMutables("for (const r of runs) {}")).toStrictEqual([]);
+    });
+
+    it("does NOT flag a `let` sitting at column zero inside a multiline template literal — it is a string, not a declaration", () => {
+      // The reviewer's case 3, and the one no amount of line-oriented
+      // regex plus comment-stripping could ever get right.
+      expect(
+        moduleScopeMutables(
+          "const snippet = `\nlet nestedLocal = 1;\n`;\nexport default snippet;",
+        ),
+      ).toStrictEqual([]);
+      // Same for a `let` named inside a comment — free, now that the
+      // parser rather than `stripComments` decides.
+      expect(
+        moduleScopeMutables("// let smuggledRun = null;\nconst a = 1;"),
       ).toStrictEqual([]);
     });
 
+    it("ignores a `let` inside a function body — a function-local, which is not a module-level carrier, at ANY indentation", () => {
+      expect(
+        moduleScopeMutables("function f() {\n  let local = 1;\n}"),
+      ).toStrictEqual([]);
+      // Written at column zero, which the previous detector false-flagged.
+      // Indentation no longer participates in the answer at all.
+      expect(
+        moduleScopeMutables("function f() {\nlet local = 1;\nreturn local;\n}"),
+      ).toStrictEqual([]);
+      // ...and the converse: an INDENTED module-scope declaration, which
+      // the previous detector missed, is now caught.
+      expect(moduleScopeMutables("  let smuggledRun = null;")).toStrictEqual([
+        "smuggledRun",
+      ]);
+    });
+
+    it("parses a `.tsx` file as JSX rather than as type assertions", () => {
+      // The scan feeds real relative paths precisely for this. Without the
+      // extension the parser would read `<div>` as a type assertion and
+      // the statement list would be garbage.
+      const tsx = "let held = null;\nconst el = <div className='x' />;\n";
+      expect(moduleScopeMutables(tsx, "src/monitor/Thing.tsx")).toStrictEqual([
+        "held",
+      ]);
+    });
+
     it("MISSES a run held in a `const` object's mutable property (header: 'what it cannot see')", () => {
-      // The exact carrier shape §2 deleted, wearing a `const`. Text alone
-      // cannot tell this from any other constant, which is why §1's second
-      // clause is only half-gated and the test above now says so in its
-      // name.
+      // The exact carrier shape §2 deleted, wearing a `const`. Syntax
+      // alone cannot tell this from any other constant — the binding is
+      // genuinely immutable; what it POINTS AT is not — which is why §1's
+      // second clause is only half-gated and the scan test above says so
+      // in its name.
       expect(moduleScopeMutables("const slot = { run: null };")).toStrictEqual(
         [],
       );
     });
 
-    // THE DISCLOSED EVASION, PINNED (PR #239 review round 3, finding 2).
-    // The detector's contract is COLUMN ZERO, not scope, so a module-scope
-    // declaration written with leading whitespace walks straight through.
-    // It cannot exist in the scanned tree — `format:check` would reject the
-    // file (see the `format:check` self-test below, which proves Prettier
-    // un-indents exactly this shape) — but the boundary is asserted here
-    // rather than merely described, so a future tightening pass has to come
-    // and change the claim on purpose.
-    it("MISSES a module-scope declaration that is artificially INDENTED — the contract is column zero, and only `format:check` makes that mean 'module scope'", () => {
-      expect(moduleScopeMutables("  let smuggledRun = null;")).toStrictEqual(
-        [],
-      );
-      // ...and the identical declaration at column zero IS caught, so the
-      // miss above is the indentation and not a broken detector.
-      expect(moduleScopeMutables("let smuggledRun = null;")).toStrictEqual([
+    // THE DISCLOSED RESIDUAL, PINNED (header evasion 3). The walk is over
+    // TOP-LEVEL statements, so a `var` nested in a top-level block escapes
+    // even though it hoists to module scope. Asserted rather than merely
+    // described, so a future tightening pass has to come and change the
+    // claim on purpose.
+    it("MISSES a `var` hoisting out of a top-level BLOCK — the walk is top-level statements, not a hoisting analysis", () => {
+      expect(
+        moduleScopeMutables("if (flag) {\n  var smuggledRun = null;\n}"),
+      ).toStrictEqual([]);
+      // ...and the identical declaration as a top-level statement IS
+      // caught, so the miss above is the nesting and not a broken
+      // detector.
+      expect(moduleScopeMutables("var smuggledRun = null;")).toStrictEqual([
         "smuggledRun",
       ]);
-    });
-  });
-
-  // ---------------------------------------------------------------------
-  // THE COMPOSED ASSUMPTION, TESTED (PR #239 review round 3, finding 2).
-  //
-  // The reviewer's objection: equating column zero with module scope is an
-  // assumption, and this file asserted it rather than testing it. The gate
-  // is deliberately NOT made scope-aware (no AST — a vitest `unit` project
-  // would have to pull a TypeScript parser in for one assertion); instead
-  // the contract is bound EXPLICITLY to Prettier-normalized source, above,
-  // and the half of that composition this file does not own — "Prettier
-  // indents block bodies and leaves module-scope declarations at column
-  // zero" — is pinned right here, by running the real formatter.
-  //
-  // WHY THE REAL FORMATTER AND NOT A HAND-WRITTEN FIXTURE: a fixture that
-  // merely LOOKS Prettier-formatted proves nothing about what Prettier
-  // does; it is this file's own author asserting the assumption a second
-  // time. `prettier.format` is the authority the repo's `format:check` gate
-  // actually runs (`app/package.json`: `prettier --check .`), resolved from
-  // the same `prettier` devDependency, so this test goes red if a Prettier
-  // upgrade ever changes the indentation behaviour the gate composes with.
-  // ---------------------------------------------------------------------
-  describe("the Prettier normalization this gate composes with", () => {
-    // One fixture holding BOTH shapes the composition depends on: a
-    // module-scope `let` and a `let` nested inside a function body, each
-    // written at the WRONG indentation so the formatter has to move them.
-    const FIXTURE = [
-      "  let moduleScopeRun = null;",
-      "function holdIt() {",
-      "let nestedLocal = 1;",
-      "return nestedLocal;",
-      "}",
-    ].join("\n");
-
-    it("puts a module-scope `let` at column zero and INDENTS a `let` inside a function body — the assumption `MODULE_SCOPE_MUTABLE` composes with", async () => {
-      const formatted = await format(FIXTURE, { parser: "typescript" });
-      const lines = formatted.split("\n");
-
-      const moduleLine = lines.find((l) => l.includes("moduleScopeRun"));
-      const nestedLine = lines.find((l) => l.includes("nestedLocal = 1"));
-      expect(moduleLine).toBeDefined();
-      expect(nestedLine).toBeDefined();
-      // The module-scope declaration is UN-indented by the formatter...
-      expect(moduleLine).toBe("let moduleScopeRun = null;");
-      // ...and the nested one is INDENTED by it, from column zero.
-      expect(nestedLine!.startsWith(" ")).toBe(true);
-      expect(nestedLine!.trim()).toBe("let nestedLocal = 1;");
-    });
-
-    it("and the detector run over that formatted output sees exactly the module-scope one — the composition, end to end", async () => {
-      const formatted = await format(FIXTURE, { parser: "typescript" });
-      // The whole point: on Prettier-normalized source, column zero and
-      // module scope agree. Both of this fixture's declarations were
-      // written at the wrong indentation; after the gate's own precondition
-      // is applied, the detector's answer is correct for the right reason.
-      expect(moduleScopeMutables(formatted)).toStrictEqual(["moduleScopeRun"]);
-      // And on the UNFORMATTED source it is wrong in both directions at
-      // once — the miss and the false-flag this contract exists to bound.
-      expect(moduleScopeMutables(FIXTURE)).toStrictEqual(["nestedLocal"]);
     });
   });
 });
