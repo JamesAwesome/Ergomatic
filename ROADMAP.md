@@ -679,6 +679,16 @@ rower's work silently.
       getter is a loop. Open research line for the spec: whether the getter
       can throw in a Capacitor WKWebView on its own origin (the WHATWG
       authority is vetted; the native-layer reachability is not).
+      **NARROWED AGAIN by the hand-off store's final fix round
+      (2026-08-30, adversarial F-2): `loadMonitorRun`'s SELF-CLEAR is gone
+      — the read now returns `null` and leaves malformed bytes for the
+      store's §8 deferred clear.** That was a genuine defect on this
+      branch, not a residual: `Today.tsx`'s mount effect calls the loader,
+      so opening Today destroyed a malformed record the store was
+      deliberately preserving. What this chunk still owes for that loader
+      is only the GETTER guard (the `SecurityError` arm), which §8's
+      accessor covers for the store's own reads but not for the legacy
+      loader's direct `localStorage.getItem`.
 
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 
@@ -1091,6 +1101,31 @@ X" is a real disposition — most of these are single files.
   TRIAD: Gate 0 decides leading-rest validity and renders both orientations
   before implementation. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`.
+
+## Tooling
+
+- **13 of the 83 committed screenshots are NOT byte-stable across two
+  consecutive `pnpm screenshots` runs of identical code.** Measured at the
+  hand-off store's final fix round (2026-08-30): two back-to-back runs at the
+  same commit produced differing bytes for `log-delete-confirm`,
+  `log-detail`, `log-detail-legacy`, `log-monitor`, `log-monitor-landscape`,
+  `post-workout-summary`, `post-workout-summary-landscape`, and all six
+  `you-*` captures. Two causes seen by eye: a trace chart whose axis ticks
+  follow a series recorded over REAL elapsed test time (`log-monitor`:
+  `0:00/0:05/0:10/0:15` one run, `0:00/0:10/0:20` the next), and a focus-
+  dependent hint that comes and goes (`you-derive-offer-accepted`:
+  `ESTIMATED · TYPE TO ADJUST` vs `ESTIMATED`). A further ~10 differ from
+  the committed bytes only by the seeded DATE STAMP (`AUG 25` → `AUG 30`),
+  which is stable per-day and re-churns on every calendar day.
+  **Why it matters:** capture triage currently cannot distinguish a real
+  rendering regression from run-to-run noise without re-running the suite
+  twice and diffing run-against-run, which is what this round had to do.
+  Rides the next PR touching the screenshots harness. **The measurement is
+  written out above rather than cited**, because the round's own report
+  lives under git-excluded `.superpowers/` and a citation into it is
+  unreachable to anyone but the session that wrote it (recurring failure
+  16's corollary). To reproduce: run `pnpm screenshots` twice at the same
+  commit, saving the first run's PNGs, and diff run against run.
 
 ## Needs a decision from James
 
