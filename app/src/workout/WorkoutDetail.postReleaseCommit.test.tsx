@@ -27,7 +27,13 @@
 //
 // §10 row 2 asks for "before/after navigation x before/after teardown".
 // Read against the shipped code, those two axes are not independent, and
-// three of the four cells are not rower-reachable:
+// row 2 owns TWO producer orderings, both gated in this file (round 9
+// correction — an earlier revision of this header said three of four
+// cells were not rower-reachable, which the file's own tests had
+// outgrown): (i) delivery inside the release->navigation gap (defensive
+// synthetic; tests 2/3), and (ii) post-navigation delivery during the
+// teardown linger (test 1). After-navigation/before-teardown is a real
+// gap OWNED BY ROW 3, and the one genuinely dead cell is:
 //
 //  - **Navigation and teardown are ONE React commit, not two axes.**
 //    `WorkoutDetail.tsx`'s `handleConnectedEnded` (the ONLY door out of a

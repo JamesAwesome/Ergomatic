@@ -587,13 +587,15 @@ as row 8 does) takes the real-bytes requirement.
     IS caught, `for (var …)` heads and destructuring patterns are caught,
     `for (let …)` heads and `let`s in top-level blocks correctly are not,
     and a `let` inside a string or a comment cannot false-flag. Each
-    scanned file is parsed EXACTLY ONCE (round 7): the detector, the
-    zero-syntactic-diagnostics parse-health pin and the statement-count
-    check all read one `ts.SourceFile`, produced at the file's only
-    `ts.createSourceFile` call site — itself asserted, so a second parse
-    site cannot reintroduce the divergence round 6 carried, where a
-    detector-only file-name regression passed the whole focused suite
-    because the diagnostics pin was parsing its own correctly-named copy.
+    scanned file is parsed EXACTLY ONCE, and that invariant is gated by
+    what it actually needs (round 8, superseding round 7's weaker claim):
+    a `parseModule` INVOCATION count asserted equal to the number of
+    scanned files, plus a detector-input IDENTITY check (the `fileName`
+    the detector was handed, asserted equal to each scanned path). Round
+    7's single-definition-site count alone did NOT close this — a
+    detector-only reparse through the same helper with a wrong name kept
+    the site count at one and the suite green — so the stronger gates
+    exist and that exact reparse mutation now fails both of them.
     Its own residuals are named and pinned as MISSES too: a
     `const`-object carrier and a closure-held run (both syntax-invisible
     to any keyword-scope check), plus an aliased-key carrier, which

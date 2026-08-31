@@ -264,15 +264,21 @@ function bindingNames(name: ts.BindingName): string[] {
  * `ts.createSourceFile` for a file-name (or target, or `setParentNodes`)
  * regression to diverge across.
  *
- * **Why by construction and not by convention.** Round 6 had three parse
- * calls behind one helper, and the reviewer's mutation — changing ONLY
- * the detector's call to a hardcoded `"module.ts"` — passed the focused
- * suite 23/23, because the diagnostics pin was parsing its own,
- * correctly-named copy. The pin was asserting on arguments the detector
- * did not use. With one call site that mutation is unrepresentable: it
- * moves the file name for the detector AND the diagnostics AND the real
- * scan at once, and all three go red. The "exactly one call site" claim
- * is itself gated, by the self-scan test at the bottom of this file.
+ * **Why the single site alone is NOT the gate (round 8 correction).**
+ * Round 6 had three parse calls behind one helper, and the reviewer's
+ * mutation — changing ONLY the detector's call to a hardcoded
+ * `"module.ts"` — passed the focused suite 23/23, because the
+ * diagnostics pin was parsing its own, correctly-named copy. Round 7
+ * collapsed to one `ts.createSourceFile` site and called the mutation
+ * unrepresentable; that was an overclaim — a detector-only REPARSE
+ * through this same helper with a wrong name keeps the site count at
+ * one and stayed green. What actually closes it (round 8): the
+ * `parseModule` INVOCATION counter (asserted equal to the number of
+ * scanned files) and the detector-input IDENTITY check (the `fileName`
+ * the detector was handed, asserted equal to each scanned path). The
+ * reparse mutation now fails both. The definition-site self-scan at the
+ * bottom of this file remains as a structural convenience only, titled
+ * for exactly what it proves.
  *
  * `scriptKind` comes from the file name (TypeScript's own
  * `ensureScriptKind` fallback), so a `.tsx` file's JSX parses as JSX
