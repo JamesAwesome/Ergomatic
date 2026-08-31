@@ -243,6 +243,52 @@ describe("JustRowObserver", () => {
     expect(download).toHaveBeenCalledWith();
   });
 
+  // Cancel during an in-flight connect. `useMonitorSession`'s own guard
+  // comment predicted this and named the precondition that made it safe:
+  // "Unreachable today only because onExit() unmounts the interstitial
+  // synchronously — nothing can press Connect mid-cancel. If cancel ever
+  // stops unmounting, this guard needs a cancellingRef." This screen is the
+  // caller that stops unmounting: it stays mounted and offers Connect again.
+  // Without attempt cancellation the abandoned connect() runs to completion
+  // AFTER the UI has returned to offline, installing a driver and its
+  // subscriptions behind a screen that says "Not connected" — and the
+  // visible Connect then silently no-ops on the `driverRef.current !== null`
+  // half of that same guard.
+  it("a Cancel mid-connect installs nothing and leaves Connect working", async () => {
+    let releaseConnect!: () => void;
+    const connectGate = new Promise<void>((resolve) => {
+      releaseConnect = resolve;
+    });
+    const transport = observeTransport(connectGate);
+    const user = userEvent.setup();
+    render(<JustRowObserver deps={deps(transport)} />);
+
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    await screen.findByRole("heading", { name: "Connecting to monitor" });
+    expect(transport.connects).toBe(1);
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      await screen.findByRole("heading", { name: "Not connected" }),
+    ).toBeInTheDocument();
+
+    // The abandoned attempt now completes. It must claim nothing.
+    await act(async () => {
+      releaseConnect();
+      await Promise.resolve();
+    });
+    expect(
+      screen.getByRole("heading", { name: "Not connected" }),
+    ).toBeInTheDocument();
+    expect(transport.subscribed).toStrictEqual([]);
+    await waitFor(() => expect(transport.disconnects).toBe(1));
+
+    // And the screen is genuinely usable again, not silently inert.
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    await screen.findByRole("heading", { name: `${DEVICE_NAME} connected` });
+    expect(transport.connects).toBe(2);
+  });
+
   it("re-reads the capture count while the link is up", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let events = 7;
