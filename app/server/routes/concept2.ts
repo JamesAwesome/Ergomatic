@@ -502,12 +502,39 @@ export function createConcept2Router({
       // signal `refreshTokens`'s own `grantDead` gives — the grant is
       // invalid, not merely stale-by-timing. Flag it identically (never
       // delete) rather than falling through to a generic c2_error.
+      //
+      // Fix round 2, N1: the flag must be bound to the SAME link that
+      // actually produced this 401 — a fresh, unconditional
+      // `withLinkLock` call here would flag whatever link exists AT THAT
+      // MOMENT, not the one whose token was just rejected. A callback
+      // relink landing between the retry's `postResult` call and this
+      // lock would clear `needsReauthAt` (upsertLink's own contract) and
+      // then have this branch immediately re-flag the NEW grant based on
+      // the OLD grant's 401 (same authority-split class as I4). The
+      // locked re-read decides: if the link's CURRENT access token still
+      // matches the one that got the 401, the grant this route tried is
+      // still live — flag it. If it doesn't match, a relink or rotation
+      // happened concurrently and the NEW grant was never tried at all —
+      // the honest answer is a retryable c2_error, never a needs_reauth
+      // that would send the rower back through re-consent for a grant
+      // that may already be fine.
       if (!postResult.ok && postResult.kind === "auth") {
-        await store.withLinkLock(userId, async () => ({
-          action: "flagReauth",
-          result: undefined,
-        }));
-        res.status(409).json({ error: "needs_reauth" });
+        const stillSameGrant = await store.withLinkLock<boolean>(
+          userId,
+          async (locked) => {
+            const matches =
+              locked !== null && locked.accessToken === accessToken;
+            if (matches) {
+              return { action: "flagReauth", result: true };
+            }
+            return { action: "none", result: false };
+          },
+        );
+        if (stillSameGrant) {
+          res.status(409).json({ error: "needs_reauth" });
+        } else {
+          res.status(502).json({ error: "c2_error" });
+        }
         return;
       }
     }

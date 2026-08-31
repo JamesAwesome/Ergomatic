@@ -1211,6 +1211,57 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(link?.needsReauthAt).not.toBeNull();
   });
 
+  // Fix round 2, N1: the repeat-401 flag must be bound to the SAME link
+  // that produced the 401 (same authority-split class as I4). A relink
+  // landing between the retry's own 401 and the flag lock must NOT get
+  // flagged on the OLD grant's failure — the NEW grant was never tried at
+  // all, so the honest response is a retryable c2_error, not needs_reauth.
+  it("a relink landing between the retry's 401 and the flag lock -> the NEW link is never flagged, response is c2_error", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(
+      userA.id,
+      freshLink({ accessToken: "at-A", c2UserId: 111 }),
+    );
+    const client = makeStubClient();
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "at-A-refreshed",
+        refreshToken: "rt-A-refreshed",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    vi.mocked(client.postResult).mockImplementation(async (token) => {
+      if (token === "at-A") {
+        return { ok: false, kind: "auth" };
+      }
+      // token === "at-A-refreshed" (the retry): simulate a callback
+      // relink landing WHILE this postResult call was in flight — a
+      // completely different account's grant, before this same call's
+      // own 401 comes back.
+      await store.upsertLink(
+        userA.id,
+        freshLink({ accessToken: "at-B", c2UserId: 222 }),
+      );
+      return { ok: false, kind: "auth" };
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(502);
+    expect(res.body).toStrictEqual({ error: "c2_error" });
+
+    const link = await store.getLink(userA.id);
+    expect(link?.c2UserId).toBe(222);
+    expect(link?.accessToken).toBe("at-B");
+    expect(link?.needsReauthAt).toBeNull();
+  });
+
   it("recordC2Result returning false (row deleted concurrently) -> 502 (RF25 seam)", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
