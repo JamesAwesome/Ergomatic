@@ -183,11 +183,16 @@ green (suite 32/32 both sides):
 | red-proof fresh-201 guard | dropped `status === 201` clause | `expected { ok: true, id: '998877' } to strictly equal { ok: false, message: "RED-PROOF ABORTED: expected fresh 201, got 409" }` |
 | fetchResult non-2xx throw | removed `if (!res.ok) throw` | `expected [Function] to throw error matching /fetchResult failed: 401.*invalid_token/ but got 'malformed result response'` |
 
+P1 round (red proof bound to its own fresh post), same protocol:
+
+| guard | mutation | exact failure |
+| --- | --- | --- |
+| `fetchResult` id equality | deleted the `String(data.id) !== String(id)` check + throw | `promise resolved "{ id: 445566, distance: 935 }" instead of rejecting` |
+| `redProofVerdict` hard gate | body replaced with `return { ok: true }` | 3 tests red: missing-time arm (`expected { ok: true } to strictly equal { ok: false, …}` wanting `no 'time' field in the diff`), UNPROVEN arm (`time verdict is invisible-to-result-object (cameBack=undefined), required MISMATCH`), match arm (`time verdict is match (cameBack=100), required MISMATCH`) |
+
 (Earlier task-loop mutations — c2Tenths `expected 60 to be 600`,
 formatC2Date zone drop, rest-guard inversion, timezone-key drop,
-verdict-always-match — are recorded in PR #244's Record block; the P1
-round's id-equality and red-verdict mutations are appended to this table
-in the P1 commit.)
+verdict-always-match — are recorded in PR #244's Record block.)
 
 ## Verdict against RC exit (d)
 
