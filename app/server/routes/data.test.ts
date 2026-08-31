@@ -16,6 +16,28 @@ import { createDataRouter, type Stores } from "./data.js";
 // tests). This file is the API contract that exercises them.
 const makeStores = makeFakeStores;
 
+// Flake capture (ROADMAP "TWO unit-project flakes, cause UNKNOWN"): two
+// tests in this file have each failed exactly once with `expected
+// undefined to be <value>` on a response-body field, and fifteen clean
+// reruns later the mechanism is still unattributed because the assertion
+// error carries neither the status nor the raw body. This prints both,
+// ONLY when the about-to-fail shape is present, so the next occurrence
+// self-reports instead of being re-run past. Deliberately a console.error
+// plus the ordinary assertion — never a retry, never a softened check:
+// ROADMAP's own binding is that the flake must still fail loudly.
+function captureIfUndefined(
+  res: request.Response,
+  field: string,
+  where: string,
+): void {
+  if ((res.body as Record<string, unknown>)?.[field] === undefined) {
+    console.error(
+      `FLAKE CAPTURE [${where}] status=${res.status} type=${res.type} ` +
+        `headers=${JSON.stringify(res.headers)} text=${JSON.stringify(res.text)}`,
+    );
+  }
+}
+
 const userA: SessionUser = { id: "user-a", email: "a@x.com", name: "A" };
 const userB: SessionUser = { id: "user-b", email: "b@x.com", name: "B" };
 
@@ -3198,6 +3220,7 @@ describe("GET/POST /api/logs", () => {
         const res = await asA(
           request(app).patch(`/api/logs/${created.body.id}`),
         ).send({ [field]: null });
+        captureIfUndefined(res, field, "PATCH null-clears");
         expect(res.status).toBe(200);
         expect(res.body[field]).toBeNull();
       },
@@ -3747,9 +3770,12 @@ describe("GET/PUT /api/prefs", () => {
     const put = await asA(request(app).put("/api/prefs")).send({
       accentColor: "#00ff00",
     });
+    captureIfUndefined(put, "accentColor", "prefs PUT");
     expect(put.status).toBe(200);
     expect(put.body.accentColor).toBe("#00ff00");
     const get = await asA(request(app).get("/api/prefs"));
+    captureIfUndefined(get, "accentColor", "prefs GET-after-PUT");
+    expect(get.status).toBe(200);
     expect(get.body.accentColor).toBe("#00ff00");
   });
 

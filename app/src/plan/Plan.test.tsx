@@ -868,6 +868,83 @@ describe("Plan (done-row workout names and swap marks)", () => {
   });
 });
 
+// The `globalOnly: false` arm (filed at #233's final review as latent —
+// "fix with the first false ref or authoring UI"; James pulled the
+// trigger forward 2026-08-31). Every SHIPPED ref sets `globalOnly: true`,
+// so no fixture built from the real `PLANS` can reach this arm — the ONLY
+// producer is a synthetic prescription, which is why `domain/plans` is
+// mocked here and nowhere else in this file. The mock replaces exactly one
+// session's `prescribe`; the sequence itself stays the real 84 codes.
+describe("Plan (a globalOnly: false prescription — mocked, the only producer)", () => {
+  async function renderWithFalseRef(links: Map<number, PlanLink>) {
+    const real =
+      await vi.importActual<typeof import("../../domain/plans")>(
+        "../../domain/plans",
+      );
+    const sessions = real.PLANS.sprint.sessions.map((day, i) =>
+      i === 6
+        ? {
+            ...day,
+            prescribe: {
+              ref: {
+                kind: "title" as const,
+                title: "My Own Test",
+                globalOnly: false,
+              },
+              reason: "synthetic: the false-ref arm's only producer",
+            },
+          }
+        : day,
+    );
+    vi.doMock("../../domain/plans", () => ({
+      ...real,
+      PLANS: {
+        ...real.PLANS,
+        sprint: { ...real.PLANS.sprint, sessions },
+      },
+    }));
+    mockUsePlan({
+      state: "ready",
+      plan: SPRINT_ACTIVE,
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    return renderPlan(links);
+  }
+
+  it("accepts a PERSONAL workout matching the title — a false ref does not demand a global", async () => {
+    await renderWithFalseRef(
+      new Map([
+        [
+          6,
+          link({
+            workoutTitle: "My Own Test",
+            workoutType: "AN",
+            workoutIsGlobal: false,
+          }),
+        ],
+      ]),
+    );
+
+    const row = document.querySelectorAll<HTMLElement>(".plan-row")[6]!;
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe(
+      "My Own Test",
+    );
+    expect(row.querySelector(".plan-row-swap")).toBeNull();
+  });
+
+  it("still marks a DIFFERENT workout against a false ref — the title half keeps working", async () => {
+    await renderWithFalseRef(
+      new Map([[6, link({ workoutTitle: "Sea Fret", workoutType: "O2" })]]),
+    );
+
+    const row = document.querySelectorAll<HTMLElement>(".plan-row")[6]!;
+    expect(row.querySelector(".plan-row-swap")?.textContent).toContain(
+      "My Own Test",
+    );
+  });
+});
+
 describe("Plan (RESET — staged confirm)", () => {
   it("does not call reset on the first press, and names the consequence", async () => {
     const reset = vi.fn();
