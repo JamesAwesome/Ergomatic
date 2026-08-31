@@ -3034,15 +3034,22 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
   // release is accepted and receipted after the release in the ring's own
   // ordering. No navigation is claimed, simulated, or implied.
   //
-  // **AND THAT STATE IS THE INTERVAL ITSELF (PR #239 review round 6).**
-  // Released, still mounted, still subscribed, no consumer yet — read in
-  // route terms, that is exactly after-release/before-navigation, the
-  // interval rounds 3-5 wrongly called unoccupiable by a wire frame. This
-  // arm is therefore the hook-layer half of that ordering, not merely a
-  // narrower fact than it. `WorkoutDetail.postReleaseCommit.test.tsx`'s
-  // second test drives the same ordering through the real route, taking
-  // production's own released-frame copy plus an unmounted consumer as its
-  // proof of position.
+  // **AND THAT STATE IS THE INTERVAL ITSELF (PR #239 review round 6;
+  // NARROWED at round 8, reviewer finding 1).** Released, still mounted,
+  // still subscribed, no consumer yet — read in route terms, that is
+  // exactly after-release/before-navigation. Rounds 3-5 wrongly called that
+  // interval unoccupiable by a wire frame; round 6 then overcorrected into
+  // reading as though occupancy had been DEMONSTRATED. Neither is right.
+  // What this arm establishes is the app's behaviour GIVEN a commit in that
+  // state — acceptance-if-delivered — on a schedule the test supplies
+  // (`manualSchedule`), not evidence about when a real producer fires. The
+  // scheduling facts, and why a gate on the real race is deliberately not
+  // attempted, are stated once in
+  // `WorkoutDetail.postReleaseCommit.test.tsx`'s second test header; that
+  // file's tests 2 and 3 drive the same ordering through the real route,
+  // taking production's own released-frame copy plus an unmounted consumer
+  // as their proof of POSITION (where the wedge put the frame, not that the
+  // wire would).
   it("row 2, HOOK LAYER — a producer commit made AFTER the hand-off released is accepted: the burst backstop frees the surface, THEN the machine's summary lands, and the store takes it (revision advances, receipt after the release)", async () => {
     const timer = manualSchedule();
     const driverTimer = manualSchedule();

@@ -385,37 +385,67 @@ as row 8 does) takes the real-bytes requirement.
    history rather than being rewritten, with this sentence as its
    correction.
 2. **Producer update after release — TWO orderings on the navigation
-   axis, both real, both gated (amended at #239's review round 6; the
-   row said "ONE ordering" and was wrong about which intervals a wire
-   frame can occupy).** In both, the burst backstop releases with no
-   summary in hand and the machine's summary reaches `commit` on both
-   tiers inside `BURST_LINGER_MS`. They differ only in where in React's
-   flush the frame lands:
+   axis, gated at DIFFERENT strengths, and the row says which is which
+   (amended at #239's review round 6; its occupancy claim NARROWED at
+   round 8, per the reviewer's P1 — round 6 replaced an unevidenced "a
+   wire frame cannot occupy the interval" with an unevidenced "it
+   does", and neither was earned).** In both, the burst backstop
+   releases with no summary in hand and the machine's summary reaches
+   `commit` on both tiers inside `BURST_LINGER_MS`. They differ only in
+   where in React's flush the frame lands:
    - **(i) INSIDE the interval** between the release's own commit
      (`useMonitorSession.ts:2158` sets `handoffHeld: false`) and the
      PASSIVE effect that navigates (`ConnectedSurface.tsx:352-358` →
-     `handleConnectedEnded`). The interval is real — a passive effect
-     runs after the commit that scheduled it, not inside it — and a
-     wire frame can occupy it. Gated at the hook by
-     `useMonitorSession.test.ts`'s `row 2, HOOK LAYER` arm (released,
-     still mounted, still subscribed, commit accepted and receipted
-     after the release) and at the route by the second test in
-     `WorkoutDetail.postReleaseCommit.test.tsx`, which delivers there
-     and proves its position with production's own released-frame copy
-     ("No numbers to keep." renders only on the `!handoffHeld` branch)
-     beside an unmounted consumer.
-   - **(ii) AFTER the navigation** — the first test in that file.
+     `handleConnectedEnded`). Three facts, kept apart:
+     **(a) the gap is REAL** — React runs a passive effect after the
+     commit that scheduled it, never inside it (PRIMARY: React's
+     documented `useEffect` timing), and nothing text-shaped can close
+     it; **(b) production delivery is TASK-scheduled with no specified
+     order against the navigation task** — on web a notification
+     arrives as a `characteristicvaluechanged` event queued on the
+     **Bluetooth task source**, a task and not a microtask (PRIMARY:
+     `https://webbluetoothcg.github.io/web-bluetooth/#dfn-bluetooth-task-source`),
+     and on native it is a Capacitor plugin callback whose ordering is
+     UNEVIDENCED — we hold no source that pins it; so occupancy is
+     **PLAUSIBLE but not demonstrated**; **(c) the gate is a DEFENSIVE
+     SYNTHETIC ORDERING** — a test-only `MutationObserver` microtask
+     invoking the synchronous fake, which lands in the gap by
+     construction and therefore proves the app ACCEPTS a summary
+     delivered there (acceptance-if-delivered), not that a supported
+     wire producer occupies it. A gate on the task-source race itself
+     is deliberately NOT attempted: with two macrotask sources of
+     unspecified relative order, a deterministic one would be
+     manufactured. Gated at the hook by `useMonitorSession.test.ts`'s
+     `row 2, HOOK LAYER` arm (released, still mounted, still
+     subscribed, commit accepted and receipted after the release, on a
+     `manualSchedule` the test supplies) and at the route by tests 2
+     and 3 in `WorkoutDetail.postReleaseCommit.test.tsx`, which prove
+     WHERE THE WEDGE PUT THE FRAME with production's own released-frame
+     copy ("No numbers to keep." renders only on the `!handoffHeld`
+     branch) beside an unmounted consumer.
+   - **(ii) AFTER the navigation** — the first test in that file, which
+     needs no wedge and carries no such caveat.
    **The consumer question (i) raises is not a third state.** No
    consumer exists during the interval; `LogSession` is what the
    navigation mounts, and its snapshot is taken by a once-only
    `useState` initializer AT mount. So the only question is which side
-   of the fold-in that mount falls on, and both sides are gated:
-   mount-before-fold-in (what the driver's deferred summary reconcile
-   actually produces — the reader's screen does not move and its Save
-   posts what was shown, the machine fields the store now holds absent
-   from that POST) and mount-after-fold-in (the third test — the screen
-   shows the machine's numbers and Save posts exactly those). Contract
-   A holds on both sides. **The receipt
+   of the fold-in that mount falls on, and **both sides are now driven
+   through the ORIGINAL navigation, with the WIRE deciding which one
+   happens** (corrected at round 8, per the reviewer's finding 3 — the
+   mount-after-fold-in side used to be gated by an unmount and a fresh
+   router, which is re-entry equivalence and not this ordering):
+   0x0039 delivered ALONE leaves `driver.ts`'s
+   `noteTerminateObservations` holding its observations emit for up to
+   `HASH_SUBWINDOW_MS` (200 ms) waiting for the verification byte, so
+   the mount lands FIRST — the reader's screen does not move and its
+   Save posts what was shown, the machine fields the store now holds
+   absent from that POST (test 2); 0x0039 followed by its 0x003F
+   flushes that emit synchronously (0x003F's own subscriber, driver
+   call site 5), so the FOLD-IN lands first and the consumer the
+   original navigation mounts shows `DISTANCE 244` and Saves exactly
+   those numbers (test 3). Contract A holds on both sides. Test 4 keeps
+   the RE-ENTRY case — a cold door onto an already-folded store — as
+   what it is: equivalence, not ordering. **The receipt
    requirement names what production actually emits.**
    `commit-accepted` is NOT observable here: the departing hook's
    unmount cleanup calls `setReceiptChannel(null)`
@@ -453,7 +483,9 @@ as row 8 does) takes the real-bytes requirement.
    between, since `ConnectedSurface.tsx:352-358` fires `onEnded` the
    instant `phase === "ended" && !handoffHeld` (**round 6's correction:
    "no rower tap" is not "no wire frame" — the passive-effect boundary
-   between them is ordering (i) above, gated rather than argued away**);
+   between them is ordering (i) above, whose BEHAVIOUR is gated on a
+   synthetic delivery rather than argued away, and whose real-wire
+   occupancy is left open and labelled**);
    and the after-navigation/before-teardown gap belongs to row
    3, whose own note already rules that "an arbitrary driver callback
    cannot be scheduled there" — scheduling one from a test is the
@@ -467,11 +499,13 @@ as row 8 does) takes the real-bytes requirement.
    change from one a macrotask later. The assumption therefore carries
    its own gate: source-shape pins in the route leg's file assert that
    both handlers defer nothing, and go red on exactly that mutation.
-   **What those pins never covered (round 6):** they exclude ADDITIONAL
-   deferral written into the handler or the effect; they cannot close
-   React's own passive-effect boundary, and nothing text-shaped could.
-   That gap is ordering (i), and it is now driven rather than assumed
-   away.
+   **What those pins never covered (round 6, restated at round 8):**
+   they exclude ADDITIONAL deferral written into the handler or the
+   effect; they cannot close React's own passive-effect boundary, and
+   nothing text-shaped could. That gap is ordering (i): the app's
+   behaviour inside it is DRIVEN (synthetically) rather than assumed
+   away, while whether a real wire frame lands there stays open, per
+   (i)(b) above.
 3. **The claim race, with its producer NAMED:** R0 render → **R1
    committed from the OLD hook's passive-cleanup teardown** (the only
    occupant React allows between the new render and its mount effect —

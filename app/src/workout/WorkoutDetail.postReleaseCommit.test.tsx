@@ -38,34 +38,57 @@
 //    navigation IS what tears the surface down. **That kills the
 //    after-teardown/before-navigation cell outright.**
 //
-//  - **The release LEADS to the navigation, but there is a real gap
-//    between them, and a wire frame CAN occupy it (PR #239 review round 6,
-//    reviewer's P1 addendum — this bullet used to claim the opposite).**
+//  - **The release LEADS to the navigation, and there is a real gap
+//    between them (PR #239 review round 6; THE CLAIM ABOUT THAT GAP
+//    NARROWED at round 8, reviewer finding 1 — this bullet twice said more
+//    than its evidence supported, first in the other direction).**
 //    `releaseHandoff` commits `handoffHeld: false`
 //    (`useMonitorSession.ts:2158`); `ConnectedSurface.tsx:352-358` then
 //    fires `onEnded` from a PASSIVE effect, which React runs after that
-//    commit, not inside it. No rower tap sits between them — but a wire
-//    frame is not a tap, and the source pins at the bottom of this file
-//    only exclude ADDITIONAL deferral inside the handler; they cannot
-//    close the passive-effect boundary itself. Rounds 3-5 asserted the
-//    interval was unoccupiable and offered no evidence for it. It is
-//    occupiable, MEASURED: the second test below delivers a summary in it
-//    and records production's own released-frame copy plus an unmounted
-//    consumer as its proof of position.
-//    **So the navigation axis carries TWO real orderings, both gated:**
-//    (i) delivery INSIDE the interval — this file's second test at the
-//    route layer, with `useMonitorSession.test.ts`'s `row 2, HOOK LAYER`
-//    arm carrying the same state at the hook (released, still mounted,
-//    still subscribed, commit accepted and receipted after the release);
-//    and (ii) delivery AFTER the navigation — this file's first test.
+//    commit, not inside it. Three separate facts, kept apart:
+//      1. **The gap is REAL** — React's own passive-effect contract, and
+//         nothing text-shaped can close it (the source pins at the bottom
+//         of this file exclude only ADDITIONAL deferral inside the
+//         handler). PRIMARY: React's documented `useEffect` timing.
+//      2. **Production delivery is TASK-scheduled, and its order against
+//         the navigation task is UNSPECIFIED.** On web a notification
+//         arrives as a `characteristicvaluechanged` event queued on the
+//         **Bluetooth task source** — a task, not a microtask (PRIMARY:
+//         https://webbluetoothcg.github.io/web-bluetooth/#dfn-bluetooth-task-source).
+//         On native it is a Capacitor plugin callback with NO evidenced
+//         ordering; we have no source that pins it. Two macrotask sources
+//         have no specified relative order, so a real frame occupying this
+//         particular interval is **PLAUSIBLE, not demonstrated.**
+//      3. **What this file's wedge is** — a `MutationObserver` microtask
+//         invoking a synchronous fake, i.e. a DEFENSIVE SYNTHETIC
+//         ORDERING. It proves the app ACCEPTS a summary delivered in the
+//         gap (acceptance-if-delivered) and NOT that a supported wire
+//         producer occupies it. Rounds 3-5 claimed the interval was
+//         unoccupiable with no evidence; rounds 6-7 then read as though
+//         occupancy had been demonstrated. Neither is what we have.
+//    A gate on the task-source race itself is deliberately NOT attempted:
+//    a deterministic one would be manufactured, since the platform
+//    specifies no order between the two sources.
+//    **So the navigation axis carries two orderings, both gated:**
+//    (i) delivery INSIDE the interval — synthetic, this file's second and
+//    third tests at the route layer, with `useMonitorSession.test.ts`'s
+//    `row 2, HOOK LAYER` arm carrying the same state at the hook
+//    (released, still mounted, still subscribed, commit accepted and
+//    receipted after the release); and (ii) delivery AFTER the navigation —
+//    this file's first test, which needs no wedge at all.
 //    **The consumer consequence of (i) is not a third state.** No consumer
 //    exists during the interval: `LogSession` is what the navigation
 //    mounts. So (i)'s consumer half is a MOUNT snapshot, and the only
-//    question is which side of the fold-in that mount falls on — mount
-//    first (what the driver's deferred summary reconcile actually
-//    produces, asserted in the second test) or fold-in first (the third
-//    test, where the screen shows the machine's numbers and Save posts
-//    them). Contract A is asserted on both sides.
+//    question is which side of the fold-in that mount falls on. BOTH sides
+//    are now driven through the ORIGINAL navigation, and the wire itself
+//    decides which one happens: 0x0039 alone leaves the driver holding its
+//    observations emit for `HASH_SUBWINDOW_MS`, so the mount lands FIRST
+//    (test 2); 0x0039 followed by its 0x003F flushes that emit
+//    synchronously, so the FOLD-IN lands first and the mounted consumer
+//    shows the machine's numbers and saves them (test 3). Contract A is
+//    asserted on both sides. Test 4 keeps the separate RE-ENTRY case — a
+//    cold door onto an already-folded store — which is equivalence, not
+//    ordering.
 //
 //  - **HOW THE FIRST BULLET IS ESTABLISHED, said exactly (PR #239
 //    review round 4, reviewer finding 2).** It is a SOURCE-REVIEWED
@@ -97,15 +120,16 @@
 //    row 3 and is gated by row 3's own test; row 2 does not manufacture a
 //    driver callback into it.**
 //
-// What is left is TWO reachable orderings, both of them the row's own
-// headline case (§1: "the late burst"; §9.1: "the window is bounded by the
-// producer's subscription life") differing only in WHERE in the flush the
-// frame lands: the hold times out on its own backstop, the release frees
-// the surface, and the machine's summary arrives on the wire either inside
-// the interval before the navigation (test 2) or after it (test 1), in
-// both cases inside `BURST_LINGER_MS`. This file drives both end to end,
-// with no seam touched but the transport, and test 3 carries the mount
-// side of the consumer question the two of them leave open.
+// What is left is the row's own headline case (§1: "the late burst"; §9.1:
+// "the window is bounded by the producer's subscription life") in its
+// reachable positions: the hold times out on its own backstop, the release
+// frees the surface, and the machine's summary arrives inside
+// `BURST_LINGER_MS` — after the navigation (test 1, no wedge), or placed
+// inside the release-to-navigation interval by the wedge, on either side of
+// the driver's own fold-in (tests 2 and 3). Test 1's position is
+// production's; tests 2-3's is synthetic and labelled as such. Test 4
+// carries the separate re-entry case. This file drives all four end to end,
+// with no seam touched but the transport.
 //
 // **Why the window is still open after teardown**, stated so the test does
 // not read as wishful thinking: `useMonitorSession.ts`'s `teardown` takes
@@ -313,6 +337,80 @@ function makeFake(): Transport & FakeControls {
       },
     ],
   });
+}
+
+/** What the screen was showing at the instant a wire frame was delivered —
+ *  the whole of a wedge test's claim about WHERE in the flush the delivery
+ *  happened. */
+type GapRecord = { main: string; consumerMounted: boolean };
+
+/**
+ * THE WEDGE (PR #239 review round 6, NARROWED at round 8) — a
+ * `MutationObserver` that fires on the DOM mutation the release's own commit
+ * produces and runs `deliver` there, between that commit and the passive
+ * effect that navigates.
+ *
+ * **WHAT IT IS, SAID AT ITS REAL STRENGTH.** This is a DEFENSIVE SYNTHETIC
+ * ORDERING, not a demonstration of wire reachability. The observer callback
+ * is a MICROTASK invoking a synchronous fake, so the delivery is guaranteed
+ * to land in the gap — which is exactly what makes it a usable gate and
+ * exactly what stops it from proving that a real producer occupies that gap.
+ * See the two tests' own headers for the scheduling facts and what they do
+ * and do not license.
+ *
+ * The observer renders no component, mounts no effect into the production
+ * tree, and installs no channel the app lacks; it observes the DOM from
+ * outside and supplies only the MOMENT. Whatever `deliver` does goes through
+ * the same wire seam (`fake.deliver*`) every other test in this file uses.
+ */
+function wedgeIntoTheGap(deliver: () => void): {
+  atDelivery: GapRecord[];
+  disconnect: () => void;
+} {
+  const atDelivery: GapRecord[] = [];
+  let delivered = false;
+  const observer = new MutationObserver(() => {
+    // Every mutation while the hold is still open is skipped: the held
+    // branch's own caption is on screen, so this is not the release.
+    if (delivered) return;
+    if (screen.queryByText("Getting the monitor's own numbers.") !== null) {
+      return;
+    }
+    delivered = true;
+    atDelivery.push({
+      main: screenText(),
+      consumerMounted:
+        screen.queryByRole("button", { name: "Save without logging" }) !== null,
+    });
+    deliver();
+  });
+  observer.observe(document.body, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+  });
+  return {
+    atDelivery,
+    disconnect: () => {
+      observer.disconnect();
+    },
+  };
+}
+
+/** The position assertions every wedge test shares: ONE delivery, made while
+ *  the surface was showing the RELEASED ended frame (production's own
+ *  `!handoffHeld` copy — `ConnectedSurface.tsx:485-495` renders "No numbers
+ *  to keep." on that branch alone, the held branch reading "Getting the
+ *  monitor's own numbers.") and no consumer existed yet. That pair IS
+ *  after-release and before-navigation, in production's own strings. */
+function expectDeliveredInTheGap(atDelivery: GapRecord[]): void {
+  expect(atDelivery).toHaveLength(1);
+  expect(atDelivery[0]!.main).toContain("SESSION ENDED");
+  expect(atDelivery[0]!.main).toContain("No numbers to keep.");
+  expect(atDelivery[0]!.main).not.toContain(
+    "Getting the monitor's own numbers.",
+  );
+  expect(atDelivery[0]!.consumerMounted).toBe(false);
 }
 
 /** The two production routes this file composes over, plus a Today stub —
@@ -612,33 +710,45 @@ describe("§10 row 2 through the real destination seam: a producer update after 
   }, 20000);
 
   // ---------------------------------------------------------------------
-  // ORDERING (i) — THE FRAME LANDS IN THE INTERVAL ITSELF (PR #239 review
-  // round 6).
+  // ORDERING (i) — A FRAME PLACED IN THE INTERVAL ITSELF (PR #239 review
+  // round 6; ITS CLAIM NARROWED at round 8, reviewer finding 1).
   //
   // The interval is the one the header names: after `releaseHandoff`
   // commits `handoffHeld: false` and the surface has RENDERED that release,
   // and before `ConnectedSurface.tsx:352-358`'s passive effect fires
-  // `onEnded` and `handleConnectedEnded` navigates. Rounds 3-5 asserted no
-  // wire frame could occupy it; that claim had no evidence and is deleted.
-  // This test occupies it, and proves it did.
+  // `onEnded` and `handleConnectedEnded` navigates.
   //
-  // **THE WEDGE, and why it is not the scaffolding the reviewer rejected.**
-  // A `MutationObserver` on `document.body` fires as a MICROTASK on the DOM
-  // mutation the release's own commit produces, while React's passive
-  // effects are scheduled on a later task — so the callback is guaranteed
-  // to run in the gap, ahead of the navigate. It observes the DOM from
-  // outside; it renders no component, mounts no effect into the production
-  // tree, and installs no channel the app lacks. The delivery it triggers
-  // goes through the SAME wire seam every other test in this file uses
-  // (`fake.deliverSummary`) — the observer supplies only the MOMENT.
+  // **WHAT THIS TEST PROVES, AND WHAT IT DOES NOT.** Rounds 6-7 read as
+  // though a production wire frame had been shown to occupy the interval.
+  // It has not been, and the difference is a scheduling fact:
+  //   - **The gap is REAL** — React runs a passive effect after the commit
+  //     that scheduled it, never inside it (PRIMARY: React's own
+  //     documentation of `useEffect` timing). That half is not in doubt and
+  //     never was.
+  //   - **Production delivery is TASK-scheduled.** On web, a notification
+  //     arrives as a `characteristicvaluechanged` event that the Web
+  //     Bluetooth spec queues on the **Bluetooth task source** — a task, not
+  //     a microtask (PRIMARY:
+  //     https://webbluetoothcg.github.io/web-bluetooth/#dfn-bluetooth-task-source).
+  //     On native it is a Capacitor plugin callback whose ordering relative
+  //     to React's scheduler is UNEVIDENCED — we have no source that pins
+  //     it. Two macrotask sources have no specified relative order, so
+  //     whether a real frame lands inside this particular interval is
+  //     PLAUSIBLE and UNDEMONSTRATED.
+  //   - **This wedge is a MICROTASK invoking a synchronous fake**, so it
+  //     lands in the gap by construction. It is therefore a DEFENSIVE
+  //     SYNTHETIC ORDERING: it proves the app ACCEPTS a summary delivered
+  //     there — acceptance-if-delivered — and not that a supported wire
+  //     producer demonstrably occupies it.
   //
-  // **The position is asserted, not assumed.** What the callback records at
-  // delivery time is the released ended frame's own copy —
-  // `ConnectedSurface.tsx:485-495` renders "No numbers to keep." ONLY on the
-  // `!session.handoffHeld` branch (the held branch is "Getting the monitor's
-  // own numbers.") — with no `LogSession` on screen. That pair IS
-  // after-release and before-navigation, in production's own strings.
-  it("IN THE INTERVAL: a summary delivered after the release's own commit and BEFORE the passive effect that navigates still reaches `commit` on both tiers, and the consumer that mounts a beat later keeps its own snapshot", async () => {
+  // Deliberately NOT attempted: a gate on the task-source race itself.
+  // Making one deterministic would mean manufacturing an ordering the
+  // platform does not specify, which is the move the reviewer rejects.
+  //
+  // **The delivery's position IS asserted**, by `expectDeliveredInTheGap` —
+  // production's own released-frame copy beside an unmounted consumer. What
+  // that pins is where the wedge put the frame, not that the wire would.
+  it("IN THE INTERVAL (synthetic ordering): a summary delivered after the release's own commit and BEFORE the passive effect that navigates is still ACCEPTED — `commit` on both tiers — and the consumer that mounts a beat later keeps its own snapshot", async () => {
     const fake = makeFake();
     fakeForTest = fake;
     renderRoutes();
@@ -649,31 +759,14 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     expect(held!.run.summaryTotals).toBeUndefined();
     const heldRevision = held!.revision;
 
-    /** What the screen was showing at the instant the wire frame was
-     *  delivered — the whole of this test's claim about WHERE in the flush
-     *  the delivery happened. */
-    const atDelivery: { main: string; consumerMounted: boolean }[] = [];
-    let delivered = false;
-    const observer = new MutationObserver(() => {
-      // Every mutation while the hold is still open is skipped: the held
-      // branch's own caption is on screen, so this is not the release.
-      if (delivered) return;
-      if (screen.queryByText("Getting the monitor's own numbers.") !== null) {
-        return;
-      }
-      delivered = true;
-      atDelivery.push({
-        main: screenText(),
-        consumerMounted:
-          screen.queryByRole("button", { name: "Save without logging" }) !==
-          null,
-      });
+    // 0x0039 ALONE, with no 0x003F behind it — which is why this test's
+    // consumer mounts BEFORE the fold-in. `driver.ts`'s
+    // `noteTerminateObservations` holds the observations emit for up to
+    // `HASH_SUBWINDOW_MS` (200 ms) waiting for the verification byte, so
+    // the fold lands well after the navigation this same release triggers.
+    // The next test delivers BOTH halves and gets the other side.
+    const wedge = wedgeIntoTheGap(() => {
       fake.deliverSummary(LATE_SUMMARY);
-    });
-    observer.observe(document.body, {
-      subtree: true,
-      childList: true,
-      characterData: true,
     });
 
     try {
@@ -690,19 +783,11 @@ describe("§10 row 2 through the real destination seam: a producer update after 
         { timeout: BURST_HANDOFF_HOLD_MS + 3000 },
       );
     } finally {
-      observer.disconnect();
+      wedge.disconnect();
     }
 
-    // WHERE THE FRAME LANDED. One delivery, made while the surface was
-    // showing the RELEASED ended frame (production's own `!handoffHeld`
-    // copy) and no consumer existed yet.
-    expect(atDelivery).toHaveLength(1);
-    expect(atDelivery[0]!.main).toContain("SESSION ENDED");
-    expect(atDelivery[0]!.main).toContain("No numbers to keep.");
-    expect(atDelivery[0]!.main).not.toContain(
-      "Getting the monitor's own numbers.",
-    );
-    expect(atDelivery[0]!.consumerMounted).toBe(false);
+    // WHERE THE FRAME LANDED.
+    expectDeliveredInTheGap(wedge.atDelivery);
 
     // WHAT THE CONSUMER MOUNTED WITH. Captured the moment the destination
     // is on screen, before the fold-in has drained — non-vacuity for the
@@ -748,23 +833,146 @@ describe("§10 row 2 through the real destination seam: a producer update after 
   }, 20000);
 
   // ---------------------------------------------------------------------
-  // THE CONSUMER HALF OF ORDERING (i) THE ROUTE CANNOT SHOW (PR #239 review
-  // round 6).
+  // THE OTHER SIDE OF THE FOLD-IN, ON THE ORIGINAL NAVIGATION (PR #239
+  // review round 8, reviewer finding 3).
   //
-  // The test above pins where the FRAME landed; its consumer still mounted
-  // ahead of the fold-in, because the driver defers its summary reconcile
-  // past the same flush the navigation happens in. The other side of the
-  // interval — a consumer whose mount READS a store that already carries
-  // the late frame — is reachable without any wedge at all, and is the
-  // rower's ordinary case on a re-entry or a reload: the snapshot is taken
-  // by `LogSession.tsx`'s once-only `useState` initializer at MOUNT, so
-  // whichever side of the commit that mount falls on is the whole of the
-  // difference.
+  // The test above delivers 0x0039 alone, so its consumer mounts BEFORE the
+  // fold-in: `driver.ts`'s `noteTerminateObservations` holds the
+  // observations emit for up to `HASH_SUBWINDOW_MS` (200 ms) waiting for the
+  // verification byte, and the navigation this same release triggers happens
+  // long before that. §10 row 2's other side — a consumer whose MOUNT reads
+  // a store that already carries the machine's numbers — was previously
+  // gated by unmounting and re-entering through a fresh router, which proves
+  // re-entry equivalence and NOT the ordering the row claims.
+  //
+  // This test gates the claimed ordering directly, and the mechanism is
+  // production's own: the machine sends 0x0039 and 0x003F as a PAIR, and
+  // 0x003F's own subscriber (`driver.ts` call site 5) flushes the pending
+  // terminate-observations emit the instant it lands. Deliver both halves in
+  // the gap and the fold-in completes SYNCHRONOUSLY, before React's passive
+  // effect runs — so the `LogSession` that the ORIGINAL
+  // `handleConnectedEnded` navigation mounts is the one reading the folded
+  // store. No unmount, no second render, no fresh router.
+  //
+  // The wedge carries the round-8 caveat its sibling does (see that header):
+  // it places the PAIR in the gap by construction, which licenses
+  // "acceptance-if-delivered", not "the wire lands here."
   //
   // Contract A ("renders snapshot; recording actions post what was shown")
   // is the claim on BOTH sides, and it is not trivially true here: the
   // screen now shows the machine's own numbers, so Save has to post THOSE.
-  it("A CONSUMER MOUNTING AFTER THE FOLD-IN shows the machine's numbers and saves exactly what it showed", async () => {
+  it("MOUNTING AFTER AN IN-GAP FOLD: the consumer the ORIGINAL navigation mounts shows the machine's numbers and saves exactly what it showed", async () => {
+    const fake = makeFake();
+    fakeForTest = fake;
+    renderRoutes();
+    await rowToBurstHold(fake);
+
+    const held = currentUnretired();
+    expect(held).not.toBeNull();
+    expect(held!.run.summaryTotals).toBeUndefined();
+    const heldRevision = held!.revision;
+
+    /** Read INSIDE the gap, immediately after the pair is delivered and
+     *  still ahead of the passive effect — the direct evidence that the
+     *  fold-in preceded the navigation rather than merely preceding an
+     *  assertion. */
+    let foldedInsideTheGap: boolean | null = null;
+    const wedge = wedgeIntoTheGap(() => {
+      fake.deliverSummary(LATE_SUMMARY);
+      // The pair's second half. Nothing about this is test-only plumbing:
+      // it is the byte the machine sends next, through the same transport
+      // seam, and it is what turns the driver's held emit into an
+      // immediate one.
+      fake.deliverVerification();
+      foldedInsideTheGap =
+        currentUnretired()?.run.summaryTotals !== undefined &&
+        screen.queryByRole("button", { name: "Save without logging" }) === null;
+    });
+
+    try {
+      await waitFor(
+        () => {
+          expect(
+            screen.getByRole("button", { name: "Save without logging" }),
+          ).toBeInTheDocument();
+        },
+        { timeout: BURST_HANDOFF_HOLD_MS + 3000 },
+      );
+    } finally {
+      wedge.disconnect();
+    }
+
+    // WHERE THE PAIR LANDED — the same production-string position proof the
+    // sibling test uses.
+    expectDeliveredInTheGap(wedge.atDelivery);
+    // ...AND THAT THE FOLD-IN BEAT THE NAVIGATION. Without this the test
+    // below would be satisfied by a fold that merely happened before the
+    // ASSERTION, which is the weaker claim round 7 was making.
+    expect(foldedInsideTheGap).toBe(true);
+
+    // The connected surface really is gone and the REAL `LogSession`
+    // replaced it — this is the original navigation, not a re-render of the
+    // detail view with its Connect button back.
+    expect(
+      screen.queryByRole("button", { name: "End session" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Connect" }),
+    ).not.toBeInTheDocument();
+
+    // The commit itself, with the same independent +1 arithmetic: this test
+    // makes exactly one producer write after the hold.
+    const afterBurst = currentUnretired();
+    expect(afterBurst!.revision).toBe(heldRevision + 1);
+    expect(afterBurst!.run.summaryTotals).toStrictEqual({
+      workElapsedSeconds: LATE_SUMMARY.elapsedSeconds,
+      workDistanceMeters: LATE_SUMMARY.meters,
+    });
+    expect(durableRun()?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: LATE_SUMMARY.elapsedSeconds,
+      workDistanceMeters: LATE_SUMMARY.meters,
+    });
+
+    // WHAT IT SHOWS: the machine's own totals, `summaryModel.ts`'s tier-A
+    // branch rendering `summaryTotals` verbatim — on the screen the rower
+    // arrived at, never a second one.
+    expect(screen.getByText("DISTANCE")).toBeInTheDocument();
+    expect(screen.getByText(String(LATE_SUMMARY.meters))).toBeInTheDocument();
+    expect(screen.queryByText(/NO MONITOR READING/)).not.toBeInTheDocument();
+
+    // ...AND WHAT IT SAVES: the same numbers. The three machine fields the
+    // first test asserts ABSENT (its consumer never saw them) are present
+    // here, carrying the shown values, with the identity fields as the
+    // positive half so this cannot be satisfied by some other POST.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
+    await waitFor(() => {
+      expect(apiFn).toHaveBeenCalled();
+    });
+    const [path, init] = apiFn.mock.calls.at(-1)!;
+    expect(path).toBe("/api/logs");
+    const body = JSON.parse(String(init!.body)) as Record<string, unknown>;
+    expect(body.machineWorkMeters).toBe(LATE_SUMMARY.meters);
+    expect(body.machineWorkSeconds).toBe(LATE_SUMMARY.elapsedSeconds);
+    expect(body.machineSummary).toBeDefined();
+    expect(body.workoutId).toBe(WORKOUT.id);
+    expect(body.deviceName).toBe(DEVICE);
+  }, 20000);
+
+  // ---------------------------------------------------------------------
+  // RE-ENTRY EQUIVALENCE (PR #239 review round 6; RE-SCOPED at round 8,
+  // reviewer finding 3 — this used to carry §10 row 2's mount-after-fold-in
+  // claim, which it does not establish).
+  //
+  // What this drives is an unmount and a fresh entry through a new router:
+  // the rower's ordinary case on a RE-ENTRY or a RELOAD, where the store is
+  // already folded and the door opens cold. That is worth its own gate —
+  // `LogSession.tsx`'s once-only `useState` initializer is the whole of the
+  // difference between the two sides, and a re-entering reader must read
+  // the same numbers the original navigation's reader would — but it is
+  // equivalence, not ordering. The ordering itself is the test above.
+  it("RE-ENTRY: a consumer entering cold on an already-folded store shows the machine's numbers and saves exactly what it showed", async () => {
     const fake = makeFake();
     fakeForTest = fake;
     const first = renderRoutes();
@@ -845,12 +1053,14 @@ describe("§10 row 2 through the real destination seam: a producer update after 
   // move that would make the after-teardown/before-navigation cell
   // reachable again and silently invalidate the reduction.
   //
-  // **AND WHAT IT NEVER CLAIMED (PR #239 review round 6).** These pins
-  // exclude ADDITIONAL deferral inside the handler and the effect. They do
-  // NOT close React's own passive-effect boundary between the release's
-  // commit and the `onEnded` call — nothing text-shaped could. That gap is
-  // real, it is occupiable, and it is gated by the second test above
-  // rather than argued away here.
+  // **AND WHAT IT NEVER CLAIMED (PR #239 review round 6, restated at round
+  // 8).** These pins exclude ADDITIONAL deferral inside the handler and the
+  // effect. They do NOT close React's own passive-effect boundary between
+  // the release's commit and the `onEnded` call — nothing text-shaped
+  // could. That gap is real, and the tests above gate the app's BEHAVIOUR
+  // when something lands in it, on a synthetic ordering. Whether a real
+  // wire frame lands there is unsettled and is not asserted anywhere in
+  // this file (see the second test's header for the scheduling facts).
   describe("the reduction's premise, pinned at the source it was reviewed at", () => {
     const readSource = (rel: string): string =>
       readFileSync(join(import.meta.dirname, rel), "utf8");
