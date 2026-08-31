@@ -506,7 +506,15 @@ rower's work silently.
         "unbound" armed retire (consuming `currentUnretired()` directly
         instead of the staged set) is what the dedicated
         "nothing staged: an unrelated entry survives" test exists to
-        catch — both confirmed red before the fix, green after.
+        catch. Both run against the committed fix, confirmed to fail, then
+        reverted: retire-at-press-time failed exactly 3 tests (the
+        WorkoutDetail.test.tsx abandon leg plus two ConnectAction.test.tsx
+        staging-only tests, which now saw a retire that should not have
+        happened); the unbound-set mutation failed exactly 4 tests (the
+        named staged-set leg plus the superseded/M6/create-defense tests
+        it also collaterally broke, since an unconditional
+        `currentUnretired()`-based retire fires even where nothing was
+        staged).
         **Two further findings folded in at the same review:** (1)
         `Today.tsx`'s own stale-draft-discard guard effect
         (`Today.tsx:370`, `loadMonitorRun()` direct) is a THIRD legacy
@@ -547,10 +555,13 @@ rower's work silently.
         reference branch was the identical mechanical widening, already
         present in substance on this branch — checked via a three-way diff
         against the shared merge-base, not assumed.
-        Gates: `pnpm test --project unit --project client` green
-        (5565/5565 tests, 1 skipped, 200 files; one unrelated pre-existing
-        flake observed once in `server/routes/data.test.ts`, gone on
-        re-run, confirmed unrelated to this diff); `pnpm e2e` 420/420;
+        Gates (re-run in full after the review fix round): `pnpm test
+        --project unit --project client` green (5572/5573 tests, 1
+        skipped, 200 files; two unrelated pre-existing flakes observed
+        once each in `server/routes/data.test.ts` — a different
+        individual test both times — gone on re-run, confirmed unrelated
+        to this diff); `pnpm e2e` 420/420, re-run after the review fix
+        since `ConnectAction.tsx`/`useMonitorSession.ts` behavior changed;
         `pnpm screenshots` 82/83 (the one failure, `releases`, is a stale
         `v0.26.0` version pin against a `v0.27.0`-tagged main — unrelated
         to this task, not fixed here); the two `connected-ended-error`
