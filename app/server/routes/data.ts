@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from "express";
+import { Router, type RequestHandler, type Response } from "express";
 import { parseBulk } from "../../domain/bulk.js";
 import { bucketsForCap } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
@@ -915,12 +915,33 @@ export function createDataRouter({
     );
   });
 
+  // Reservation (James, 2026-08-31): the designated test titles are the
+  // app's ONLY identity for its test workouts (domain/onboarding.ts), and
+  // a personal row taking one was the common producer of the checkpoint
+  // confusion #233 fixed downstream. Exact match, same no-fuzz rule as
+  // isOnboardingTitle itself. Applied to create and update; rows that
+  // took a reserved title before this check keep rendering (reads stay
+  // tolerant, the same posture as the workoutType validation) and the
+  // linked-row identity check still tells them apart.
+  function reservedTitle(res: Response, title: string): boolean {
+    if (isOnboardingTitle(title)) {
+      badRequest(
+        res,
+        "this title is reserved for the app's own test workout",
+        "title",
+      );
+      return true;
+    }
+    return false;
+  }
+
   router.post("/api/workouts", async (req, res) => {
     const validated = validateWorkoutInput(req.body);
     if (!validated.ok) {
       badRequest(res, validated.errors.join("; "));
       return;
     }
+    if (reservedTitle(res, validated.workout.title)) return;
     const row = await stores.workouts.create(req.user!.id, {
       ...validated.workout,
       source: "user",
@@ -960,6 +981,7 @@ export function createDataRouter({
       badRequest(res, validated.errors.join("; "));
       return;
     }
+    if (reservedTitle(res, validated.workout.title)) return;
     const row = await stores.workouts.update(
       req.user!.id,
       req.params.id,

@@ -526,6 +526,43 @@ describe("workouts CRUD", () => {
     expect(list.body).toHaveLength(1);
   });
 
+  // Reservation (James, 2026-08-31, at the edge-marks gate): the two
+  // designated test titles are the ONLY identity the app has for its test
+  // workouts (domain/onboarding.ts — "the ONLY identity the rest of the
+  // app uses to recognize them"), and a personal row taking one was the
+  // common producer of checkpoint-identity confusion (#233's P1). New
+  // writes reject; rows created before this check keep rendering and are
+  // still separated by the linked-row identity check.
+  it.each(["2K Test", "6K Test"])(
+    "POST rejects the reserved title %s with 400, field named",
+    async (title) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/workouts"),
+      ).send(validWorkoutBody({ title }));
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("title");
+    },
+  );
+
+  it("PUT rejects renaming a personal workout TO a reserved title", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody(),
+    );
+    const res = await asA(
+      request(app).put(`/api/workouts/${created.body.id}`),
+    ).send(validWorkoutBody({ title: "2K Test" }));
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("title");
+  });
+
+  it("reservation is exact-match: a near-miss title is accepted", async () => {
+    const res = await asA(
+      request(appFor(makeStores())).post("/api/workouts"),
+    ).send(validWorkoutBody({ title: "2K Test Prep" }));
+    expect(res.status).toBe(201);
+  });
+
   it("POST rejects an invalid workout with 400", async () => {
     const res = await asA(
       request(appFor(makeStores())).post("/api/workouts"),
@@ -4128,16 +4165,23 @@ describe("GET /api/today", () => {
       title: ONBOARDING_TITLES.k6,
       type: todayCode,
     });
-    const custom = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ title: ONBOARDING_TITLES.k6, type: todayCode }),
-    );
-    expect(custom.body.isGlobal).toBe(false);
+    // Seeded through the STORE, not the route: since the 2026-08-31
+    // reservation, POST /api/workouts rejects the designated titles, so
+    // the only remaining producer of a personal row with one is history —
+    // rows created before the check. This test now guards exactly that
+    // legacy class: such a row STAYS suggestable, and only the GLOBAL is
+    // excluded from the pool.
+    const custom = await stores.workouts.create("user-a", {
+      ...validWorkoutBody({ title: ONBOARDING_TITLES.k6, type: todayCode }),
+      source: "user",
+    });
+    expect(custom.isGlobal).toBe(false);
 
     const res = await asA(request(app).get("/api/today"));
     expect(res.status).toBe(200);
     expect(res.body.pool).not.toContain(onboarding.id);
-    expect(res.body.pool).toContain(custom.body.id);
-    expect(res.body.recommendation).toBe(custom.body.id);
+    expect(res.body.pool).toContain(custom.id);
+    expect(res.body.recommendation).toBe(custom.id);
   });
 
   it("uses the selected plan and doneN, not the fallback, and reports the real planKey", async () => {

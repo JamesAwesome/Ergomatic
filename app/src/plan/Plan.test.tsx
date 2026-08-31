@@ -774,10 +774,15 @@ describe("Plan (done-row workout names and swap marks)", () => {
   });
 
   // `session_logs.workout_type` is plain text, not the workouts table's
-  // enum. The POST route now rejects values outside the union, so this
-  // covers rows written BEFORE that check — the only ones that can carry
-  // an unreadable type. A type we cannot read is not evidence of a swap.
-  it("an unreadable stored type falls back to the plan's own badge and claims no swap", async () => {
+  // enum. The POST route rejects values outside the union, so this covers
+  // rows written BEFORE that check — the only ones that can carry an
+  // unreadable type. Edge-marks gate (James, 2026-08-31): such a row
+  // shows the SHADED BOX, not the plan's badge — the old fallback
+  // confidently asserted a type nobody recorded. The box shares
+  // `.type-badge` (same box model by construction — that class IS the
+  // size check, since no supported writer can produce this row for a
+  // live measurement any more) and claims no swap either way.
+  it("an unreadable stored type renders the unknown box, not the plan's badge, and claims no swap", async () => {
     await readyWithLinks(
       new Map([
         [3, link({ workoutTitle: "Slack Tide", workoutType: "nonsense" })],
@@ -785,15 +790,32 @@ describe("Plan (done-row workout names and swap marks)", () => {
       ]),
     );
 
-    // Index 3 is a TR day; the badge falls back rather than rendering an
-    // unstyled/unknown type.
-    expect(rowAt(3).querySelector(".type-badge")?.textContent).toBe("TR");
+    const box = rowAt(3).querySelector(".plan-row-badge-unknown");
+    expect(box).not.toBeNull();
+    // Same element, same class: the box inherits the real badge's box
+    // model rather than approximating it.
+    expect(box).toHaveClass("type-badge");
+    // No type text — two no-break spaces keep the two-character width.
+    expect(box!.textContent).toBe("\u00A0\u00A0");
+    // The plan's own type appears NOWHERE on this row's badge slot.
+    expect(rowAt(3).querySelector(".type-badge")?.textContent).not.toBe("TR");
     expect(rowAt(3).querySelector(".plan-row-swap")).toBeNull();
     // Index 4 is an AT day rowed as O2 — the control proving the mark is
     // reachable in this render.
     expect(rowAt(4).querySelector(".plan-row-swap")?.textContent).toBe(
       "INSTEAD OF AT",
     );
+  });
+
+  // The box is only for a LINKED row whose stored type is unreadable. An
+  // UNLINKED row has no stored type at all — its badge is the plan's own
+  // claim, legitimately.
+  it("an unlinked row keeps the plan's badge — the box is not a general fallback", async () => {
+    await readyWithLinks(new Map([[0, link()]]));
+
+    // Index 1 is done but unlinked.
+    expect(rowAt(1).querySelector(".plan-row-badge-unknown")).toBeNull();
+    expect(rowAt(1).querySelector(".type-badge")?.textContent).toBe("AT");
   });
 
   it("a done row with no stored link renders exactly as it did before: plan badge, no name, no mark", async () => {

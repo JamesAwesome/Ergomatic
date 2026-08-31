@@ -2741,6 +2741,22 @@ button.back-link:disabled,
   grid-column: 2 / -1;
 }
 
+/* The unknown-type box (edge-marks gate, James, 2026-08-31: "a shaded
+   box", then "put a border around it. Check its size against others").
+   Composes WITH `.type-badge` — same element, same class — so font,
+   padding and the two-nbsp content give it a real two-letter badge's
+   exact box; the 1px border is compensated in padding (3px 7px minus
+   1px each side) to keep the outer box identical. Colours are the two
+   neutral rules: this is decorative rhythm under WCAG 1.4.11 (the row's
+   meaning lives in the name; swap logic never reads the box), border
+   1.53:1 on --page stated for the record. Only a pre-validation row can
+   render this — the POST route validates types since #233. */
+.plan-row-badge-unknown {
+  background: var(--rule-2);
+  border: 1px solid var(--rule-3);
+  padding: 2px 6px;
+}
+
 .plan-row-status {
   flex: 1;
   text-align: right;

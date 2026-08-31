@@ -403,7 +403,27 @@ function PlanView({
               <span className="plan-row-index mono-status">
                 {item.index + 1}
               </span>
-              <TypeBadge type={rowedType(link) ?? item.code} />
+              {/* Edge-marks gate (James, 2026-08-31): a LINKED row whose
+                  stored type is unreadable gets the shaded box, not the
+                  plan's badge — the old fallback asserted a type nobody
+                  recorded. Only pre-validation rows can be this (the POST
+                  route now checks the union). The box IS a `.type-badge`
+                  (same class, two no-break spaces of content), so its box
+                  model matches every neighbour by construction — the size
+                  check James asked for, done structurally, since no
+                  supported writer can mint such a row for a live
+                  measurement. An UNLINKED row has no stored type at all;
+                  its badge is the plan's own claim and stays. */}
+              {link !== undefined && rowedType(link) === undefined ? (
+                <span
+                  className="type-badge plan-row-badge-unknown"
+                  aria-hidden="true"
+                >
+                  {"\u00A0\u00A0"}
+                </span>
+              ) : (
+                <TypeBadge type={rowedType(link) ?? item.code} />
+              )}
               {/* ONE name per row, in one treatment (James, 2026-08-30:
                   "a 2k test is just a specific workout on a specific
                   day"). Which workout it names depends on whether the day
