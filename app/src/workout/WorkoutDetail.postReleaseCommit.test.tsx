@@ -292,7 +292,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
   // `ConnectedInterstitial`, which is precisely what makes this a test of
   // the real composition. The backstop firing on its own real timer is the
   // production event; waiting for it is the honest way to observe it.
-  it("the burst backstop releases, the REAL handleConnectedEnded navigates to the REAL LogSession and tears the surface down in the same commit, and the machine's summary — arriving after all of it — still lands on the store, the durable tier, and the ring", async () => {
+  it("the burst backstop releases, the REAL handleConnectedEnded replaces the connected surface with the REAL LogSession, and the machine's summary — arriving after all of it — still lands on the store, the durable tier, and the ring", async () => {
     const program = programFor(WORKOUT, BASELINES);
     const fake = createFakeTransport({
       program,
@@ -381,13 +381,22 @@ describe("§10 row 2 through the real destination seam: a producer update after 
       { timeout: BURST_HANDOFF_HOLD_MS + 3000 },
     );
 
-    // NAVIGATION AND TEARDOWN ARE ONE COMMIT — the after-teardown/
-    // before-navigation cell, killed by observation rather than by
-    // assertion. The connected surface is gone (its End button with it),
-    // and what replaced it is `LogSession`, NOT `WorkoutDetail`'s own
-    // detail view. Had `setConnecting(null)` been able to run without the
-    // navigate beside it, the Connect button would be back on screen here
-    // — that is the discriminator, and it is a production observable.
+    // WHAT THIS ASSERTION ACTUALLY ESTABLISHES, said exactly (PR #239
+    // review rounds 4 and 5): the connected surface is gone (its End
+    // button with it) and what replaced it is `LogSession`, NOT
+    // `WorkoutDetail`'s own detail view — had `setConnecting(null)` been
+    // able to run without the navigate beside it, the Connect button would
+    // be back on screen here. That is a production observable and it is
+    // the whole of the claim.
+    //
+    // It is NOT a claim about React commit timing. This behavioural route
+    // test cannot observe the difference between a same-commit route
+    // change and one a macrotask later (the reviewer proved it: wrapping
+    // `navigate(...)` in `setTimeout(..., 0)` leaves this test green).
+    // The one-commit premise the matrix reduction rests on is a
+    // SOURCE-REVIEWED ASSUMPTION about two named handlers, and it is
+    // gated separately by the source-shape pins at the bottom of this
+    // file, which DO go red on that mutation.
     expect(
       screen.queryByRole("button", { name: "End session" }),
     ).not.toBeInTheDocument();
@@ -469,15 +478,48 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     });
 
     // ---------------------------------------------------------------
+    // A REAL POST-BURST INTERACTION — WITHOUT ONE, EVERYTHING BELOW IS
+    // SATISFIED BY THE ABSENCE OF A RENDER (PR #239 review round 5,
+    // reviewer finding 1).
+    //
+    // The reviewer mutated the snapshot away — `LogSession.tsx:1553`'s
+    // lazy `useState<HandoffEntry | null>(() => monitorModeEntry(...))`
+    // replaced by a plain `const monitorEntry = monitorModeEntry(...)`
+    // re-read on every render — and this test stayed GREEN. Nothing above
+    // rerenders `LogSession` after the burst (the store is not a React
+    // store; the late commit reaches it without touching this tree), and
+    // Save ran the closure built at the last render, which predated the
+    // burst. So both claims below were being met by a screen that never
+    // re-ran, not by the snapshot doing its job.
+    //
+    // A rower who has just arrived here does not sit still — the
+    // reflection card sits directly under the heroes — and one tap on it
+    // is a production rerender with no bearing on the record.
+    //
+    // The tap is the feel chip rather than a pain chip DELIBERATELY:
+    // `screenText()` is the whole of `<main>`, and the pain row renders
+    // its own caption (`PostWorkoutSummary.tsx`'s `painCaption`:
+    // `TAP TO RATE` -> `EASIER THAN PLANNED`), so a pain tap moves that
+    // string for a legitimate reason and the `toBe` equality below could
+    // no longer be used. The feel chip changes only its own
+    // `aria-pressed`. A pain tap follows immediately after, carrying the
+    // narrower assertions its caption change still allows.
+    // ---------------------------------------------------------------
+    await userEvent.click(
+      screen.getByRole("button", { name: "↑ MORE LIKE THIS" }),
+    );
+
+    // ---------------------------------------------------------------
     // "THE CONSUMER'S SNAPSHOT UNAFFECTED" — the half of §10 row 2 the
     // store assertions above do not touch, and the half the ratified
     // product contract is actually about: **renders snapshot; recording
     // actions post what was shown.**
     //
-    // The reader is ALREADY MOUNTED. Its record came from a `useState`
-    // lazy initializer (`LogSession.tsx:1553` — `useState<HandoffEntry |
-    // null>(() => currentUnretired())`) that runs once and never
-    // re-reads, so the commit that just advanced the store must not
+    // The reader is ALREADY MOUNTED, and has now re-rendered (the tap
+    // above). Its record came from a `useState` lazy initializer
+    // (`LogSession.tsx:1553` — `useState<HandoffEntry | null>(() =>
+    // monitorModeEntry(searchParams, workoutId))`) that runs once and
+    // never re-reads, so the commit that just advanced the store must not
     // advance the screen. `summaryModel.ts:919` makes the alternative
     // concrete: with `summaryTotals` present, its tier-A branch renders
     // the machine's own totals VERBATIM, so a re-reading consumer would
@@ -485,6 +527,16 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     // arrived on this screen.
     // ---------------------------------------------------------------
     expect(screenText()).toBe(shownAtRelease);
+    expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(String(LATE_SUMMARY.meters)),
+    ).not.toBeInTheDocument();
+
+    // A SECOND real rerender, this one the reviewer's own interaction,
+    // held to the narrower claim its caption change allows: the machine's
+    // figures are still not on this screen. The rower's own reflection
+    // moves; the record's numbers do not.
+    await userEvent.click(screen.getByRole("button", { name: "Pain 1" }));
     expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
     expect(
       screen.queryByText(String(LATE_SUMMARY.meters)),

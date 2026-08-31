@@ -52,12 +52,14 @@
 //     directly would get zero signal from either check in this file.
 //  3. The MODULE-SCOPE detector (a separate detector, §1's second clause)
 //     is no longer text-shaped at all — it parses with the TypeScript
-//     compiler API and walks `sourceFile.statements`, so evasions 1-2
-//     above do not apply to it. Its own residual is named at
-//     `moduleScopeMutables`: a `var` declared inside a top-level BLOCK
-//     (`if (x) { var run = null; }`) hoists to module scope and is not
-//     collected, because the walk is top-level statements rather than a
-//     full hoisting analysis. Pinned as a MISS below.
+//     compiler API and walks the tree, so evasions 1-2 above do not apply
+//     to it. It now performs the `var` half of a real hoisting analysis
+//     (PR #239 review round 5, finding 3a): a `var` declared inside a
+//     top-level BLOCK — `if (x) { var run = null; }` — hoists to module
+//     scope and IS collected. Its residuals are narrower and named at
+//     `moduleScopeMutables`: a run held in a `const` object's mutable
+//     property, and anything outside `src/monitor/`. Both pinned as
+//     MISSES below.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
 // The compiler the repo already builds with (`app/package.json`
@@ -245,6 +247,75 @@ function bindingNames(name: ts.BindingName): string[] {
 }
 
 /**
+ * THE ONE PARSE both the detector below and its diagnostics pin go
+ * through (PR #239 review round 5, finding 3b). Deliberately a single
+ * shared call rather than two `ts.createSourceFile`s: a mutation to the
+ * parser call — dropping `fileName`, hardcoding it to `module.ts`,
+ * changing the target — must be visible to BOTH, or the plumbing pin is
+ * asserting on its own copy of the arguments instead of on the detector's.
+ *
+ * `scriptKind` comes from the file name (TypeScript's own
+ * `ensureScriptKind` fallback), so a `.tsx` file's JSX parses as JSX
+ * rather than as a cascade of type assertions. Callers scanning the real
+ * tree pass the real relative path for exactly that reason.
+ */
+function parseModule(source: string, fileName: string): ts.SourceFile {
+  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+}
+
+/**
+ * The SYNTACTIC diagnostics of a parse, used as the "did this actually
+ * parse as the language we think it is" check (PR #239 review round 5,
+ * finding 3b).
+ *
+ * **`parseDiagnostics` is INTERNAL** — it is not on the public
+ * `ts.SourceFile` type, so reaching it needs a cast. The public route
+ * (`ts.createProgram` + `getSyntacticDiagnostics`) would drag a real
+ * program, `tsconfig` resolution and a filesystem host into a scan whose
+ * whole point is that it is a syntax-only parse costing milliseconds.
+ * The cast is the cheap route, and the risk it carries — a future
+ * TypeScript renaming or dropping the property, leaving every diagnostics
+ * assertion silently reading `undefined` — is closed by throwing here
+ * rather than defaulting to "clean", and pinned by the deliberate-garbage
+ * self-test below.
+ */
+function parseDiagnosticsOf(
+  source: string,
+  fileName: string,
+): readonly ts.Diagnostic[] {
+  const parsed = parseModule(source, fileName) as unknown as {
+    parseDiagnostics?: readonly ts.Diagnostic[];
+  };
+  const diagnostics = parsed.parseDiagnostics;
+  if (diagnostics === undefined) {
+    throw new Error(
+      "ts.SourceFile no longer exposes `parseDiagnostics` — this gate's parse-health checks would read as CLEAN on an unparsed file, so they fail loudly here instead",
+    );
+  }
+  return diagnostics;
+}
+
+/** The node kinds that open a new `var` scope. A `var` hoists to the
+ *  nearest FUNCTION scope, so a `var` inside any of these is function-
+ *  local and NOT a module-level carrier; a `var` inside a plain block,
+ *  `if`, `try`, `switch` or loop body at module level IS. Class static
+ *  blocks and namespace bodies are their own `var` scopes too and are
+ *  included on the same rule. */
+function opensVarScope(node: ts.Node): boolean {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node) ||
+    ts.isConstructorDeclaration(node) ||
+    ts.isClassStaticBlockDeclaration(node) ||
+    ts.isModuleDeclaration(node)
+  );
+}
+
+/**
  * §1's SECOND clause: every module-scope `let`/`var` declared in `source`,
  * by NAME. Extracted from the test that used to inline it (PR #239 review
  * round 1, item 3) so the detector can be fed synthetic sources and pinned
@@ -252,10 +323,8 @@ function bindingNames(name: ts.BindingName): string[] {
  *
  * **THIS IS A SYNTAX-AWARE SCOPE CHECK, NOT A TEXT HEURISTIC (PR #239
  * review round 4, reviewer finding 3).** It parses `source` with the
- * TypeScript compiler API and walks `sourceFile.statements` — the top
- * level, by construction — so "module scope" means the parser's own answer
- * rather than a claim about indentation. What that buys, stated as the
- * three cases that motivated the rewrite:
+ * TypeScript compiler API, so "module scope" means the parser's own answer
+ * rather than a claim about indentation. What that buys:
  *  - `let { run } = slot;` at the top level is CAUGHT (the previous regex
  *    required an identifier immediately after the keyword and walked
  *    straight past every destructuring pattern);
@@ -266,71 +335,85 @@ function bindingNames(name: ts.BindingName): string[] {
  *    not flagged, because it is a string, not a declaration. The previous
  *    line-oriented regex could not tell the two apart, and its
  *    `stripComments` pre-pass could not either.
- * The converse holds too: `for (let q = 0; …)` is NOT collected. A `let`
- * in a for-head is block-scoped to the loop and can never be a
- * module-level carrier. And the whole Prettier composition the previous
- * version depended on — `format:check` in CI plus `prettier --write` at
- * pre-commit, with a self-test pinning that Prettier indents block bodies
- * — is GONE, along with its self-test: indentation is now irrelevant to
- * the answer in both directions.
+ * And the whole Prettier composition the original version depended on —
+ * `format:check` in CI plus `prettier --write` at pre-commit, with a
+ * self-test pinning that Prettier indents block bodies — is GONE, along
+ * with its self-test: indentation is irrelevant to the answer in both
+ * directions.
  *
- * `scriptKind` comes from the file name (TypeScript's own
- * `ensureScriptKind` fallback), so a `.tsx` file's JSX parses as JSX
- * rather than as a cascade of type assertions. Callers scanning the real
- * tree pass the real relative path for exactly that reason.
+ * **THE COVERAGE, EXACTLY, BY KEYWORD (PR #239 review round 5, finding
+ * 3a — which is why this is a traversal rather than a walk of
+ * `sourceFile.statements`).** The two keywords scope differently, so they
+ * are collected differently, and the difference is the whole point:
+ *  - **`var`: ANYWHERE in the module's own function scope.** The walk
+ *    descends the full tree and stops only at a node that opens a new
+ *    `var` scope (`opensVarScope` above). So `if (flag) { var run = null; }`
+ *    at module level IS collected — it hoists — as are `var`s in `try`,
+ *    `switch`, bare blocks, and loop bodies, and `var`s in all three
+ *    for-heads. A `var` inside any function, method, accessor,
+ *    constructor, class static block or namespace body is NOT: it hoists
+ *    only as far as that scope.
+ *  - **`let`: TOP-LEVEL STATEMENTS ONLY.** `let` is block-scoped, so a
+ *    `let` inside any block — including a top-level `if` or `try` — can
+ *    never outlive it and is not a module-level carrier. `for (let q = 0;
+ *    …)` is likewise not collected.
+ *  - **`const`: never.** The binding cannot be re-pointed at a run. (What
+ *    its VALUE can hold is a different, and disclosed, blind spot — see
+ *    the `const slot = { run: null }` MISS pin below.)
  *
- * RESIDUAL, named rather than implied (header evasion 3): a `var` inside a
- * top-level BLOCK — `if (x) { var run = null; }` — hoists to module scope
- * and is NOT collected, because this walks top-level statements rather
- * than performing a full hoisting analysis. Pinned as a MISS below. Every
- * `var` in the scanned tree today is top-level or function-local; the
- * shape is disclosed so a future tightening pass knows where to look.
+ * RESIDUALS, named rather than implied: a run held in a `const` object's
+ * mutable property, one held outside the scanned tree, and one smuggled
+ * through a closure returned by a factory. All three are pinned or named
+ * below; the `var`-in-a-block miss this comment used to disclose is now
+ * CAUGHT, and pinned as such.
  */
 function moduleScopeMutables(source: string, fileName = "module.ts"): string[] {
-  const sourceFile = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-  );
+  const sourceFile = parseModule(source, fileName);
   const names: string[] = [];
+  // `NodeFlags.Const` and `NodeFlags.Let` are the only flags that
+  // distinguish the three keywords: `var` sets neither.
+  const isConst = (list: ts.VariableDeclarationList): boolean =>
+    (list.flags & ts.NodeFlags.Const) !== 0;
+  const isLet = (list: ts.VariableDeclarationList): boolean =>
+    (list.flags & ts.NodeFlags.Let) !== 0;
   const collect = (list: ts.VariableDeclarationList): void => {
-    // `const` is not a carrier this clause is about: the binding cannot be
-    // re-pointed at a run. (What its VALUE can hold is a different, and
-    // disclosed, blind spot — see the `const slot = { run: null }` MISS
-    // pin below.) `NodeFlags.Const` is the only flag that distinguishes
-    // the three keywords in a way this check cares about: `let` sets
-    // `NodeFlags.Let`, `var` sets neither, and BOTH are mutable bindings.
-    if ((list.flags & ts.NodeFlags.Const) !== 0) return;
     for (const declaration of list.declarations) {
       names.push(...bindingNames(declaration.name));
     }
   };
-  for (const statement of sourceFile.statements) {
-    if (ts.isVariableStatement(statement)) {
-      collect(statement.declarationList);
-      continue;
-    }
-    // A for-head declaration. Only `var` hoists out of the loop to the
-    // module's own scope; `let`/`const` there are block-scoped to the
-    // loop and are skipped by the `Let` check below plus `collect`'s own
-    // `Const` check. `for…in`/`for…of` are included on the identical
-    // rule — a `var` in any of the three heads hoists the same way.
-    if (
-      ts.isForStatement(statement) ||
-      ts.isForInStatement(statement) ||
-      ts.isForOfStatement(statement)
+
+  const visit = (node: ts.Node, atTopLevel: boolean): void => {
+    // A `var` below this point hoists to THIS node, not to the module.
+    if (opensVarScope(node)) return;
+
+    if (ts.isVariableStatement(node)) {
+      const list = node.declarationList;
+      // `var` anywhere in this scope; `let` only as a top-level statement.
+      if (!isConst(list) && (!isLet(list) || atTopLevel)) collect(list);
+    } else if (
+      ts.isForStatement(node) ||
+      ts.isForInStatement(node) ||
+      ts.isForOfStatement(node)
     ) {
-      const initializer = statement.initializer;
+      // Only `var` hoists out of a for-head; `let`/`const` there are
+      // block-scoped to the loop. All three head forms hoist alike.
+      const initializer = node.initializer;
       if (
         initializer !== undefined &&
         ts.isVariableDeclarationList(initializer) &&
-        (initializer.flags & ts.NodeFlags.Let) === 0
+        !isConst(initializer) &&
+        !isLet(initializer)
       ) {
         collect(initializer);
       }
     }
-  }
+
+    node.forEachChild((child) => {
+      visit(child, false);
+    });
+  };
+
+  for (const statement of sourceFile.statements) visit(statement, true);
   return names;
 }
 
@@ -422,34 +505,50 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
   // WHAT IT CANNOT SEE, named rather than implied: a module-level run
   // held in a `const` object's mutable property (`const slot = {run:
   // null}`), one held outside `src/monitor/` (`src/session/`,
-  // `src/workout/`), one smuggled through a closure returned by a
-  // factory, or a `var` hoisting out of a top-level block. It also
-  // over-approximates in the other direction: ANY new module-scope
-  // mutable here fails, run-holding or not. That is the intended trade —
-  // a failure means: justify the binding and add it to the pinned list
-  // below, a cheap, once-per-binding cost against a carrier class that
-  // has already cost this project two review waves.
+  // `src/workout/`), or one smuggled through a closure returned by a
+  // factory. It also over-approximates in the other direction: ANY new
+  // module-scope mutable here fails, run-holding or not. That is the
+  // intended trade — a failure means: justify the binding and add it to
+  // the pinned list below, a cheap, once-per-binding cost against a
+  // carrier class that has already cost this project two review waves.
   //
-  // WHAT "MODULE-SCOPE" MEANS HERE, EXACTLY (PR #239 review round 4,
-  // finding 3): whatever the TypeScript PARSER says it is. The detector
-  // walks `sourceFile.statements`, so the answer is a real scope fact —
-  // destructuring patterns and top-level `for (var …)` heads included,
-  // string and comment contents excluded by construction. The column-zero
-  // heuristic this replaced, and the whole Prettier composition it leaned
-  // on, are gone; see `moduleScopeMutables`'s own doc comment.
-  it("no production file under src/monitor/ outside the store DECLARES a module-scope `let`/`var` — the syntax-visible half of §1's 'or holds a module-level run'", () => {
+  // WHAT "MODULE-SCOPE" MEANS HERE, EXACTLY (PR #239 review rounds 4 and
+  // 5, finding 3): whatever the TypeScript PARSER says it is, applied per
+  // KEYWORD — every `var` anywhere in the module's own function scope
+  // (top-level blocks, `if`/`try`/`switch` bodies and all three for-heads
+  // included, function bodies excluded because that is where a `var`
+  // actually stops), and every `let` declared as a top-level statement.
+  // Destructuring patterns are included; string and comment contents are
+  // excluded by construction. The column-zero heuristic this replaced,
+  // and the whole Prettier composition it leaned on, are gone; see
+  // `moduleScopeMutables`'s own doc comment for the keyword-by-keyword
+  // statement.
+  it("no production file under src/monitor/ outside the store DECLARES a module-scope binding — every `var` in the module's function scope (blocks and for-heads included) and every top-level `let` — the syntax-visible half of §1's 'or holds a module-level run'", () => {
     const found: string[] = [];
     for (const file of listFiles(SRC_ROOT, [".ts", ".tsx"])) {
       const rel = toPosixRelative(file);
       if (!rel.startsWith("src/monitor/")) continue;
       if (TEST_FILE.test(rel) || rel === STORE_FILE) continue;
       const source = readFileSync(file, "utf8");
-      // RF21 insurance: a parse that silently produced NOTHING would make
-      // this whole scan green for the worst possible reason. Every file
-      // here has content, so every file must yield statements.
+      // RF21 insurance, in the only form that can actually go red on a
+      // broken parse (PR #239 review round 5, finding 3b). The previous
+      // `statements.length > 0` check could not: a `.tsx` file parsed as
+      // `.ts` still yields plenty of statements — garbage ones, with the
+      // JSX read as type assertions — so it was green either way. ZERO
+      // SYNTACTIC DIAGNOSTICS is the claim that distinguishes them, and
+      // it is what makes `parseModule`'s file-name plumbing load-bearing:
+      // hardcode that argument and every `.tsx` file here goes red.
       expect(
-        ts.createSourceFile(rel, source, ts.ScriptTarget.Latest, true)
-          .statements.length,
+        parseDiagnosticsOf(source, rel).map((d) =>
+          ts.flattenDiagnosticMessageText(d.messageText, " "),
+        ),
+        `${rel} did not parse cleanly — the detector is blind, not clean`,
+      ).toStrictEqual([]);
+      // ...and it parsed to something. Kept alongside, since a source
+      // that produced no statements AND no diagnostics (an empty file)
+      // would satisfy the check above on its own.
+      expect(
+        parseModule(source, rel).statements.length,
         `${rel} parsed to zero statements — the detector is blind, not clean`,
       ).toBeGreaterThan(0);
       // Identified by NAME, never by line number: a line-pinned gate would
@@ -688,14 +787,45 @@ describe("the boundary detectors themselves (both directions)", () => {
       ]);
     });
 
-    it("parses a `.tsx` file as JSX rather than as type assertions", () => {
+    it("parses a `.tsx` file as JSX rather than as type assertions — pinned by ZERO parse diagnostics, in a red/green pair", () => {
       // The scan feeds real relative paths precisely for this. Without the
-      // extension the parser would read `<div>` as a type assertion and
-      // the statement list would be garbage.
+      // extension the parser reads `<div ... />` as a type assertion and
+      // the statement list is garbage.
+      //
+      // WHY THE DIAGNOSTICS AND NOT THE NAMES (PR #239 review round 5,
+      // finding 3b): the name list alone does NOT pin the plumbing. This
+      // fixture parses to `["held"]` either way — as `.ts` the JSX is
+      // mangled into a type assertion, but the `let` above it is still a
+      // `let`, so hardcoding the file name to `module.ts` inside
+      // `parseModule` left this test green and the pin was decoration.
+      // The diagnostics are the discriminator: as `.tsx` there are none,
+      // as `.ts` there are several. Both halves asserted, so the "clean"
+      // half cannot be satisfied by a parser that never complains.
       const tsx = "let held = null;\nconst el = <div className='x' />;\n";
       expect(moduleScopeMutables(tsx, "src/monitor/Thing.tsx")).toStrictEqual([
         "held",
       ]);
+      expect(parseDiagnosticsOf(tsx, "src/monitor/Thing.tsx")).toStrictEqual(
+        [],
+      );
+      expect(
+        parseDiagnosticsOf(tsx, "src/monitor/Thing.ts").length,
+      ).toBeGreaterThan(0);
+    });
+
+    it("`parseDiagnosticsOf` reads a real diagnostics list — deliberate garbage comes back non-empty", () => {
+      // RF21 on the ACCESSOR itself. `parseDiagnostics` is an internal
+      // property (see `parseDiagnosticsOf`'s own comment); if a future
+      // TypeScript renamed it, every "parses cleanly" assertion in this
+      // file would read `undefined`. The helper throws rather than
+      // defaulting to clean, and this is the positive half proving the
+      // property is really there and really populated.
+      expect(
+        parseDiagnosticsOf("const = ;\nfunction (", "module.ts").length,
+      ).toBeGreaterThan(0);
+      expect(parseDiagnosticsOf("const a = 1;\n", "module.ts")).toStrictEqual(
+        [],
+      );
     });
 
     it("MISSES a run held in a `const` object's mutable property (header: 'what it cannot see')", () => {
@@ -709,21 +839,80 @@ describe("the boundary detectors themselves (both directions)", () => {
       );
     });
 
-    // THE DISCLOSED RESIDUAL, PINNED (header evasion 3). The walk is over
-    // TOP-LEVEL statements, so a `var` nested in a top-level block escapes
-    // even though it hoists to module scope. Asserted rather than merely
-    // described, so a future tightening pass has to come and change the
-    // claim on purpose.
-    it("MISSES a `var` hoisting out of a top-level BLOCK — the walk is top-level statements, not a hoisting analysis", () => {
+    // THE FORMER RESIDUAL, NOW CAUGHT (PR #239 review round 5, finding
+    // 3a — the reviewer's own counterexample). This used to be pinned as
+    // a MISS: the walk was over top-level statements, so a `var` nested
+    // in a top-level block escaped even though it hoists to module scope.
+    // The walk is now a `var`-scope traversal and the shape is caught.
+    it("CATCHES a `var` hoisting out of a top-level BLOCK — `if (flag) { var run = null; }` is a module-level binding", () => {
       expect(
         moduleScopeMutables("if (flag) {\n  var smuggledRun = null;\n}"),
-      ).toStrictEqual([]);
-      // ...and the identical declaration as a top-level statement IS
-      // caught, so the miss above is the nesting and not a broken
-      // detector.
+      ).toStrictEqual(["smuggledRun"]);
+      // The identical declaration as a top-level statement, unchanged.
       expect(moduleScopeMutables("var smuggledRun = null;")).toStrictEqual([
         "smuggledRun",
       ]);
+      // ...and every other block shape a `var` can hide in at module
+      // level, since `if` is not special — a bare block, `try`/`catch`/
+      // `finally`, `switch`, and a loop body all hoist the same way.
+      expect(moduleScopeMutables("{\n  var inBlock = null;\n}")).toStrictEqual([
+        "inBlock",
+      ]);
+      expect(
+        moduleScopeMutables(
+          "try {\n  var inTry = null;\n} catch {\n  var inCatch = null;\n}",
+        ),
+      ).toStrictEqual(["inTry", "inCatch"]);
+      expect(
+        moduleScopeMutables("while (flag) {\n  var inLoop = null;\n}"),
+      ).toStrictEqual(["inLoop"]);
+      expect(
+        moduleScopeMutables(
+          "switch (x) {\n  case 1: {\n    var inCase = null;\n  }\n}",
+        ),
+      ).toStrictEqual(["inCase"]);
+    });
+
+    // THE OTHER HALF OF THE SAME RULE, and the reason this is a
+    // `var`-scope traversal rather than "collect every `var` anywhere".
+    it("does NOT flag a `var` inside a function — `var` hoists to the nearest FUNCTION scope, which is where it stops", () => {
+      expect(
+        moduleScopeMutables("function f() {\n  var local = null;\n}"),
+      ).toStrictEqual([]);
+      // Nested a block deep inside the function, so the exclusion is the
+      // function boundary and not merely "one level down".
+      expect(
+        moduleScopeMutables(
+          "function f() {\n  if (flag) {\n    var local = null;\n  }\n}",
+        ),
+      ).toStrictEqual([]);
+      // Every other node that opens a `var` scope, on the same rule.
+      expect(
+        moduleScopeMutables("const f = () => {\n  var local = null;\n};"),
+      ).toStrictEqual([]);
+      expect(
+        moduleScopeMutables(
+          "class C {\n  m() {\n    var local = null;\n  }\n  get g() {\n    var inGetter = null;\n    return inGetter;\n  }\n}",
+        ),
+      ).toStrictEqual([]);
+    });
+
+    // ...and the CONVERSE for `let`, which scopes differently and is
+    // therefore collected differently. A `let` in a top-level block dies
+    // with the block and can never be a module-level carrier, so
+    // collecting it would be a false positive, not a tightening.
+    it("does NOT flag a `let` inside a top-level BLOCK — `let` is block-scoped, so it never reaches module scope", () => {
+      expect(
+        moduleScopeMutables("if (flag) {\n  let blockLocal = null;\n}"),
+      ).toStrictEqual([]);
+      expect(
+        moduleScopeMutables("{\n  let blockLocal = null;\n}"),
+      ).toStrictEqual([]);
+      // The discriminator, side by side: same block, same name, `var`
+      // instead of `let`, and it IS collected.
+      expect(
+        moduleScopeMutables("if (flag) {\n  var blockLocal = null;\n}"),
+      ).toStrictEqual(["blockLocal"]);
     });
   });
 });
