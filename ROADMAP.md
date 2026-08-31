@@ -750,11 +750,16 @@ gate was explicit that without the transcription the criterion evaporates on
 the rename — and Phase RC is titled "the row Concept2 would recognise" and
 closed with zero Concept2 contact.
 
-- [ ] **PR0 — post a reconciled row to `log-dev.concept2.com`, pull `export/`
-      back, and diff.** The cross-connect RC never ran. Carries the wave's six
-      pre-committed probes (spec §PR0): `state` echo, dedup date granularity,
-      zero-rest post, the wrong-value red-proof, the verification stretch, and
-      the eligible-population count. **M**
+- [x] **PR0 — post a reconciled row to `log-dev.concept2.com`, pull `export/`
+      back, and diff.** RUN LIVE 2026-08-31 (result 85557, log-dev user 2211):
+      10/10 posted fields round-trip through the result object; `export/`
+      404s by C2's design on stroke-less rows (the documented reason RC exit
+      (d)'s hatch allows); `state` ECHOED so Branch A is chosen; dedup is
+      second-granular (ErgData copies coexist — PR2 copy carries the
+      warning); zero-rest interval post accepted; raw 0x003F bytes are not
+      the verification format. Report:
+      `docs/monitor/c2-crossconnect-2026-09/`. **One residual: the
+      eligible-population prod count is still owed from James.**
 - [ ] **PR1 — the server broker.** `concept2_links` + auth attempts + four
       `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
       `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**

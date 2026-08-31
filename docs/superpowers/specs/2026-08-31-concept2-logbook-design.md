@@ -66,11 +66,24 @@ are results.
   user-agents to perform authorization requests"; §6 recommends in-app
   browser tabs. The authorize leg therefore runs in the SYSTEM browser /
   in-app browser tab on iOS, never the WebView.
-- **`state`: NOT DOCUMENTED.** C2's authorize parameters as documented:
-  `client_id`, `scope`, `response_type`, `redirect_uri`. No `state`
-  anywhere on the page (anchor F4). Whether C2 echoes it is UNPROVABLE
-  from the docs and is PR0's first probe; both outcomes have a
-  pre-committed design below.
+- **`state`: NOT DOCUMENTED — MEASURED ECHOED (PR0 live, 2026-08-31).**
+  C2's authorize parameters as documented: `client_id`, `scope`,
+  `response_type`, `redirect_uri`; no `state` on the page (anchor F4).
+  The live grant returned it byte-identical. **Branch A is CHOSEN.**
+  Further PR0 measurements that supersede the doc-only claims below:
+  the result object DOES return top-level `rest_time`/`rest_distance`/
+  `stroke_rate` (the omission claim was wrong); `export/{csv,fit,tcx}`
+  404s ("Stroke data not found") on any row without `stroke_data`, so
+  the export oracle is closed until the stroke-data follow-on; dedup is
+  DATETIME-GRANULAR to the second (an ErgData copy coexists — PR2's send
+  copy carries the duplicate warning) and the 409 body names the
+  colliding result id; dates ~3+ days in the future are 422-rejected;
+  a zero-rest `VariableInterval` post is accepted (F11 answered:
+  omission never forced); the raw 0x003F bytes are NOT C2's
+  `verification_code` format (201 with `verified: false`, silently
+  ignored); the logbook web URL is
+  `/profile/{c2_user_id}/log/{result_id}` — the link-out needs both
+  stored ids. Full evidence: `docs/monitor/c2-crossconnect-2026-09/`.
 - **Scopes:** request `user:read,results:write` EXPLICITLY ("Do not rely
   on passing nothing as a scope"); scopes can narrow later but never
   widen (V4).

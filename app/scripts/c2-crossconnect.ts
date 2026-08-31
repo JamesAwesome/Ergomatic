@@ -445,7 +445,10 @@ async function cmdProbeZeroRest(cfg: C2Config): Promise<void> {
       { ...FIXTURE, restSeconds: 0, restMeters: 0 },
       {
         ...FIXTURE_OPTS,
-        date: new Date("2026-09-03T14:00:00Z"),
+        // Past date on purpose: log-dev 422s dates ~3+ days in the future
+        // ("The date of the workout is too far in the future", measured
+        // 2026-08-31 — see the PR0 report's Encoding notes).
+        date: new Date("2026-08-24T14:00:00Z"),
         workoutType: "VariableInterval",
       },
     ),
@@ -464,7 +467,8 @@ async function cmdProbeVerification(cfg: C2Config): Promise<void> {
   await postResult(cfg, {
     ...buildResultPost(FIXTURE, {
       ...FIXTURE_OPTS,
-      date: new Date("2026-09-04T14:00:00Z"),
+      // Past date: log-dev rejects dates ~3+ days ahead (measured 2026-08-31).
+      date: new Date("2026-08-23T14:00:00Z"),
     }),
     verification_code: code,
   });
