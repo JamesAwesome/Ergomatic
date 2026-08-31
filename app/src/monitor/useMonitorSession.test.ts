@@ -38,6 +38,7 @@ import {
   resetForTests as resetHandoffStore,
   currentUnretired as currentUnretiredHandoffForTest,
   retire as retireHandoffForTest,
+  durableState as durableStateForTest,
   commit as commitHandoffForTest,
   read as readHandoffForTest,
   stageRetire as stageRetireForTest,
@@ -2643,7 +2644,82 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     return result;
   }
 
-  it("a denied durable write on the no-conditions-owed close enters held-error, with a receipt — row 7's first shape (denied-from-close)", async () => {
+  // ROW 7's FIRST SHAPE, added at the final fix round (2026-08-30) after
+  // the antagonist's §10 audit found it missing entirely — the row lists
+  // four storage shapes and only three had tests. Denied-from-OPEN is not
+  // a weaker denied-at-close: the durable tier never holds anything at
+  // all, so every downstream reader that falls back to it (Today's guard,
+  // a reload) sees nothing, and the ONLY copy of a live workout is the
+  // store's memory tier. That is §5's "product gain" and §9.5's residual
+  // in the same run, and until this test nothing exercised the shape.
+  it("a denial from the FIRST write on: the record lives in memory alone, the durable tier stays empty, and the failure is receipted at OPEN — row 7's first shape (denied-from-open)", async () => {
+    const restore = installMonitorRunWriteDenial(() => true);
+    try {
+      const { result, fake } = harness({
+        program: ONE_INTERVAL,
+        events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+      });
+      await connect(result);
+      await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+
+      // THE RECORD EXISTS — in memory, open, complete. `commit` writes the
+      // memory tier unconditionally and only ATTEMPTS the durable one
+      // (§1), so a session whose every durable write is refused is still a
+      // recoverable session for as long as this process lives (§4
+      // invariant 1).
+      const entry = currentUnretiredHandoffForTest();
+      expect(entry).not.toBeNull();
+      expect(entry!.run.completedAt).toBeNull();
+      expect(entry!.run.title).toBe(ONE_IDENTITY.title);
+      // ...and the durable tier holds NOTHING. Not stale bytes, not a
+      // partial write — the key was never successfully written once.
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+      expect(durableStateForTest(entry!.sessionKey)).toBeUndefined();
+
+      // THE FAILURE IS ALREADY RECEIPTED, at OPEN — the distinguishing
+      // observable of this shape. The denied-at-close shape's first
+      // `"failed"` verdict arrives at the close; this one's arrives with
+      // the create, before the rower has finished the first interval, and
+      // it is what §9.5 names as the counter for a memory-only session a
+      // later reload loses.
+      const entries = JSON.parse(result.current.exportLog()) as {
+        kind: string;
+        detail: string;
+      }[];
+      const accepted = entries.filter(
+        (e) => e.kind === "store-receipt:commit-accepted",
+      );
+      expect(accepted).not.toHaveLength(0);
+      expect(
+        accepted.every((e) => e.detail.includes('"verdict":"failed"')),
+      ).toBe(true);
+      // No hold has been entered — nothing has CLOSED yet. The held-error
+      // frame belongs to the close, and asserting its absence here is what
+      // keeps this test distinct from the denied-at-close one below rather
+      // than a second copy of it.
+      expect(result.current.holdError).toBeNull();
+      expect(result.current.handoffHeld).toBe(false);
+
+      // ...and when the run finally does close, still denied, THAT is when
+      // the rower is held — the two shapes chained, so the ordering is
+      // pinned rather than assumed.
+      act(() => {
+        fake.injectDisconnect();
+      });
+      await act(async () => {
+        await result.current.endSession();
+      });
+      expect(result.current.handoffHeld).toBe(true);
+      expect(result.current.holdError).toBe("storage-failed");
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it("a denied durable write on the no-conditions-owed close enters held-error, with a receipt — row 7's SECOND shape (denied-at-close)", async () => {
     const restore = installMonitorRunWriteDenial(
       (parsed) =>
         (parsed as { completedAt: string | null }).completedAt !== null,
@@ -2672,7 +2748,16 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       expect(result.current.holdError).toBe("storage-failed");
       const beforeRetry = currentUnretiredHandoffForTest();
       expect(beforeRetry).not.toBeNull();
+      // AN INDEPENDENT LITERAL, not a captured reference (antagonist §10
+      // audit, F-2b: comparing two reads of the same store is a mirror —
+      // it holds whatever the store did, including a bump). This test
+      // knows exactly how many producer commits it made: the create
+      // (`revision 0`, `createMonitorRun`'s own commit at the first live
+      // frame) and the close (`revision 1`, `endSession` -> `closeRecord`).
+      // No boundary lands in this script, so there is no third. The heal
+      // below must leave the number at THAT count.
       const revisionBeforeRetry = beforeRetry!.revision;
+      expect(revisionBeforeRetry).toBe(1);
 
       // Heals: the NEXT durable attempt (Retry's own) succeeds.
       deny = false;
@@ -2690,6 +2775,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       // producer commit").
       const afterRetry = currentUnretiredHandoffForTest();
       expect(afterRetry).not.toBeNull();
+      expect(afterRetry!.revision).toBe(1);
       expect(afterRetry!.revision).toBe(revisionBeforeRetry);
 
       // THE HEADLINE-LOSS CASE ITSELF: a follow-on producer commit, using
@@ -2814,6 +2900,27 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       // A degraded-but-landed write is still a landed write — no hold.
       expect(result.current.holdError).toBeNull();
       expect(result.current.handoffHeld).toBe(false);
+
+      // THE VERDICT ITSELF (antagonist §10 audit, F-2c: this path only
+      // ever pinned `durableState`, never the receipt row 7 names). §10
+      // row 7: "`saved-without-series` sets `durableComplete=false` and
+      // THE RECEIPT SAYS SO." Asserted on the receipt actually piped to
+      // the ring, so a verdict that degraded silently — or one that
+      // reported plain `"saved"` for a copy missing up to ~720 KB of
+      // trace, which is what the staleness metric downstream reads — goes
+      // red here.
+      const receipts = (
+        JSON.parse(result.current.exportLog()) as {
+          kind: string;
+          detail: string;
+        }[]
+      ).filter((e) => e.kind === "store-receipt:commit-accepted");
+      expect(receipts).not.toHaveLength(0);
+      expect(receipts[receipts.length - 1]!.detail).toContain(
+        '"verdict":"saved-without-series"',
+      );
+      const key = currentUnretiredHandoffForTest()!.sessionKey;
+      expect(durableStateForTest(key)?.durableComplete).toBe(false);
     } finally {
       Storage.prototype.setItem = original;
     }
