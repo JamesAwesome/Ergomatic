@@ -94,7 +94,10 @@ type ObserveTransport = Transport & {
  *  `render()` instead would be seeding past the producer (recurring failure
  *  24) and could not fail if the component read it at the wrong time. */
 function observeTransport(
-  connectGate?: Promise<void>,
+  /** A single promise gates every `connect()`; a function gates the Nth one
+   *  (1-based) independently, which is what a test needs to hold TWO
+   *  attempts open at once. */
+  connectGate?: Promise<void> | ((n: number) => Promise<void> | undefined),
   onConnect?: () => void,
 ): ObserveTransport {
   const inner = createFakeTransport({
@@ -115,7 +118,9 @@ function observeTransport(
     async connect(id: string) {
       transport.connects += 1;
       onConnect?.();
-      await connectGate;
+      await (typeof connectGate === "function"
+        ? connectGate(transport.connects)
+        : connectGate);
       return inner.connect(id);
     },
     async write(uuid: string, bytes: Uint8Array) {

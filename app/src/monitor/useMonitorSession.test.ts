@@ -6937,6 +6937,73 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
     Reflect.deleteProperty(navigator, "storage");
   });
 
+  // ATTEMPT OWNERSHIP. `cancel()` retires an in-flight attempt by bumping
+  // `attemptRef`; the abandoned attempt then unwinds through its own
+  // `finally`, which must NOT release the `connectingRef` claim a NEWER
+  // attempt is holding. Pinned here rather than at a component, because no
+  // screen offers Connect while an attempt is live — the single-flight
+  // guard is only observable by calling the hook directly, and this hook is
+  // shared with the production connected flow.
+  it("an abandoned attempt's unwind does not release a newer attempt's connect claim", async () => {
+    const gates = [0, 1].map(() => {
+      let resolve!: () => void;
+      const promise = new Promise<void>((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    });
+    let connects = 0;
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+    });
+    const transport = {
+      ...fake,
+      async connect(id: string) {
+        connects += 1;
+        await gates[connects - 1]?.promise;
+        return fake.connect(id);
+      },
+    };
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+      }),
+    );
+
+    // Attempt 1 parks inside connect(); cancel retires it while it is there.
+    act(() => void result.current.connect());
+    await act(async () => {
+      await flush();
+    });
+    expect(connects).toBe(1);
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    // Attempt 2 parks too, and now owns the claim.
+    act(() => void result.current.connect());
+    await act(async () => {
+      await flush();
+    });
+    expect(connects).toBe(2);
+
+    // Attempt 1 unwinds underneath it.
+    await act(async () => {
+      gates[0]!.resolve();
+      await flush();
+    });
+
+    // A third call must still be refused — attempt 2 is live and unfinished.
+    act(() => void result.current.connect());
+    await act(async () => {
+      await flush();
+    });
+    expect(connects).toBe(2);
+  });
+
   it("an explicit persistence opt-out reaches pairing without calling or logging Storage Manager", async () => {
     const persistMock = vi.fn().mockResolvedValue(true);
     Object.defineProperty(navigator, "storage", {
