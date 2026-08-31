@@ -758,8 +758,9 @@ closed with zero Concept2 contact.
       second-granular (ErgData copies coexist — PR2 copy carries the
       warning); zero-rest interval post accepted; raw 0x003F bytes are not
       the verification format. Report:
-      `docs/monitor/c2-crossconnect-2026-09/`. **One residual: the
-      eligible-population prod count is still owed from James.**
+      `docs/monitor/c2-crossconnect-2026-09/`. Eligible-population count
+      MEASURED (James, prod, 2026-08-31): **6 of 20 rows** qualify for the
+      Send affordance — nonzero, and RC-1's columns confirmed populating.
 - [ ] **PR1 — the server broker.** `concept2_links` + auth attempts + four
       `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
       `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**

@@ -122,15 +122,12 @@ independent reasons this cannot pass yet.
 
 ## Eligible-population count
 
-**OWED — James runs on prod** (deploy host, `~/Ergomatic`):
-
-```sql
-SELECT count(*) FILTER (WHERE ended_by = 'finished'
-                        AND work_seconds IS NOT NULL
-                        AND work_meters IS NOT NULL) AS eligible,
-       count(*) AS total_rows
-FROM session_logs;
-```
+**MEASURED (James, prod, 2026-08-31): 6 eligible of 20 total rows** —
+`docker compose exec postgres psql` on the deploy host, counting
+`ended_by = 'finished' AND work_seconds IS NOT NULL AND work_meters IS
+NOT NULL`. Nonzero: the Send affordance has a real first audience, and
+RC-1's work columns are confirmed populating in production (unlike the
+machineSummary precedent this check exists because of).
 
 ## Result web URL shape
 
