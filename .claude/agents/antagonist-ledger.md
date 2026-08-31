@@ -4344,10 +4344,15 @@ work-only definitions; PR0-before-PR1; RF25 seam ownership.
 - **Enumerate the whole POST parameter table, not the fields you planned to
   send.** `timezone` was not in our design vocabulary, which is exactly why it
   was the finding.
-- **Ask what the read-back CANNOT see.** C2's result object returns no
-  top-level `stroke_rate`/`rest_time`/`rest_distance`, so three of the fields
-  we send are invisible to the export oracle. Oracle blindness found at the
-  ANCHOR pass rather than the exit pass, for once.
+- **Ask what the read-back CANNOT see.** ~~C2's result object returns no
+  top-level `stroke_rate`/`rest_time`/`rest_distance`~~ **FALSIFIED LIVE
+  at PR0 (2026-08-31, result 85557): the result object returns all
+  three** — this pass's enumeration of the response example was itself
+  under-read, the exact failure class it was hunting. The TECHNIQUE
+  stands (the question found a real limit one door over: `export/` 404s
+  entirely on stroke-less rows, "Stroke data not found"); the specific
+  claim does not. A doc-derived field list is a hypothesis until a live
+  response confirms it.
 - **An export of a row you just posted is an ECHO.** It can go red on
   encoding (units, rounding, timezone) and never on meaning. The genuinely
   independent oracle here is ErgData posting the same physical row and

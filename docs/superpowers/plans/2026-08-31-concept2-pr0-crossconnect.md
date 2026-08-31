@@ -1,5 +1,13 @@
 # Wave E PR0 — Concept2 desk cross-connect Implementation Plan
 
+> **EXECUTION STATUS (2026-08-31, reconciled at James's #244 review,
+> finding 6):** Tasks 1-5 executed and reviewed (SDD ledger; commits
+> c099c5e6..cbf03182 + fix wave e379c33d). Task 6's live run happened
+> 2026-08-31 (report: `docs/monitor/c2-crossconnect-2026-09/`) with two
+> operator items still open: the single-process state receipt and the
+> provenance-correct eligibility census. Checkboxes below were tracked
+> in the SDD ledger rather than ticked in this file.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Post one reconciled stored row to `log-dev.concept2.com`, pull the

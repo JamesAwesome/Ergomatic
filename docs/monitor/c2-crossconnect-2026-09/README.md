@@ -15,22 +15,29 @@ rest 120 s / 274 m (walk README W-9; corroborated `oracleCorpusReplay:485`),
 avgStrokeRate 24 and workoutType ordinal 8 (`rests-finished-ring.json:65-66`),
 end wall-stamp `2026-08-25T21:42:03.110Z` (ring line 66).
 
-**Timezone ruling CONFIRMED LIVE:** posted `tz=America/New_York`; C2's
-response carried `date: 2026-08-25 17:42:03` beside
-`date_utc: 2026-08-25 21:42:03` — exactly the capture's wire-vs-wall −4 h.
-The original LA guess would have filed the row three hours wrong, invisibly
-to the echo oracle.
+**Timezone: CONSISTENT, not confirmed by C2 (corrected at James's #244
+review, finding 3 — the earlier "CONFIRMED LIVE" wording was a mirror).**
+C2's `date`/`date_utc` pair derives from the tz WE submitted, so their
+agreement with the capture's wire-vs-wall −4 h shows our arithmetic is
+self-consistent, nothing more. The evidence that the erg's zone is
+America/New_York remains capture-internal (every wire-vs-wall stamp across
+two walks is −4 h) plus the operator's environment; **James's explicit
+confirmation of the erg's zone is still owed.**
 
 ## Auth + state-echo probe
 
 Authorization-code grant completed manually (browser consent on log-dev,
-code pasted). **`state` IS ECHOED** — undocumented on C2's page, but the
-callback URL returned `state=63ed…` byte-identical to the nonce the run
-generated. (The harness transcript's own "NOT ECHOED" line is an artifact:
-the code was exchanged in a second process whose fresh nonce could not
-match the first run's; the byte-identity above is the real answer.)
-**Consequence: the spec's Branch A is chosen** — https callback, server
-binds the user by the state-linked attempt row, no iOS URL scheme needed.
+code pasted). The operator's callback URL returned a `state` byte-identical
+to the nonce his run generated — but that observation spans two processes
+and the committed transcript's own line reads "NOT ECHOED" (the second
+process's fresh nonce could not match), so **it is NOT durable evidence
+(James's #244 review, finding 1). Branch A is PROVISIONAL until a
+single-process re-auth lands the receipt below; Branch B stays in the
+spec until then.** The harness now ENFORCES state (abort before exchange
+on missing/mismatch) and writes a sanitized receipt (sha256 of nonce and
+echo, equality flag) into the session file for committing here:
+
+> **State receipt: PENDING single-process re-auth.**
 
 Operator caution: the authorize URL (`buildAuthorizeUrl`) carries
 `client_id` in the query string. Don't paste it into transcripts, chat
@@ -52,6 +59,11 @@ reading agrees with our stored split exactly (254.8 + 120).
 10/10 match after the visibility fix (see below): type, date, timezone,
 distance, time, weight_class, rest_time (1200), rest_distance (274),
 stroke_rate (24), workout_type (VariableInterval).
+
+**Layer named (finding 3):** this proves the API ENCODING — hand-built
+payload from capture-transcribed values, through C2's validator, back
+matching. It does NOT exercise the stored-row producer → upload route →
+GET seam; that is PR1's RF24 seam test, against these transcripts.
 
 **Research correction, measured:** the claim that the result object omits
 top-level `rest_time`/`rest_distance`/`stroke_rate` is WRONG — both the
@@ -91,11 +103,13 @@ can go red on a wrong encoding, proven live before any green was trusted.
   colliding id (85560) — the product can link "already has this row" to
   the existing result.
 - C same values, date +30 s → **201** ⇒ **DATETIME-GRANULAR (to the
-  second)**. → **The pre-committed datetime branch fires:** an ErgData
-  copy of the same physical row (posted with the monitor's own minute
-  date) will NOT collide with ours; two rows for one piece coexist.
-  PR2's send copy carries the duplicate warning, and the wave ships with
-  that said.
+  second)**. → The pre-committed datetime branch fires. **The ErgData
+  consequence is an INFERENCE (finding 3), stated as such:** measured
+  second-granularity + the wire date's minute resolution imply an
+  ErgData copy of the same physical row would not collide; no actual
+  ErgData post was observed. PR2's duplicate-warning copy rests on this
+  inference; the direct observation (post one physical row from both
+  apps) stays open on the wave.
 - D same instant, time +1 tenth → 201 ⇒ `time` is in the key.
 - E next-day sanity → not run as designed; it instead measured a
   validation bound: **dates ~3+ days in the future are 422-rejected**
@@ -122,12 +136,23 @@ independent reasons this cannot pass yet.
 
 ## Eligible-population count
 
-**MEASURED (James, prod, 2026-08-31): 6 eligible of 20 total rows** —
-`docker compose exec postgres psql` on the deploy host, counting
+**First count (James, prod, 2026-08-31): 6 of 20 rows** on
 `ended_by = 'finished' AND work_seconds IS NOT NULL AND work_meters IS
-NOT NULL`. Nonzero: the Send affordance has a real first audience, and
-RC-1's work columns are confirmed populating in production (unlike the
-machineSummary precedent this check exists because of).
+NOT NULL` — but that predicate OMITS monitor provenance (James's #244
+review, finding 4), so it is an upper bound, not the spec's eligibility.
+**RECOUNT OWED with the exact server predicate:**
+
+```sql
+SELECT count(*) FILTER (WHERE ended_by = 'finished'
+                        AND work_seconds IS NOT NULL
+                        AND work_meters IS NOT NULL
+                        AND device_name IS NOT NULL) AS eligible,
+       count(*) AS total_rows
+FROM session_logs;
+```
+
+What the first count does establish: RC-1's work columns populate in
+production (nonzero, unlike the machineSummary precedent).
 
 ## Result web URL shape
 
@@ -149,12 +174,16 @@ is periodically reset by C2): 85557, 85559-85564.
 *"a row posted to the Concept2 sandbox comes back through `export/`
 matching what we stored, or the reason it cannot is documented."*
 
-**MET, on the documented-reason branch for `export/` and better than the
-criterion asked elsewhere:** the row comes back through C2's result
-object matching what we stored on all ten posted fields (and C2's own
-derived `time_formatted`/`date_utc` independently reconcile with our
-split and our zone); `export/` specifically cannot return it because C2's
-export endpoint requires `stroke_data`, which this wave omits for RC-11's
-documented reason — a C2-side bound, within the exit's bounded hatch
-("a field C2 rejects or does not return"). The stroke_data follow-on
-reopens the export oracle.
+**MET AT THE ENCODING LAYER, on the documented-reason branch for
+`export/`; the layer is named (finding 3):** capture-transcribed stored
+values come back through C2's result object matching on all ten posted
+fields, and C2's own derived `time_formatted` reconciles with our
+work/rest split (374.8 s = 254.8 + 120 — a C2-side computation over our
+numbers, not an echo of a field we sent). `export/` specifically cannot
+return the row because C2's export endpoint requires `stroke_data`,
+which this wave omits for RC-11's documented reason — a C2-side bound,
+within the exit's bounded hatch ("a field C2 rejects or does not
+return"). **Not yet exercised, owed to PR1:** the stored-row → upload
+route → GET seam (RF24). **Owed to close this report:** the
+single-process state receipt and the provenance-correct census above.
+The stroke_data follow-on reopens the export oracle.

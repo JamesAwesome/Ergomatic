@@ -750,17 +750,20 @@ gate was explicit that without the transcription the criterion evaporates on
 the rename — and Phase RC is titled "the row Concept2 would recognise" and
 closed with zero Concept2 contact.
 
-- [x] **PR0 — post a reconciled row to `log-dev.concept2.com`, pull `export/`
-      back, and diff.** RUN LIVE 2026-08-31 (result 85557, log-dev user 2211):
-      10/10 posted fields round-trip through the result object; `export/`
-      404s by C2's design on stroke-less rows (the documented reason RC exit
-      (d)'s hatch allows); `state` ECHOED so Branch A is chosen; dedup is
-      second-granular (ErgData copies coexist — PR2 copy carries the
-      warning); zero-rest interval post accepted; raw 0x003F bytes are not
-      the verification format. Report:
-      `docs/monitor/c2-crossconnect-2026-09/`. Eligible-population count
-      MEASURED (James, prod, 2026-08-31): **6 of 20 rows** qualify for the
-      Send affordance — nonzero, and RC-1's columns confirmed populating.
+- [ ] **PR0 — post a reconciled row to `log-dev.concept2.com`, pull `export/`
+      back, and diff.** RUN LIVE 2026-08-31 (result 85557, log-dev user
+      2211), NEARLY closed — narrowed at James's #244 review: 10/10 posted
+      fields round-trip at the ENCODING layer (the stored-row→upload seam is
+      PR1's RF24 test); `export/` 404s by C2's design on stroke-less rows
+      (the documented reason RC exit (d)'s hatch allows); Branch A
+      PROVISIONAL pending a single-process state receipt; dedup is
+      second-granular and the ErgData-coexistence consequence is a stated
+      INFERENCE (direct two-app observation open); zero-rest interval post
+      accepted; raw 0x003F bytes are not the verification format. Report:
+      `docs/monitor/c2-crossconnect-2026-09/`. First census (6 of 20) is an
+      UPPER BOUND — it omitted monitor provenance; recount with
+      `device_name IS NOT NULL` owed. Box ticks when the receipt and the
+      recount land.
 - [ ] **PR1 — the server broker.** `concept2_links` + auth attempts + four
       `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
       `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**

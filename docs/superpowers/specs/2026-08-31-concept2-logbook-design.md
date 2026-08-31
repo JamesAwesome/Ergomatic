@@ -36,15 +36,13 @@ exercises them.
 - **`weight_class` ruling stands** (James, 2026-08-22, RC phase open):
   a binary H/L asked ONLY at Concept2 link time, never at onboarding.
 
-**Operator steps owed before PR0 runs (anchor F5 — PR0 cannot run
-without them):** the token grant needs BOTH `client_id` and
-`client_secret` ("Obtained from Concept2", `client_secret` Required:
-**Yes** on `POST /oauth/access_token`); repo-root `.env` holds ONE
-40-char value (`LOGBOOK_DEV_KEY`) and the spec does not know which half
-it is. James supplies the dev pair, registers the redirect URI in C2's
-API-key portal ("If using the Authorization Grant, you'll also need to
-register your redirection endpoint"), and creates a `log-dev` account to
-authorize against. Values never enter a transcript or a committed file.
+**Operator steps (anchor F5) — DONE 2026-08-31:** James supplied the dev
+credential pair (`LOGBOOK_CLIENT_ID_DEV`/`LOGBOOK_CLIENT_SECRET_DEV` in
+the root `.env`), registered `http://localhost:8199/c2-callback` in the
+log-dev API-key portal, and authorized with a log-dev account (user
+2211). Values never enter a transcript or a committed file. Still open
+on the operator side: the single-process re-auth receipt (finding 1)
+and the corrected eligibility census (finding 4).
 
 ## Research record
 
@@ -66,24 +64,27 @@ are results.
   user-agents to perform authorization requests"; §6 recommends in-app
   browser tabs. The authorize leg therefore runs in the SYSTEM browser /
   in-app browser tab on iOS, never the WebView.
-- **`state`: NOT DOCUMENTED — MEASURED ECHOED (PR0 live, 2026-08-31).**
-  C2's authorize parameters as documented: `client_id`, `scope`,
+- **`state`: NOT DOCUMENTED — observed echoed on the 2026-08-31 grant,
+  NOT YET DURABLY PROVEN (James's PR #244 review, finding 1).** C2's
+  authorize parameters as documented: `client_id`, `scope`,
   `response_type`, `redirect_uri`; no `state` on the page (anchor F4).
-  The live grant returned it byte-identical. **Branch A is CHOSEN.**
-  Further PR0 measurements that supersede the doc-only claims below:
-  the result object DOES return top-level `rest_time`/`rest_distance`/
-  `stroke_rate` (the omission claim was wrong); `export/{csv,fit,tcx}`
-  404s ("Stroke data not found") on any row without `stroke_data`, so
-  the export oracle is closed until the stroke-data follow-on; dedup is
-  DATETIME-GRANULAR to the second (an ErgData copy coexists — PR2's send
-  copy carries the duplicate warning) and the 409 body names the
-  colliding result id; dates ~3+ days in the future are 422-rejected;
-  a zero-rest `VariableInterval` post is accepted (F11 answered:
-  omission never forced); the raw 0x003F bytes are NOT C2's
-  `verification_code` format (201 with `verified: false`, silently
-  ignored); the logbook web URL is
+  The operator's live grant returned the state byte-identical, but the
+  committed transcript carries a two-process artifact ("NOT ECHOED")
+  and no receipt. **Branch A is PROVISIONALLY chosen; Branch B stays in
+  this spec until a single-process re-auth commits a sanitized
+  equality receipt** (the harness now enforces state and writes the
+  receipt). Other PR0 measurements: dedup is DATETIME-GRANULAR to the
+  second and the 409 body names the colliding result id; dates ~3+
+  days in the future are 422-rejected; a zero-rest `VariableInterval`
+  post is accepted (F11 answered: omission never forced); the raw
+  0x003F bytes are NOT C2's `verification_code` format (201 with
+  `verified: false`, silently ignored); the logbook web URL is
   `/profile/{c2_user_id}/log/{result_id}` — the link-out needs both
-  stored ids. Full evidence: `docs/monitor/c2-crossconnect-2026-09/`.
+  stored ids. **The ErgData-coexistence consequence is an INFERENCE**
+  from second-granularity plus the wire date's minute resolution, not
+  an observed ErgData post; PR2's duplicate-warning copy rests on it
+  and the direct observation (post the same physical row from ErgData)
+  remains open. Full evidence: `docs/monitor/c2-crossconnect-2026-09/`.
 - **Scopes:** request `user:read,results:write` EXPLICITLY ("Do not rely
   on passing nothing as a scope"); scopes can narrow later but never
   widen (V4).
@@ -125,13 +126,15 @@ are results.
   We store `verificationBytes`; format match UNPROVEN — PR0 stretch
   probe, and MOOT until the `date`/timezone mapping is right (anchor K3).
 - **Export:** `GET /api/users/{user}/results/{result_id}/export/{type}`,
-  `csv`/`fit`/`tcx`. **The read-back result object returns** `id,
-  user_id, date, timezone, date_utc, distance, type, time,
-  time_formatted, workout_type, source, weight_class, verified, ranked,
-  comments, privacy` — **no top-level `stroke_rate`, `rest_time` or
-  `rest_distance`**, so three fields we send are invisible to that
-  oracle; PR0's report must say per field which oracle saw it (anchor
-  F10). CSV columns are publicly undocumented; PR0 records them.
+  `csv`/`fit`/`tcx`. **MEASURED LIVE 2026-08-31, replacing this bullet's
+  original doc-derived claim:** the result object DOES return top-level
+  `rest_time`, `rest_distance` and `stroke_rate` (both on the POST echo
+  and a fresh GET of result 85557) — the earlier enumeration that omitted
+  them was wrong, and the diff oracle sees every field we send. `export/`
+  itself is CLOSED to this wave's rows: all three types 404 with
+  "Stroke data not found" on any row without `stroke_data`, so CSV
+  columns stay unrecorded until the stroke-data follow-on. Evidence:
+  `docs/monitor/c2-crossconnect-2026-09/`.
 - **Edit/delete:** PATCH/DELETE exist; DELETE "cannot be undone". Unused
   this wave. **Rate limits:** none currently. **Webhooks** exist — noted
   for the auto-upload follow-on. **No token-revocation endpoint** —
@@ -225,6 +228,16 @@ so we build the RFC 8252 shape:
    way — hidden, not absent; nothing in it is secret. Lifecycle rule:
    turning the flag OFF after users linked hides the surface but deletes
    nothing — links and per-row sent state persist as history.
+   **Availability matrix (James's #244 review, finding 7) — every route,
+   every unavailable input, pinned:**
+   | route | flag off | creds missing | mid-hop (flag off between mint and callback) |
+   | --- | --- | --- | --- |
+   | `GET /link` | `{available:false}` 200 | `{available:false}` 200 | n/a |
+   | `POST /connect` (mint) | 403, no attempt row | 403, no attempt row | n/a |
+   | callback/exchange | 403 BEFORE any token exchange; the attempt row is consumed/expired; NO link row is created | same | same — availability is re-checked AT the callback, not inherited from mint |
+   | `POST /results/:logId` (upload) | 403 `unavailable` | 403 `unavailable` | n/a |
+   A linked user under flag-off: link row persists, upload refuses,
+   surface hidden. PR1 tests one row of this matrix per cell class.
 9. **Prod write approval ORDERS the cutover (James's portal quote,
    PRIMARY, 2026-08-31: "By default, the scopes granted to a client in
    the live environment are user:read and results:read. To create a
