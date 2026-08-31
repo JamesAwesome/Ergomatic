@@ -1160,8 +1160,9 @@ test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)
   // comment said POST /api/workouts was the "ONLY supported producer" —
   // false when written: /api/workouts/bulk (Library IMPORT) also created
   // personal rows and was unguarded until #238's PM gate caught it (C1).
-  // With all three validator callers now guarded, the remaining producers
-  // of a personal same-title row are pre-reservation legacy rows only. The legacy class (rows that took a
+  // With all three request-writing route callers of the validator now
+  // guarded, the remaining producers of a personal same-title row are
+  // pre-reservation legacy rows only. The legacy class (rows that took a
   // reserved title before the check) keeps its gates at the layers that
   // can still produce it: the store contracts (provenance) and
   // Plan.test.tsx (rendering, mocked links). The cross-linked test at the

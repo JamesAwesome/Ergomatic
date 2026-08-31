@@ -410,11 +410,13 @@ function PlanView({
                   recorded. Only pre-validation rows can be this (the POST
                   route now checks the union). The box IS a `.type-badge`
                   (same class, two no-break spaces of content), so its box
-                  model matches every neighbour by construction — the size
-                  check James asked for, done structurally, since no
-                  supported writer can mint such a row for a live
-                  measurement. An UNLINKED row has no stored type at all;
-                  its badge is the plan's own claim and stays. */}
+                  model matches every neighbour by construction — AND by
+                  measurement: `design.spec.ts` injects this exact markup
+                  into the live screen (no supported writer can produce
+                  the row itself) and asserts computed colours, an
+                  in-test 3:1 ratio, and sub-pixel outer geometry against
+                  a real badge. An UNLINKED row has no stored type at
+                  all; its badge is the plan's own claim and stays. */}
               {link !== undefined && rowedType(link) === undefined ? (
                 // James's review (P1): the box is the SOLE carrier of
                 // "stored type unreadable", so it cannot be aria-hidden —

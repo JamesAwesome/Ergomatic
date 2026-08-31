@@ -1362,6 +1362,62 @@ test("builder-draft-restored", async ({ page }) => {
   });
 });
 
+// The unknown-type box, INJECTED (Gate 0 record for #238): no supported
+// writer can produce a row rendering this state — POST /api/logs
+// validates types since #233 — so the capture injects the badge's exact
+// markup into a real done row and shoots the served screen. This is the
+// committed rendering James's design gate approves (the session-local
+// artifact is not citable — RF16); the assertions mirror design.spec's
+// injected measurement so the capture cannot silently show a stale
+// treatment (recurring failure 7).
+test("plan-badge-unknown", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-badge-unknown@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  for (const { title, type } of [
+    { title: "Sea Fret", type: "O2" },
+    { title: "Occluded Front", type: "AT" },
+  ]) {
+    await postLog(page, {
+      workoutTitle: title,
+      workoutType: type,
+      held: "held",
+      pain: 2,
+      advancesPlan: true,
+      steps: [{ label: "Work" }],
+    });
+  }
+  await page.goto("/plan");
+  await expect(page.locator(".plan-row").nth(0)).toHaveAttribute(
+    "href",
+    /\/today\/log\/.+/,
+  );
+  const border = await page.evaluate(() => {
+    const row = document.querySelectorAll(".plan-row")[1]!;
+    const real = row.querySelector(".type-badge") as HTMLElement;
+    const box = document.createElement("span");
+    box.className = "type-badge plan-row-badge-unknown";
+    box.innerHTML =
+      '<span aria-hidden="true">\u00A0\u00A0</span>' +
+      '<span class="visually-hidden">type unknown</span>';
+    real.replaceWith(box);
+    return getComputedStyle(box).borderTopColor;
+  });
+  // The capture is only a record of the CURRENT treatment if the current
+  // treatment is what rendered.
+  expect(border).toBe("rgb(111, 106, 95)"); // --ink-4
+  // Top rows only: an 84-row strip buries the one row this capture is
+  // the record OF (recurring failure 7's scrolled-past trap, inverted).
+  const seq = (await page.locator(".plan-sequence").boundingBox())!;
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "plan-badge-unknown.png"),
+    clip: { x: seq.x, y: seq.y, width: seq.width, height: 200 },
+  });
+});
+
 test("releases", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-releases@e2e.test",

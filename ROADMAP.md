@@ -1041,18 +1041,22 @@ Each needs erg time or a deliberate recording session.
   seed key replacing `isOnboardingTitle`'s remaining call sites. Name
   conflicts in general REMAIN allowed.
 
-- **The reservation is a NON-ADDITIVE API change and takes a COORDINATED
-  TAG (PM gate C3, corrected at James's re-review).** A request that used
-  to 201 now 400s, and the shipped v0.28.0 client has no pre-check — its
-  Builder renders the generic "Couldn't save this workout. Try again."
-  retry loop for a permanent 400. The first disposition ("ride the next
-  tag") contradicted `docs/RELEASING.md`'s own rule: old TestFlight builds
-  talk to the newest server, and **a breaking change forces a coordinated
-  tag**. Disposition now: #238 merges WITH its release notes and tag —
-  the notes PR lands immediately behind the merge, the tag (v0.29.0) cuts
-  on it, and the note names the reservation. The exposure window is the
-  minutes between the two merges, not an open-ended wait. This item
-  closes when that tag exists.
+- **The reservation is a NON-ADDITIVE API change: coordinated tag, and an
+  honestly-named residual (PM gate C3, corrected twice at James's
+  reviews).** A request that used to 201 now 400s. First disposition
+  ("ride the next tag") broke RELEASING.md's breaking-change rule; the
+  second overclaimed that the tag CLOSES the exposure. It does not: an
+  installed v0.28.0 client keeps sending the now-rejected request until
+  its owner updates — there is no version negotiation or forced-update
+  path — and sees the Builder's generic "Couldn't save this workout. Try
+  again." retry loop. What the coordinated tag does buy: the notes ship
+  in the SAME tagged commit (#238 carries its own v0.29.0 notes), so the
+  moment a build exists that explains the rule, it is the newest build.
+  **Residual: pre-update clients hitting a reserved title get the generic
+  copy, for as long as they stay un-updated. Accepted by James with his
+  merge approval of #238, which presented this text.** Building version
+  negotiation for two reserved strings was considered and declined as
+  disproportionate.
 
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
