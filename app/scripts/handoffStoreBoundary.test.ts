@@ -60,10 +60,16 @@
 //     `moduleScopeMutables`: a run held in a `const` object's mutable
 //     property, and anything outside `src/monitor/`. Both pinned as
 //     MISSES below. Each scanned file is parsed EXACTLY ONCE, at
-//     `parseModule` — this file's only `ts.createSourceFile` call site,
-//     asserted as such — and the detector, the diagnostics pin and the
+//     `parseModule`, and the detector, the diagnostics pin and the
 //     statement-count check all read that one tree, so none of them can
-//     be looking at a differently-named parse than the others.
+//     be looking at a differently-named parse than the others. That is
+//     MEASURED, not conventional (PR #239 review round 8): the scan
+//     counts `parseModule` INVOCATIONS against the number of files it
+//     scanned, and `moduleScopeMutables` records the file name it was
+//     actually handed so the detector's tree and the diagnostics pin's
+//     tree are asserted to be the same one. Round 7's definition-site
+//     count is kept beside those, retitled for what it really covers —
+//     a second parser HELPER, not a second parse.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
 // The compiler the repo already builds with (`app/package.json`
@@ -273,9 +279,44 @@ function bindingNames(name: ts.BindingName): string[] {
  * rather than as a cascade of type assertions. Callers scanning the real
  * tree pass the real relative path for exactly that reason.
  */
+/**
+ * HOW MANY TIMES `parseModule` HAS BEEN CALLED (PR #239 review round 8,
+ * reviewer finding 2). Round 7 gated the single-parse property by counting
+ * `ts.createSourceFile(` CALL SITES in this file's own text, and the
+ * reviewer's regression walked straight past it: adding a SECOND
+ * `parseModule(...)` call at the scan — `moduleScopeMutables(parseModule(
+ * readFileSync(file), "module.ts"))` — reparses the file under the wrong
+ * name for the detector alone while the diagnostics pin still reads the
+ * correctly-named tree, and the DEFINITION-site count stays at one because
+ * no new `ts.createSourceFile(` was written.
+ *
+ * The invariant that regression violates is not "one definition site" but
+ * "exactly one PARSE PER SCANNED FILE", which is a count of INVOCATIONS.
+ * This counter is that count, and the scan asserts it against the number of
+ * files it actually scanned.
+ */
+let parseModuleInvocations = 0;
+
 function parseModule(source: string, fileName: string): ts.SourceFile {
+  parseModuleInvocations += 1;
   return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
 }
+
+/**
+ * THE FILE NAMES THE DETECTOR ITSELF WAS HANDED (PR #239 review round 8,
+ * reviewer finding 2 — the identity half).
+ *
+ * The counter above catches an EXTRA parse. This catches a WRONG one, and
+ * it does so without any arithmetic: `moduleScopeMutables` records the
+ * `fileName` of the tree it is actually given, so the scan can assert that
+ * the detector saw the same path the diagnostics pin vouched for. A
+ * hardcoded name reaching the detector by any route — a second parse, a
+ * swapped variable, a helper that re-parses internally — puts the wrong
+ * string in this list.
+ *
+ * Reset per test by the scan that reads it; nothing else consumes it.
+ */
+const detectorSawFileNames: string[] = [];
 
 /**
  * The SYNTACTIC diagnostics OF AN ALREADY-PARSED FILE, used as the "did
@@ -388,6 +429,10 @@ function opensVarScope(node: ts.Node): boolean {
  * language the bytes are in.
  */
 function moduleScopeMutables(sourceFile: ts.SourceFile): string[] {
+  // The identity instrument (round 8): what this detector was ACTUALLY
+  // handed, recorded from inside it rather than inferred from the call
+  // site. See `detectorSawFileNames`.
+  detectorSawFileNames.push(sourceFile.fileName);
   const names: string[] = [];
   // `NodeFlags.Const` and `NodeFlags.Let` are the only flags that
   // distinguish the three keywords: `var` sets neither.
@@ -544,10 +589,17 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
   // statement.
   it("no production file under src/monitor/ outside the store DECLARES a module-scope binding — every `var` in the module's function scope (blocks and for-heads included) and every top-level `let` — the syntax-visible half of §1's 'or holds a module-level run'", () => {
     const found: string[] = [];
+    // ONE PARSE PER SCANNED FILE, MEASURED (PR #239 review round 8). Both
+    // instruments are zeroed here rather than in a hook, so this test owns
+    // the whole window it asserts over.
+    parseModuleInvocations = 0;
+    detectorSawFileNames.length = 0;
+    const scanned: string[] = [];
     for (const file of listFiles(SRC_ROOT, [".ts", ".tsx"])) {
       const rel = toPosixRelative(file);
       if (!rel.startsWith("src/monitor/")) continue;
       if (TEST_FILE.test(rel) || rel === STORE_FILE) continue;
+      scanned.push(rel);
       // ONE parse per file, and all three checks below read THAT tree
       // (PR #239 review round 7). The diagnostics pin can no longer be
       // asserting on a differently-named copy than the detector consumes,
@@ -593,6 +645,29 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
       "src/monitor/transports/capacitorBle.ts: initPromise",
       "src/monitor/useMonitorSession.ts: receiptChannelOwner",
     ]);
+
+    // ── THE SINGLE-PARSE PROPERTY, AS A PROPERTY OF THIS SCAN (PR #239
+    // review round 8, reviewer finding 2) ──────────────────────────────
+    //
+    // Round 7's gate counted `ts.createSourceFile(` DEFINITION sites and
+    // pinned them at one. The reviewer's regression — wrapping the
+    // detector's argument in a second `parseModule(readFileSync(file),
+    // "module.ts")` right here — leaves that number at one and still hands
+    // the detector a `.tsx` file parsed under a `.ts` name, while the
+    // diagnostics pin above vouches for a DIFFERENT tree. The invariant it
+    // breaks is a count of INVOCATIONS, so that is what is counted.
+    //
+    // Non-vacuity first: a scan that matched nothing would satisfy every
+    // equality below trivially.
+    expect(scanned.length).toBeGreaterThan(0);
+    // Exactly one parse per scanned file — no more (a reparse) and no
+    // fewer (a cached or skipped file silently reusing another's tree).
+    expect(parseModuleInvocations).toBe(scanned.length);
+    // ...and the IDENTITY, which needs no arithmetic at all: the detector
+    // was handed each scanned path itself, in order, recorded from inside
+    // `moduleScopeMutables`. A hardcoded file name reaching the detector by
+    // ANY route puts the wrong string here, whatever the count says.
+    expect(detectorSawFileNames).toStrictEqual(scanned);
   });
 });
 
@@ -857,20 +932,23 @@ describe("the boundary detectors themselves (both directions)", () => {
       ).toStrictEqual([]);
     });
 
-    // THE SINGLE-PARSE PROPERTY, ASSERTED RATHER THAN ASSUMED (PR #239
-    // review round 7). Everything above rests on there being exactly one
-    // place in this file where a `ts.SourceFile` is created: that is what
-    // makes a file-name regression unrepresentable instead of merely
-    // unlikely. Round 6 had three parse calls behind one helper and the
-    // reviewer's detector-only mutation passed 23/23 — the diagnostics
-    // pin was asserting on its own correctly-named copy. This test is
-    // that structural claim, in the only form text can carry it: count
-    // the `ts.createSourceFile` call sites in this file's own source,
-    // comments stripped (the header and the doc comments name the API in
-    // prose several times). A second parse site — anywhere, including a
-    // well-meant convenience helper — moves the number and fails here,
-    // which is the moment to ask what it is allowed to disagree about.
-    it("creates a ts.SourceFile at EXACTLY ONE call site — a second parse is where a file-name regression could hide", () => {
+    // ONE PARSER DEFINITION SITE — AND WHAT THAT DOES NOT COVER (PR #239
+    // review round 7, RETITLED AND BOUNDED at round 8).
+    //
+    // This counts DEFINITION sites: places in this file's own text where
+    // `ts.createSourceFile` is written. Keeping it is worth one line —
+    // a second parser helper is a real way for two trees to diverge, and
+    // this is the moment to ask what they are allowed to disagree about.
+    //
+    // **It is NOT the single-parse gate, and round 7's title said it was.**
+    // The reviewer's round-8 regression proved the difference: a second
+    // `parseModule(...)` INVOCATION at the scan reparses under the wrong
+    // name for the detector alone and leaves this number at one, because
+    // no new `ts.createSourceFile(` was written. That invariant — one parse
+    // per scanned file, and the detector handed the tree the diagnostics
+    // vouched for — is gated in the scan test itself, by
+    // `parseModuleInvocations` and `detectorSawFileNames`.
+    it("writes `ts.createSourceFile` at EXACTLY ONE DEFINITION site — a second parser helper is where two trees could start to disagree (the per-file INVOCATION count lives in the scan test)", () => {
       const self = stripComments(readFileSync(import.meta.filename, "utf8"));
       expect(self.match(/ts\.createSourceFile\(/g)).toHaveLength(1);
     });
