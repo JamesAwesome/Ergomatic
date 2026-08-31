@@ -253,8 +253,21 @@ async function cmdAuth(cfg: C2Config): Promise<void> {
 //     "Piece 1 (finished) | 24", matching the raw byte independently.
 // date/tz: the 0x0039 summary's own wall-clock stamp —
 //     docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json:66
-//     ("wall=2026-08-25T21:42:03.110Z"); tz per the walk README's own walk
-//     (James, America/Los_Angeles — no override stated for this session).
+//     ("wall=2026-08-25T21:42:03.110Z"). tz: the walk README states NO zone
+//     for this session (grepped, nothing found — a prior comment here cited
+//     James/America/Los_Angeles and that citation was invented, RF16). The
+//     zone below is instead SOURCED from the capture's own wire stamp:
+//     rests-finished-ring.json:65 pairs wire=2026-08-25 17:40 with the same
+//     wall=2026-08-25T21:42:03.110Z — the monitor's local clock reads wall
+//     minus 4 h (wire is minute-resolution and reads ~2 min slow, matching
+//     that line's own "DIAGNOSTIC only" caveat). UTC-4 in August is EDT
+//     (America/New_York), and every other summary-log-stamp line under
+//     docs/monitor/sessions/ shows the same wall-4h relationship (e.g.
+//     walk-2026-08-28*/*.json: wire=2026-08-28 21:22/21:27/17:36 vs
+//     wall=...T01:24:18/01:29:11/21:38:28 — all -4h), corroborated by this
+//     repo's own commits being authored at -0400 (`git log -1 --format=%cI`
+//     on this branch: 2026-08-31T11:01:49-04:00). PENDING JAMES'S
+//     CONFIRMATION — no walk README states the PM5's set timezone directly.
 // See PR0 report §fixture.
 export const FIXTURE: StoredRowFixture = {
   workSeconds: 254.8,
@@ -266,8 +279,36 @@ export const FIXTURE: StoredRowFixture = {
 export const FIXTURE_OPTS: PostOpts = {
   weightClass: "H",
   date: new Date("2026-08-25T21:42:03.110Z"),
-  tz: "America/Los_Angeles",
+  tz: "America/New_York",
+  // I-1: the flagship post must exercise every field the mapping sends —
+  // the spec's bounded hatch forbids "we chose not to send it" (spec
+  // §PR0). workoutType decoded straight off this capture:
+  // rests-finished-ring.json:66 ("0x0039 decoded: ... workoutType=8 ...");
+  // ordinal 8 -> VariableInterval per
+  // docs/superpowers/specs/2026-08-24-just-row-design.md:303 ("a programmed
+  // row is `VariableInterval`" — this fixture is a programmed 3-interval
+  // walk, so VariableInterval is the correct mapping, not just an available
+  // one).
+  workoutType: "VariableInterval",
 };
+
+// Minor 2: a non-aliased account can 404 the `me` alias on result routes —
+// use the stored session's c2UserId when present, falling back to `me`.
+function resultsBase(session: Session): string {
+  return session.c2UserId !== undefined
+    ? `/api/users/${session.c2UserId}/results`
+    : "/api/users/me/results";
+}
+
+async function fetchResult(
+  cfg: C2Config,
+  id: string,
+): Promise<Record<string, unknown>> {
+  const session = await loadSession();
+  const res = await authedFetch(cfg, `${resultsBase(session)}/${id}`);
+  const wrapper = (await res.json()) as { data?: Record<string, unknown> };
+  return wrapper.data ?? (wrapper as Record<string, unknown>);
+}
 
 async function authedFetch(
   cfg: C2Config,
@@ -295,7 +336,16 @@ async function postResult(
     method: "POST",
     body: JSON.stringify(body),
   });
-  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  // I-2: a non-JSON body must still be captured and printed — a 4xx body IS
+  // the finding for probes 3 and 5, and the old `.catch(() => ({}))` threw
+  // it away silently.
+  const raw = await res.text();
+  let json: Record<string, unknown>;
+  try {
+    json = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    json = { rawBody: raw };
+  }
   console.log(`POST → ${res.status}`);
   console.log(JSON.stringify(json, null, 2));
   return { status: res.status, json };
@@ -308,19 +358,16 @@ async function cmdPost(cfg: C2Config): Promise<void> {
 async function cmdDiff(cfg: C2Config): Promise<void> {
   const id = process.argv[3];
   if (!id) throw new Error("usage: … diff <result_id>");
-  const res = await authedFetch(cfg, `/api/users/me/results/${id}`);
-  const wrapper = (await res.json()) as { data?: Record<string, unknown> };
-  const result = wrapper.data ?? (wrapper as Record<string, unknown>);
+  const result = await fetchResult(cfg, id);
   for (const d of diffRowVsResult(FIXTURE, FIXTURE_OPTS, result)) {
     console.log(
       `${d.verdict.padEnd(28)} ${d.field}: expected ${String(d.expected)} got ${String(d.cameBack)}`,
     );
   }
+  const session = await loadSession();
+  const base = resultsBase(session);
   for (const type of ["csv", "fit", "tcx"] as const) {
-    const ex = await authedFetch(
-      cfg,
-      `/api/users/me/results/${id}/export/${type}`,
-    );
+    const ex = await authedFetch(cfg, `${base}/${id}/export/${type}`);
     console.log(
       `export/${type} → ${ex.status} ${ex.headers.get("content-type")}`,
     );
@@ -330,19 +377,36 @@ async function cmdDiff(cfg: C2Config): Promise<void> {
 
 async function cmdProbeRed(cfg: C2Config): Promise<void> {
   // RF21: prove the diff can go red. Post the fixture with time encoded in
-  // SECONDS (the classic wrong encoding), then diff — `time` must MISMATCH.
+  // SECONDS (the classic wrong encoding). I-3: the verdict must NOT be read
+  // off the POST echo — C2's create response is not guaranteed to be the
+  // same shape a later GET returns. Self-contained instead: fetch the
+  // stored result back (the same path cmdDiff uses) and diff THAT, only
+  // trusting a MISMATCH when cameBack is actually defined and wrong.
   const wrong = buildResultPost(FIXTURE, {
     ...FIXTURE_OPTS,
     date: new Date(FIXTURE_OPTS.date.getTime() + 86_400_000), // avoid 409 with the real post
     timeOverrideTenths: Math.round(FIXTURE.workSeconds),
   });
   const { json } = await postResult(cfg, wrong);
-  const result = (json as { data?: Record<string, unknown> }).data ?? json;
+  const posted = (json as { data?: Record<string, unknown> }).data ?? json;
+  const id = posted.id;
+  if (id === undefined || id === null) {
+    console.log(
+      `PROBE red-proof: FAILED to get an id back from the POST (raw: ${JSON.stringify(json)}) — cannot self-verify; run \`diff <id>\` by hand once you have one`,
+    );
+    return;
+  }
+  console.log(`PROBE red-proof: posted id=${String(id)}, fetching it back`);
+  const result = await fetchResult(cfg, String(id));
   const timeDiff = diffRowVsResult(FIXTURE, FIXTURE_OPTS, result).find(
     (d) => d.field === "time",
   );
+  const proven = timeDiff !== undefined && timeDiff.cameBack !== undefined;
+  const verdict = proven
+    ? timeDiff.verdict
+    : `UNPROVEN — cameBack is ${String(timeDiff?.cameBack)}, not a defined-and-wrong value`;
   console.log(
-    `PROBE red-proof: time verdict = ${timeDiff?.verdict} (MUST be MISMATCH)`,
+    `PROBE red-proof: time verdict (from a fresh GET of id=${String(id)}, not the POST echo) = ${verdict} (MUST be MISMATCH; double-check by hand with \`diff ${String(id)}\`)`,
   );
 }
 
@@ -360,14 +424,14 @@ async function cmdProbeDedup(cfg: C2Config): Promise<void> {
   console.log("B: exact repost (expect 409 — proves dedup fires at all)");
   await postResult(cfg, buildResultPost(FIXTURE, at(0)));
   console.log(
-    "C: same day, +30 SECONDS (THE deciding case: 409 = day-granular, 201 = datetime-granular)",
+    "C: same day, +30 SECONDS (THE deciding case: 409 = coarser than seconds, 201 = datetime-granular — a +30s probe can't tell day from minute granularity; the wire date is minute-resolution, exactly the ErgData shape)",
   );
   await postResult(cfg, buildResultPost(FIXTURE, at(30_000)));
   console.log(
-    "D: same date, time field +1 tenth (expect 201 — time is in the key)",
+    "D: SAME instant as A/B, time field +1 tenth (expect 201 — time is in the key)",
   );
   await postResult(cfg, {
-    ...buildResultPost(FIXTURE, at(60_000)),
+    ...buildResultPost(FIXTURE, at(0)),
     time: c2Tenths(FIXTURE.workSeconds) + 1,
   });
   console.log("E: next day, identical values (expect 201 — sanity)");
@@ -424,13 +488,14 @@ if (command && commands[command]) {
     console.error(e);
     process.exit(1);
   });
-} else if (
-  command !== undefined ||
-  process.argv[1]?.endsWith("c2-crossconnect.ts")
-) {
-  // Imported by the test file: no command, no dispatch, no output.
-  if (command !== undefined) {
-    console.error(`unknown command: ${command}`);
-    process.exit(1);
-  }
+} else if (command !== undefined) {
+  console.error(`unknown command: ${command}`);
+  process.exit(1);
+} else if (process.argv[1]?.endsWith("c2-crossconnect.ts")) {
+  // Run directly with no command — usage, not silence.
+  console.log(
+    `usage: c2-crossconnect.ts <${Object.keys(commands).join(" | ")}>`,
+  );
 }
+// Else: imported by the test file (command undefined, not the entry script)
+// — no dispatch, no output.
