@@ -64,16 +64,12 @@ are results.
   user-agents to perform authorization requests"; §6 recommends in-app
   browser tabs. The authorize leg therefore runs in the SYSTEM browser /
   in-app browser tab on iOS, never the WebView.
-- **`state`: NOT DOCUMENTED — observed echoed on the 2026-08-31 grant,
-  NOT YET DURABLY PROVEN (James's PR #244 review, finding 1).** C2's
-  authorize parameters as documented: `client_id`, `scope`,
-  `response_type`, `redirect_uri`; no `state` on the page (anchor F4).
-  The operator's live grant returned the state byte-identical, but the
-  committed transcript carries a two-process artifact ("NOT ECHOED")
-  and no receipt. **Branch A is PROVISIONALLY chosen; Branch B stays in
-  this spec until a single-process re-auth commits a sanitized
-  equality receipt** (the harness now enforces state and writes the
-  receipt). Other PR0 measurements: dedup is DATETIME-GRANULAR to the
+- **`state`: NOT DOCUMENTED on C2's page (anchor F4) — MEASURED ECHOED,
+  DURABLY (single-process re-auth 2026-08-31, sha256 equality receipt
+  committed in the PR0 report; the harness enforces state and aborts
+  before exchange on mismatch, abort path mutation-proven).**
+  **Branch A is CHOSEN.** Branch B below stays as the recorded
+  contingency design, not a live option. Other PR0 measurements: dedup is DATETIME-GRANULAR to the
   second and the 409 body names the colliding result id; dates ~3+
   days in the future are 422-rejected; a zero-rest `VariableInterval`
   post is accepted (F11 answered: omission never forced); the raw

@@ -21,23 +21,32 @@ C2's `date`/`date_utc` pair derives from the tz WE submitted, so their
 agreement with the capture's wire-vs-wall −4 h shows our arithmetic is
 self-consistent, nothing more. The evidence that the erg's zone is
 America/New_York remains capture-internal (every wire-vs-wall stamp across
-two walks is −4 h) plus the operator's environment; **James's explicit
-confirmation of the erg's zone is still owed.**
+two walks is −4 h) plus the operator's environment — and **James confirmed
+it directly (2026-08-31): "yes its in america/new_york."** The fixture's
+`tz` is settled on operator authority, with the capture stamps as
+corroboration.
 
 ## Auth + state-echo probe
 
 Authorization-code grant completed manually (browser consent on log-dev,
-code pasted). The operator's callback URL returned a `state` byte-identical
-to the nonce his run generated — but that observation spans two processes
-and the committed transcript's own line reads "NOT ECHOED" (the second
-process's fresh nonce could not match), so **it is NOT durable evidence
-(James's #244 review, finding 1). Branch A is PROVISIONAL until a
-single-process re-auth lands the receipt below; Branch B stays in the
-spec until then.** The harness now ENFORCES state (abort before exchange
-on missing/mismatch) and writes a sanitized receipt (sha256 of nonce and
-echo, equality flag) into the session file for committing here:
+code pasted). The first run's echo observation spanned two processes and
+was ruled non-durable at James's #244 review (finding 1); the harness was
+then changed to ENFORCE state (abort before any exchange on
+missing/mismatch) and to write a sanitized receipt. **A single-process
+re-auth on 2026-08-31 landed it — `state` IS ECHOED, Branch A PROVEN:**
 
-> **State receipt: PENDING single-process re-auth.**
+```json
+{
+  "nonceSha256": "225c34121dc760afdeee4fce8d1ed811034875c4543b5369dcc5490c678801d2",
+  "echoedSha256": "225c34121dc760afdeee4fce8d1ed811034875c4543b5369dcc5490c678801d2",
+  "equal": true,
+  "at": "2026-08-31T17:43:44.422Z"
+}
+```
+
+(sha256 of the run's nonce and of the callback's echoed state, computed
+and compared inside the one process that generated the nonce; the abort
+path is mutation-proven in the unit suite.)
 
 Operator caution: the authorize URL (`buildAuthorizeUrl`) carries
 `client_id` in the query string. Don't paste it into transcripts, chat
@@ -136,23 +145,15 @@ independent reasons this cannot pass yet.
 
 ## Eligible-population count
 
-**First count (James, prod, 2026-08-31): 6 of 20 rows** on
+**MEASURED on the spec's full predicate (James, prod, 2026-08-31,
+recounted at #244 finding 4): 6 eligible of 20 total rows**, with
 `ended_by = 'finished' AND work_seconds IS NOT NULL AND work_meters IS
-NOT NULL` — but that predicate OMITS monitor provenance (James's #244
-review, finding 4), so it is an upper bound, not the spec's eligibility.
-**RECOUNT OWED with the exact server predicate:**
-
-```sql
-SELECT count(*) FILTER (WHERE ended_by = 'finished'
-                        AND work_seconds IS NOT NULL
-                        AND work_meters IS NOT NULL
-                        AND device_name IS NOT NULL) AS eligible,
-       count(*) AS total_rows
-FROM session_logs;
-```
-
-What the first count does establish: RC-1's work columns populate in
-production (nonzero, unlike the machineSummary precedent).
+NOT NULL AND device_name IS NOT NULL`. The first count (same 6/20,
+without the provenance term) was an upper bound; the recount shows every
+work-column row also carries `device_name`, so 6 is the true count. The
+Send affordance has a real first audience, and RC-1's columns are
+confirmed populating in production (unlike the machineSummary precedent
+this check exists because of).
 
 ## Result web URL shape
 
