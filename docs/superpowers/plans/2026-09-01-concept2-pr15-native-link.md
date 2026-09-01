@@ -102,8 +102,14 @@ browser-side option in the set achieves it at all), §4 (the device-check
 card — round 7 dropped the on-device
 cookie-persistence probe entirely, since its premise, the shared-jar
 speculation, no longer exists), and §5 (the full antagonist verdict).
-Assembled from evidence, no invention; still ends by asking for James's
-ruling, still choosing nothing itself.
+Assembled from evidence, no invention. **Ruling MADE, 2026-09-01
+(ACCEPT the bounded residual for the dark plumbing; `C2_LINK_ENABLED=1`
+on any real cohort is GATED on the fully authenticated form of (g) —
+surface binding AND identity-checked completion on BOTH web and native
+before the token exchange, or an explicit re-ruling — `ROADMAP.md`'s C2
+account injection row, `2026-09-01-concept2-pr15-gate.md` §6).** The
+package's seven-option, four-bucket survey stands as the evidence the
+ruling was made against, not as a still-open menu.
 
 - [ ] **Step 1:** Write both docs. **Step 2:** `pnpm format:check` untouched-by-prettier rule for root docs does not apply (these live under docs/superpowers — still never Prettier root markdown). **Step 3: Commit.**
 

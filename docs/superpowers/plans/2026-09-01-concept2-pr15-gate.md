@@ -1,12 +1,17 @@
 # PR1.5 design gate — the account-injection ruling
 
 **What this is:** the evidence package for the ruling the design spec
-flagged as owed (`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`
-§Architecture 3, Branch A: "SUSPECTED, decision owed (PR1 premise pass,
-2026-08-31)"). Everything below is derived from code read this session or a
-committed measurement; the seven options in §3 are presented neutrally
-with their costs. **This document does not choose one — that is James's
-ruling, asked for at the end.**
+originally flagged as owed (`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`
+§Architecture 3, Branch A — that section quoted this doc's own
+"SUSPECTED, decision owed (PR1 premise pass, 2026-08-31)" phrasing until
+the ruling below landed; the spec now reads RULED, and cites this
+document rather than repeating the quote). Everything below is derived
+from code read this session or a committed measurement; the seven
+options in §3 are presented neutrally with their costs. **§3-§5 present
+the evidence without choosing between the options; §6 carries James's
+actual ruling, made 2026-09-01 — read the sections in that order and the
+"neutral" framing below still makes sense as the record the ruling was
+drawn from.**
 
 **Revision history:**
 - Fix round 2 (P1b) rebuilt §3 around the CONSENTING PRINCIPAL after the
@@ -667,9 +672,18 @@ this cookie and already resolves it to a `SessionUser`; wiring it (or an
 equivalent check with the route's own `htmlPage` error shape, since
 `requireUser` today replies with a bare JSON 401, not this route's HTML
 error pages) onto `/api/concept2/callback`, then comparing
-`attempt.userId === req.user.id` before ever calling
-`store.upsertLink`, closes the web path the same way (g)'s own route
-closes native. **Restated, round 12: (g) achieves principal binding
+`attempt.userId === req.user.id` **BEFORE `client.exchangeCode(code)`
+runs — right after `consumeAttempt` returns the attempt, not merely
+before `store.upsertLink` writes the link** (James's own ruling names
+this exact ordering, spec §Architecture 3, PR1.5's plan doc), closes the
+web path the same way (g)'s own route closes native. Placing the check
+before the exchange, not just before the write, matters concretely: a
+mismatch caught only before `upsertLink` still means the server has
+already spent the ONE-TIME authorization `code` against C2 and briefly
+held a real access/refresh token pair for an unauthorized completion,
+burning the legitimate victim's only chance to retry and creating
+tokens-in-memory the design has no reason to ever produce for a
+rejected request. **Restated, round 12: (g) achieves principal binding
 ONLY in this fully-authenticated-BOTH-paths form. The surface column
 from round 10 is still worth keeping (route integrity has real value —
 it stops a native-intended nonce from silently completing through a
@@ -764,7 +778,9 @@ the EXISTING `/api/concept2/callback` route itself** — today it has NO
 check preserving this route's existing `htmlPage` HTML error shape
 (`requireUser` itself replies bare JSON 401, a mismatch with every other
 branch in this route), PLUS the `attempt.userId === req.user.id`
-comparison before `store.upsertLink` runs — the SAME shape (g)'s own new
+comparison **BEFORE the C2 token exchange (`client.exchangeCode(code)`)
+runs — not merely before `store.upsertLink` writes the link; James's own
+ruling names this exact ordering** — the SAME shape (g)'s own new
 native route already gets, just retrofitted onto an EXISTING route
 instead of a new one. PER-SURFACE redirect selection at mint time (the
 spec's own Branch B line: "`redirect_uri` chosen per surface at mint
@@ -848,21 +864,28 @@ question. No substitute check exists until `/start` is built (see the
 walk card's own "Also worth a glance" section, which already carries this
 correction).
 
-Still owed, and this time genuinely blocked on which option James picks:
+**Still owed — no longer "blocked on which option James picks" (§6: RULED,
+ACCEPT + gate `C2_LINK_ENABLED=1` on fully authenticated (g)); these are
+now build items against a picked shape, not open questions:**
 
-- The callback's "Linked"/"Continue" page (whatever copy the ruling below
-  settles on) renders as designed after a REAL consent grant, not the dev
-  probe's fake URL.
-- **If either half of (d) is chosen: a REAL device measurement of whether
-  a cookie set by `/start` survives the full `/start` → C2 → `/callback`
-  round trip inside `SFSafariViewController`.** §2's revised credential
-  fact only establishes this is PLAUSIBLE, not proven — this is the
-  measurement that turns the browser-bound continuation from a plausible
-  design into a verified one, and it cannot happen before `/start` exists
-  to test.
-- If (c) or (d) is chosen: the Confirm/Continue tap's interaction with the
-  return signal (§3's finding 7) needs its OWN device check before PR2
-  ships, not an assumption.
+- The callback's "Linked"/"Continue" page renders as designed after a
+  REAL consent grant (both surfaces, now authenticated per §3(g)), not
+  the dev probe's fake URL.
+- (g)'s own three preconditions, none built yet: the `surface` column
+  and migration (round 10), the dual-route
+  `attempt.userId === req.user.id` check BEFORE token exchange on both
+  `/api/concept2/callback` and the new `/api/concept2/exchange` (round
+  12), and Concept2's own approval of a new native `redirect_uri`.
+- PR2's detect-identity treatment (§6: option (b), shipping alongside)
+  — the callback/linked card naming which Ergomatic account the link
+  goes to.
+- **Moot, since (d) was not the ruling: the two bullets this section
+  used to carry about (d) specifically** (a device measurement of
+  `/start`'s cookie surviving the full round trip; the Confirm/Continue
+  tap's interaction with the return signal) — kept as a record of what
+  this section once asked for, not a live TODO. If a future re-ruling
+  ever revisits (d), those checks would need to be redone from scratch,
+  not resurrected from here.
 
 ## 5. Antagonist pass — full TRIAD, REVISE (round 3); scoped re-reviews
 at rounds 5-7

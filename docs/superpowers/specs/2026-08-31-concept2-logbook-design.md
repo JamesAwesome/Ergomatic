@@ -200,26 +200,44 @@ the in-repo precedent; C2 has no SDK, so we build the RFC 8252 shape:
      firing on a Control Centre swipe without the app ever leaving the
      foreground, and it made a lost-link banner fire nine times over a
      link that never dropped (`adapters/appLifecycle.ts:27-31`).
-     **SUSPECTED, decision owed
-     (PR1 premise pass, 2026-08-31):** the nonce binds the exchange to
-     `attempt.user_id` alone, so an attacker who mints on their OWN
-     Ergomatic account and delivers the resulting authorize URL to a
-     victim links the VICTIM's Concept2 account under the ATTACKER's
-     user. **Corrected round 9 — "bounded today only by `ALLOWED_EMAILS`"
-     was already stale when PR1.5's own gate package shipped: four real
-     bounds exist, not one, and seven options across four buckets are on
-     the table (`2026-09-01-concept2-pr15-gate.md` §1/§3), one of them
-     (g) this Branch B section's own shape.** James's call is owed
-     before prod cutover — see the gate doc, not this bullet, for the
-     current bound count and option set.
-   - **Branch B (C2 does not echo `state`):** the callback cannot bind a
-     user, so the CODE must come back through the app: register a
-     private-use scheme (Info.plist), C2 redirects to
+     **RULED (James, 2026-09-01, PR1.5 design gate — `2026-09-01-concept2-pr15-gate.md`):
+     ACCEPT the bounded residual for the dark plumbing today (four real
+     bounds — `ALLOWED_EMAILS`, the `C2_LINK_ENABLED` dark flag, one live
+     attempt per user, the 15-minute window — not the two the original
+     "SUSPECTED" framing named).** `C2_LINK_ENABLED=1` on any REAL cohort
+     is GATED, not free, on the fully authenticated form of option (g)
+     below (not chosen yet, but the condition of activation): the nonce
+     alone binding the exchange, as this section originally described,
+     is the failure mode the ruling closes before flag flip, not a
+     standing design. Seven options across four buckets (accept, detect,
+     physically-confirm, app-bind) are catalogued in the gate doc's §3;
+     this bullet states only the RULED activation contract, not the
+     survey.
+   - **Branch B (C2 does not echo `state`) — THE RULED ACTIVATION SHAPE,
+     not a contingency design:** the callback cannot bind a user by nonce
+     alone, so BOTH completion paths authenticate the caller and compare
+     `attempt.userId === req.user.id` BEFORE the C2 token exchange runs
+     (never after, and never merely before writing the link — a failed
+     comparison must prevent the exchange call itself, not just the
+     write that follows it). On native: register a private-use scheme
+     (Info.plist), C2 redirects to
      `haus.waffle.ergomatic://oauth/callback?code=…`, an `appUrlOpen`
-     handler posts it to authed `POST /api/concept2/exchange {code}`, and
-     the server does the same exchange bound to the caller. Web keeps the
-     https callback (cookie exists there) with `redirect_uri` chosen per
-     surface at mint time.
+     handler posts `{code, state}` to authed `POST /api/concept2/exchange`
+     carrying the app's Keychain bearer, and the server checks the
+     caller's id against the attempt's before exchanging. On web: the
+     EXISTING `/api/concept2/callback` — unauthenticated today, per
+     `server/routes/concept2.ts:171`'s own "NO requireUser — the nonce
+     binds" comment — gains the SAME check, using the `erg_session`
+     cookie that already exists for web sessions (`server/auth/cookies.ts`)
+     and is already delivered on C2's redirect back to our own
+     first-party origin; "a cookie exists there" is no longer a reason to
+     skip authenticating it, it is what makes authenticating it possible
+     with no new mechanism. BOTH routes additionally enforce the
+     attempt's own `surface` (a new column, `2026-09-01-concept2-pr15-gate.md`
+     §3(g)) so a nonce minted for one surface cannot complete on the
+     other — surface enforcement is route integrity; the identity check
+     above is what makes the binding real. `redirect_uri` is chosen per
+     surface at mint time, exactly as originally drafted.
    - Attempt rows expire (15 min) and are single-use; expiry/garbage
      collection is the server's, not a cron.
 4. **Link routes:** `GET /api/concept2/link` → `{linked, weightClass,
