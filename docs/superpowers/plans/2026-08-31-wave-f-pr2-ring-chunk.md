@@ -7,12 +7,16 @@ not one overwritten slot) and readable (one deliberate door, no session
 required), and the resume edge gets the instrument §4's freeze-predicate fix
 is waiting on, plus the RC-29 latch counter.
 
-**Architecture:** A small storage module owns a three-slot rotated history
-that teardown writes alongside the existing key (which stays, untouched, for
-`readMonitorLogStash`). The hook's existing resume handler gains one
-first-frame instrument entry and a stale-run terminator entry; teardown's
-stash gains a latch-count line. A new quiet You-screen door lists the saved
-logs and copies any one.
+**Architecture:** A small storage module owns a three-entry history, held
+under ONE atomic localStorage key and keyed on the connected session's own
+identity (an `upsertSessionLog` write, not a rotation), that teardown writes
+alongside the existing `ergomatic:last-session-log` key (which stays,
+untouched, for `readMonitorLogStash`). The hook's existing resume handler
+gains one first-frame instrument entry and a stale-run terminator entry;
+teardown's stash gains a latch-count line. You's own DIAGNOSTICS row routes
+to `/you/diagnostics` — a menu layer James added at Gate 0 — whose "Monitor
+logs" card routes to `/you/diagnostics/monitor-logs`, the screen that lists
+the saved logs and copies any one.
 
 **Tech Stack:** React 19 client, localStorage, the existing event-ring
 (`eventLog.ts`) and replay idioms. No server changes, no migration.
@@ -51,80 +55,101 @@ task.
 
 | File | Responsibility |
 | --- | --- |
-| `src/monitor/sessionLogHistory.ts` (new) | the three-slot rotated history: write, list, read; never-throw |
+| `src/monitor/sessionLogHistory.ts` (new) | the three-entry history under ONE atomic key, keyed on session identity (`upsertSessionLog`): write, list, read; never-throw |
 | `src/monitor/sessionLogHistory.test.ts` (new) | its unit suite |
-| `src/monitor/useMonitorSession.ts` | stash() rotation call; §3 resume instruments; §6 latch counter |
+| `src/monitor/useMonitorSession.ts` | stash()'s `upsertSessionLog` call, keyed on `sessionIdRef` (minted once per `connect()`); §3 resume instruments; §6 latch counter |
 | `src/monitor/useMonitorSession.test.ts` | instrument unit legs |
 | `domain/monitor/pm5/parse.ts` + `domain/monitor/types.ts` | additive `rawRowingState` on the frame |
-| `src/you/MonitorLogs.tsx` (new) + `src/You.tsx` + `src/shell/AppRoutes.tsx` | the door row, route, and screen |
-| `src/index.css` | door/screen styles |
+| `src/you/Diagnostics.tsx` (new, added at Gate 0) + `src/you/MonitorLogs.tsx` (new) + `src/You.tsx` + `src/shell/AppRoutes.tsx` | the You DIAGNOSTICS row → `/you/diagnostics` menu → "Monitor logs" card → `/you/diagnostics/monitor-logs` screen |
+| `src/index.css` | menu/door/screen styles |
 | e2e + screenshots specs | door flow + captures |
 
 ---
 
-### Task 1: The three-slot history and the rotation
+### Task 1: The three-entry history, atomic and identity-keyed
+
+> **SHIPPED SHAPE, reconciled at review round 2 (PR #258, items 1+2) —
+> rewritten here rather than left as a superseded draft, per the "no
+> canonical claim survives uncorrected" rule.** The plan below originally
+> sketched a three-KEY rotation (`h1`/`h2`/`h3`) and a push/update-in-place
+> call pair; final whole-branch review's M-6 replaced the three keys with
+> ONE atomic key before merge, and review round 2 then replaced the
+> push/update pair with a single identity-keyed `upsertSessionLog` after it
+> shipped two defects (a double-teardown burning two history slots on one
+> session; a denied write flipping a per-call guard and corrupting the
+> WRONG entry on retry). What follows describes the shipped design.
 
 **Files:**
 - Create: `src/monitor/sessionLogHistory.ts`,
   `src/monitor/sessionLogHistory.test.ts`
-- Modify: `src/monitor/useMonitorSession.ts` (the `stash()` closure, ~:3395-
-  3412 — find it by the `ergomatic:last-session-log` write)
+- Modify: `src/monitor/useMonitorSession.ts` (the `stash()` closure, and
+  `connect()`'s own per-connect reset block, which mints the session
+  identity `stash()` reads)
 
 **Interfaces:**
 - Produces (Task 3 consumes):
 
 ```ts
 export interface SessionLogHistoryEntry {
-  /** 1 = newest. */
+  /** 1 = newest, derived from array position. */
   slot: 1 | 2 | 3;
-  /** ISO timestamp written at rotation — the display "when". */
+  /** The logical connected session this entry belongs to — opaque to this
+   *  module, minted once per `connect()` by `useMonitorSession.ts`. */
+  sessionId: string;
+  /** ISO timestamp written at write time — the display "when". */
   savedAt: string;
   /** The ring's exported JSON, byte-identical to what teardown stashed. */
   exported: string;
 }
-/** Rotates `exported` into slot 1, shifting 1→2→3, oldest evicted.
+/** Searches the history for an entry already carrying `sessionId`:
+ *  replaces it in place if found (no rotation, list length unchanged), or
+ *  inserts a fresh entry at the head — evicting past `MAX_ENTRIES` (3) —
+ *  if not. Every `stash()` call for the SAME logical session, however many
+ *  times teardown() runs for it, converges on one entry by construction.
  *  Never throws. */
-export function pushSessionLog(exported: string, savedAt: Date): void;
-/** Newest-first list of whatever slots exist. Never throws; a corrupt or
- *  denied slot is skipped, not fatal. */
+export function upsertSessionLog(
+  sessionId: string,
+  exported: string,
+  savedAt: Date,
+): void;
+/** Newest-first list of whatever entries exist. Never throws; a corrupt or
+ *  denied entry is skipped, not fatal. */
 export function listSessionLogs(): SessionLogHistoryEntry[];
 ```
 
-- Storage shape (client-only diagnostics; additive; no migration): three
-  localStorage keys `ergomatic:session-log-h1|h2|h3`, each the JSON
-  `{"savedAt": "<ISO>", "exported": "<ring JSON>"}`. Documented in the
-  module header as diagnostics-tier data: losable, never a record.
+- Storage shape (client-only diagnostics; additive; no migration): ONE
+  localStorage key, `ergomatic:session-log-history`, holding
+  `JSON.stringify({sessionId, savedAt, exported}[])` — newest first, capped
+  at 3, written in a single `setItem` call so a denied/throwing write can
+  never leave a partial rewrite (M-6). Documented in the module header as
+  diagnostics-tier data: losable, never a record.
 
-- [ ] **Step 1: failing unit tests** for `pushSessionLog`/`listSessionLogs`:
-  rotation order (three pushes → h1 newest, fourth push evicts the oldest);
-  list skips a corrupt slot (plant garbage JSON in h2, expect h1+h3);
-  DENIED GETTER (mock `Storage.prototype.getItem` to throw — the idiom
-  `monitorRun.test.ts`'s "the storage GETTER itself throws" leg uses) reads
-  as empty list; denied setItem is a silent no-op. Byte-identity: what goes
-  in comes back exact.
-- [ ] **Step 2: run, red.** `pnpm exec vitest run --project unit -t
-  "sessionLogHistory"` (confirm which project the sibling monitor modules
-  run in first; both summary lines).
-- [ ] **Step 3: implement** the module (wrap every storage access in try;
-  rotation reads h2→h3 then h1→h2 then writes h1).
-- [ ] **Step 4: green.**
-- [ ] **Step 5: wire the rotation into `stash()`** — one added call
-  `pushSessionLog(exported, nowDate())` immediately after the existing
-  `localStorage.setItem("ergomatic:last-session-log", exported)` line,
-  inside the same try (its catch comment already says "diagnostics never
-  break a teardown"). The hook already has a `nowDate` dep — use it, never
-  `new Date()` directly if the file's convention injects time (check the
-  hook's existing time idiom and follow it).
-- [ ] **Step 6: hook-level test**: the existing teardown-stash unit legs in
-  `useMonitorSession.test.ts` (find them by `last-session-log`) gain one
-  assertion: after two full connect→teardown cycles, `listSessionLogs()`
-  returns two entries, newest first, and slot 1's `exported` equals the
-  current `last-session-log` value. Run; green.
-- [ ] **Step 7: commit**, then **mutations (RF21):** (a) make
-  `pushSessionLog` write h1 without shifting → the rotation-order leg goes
-  red; (b) remove the `stash()` wiring call → the hook-level leg goes red
-  while the module suite stays green (proving the seam leg is the one that
-  sees the wiring). Record failure text; revert via git checkout.
+- [x] **Step 1: failing unit tests** for `upsertSessionLog`/`listSessionLogs`:
+  insert order (three distinct sessions → newest first, a fourth evicts the
+  oldest); replace-in-place for a repeated session id (list length
+  unchanged); list skips a corrupt or pre-identity (missing `sessionId`)
+  entry; DENIED GETTER reads as empty list; denied setItem is a silent
+  no-op and never corrupts the prior array; byte-identity: what goes in
+  comes back exact; the identity-bound regressions (a double-write for one
+  session id converges on one entry; a denied write for a new session never
+  wins a wrong-entry replace on retry).
+- [x] **Step 2: run, red; implement; green.**
+- [x] **Step 3: wire into `stash()`** — `upsertSessionLog(sessionId,
+  exported, nowDate())` where `sessionId` is `sessionIdRef.current`, minted
+  once per `connect()` (alongside that function's other per-connect ref
+  resets) and read, never re-minted, at every `stash()` call — including a
+  second `teardown()` invocation for the SAME logical session (the Cancel
+  defect) and the burst linger's second stash within one `teardown()` call.
+- [x] **Step 4: hook-level tests**: two full connect→teardown cycles leave
+  two history entries; the Cancel-interleaving regression (an unmount's
+  `teardown()` racing `cancel()`'s own call) leaves exactly ONE entry; the
+  burst linger's second stash still converges on one entry, carrying the
+  fresher bytes.
+- [x] **Step 5: commit**, then **mutations (RF21):** (a) make
+  `upsertSessionLog` always insert, never match by `sessionId` → the
+  Cancel-interleaving leg (and the burst-linger leg) go red; (b) match by
+  `savedAt` instead of `sessionId` → the identity-bound "converges on one
+  entry" legs go red. Record failure text; revert.
 
 ### Task 2: The resume-edge instrument (§3) and the latch counter (§6)
 
@@ -191,34 +216,37 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
 
 ### Task 3: The door — **BLOCKED until its Gate 0 clears**
 
-> **SUPERSEDED IN PART by the approved Gate-0 artifact (rev 3) and the
-> external review:** the shipped shape is You → `DIAGNOSTICS` →
-> `/you/diagnostics` (menu) → `/you/diagnostics/monitor-logs` — a menu
-> layer James added at the gate; the direct `/you/monitor-logs` route below
-> is the pre-gate draft. Storage moved to ONE atomic key
-> (`ergomatic:session-log-history`) at the review's item 4; the h1/h2/h3
-> scheme below is historical. The artifact and the code are the record.
-
+**SHIPPED SHAPE** (the approved Gate-0 artifact, rev 3, and the external
+review that followed it): You's own DIAGNOSTICS row routes to
+`/you/diagnostics` — a menu layer James added at the gate, extensible for
+future diagnostic tools — whose "Monitor logs" card routes to
+`/you/diagnostics/monitor-logs`, the screen below. There is no direct
+`/you/monitor-logs` route; the menu layer sits between them.
 
 The controller presents the rendered artifact (James approves BEFORE this
 task is dispatched). The approved copy and placement then bind verbatim.
 
 **Files:**
-- Create: `src/you/MonitorLogs.tsx`, `src/you/MonitorLogs.test.tsx`
-- Modify: `src/You.tsx` (one quiet row under `ResetBaselineSetup`),
-  `src/shell/AppRoutes.tsx` (route `/you/monitor-logs`), `src/index.css`
+- Create: `src/you/Diagnostics.tsx` (the menu, added at Gate 0),
+  `src/you/MonitorLogs.tsx`, `src/you/MonitorLogs.test.tsx`,
+  `src/you/Diagnostics.test.tsx`
+- Modify: `src/You.tsx` (one quiet DIAGNOSTICS row), `src/shell/AppRoutes.tsx`
+  (routes `/you/diagnostics` and `/you/diagnostics/monitor-logs`),
+  `src/index.css`
 - Test: also `src/You.test.tsx` (the row), `e2e/` (see Task 4)
 
 **Interfaces:**
 - Consumes: Task 1's `listSessionLogs()` and `SessionLogHistoryEntry`.
 
 - [ ] **Step 1: failing client tests**: the You row navigates to
-  `/you/monitor-logs`; the screen lists entries newest-first with their
-  `savedAt` rendered per the Gate-0-approved format; empty state renders
-  the approved empty copy; COPY on an entry writes that entry's `exported`
-  bytes to the clipboard byte-identically (the `ConnectionLogSheet` COPY
-  LOG contract: one serialization, never re-stringified) and flips its
-  label per the approved states; a corrupt slot simply doesn't render.
+  `/you/diagnostics`; that menu's "Monitor logs" card navigates to
+  `/you/diagnostics/monitor-logs`; the screen lists entries newest-first
+  with their `savedAt` rendered per the Gate-0-approved format; empty state
+  renders the approved empty copy; COPY on an entry writes that entry's
+  `exported` bytes to the clipboard byte-identically (the
+  `ConnectionLogSheet` COPY LOG contract: one serialization, never
+  re-stringified) and flips its label per the approved states; a corrupt
+  entry simply doesn't render.
 - [ ] **Step 2: red, implement** (screen reads `listSessionLogs()` once at
   mount — `useState` initializer, the repo's on-open snapshot idiom;
   clipboard via `navigator.clipboard.writeText` with the failed state, the
