@@ -133,11 +133,18 @@ function programFor(
  *  completed interval actual (65s/250m, well past
  *  `MIN_MEASURABLE_ELAPSED_SECONDS`, `summaryModel.ts`'s own
  *  `isMeasuredReading`), live, unfinished, the precondition every assertion
- *  below rests on. All three `elapsedSeconds`/`distanceMeters` fields are
- *  SESSION-cumulative, matching 0x0031's own top-level pair
- *  (`useMonitorSession.test.ts`'s `fillingLowTimeline` is the same idiom):
- *  20s/70m mid interval 0, the boundary at 65s/250m, then 75s/260m — 10s/10m
- *  into interval 1. */
+ *  below rests on. The two STATUS ticks' own `elapsedSeconds`/
+ *  `distanceMeters` are PER-INTERVAL on the wire — 0x0031's own top-level
+ *  pair (`fake.ts`'s `updateSessionAvgSplit` doc comment: "PER-INTERVAL on
+ *  the wire, not session-cumulative", citing `pm5/parse.ts`'s
+ *  `toMonitorFrame` doc and `connectedMetricsReplay.test.ts`), never
+ *  session-cumulative. Only the BOUNDARY event's own, SEPARATE
+ *  `cumulativeElapsedSeconds`/`cumulativeDistanceMeters` pair genuinely
+ *  accumulates (`FakeBoundaryEvent`'s own doc comment): 20s/70m mid
+ *  interval 0 (identical to the session total there, since interval 0 is
+ *  the session's first), the boundary's own actual and cumulative pair
+ *  both at 65s/250m (same reason), then 10s/10m into interval 1 — a fresh
+ *  per-interval count, not a continuation of the session's 65s/250m. */
 function timeline(): FakeTimelineEvent[] {
   return [
     {
@@ -169,8 +176,8 @@ function timeline(): FakeTimelineEvent[] {
       atMs: 300,
       kind: "status",
       workoutState: WORKOUTSTATE_INTERVALWORKTIME,
-      elapsedSeconds: 75,
-      distanceMeters: 260,
+      elapsedSeconds: 10,
+      distanceMeters: 10,
       spm: 22,
       currentSplit: 118,
       heartRateBpm: 166,
