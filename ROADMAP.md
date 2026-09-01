@@ -291,6 +291,17 @@ rower's work silently.
       to the open-item register: the distance-goal suppression covers all
       six committed captures, so the F2b count bound has been compared on
       ZERO pairs ("clean but VACUOUS", its own words). **S**
+      **§3 SHIPS in Wave F PR 2**, alongside §2 and §6
+      (`useMonitorSession.ts`): every resume edge records `resume-first-frame`
+      (the arrival gap, whether the first post-resume frame repeats the
+      pre-background `freezeKey` triple, the raw `rowingState` byte); a
+      repeating run is then tracked as `resume-stale-run` and closed with a
+      consecutive-identical count by one of FOUR closers, each named in the
+      entry's own `endedBy=`: a differing frame (`changed`), a second resume
+      edge arriving while it is still open (`resumed`), a per-run reset
+      (`reset`), or teardown (`teardown`). §4's wait is now on the next
+      natural occurrence producing a reading through it, not on unbuilt
+      plumbing.
 - [x] **~~Recover the full ring before the lifecycle spec is written~~ —
       STRUCK 2026-08-31: it is UNRECOVERABLE, and the loss was ours.**
       `ergomatic:last-session-log` is written UNCONDITIONALLY on every
@@ -308,6 +319,15 @@ rower's work silently.
       `2026-08-31-lifecycle-design.md` §2, which is now a PREREQUISITE:
       the ring is the only instrument that reaches production, and today it
       can only be read by destroying it.
+      **§2 SHIPS in Wave F PR 2** (the ring chunk; PR number filled in at
+      merge): a three-slot history beside the single perishable key (the last
+      three LOGICAL connected sessions' exports all survive at once, one entry
+      per logical session, `src/monitor/sessionLogHistory.ts`) and the ungated
+      door that lists and copies them (You → DIAGNOSTICS → Monitor logs,
+      `src/you/Diagnostics.tsx`/`MonitorLogs.tsx`, Gate 0 approved 2026-09-01) —
+      exactly the fix that would have saved the pocketed-phone ring, now in
+      place for the next one. The same PR also ships §3 (the resume-edge frame
+      instrument) and §6 (the RC-29 latch counter, see that register row).
 
 - [ ] **Correct resume** (was LM PR 2). James's ruling, 2026-08-20:
       **"CORRECT RESUME, not a background mode."** **Unblocked 2026-08-26** —
@@ -740,10 +760,16 @@ for a stranger — no backup, and no idea when their app breaks.
       summary defect survived five hardware walks and a phase close: a rower
       can never report it, and James caught it only by looking before saving.
       **The evidence already survives the process kill** —
-      `useMonitorSession.ts:2617` writes `ergomatic:last-session-log` to
+      `useMonitorSession.ts` writes `ergomatic:last-session-log` to
       localStorage unconditionally, its own comment citing "no console on
-      iOS". It has no reader. **Whatever this item builds, a rower must be
-      able to send a saved row's diagnostics without knowing a gesture.**
+      iOS". **PARTIALLY DISCHARGED by Wave F PR 2 (#258, 2026-09-01):** the
+      gesture-free half is done — a three-slot history and the You →
+      DIAGNOSTICS → Monitor logs door give any of the last three connected
+      sessions' logs a reader and a COPY, no gesture, no erg. The SAVED-ROW
+      half is NOT: `session_logs` still has no diagnostics column, so once a
+      row's three slots are evicted its diagnostics are gone. This item's
+      remaining demand narrows to: **a rower must be able to send a SAVED
+      row's diagnostics — storage that outlives the three-slot window.**
 - [ ] **An in-app "something went wrong" that reaches a human.** Pairs with the
       reporter above, and with the support URL the store surface will owe. **S**
 
@@ -983,13 +1009,46 @@ X" is a real disposition — most of these are single files.
 
 ## Codebase-audit owners
 
+- **v0.32.0's notes owe the DIAGNOSTICS door its affordance sentence** (PM
+  gate on #258, 2026-09-01): where it is (You → DIAGNOSTICS → Monitor logs),
+  WHEN a rower would tap it (something went wrong in a connected session and
+  someone asks for the log), and what COPY does. The note is the affordance,
+  not the announcement — the row itself never says when to tap it. Ships in
+  the v0.32.0 notes PR, tag on that (#231/#238 shape).
+- **The ring history's three-slot eviction has an incident-shaped failure
+  mode, filed with its trigger** (PM gate on #258): the identity upsert
+  gives one slot per LOGICAL SESSION, so three fumbled reconnects after an
+  incident evict the incident, and fumbled reconnects are what incidents
+  produce. Ruled at the gate: ship three, no invented size/rowing threshold
+  on the teardown path. **Trigger: if a field read ever finds the wanted
+  session already evicted, raise the slot count in that PR.**
+  **NARROWED by #258's round-5 fix, and the narrowing is in this row's
+  favour:** a logical session now begins at the GATT CONNECT, not at the
+  `connect()` call. An attempt that never got a link — no transport, the
+  chooser dismissed, a radio throw, or Cancel pressed while the scan/connect
+  was still in flight — creates no new logical session or identity. Its
+  teardown may re-stash a RETAINED prior logical session under that
+  unchanged id: updating the existing history entry, or inserting it if
+  the prior write never landed (denied-then-recovered). With no retained
+  prior session, teardown writes nothing. Only a session that actually
+  reached the monitor ever owns a slot. This row previously read
+  "a failed pairing or a connect-then-cancel is still a fresh `connect()`,
+  hence a fresh session id and its own slot", which was true of the code
+  then and is false of it now. Evidence:
+  `app/src/monitor/useMonitorSession.ts` (`LogicalSession`, and `stash()`'s
+  single read of it), `app/src/monitor/sessionLogHistory.ts`, spec §0.3.
 - **RC-29 — the 2.5 s banner, UNMEASURED on the current build.** Returned here
   from Wave F on 2026-08-31, the same day it was folded in, because the number
   it carried was pre-fix: `decideResumeLatch` (v0.24.0) killed the nine-banner
   rate, and the next day's build-759 ring shows one correct latch for one
   39.4 s lock. No threshold moves until ordinary use produces a fresh rate —
   `2026-08-31-lifecycle-design.md` §6's latch counter is what produces it.
-  **Rides the lifecycle spec's PR 2** (the ring chunk). Evidence:
+  **§6 SHIPS in Wave F PR 2**: `stash()` records `latch-count
+  latches=<n> resumes=<n>` into every teardown's own ring export, so the
+  count is available from ordinary use once the build reaches a phone —
+  this row's own clause is now ARMED, not just written. **Still no
+  threshold moves until that first ordinary-use rate lands here**; this
+  row stays open until it does. Evidence:
   `docs/superpowers/specs/2026-08-27-link-authority-design.md` rev 4,
   `docs/monitor/sessions/walk-2026-08-27/lock-phone-ring.json`.
 - **The continuity count bound has never been exercised unsuppressed.**

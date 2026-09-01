@@ -995,11 +995,23 @@ function withDoorMisses(stash: string): string {
  *  never-rowed case ever falls through to the second read" was false in a
  *  way that cost the rower something. `ergomatic:last-session-log` is
  *  localStorage: it survives relaunch where the rowed sessionStorage key
- *  does not, it is written on EVERY connected teardown including a failed
- *  pairing and a connect-then-cancel, and nothing ever clears it. So after
- *  a rower's first ever Connect, EVERY log screen fell through to it and
- *  wore `MONITOR LOG · COPY` for the life of the install — on by-hand
- *  entries that never touched a monitor.
+ *  does not, it is written on EVERY connected teardown that belongs to a
+ *  real session — a connect-then-cancel included — and nothing ever clears
+ *  it. So after a rower's first ever Connect, EVERY log screen fell through
+ *  to it and wore `MONITOR LOG · COPY` for the life of the install — on
+ *  by-hand entries that never touched a monitor.
+ *
+ *  (Narrowed by PR #258's round-5 fix, which does NOT weaken any of the
+ *  above: a pre-GATT attempt — no transport, chooser dismissed, radio
+ *  throw, Cancel mid-scan — creates no new logical session or identity.
+ *  Its teardown may re-stash a RETAINED prior logical session under that
+ *  unchanged id: legacy keys rewritten, and the history entry updated in
+ *  place — or INSERTED, if the prior session's own write never landed
+ *  (the denied-then-recovered case). With no retained prior session,
+ *  teardown writes nothing. This comment used to say a pre-link failure
+ *  "writes nothing", then "never a new slot"; both overstated it. Everything that did reach a monitor
+ *  still does, so the gate below is needed for exactly the reason it always
+ *  was.)
  *
  *  `fromMonitor` is the arrival that key exists for. Every finished
  *  connected session, rowed or not, reaches

@@ -1,0 +1,211 @@
+<title>Ring Door Gate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --d-ground: #f6f7f9; --d-panel: #ffffff; --d-ink: #151820; --d-ink-2: #3b424f;
+    --d-muted: #5c6472; --d-hair: #e3e6eb; --d-accent: #2f5d8a; --d-accent-soft: #e8eff6;
+    --d-good: #1c6b4f; --d-good-soft: #e6f2ec;
+    --d-shadow: 0 1px 2px rgba(21,24,32,.06), 0 8px 24px rgba(21,24,32,.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --d-ground: #101318; --d-panel: #171b22; --d-ink: #e7eaef; --d-ink-2: #b9c0cc;
+      --d-muted: #8d95a3; --d-hair: #272d37; --d-accent: #7fadda; --d-accent-soft: #1b2733;
+      --d-good: #62c39c; --d-good-soft: #16261f;
+      --d-shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --d-ground: #101318; --d-panel: #171b22; --d-ink: #e7eaef; --d-ink-2: #b9c0cc;
+    --d-muted: #8d95a3; --d-hair: #272d37; --d-accent: #7fadda; --d-accent-soft: #1b2733;
+    --d-good: #62c39c; --d-good-soft: #16261f;
+    --d-shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
+  }
+  body { background: var(--d-ground); color: var(--d-ink); font-family: "Archivo", system-ui, sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 52px 24px 90px; display: flex; flex-direction: column; gap: 44px; }
+  .eyebrow { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--d-accent); margin: 0 0 10px; }
+  h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 700; letter-spacing: -.025em; line-height: 1.1; margin: 0 0 12px; text-wrap: balance; }
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.015em; margin: 0 0 6px; }
+  p { margin: 0 0 12px; max-width: 68ch; color: var(--d-ink-2); }
+  strong { color: var(--d-ink); }
+  .rule { height: 1px; background: var(--d-hair); border: 0; margin: 0; }
+  .strip { overflow-x: auto; padding: 4px 4px 14px; margin: 0 -4px; }
+  .frames { display: flex; gap: 26px; align-items: flex-start; width: max-content; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .lab { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted); }
+  .decision { background: var(--d-panel); border: 1px solid var(--d-hair); border-left: 3px solid var(--d-accent); border-radius: 4px; padding: 16px 18px; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .9em; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--d-hair); }
+  th { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted); }
+  td.num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .pass { color: var(--d-good); font-weight: 600; }
+  .note { font-size: 13px; color: var(--d-muted); margin: 8px 0 0; }
+
+  /* App frame — tokens verbatim from app/src/theme/tokens.css, fixed light. */
+  .e {
+    --page:#f4f1e8; --surface:#fffdf7; --ink:#1b1a17; --ink-2:#3f3c35; --ink-3:#57544c;
+    --rule-2:#ded8c9; --rule-3:#c9c3b2; --on:#fffdf7;
+    width: 372px; height: 640px; background: var(--page); color: var(--ink);
+    border: 1px solid var(--d-hair); border-radius: 10px; overflow: hidden;
+    box-shadow: var(--d-shadow); display: flex; flex-direction: column;
+    font-family: "Archivo", system-ui, sans-serif;
+  }
+  .e-nav { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--rule-2); background:var(--surface); }
+  .e-back { font-size:18px; color:var(--ink-3); line-height:1; }
+  .e-navtitle { font-size:13px; font-weight:600; color:var(--ink-2); }
+  .e-body { flex:1; overflow:hidden; padding:16px; display:flex; flex-direction:column; gap:12px; }
+  .e-h { font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; letter-spacing:.14em; color:var(--ink-3); margin:6px 0 2px; }
+  .e-row-quiet { font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12px; letter-spacing:.08em; color:var(--ink-3); padding:13px 2px; border-top:1px solid var(--rule-2); display:flex; justify-content:space-between; align-items:center; min-height:44px; box-sizing:border-box; }
+  .e-card { background:var(--surface); border:1px solid var(--rule-2); border-radius:4px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .e-card-when { font-size:14px; font-weight:600; color:var(--ink); margin:0; }
+  .e-card-sub { font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; color:var(--ink-3); margin:2px 0 0; }
+  .e-copy { border:1px solid var(--rule-3); color:var(--ink-2); background:var(--surface); border-radius:3px; padding:10px 14px; font-size:12px; font-weight:600; min-height:44px; display:flex; align-items:center; }
+  .e-empty { font-size:13px; color:var(--ink-3); margin:8px 0 0; }
+  .e-cap { font-size:12px; color:var(--ink-3); }
+  .e-btnrow { display:flex; gap:10px; }
+  .e-l3 { flex:1; text-align:center; border:1px solid var(--rule-3); color:var(--ink-2); border-radius:4px; padding:12px; font-size:13px; font-weight:600; min-height:44px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; }
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Gate 0 · Wave F lifecycle spec §2 · PR 2</p>
+  <h1>The monitor-log door</h1>
+  <p>The diagnostics ring is the only instrument that reaches your phone, and today it can be read only by finishing a new session — whose teardown overwrites the very log you came for. That is how the pocketed-phone evidence died. PR 2 keeps the last three session logs; this door is how you reach them without an erg.</p>
+  <p class="note">Tokens verbatim from <span class="mono">app/src/theme/tokens.css</span>; frames at 372&times;640. The You screen's row anatomy is read from <span class="mono">You.tsx</span>, not invented.</p>
+</header>
+
+<hr class="rule">
+
+<section>
+  <h2>The row on You, and the screen behind it</h2>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col">
+        <div class="lab">You &middot; the new row (bottom)</div>
+        <div class="e">
+          <div class="e-body">
+            <div style="display:flex; gap:12px; align-items:center;">
+              <div style="width:44px;height:44px;border-radius:50%;background:var(--surface);border:1px solid var(--rule-2);display:flex;align-items:center;justify-content:center;font-weight:700;">JA</div>
+              <div>
+                <p style="font-family:Georgia,serif;font-size:22px;margin:0;">James</p>
+                <p style="font-size:12px;color:var(--ink-3);margin:0;">james@&hellip;</p>
+              </div>
+            </div>
+            <p class="e-h">BASELINES</p>
+            <div class="e-card" style="justify-content:flex-start;"><p class="e-card-sub" style="margin:0;">2K 1:52.0 &middot; 6K 2:03.5</p></div>
+            <div class="e-btnrow">
+              <div class="e-l3">ROW THE 6K</div>
+              <div class="e-l3">RACE THE 2K</div>
+            </div>
+            <div class="e-l3" style="flex:0 0 auto;">Reset baseline setup&hellip;</div>
+            <div style="margin-top:auto;">
+              <div class="e-row-quiet">
+                <span>DIAGNOSTICS</span>
+                <span aria-hidden="true">&rsaquo;</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">/you/diagnostics &middot; the menu</div>
+        <div class="e">
+          <div class="e-nav"><span class="e-back">&larr;</span><span class="e-navtitle">Diagnostics</span></div>
+          <div class="e-body">
+            <p class="e-cap">Tools for looking under the hood.</p>
+            <div class="e-card">
+              <div>
+                <p class="e-card-when">Monitor logs</p>
+                <p class="e-card-sub">THE LAST 3 CONNECTED SESSIONS</p>
+              </div>
+              <span aria-hidden="true" style="color:var(--ink-3);">&rsaquo;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">/you/diagnostics/monitor-logs &middot; three saved</div>
+        <div class="e">
+          <div class="e-nav"><span class="e-back">&larr;</span><span class="e-navtitle">Monitor logs</span></div>
+          <div class="e-body">
+            <p class="e-cap">The app keeps the last three connected sessions' diagnostic logs. Copy one to send it with a bug report.</p>
+            <div class="e-card">
+              <div>
+                <p class="e-card-when">Today, 18:42</p>
+                <p class="e-card-sub">37 EVENTS</p>
+              </div>
+              <div class="e-copy">COPY</div>
+            </div>
+            <div class="e-card">
+              <div>
+                <p class="e-card-when">Today, 07:15</p>
+                <p class="e-card-sub">214 EVENTS</p>
+              </div>
+              <div class="e-copy">COPIED</div>
+            </div>
+            <div class="e-card">
+              <div>
+                <p class="e-card-when">Yesterday, 19:03</p>
+                <p class="e-card-sub">9 EVENTS</p>
+              </div>
+              <div class="e-copy">COPY</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Empty state</div>
+        <div class="e">
+          <div class="e-nav"><span class="e-back">&larr;</span><span class="e-navtitle">Monitor logs</span></div>
+          <div class="e-body">
+            <p class="e-cap">The app keeps the last three connected sessions' diagnostic logs. Copy one to send it with a bug report.</p>
+            <p class="e-empty">No logs yet. They appear here after a connected session.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <p class="note">Landscape is the same single column (this is a settings-tier screen, not a rowing surface); the row and cards keep 44&nbsp;px heights either way. COPY flips to <span class="mono">COPIED</span> / <span class="mono">COPY FAILED</span> per entry — <span class="mono">ConnectionLogSheet</span>'s exact three-state contract, and the bytes copied are the stashed export verbatim, never re-serialized.</p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>Contrast, computed</h2>
+  <table>
+    <thead><tr><th>Element</th><th>Pairing</th><th>Ratio</th><th>Floor</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Row label / captions / card sub</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Card "when" line</td><td class="mono">--ink #1b1a17 on --surface #fffdf7</td><td class="num">17.11:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Card sub on card</td><td class="mono">--ink-3 #57544c on --surface #fffdf7</td><td class="num">7.43:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>COPY button text</td><td class="mono">--ink-2 #3f3c35 on --surface #fffdf7</td><td class="num">10.81:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+    </tbody>
+  </table>
+  <p class="note">All tap targets 44&nbsp;px minimum (the row, each COPY).</p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>What I am asking you to approve</h2>
+  <div class="decision">
+    <p><strong>Revised per your direction (2026-09-01): a menu, not a direct row.</strong> You &rarr; <span class="mono">DIAGNOSTICS</span> &rarr; a menu of tools &rarr; Monitor logs. The menu is the extensible home for every diagnostic tool that follows; today it holds one entry. Named <span class="mono">DIAGNOSTICS</span> rather than "advanced"/"debug" because that is the word the app already uses for this class of thing ("diagnostic logs", the diagnostics sheet) — say the word if you want one of your two instead.</p>
+    <p><strong>1. The placement:</strong> one quiet mono row, <span class="mono">DIAGNOSTICS</span>, at the bottom of You; the menu's caption reads "Tools for looking under the hood." (second sentence dropped per James, 2026-09-01) The existing <span class="mono">MONITOR LOG &middot; COPY</span> row on the log screen stays exactly as it is.</p>
+    <p><strong>2. The words:</strong> the caption ("The app keeps the last three connected sessions' diagnostic logs. Copy one to send it with a bug report."), the empty state ("No logs yet. They appear here after a connected session."), and per-entry <span class="mono">Today, 18:42</span> + event count + <span class="mono">COPY / COPIED / COPY FAILED</span>.</p>
+    <p><strong>3. The scope:</strong> read-and-copy only. No viewer, no delete, no share sheet — the clipboard is the whole job, same as every existing log door.</p>
+  </div>
+  <p class="note"><strong>Chrome-delta approval (James, 2026-09-01, PR #258 review round 1):</strong> the shipped screens use the house BackLink + serif screen-title chrome, not the compact nav these frames mock (~90px taller at the top). Approved on the four committed captures, both screens, both orientations ("the chrome delta is approved"). The captures, not these frames, are the record of the shipped top edge.</p>
+  <p class="note">Implemented and shipped in PR #258. Both approvals recorded above (the rev-3 design in this section, and the chrome-delta note) are reflected in the merged screens.</p>
+</section>
+
+</div>

@@ -73,6 +73,7 @@ import {
   toMonitorState,
 } from "../../domain/monitor/pm5/parse.js";
 import { check as checkContinuity } from "./continuity";
+import { listSessionLogs } from "./sessionLogHistory";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import {
@@ -5062,8 +5063,8 @@ describe("useMonitorSession: ending", () => {
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.some((e) => e.kind === "write")).toBe(true);
     // This session OPENED A RECORD, so it also keeps the rowed-only copy —
-    // the one a later never-rowed attempt (a failed pairing, a
-    // connect-then-cancel) cannot clobber.
+    // the one a later never-rowed SESSION (a pairing that failed after the
+    // link came up, a connect-then-cancel) cannot clobber.
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(stashed);
   });
 
@@ -5153,6 +5154,52 @@ describe("useMonitorSession: ending", () => {
     const stash = localStorage.getItem("ergomatic:last-session-log");
     expect(stash).not.toBeNull();
     expect((JSON.parse(stash!) as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it("Task 1 (ring history spec §2): two full connect→teardown cycles leave two history entries, newest first, slot 1 matching the current last-session-log stash", async () => {
+    const first = await arriveArmedWithoutRowing();
+    await first.teardown();
+    const second = await arriveArmedWithoutRowing();
+    await second.teardown();
+
+    const entries = listSessionLogs();
+    expect(entries).toHaveLength(2);
+    expect(entries[0]!.slot).toBe(1);
+    expect(entries[1]!.slot).toBe(2);
+    // Newest first: slot 1 is the SECOND cycle's stash.
+    const currentStash = localStorage.getItem("ergomatic:last-session-log");
+    expect(currentStash).not.toBeNull();
+    expect(entries[0]!.exported).toBe(currentStash);
+  });
+
+  it("M-1 fix: a throwing legacy `ergomatic:last-monitor-log` write does not skip the three-slot history — upsertSessionLog runs even though an earlier setItem in the same stash denied", async () => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (
+      this: Storage,
+      key: string,
+      value: string,
+    ): void {
+      if (key === "ergomatic:last-monitor-log") {
+        throw new Error("simulated quota error (legacy sessionStorage key)");
+      }
+      original.call(this, key, value);
+    };
+    try {
+      const { teardown } = await arriveArmedWithoutRowing();
+      await teardown();
+
+      // The legacy key's own write was denied and swallowed by stash()'s
+      // try/catch — this is not asserting that succeeded, only that the
+      // denial did not also take upsertSessionLog's own write with it (the
+      // bug: that call used to be the LAST statement inside that same try,
+      // so this throw skipped it before it ever ran).
+      const entries = listSessionLogs();
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.slot).toBe(1);
+      expect(entries[0]!.exported.length).toBeGreaterThan(0);
+    } finally {
+      Storage.prototype.setItem = original;
+    }
   });
 
   it("Task 1 (lost-monitor design spec): endSession closing with no record open writes a close-no-record entry naming what was closed, not why nothing was there", async () => {
@@ -6807,6 +6854,18 @@ describe("useMonitorSession: cancel", () => {
   // terminate. The fix is MEDIUM-9's own: `cancel()` CLAIMS the ref
   // synchronously, before its first `await`, and hands the captured driver
   // to `teardown` so the disconnect still happens exactly once.
+  //
+  // Review round 2, items 1+2 (P1+P2): this SAME interleaving — the
+  // unmount's own `teardown()` cleanup running first, then `cancel()`'s
+  // own `teardown(armed, driver)` call running a SECOND time once the
+  // monitor's ack finally arrives — is Defect A for the ring history: two
+  // separate `teardown()` invocations for what is still ONE connected
+  // session, each of which calls `stash()`. Before the identity fix this
+  // burned two `sessionLogHistory.ts` slots on a single Cancel; the
+  // assertion below is that regression, pinned here rather than only in
+  // `sessionLogHistory.test.ts` because THIS is the exact interleaving that
+  // produces it — a fixed module and an unfixed call site would still fail
+  // this way.
   it("cancel() racing an interleaved unmount sends at most ONE physical terminate even when the monitor answers asynchronously, as real hardware does (MEDIUM-9, for real this time)", async () => {
     const { result, fake, transport, unmount } = harness({
       program: TWO_INTERVALS,
@@ -6847,6 +6906,344 @@ describe("useMonitorSession: cancel", () => {
     expect(settled).toBe("settled");
     expect(transport.wireWrites - writesAtReady).toBe(1);
     expect(transport.disconnects).toBe(1);
+    // Review round 2, items 1+2: the unmount's own teardown() stashed
+    // first (driverRef already null by then — cancel() claimed it
+    // synchronously — so this teardown call did nothing BUT stash), and
+    // cancel()'s own teardown(armed, driver) call stashed a second time
+    // once the deferred ack let it proceed. Same session id both times:
+    // ONE history entry, not two.
+    const entries = listSessionLogs();
+    expect(entries).toHaveLength(1);
+    // Review round 3, item 3 (mechanism superseded at round 5): the
+    // latch-count guard used to reset at the top of EVERY `teardown()`
+    // call, so this same double-`teardown()` interleaving that used to
+    // burn two ring slots (fixed above) also recorded `latch-count` twice.
+    // Since round 5 the guard is a field of the `LogicalSession` value
+    // itself — it has NO reset site at all, so it spans every teardown of
+    // one session by construction, and the final entry's bytes carry
+    // exactly one `latch-count` line.
+    const latchCountLines = (
+      JSON.parse(entries[0]!.exported) as { kind: string; detail: string }[]
+    ).filter((e) => e.kind === "latch-count");
+    expect(latchCountLines).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review round 3, item 1: round 2's `sessionIdRef` mint (`useId()` plus a
+// per-instance connect counter) is collision-resistant across DIFFERENT
+// hook instances within one JS document, but `useId()`'s own id is
+// deterministic by render-tree position and resets to the same starting
+// sequence on every fresh document — so the first `useMonitorSession()`
+// mounted after a real relaunch (background+evict, a page reload) minted
+// the IDENTICAL id its predecessor's first Connect always does, and
+// `upsertSessionLog`'s identity-bound upsert read that as "the same
+// session, write again" and REPLACED the prior relaunch's entry instead of
+// adding beside it. `mintSessionId`'s default, `crypto.randomUUID()`,
+// carries no such determinism.
+// ---------------------------------------------------------------------------
+
+describe("Review round 3, item 1: sessionId is collision-resistant across a full relaunch, not just across hook instances in one document", () => {
+  it("a fresh module's first Connect adds a SECOND ring entry beside a prior \"document\"'s, rather than replacing it", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+
+    // "Document" 1: an ordinary connect + unmount on this file's own
+    // `useMonitorSession` import, relying on the REAL default mint
+    // (`crypto.randomUUID()`) on both sides of this test — no
+    // `createSessionId` override anywhere. The default IS the thing under
+    // test: it is what makes two independent hook lifetimes
+    // distinguishable, where round 2's `useId()` mint was not.
+    const first = harness({ program: ONE_INTERVAL });
+    await connect(first.result);
+    act(() => {
+      first.unmount();
+    });
+    const afterFirst = listSessionLogs();
+    expect(afterFirst).toHaveLength(1);
+    const firstId = afterFirst[0]!.sessionId;
+
+    // Simulate a relaunch: fresh module state (`vi.resetModules()`), the
+    // identical idiom this file's own RC-37/READY-drop regression already
+    // uses. `localStorage`/`sessionStorage` are jsdom globals and survive
+    // the reset — exactly like a real device's persisted storage survives
+    // a relaunch — while every hook-internal binding starts fresh (had
+    // this fix not landed: `useId()`'s own render-tree-position counter,
+    // reset to its starting sequence).
+    vi.resetModules();
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+
+    const fake2 = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: ONE_INTERVAL,
+    });
+    const { result: second, unmount: unmountSecond } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => fake2,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+    await act(async () => {
+      await second.current.connect();
+    });
+    act(() => {
+      unmountSecond();
+    });
+
+    const afterSecond = listSessionLogs();
+    expect(afterSecond).toHaveLength(2);
+    const ids = afterSecond.map((entry) => entry.sessionId);
+    expect(ids).toContain(firstId);
+    expect(new Set(ids).size).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round 4, item 1 (P1): `IPHONEOS_DEPLOYMENT_TARGET = 15.0`
+// (`ios/App/App.xcodeproj/project.pbxproj`), while `crypto.randomUUID()` is
+// reported as arriving in Safari/WKWebView only at 15.4. On 15.0-15.3 the
+// old unconditional `crypto.randomUUID()` default threw SYNCHRONOUSLY inside
+// `connect()`, before its own `try`, which rejected the returned promise
+// having already set `connectingRef.current = true` two lines earlier —
+// nothing downstream of the throw ever ran, including the `finally` that is
+// the ONLY place a successful attempt clears that ref, so Connect went
+// permanently dead. The fixed default capability-checks `crypto.randomUUID`
+// and falls back to a UUIDv4 built from `crypto.getRandomValues()`. These
+// legs stub exactly that gap: `crypto.randomUUID` deleted,
+// `crypto.getRandomValues` left real.
+//
+// CITATION LABELS CORRECTED, round 5 item 3c: both version numbers come from
+// MDN's `browser-compat-data`, which is SECONDARY (a community dataset, not
+// a vendor document) — round 4 tagged it PRIMARY. The only WebKit-primary
+// source found is STP 132's release note ("Implemented `Crypto.randomUUID()`",
+// webkit.org/blog/11971/), which names no stable iOS version; webkit.org's
+// own "New WebKit Features in Safari 15.4" post does not mention the API at
+// all. `defaultSessionId`'s doc comment carries the full disposition,
+// including why a SECONDARY-only citation is acceptable for a fix that
+// capability-checks rather than version-sniffs.
+// ---------------------------------------------------------------------------
+
+describe("Round 4, item 1: the default sessionId factory survives no crypto.randomUUID (iOS 15.0-15.3)", () => {
+  const realCrypto = globalThis.crypto;
+
+  beforeEach(() => {
+    // Deliberately omits `randomUUID` from the stub object — this is the
+    // WKWebView 15.0-15.3 shape, not a fully absent Web Crypto API.
+    vi.stubGlobal("crypto", {
+      getRandomValues: realCrypto.getRandomValues.bind(realCrypto),
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("mints a well-formed UUIDv4 via the getRandomValues fallback, and two mints differ", async () => {
+    const first = harness({ program: ONE_INTERVAL });
+    await connect(first.result);
+    act(() => {
+      first.unmount();
+    });
+
+    const second = harness({ program: ONE_INTERVAL });
+    await connect(second.result);
+    act(() => {
+      second.unmount();
+    });
+
+    const entries = listSessionLogs();
+    expect(entries).toHaveLength(2);
+    const uuidV4 =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    for (const entry of entries) {
+      expect(entry.sessionId).toMatch(uuidV4);
+    }
+    expect(entries[0]!.sessionId).not.toBe(entries[1]!.sessionId);
+  });
+
+  it("connect() still reaches its normal flow, and a SECOND Connect after the link drops scans again — the claim 'no latched connectingRef' actually observed", async () => {
+    const { result, fake, transport } = harness({ program: TWO_INTERVALS });
+
+    await connect(result);
+
+    // Reaching `"pairing"` with no error is only possible having run PAST
+    // the mint and THROUGH the try/finally that is the only place a
+    // successful attempt clears `connectingRef`. The old
+    // unconditional-throw default left `phase` stuck at its pre-connect
+    // value forever, with `connect()`'s own promise rejected uncaught.
+    expect(result.current.phase).toBe("pairing");
+    expect(result.current.error).toBeNull();
+    expect(transport.scans).toBe(1);
+
+    // ROUND 5, ITEM 2 (P2) — THIS TEST USED TO CLAIM A LATCH IT NEVER
+    // LOOKED FOR. A latched `connectingRef` is invisible from the outside
+    // until something asks `connect()` to run a SECOND time: the whole
+    // symptom of round 4's defect is "Connect goes permanently dead", and
+    // one successful attempt cannot show that. So the link drops and
+    // Connect is pressed again.
+    //
+    // The drop, NOT a `cancel()`, is the exit that makes this observation
+    // sound. `cancel()` clears `connectingRef` itself (its own
+    // `attemptRef`/`connectingRef` pair, the abandoned-attempt fix), which
+    // would mask a defeated `finally` completely — a second scan would
+    // happen either way and the assertion below could not go red. The
+    // `disconnected` handler is the one exit that disposes `driverRef`
+    // (F1's cohort-unlock CRITICAL) while deliberately touching NOTHING
+    // about the connect claim, so after it the ONLY thing standing between
+    // this hook and a second scan is the `finally` under test.
+    //
+    // "F1: connect() again after a disconnected event reaches a genuinely
+    // fresh scan" (below) pins the same shape and IS bitten by the same
+    // mutation — deliberately not deleted here, because that one runs
+    // against the real `crypto.randomUUID`. This describe block's whole
+    // point is the 15.0-15.3 stub, and the claim being made is that the
+    // FALLBACK mint leaves Connect reusable, which only a test inside this
+    // block's `beforeEach` can say.
+    act(() => {
+      fake.injectDisconnect();
+    });
+    expect(result.current.phase).toBe("disconnected");
+
+    await connect(result);
+
+    expect(transport.scans).toBe(2);
+    expect(result.current.phase).toBe("pairing");
+    expect(result.current.error).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REVIEW ROUND 5, ITEM 1 (P1) — THE ALIAS, AND WHY FOUR ROUNDS OF POINT-FIXES
+// COULD NOT REACH IT.
+//
+// Rounds 2-4 held the logical session's identity in `sessionIdRef` and its
+// trace in `logRef`, on two different lifetimes. The id was minted at
+// `connect()`'s ENTRY — an attempt boundary. The log was replaced only after
+// `transport.connect()` resolved, and deliberately SURVIVES a `cancel()` so
+// the diagnostics sheet can still show why an attempt died.
+//
+// So: connect, cancel (one history entry, correct). Press Connect again and
+// cancel it while it is still parked in scan/GATT. That second attempt never
+// replaced the log — but it DID mint a fresh id and reset the latch guard,
+// and `stash()` read one from each ref. `upsertSessionLog` found no entry
+// under the new id and did exactly what it is told: it INSERTED a clone of
+// the previous session's trace, in a fresh slot, carrying a second
+// `latch-count` line appended to the log it does not own. Repeatable once
+// per cancelled attempt, until all three slots hold copies of one session —
+// and the ring exists to survive an incident, which is precisely the moment
+// a rower fumbles reconnects.
+//
+// The fix is structural: id, log and §6's counters are ONE `LogicalSession`
+// value, assigned at the single site that replaces the log. This test is the
+// reviewer's own reproduction.
+// ---------------------------------------------------------------------------
+
+describe("Review round 5, item 1: a cancelled pre-GATT attempt cannot clone the session whose log it never replaced", () => {
+  it("Connect -> Cancel, then a SECOND Connect cancelled while parked inside transport.connect(): still ONE ring entry, unchanged, with no second latch-count", async () => {
+    // The second `transport.connect()` parks; the first resolves normally,
+    // so session 1 is a real logical session with a real log behind it.
+    let connects = 0;
+    let releaseSecondGatt!: () => void;
+    const parkedGatt = new Promise<void>((resolve) => {
+      releaseSecondGatt = resolve;
+    });
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: ONE_INTERVAL,
+    });
+    let scans = 0;
+    const transport = {
+      ...fake,
+      async scan() {
+        scans += 1;
+        return fake.scan();
+      },
+      async connect(id: string) {
+        connects += 1;
+        if (connects === 2) await parkedGatt;
+        return fake.connect(id);
+      },
+    };
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+        burstLingerSchedule: () => (): void => undefined,
+      }),
+    );
+
+    // SESSION 1: a genuine connect (GATT resolved, log created), cancelled
+    // from `pairing`. Its trace is kept on purpose — this is the ref state
+    // the second attempt used to alias.
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("pairing");
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    const afterFirst = listSessionLogs();
+    expect(afterFirst).toHaveLength(1);
+    const firstId = afterFirst[0]!.sessionId;
+    const firstExport = afterFirst[0]!.exported;
+
+    // ATTEMPT 2 parks inside the GATT connect — past the scan, before the
+    // one line that may replace the log. Nothing about session 1 has
+    // changed at this point on either the old code or the new.
+    act(() => void result.current.connect());
+    await act(async () => {
+      await flush();
+    });
+    expect(scans).toBe(2);
+    expect(connects).toBe(2);
+
+    // THE CANCEL THAT USED TO CLONE. `teardown()` -> `stash()` runs here
+    // while the hook is still holding session 1's log, and on the old code
+    // a fresh `sessionIdRef` beside it.
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    // The abandoned attempt unwinds underneath, finds itself superseded,
+    // and hands its transport back without ever building a log.
+    await act(async () => {
+      releaseSecondGatt();
+      await flush();
+    });
+
+    const entries = listSessionLogs();
+    // ONE slot. On the unfixed hook this is 2: the same trace twice, under
+    // two ids.
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.sessionId).toBe(firstId);
+    // And it is session 1's OWN log, CONTINUED — not a copy of it. The
+    // second cancel's `teardown()` does stash again (that is the design:
+    // every stash this session produces upserts its one entry), so the
+    // bytes are a later snapshot of the same ring — session 1's own
+    // `disconnect-requested` from the first cancel's hang-up now sits after
+    // the entries the first stash could see. What must NOT have happened is
+    // a second slot, or a second `latch-count` appended to a log this
+    // attempt never owned.
+    const parsedFirst = JSON.parse(firstExport) as {
+      seq: number;
+      kind: string;
+      detail: string;
+    }[];
+    const parsedNow = JSON.parse(entries[0]!.exported) as typeof parsedFirst;
+    expect(parsedNow.slice(0, parsedFirst.length)).toStrictEqual(parsedFirst);
+    const latchCountLines = parsedNow.filter((e) => e.kind === "latch-count");
+    expect(latchCountLines).toHaveLength(1);
   });
 });
 
@@ -9318,7 +9715,7 @@ describe("Phase LM: decideResumeLatch (pure) — the resume alarm keys on a meas
 // ---------------------------------------------------------------------------
 // Phase LL Task 1: THE HOOK'S OWN WIRING — proving `livenessDepsRef`'s
 // `onSilence`/`onRecovery` closures (built inside the hook, never passed
-// `logRef` itself — `react-hooks/refs` forbids that) really do write into
+// the session ref itself — `react-hooks/refs` forbids that) really do write into
 // THIS session's log once one exists. Every other test in this file
 // overrides `MonitorSessionDeps.createTransport`, which bypasses
 // `defaultTransport` (and therefore `livenessDepsRef`) entirely — this is
@@ -9432,12 +9829,12 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
     // `catch (err) { fail(mapRadioFailure(err)); ... }`, the SAME catch a
     // real driver-construction failure would hit. Picked deliberately over
     // `scan-dismissed`/a `connect()` throw: BOTH of those fail before
-    // `logRef.current` is ever assigned (device not yet picked, or
+    // `sessionRef.current` is ever assigned (device not yet picked, or
     // `transport.connect()` not yet resolved) — the ring literally has
     // nothing to append into yet, which would make this test pass whether
-    // or not the append logic is correct. Failing here, AFTER `logRef
-    // .current = log` (the line right before `createPm5Driver` runs), is
-    // what actually exercises the append.
+    // or not the append logic is correct. Failing here, AFTER
+    // `sessionRef.current = session` (the line right before
+    // `createPm5Driver` runs), is what actually exercises the append.
     const stubTransport: Transport & { snapshot(): unknown } = {
       scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
       connect: vi.fn(async () => undefined),
@@ -9489,7 +9886,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
       recentEvents: [],
     };
     // Same construction-throw shape as the criterion-7 test above — fails
-    // AFTER `logRef.current = log` so the ring genuinely has something to
+    // AFTER `sessionRef.current = session` so the ring genuinely has something to
     // append into.
     const firstTransport: Transport & { snapshot(): unknown } = {
       scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
@@ -11336,6 +11733,1114 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     // that could never accept another write.
     expect(flushTimer.calls[0]!.cancelled).toBe(true);
   }, 15000);
+});
+
+// ---------------------------------------------------------------------------
+// Wave F PR 2 Task 2: §3's resume-edge frame instrument, §6's RC-29 latch
+// counter (design spec 2026-08-31-lifecycle-design.md). Measurement only —
+// neither entry has a consumer yet, and neither changes what any predicate
+// decides. Same composition idiom every other resume test in this file
+// already uses (the REAL liveness decorator around the fake, the native-
+// shaped app-lifecycle dispatch) so `decideResumeLatch`/the new instrument
+// both read a genuine measured gap, never a bypass.
+// ---------------------------------------------------------------------------
+
+describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/monitorTransport");
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  const D0 = 40;
+  const SPLIT0 = 120;
+  const SPM0 = 22;
+
+  /** Composes the REAL liveness decorator and a native-shaped app-lifecycle
+   *  listener around a fresh fake, the same wiring every other resume test
+   *  in this file uses (e.g. "PHASE LM, THE FIX AT THE HOOK LEVEL", above) —
+   *  connects only, no `programAndArm`: §3's instrument sits at the very top
+   *  of `handleFrame`, unconditional on phase, the same placement
+   *  `framesWhileHiddenRef`'s own counter uses, and three other resume tests
+   *  in this file already exercise the lifecycle listener with no program
+   *  ever sent (the "PHASE LM" describe block's own tests, none of which
+   *  call `programAndArm` either). */
+  async function setupResumeInstrumentSession(
+    events: FakeTimelineEvent[],
+  ): Promise<{
+    fake: FakeControls;
+    lifecycleCb: (event: "background" | "foreground") => void;
+    exportLog: () => string;
+    unmount: () => void;
+    program: (p: WorkoutProgram, identity: RunIdentity) => void;
+    beginFreeRow: () => void;
+  }> {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result, unmount } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(lifecycleCb).toBeDefined();
+    return {
+      fake,
+      lifecycleCb: lifecycleCb!,
+      exportLog: () => result.current.exportLog(),
+      unmount,
+      // Final whole-branch review, item 5's own second site: `program()`'s
+      // fresh-arm reset needs a live `result` to call, not just the export.
+      program: (p: WorkoutProgram, identity: RunIdentity): void => {
+        void result.current.program(p, identity);
+      },
+      // Merge of PR #259: the SECOND arm. Same reason `program` is exposed
+      // here — the per-arm reset is a property of arming, and #259 built a
+      // second door onto `ready` that has to carry it too.
+      beginFreeRow: (): void => {
+        result.current.beginFreeRow();
+      },
+    };
+  }
+
+  function frame(atMs: number, distanceMeters: number): FakeTimelineEvent {
+    return status(atMs, { distanceMeters, currentSplit: SPLIT0, spm: SPM0 });
+  }
+
+  it("leg (a): a resume whose first frame repeats the pre-background freezeKey triple logs resume-first-frame stale=true with the measured gap and the raw byte, and the run of identical frames that follows it closes with resume-stale-run endedBy=changed the instant a differing frame arrives", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // opens the pre-background baseline
+      frame(1000, D0), // identical
+      frame(1500, D0), // identical — the last pre-background frame
+      frame(2000, D0), // first post-resume frame — identical -> stale=true, run opens (frames=1)
+      frame(2500, D0), // still identical -> run continues (frames=2)
+      frame(3000, D0 + 50), // DIFFERENT -> closes the run
+    ];
+    const { fake, lifecycleCb, exportLog } =
+      await setupResumeInstrumentSession(events);
+
+    for (let i = 0; i < 3; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 3; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntries = exported.filter(
+      (e) => e.kind === "resume-first-frame",
+    );
+    expect(firstFrameEntries).toHaveLength(1);
+    // gapMs: the last pre-background frame's own arrival (recorded at
+    // system-clock 1000, before that iteration's own advance) against the
+    // clock reading at resume (1500, unchanged by the background/foreground
+    // pair itself) — the identical arithmetic the "PHASE LM" describe
+    // block's own `resume gap=500ms` pin uses.
+    expect(firstFrameEntries[0]!.detail).toBe(
+      "gapMs=500 stale=true rawRowingState=1 framesWhileHidden=0",
+    );
+
+    const staleRunEntries = exported.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(staleRunEntries).toHaveLength(1);
+    expect(staleRunEntries[0]!.detail).toBe("frames=2 endedBy=changed");
+  });
+
+  it("leg (a) supplement: gapMs reads 'unmeasured' when no liveness decorator is available — the same bare createTransport composition Task 1's own 'resume records frames' test uses, no defaultTransport/withLiveness involved", async () => {
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [frame(100, D0), frame(200, D0)],
+    });
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    tick(fake, 100); // the pre-background baseline — no liveness decorator wired at all
+
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+
+    tick(fake, 100); // first post-resume frame — consumes the arm, identical -> stale=true
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const entry = exported.find((e) => e.kind === "resume-first-frame");
+    expect(entry).toBeDefined();
+    expect(entry!.detail).toBe(
+      "gapMs=unmeasured stale=true rawRowingState=1 framesWhileHidden=0",
+    );
+  });
+
+  it("leg (b) supplement: a resume before this session has ever seen a frame never marks stale — there is no pre-background frame to compare against", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // the FIRST frame this session ever sees — arrives after the resume
+    ];
+    const { fake, lifecycleCb, exportLog } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    }); // no frame has arrived at all yet
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    }); // this session's first-ever frame, also the first post-resume frame
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const entry = exported.find((e) => e.kind === "resume-first-frame");
+    expect(entry).toBeDefined();
+    expect(entry!.detail).toBe(
+      "gapMs=unmeasured stale=false rawRowingState=1 framesWhileHidden=0",
+    );
+    expect(exported.some((e) => e.kind === "resume-stale-run")).toBe(false);
+  });
+
+  it("leg (b): a resume whose first frame differs from the pre-background triple logs stale=false, and no resume-stale-run is ever recorded", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // the pre-background baseline
+      frame(1000, D0 + 30), // first post-resume frame — DIFFERENT -> stale=false
+      frame(1500, D0 + 30), // identical to itself, but no run was ever opened
+    ];
+    const { fake, lifecycleCb, exportLog } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntries = exported.filter(
+      (e) => e.kind === "resume-first-frame",
+    );
+    expect(firstFrameEntries).toHaveLength(1);
+    expect(firstFrameEntries[0]!.detail).toBe(
+      "gapMs=500 stale=false rawRowingState=1 framesWhileHidden=0",
+    );
+    expect(exported.some((e) => e.kind === "resume-stale-run")).toBe(false);
+  });
+
+  // Final whole-branch review, item 2: `resume-first-frame`'s own `stale`
+  // field is documented (its own comment on `resumeEdgeArmedRef`) to
+  // compare the first post-resume frame against the PRE-BACKGROUND one —
+  // but hidden frames still move `stateRef.current.frame` (`handleFrame`'s
+  // unconditional `update({ frame })` fall-through), so a resume with at
+  // least one hidden frame used to compare against THAT frame instead. This
+  // is the exact sequence that falsifies it: A before background, a
+  // DIFFERENT B while hidden, then B again as the first post-resume frame —
+  // the buggy comparison (B vs. the hidden B) says `stale=true`; the
+  // correct one (B vs. pre-background A) says `stale=false`, since A and B
+  // genuinely differ.
+  it("leg (e), item 2 fix: a hidden frame that arrives WHILE backgrounded does not become the staleness baseline — only the PRE-background frame does", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // pre-background baseline A
+      frame(1000, D0 + 30), // arrives WHILE HIDDEN — a DIFFERENT frame, B
+      frame(1500, D0 + 30), // first post-resume frame — identical to the HIDDEN frame B, but B is not the baseline
+    ];
+    const { fake, lifecycleCb, exportLog } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      lifecycleCb("background");
+    });
+    // The hidden frame B arrives HERE, strictly between background and
+    // foreground — the shape no existing leg in this describe block drives
+    // (every one of them calls `background`/`foreground` back-to-back with
+    // no tick in between).
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntries = exported.filter(
+      (e) => e.kind === "resume-first-frame",
+    );
+    expect(firstFrameEntries).toHaveLength(1);
+    // stale=false (correct: B differs from pre-background A) and
+    // framesWhileHidden=1 (the hidden B frame, counted before the resume
+    // clears the counter) — both readable off one line, same idiom every
+    // other leg in this block uses.
+    expect(firstFrameEntries[0]!.detail).toBe(
+      "gapMs=500 stale=false rawRowingState=1 framesWhileHidden=1",
+    );
+    expect(exported.some((e) => e.kind === "resume-stale-run")).toBe(false);
+  });
+
+  it("leg (c): teardown while the identical run is still open closes it with resume-stale-run endedBy=teardown, and the entry rides the stashed export", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // pre-background baseline
+      frame(1000, D0), // first post-resume frame — identical -> run opens (frames=1)
+    ];
+    const { fake, lifecycleCb, unmount } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const staleRunEntries = entries.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(staleRunEntries).toHaveLength(1);
+    expect(staleRunEntries[0]!.detail).toBe("frames=1 endedBy=teardown");
+  });
+
+  it("leg (d), I-1 fix: a SECOND resume arriving while the first resume's identical-run tracker is still open closes it with resume-stale-run endedBy=resumed (not overwritten, not merged into the second run) — the second run then closes independently at teardown", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // pre-background baseline (key K)
+      frame(1000, D0), // 1st resume's first frame — identical -> stale=true, run r1 opens (frames=1)
+      frame(1500, D0), // still identical -> r1 continues (frames=2)
+      // — second background/foreground pair happens here, while r1 is
+      // still open with frames=2 —
+      frame(2000, D0), // 2nd resume's first frame — BEFORE this consumes the
+      // new arm, r1 (frames=2) must close as endedBy=resumed. This frame
+      // is also identical to the pre-(2nd)-background key, so it opens a
+      // FRESH run r2 (frames=1) rather than being folded into r1's count.
+    ];
+    const { fake, lifecycleCb, unmount } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    // r1 is now open at frames=2. Background/foreground again WITHOUT the
+    // run ever closing on its own — the second resume must interrupt it.
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const staleRunEntries = entries.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(staleRunEntries).toHaveLength(2);
+    expect(staleRunEntries[0]!.detail).toBe("frames=2 endedBy=resumed");
+    expect(staleRunEntries[1]!.detail).toBe("frames=1 endedBy=teardown");
+  });
+
+  // Final whole-branch review, item 5's OTHER site: `program()`'s own
+  // fresh-arm reset (the RC-37 exit's sibling test, in a later describe
+  // block below, is the FIRST of the two sites the brief names). The guard
+  // at the top of `program()` only refuses a SECOND call while already
+  // `"programming"` — it does not require a prior `program()` call to have
+  // happened at all — so calling it here, once, while a stale run is open,
+  // exercises the exact reset lines a real re-program-from-ready would
+  // hit.
+  it("a resume-stale-run open when program() re-arms closes with its own endedBy=reset entry, not silently", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // pre-background baseline
+      frame(1000, D0), // first post-resume frame — identical -> stale=true, opens the run (frames=1)
+      frame(1500, D0), // still identical -> run continues (frames=2)
+    ];
+    const { fake, lifecycleCb, exportLog, program } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    const preProgramExport = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(preProgramExport.some((e) => e.kind === "resume-stale-run")).toBe(
+      false,
+    ); // sanity: still open, nothing recorded yet
+
+    act(() => {
+      program(TWO_INTERVALS, TWO_IDENTITY);
+    });
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const staleRunEntriesAfterProgram = exported.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(staleRunEntriesAfterProgram).toHaveLength(1);
+    expect(staleRunEntriesAfterProgram[0]!.detail).toBe(
+      "frames=2 endedBy=reset",
+    );
+  });
+
+  // MERGE OF PR #259 — the twin of the test immediately above, for the arm
+  // #259 added. `beginFreeRow()` is a second producer of `ready`, so it is a
+  // second fresh arm, and the §3 invariant ("a measurement banked before this
+  // arm is not attributed to the run this arm opens") has to hold at both
+  // doors or it is a property of one implementation rather than of arming.
+  //
+  // Reachable in the product, not a contrivance: connect, the phone locks and
+  // unlocks while still at `pairing` (the foreground edge arms the instrument
+  // and no frame arrives to consume it), then the rower taps JUST ROW. The
+  // free row's first frame would otherwise consume the prior arm and file
+  // that gap as this row's resume edge.
+  it("merge #259: a resume-stale-run open when beginFreeRow() arms closes with its own endedBy=reset entry, exactly as it does for program()", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // pre-background baseline
+      frame(1000, D0), // first post-resume frame — identical -> stale=true, opens the run (frames=1)
+      frame(1500, D0), // still identical -> run continues (frames=2)
+    ];
+    const { fake, lifecycleCb, exportLog, beginFreeRow } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    const preArmExport = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(preArmExport.some((e) => e.kind === "resume-stale-run")).toBe(false); // sanity: still open, nothing recorded yet
+
+    act(() => {
+      beginFreeRow();
+    });
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const staleRunEntriesAfterArm = exported.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(staleRunEntriesAfterArm).toHaveLength(1);
+    expect(staleRunEntriesAfterArm[0]!.detail).toBe("frames=2 endedBy=reset");
+  });
+});
+
+describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/monitorTransport");
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  /** Same composition as Task 2 (§3)'s own `setupResumeInstrumentSession` —
+   *  duplicated locally rather than shared across `describe` blocks (this
+   *  file's own established practice: `resumeAfterGap`/`interceptingTransport`
+   *  above are local to their own block too). */
+  async function setupLatchCountSession(events: FakeTimelineEvent[]): Promise<{
+    fake: FakeControls;
+    lifecycleCb: (event: "background" | "foreground") => void;
+    unmount: () => void;
+  }> {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result, unmount } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(lifecycleCb).toBeDefined();
+    return { fake, lifecycleCb: lifecycleCb!, unmount };
+  }
+
+  it("leg (d), part 1: two latching resumes then teardown — the stashed export's latch-count line reads latches=2 resumes=2", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [status(500, {}), status(1000, {})];
+    const { fake, lifecycleCb, unmount } = await setupLatchCountSession(events);
+
+    // First latching resume: the gap since the last 0x0031 (recorded at
+    // system-clock 0) reaches SILENCE_THRESHOLD_MS before this resume, the
+    // same "PHASE LM: a resume over a stream that never stopped" pin's own
+    // arithmetic, but pushed PAST the threshold instead of comfortably under
+    // it.
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      vi.advanceTimersByTime(SILENCE_THRESHOLD_MS);
+    });
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    // A healthy frame between the two resumes, then the second latching
+    // resume, by the identical construction.
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      vi.advanceTimersByTime(SILENCE_THRESHOLD_MS);
+    });
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const latchEntries = entries.filter((e) => e.kind === "latch-count");
+    expect(latchEntries).toHaveLength(1);
+    expect(latchEntries[0]!.detail).toBe("latches=2 resumes=2");
+  });
+
+  it("leg (d), part 2: a non-latching resume increments only resumes, never latches", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [status(500, {})];
+    const { fake, lifecycleCb, unmount } = await setupLatchCountSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    // No further gap: the same comfortably-under-threshold shape "PHASE LM,
+    // THE FIX AT THE HOOK LEVEL" pins as non-latching.
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const latchEntries = entries.filter((e) => e.kind === "latch-count");
+    expect(latchEntries).toHaveLength(1);
+    expect(latchEntries[0]!.detail).toBe("latches=0 resumes=1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2 review, fix round 1, finding 1: `resumeStaleRunRef`'s own doc
+// comment claimed the per-run discipline `freezeRef`/`rowingStreakRef`/
+// `lastContinuityRef` already use; the code only reset it per-connection.
+// This pins the RC-37 programDropped/ready exit's own new reset.
+//
+// CORRECTED (round 5, item 3a — this comment carried round 2's version of
+// the story, which round 3 item 2 had already replaced in the source): that
+// exit DOES route through `teardown()`, just not SYNCHRONOUSLY. It inlines
+// its own unsubscribe/disconnect and then calls `update({ ...INITIAL_STATE,
+// programDropped: true })`, which unmounts the interstitial and fires this
+// hook's unmount effect — `teardown()` and its `stash()` run there, later.
+// The reset still has to live at the drop site itself, but for a REASON OF
+// ORDER rather than of reachability: by the time that late `teardown()`
+// runs, its own resume-stale-run closeout would attribute a resume measured
+// before the drop to whatever the rower connects to next. Recording and
+// clearing at the drop is what keeps the entry with the run it describes.
+// ---------------------------------------------------------------------------
+
+describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-run reset at the RC-37 programDropped/ready exit", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  /** Same hand-rolled stub `Transport` the RC-37 block and the "Wave F PR 1
+   *  Task 2" block above both use, redeclared here per this file's own
+   *  per-describe-block convention — `transports/fake.ts` derives its armed
+   *  structure honestly and cannot be scripted to report a wrong one. */
+  function rawTransport(): Transport & {
+    notify(uuid: string, bytes: Uint8Array): void;
+    writes: { uuid: string; bytes: Uint8Array }[];
+  } {
+    const subs = new Map<string, Set<(bytes: Uint8Array) => void>>();
+    const writes: { uuid: string; bytes: Uint8Array }[] = [];
+    return {
+      writes,
+      scan: () => Promise.resolve([{ id: "stub", name: "PM5 STUB" }]),
+      connect: () => Promise.resolve(),
+      write(uuid, bytes) {
+        writes.push({ uuid, bytes });
+        return Promise.resolve();
+      },
+      subscribe(uuid, cb) {
+        let set = subs.get(uuid);
+        if (!set) {
+          set = new Set();
+          subs.set(uuid, set);
+        }
+        set.add(cb);
+        return () => set!.delete(cb);
+      },
+      disconnect: () => Promise.resolve(),
+      onDisconnect: () => () => undefined,
+      notify(uuid, bytes) {
+        for (const cb of subs.get(uuid) ?? []) cb(bytes);
+      },
+    };
+  }
+
+  const READY_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+
+  /** The healthy armed readback for `READY_PROGRAM` — same encoding the
+   *  RC-37 block's own `armedStatus()` uses. Also this test's own
+   *  freezeKey baseline: `distanceMeters: 0` here, `currentSplit`/`spm`
+   *  both `0` from the zeroed AS1 seed below (never updated again), so
+   *  every `armedStatus()` notification in this test carries the IDENTICAL
+   *  `freezeKey`. */
+  function armedStatus(): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+  }
+
+  /** A DIFFERENT armed structure — the RC-37 block's own "empty arm" shape,
+   *  redeclared here. */
+  function wrongArmedStatus(): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 1,
+      intervalType: 1,
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 128,
+      dragFactor: 130,
+    });
+  }
+
+  function manualClock(startMs = 0): {
+    now: () => number;
+    advance(by: number): void;
+  } {
+    let ms = startMs;
+    return {
+      now: () => ms,
+      advance(by: number): void {
+        ms += by;
+      },
+    };
+  }
+
+  async function waitUntil(check: () => boolean, maxTicks = 50): Promise<void> {
+    for (let i = 0; i < maxTicks && !check(); i += 1) {
+      await Promise.resolve();
+    }
+  }
+
+  /** Drives `driver.ts`'s own armedWatch (RC-37's mechanism) to a genuine
+   *  `programDropped` while still at READY — three consecutive, stable,
+   *  wrong-structure WaitToBegin ticks, 1000ms apart, the identical
+   *  construction the other two RC-37-shaped describe blocks in this file
+   *  use for their own live-arm/outside-guard legs. */
+  function triggerReadyDrop(
+    transport: ReturnType<typeof rawTransport>,
+    clock: ReturnType<typeof manualClock>,
+  ): void {
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1000);
+      act(() => {
+        transport.notify(GENERAL_STATUS_UUID, wrongArmedStatus());
+      });
+    }
+  }
+
+  it("a resume-stale-run opened at READY does not survive the drop — final whole-branch review item 5: it closes THERE with its own endedBy=reset entry, not silently, and does not ALSO close a second time at the eventual unmount's teardown", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+
+    const transport = rawTransport();
+    const clock = manualClock();
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: clock.now,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // `maybeEmitFrame`'s own gate: General Status AND both Additional
+    // Status characteristics each need to have been seen once before any
+    // `frame` event fires at all — same idiom the other two RC-37-shaped
+    // blocks use, seeded once, up front.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    const sentCount = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const prepareChunkCount = buildTerminate()[0]!.length;
+    await act(async () => {
+      const start = sentCount();
+      const pending = result.current.program(READY_PROGRAM, TWO_IDENTITY);
+      await waitUntil(() => sentCount() > start);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "reject" }),
+      );
+      await waitUntil(() => sentCount() > start + prepareChunkCount);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "ok" }),
+      );
+      for (let i = 0; i < 50; i += 1) await Promise.resolve();
+      transport.notify(GENERAL_STATUS_UUID, armedStatus());
+      await pending;
+    });
+    expect(result.current.phase).toBe("ready");
+
+    // An explicit, known baseline frame right before backgrounding —
+    // `stateRef.current.frame` is what `resume-first-frame`'s own
+    // `preBackgroundKey` reads.
+    act(() => {
+      transport.notify(GENERAL_STATUS_UUID, armedStatus());
+    });
+
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    act(() => {
+      // Identical to the baseline above -> stale=true, opens the run.
+      transport.notify(GENERAL_STATUS_UUID, armedStatus());
+    });
+
+    const midExport = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntry = midExport.find(
+      (e) => e.kind === "resume-first-frame",
+    );
+    expect(firstFrameEntry?.detail).toContain("stale=true"); // sanity: the run is genuinely open
+    expect(midExport.some((e) => e.kind === "resume-stale-run")).toBe(false); // not yet closed
+
+    // Trip the RC-37 drop while still at READY — the branch under test.
+    triggerReadyDrop(transport, clock);
+    expect(result.current.programDropped).toBe(true);
+
+    // Final whole-branch review, item 5: the drop closes the still-open run
+    // HERE, with its own `resume-stale-run endedBy=reset` entry — this
+    // used to clear `resumeStaleRunRef` with no entry at all, which is the
+    // "no leaked run reaches teardown" title this test originally carried;
+    // the leak is now a RECORDED close instead of a silent discard.
+    const postDropExport = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const resetEntries = postDropExport.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(resetEntries).toHaveLength(1);
+    expect(resetEntries[0]!.detail).toMatch(/^frames=\d+ endedBy=reset$/);
+
+    // `teardown()` is unconditional on driver state (its own header
+    // comment: "exactly two callers, this hook's unmount effect and
+    // `cancel()`") and its own resume-stale-run closeout runs regardless —
+    // if the open run had ALSO leaked past the drop instead of being
+    // closed there, THIS unmount's `stash()` would record a SECOND entry,
+    // `endedBy=teardown`. It must not: the drop already cleared the ref.
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const allStaleRunEntries = entries.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(allStaleRunEntries).toHaveLength(1);
+    expect(allStaleRunEntries[0]!.detail).toBe(resetEntries[0]!.detail);
+
+    // Review round 3, item 2: this attempt never left READY — its own
+    // `programDropped` branch runs BEFORE this unmount, and used to clear
+    // `sessionIdRef` right there, before the unmount's own `teardown()`/
+    // `stash()` could ever read it. `stash()`'s `sessionId !== null` guard
+    // then skipped the `upsertSessionLog` call entirely, so this trace
+    // reached only the perishable legacy `ergomatic:last-monitor-log`
+    // slot (asserted above) and never the three-entry ring at all — the
+    // ring silently dropped every programDropped-at-READY exit. Leaving
+    // the id alive through this unmount's teardown means the ring gets
+    // exactly the entry the legacy key got, byte-for-byte.
+    const ringEntries = listSessionLogs();
+    expect(ringEntries).toHaveLength(1);
+    expect(ringEntries[0]!.exported).toBe(stashed);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2 review, fix round 1, finding 2: `stash()` recorded `latch-count`
+// unconditionally, and a burst-eligible teardown calls `stash()` TWICE (the
+// immediate t=0 stash, then a second one when the burst linger drains) —
+// same idiom as "(a-cap) LATE SIDE, PRODUCTION TIMING, NOTHING EVER
+// ARRIVES" above (storage-spine design spec §2, Task 3's own describe
+// block), which is the simplest reliable way to force the double-stash path.
+// ---------------------------------------------------------------------------
+
+describe("Wave F PR 2 Task 2, fix round 1 (finding 2), rescoped round 3 item 3: stash() records latch-count at most once per logical connection", () => {
+  it("a burst-eligible teardown's SECOND stash (the linger drain) does not duplicate the first stash's latch-count line", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100); // natural finish -> burst-eligible, no summary yet
+    expect(result.current.phase).toBe("ended");
+
+    unmount(); // teardown's DEFERRED path — STEP 2's first stash runs here
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+    expect(transport.disconnects).toBe(0); // not yet — the linger is still open
+
+    // The linger's own cap fires (nothing ever arrived to complete the
+    // evidence early — same shape "(a-cap)" above pins) — `finish()` runs
+    // STEPS 1/3/4 and the SECOND stash.
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
+    expect(transport.disconnects).toBe(1); // confirms the second stash actually ran
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const latchEntries = entries.filter((e) => e.kind === "latch-count");
+    expect(latchEntries).toHaveLength(1);
+    expect(latchEntries[0]!.detail).toBe("latches=0 resumes=0");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Final whole-branch review, item 1 (P1): a burst-eligible teardown's SECOND
+// stash (the linger drain) must not consume a SECOND history slot. Mirrors
+// "fix round 1 (finding 2)" immediately above — the identical double-stash
+// path (natural finish, no summary heard yet) — but asserts the OTHER thing
+// that call duplicated: not just the latch-count LINE inside one export, but
+// the whole export landing in `sessionLogHistory.ts`'s history TWICE.
+// ---------------------------------------------------------------------------
+
+describe("Final whole-branch review, item 1: one burst-eligible session consumes ONE history slot", () => {
+  it("the linger's second stash UPDATES the newest history entry in place — exactly one entry, carrying the second stash's own bytes", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100); // natural finish -> burst-eligible, no summary yet
+    expect(result.current.phase).toBe("ended");
+
+    unmount(); // teardown's DEFERRED path — STEP 2's FIRST stash runs here
+    // Exactly one entry after the first stash — the floor this test's own
+    // "extend or mirror" brief names.
+    expect(listSessionLogs()).toHaveLength(1);
+    const afterFirstStash = listSessionLogs()[0]!.exported;
+
+    // The linger's own cap fires — `finish()` runs STEPS 1/3/4 (a real
+    // `disconnect-*` entry among them, per this describe block's sibling
+    // above) and the SECOND stash.
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
+    expect(transport.disconnects).toBe(1); // confirms the second stash actually ran
+
+    const entries = listSessionLogs();
+    // THE BUG THIS GUARDS: two `stash()` calls in one teardown used to
+    // rotate twice, burning two of the three history slots on ONE session.
+    // Now both `upsertSessionLog` calls share this session's own id, so
+    // this converges on one entry by construction — still exactly one.
+    expect(entries).toHaveLength(1);
+    // And it carries the SECOND stash's bytes, not the first's — the linger
+    // stash sees STEPS 1/3/4's own ring entries (the disconnect sequence)
+    // that the first stash, taken before any of them ran, could not have.
+    const afterSecondStash = entries[0]!.exported;
+    expect(afterSecondStash).not.toBe(afterFirstStash);
+    expect(afterSecondStash.length).toBeGreaterThan(afterFirstStash.length);
+  });
 });
 
 /**

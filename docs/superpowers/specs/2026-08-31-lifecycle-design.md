@@ -542,10 +542,13 @@ recorded in its own doc: after a rower's first ever Connect, every log screen
 fell through to the localStorage key and wore `MONITOR LOG · COPY` "for the
 life of the install — on by-hand entries that never touched a monitor."
 
-**The fix:** keep a short **history** — the last three session logs under
-indexed keys, oldest evicted — and add one deliberate, ungated door that lists
-them and copies any one. The `fromMonitor` gate on the *inline* row stays
-exactly as it is.
+**The fix:** keep a short **history** — the last three session logs under one
+atomic history key, upserted by the connected session's own identity, oldest
+evicted (amended at PR #258's review round 2, items 1+2: originally indexed
+keys with a push/rotate call, replaced after two identity-adjacent defects —
+see `sessionLogHistory.ts`'s own header) — and add one deliberate, ungated
+door that lists them and copies any one. The `fromMonitor` gate on the
+*inline* row stays exactly as it is.
 
 That fixes reachability and perishability together, and it is what would have
 saved the pocketed-phone ring.

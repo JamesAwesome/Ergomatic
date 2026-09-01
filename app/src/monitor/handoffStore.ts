@@ -103,7 +103,7 @@ export type ClaimState = "unclaimed" | "claimed" | "consumed";
  *  comment for its citation. This is the module's ENTIRE side-channel for
  *  observability — no method below returns receipts directly (only their
  *  own operational result), so every test and every future diagnostic-ring
- *  consumer (Task 3's `logRef` wiring) goes through `setReceiptChannel`. */
+ *  consumer (Task 3's ring wiring) goes through `setReceiptChannel`. */
 export type HandoffReceipt =
   | {
       kind: "commit-accepted";
@@ -214,7 +214,7 @@ type ReceiptChannel = (receipt: HandoffReceipt) => void;
 let receiptChannel: ReceiptChannel = () => undefined;
 
 /** Installs the store's one observability sink (Task 2 brief: "an
- *  injectable `onReceipt` callback (the hook wires logRef in Task 3);
+ *  injectable `onReceipt` callback (the hook wires the ring in Task 3);
  *  default no-op"). Not a per-call parameter — `commit`/`retryDurable`/
  *  `retire`'s arities are fixed at the spec's own verbatim signatures — so
  *  this is the configuration point instead, same shape as the module's

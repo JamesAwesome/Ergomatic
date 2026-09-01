@@ -4120,6 +4120,142 @@ test.describe("you screen: the address may not reflow the identity block", () =>
   });
 });
 
+// Final whole-branch review, item 3: register the diagnostics door in the
+// design sweep — Task 3's `/you/diagnostics` menu and the
+// `/you/diagnostics/monitor-logs` list behind it shipped with no entry
+// here (TESTING.md §"structural design assertions": "a new screen with no
+// entry here is a screen the a11y/tap-target/token rules aren't actually
+// checking"). Tokens/contrast below are the ones `index.css`'s own comment
+// above `.diag-row` already records, computed and passed at Gate 0.
+test.describe("diagnostics screen", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-diagnostics@e2e.test",
+      name: "Design Diagnostics Tester",
+    });
+    await page.goto("/you/diagnostics");
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("body background and the Monitor logs card's title/caption ink match the token palette", async ({
+    page,
+  }) => {
+    const bodyBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+
+    const titleColor = await page
+      .locator(".diag-card-title")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(titleColor).toBe("rgb(27, 26, 23)"); // --ink, 17.11:1 on --surface
+
+    const captionColor = await page
+      .locator(".diag-caption")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(captionColor).toBe("rgb(87, 84, 76)"); // --ink-3, 6.69:1 on --page
+  });
+});
+
+/** A plausible mix of the driver's own real `log.record` kinds, same idiom
+ *  `screenshots.spec.ts`'s own `sessionLogRing` uses (duplicated rather
+ *  than shared across e2e files, this file's own established precedent for
+ *  small fixture helpers) — a realistic ring shape, not a screenshot of a
+ *  loop counter (agent-briefing's "realistic fixtures" rule). */
+function designSweepSessionLogRing(n: number): string {
+  const kinds = ["notify", "write", "status", "notify-first"];
+  const entries = [{ seq: 0, kind: "connect", detail: "PM5 432331249" }];
+  for (let i = 1; i < n - 1; i += 1) {
+    entries.push({
+      seq: i,
+      kind: kinds[i % kinds.length]!,
+      detail: `0x00${(31 + (i % 9)).toString(16)} ${i.toString(16).padStart(2, "0")}`,
+    });
+  }
+  if (n > 1) entries.push({ seq: n - 1, kind: "terminal", detail: "finished" });
+  return JSON.stringify(entries.slice(0, n));
+}
+
+// Realistic, populated state (RF3: an empty fixture would leave the sweep's
+// tap-target/axe pass never exercising `.diag-copy`, the only interactive
+// element this screen has beyond the back link) — two entries, matching
+// `sessionLogHistory.ts`'s own single-key array shape (M-6, final
+// whole-branch review item 4; `sessionId` added at review round 2, items
+// 1+2 — an entry missing it fails `isStoredEntry`'s shape check and is
+// dropped as corrupt, same as any other malformed entry, so this fixture
+// must carry one per entry or the screen renders its EMPTY state instead):
+// newest first.
+test.describe("diagnostics: monitor logs screen", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-diagnostics-logs@e2e.test",
+      name: "Design Diagnostics Logs Tester",
+    });
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: "ergomatic:session-log-history",
+      value: JSON.stringify([
+        {
+          sessionId: "design-sweep-newest",
+          savedAt: now.toISOString(),
+          exported: designSweepSessionLogRing(37),
+        },
+        {
+          sessionId: "design-sweep-oldest",
+          savedAt: yesterday.toISOString(),
+          exported: designSweepSessionLogRing(9),
+        },
+      ]),
+    });
+    await page.goto("/you/diagnostics/monitor-logs");
+    await page
+      .getByText(/EVENTS/)
+      .first()
+      .waitFor();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("body background, a card's 'when' line and the COPY button ink match the token palette", async ({
+    page,
+  }) => {
+    const bodyBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+
+    const whenColor = await page
+      .locator(".diag-log-when")
+      .first()
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(whenColor).toBe("rgb(27, 26, 23)"); // --ink, 17.11:1 on --surface
+
+    const copyColor = await page
+      .locator(".diag-copy")
+      .first()
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(copyColor).toBe("rgb(63, 60, 53)"); // --ink-2, 10.81:1 on --surface
+  });
+});
+
 // Phase 6B (Task 5): the pre-workout countdown (handoff §5). A single
 // 2-minute work step gets a rower here directly off Start (fast-follow
 // Task 4: ConfirmTargets is deleted) without ever pressing SKIP —

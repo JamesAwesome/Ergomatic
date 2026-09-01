@@ -9641,6 +9641,163 @@ section:not(.news-pinned) .news-row:last-of-type {
   min-width: 140px;
 }
 
+/* Task 3 (Gate 0 rev 3, docs/superpowers/specs/2026-08-31-ring-door-gate.html
+   §"The row on You, and the screen behind it"): the DIAGNOSTICS door — a
+   quiet mono row on You, a static menu screen, and the monitor-logs list
+   behind it. Tokens and contrast ratios are the gate's own, computed and
+   PASSED there against the app's real light-theme values (this app has no
+   dark theme yet, same as every other screen's CSS in this file):
+     - row label / captions / card sub: --ink-3 #57544c on --page #f4f1e8
+       = 6.69:1 (floor 4.5:1)
+     - card "when" line: --ink #1b1a17 on --surface #fffdf7 = 17.11:1
+     - card sub on card: --ink-3 on --surface = 7.43:1
+     - COPY button text: --ink-2 #3f3c35 on --surface = 10.81:1
+   All four hit targets (.diag-row, .diag-card, .diag-copy) are >=44px. */
+
+/* M-3 (final whole-branch review, matching the gate artifact's `.e-body`
+   flex-column + `margin-top:auto` wrapper): the DIAGNOSTICS row is pinned
+   to the bottom of the You screen, not left sitting directly under Reset
+   baseline setup. Scoped to `.you-screen` alone (an addition alongside
+   `.screen` on You.tsx's `<main>`, never a change to the shared `.screen`
+   rule itself) — `.screen` is the generic screen frame every other route
+   also uses, and giving it a flex column unconditionally would restyle
+   every one of them. `min-height` mirrors `.app-shell`'s own tab-bar
+   reservation (index.css:445) so the row lands just above the tab bar, not
+   below its fold: full viewport minus the same `var(--tap)` +
+   `env(safe-area-inset-bottom)` the tab bar itself occupies. When BASELINES
+   content is tall enough to exceed that height on its own, the row simply
+   follows it in flow (no `margin-top: auto` room left to absorb) and the
+   page scrolls, same as before this task. */
+.you-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - var(--tap) - env(safe-area-inset-bottom, 0px));
+}
+
+.diag-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--tap);
+  box-sizing: border-box;
+  padding: 13px 2px;
+  border-top: 1px solid var(--rule-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+
+/* M-3: pins the row above — `.diag-row` is used ONLY on the You screen
+   (grep confirmed, single JSX site), so this lives on the row's own rule
+   rather than a separate wrapper div; `margin-top: auto` on a flex-column
+   item pushes it to the end of the main axis, absorbing whatever space
+   `.you-screen`'s min-height leaves above it (the short-content case the
+   gate artifact shows). Overrides the plain `12px` `margin-top` above via
+   specificity, in EVERY case, not conditionally — when BASELINES content
+   already fills or exceeds that min-height, a flex `auto` margin resolves
+   to `0`, not back to `12px`; the row's own `border-top` still supplies
+   the visual separation in that case, so nothing collapses illegibly. */
+.you-screen .diag-row {
+  margin-top: auto;
+}
+
+.diag-caption {
+  color: var(--ink-3);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.diag-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: var(--tap);
+  box-sizing: border-box;
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-top: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.diag-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.diag-card-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin: 2px 0 0;
+}
+
+.diag-chevron {
+  color: var(--ink-3);
+}
+
+/* .diag-log-card repeats .diag-card's own look (same surface/rule/radius,
+   same "when" + mono sub pair) rather than sharing the class: this card's
+   right-hand slot is a button, not a chevron, and .diag-card's `<Link>`
+   role would be wrong here — the whole row isn't a nav target, only the
+   COPY control inside it is interactive. */
+.diag-log-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-top: 12px;
+}
+
+.diag-log-when {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.diag-log-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin: 2px 0 0;
+}
+
+.diag-copy {
+  flex: none;
+  min-height: var(--tap);
+  box-sizing: border-box;
+  border: 1px solid var(--rule-3);
+  color: var(--ink-2);
+  background: var(--surface);
+  border-radius: 3px;
+  padding: 10px 14px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.diag-empty {
+  color: var(--ink-3);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
 /* ── PHASE JR PR 2: THE FREE ROW ─────────────────────────────────────────
    Gate 0 board `docs/design/handoffs/2026-09-01-just-row/`, approved
    2026-09-01. Every value here is lifted from an existing idiom rather

@@ -1878,6 +1878,138 @@ test("you-derive-offer-6k", async ({ page }) => {
   });
 });
 
+// Task 3 (Gate 0 rev 3, docs/superpowers/specs/2026-08-31-ring-door-gate.
+// html): the diagnostics door — the menu screen and the monitor-logs list
+// behind it. M-6 (final whole-branch review, atomic history storage): the
+// storage key ("ergomatic:session-log-history") is `sessionLogHistory.ts`'s
+// own `HISTORY_KEY`, not exported for this file's use — seeded directly
+// (same lightweight idiom `today-interrupted`'s own `MONITOR_RUN_KEY` seed
+// uses) as a single JSON array, newest first, rather than driving a real
+// connected session through teardown, which the monitor e2e/design specs
+// already exercise at the transport layer.
+function sessionLogRing(n: number): string {
+  // A plausible mix of the driver's own real `log.record` kinds
+  // (driver.ts: "connect", "notify-first", "notify", "status", "write",
+  // "terminal") rather than n identical lines — this is what a captured
+  // ring actually looks like, not a screenshot of a loop counter.
+  const kinds = ["notify", "write", "status", "notify-first"];
+  const entries = [{ seq: 0, kind: "connect", detail: "PM5 432331249" }];
+  for (let i = 1; i < n - 1; i++) {
+    entries.push({
+      seq: i,
+      kind: kinds[i % kinds.length]!,
+      detail: `0x00${(31 + (i % 9)).toString(16)} ${i.toString(16).padStart(2, "0")}`,
+    });
+  }
+  if (n > 1) entries.push({ seq: n - 1, kind: "terminal", detail: "finished" });
+  return JSON.stringify(entries.slice(0, n));
+}
+
+async function seedSessionLogHistory(
+  page: Page,
+  entries: { sessionId: string; savedAt: string; exported: string }[],
+): Promise<void> {
+  // Newest first, matching `sessionLogHistory.ts`'s own `upsertSessionLog`
+  // ordering — the caller passes entries in that order already. `sessionId`
+  // is required (review round 2, items 1+2): an entry missing it fails
+  // `isStoredEntry`'s shape check and is silently dropped as corrupt, which
+  // used to leave this seed producing an empty screen instead of the
+  // populated one these captures exist to show.
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: "ergomatic:session-log-history",
+    value: JSON.stringify(entries),
+  });
+}
+
+test("diagnostics", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-diagnostics@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/you/diagnostics");
+  await page.getByText("Monitor logs").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "diagnostics.png"),
+  });
+});
+
+test("diagnostics-monitor-logs", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-diagnostics-logs@e2e.test",
+    name: "Screenshot Tester",
+  });
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  await seedSessionLogHistory(page, [
+    {
+      sessionId: "screenshots-newest",
+      savedAt: now.toISOString(),
+      exported: sessionLogRing(37),
+    },
+    {
+      sessionId: "screenshots-oldest",
+      savedAt: yesterday.toISOString(),
+      exported: sessionLogRing(9),
+    },
+  ]);
+  await page.goto("/you/diagnostics/monitor-logs");
+  await page
+    .getByText(/EVENTS/)
+    .first()
+    .waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "diagnostics-monitor-logs.png"),
+  });
+});
+
+// Final whole-branch review, item 3: landscape captures for both doors,
+// same idiom "connected-interstitial-failed-landscape" above uses (a
+// viewport resize, no `neutralizeFixedTabBarForFullPageCapture` needed —
+// both screens are `.overlay-screen`, fixed and full-viewport, not the
+// scrollable tab-bar-reserving `.app-shell` layout that helper exists for).
+test("diagnostics-landscape", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-diagnostics-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/you/diagnostics");
+  await page.getByText("Monitor logs").waitFor();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "diagnostics-landscape.png"),
+  });
+});
+
+test("diagnostics-monitor-logs-landscape", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-diagnostics-logs-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  await seedSessionLogHistory(page, [
+    {
+      sessionId: "screenshots-landscape-newest",
+      savedAt: now.toISOString(),
+      exported: sessionLogRing(37),
+    },
+    {
+      sessionId: "screenshots-landscape-oldest",
+      savedAt: yesterday.toISOString(),
+      exported: sessionLogRing(9),
+    },
+  ]);
+  await page.goto("/you/diagnostics/monitor-logs");
+  await page
+    .getByText(/EVENTS/)
+    .first()
+    .waitFor();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "diagnostics-monitor-logs-landscape.png"),
+  });
+});
+
 // Phase 6B (Task 5): the pre-workout countdown, live timer (portrait +
 // 844×420 landscape), and the post-workout summary (Phase PW Task 5's own
 // screen, which replaced SessionComplete). Every capture drives a

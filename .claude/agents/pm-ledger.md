@@ -3856,6 +3856,86 @@ does not match these numbers._
   gets a fresh PM slate pass before implementation; its "L" sizing predates
   the correction.**
 
+## TRIAD final-PR gate, 2026-09-01 (Wave F PR 2 — the ring history and its door, #258)
+
+- **The #248 risk-note lookup came back CLEAN, first time, and it was worth
+  the one line.** 134 words above the fold with two captures and a Try-it —
+  the series now reads #228 ~270, #230 266, #239 148, #248 274, #249 225,
+  **#258 134**. What remains over budget is one 32-word bullet naming a
+  mechanism with no rower on the other end ("gap, staleness, the raw rowing
+  byte"). **Three gates running, the residual overage IS the so-what bullet
+  and nothing else.** The presentation rule is now two mechanical lookups —
+  count the fold, grep for a risk note — and both are cheap enough to keep.
+- **A Gate-0 artifact can UNDER-draw a screen's chrome as easily as it can
+  mock the wrong chrome.** #248's lesson was an artifact drawing "← Log it"
+  where the real screen says WORKOUT COMPLETE. #258 is its inverse: the
+  artifact drew a compact "← Monitor logs" nav where the shipped screens use
+  the house `BackLink` + `screen-title` pair (← BACK plus a large serif
+  heading, ~90px taller). The implementer was RIGHT to take the house
+  component — but James approved a frame whose top is not what ships, and
+  nobody told him. **At any gate on a Gate-0 screen, diff the artifact's
+  chrome against the real component's render tree in BOTH directions:
+  invented chrome and omitted chrome are the same defect.**
+- **An eviction policy is a product decision and this one was never argued
+  against the incident that justifies it.** The three-slot history is pushed
+  from `stash()`, which spec §0.3 establishes runs on EVERY connected
+  teardown "including failed pairings and connect-then-cancel". So three
+  fumbled reconnects after an incident evict the incident — and fumbled
+  reconnects are exactly what an incident produces. It also makes the PR's
+  headline claim ("exactly the fix that would have saved the pocketed-phone
+  ring") unverifiable: that incident had ≥2 saved-row sessions after it
+  (production count 16→18) plus an uncounted number of cancels, which §0.3
+  says leave no trace. **Ruled: ship three, file the count with its trigger,
+  and do NOT add a size-or-rowing threshold on the teardown path at the last
+  gate** — an invented ungated threshold is the exact smell §3's own
+  measure-don't-tune posture refuses. The spec's posture applied to its own
+  storage.
+- **An unverifiable instrument is safe to ship when nothing shipped READS
+  it — say that, not "shipping them together is the point."** #258's RF19
+  residual is real (every gate mocks the lifecycle seam; §0.4's registered
+  deferral blocks e2e). It is acceptable because §4 explicitly waits on §3
+  and §6's ROADMAP row forbids a threshold move until an ordinary-use rate
+  lands: a wrong instrument yields a wrong measurement whose only consumer
+  is a future PR with its own gate. **The general test for shipping an
+  unverifiable instrument: name every consumer of its numbers and confirm
+  each one is a human-run gate, not a shipped predicate.** Corollary owed at
+  the read: the first field ring is simultaneously the instrument's
+  acceptance test and its data — read it as the acceptance test FIRST, or it
+  is the mirror problem (RF11) with one artifact playing both parts.
+- **I over-counted the obligations this door serves, and the correction is
+  the durable part.** I had #258 enabling three stacked "decode the first
+  field ring" obligations. It enables ONE class: §3's and §6's own entries.
+  #239's obligation reads `handoffStore`'s receipts from **sessionStorage**
+  via the connection log sheet; #248's reads the stored row's `endedBy`.
+  **"The ring" is three different instruments in this repo — name which one
+  an obligation reads before crediting a PR with unblocking it.**
+- **RF14, seventh occurrence: the notes obligation was in the Record block
+  and nowhere else.** ROADMAP's register carries notes-owed rows and had
+  none for this screen. Paired with a stale row the PR falsifies and does
+  not touch: the Wave D worked example stated in bold that
+  `ergomatic:last-session-log` "has no reader" — false on merge — inside the
+  item whose demand this PR HALF discharges (gesture-free yes; a saved row's
+  diagnostics no, `session_logs` still has no diagnostics column). **A PR
+  that falsifies a ROADMAP sentence owns reconciling it, and
+  half-discharging an item is an edit to that item, not a new row
+  elsewhere.**
+- **For a diagnostics door the release note is the affordance, not the
+  announcement.** The row reads `DIAGNOSTICS ›` and tells a rower nothing
+  about when to tap it. Same shape as the 2026-08-18 swipe ruling: an
+  instrument nobody is told to use is not an instrument, and batching it
+  into a later multi-item release makes it item N of 8. **Notes PR
+  immediately behind, tag on that (#231/#238 shape), and the sentence says
+  WHEN to tap, never what it is.**
+- **Release: v0.32.0 MINOR.** `origin/main` is exactly `v0.31.0` (zero
+  merges since the tag), so this is the first merge after it and the number
+  is unclaimed at the gate. Wave E's PR2 wants v0.32.0 too, having lost
+  v0.31.0 to #248 — second consecutive gate where two waves claim one
+  number. **The #248 rule held on its first live test: a version
+  reservation is a claim, not an allocation; re-check it at the merge.**
+- **Zero unreviewed tail, third time achieved** (#104, #109, #258): the
+  scoped re-review's own diff ends at `git rev-parse HEAD`. Two commands.
+  Worth continuing to name as the standard for a final PR.
+
 ## Phase JR PR 2 final gate, 2026-09-01 (#259, TRIAD — a number's meaning + the free-row writer)
 
 - **A "one place for this number" helper only helps the screens that CALL it,

@@ -119,4 +119,12 @@ describe("You", () => {
       ).toBe(true);
     });
   });
+
+  // Task 3 (Gate 0 rev 2/3): the quiet DIAGNOSTICS row at the bottom of
+  // You, navigating to the menu screen — not Monitor logs directly.
+  it("carries a DIAGNOSTICS row navigating to /you/diagnostics", () => {
+    renderYou(user);
+    const row = screen.getByRole("link", { name: "DIAGNOSTICS" });
+    expect(row).toHaveAttribute("href", "/you/diagnostics");
+  });
 });

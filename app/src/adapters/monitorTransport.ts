@@ -60,7 +60,7 @@ import {
  * why (the injected clock is not optional — a bare `Date.now()`/
  * `setTimeout()` inside this function would be unprovable by the replay
  * harness). `useMonitorSession.ts` supplies a real `Date.now`/`setTimeout`
- * pair in production and threads its own `logRef` through `onSilence`/
+ * pair in production and threads its own ring (the hook's `sessionRef.current.log`) through `onSilence`/
  * `onRecovery`; `adapters/monitorTransport.test.ts` supplies a manual one
  * to prove the COMPOSITION itself, not just the decorator in isolation
  * (the plan's own constraint: "every test that injects

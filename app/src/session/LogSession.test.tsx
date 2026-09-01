@@ -1119,8 +1119,11 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
 
   // FIX ROUND (whole-branch review, MEDIUM) — THE REGRESSION THIS CLOSES.
   // `ergomatic:last-session-log` is localStorage, written on EVERY
-  // connected teardown (a failed pairing and a connect-then-cancel
-  // included) and never cleared. Ungated, that made `MONITOR LOG · COPY`
+  // connected teardown that belongs to a real session (a connect-then-cancel
+  // included; since PR #258's round-5 fix a pre-GATT attempt owns no NEW
+  // session, though its teardown may re-stash a retained prior session
+  // under the same id) and never cleared. Ungated, that made
+  // `MONITOR LOG · COPY`
   // permanent furniture on every log screen in the app for the life of the
   // install, after a rower's first ever Connect — including on a by-hand
   // entry that has nothing to do with a monitor. The one place in this
