@@ -46,17 +46,16 @@ deliberately refuses to infer a run without a program — naming a
    plus whatever precedes Menu). The exit walk states this instead of
    discovering it.
 
-   **PREMISE IN DOUBT, RULING NOT REVERSED (2026-08-31 capture).** The
-   passive closer assumes the monitor powers itself off and drops the link.
-   We watched for 896.8 s, connected, and it did not — but that is a
-   bounded observation, not a refutation: concept2.com documents the
-   power-off plainly and says nothing about Bluetooth either way, and no
-   vendor document relates a connection to it. **What IS settled is that we
-   have never observed the signal**, and a closer we cannot observe is one
-   PR 1 cannot store, which is why `ended_by: "idle"` is withdrawn below.
-   The tension this leaves is real and is yours to resolve: only an
-   app-side threshold could produce a passive closer now, and this ruling's
-   second sentence forbids one. **James's call, not an implementer's.**
+   **AMENDED BY RULINGS 8 AND 9 (James, 2026-09-01), which land in
+   opposite directions and settle together.** Ruling 8 says design as
+   though the machine never closes a connected row, which briefly made an
+   app-side threshold the only possible closer and reversed this ruling's
+   second sentence. Ruling 9 then declines to build one. **Net: this
+   ruling's first clause stands (Done in the app, Menu on the erg), its
+   second sentence STANDS as originally written (the app never invents an
+   idle threshold), and only the passive closer changes** — it is no longer
+   the machine's idle power-off we wait for, but whatever takes the link,
+   handled by the existing recovery path.
 6. **Approach A** — a parallel observer path; `ConnectedSurface` and
    `useMonitorSession` are not modified. **Corrected claim:** this is
    parallel-*safer*, not parallel-safe — the observer still needs driver
@@ -65,6 +64,72 @@ deliberately refuses to infer a run without a program — naming a
    therefore still waits behind Phase RC's wave.
 7. **The capture walk is its own erg session, James-scheduled** — RC's
    exit-7 walk already ran (2026-08-24), so there is no trip to attach to.
+   **DONE 2026-08-31** (`docs/monitor/sessions/walk-2026-08-31-justrow/`).
+8. **ASSUME THE CONNECTION STAYS OPEN INDEFINITELY (James, 2026-09-01).**
+   Design for a PM5 that never closes a Just Row while we are connected.
+
+   **This is a RULING, not a measurement, and the distinction matters for
+   anyone citing it later.** The walk observed no closer within 896.8 s and
+   the vendor documentation is silent on whether a connection suppresses
+   the inactivity power-off; rather than spend another erg session settling
+   it, we design for the worst case. The owed capture is retired — not
+   answered. If a closer is ever observed in the wild it is a bonus, never
+   something the design waits on.
+
+   **What it settles.** There is no machine-side passive closer. PR 2 owns
+   the inactivity rule outright, and OPEN 3's remaining half stops blocking
+   anything.
+
+   **What it reverses.** Ruling 5's second sentence ("the app never invents
+   an idle threshold"). Under ruling 8 an app-side threshold is the only
+   possible closer for a walked-away row, so inventing one is now required
+   rather than forbidden.
+
+   **What it opened is closed by ruling 9 below.** Briefly, for the record:
+   a row the APP closed could not have stored the old `idle`, whose copy
+   was "the monitor switched itself off after the row" — under ruling 8 the
+   monitor did no such thing, we did, and storing `idle` would assert the
+   machine's agency for our own decision. Ruling 9 removes the app-side
+   close entirely, so no such value is needed.
+
+   **One thing the capture already de-risks, and it survives ruling 9:**
+   the machine's own elapsed and distance HOLD while the rower is away
+   (CLOSED 3 — frozen at 64.45 s / 222.8 m across the whole 896.8 s). So a
+   close at ANY moment, by any cause, stores the last-motion numbers
+   automatically. There is no inflation to subtract and no "numbers at
+   close vs numbers at last stroke" problem to design around.
+9. **DO NOT CLOSE IT AT ALL — let the link die by other means (James,
+   2026-09-01).** No app-side inactivity threshold. A Just Row nobody ends
+   simply runs until something else takes the connection: the phone
+   sleeping, the app being killed, the rower walking out of range, a flat
+   battery, or the monitor eventually powering itself off after all.
+
+   **This REINSTATES ruling 5's second sentence**, which ruling 8 had
+   reversed. Net position across rulings 5, 8 and 9: the app never invents
+   an idle threshold, and it does not wait for a machine closer either — it
+   simply keeps observing until the link goes.
+
+   **It needs no new mechanism and no new enum value, because the existing
+   recovery path already IS this.** A link drop or app death leaves the
+   `MonitorRun` open; Today offers it; `completeInterruptedRun`
+   (`Today.tsx:778`) stamps `endedBy: "interrupted"` when the rower deals
+   with it. That value's documented meaning is *"closed later with no
+   evidence … a different shape of honesty than these four"*
+   (`monitorRun.ts:34-37`), which is exactly and only what we know about a
+   row that ended while nobody was watching. **`ended_by: "idle"` is
+   withdrawn permanently — nothing needs it now, and PR 1's last blocking
+   design question is dissolved rather than answered.**
+
+   **The accepted cost, stated so it is not discovered later.** Storage is
+   not the cost: the series buckets by the WORK clock, which freezes when
+   the rower stops, so idle time adds essentially nothing — measured on the
+   walk's own piece 2, 890 frames with a frozen clock collapsed into ONE
+   sample, and 14:57 of sitting there grew the trace by that one sample.
+   `SERIES_SAMPLE_CAP` already bounds the whole trace at 4 hours of rowing.
+   **The real cost is the live session**: the BLE link and the wake lock
+   stay up until something else ends them, which is battery on both the
+   phone and the PM5. That is the price of this ruling and it is accepted
+   deliberately.
 
 ## Does the system have the concept? (the mandatory question)
 
@@ -197,8 +262,11 @@ captures and transcriptions. This section is the corrected record.
 
 ### CLOSED — answered by PR 0b's capture, 2026-08-31
 
-**Six are answered outright; OPEN 3 is answered only within a bound (see
-its own entry).** Evidence and full decodes:
+**Six are answered outright. OPEN 3 is answered within a bound by the
+capture, and its remaining half is CLOSED BY RULING 8 rather than by
+evidence — we design as though the machine never closes a connected row.**
+
+Evidence and full decodes:
 `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`. Scope, per that
 README: PM5 serial 432331249, firmware not captured, one session — these
 are findings for this device and these runs, not firmware-general truths.
@@ -244,7 +312,8 @@ are findings for this device and these runs, not firmware-general truths.
    is documented at any layer we can watch. That is enough to keep `idle`
    out of PR 1 — a rule cannot map a signal nobody has seen — and not enough
    to say the machine never closes. The physical-power/BLE layer is the open
-   half, and OPEN 3 is answered only within its bound until it is settled.
+   half — and ruling 8 (2026-09-01) closes that half by DECISION rather
+   than by measurement: we assume it never closes and design for it.
 4. **Does a Menu-end emit 0x0039? YES**, with 0x003A and a 0x003F, 0.4 s
    after the terminate. Its filed totals (393.60 s / 1396.0 m) agree with
    the live stream (393.58 s / 1396.6 m) to 0.6 m. **This retires rev 2's
@@ -365,9 +434,19 @@ with no terminate and no power-off, and then the operator ended the capture
 plainly and says nothing about Bluetooth either way, so the physical-power
 layer is unsettled, not disproved.
 
-**The withdrawal does not depend on settling it.** What is settled is that
-**there is no observed signal to map, so there is nothing to store** — and
-that is sufficient on its own. Adding an enum value for an event we have
+**The withdrawal does not depend on settling it, and RULING 8 (2026-09-01)
+has now removed the need to settle it at all** — we design as though the
+machine never closes a connected row.
+
+**The withdrawal is now PERMANENT, and needs no replacement** (ruling 9).
+There is no app-side close to name, so nothing has to assert anyone's
+agency. A row that ends while nobody is watching runs through the existing
+recovery path and stamps the `"interrupted"` value that already exists,
+whose documented meaning — "closed later with no evidence" — is precisely
+what we know. **PR 1 adds no `ended_by` member at all.** The closers it
+knows about are `rower`, `link-lost`, and `interrupted` via recovery.
+
+Adding an enum value for an event we have
 never seen is exactly the "does the system HAVE the concept" failure this
 project has already paid for once, and an enum value is a stored shape:
 easy to add and, by our own ratchet, permanent.
@@ -380,9 +459,10 @@ ever found — it is not an argument for shipping one now:
 > with a row you chose to end" — reusing it for a *designed* idle power-off
 > would label a normal free-row ending a failure.
 
-**What PR 2 needs instead is an inactivity rule of our own** (N2): with no
-observed machine-side closer, a row the rower walks away from has nothing
-known to close it.
+**PR 2 needs NO inactivity rule** (rulings 8 and 9 together): there is no
+machine closer to wait for and we decline to invent one, so a walked-away
+row simply stays open until the link goes and then takes the recovery path
+that already exists. N2 is resolved by declining it, not by designing it.
 That rule is undesigned, it decides what a walked-away row stores, and it
 therefore wants a brainstorm and a fresh antagonist pass **before PR 1
 freezes any enum**. Until that lands, the closers are `rower` and
