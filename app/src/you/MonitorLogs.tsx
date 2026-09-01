@@ -160,7 +160,7 @@ export default function MonitorLogs() {
   const rows = renderableRows(entries);
 
   return (
-    <main className="screen diag-screen overlay-screen" tabIndex={0}>
+    <main className="screen overlay-screen" tabIndex={0}>
       <BackLink fallback="/you/diagnostics" />
       <h1 className="screen-title">Monitor logs</h1>
       <p className="diag-caption">

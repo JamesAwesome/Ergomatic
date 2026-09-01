@@ -9654,6 +9654,26 @@ section:not(.news-pinned) .news-row:last-of-type {
      - COPY button text: --ink-2 #3f3c35 on --surface = 10.81:1
    All four hit targets (.diag-row, .diag-card, .diag-copy) are >=44px. */
 
+/* M-3 (final whole-branch review, matching the gate artifact's `.e-body`
+   flex-column + `margin-top:auto` wrapper): the DIAGNOSTICS row is pinned
+   to the bottom of the You screen, not left sitting directly under Reset
+   baseline setup. Scoped to `.you-screen` alone (an addition alongside
+   `.screen` on You.tsx's `<main>`, never a change to the shared `.screen`
+   rule itself) — `.screen` is the generic screen frame every other route
+   also uses, and giving it a flex column unconditionally would restyle
+   every one of them. `min-height` mirrors `.app-shell`'s own tab-bar
+   reservation (index.css:445) so the row lands just above the tab bar, not
+   below its fold: full viewport minus the same `var(--tap)` +
+   `env(safe-area-inset-bottom)` the tab bar itself occupies. When BASELINES
+   content is tall enough to exceed that height on its own, the row simply
+   follows it in flow (no `margin-top: auto` room left to absorb) and the
+   page scrolls, same as before this task. */
+.you-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - var(--tap) - env(safe-area-inset-bottom, 0px));
+}
+
 .diag-row {
   margin-top: 12px;
   display: flex;
@@ -9668,6 +9688,20 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.08em;
   color: var(--ink-3);
   text-decoration: none;
+}
+
+/* M-3: pins the row above — `.diag-row` is used ONLY on the You screen
+   (grep confirmed, single JSX site), so this lives on the row's own rule
+   rather than a separate wrapper div; `margin-top: auto` on a flex-column
+   item pushes it to the end of the main axis, absorbing whatever space
+   `.you-screen`'s min-height leaves above it (the short-content case the
+   gate artifact shows). Overrides the plain `12px` `margin-top` above via
+   specificity, in EVERY case, not conditionally — when BASELINES content
+   already fills or exceeds that min-height, a flex `auto` margin resolves
+   to `0`, not back to `12px`; the row's own `border-top` still supplies
+   the visual separation in that case, so nothing collapses illegibly. */
+.you-screen .diag-row {
+  margin-top: auto;
 }
 
 .diag-caption {

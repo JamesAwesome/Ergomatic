@@ -29,7 +29,12 @@ export default function You({
   const [resetGeneration, setResetGeneration] = useState(0);
 
   return (
-    <main className="screen">
+    // M-3 (final whole-branch review): `you-screen` pairs with the
+    // `.you-screen` CSS rule (index.css, Task 3's own comment block) that
+    // pins the DIAGNOSTICS row below to the bottom of this screen, matching
+    // the approved gate artifact — `.screen` itself is untouched, so no
+    // other route's layout changes.
+    <main className="screen you-screen">
       <section className="you">
         <div className="avatar" aria-hidden="true">
           {initials(user.name)}
