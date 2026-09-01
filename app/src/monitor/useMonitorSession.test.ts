@@ -7059,20 +7059,176 @@ describe("Round 4, item 1: the default sessionId factory survives no crypto.rand
     expect(entries[0]!.sessionId).not.toBe(entries[1]!.sessionId);
   });
 
-  it("connect() still reaches its normal flow — scan, then pairing — with no latched connectingRef", async () => {
-    const { result, transport } = harness({ program: TWO_INTERVALS });
+  it("connect() still reaches its normal flow, and a SECOND Connect after the link drops scans again — the claim 'no latched connectingRef' actually observed", async () => {
+    const { result, fake, transport } = harness({ program: TWO_INTERVALS });
 
     await connect(result);
 
     // Reaching `"pairing"` with no error is only possible having run PAST
-    // the mint (it precedes `update({ phase: "picking" })`, this file's own
-    // brief-cited call site) and THROUGH the try/finally that is the only
-    // place a successful attempt clears `connectingRef`. The old
+    // the mint and THROUGH the try/finally that is the only place a
+    // successful attempt clears `connectingRef`. The old
     // unconditional-throw default left `phase` stuck at its pre-connect
     // value forever, with `connect()`'s own promise rejected uncaught.
     expect(result.current.phase).toBe("pairing");
     expect(result.current.error).toBeNull();
     expect(transport.scans).toBe(1);
+
+    // ROUND 5, ITEM 2 (P2) — THIS TEST USED TO CLAIM A LATCH IT NEVER
+    // LOOKED FOR. A latched `connectingRef` is invisible from the outside
+    // until something asks `connect()` to run a SECOND time: the whole
+    // symptom of round 4's defect is "Connect goes permanently dead", and
+    // one successful attempt cannot show that. So the link drops and
+    // Connect is pressed again.
+    //
+    // The drop, NOT a `cancel()`, is the exit that makes this observation
+    // sound. `cancel()` clears `connectingRef` itself (its own
+    // `attemptRef`/`connectingRef` pair, the abandoned-attempt fix), which
+    // would mask a defeated `finally` completely — a second scan would
+    // happen either way and the assertion below could not go red. The
+    // `disconnected` handler is the one exit that disposes `driverRef`
+    // (F1's cohort-unlock CRITICAL) while deliberately touching NOTHING
+    // about the connect claim, so after it the ONLY thing standing between
+    // this hook and a second scan is the `finally` under test.
+    act(() => {
+      fake.injectDisconnect();
+    });
+    expect(result.current.phase).toBe("disconnected");
+
+    await connect(result);
+
+    expect(transport.scans).toBe(2);
+    expect(result.current.phase).toBe("pairing");
+    expect(result.current.error).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REVIEW ROUND 5, ITEM 1 (P1) — THE ALIAS, AND WHY FOUR ROUNDS OF POINT-FIXES
+// COULD NOT REACH IT.
+//
+// Rounds 2-4 held the logical session's identity in `sessionIdRef` and its
+// trace in `logRef`, on two different lifetimes. The id was minted at
+// `connect()`'s ENTRY — an attempt boundary. The log was replaced only after
+// `transport.connect()` resolved, and deliberately SURVIVES a `cancel()` so
+// the diagnostics sheet can still show why an attempt died.
+//
+// So: connect, cancel (one history entry, correct). Press Connect again and
+// cancel it while it is still parked in scan/GATT. That second attempt never
+// replaced the log — but it DID mint a fresh id and reset the latch guard,
+// and `stash()` read one from each ref. `upsertSessionLog` found no entry
+// under the new id and did exactly what it is told: it INSERTED a clone of
+// the previous session's trace, in a fresh slot, carrying a second
+// `latch-count` line appended to the log it does not own. Repeatable once
+// per cancelled attempt, until all three slots hold copies of one session —
+// and the ring exists to survive an incident, which is precisely the moment
+// a rower fumbles reconnects.
+//
+// The fix is structural: id, log and §6's counters are ONE `LogicalSession`
+// value, assigned at the single site that replaces the log. This test is the
+// reviewer's own reproduction.
+// ---------------------------------------------------------------------------
+
+describe("Review round 5, item 1: a cancelled pre-GATT attempt cannot clone the session whose log it never replaced", () => {
+  it("Connect -> Cancel, then a SECOND Connect cancelled while parked inside transport.connect(): still ONE ring entry, unchanged, with no second latch-count", async () => {
+    // The second `transport.connect()` parks; the first resolves normally,
+    // so session 1 is a real logical session with a real log behind it.
+    let connects = 0;
+    let releaseSecondGatt!: () => void;
+    const parkedGatt = new Promise<void>((resolve) => {
+      releaseSecondGatt = resolve;
+    });
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: ONE_INTERVAL,
+    });
+    let scans = 0;
+    const transport = {
+      ...fake,
+      async scan() {
+        scans += 1;
+        return fake.scan();
+      },
+      async connect(id: string) {
+        connects += 1;
+        if (connects === 2) await parkedGatt;
+        return fake.connect(id);
+      },
+    };
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+        burstLingerSchedule: () => (): void => undefined,
+      }),
+    );
+
+    // SESSION 1: a genuine connect (GATT resolved, log created), cancelled
+    // from `pairing`. Its trace is kept on purpose — this is the ref state
+    // the second attempt used to alias.
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("pairing");
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    const afterFirst = listSessionLogs();
+    expect(afterFirst).toHaveLength(1);
+    const firstId = afterFirst[0]!.sessionId;
+    const firstExport = afterFirst[0]!.exported;
+
+    // ATTEMPT 2 parks inside the GATT connect — past the scan, before the
+    // one line that may replace the log. Nothing about session 1 has
+    // changed at this point on either the old code or the new.
+    act(() => void result.current.connect());
+    await act(async () => {
+      await flush();
+    });
+    expect(scans).toBe(2);
+    expect(connects).toBe(2);
+
+    // THE CANCEL THAT USED TO CLONE. `teardown()` -> `stash()` runs here
+    // while the hook is still holding session 1's log, and on the old code
+    // a fresh `sessionIdRef` beside it.
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    // The abandoned attempt unwinds underneath, finds itself superseded,
+    // and hands its transport back without ever building a log.
+    await act(async () => {
+      releaseSecondGatt();
+      await flush();
+    });
+
+    const entries = listSessionLogs();
+    // ONE slot. On the unfixed hook this is 2: the same trace twice, under
+    // two ids.
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.sessionId).toBe(firstId);
+    // And it is session 1's OWN log, CONTINUED — not a copy of it. The
+    // second cancel's `teardown()` does stash again (that is the design:
+    // every stash this session produces upserts its one entry), so the
+    // bytes are a later snapshot of the same ring — session 1's own
+    // `disconnect-requested` from the first cancel's hang-up now sits after
+    // the entries the first stash could see. What must NOT have happened is
+    // a second slot, or a second `latch-count` appended to a log this
+    // attempt never owned.
+    const parsedFirst = JSON.parse(firstExport) as {
+      seq: number;
+      kind: string;
+      detail: string;
+    }[];
+    const parsedNow = JSON.parse(entries[0]!.exported) as typeof parsedFirst;
+    expect(parsedNow.slice(0, parsedFirst.length)).toStrictEqual(parsedFirst);
+    const latchCountLines = parsedNow.filter((e) => e.kind === "latch-count");
+    expect(latchCountLines).toHaveLength(1);
   });
 });
 
