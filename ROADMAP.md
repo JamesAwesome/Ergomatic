@@ -999,18 +999,17 @@ X" is a real disposition — most of these are single files.
   already REJECTS leading rest, so only the consecutive case is live. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`
   (§AUD-006, §V4).
-- **The dropped-arrival log screen reads `WORKOUT COMPLETE` two lines above
-  `THE ERG DROPPED THE WORKOUT.`** `.summary-eyebrow`
-  (`PostWorkoutSummary.tsx:655`) is unconditional and predates this work
-  (link-lost/interrupted arrivals already show it); the Gate-0 artifact's
-  mock drew a nav bar where the real screen has the eyebrow, so the
-  juxtaposition was invisible at the gate. James decides: keep, or suppress
-  the eyebrow (that change is itself Gate-0 copy). **Scoped at the PM gate:
-  a suppression must cover all THREE arrival types that did not complete —
-  dropped, link-lost, and interrupted — or the fix ships a screen that
-  tells the truth on drops and keeps lying on the other two.** Found at
-  PR #248's final whole-branch review, re-scoped at its PM gate,
-  2026-08-31.
+- **RESOLVED (James, PR #248 review, 2026-08-31): "My recommendation is to
+  suppress the completion eyebrow"** — the dropped-arrival log screen no
+  longer reads `WORKOUT COMPLETE` two lines above `THE ERG DROPPED THE
+  WORKOUT.` Scoped across all THREE arrival types that did not complete,
+  never a drop-only fork: `.summary-eyebrow` now suppresses on
+  `endedBy === "program-dropped" | "link-lost" | "interrupted"`
+  (`SummaryModel.suppressCompletionEyebrow`, derived in `buildMonitorModel`
+  from the same `run.endedBy` the door already reads), and renders exactly
+  as before everywhere else — `"finished"`, `"rower"`, `"program-failed"`,
+  absent, and every timer/manual-door summary. Implemented in the same PR's
+  fix round; `log-monitor-dropped.png` regenerated.
 - **The server's `EndedBy` mirror can be derived, not hand-copied.**
   `server/stores/logs.ts` already imports `../db/schema.js`, so
   `export type EndedBy = (typeof endedByEnum.enumValues)[number]` plus
