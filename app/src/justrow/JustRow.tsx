@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConnectAction from "../monitor/ConnectAction";
+// Review #1, finding 4: the keep-awake lock. The programmed flow acquires
+// it in ConnectedInterstitial's mount effect; this screen bypasses that
+// component entirely, and without its own acquire the phone sleeps mid-row
+// — the exact iOS data-loss failure the lifecycle work exists to prevent.
+import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import { deriveAxes } from "../monitor/connectedAxes";
 import { read as readHandoff } from "../monitor/handoffStore";
 import { useMonitorSession } from "../monitor/useMonitorSession";
@@ -80,12 +85,34 @@ export default function JustRow() {
       started &&
       !armedThisStart.current &&
       axes.link === "up" &&
-      axes.program === "none"
+      axes.program === "none" &&
+      // Review #1, finding 1: `deriveLink` reads "up" from `pairing`
+      // ONWARD — before the transport has actually connected and before
+      // `driverRef` exists — so arming on the axes alone can call
+      // `beginFreeRow()` with no driver on a real, slow radio and fail
+      // the whole flow as `transport-missing`. The device name is the
+      // driver-ready fact this screen can see: it is null until the
+      // picker's result has been threaded through `createPm5Driver`
+      // (`JustRowObserver`'s own rule — "a live link with no name yet is
+      // still `connecting`").
+      session.deviceName !== null
     ) {
       armedThisStart.current = true;
       session.beginFreeRow();
     }
   }, [started, axes.link, axes.program, session]);
+
+  // Review #1, finding 4: the phone stays awake for the whole Just Row
+  // connection — ready through live through the ended hand-off — exactly
+  // as ConnectedInterstitial holds it for a programmed one. Keyed on
+  // `started`, not on a phase: the lock must survive every frame change
+  // between Connect and leaving, and release on unmount or Cancel (the
+  // cleanup runs for both).
+  useEffect(() => {
+    if (!started) return;
+    void keepAwakeOn();
+    return () => void keepAwakeOff();
+  }, [started]);
 
   if (!started) {
     return (
@@ -153,6 +180,86 @@ export default function JustRow() {
         // before onEnded ever fires.
         onEnded={() => void navigate("/justrow/log")}
       />
+    );
+  }
+
+  // Review #1, finding 5: the failure frames. Before these existed, scan
+  // dismissal, permission denial, a connect failure and the pre-driver race
+  // all fell through to "Connecting to monitor" forever — a false promise
+  // with only Cancel under it. Both frames reuse the observer's own copy
+  // register: heading from the closed state set, the error's own `detail`
+  // on the mono body line, and a real way forward.
+  if (axes.program === "failed") {
+    return (
+      <main className="screen connected-interstitial">
+        <div className="connected-interstitial-body">
+          <p className="connected-status-label">JUST ROW</p>
+          <h1 className="connected-serif-line">Could not connect</h1>
+          {session.error !== null && (
+            <p className="connected-body-line">{session.error.detail}</p>
+          )}
+        </div>
+        <div className="action-stack connected-interstitial-actions">
+          <button
+            type="button"
+            className="button-l1"
+            onClick={() => {
+              armedThisStart.current = false;
+              void session.connect();
+            }}
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            className="button-l2"
+            onClick={() => {
+              void session.cancel();
+              armedThisStart.current = false;
+              setStarted(false);
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </main>
+    );
+  }
+  if (axes.link === "lost") {
+    // A link lost BEFORE any run opened (a run in flight renders the
+    // surface above, which owns the mid-row lost treatment). The monitor
+    // does not advertise while a Just Row is open, so Try again is honest
+    // here only because no row was under way.
+    return (
+      <main className="screen connected-interstitial">
+        <div className="connected-interstitial-body">
+          <p className="connected-status-label">JUST ROW</p>
+          <h1 className="connected-serif-line">Lost the monitor</h1>
+        </div>
+        <div className="action-stack connected-interstitial-actions">
+          <button
+            type="button"
+            className="button-l1"
+            onClick={() => {
+              armedThisStart.current = false;
+              void session.connect();
+            }}
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            className="button-l2"
+            onClick={() => {
+              void session.cancel();
+              armedThisStart.current = false;
+              setStarted(false);
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </main>
     );
   }
 

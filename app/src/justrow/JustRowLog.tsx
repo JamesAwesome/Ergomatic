@@ -91,16 +91,25 @@ export default function JustRowLog() {
         steps: [],
         deviceName: run.deviceName,
         timeSeconds: totals.seconds,
-        distanceMeters: totals.meters,
+        // ROUNDED at the payload boundary (review #1, finding 3): 0x0039's
+        // distance is tenths-precision and can legitimately end on a
+        // fractional metre (1396.5), while the server requires every metre
+        // field to be a whole number — an unrounded summary would 400 the
+        // save with no recovery. The seconds fields stay fractional; the
+        // server's own validator treats only the metre pair as whole wire
+        // fields, and the monitor door's submit already rounds the same way.
+        distanceMeters: Math.round(totals.meters),
         ...(avgSplitSeconds !== null ? { avgSplitSeconds } : {}),
         // The work pair IS the whole piece — rest does not exist for a free
         // row (the spec's stored-shape table, Logbook-aligned).
         workSeconds: totals.seconds,
-        workMeters: totals.meters,
+        workMeters: Math.round(totals.meters),
         ...(run.summaryTotals !== undefined
           ? {
               machineWorkSeconds: run.summaryTotals.workElapsedSeconds,
-              machineWorkMeters: run.summaryTotals.workDistanceMeters,
+              machineWorkMeters: Math.round(
+                run.summaryTotals.workDistanceMeters,
+              ),
               machineSummary: {
                 ...(run.summaryDetail ?? {}),
                 ...(run.verificationBytes != null

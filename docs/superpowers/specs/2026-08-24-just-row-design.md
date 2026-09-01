@@ -435,12 +435,25 @@ entered at all: the rower cannot connect mid-row. PR 2 must either require
 that the app is connected before the row starts, or say plainly that a row
 already underway is not joinable. Do not build against the struck text.
 
-**PR 2 rebuilds, not inherits, the session concerns that live in
+~~**PR 2 rebuilds, not inherits, the session concerns that live in
 `useMonitorSession` rather than the driver** — priced into its size:
 keep-awake, app foreground/background handling and suspect-marking,
 silence hysteresis, link-drop disposal, typed failure mapping, series
 recorder lifecycle, and teardown ordering. Each gets a line in PR 2's
-plan naming what is copied, simplified, or consciously dropped.
+plan naming what is copied, simplified, or consciously dropped.~~
+
+**SUPERSEDED (James's ruling, 2026-09-01, at PR 2's open): SHARE the
+hook, do not rebuild.** The evidence that retired this paragraph: PR 0a's
+observer already drives `useMonitorSession` unprogrammed, and the hook's
+own `phase === "ready"` motion branch IS this spec's detection rule
+verbatim — so every concern listed above is inherited, not re-derived.
+What sharing actually cost, found by the antagonist's delta pass rather
+than assumed: `phase: "ready"` and the DRIVER's `activeRun` are opened by
+different doors, so PR 2 added `beginFreeRow()` at both layers with an
+explicit `freeRow` marker gating the two program-comparing subsystems
+(divergence escalation, structure watchdog). There is no `JustRowSurface`
+and no `useJustRowSession`; the live screen is `ConnectedSurface` with a
+required free-row input.
 
 **Coexistence guard:** opening a Just Row session must run the same
 guard discipline as the programmed path — it must not clobber an
@@ -923,6 +936,18 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
    union is stale the moment that PR merges.
 6. Opening a Just Row session with an unlogged timer `SessionRun` or
    `MonitorRun` present does not destroy it (coexistence guard test).
+7. **(Added at PR 1's antagonist pass — landed here at PR 2's PM gate,
+   which found it living only in PR 1's commit message and the PM ledger;
+   a criterion outside the spec is not a criterion.)** A stored row with
+   `steps: []`, a work pair, and a non-null `avg_split_seconds` renders
+   the SAME avg-split figure in the history list and on the detail screen,
+   with a mutation that moves both numbers together. Shipped in PR 1.
+8. **(Added at PR 2's plan rev 2 — landed here at the same PM gate, same
+   reason.)** A free row files `summaryTotals` and `verificationBytes`
+   from the machine's own 0x0039, so MACHINE CONFIRMED and the
+   verification code reach free rows. The seam is gated one click PAST
+   Save: the replay presses it and reads the posted body
+   (`justRowReplay.test.ts`).
 
 ## Release call (PM gate, recorded)
 

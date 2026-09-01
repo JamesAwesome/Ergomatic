@@ -129,16 +129,20 @@ describe("JustRow door", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    // No confirm panel, and the door has handed over to the connecting
-    // frame — the press reached `connect()`.
+    // No confirm panel — the press reached `connect()`. In jsdom the real
+    // default transport is MISSING, and the honest screen for that is the
+    // FAILED frame (review #1, finding 5): before it existed, this exact
+    // state fell through to "Connecting to monitor" forever, and this
+    // test pinned the false promise as if it were the design.
     expect(
       screen.queryByText(
         "You have an unlogged session. Connecting discards it.",
       ),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Connecting to monitor" }),
+      await screen.findByRole("heading", { name: "Could not connect" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
   });
 });
 
@@ -152,14 +156,13 @@ describe("JustRow ready frame", () => {
     renderDoor();
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    // The real hook against the default web transport lands on the failed
-    // frame in jsdom (no Web Bluetooth). This test drives the READY frame
-    // through the component's own state instead — the transport-free half
-    // of the flow — by asserting the connecting frame's Cancel returns to
-    // the door, which is the ready frame's sibling path through the same
-    // action stack.
+    // The real hook against the default web transport lands on the FAILED
+    // frame in jsdom (no Web Bluetooth) — review #1's finding 5 made that
+    // an honest screen rather than the forever-Connecting one this test
+    // used to pin. Cancel from it returns to the door with the once-latch
+    // cleared.
     expect(
-      screen.getByRole("heading", { name: "Connecting to monitor" }),
+      await screen.findByRole("heading", { name: "Could not connect" }),
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -167,7 +170,146 @@ describe("JustRow ready frame", () => {
     // Back on the door, ready to authorize again — the once-latch cleared.
     expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Connecting to monitor" }),
+      screen.queryByRole("heading", { name: "Could not connect" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Review #1, findings 1, 4 and 5 — driven with a CONTROLLED session, since
+ * the states under test (a slow radio mid-pairing, a scan dismissal, a
+ * pre-run link loss) are exactly the ones the real default transport
+ * cannot produce on demand in jsdom. The mock carries the full
+ * MonitorSession shape; each test overrides only the fields its state is
+ * about.
+ */
+describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
+  const keepAwakeOn = vi.fn().mockResolvedValue(undefined);
+  const keepAwakeOff = vi.fn().mockResolvedValue(undefined);
+  const beginFreeRow = vi.fn();
+  const connect = vi.fn().mockResolvedValue(undefined);
+
+  function mockSession(overrides: Record<string, unknown>) {
+    // resetModules FIRST: JustRow was statically imported at this file's
+    // top for the earlier describes, and a doMock cannot reach a module
+    // already in the cache.
+    vi.resetModules();
+    vi.doMock("../adapters/keepAwake", () => ({ keepAwakeOn, keepAwakeOff }));
+    vi.doMock("../monitor/useMonitorSession", () => ({
+      useMonitorSession: () => ({
+        phase: "idle",
+        error: null,
+        deviceName: null,
+        frame: null,
+        actuals: [],
+        endedBy: null,
+        handoffHeld: false,
+        holdError: null,
+        frozen: false,
+        runOpen: false,
+        frameSilence: false,
+        programDropped: false,
+        closeReason: null,
+        connect,
+        program: vi.fn().mockResolvedValue(undefined),
+        beginFreeRow,
+        endSession: vi.fn().mockResolvedValue(undefined),
+        cancel: vi.fn().mockResolvedValue(undefined),
+        retryHandoffSave: vi.fn().mockResolvedValue(undefined),
+        proceedHandoff: vi.fn().mockResolvedValue(undefined),
+        exportLog: vi.fn().mockReturnValue("[]"),
+        ...overrides,
+      }),
+    }));
+  }
+
+  async function renderMocked() {
+    const { default: JustRow } = await import("./JustRow");
+    return render(
+      <MemoryRouter initialEntries={["/justrow"]}>
+        <JustRow />
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+  afterEach(() => {
+    vi.doUnmock("../adapters/keepAwake");
+    vi.doUnmock("../monitor/useMonitorSession");
+    vi.resetModules();
+  });
+
+  it("does NOT arm mid-pairing while the driver has no name yet — the slow-radio race", async () => {
+    // `deriveLink("pairing")` reads "up" BEFORE the transport has actually
+    // connected; the null deviceName is the driver-ready fact. Arming here
+    // called beginFreeRow with no driver and failed the whole flow as
+    // transport-missing (review #1, finding 1).
+    mockSession({ phase: "pairing", deviceName: null });
+    await renderMocked();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(beginFreeRow).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Connecting to monitor" }),
+    ).toBeInTheDocument();
+  });
+
+  it("arms once the driver carries the picked device's real name", async () => {
+    mockSession({ phase: "pairing", deviceName: "PM5 432331249" });
+    await renderMocked();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(beginFreeRow).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the wake lock from Connect and releases it on Cancel", async () => {
+    mockSession({ phase: "pairing", deviceName: null });
+    await renderMocked();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(keepAwakeOn).toHaveBeenCalledTimes(1);
+    expect(keepAwakeOff).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(keepAwakeOff).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the failed frame with the error's own detail and a Try again", async () => {
+    mockSession({
+      phase: "failed",
+      error: {
+        reason: "scan-dismissed",
+        detail: "No monitor was chosen.",
+        raw: "",
+      },
+    });
+    await renderMocked();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Could not connect" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No monitor was chosen.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    // The retry goes back through the real connect, not a private path.
+    expect(connect).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders the lost frame when the link dies before any run opened", async () => {
+    mockSession({ phase: "disconnected", deviceName: "PM5 432331249" });
+    await renderMocked();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Lost the monitor" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try again" }),
+    ).toBeInTheDocument();
   });
 });

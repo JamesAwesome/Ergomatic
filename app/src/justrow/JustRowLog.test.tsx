@@ -163,6 +163,32 @@ describe("JustRowLog (the workout-less log door)", () => {
     });
   });
 
+  it("rounds a fractional-metre summary at the payload boundary — 500.5 posts as 501", async () => {
+    // 0x0039 distance is tenths-precision; the server requires whole
+    // metres on all three metre fields, and an unrounded 500.5 would 400
+    // the save with no recovery (review #1, finding 3).
+    const fn = mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    const fractional = closedFreeRow({
+      summaryTotals: { workElapsedSeconds: 120.4, workDistanceMeters: 500.5 },
+    });
+    commitHandoff(fractional.startedAt, null, fractional);
+    await renderDoor();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save this row" }),
+    );
+
+    await waitFor(() => {
+      const body = savedBody(fn);
+      expect(body.distanceMeters).toBe(501);
+      expect(body.workMeters).toBe(501);
+      expect(body.machineWorkMeters).toBe(501);
+      // The seconds pair stays fractional — only the metre fields are
+      // whole wire fields by the server's own validator.
+      expect(body.timeSeconds).toBe(120.4);
+    });
+  });
+
   it("with no free-row record on the store, offers nothing to log and leaves", async () => {
     mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
     await renderDoor();
