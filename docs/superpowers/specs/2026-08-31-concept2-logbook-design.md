@@ -176,8 +176,15 @@ so we build the RFC 8252 shape:
      for the attempt's user, consumes the attempt, and renders a plain
      "Linked. Return to the app." page. The APP never sees the code; it
      learns the outcome by re-fetching `GET /api/concept2/link` on
-     foreground (native `appStateChange` via `@capacitor/app`, already a
-     dependency) or on page focus (web). **SUSPECTED, decision owed
+     foreground — **PR1.5 plan correction, superseding this paragraph's
+     original `appStateChange` wording:** `adapters/appLifecycle.ts`'s own
+     `pause`/`resume` translation (native, via `@capacitor/app`, already a
+     dependency), composed with `registerWebAppLifecycleListener`'s raw
+     Page Visibility mapping (web) — never native `appStateChange`. Phase
+     LM found that event is iOS's ACTIVE/INACTIVE signal, firing on a
+     Control Centre swipe without the app ever leaving the foreground, and
+     it made a lost-link banner fire nine times over a link that never
+     dropped (`adapters/appLifecycle.ts:27-31`). **SUSPECTED, decision owed
      (PR1 premise pass, 2026-08-31):** the nonce binds the exchange to
      `attempt.user_id` alone, so an attacker who mints on their OWN
      Ergomatic account and delivers the resulting authorize URL to a
