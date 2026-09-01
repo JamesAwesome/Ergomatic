@@ -45,6 +45,12 @@ vi.mock("../news/Releases", () => ({
 vi.mock("../You", () => ({
   default: () => <h1>You</h1>,
 }));
+vi.mock("../you/Diagnostics", () => ({
+  default: () => <h1>Diagnostics</h1>,
+}));
+vi.mock("../you/MonitorLogs", () => ({
+  default: () => <h1>Monitor Logs</h1>,
+}));
 beforeEach(() => {
   localStorage.clear();
 });
@@ -246,6 +252,29 @@ describe("AppRoutes", () => {
     expect(
       screen.getByRole("navigation", { name: "Main" }),
     ).toBeInTheDocument();
+  });
+
+  // Task 3 (Gate 0 rev 2/3): the diagnostics door, behind the same
+  // signed-in guard as /you itself.
+  it("routes /you/diagnostics and /you/diagnostics/monitor-logs when signed in", async () => {
+    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+    render(
+      <MemoryRouter initialEntries={["/you/diagnostics"]}>
+        <AppRoutes user={user} onSignedOut={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Diagnostics" }),
+    ).toBeVisible();
+
+    render(
+      <MemoryRouter initialEntries={["/you/diagnostics/monitor-logs"]}>
+        <AppRoutes user={user} onSignedOut={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Monitor Logs" }),
+    ).toBeVisible();
   });
 
   // James's 2026-08-23 ruling removed /you/learning (LearningTheApp) —

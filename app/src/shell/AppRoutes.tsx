@@ -28,6 +28,8 @@ import Timer from "../session/Timer";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
+import Diagnostics from "../you/Diagnostics";
+import MonitorLogs from "../you/MonitorLogs";
 import type { Me } from "../useMe";
 import TabBar from "./TabBar";
 
@@ -213,6 +215,18 @@ export default function AppRoutes({
             <Route
               path="/you"
               element={<You user={user} onSignedOut={onSignedOut} />}
+            />
+            {/* Task 3 (Gate 0 rev 2/3): the diagnostics door, behind the
+                same signed-in guard as /you itself — reaching the ring's
+                own logs makes sense only for a signed-in rower. The menu
+                (/you/diagnostics) is registered before its own child route
+                to match this file's own list-then-detail convention (same
+                note as /library/import, /news/releases above), though
+                react-router doesn't require the ordering here either. */}
+            <Route path="/you/diagnostics" element={<Diagnostics />} />
+            <Route
+              path="/you/diagnostics/monitor-logs"
+              element={<MonitorLogs />}
             />
           </>
         )}

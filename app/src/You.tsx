@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
 import BaselineEditor from "./you/BaselineEditor";
@@ -72,6 +73,18 @@ export default function You({
           WARM-UP by Phase WU (2026-08-21), and "Learning the app" by
           James's 2026-08-23 ruling (the teaching lives in News's pinned
           articles alone now). */}
+      {/* Task 3 (Gate 0 rev 2/3, 2026-09-01): one quiet mono row, at the
+          bottom of You, on purpose — the diagnostics ring is not a
+          product feature a rower reaches for, it's a tool for the rare
+          "something went wrong" moment. Opens the menu screen
+          (`you/Diagnostics.tsx`), not Monitor logs directly — the menu is
+          the extensible home for whatever diagnostic tools follow.
+          `state={{ from: "/you" }}`: the same origin idiom RetestShortcut
+          above uses, so the menu's own BackLink returns HERE. */}
+      <Link to="/you/diagnostics" state={{ from: "/you" }} className="diag-row">
+        <span>DIAGNOSTICS</span>
+        <span aria-hidden="true">&rsaquo;</span>
+      </Link>
     </main>
   );
 }
