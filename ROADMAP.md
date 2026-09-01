@@ -1599,7 +1599,10 @@ trigger is the whole entry.
   Capacitor 8, which we are on — re-verify at install per the standing rule).
   **First work of the phase is the unverified pair**: that iOS Core NFC reads
   this external record off a real PM5 at all, and that the name the tag states
-  is byte-identical to what CoreBluetooth's scan reports. **Trigger:** anytime —
+  is byte-identical to what CoreBluetooth's scan reports. A Flipper dump of
+  the tag lives in `docs/monitor/nfc/` (2026-08-31, PARTIAL: header only —
+  it confirms the 27-byte external type and a 40-byte payload, but the
+  payload itself is still owed; the README says how to get it). **Trigger:** anytime —
   it is post-production polish for a household that already pairs fine, so it
   waits behind the front door and then only needs James to ask. **S/M**
 - **The parametric workout generator** — "generate me a 45' AT workout".
