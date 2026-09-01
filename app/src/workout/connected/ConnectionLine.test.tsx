@@ -52,6 +52,7 @@ const MODEL = buildSurfaceModel({
   frame: null,
   deviceName: DEVICE,
   actuals: [],
+  freeRow: false,
 });
 
 /** A minimal `HoldOpenControls` stub — this file is about the CHIP's own

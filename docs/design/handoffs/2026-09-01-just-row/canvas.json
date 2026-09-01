@@ -1,0 +1,61 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "1 · Today" },
+    { "file": "JustRowDoor.dc.html", "x": 520, "y": 0, "w": 390, "h": 844, "title": "2 · /justrow" },
+    { "file": "Connecting.dc.html", "x": 1040, "y": 0, "w": 390, "h": 844, "title": "3 · connecting" },
+    { "file": "Ready.dc.html", "x": 1560, "y": 0, "w": 390, "h": 844, "title": "4 · ready" },
+    { "file": "Live.dc.html", "x": 2080, "y": 0, "w": 390, "h": 844, "title": "5 · live" },
+    { "file": "Ended.dc.html", "x": 2600, "y": 0, "w": 390, "h": 844, "title": "6 · ended" },
+
+    { "file": "LiveLandscape.dc.html", "x": 0, "y": 1000, "w": 844, "h": 390, "title": "5 · live, landscape" },
+    { "file": "Lost.dc.html", "x": 984, "y": 1000, "w": 390, "h": 844, "title": "Link lost mid-row" },
+    { "file": "TodayRecovery.dc.html", "x": 1504, "y": 1000, "w": 390, "h": 844, "title": "Today · recovery, no baseline" },
+    { "file": "LogDoor.dc.html", "x": 2024, "y": 1000, "w": 390, "h": 1180, "title": "/justrow/log" },
+    { "file": "EndedToday.dc.html", "x": 984, "y": 2000, "w": 812, "h": 560, "title": "Gate 0 amendment · the ended frame" }
+  ],
+  "annotations": [
+    {
+      "id": "flow",
+      "x": 0,
+      "y": -160,
+      "w": 1430,
+      "text": "THE HAPPY PATH, left to right. Two words top right on Today, then a door that behaves like a workout detail: one Connect, the same teal control and the same staged guard the workout screen uses. Nothing else on that door, because this phase is connected only (no Start Timer, no log-it-after).\n\nThe live screen is the standard connected surface, not a second one."
+    },
+    {
+      "id": "live-changes",
+      "x": 2080,
+      "y": -160,
+      "w": 910,
+      "text": "WHAT CHANGES ON THE STANDARD SURFACE, and nothing else does:\n\n1. One bar, not the interval bar's many segments, with total meters beside it in its shipped place.\n2. \"JUST ROW\" where a programmed row reads \"2 OF 5 / WORK\".\n3. \"Free\" in both target slots. You asked for rate/spm; I mirrored it onto the split because one slot reading Free beside a blank one looks like a bug. Say if the split's should be blank instead.\n4. The AVG cell stays where it already sits, on the split's target row. A free row genuinely has a running average, and it is the exact figure that gets stored.\n5. The band keeps ONE cell, ELAPSED. UP NEXT goes (no next) and EST LEFT goes (nothing ahead is priced, which the shipped guard already handles), but the slot earns its place: without it this surface never showed the rower the time at all.\n6. No LIVE / GRID control. The grid tabulates intervals and a free row has none, so a one-cell segmented control would not be a control.\n7. Split and rate stay ink, never the judged blue. With no target nothing can be faster or slower than anything."
+    },
+    {
+      "id": "ready-q",
+      "x": 1560,
+      "y": 890,
+      "w": 390,
+      "text": "Ready is the shipped screen with one word changed: CONNECTED, not PROGRAMMED.\n\nWorth a look: both its buttons are inherited, but a free row has no armed workout to check. It could equally advance itself on the first stroke and keep only Cancel.\n\nLINK LOST (right) carries NO Log or Save button, because a programmed session that loses the link does not either (connected-ready-lost.png): the mark goes hollow, the device line gains \"· LOST\", and END is still the way out, through the ordinary ending into the log door. A free row with its own Save button here would be the one connected screen that ends differently from every other."
+    },
+    {
+      "id": "amendment",
+      "x": 984,
+      "y": 1900,
+      "w": 812,
+      "text": "GATE 0 AMENDMENT, 2026-09-01, found by the antagonist pass on the plan. The board approved this frame reading \"Your numbers are kept.\" - which is what a PROGRAMMED row renders. A free row does not reach that arm and says \"No numbers to keep.\" instead. This is the one frame the board did not cover, and it is the one the rower sees at the end of every free row."
+    },
+    {
+      "id": "contrast",
+      "x": 2600,
+      "y": 1000,
+      "w": 460,
+      "text": "CONTRAST, computed (WCAG 2.x, AA floor 4.5:1)\n\nink #1b1a17 on page / surface / sunken: 15.41 / 17.11 / 14.50\nink-2 #3f3c35 on page / surface / sunken: 9.74 / 10.81 / 9.16\nink-3 #57544c on page / surface / sunken: 6.69 / 7.43 / 6.30\naccent #b5341f on page / surface / sunken: 5.35 / 5.94 / 5.03\naction-connect #2a6275 on page / surface: 5.99 / 6.65\non-color #fffdf7 on action-connect (Connect): 6.65\non-color on accent (primary buttons): 5.94\nmarker #7d5510 on sunken (ready band): 5.50\nsurface on judge-slower #962718 (lost banner): 7.94\n\nTWO THAT DO NOT CLEAR, and carry no text here:\nink-4 #6f6a5f on sunken 4.48 (short of the floor by 0.02)\nink-5 #a09a8c on page 2.48 (the dimmed link mark only)\n\nEvery tap target >= 44px: JUST ROW 44, Connect 56, Show me the numbers 56, Cancel 52, END 44, Log it 44, discard 44."
+    },
+    {
+      "id": "log-changes",
+      "x": 2024,
+      "y": 2240,
+      "w": 460,
+      "text": "THE LOG DOOR\n\n\"PAIN\", not \"ACTUAL PAIN\": the word ACTUAL exists to contrast with the workout's own EXPECTED rating sitting beside it, and a free row has no expectation to contrast with.\n\n\"DID YOU HOLD THE TARGETS?\" is gone outright rather than disabled. No intervals table and no type chip either: steps is [] and workout_type is null, and both render as absences rather than empty widgets.\n\n\"Save this row\" is NEW copy, not one of the shipped pair. The door normally offers \"Log against plan\" and \"Save without logging\" - a choice about whether the session counts toward the plan. A free row can never count, so there is one path and no choice to name.\n\nAVG SPLIT is the one number this phase derives: 500 x 393 s / 1396 m = 140.8 s."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

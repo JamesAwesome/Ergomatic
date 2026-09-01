@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root {
+      --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade;
+      --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c; --ink-4: #6f6a5f;
+      --rule: #d8d3c4; --rule-3: #c9c3b2; --accent: #b5341f;
+      --type-o2: #2a6275; --type-at: #8a5f18; --on-color: #fffdf7;
+      --radius: 2px; --tap: 44px;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    a { color: var(--accent); } a:hover { color: #9c2c19; }
+    .screen { width: 390px; height: 844px; background: var(--page); position: relative; overflow: hidden; box-sizing: border-box; }
+    .pad { padding: 0 20px; }
+    .h1 { font-family: var(--font-serif); font-size: 34px; font-weight: 500; margin: 0; letter-spacing: -0.01em; }
+    .meta { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-3); margin: 0; }
+    .seclabel { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; color: var(--ink-3); margin: 0; }
+    .chip { display: flex; align-items: center; justify-content: center; min-height: var(--tap); border: 1px solid var(--rule-3); border-radius: var(--radius); background: var(--surface); font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.12em; color: var(--ink-2); }
+    .chip-on { background: var(--type-o2); border-color: var(--type-o2); color: var(--on-color); }
+    .pill { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--tap); padding: 0 14px; border: 1px solid var(--rule-3); border-radius: var(--radius); background: var(--surface); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-2); }
+    .card { background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); }
+    .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 7px; background: var(--type-o2); color: var(--on-color); font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; }
+    .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; border-top: 1px solid var(--rule); background: var(--page); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; }
+    .tab { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); text-align: center; }
+    .tab-on { color: var(--ink); }
+    /* THE DOOR. Two words, top right, nothing else. It takes the app's
+       existing compact-control idiom (the same 44px outlined mono pill
+       FILTER and SHUFFLE use) rather than inventing a treatment. */
+    .justrow-btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 0 14px; border: 1px solid var(--ink); border-radius: var(--radius); background: var(--surface); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink); font-weight: 600; }
+  </style>
+</helmet>
+
+<div class="screen">
+  <div class="pad" style="padding-top: 26px; display: flex; flex-direction: column; gap: 14px;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+      <h1 class="h1">Today</h1>
+      <span class="justrow-btn">JUST ROW</span>
+    </div>
+    <p class="meta">SESSION 1 OF 84 &middot; O2</p>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+      <div class="chip chip-on">O2</div>
+      <div class="chip">AT</div>
+      <div class="chip">TR</div>
+      <div class="chip">AN</div>
+    </div>
+    <p class="meta" style="margin-top: -8px;">LOW &amp; SLOW</p>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+      <p class="seclabel">SUGGESTED</p>
+      <div style="display: flex; gap: 8px;">
+        <div class="pill">FILTER &#9662;</div>
+        <div class="pill">SHUFFLE &#8631;</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 6px;">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+          <span class="badge">O2</span>
+          <span style="font-family: var(--font-mono); font-size: 17px; color: var(--accent);">10&#8242;</span>
+        </div>
+        <p style="font-family: var(--font-serif); font-size: 26px; font-weight: 500; margin: 2px 0 0;">Sea Fret</p>
+        <p style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; color: var(--ink-3); margin: 0;">EASY &middot; PAIN 1/5</p>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 10px; padding: 10px 16px; background: #f1ecdd; border-top: 1px solid var(--rule);">
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-4);">01</span>
+        <div style="flex: 1;">
+          <p style="font-family: var(--font-sans); font-size: 14px; margin: 0; color: var(--ink);"><strong>2 &times; 4:00</strong> at 6k +12, 1&#8242; r</p>
+          <p style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-4); margin: 2px 0 0;">22 SPM</p>
+        </div>
+        <span style="font-family: var(--font-mono); font-size: 15px; color: var(--accent);">2:14.0</span>
+      </div>
+      <div style="padding: 8px 16px; background: var(--surface-sunken); border-top: 1px solid var(--rule); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink-3);">8&#8242; WORK&nbsp;&nbsp;10&#8242; TOTAL</div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--rule);">
+        <span style="font-family: var(--font-sans); font-size: 14px; color: var(--ink-2);">Least recently done (never done).</span>
+        <span style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.12em; color: var(--accent);">OPEN &rsaquo;</span>
+      </div>
+    </div>
+
+    <p class="seclabel" style="color: var(--accent); margin-top: 2px;">ALL SESSIONS</p>
+    <div style="display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule);">
+        <span class="badge" style="background: var(--type-at);">AT</span>
+        <span style="flex: 1; font-family: var(--font-sans); font-size: 14px;">Screenshot Session 3</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);">AUG 25 &middot; HELD &middot; 2/5</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule);">
+        <span class="badge" style="background: var(--type-at);">AT</span>
+        <span style="flex: 1; font-family: var(--font-sans); font-size: 14px;">Screenshot Session 2</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);">AUG 25 &middot; UNDER &middot; 2/5</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule);">
+        <span class="badge" style="background: var(--type-at);">AT</span>
+        <span style="flex: 1; font-family: var(--font-sans); font-size: 14px;">Screenshot Session 1</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);">AUG 25 &middot; HELD &middot; 2/5</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <span class="tab tab-on">TODAY</span>
+    <span class="tab">NEWS</span>
+    <span class="tab">LIBRARY</span>
+    <span class="tab">PLAN</span>
+    <span class="tab">YOU</span>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

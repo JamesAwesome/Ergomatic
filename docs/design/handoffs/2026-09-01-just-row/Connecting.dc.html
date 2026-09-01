@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root {
+      --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade;
+      --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c;
+      --rule: #d8d3c4; --accent: #b5341f; --on-color: #fffdf7;
+      --radius: 2px; --tap: 44px;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    a { color: var(--accent); } a:hover { color: #9c2c19; }
+    .screen { width: 390px; height: 844px; background: var(--page); box-sizing: border-box; padding: 20px; display: flex; flex-direction: column; }
+    .body { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 12px; min-height: 0; }
+    .status { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; color: var(--ink-3); margin: 0; }
+    .serif { font-family: var(--font-serif); font-size: 36px; font-weight: 500; color: var(--ink); margin: 0; line-height: 1.05; }
+    .bodyline { font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); margin: 0; line-height: 1.5; }
+    .stack { flex-shrink: 0; margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+    .l2 { display: flex; align-items: center; justify-content: center; min-height: 52px; background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); color: var(--ink); font-family: var(--font-sans); font-size: 16px; font-weight: 600; }
+  </style>
+</helmet>
+
+<div class="screen">
+  <div class="body">
+    <p class="status">JUST ROW</p>
+    <h1 class="serif">Connecting to monitor</h1>
+    <!-- The one thing the rower can do wrong here is leave the erg asleep.
+         The programmed interstitial says the same thing at the same moment. -->
+    <p class="bodyline">Wake the monitor if its screen is dark.</p>
+  </div>
+  <div class="stack">
+    <div class="l2">Cancel</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

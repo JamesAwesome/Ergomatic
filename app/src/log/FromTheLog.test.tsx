@@ -1317,3 +1317,43 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
     expect(screen.queryByText(/·.*m$/)).toBeNull();
   });
 });
+
+/**
+ * PHASE JR PR 2 (PM final gate, B2's read side): the free-row shaped row —
+ * null workout id AND null type, steps [] — renders the MACHINE CONFIRMED
+ * block like any other machine-vouched row. This is the GET half of the
+ * PR's headline claim; the POST half lives in `justRowReplay.test.ts`'s
+ * Save press and `JustRowLog.test.tsx`'s body assertions.
+ */
+describe("FromTheLog — a free row's MACHINE CONFIRMED block", () => {
+  it("renders label, value line and verification code with no type badge and no steps widget", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              workoutTitle: "Just Row",
+              workoutType: null,
+              steps: [],
+              timeSeconds: 394,
+              distanceMeters: 1396,
+              avgSplitSeconds: 141,
+              machineWorkSeconds: 393.6,
+              machineWorkMeters: 1396,
+              machineSummary: { verificationBytes: WALK_VERIFICATION_BYTES },
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    const { container } = await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Just Row" });
+
+    expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
+    expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
+    // The phase's own absences hold alongside the block: no type chip and
+    // no steps widget (exit criteria 2 and 3), never an empty version.
+    expect(container.querySelector(".type-badge")).toBeNull();
+    expect(container.querySelector(".summary-intervals")).toBeNull();
+  });
+});

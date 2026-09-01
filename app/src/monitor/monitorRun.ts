@@ -700,6 +700,13 @@ export function createMonitorRun(
     program: WorkoutProgram;
     deviceName: string;
     logSeed: LogSeed;
+    /** Phase JR PR 2: `"justrow"` for a row the rower started on the machine
+     *  itself. OMITTED, never `undefined` explicitly, for an ordinary
+     *  programmed session — `mode` is optional on the record so that every
+     *  run written before this phase reads back unchanged, and writing the
+     *  key with an undefined value would put it in the JSON as `null` on
+     *  some serializers and defeat that. */
+    mode?: "justrow";
   },
   now: Date,
 ): MonitorRun {
@@ -709,6 +716,7 @@ export function createMonitorRun(
     title: args.title,
     program: args.program,
     logSeed: args.logSeed,
+    ...(args.mode === undefined ? {} : { mode: args.mode }),
     actuals: [],
     deviceName: args.deviceName,
     startedAt: now.toISOString(),

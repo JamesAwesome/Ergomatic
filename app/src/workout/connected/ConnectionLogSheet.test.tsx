@@ -162,6 +162,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     closeReason: null,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
+    beginFreeRow: vi.fn(),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
@@ -175,6 +176,7 @@ function renderSurface(overrides: Partial<MonitorSession> = {}) {
   const current = session(overrides);
   const view = render(
     <ConnectedSurface
+      freeRow={false}
       phases={FIXTURE.phases}
       program={FIXTURE.program}
       session={current}
@@ -349,6 +351,7 @@ describe("the connection log sheet", () => {
     // The machine keeps talking; the sheet does not re-read.
     view.rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={session({

@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root {
+      --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade;
+      --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c;
+      --rule: #d8d3c4; --rule-3: #c9c3b2; --accent: #b5341f;
+      --action-connect: #2a6275; --on-color: #fffdf7;
+      --radius: 2px; --tap: 44px;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    a { color: var(--accent); } a:hover { color: #9c2c19; }
+    .screen { width: 390px; height: 844px; background: var(--page); position: relative; overflow: hidden; box-sizing: border-box; }
+    .pad { padding: 0 20px; }
+    .back { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-2); }
+    .h1 { font-family: var(--font-serif); font-size: 34px; font-weight: 500; margin: 0; letter-spacing: -0.01em; line-height: 1.08; }
+    .meta { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-3); margin: 0; }
+    /* The workout detail's own preview band: sunken strip, mono, ink-3. */
+    .band { background: var(--surface-sunken); padding: 12px 14px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; color: var(--ink-2); }
+    .connect { display: flex; align-items: center; justify-content: center; min-height: 56px; background: var(--action-connect); border: none; border-radius: var(--radius); color: var(--on-color); font-family: var(--font-sans); font-size: 16px; font-weight: 600; }
+    .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; border-top: 1px solid var(--rule); background: var(--page); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; }
+    .tab { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); text-align: center; }
+    .tab-on { color: var(--ink); }
+  </style>
+</helmet>
+
+<div class="screen">
+  <div class="pad" style="padding-top: 26px; display: flex; flex-direction: column; gap: 16px;">
+    <span class="back">&larr; BACK</span>
+
+    <!-- The workout detail's own anatomy, with the parts a free row does
+         not have simply missing: no type badge, no difficulty, no pain
+         estimate, no duration, no steps. What is left is the title, one
+         line of what it is, and Connect. -->
+    <h1 class="h1">Just Row</h1>
+    <p class="meta">NO TARGETS &middot; NO PLAN &middot; NEEDS THE MONITOR</p>
+
+    <div class="band">The monitor keeps its own time. Pull when you are ready and the numbers appear here.</div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 4px;">
+      <!-- ONE action, and it is the SAME Connect control the workout detail
+           carries: same class, same teal --action-connect token, same
+           staged guard in front of it. That guard is not decoration here.
+           Opening a monitor session clears an unlogged phone-timer run,
+           and this door has to warn about that exactly as the other one
+           does. There is deliberately no Start Timer and no Log it after:
+           this phase is connected only. -->
+      <div class="connect">Connect</div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <span class="tab tab-on">TODAY</span>
+    <span class="tab">NEWS</span>
+    <span class="tab">LIBRARY</span>
+    <span class="tab">PLAN</span>
+    <span class="tab">YOU</span>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -253,6 +253,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     closeReason: null,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
+    beginFreeRow: vi.fn(),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
@@ -269,6 +270,7 @@ function renderSurface(
   const current = session(overrides);
   const view = render(
     <ConnectedSurface
+      freeRow={false}
       phases={FIXTURE.phases}
       program={FIXTURE.program}
       session={current}
@@ -470,6 +472,7 @@ function stoppedFrame(): MonitorFrame {
 function renderNeverRowed(overrides: Partial<MonitorSession> = {}) {
   return render(
     <ConnectedSurface
+      freeRow={false}
       phases={NO_OPENER.phases}
       program={NO_OPENER.program}
       session={session({
@@ -627,6 +630,7 @@ describe("EST LEFT: the monotonic clamp is threaded into the real component, not
 
     rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={{
@@ -2005,6 +2009,7 @@ describe("ended: the surface hands off and unmounts", () => {
     // thing standing between the rower and a double navigation.
     rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={s}
@@ -2054,6 +2059,7 @@ describe("ended: the surface hands off and unmounts", () => {
     // flag, and the hand-off goes through, once.
     rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={{ ...held, handoffHeld: false }}
@@ -2516,5 +2522,134 @@ describe("the connected walk, fake-driven", () => {
     // thoroughly pinned at the driver layer (`monitor/driver.test.ts`'s own
     // extensive `WORKOUTSTATE_INTERVALWORKTIME`/`_INTERVALREST` coverage);
     // only THIS integration test's UI-level double-check is gone.
+  });
+});
+
+/**
+ * PHASE JR PR 2, TASK 4 — the free-row surface.
+ *
+ * Two structural facts and one compile-time pin. The absent control is the
+ * board's own decision 6 (a one-cell segmented control is not a control),
+ * and the forced LIVE pane is its corollary: `loadLastPane()` restores the
+ * previous session's choice, and a rower whose programmed row ended on
+ * GRID must not open a free row onto a pane that cannot exist for it.
+ */
+describe("the free-row surface", () => {
+  it("renders no pane control at all, and PaneLive regardless of the stored pane", () => {
+    // Seed the stored pane to GRID first — the case that would go wrong.
+    localStorage.setItem("ergomatic:connected-pane", "grid");
+    const { container } = render(
+      <ConnectedSurface
+        freeRow={{ kept: null }}
+        phases={[]}
+        program={{ intervals: [] }}
+        session={session({
+          phase: "live",
+          frame: frame({ intervalIndex: null }),
+        })}
+        onEnded={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector(".connected-control")).toBeNull();
+    expect(container.querySelector(".connected-pane-live")).not.toBeNull();
+    expect(container.querySelector(".connected-grid-rows")).toBeNull();
+  });
+
+  it("requires the caller to say which kind of session it mounts", () => {
+    // @ts-expect-error — `freeRow` is a required prop of ConnectedSurfaceProps
+    const missing: ConnectedSurfaceProps = {
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      session: session(),
+      onEnded: () => undefined,
+    };
+    expect(missing).toBeDefined();
+  });
+});
+
+/**
+ * PHASE JR PR 2, TASK 5 — the ended frame (Gate 0 amendment, approved
+ * 2026-09-01).
+ *
+ * The board's first two rounds approved this frame reading "Your numbers
+ * are kept." — which is what a PROGRAMMED row renders. A free row never
+ * reaches that arm: the line is picked by `measuredIntervalCount(actuals)`,
+ * a free row has no intervals, so it lands on `kept === 0` and says
+ * "No numbers to keep." on a row that just banked real meters, one
+ * navigation from a log door showing them. The block's own comment calls
+ * that string "the only false member of the three" for the case it was
+ * written for.
+ *
+ * No model change can reach this: the ended block returns before
+ * `buildSurfaceModel` is called. It needs its own branch, and this test is
+ * the antagonist's traced-but-unexecuted claim becoming executed evidence.
+ */
+describe("the free-row ended frame", () => {
+  it("states what was kept — the row's own numbers, never 'No numbers to keep.'", () => {
+    render(
+      <ConnectedSurface
+        // The kept pair comes from the CALLER (freeRowTotals through
+        // JustRow), never off session.frame — the PM gate's B1: the first
+        // cut read the frame here, a different source than the log door
+        // one tap away, and fabricated a zero when the frame was null.
+        freeRow={{ kept: { seconds: 393, meters: 1396 } }}
+        phases={[]}
+        program={{ intervals: [] }}
+        session={session({
+          phase: "ended",
+          handoffHeld: false,
+          actuals: [],
+          frame: null,
+        })}
+        onEnded={vi.fn()}
+      />,
+    );
+
+    // The approved copy, with the same words the lost banner uses so the
+    // two endings describe the row one way: elapsed, a middle dot, meters,
+    // "kept." — 393 s renders 6:33, 1396 renders 1,396 m.
+    expect(screen.getByText("6:33 · 1,396 m kept.")).toBeInTheDocument();
+    expect(screen.queryByText("No numbers to keep.")).not.toBeInTheDocument();
+  });
+
+  it("a programmed row's ended copy is untouched", () => {
+    render(
+      <ConnectedSurface
+        freeRow={false}
+        phases={FIXTURE.phases}
+        program={FIXTURE.program}
+        session={session({ phase: "ended", handoffHeld: false, actuals: [] })}
+        onEnded={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("No numbers to keep.")).toBeInTheDocument();
+  });
+});
+
+describe("the free-row ended frame with no numbers to vouch for", () => {
+  it("says the generic line, never a fabricated zero", () => {
+    render(
+      <ConnectedSurface
+        freeRow={{ kept: null }}
+        phases={[]}
+        program={{ intervals: [] }}
+        session={session({
+          phase: "ended",
+          handoffHeld: false,
+          actuals: [],
+          frame: null,
+        })}
+        onEnded={vi.fn()}
+      />,
+    );
+
+    // `kept: null` is freeRowTotals's own refusal carried through: no
+    // summary and no trace means nothing numeric to say, and "0:00 · 0 m
+    // kept." would be a wrong number wearing the kept promise.
+    expect(screen.getByText("Your numbers are kept.")).toBeInTheDocument();
+    expect(screen.queryByText(/0:00/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 m kept/)).not.toBeInTheDocument();
   });
 });

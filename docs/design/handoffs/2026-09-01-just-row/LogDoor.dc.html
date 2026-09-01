@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root {
+      --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade;
+      --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c; --ink-4: #6f6a5f;
+      --rule: #d8d3c4; --rule-3: #c9c3b2; --accent: #b5341f; --on-color: #fffdf7;
+      --radius: 2px; --tap: 44px;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    a { color: var(--accent); } a:hover { color: #9c2c19; }
+    .screen { width: 390px; height: 1180px; background: var(--page); box-sizing: border-box; padding: 26px 20px 20px; display: flex; flex-direction: column; gap: 16px; }
+    .h1 { font-family: var(--font-serif); font-size: 34px; font-weight: 500; margin: 0; letter-spacing: -0.01em; }
+    .meta { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-3); margin: 0; }
+    .seclabel { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; color: var(--ink-3); margin: 0; }
+    .card { background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .numrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .numlabel { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); margin: 0 0 4px; }
+    .numvalue { font-family: var(--font-mono); font-size: 26px; color: var(--ink); margin: 0; letter-spacing: -0.01em; }
+    .pain { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    .paincell { display: flex; align-items: center; justify-content: center; min-height: var(--tap); background: var(--surface-sunken); border: 1px solid var(--rule-3); border-radius: var(--radius); font-family: var(--font-sans); font-size: 15px; color: var(--ink-2); }
+    .paincell-on { background: var(--accent); border-color: var(--accent); color: var(--on-color); font-weight: 600; }
+    .notes { min-height: 84px; background: var(--surface); border: 1px solid var(--rule-3); border-radius: var(--radius); padding: 12px; font-family: var(--font-sans); font-size: 14px; color: var(--ink-4); }
+    .seg { display: flex; }
+    .segcell { display: flex; align-items: center; justify-content: center; min-height: var(--tap); min-width: 56px; padding: 0 14px; border: 1px solid var(--ink); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink); background: var(--surface); }
+    .segcell-on { background: var(--ink); color: var(--on-color); }
+    .chart { height: 150px; border-left: 1px solid var(--rule); border-bottom: 1px solid var(--rule); position: relative; }
+    .l1 { display: flex; align-items: center; justify-content: center; min-height: 56px; background: var(--accent); border: none; border-radius: var(--radius); color: var(--on-color); font-family: var(--font-sans); font-size: 16px; font-weight: 600; }
+  </style>
+</helmet>
+
+<div class="screen">
+
+  <!-- NO TYPE BADGE. A free row stores workout_type: null, and this spec's
+       own abstention rule says an absence, never a substitute chip. -->
+  <h1 class="h1">Just Row</h1>
+  <p class="meta">SEP 1 &middot; PM5 432331249</p>
+
+  <div class="card">
+    <div class="numrow">
+      <div>
+        <p class="numlabel">TIME</p>
+        <p class="numvalue">6:33</p>
+      </div>
+      <div>
+        <p class="numlabel">DISTANCE</p>
+        <p class="numvalue">1,396 m</p>
+      </div>
+      <div>
+        <!-- The one number this phase DERIVES: 500 x time / distance.
+             393 s x 500 / 1396 m = 140.8 s. Labelled as ours because no
+             live frame carries a whole-piece average. -->
+        <p class="numlabel">AVG SPLIT</p>
+        <p class="numvalue">2:20.8</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- "DID YOU HOLD THE TARGETS?" IS ABSENT, not disabled and not empty.
+       A free row was never given a target to hold, so the question has no
+       honest answer. Pain and notes stay: both are about how it felt, and
+       a free row has that like any other.
+
+       And the label is "PAIN", not "ACTUAL PAIN". The word ACTUAL exists to
+       contrast with the workout's own EXPECTED rating, which sits to its
+       right on a normal log. A free row has no expectation to contrast
+       with, so the word has nothing to do. -->
+  <div>
+    <p class="seclabel" style="margin-bottom: 8px;">PAIN</p>
+    <div class="pain">
+      <div class="paincell">1</div>
+      <div class="paincell paincell-on">2</div>
+      <div class="paincell">3</div>
+      <div class="paincell">4</div>
+      <div class="paincell">5</div>
+    </div>
+  </div>
+
+  <div>
+    <p class="seclabel" style="margin-bottom: 8px;">NOTES</p>
+    <div class="notes">Steady pull after work.</div>
+  </div>
+
+  <!-- NO INTERVALS TABLE. steps is [] for a free row, and the spec's
+       abstention ruling is an absence rather than an empty widget. The
+       trace below is still real, so the chart stays. -->
+  <div>
+    <div class="seg">
+      <div class="segcell segcell-on">PACE</div>
+      <div class="segcell" style="border-left: none;">RATE</div>
+      <div class="segcell" style="border-left: none;">HR</div>
+    </div>
+    <div class="chart" style="margin-top: 14px;">
+      <svg viewBox="0 0 330 150" width="330" height="150" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M6 118 C 40 96, 70 74, 104 66 S 176 58, 214 54 S 286 50, 324 46" stroke="#1b1a17" stroke-width="1.5" fill="none"></path>
+      </svg>
+    </div>
+    <div style="display: flex; justify-content: space-between; margin-top: 6px;">
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);">0:00</span>
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);">3:15</span>
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);">6:33</span>
+    </div>
+  </div>
+
+  <!-- NEW COPY, and deliberately not either of the shipped pair. The log
+       door normally offers "Log against plan" and "Save without logging",
+       a choice about whether the session counts toward the plan. A free row
+       can never count, so there is one path and no choice to name; and
+       "Save without logging" on a screen whose whole job is logging would
+       read as a contradiction. -->
+  <div class="l1" style="margin-top: 6px;">Save this row</div>
+</div>
+</x-dc>
+</body>
+</html>

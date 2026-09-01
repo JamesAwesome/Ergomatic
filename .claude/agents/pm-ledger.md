@@ -3855,3 +3855,65 @@ does not match these numbers._
   defect the ruling found. One safely-deployable end state, not two. **PR 2
   gets a fresh PM slate pass before implementation; its "L" sizing predates
   the correction.**
+
+## Phase JR PR 2 final gate, 2026-09-01 (#259, TRIAD — a number's meaning + the free-row writer)
+
+- **A "one place for this number" helper only helps the screens that CALL it,
+  and the gate has to check the call sites, not the helper.** `freeRowTotals`
+  was created with a doc comment naming its purpose ("ONE place so the log
+  door and Today's recovery row can never disagree — the RC-5 shape, one
+  number two ways"). Both named screens call it. The ENDED FRAME — the first
+  screen after END, and not named in the comment — reads
+  `session.frame?.sessionElapsedSeconds ?? 0` instead, a different source that
+  also fabricates the zero the helper refuses by name. **At any gate where a
+  spec introduces a single-source helper, enumerate every screen that renders
+  that quantity and check each one imports it.** The helper's own comment is
+  the tell: a list of two screens is a list of the screens someone thought of.
+- **A screenshot whose fixture is a CONSTANT RATE makes its own recompute-by-
+  eye instruction unfalsifiable.** `justrow-log.png` shipped showing 2:40/640 m
+  from a 90-frame fixture that tops out at 1:30/360 m — a frame that cannot
+  exist. It passed the PR's "recomputed by eye, AVG = 500×t÷d" claim because
+  the fixture is 4 m/s at every frame, so the arithmetic agrees at every frame
+  including impossible ones (and the fake's own `avgPaceSecondsPer500m` is the
+  same 125, so the wire agrees too — RF11's mirror at the capture layer).
+  **RF7's "recompute the headline by eye" check needs a fixture whose rate
+  VARIES, or it only ever proves the capture is self-consistent.** Ask what
+  the check would catch, not whether it agreed.
+- **My PR-1 R-A ruling named the wrong failure — the conclusion survived, the
+  evidence did not.** I wrote the skew harm as "a padded empty badge, not a
+  wrong number" and missed TIER B1, in the same PR, whose commit message says
+  "Tap the row and the number was gone." Real exposure: a free row's avg split
+  ABSENT on the log detail while the history list shows it. Still absent-not-
+  wrong and still self-healing, so the ruling holds — but **an invisibility
+  claim is a census of the read side, and I censused one of three read-side
+  files.**
+- **R-A ORDERING RELAXED for PR 2 (recommend; James's call).** Three facts the
+  phase-open framing missed: main deploys to prod WEB, so every web reader
+  already has the read side and only iOS builds ≤ the last tag are exposed;
+  the ordering protects only a tester who INSTALLS the intermediate tag, which
+  TestFlight does not guarantee; and the phase's own EXIT WALK needs PR 2 on a
+  device, so holding the tag holds the phase's exit instrument. **Generalise:
+  before enforcing a release-ordering discipline, name who it actually
+  protects and confirm the protection is not conditional on tester behaviour
+  we do not control.**
+- **A plan that writes the RF24 warning and an implementation that seeds past
+  it anyway — twice in two consecutive PRs of one phase.** PR 1's version was
+  caught by James at review round 1. PR 2's plan named the same trap for
+  Today's recovery row *with the mechanism* ("`UnloggedMonitorRow` reads
+  Today's own `useState` mount snapshot"), required one test to ride the
+  replay, and shipped four tests all seeding `MONITOR_RUN_KEY`. **A plan
+  restating RF24 is not a gate; ask which test file MOUNTS the reader after
+  the real producer wrote, and if the answer names no file, the seam is open.**
+- **"Frozen exit criteria" stopped being frozen and nobody noticed.** The
+  spec's numbered list has six; the phase is being held to eight (criterion 7
+  in PR 1's commit message and my own ledger, criterion 8 in PR 2's plan
+  table). Both are real obligations living outside the artefact the phase-close
+  gate quotes. **A criterion added after the freeze lands in the SPEC in the
+  same commit that invents it, or it is not a criterion** — the same rule as
+  RF17 for phases, one level down.
+- **A superseded spec section beside a correctly-struck one.** The spec strikes
+  through and labels "FALSIFIED" the N1 finding at `:428`, then two paragraphs
+  later still specifies `JustRowSurface` + `useJustRowSession` and "PR 2
+  rebuilds, not inherits" — superseded by James's share-the-hook ruling, never
+  reconciled. **When a spec already demonstrates a supersession convention,
+  the gate checks whether the newest ruling used it.**

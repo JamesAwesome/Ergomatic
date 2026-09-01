@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root {
+      --page: #f4f1e8; --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c;
+      --accent: #b5341f;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    a { color: var(--accent); } a:hover { color: #9c2c19; }
+    .screen { width: 390px; height: 844px; background: var(--page); box-sizing: border-box; padding: 20px; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+    .status { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; color: var(--ink-3); margin: 0; }
+    .serif { font-family: var(--font-serif); font-size: 36px; font-weight: 500; color: var(--ink); margin: 0; line-height: 1.05; }
+    .bodyline { font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); margin: 0; }
+  </style>
+</helmet>
+
+<!-- GATE 0 AMENDMENT (2026-09-01). This frame was on the board reading
+     "Your numbers are kept.", which is what a PROGRAMMED row renders. A
+     free row does not reach that arm.
+
+     ConnectedSurface.tsx:503-511 is a five-way ternary on closeReason,
+     `kept` and endedBy, where `kept` is measuredIntervalCount(actuals). A
+     free row has no intervals, so `kept` is 0 and the unbranched line a
+     free row renders today is:
+
+         "No numbers to keep."
+
+     ...on a row that just banked real meters and is one navigation from a
+     log door showing them. The block's own comment already calls that
+     string "the only false member of the three" in the case it was written
+     for; this is the same defect reached by a new door.
+
+     The replacement states what was actually kept, in the same words the
+     lost banner uses one artboard over, so the two endings agree. -->
+<div class="screen">
+  <p class="status">SESSION ENDED</p>
+  <h1 class="serif">Wrapping up</h1>
+  <p class="bodyline">6:33 &middot; 1,396 m kept.</p>
+</div>
+</x-dc>
+</body>
+</html>

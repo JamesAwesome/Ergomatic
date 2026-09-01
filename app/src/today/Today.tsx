@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { freeRowTotals } from "../justrow/totals";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
@@ -668,11 +669,15 @@ function UnloggedRow({ run }: { run: SessionRun }) {
  *    stash (`ergomatic:last-monitor-log`/`ergomatic:last-rowed-log`,
  *    `sessionStorage`) is left standing on purpose: a rower who reports a
  *    bug right after discarding still has the wire trace to hand over;
- *  - the null-`workoutId` latent — no "Log it" at all when `run.workoutId`
- *    is null (unreachable today: only `WorkoutDetail`'s Connect flow
- *    programs a `MonitorRun`, and it always carries a real workout id, but
- *    `MonitorRun.workoutId`'s own type says otherwise, so this row honors
- *    it rather than asserting a narrower type the record doesn't have).
+ *  - the null-`workoutId` handling — RECONCILED, Phase JR PR 2. This
+ *    bullet used to call it "the null-`workoutId` latent … unreachable
+ *    today: only `WorkoutDetail`'s Connect flow programs a `MonitorRun`".
+ *    `beginFreeRow` is the second producer that comment was waiting for,
+ *    and a free row's null id is the NORMAL case now, not a latent: it
+ *    gets its own "Log it" routing to `/justrow/log` (the route that
+ *    serves an id-less record), while a null id on a NON-free record
+ *    keeps the honest suppression — that is still a record with no route
+ *    to serve it.
  *
  *  Distinct accessible name on the ✕ (antagonist correction, this task's
  *  brief): `UnloggedRow`'s own "Discard without logging" would otherwise
@@ -779,7 +784,17 @@ function UnloggedMonitorRow({ entry }: { entry: HandoffEntry }) {
     if (stamped !== run) {
       commitHandoff(entry.sessionKey, entry.revision, stamped);
     }
-    navigate(`/library/${run.workoutId}/log?from=monitor`);
+    // Phase JR PR 2: a free row's log door is its own route — there is no
+    // workout id for `/library/:id/log` to match, and that route's monitor
+    // gate would (correctly) refuse the record. `completeInterruptedRun`
+    // above is a no-op for an already-closed record, so both the open
+    // (walked-away, stamp "interrupted") and closed (link-drop) cases pass
+    // through this one handler.
+    if (run.mode === "justrow") {
+      void navigate("/justrow/log");
+      return;
+    }
+    void navigate(`/library/${run.workoutId}/log?from=monitor`);
   }
 
   if (discard.armed) {
@@ -801,13 +816,41 @@ function UnloggedMonitorRow({ entry }: { entry: HandoffEntry }) {
     );
   }
 
+  // Phase JR PR 2: the free row's copy carries ITS NUMBERS, so "Log it"
+  // visibly means "keep these" (the approved board's own line), and no
+  // word suggests the row can be picked back up — the monitor does not
+  // advertise while a Just Row is open (N1), so recovery can only ever
+  // mean logging what we have. Totals resolve through the same helper the
+  // log door reads, so the row and the door can never name two numbers
+  // for one record. A free-row record whose burst AND trace are both
+  // empty falls back to the shipped interrupted copy.
+  const freeRowNumbers = run.mode === "justrow" ? freeRowTotals(run) : null;
+
   return (
     <div className="today-unlogged-line">
       <p className="today-unlogged-text">
-        <strong>{run.title}</strong>: interrupted connected session.
+        {freeRowNumbers !== null ? (
+          <>
+            <strong>{run.title}</strong>:{" "}
+            {fmtDuration(freeRowNumbers.seconds / 60)} ·{" "}
+            {new Intl.NumberFormat("en-US").format(
+              Math.round(freeRowNumbers.meters),
+            )}{" "}
+            m, not logged.
+          </>
+        ) : (
+          <>
+            <strong>{run.title}</strong>: interrupted connected session.
+          </>
+        )}
       </p>
       <div className="today-unlogged-actions">
-        {run.workoutId !== null && (
+        {/* Gate 1 of 2 (exit criterion 4): a free row's "Log it" exists
+            despite its null workoutId — the null-suppression below is
+            about records with no route to serve them, and /justrow/log is
+            exactly that route. Non-free null-id records keep the honest
+            suppression. */}
+        {(run.workoutId !== null || run.mode === "justrow") && (
           <button
             type="button"
             className="today-unlogged-link"
@@ -1322,7 +1365,21 @@ function TodayView({
 
   return (
     <main className="screen">
-      <h1 className="screen-title">Today</h1>
+      {/* PHASE JR PR 2 — the free row's door, two words, top right (Gate 0,
+          James, 2026-09-01: "a button in the top right that only says Just
+          Row").
+
+          DELIBERATELY OUTSIDE the `!needsDoors` guard below. Everything that
+          guard hides is plan apparatus, and this is the opposite of plan
+          apparatus: ruling 4 makes it visible with or without a baseline,
+          and a rower who has not set one up yet is exactly the rower most
+          likely to want to just pull. */}
+      <div className="today-title-row">
+        <h1 className="screen-title">Today</h1>
+        <Link to="/justrow" className="today-justrow">
+          JUST ROW
+        </Link>
+      </div>
       {/* Phase 6I (condition carried into BL PR C's doors): the whole
           plan/freestyle line, type-swap chips and descriptor word are
           "plan apparatus" (spec's own words) — hidden entirely while the
@@ -1451,9 +1508,19 @@ function TodayView({
           own doc comment explains why). Does not touch the stale-draft
           guard effect above; `todayGuard.pin.test.ts` pins that guard
           byte-identical. */}
-      {monitorEntry !== null && monitorEntry.run.completedAt === null && (
-        <UnloggedMonitorRow entry={monitorEntry} />
-      )}
+      {/* Phase JR PR 2 (exit criterion 4, gate 2 of 2): a FREE ROW renders
+          whether the record is open OR closed. The `completedAt === null`
+          rule above exists because a completed programmed record belongs to
+          7C's own log path — but a free row has no such path: a link drop
+          CLOSES its record, and under the old gate that close made the row
+          invisible, which is exactly the branch ruling 9's correction (F2)
+          found. Recovery here means "log what we have", never resume — the
+          monitor does not advertise while a Just Row is open (N1). */}
+      {monitorEntry !== null &&
+        (monitorEntry.run.completedAt === null ||
+          monitorEntry.run.mode === "justrow") && (
+          <UnloggedMonitorRow entry={monitorEntry} />
+        )}
 
       {/* Phase BL PR C: the three-door onboarding card (canvas Main)
           replaces the entire suggestion apparatus — header

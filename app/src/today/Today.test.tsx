@@ -2903,7 +2903,13 @@ describe("Today (the no-baseline card)", () => {
       .getByRole("heading", { name: "Today" })
       .closest("main")!;
     const children = [...main.children];
-    expect(children[0]!.tagName).toBe("H1");
+    // Phase JR PR 2: the heading now shares its row with the JUST ROW door,
+    // so the first child is that row rather than the bare `h1`. What this
+    // test claims is unchanged and still the point — the doors card is the
+    // first CONTENT after the heading, ahead of everything else — so the
+    // heading is asserted through the row rather than in place of it.
+    expect(children[0]!.classList.contains("today-title-row")).toBe(true);
+    expect(children[0]!.querySelector("h1")).not.toBeNull();
     expect(children[1]!.classList.contains("doorscard")).toBe(true);
   });
 
@@ -3507,5 +3513,141 @@ describe("elapsedSinceStart", () => {
     expect(elapsedSinceStart(run, new Date("2026-08-01T11:59:00.000Z"))).toBe(
       0,
     );
+  });
+});
+
+/**
+ * PHASE JR PR 2 — the free row's door on Today.
+ *
+ * Gate 0 (James, 2026-09-01): "a button in the top right that only says
+ * Just Row". Two words, and no sub-line to explain itself — the door it
+ * opens does that.
+ */
+describe("Today (the Just Row door)", () => {
+  it("offers JUST ROW to a rower with a plan", async () => {
+    mockReady({});
+    await renderToday();
+
+    const door = await screen.findByRole("link", { name: "JUST ROW" });
+    expect(door).toHaveAttribute("href", "/justrow");
+  });
+
+  /**
+   * RULING 4: visible with or without a baseline. This is the case that
+   * matters and the one an all-fixtures-have-a-plan suite cannot see — a
+   * rower who has not set a baseline up yet is exactly the rower most
+   * likely to want to just pull, and Today hides its whole plan apparatus
+   * for them. The door is deliberately outside that guard.
+   */
+  it("offers JUST ROW to a rower with no baseline at all, where the doors card shows", async () => {
+    mockReady({ baselines: NO_BASELINES });
+    await renderToday();
+
+    expect(await screen.findByText("SET UP YOUR BASELINE")).toBeVisible();
+    const door = screen.getByRole("link", { name: "JUST ROW" });
+    expect(door).toHaveAttribute("href", "/justrow");
+  });
+
+  it("says only those two words", async () => {
+    mockReady({});
+    await renderToday();
+
+    const door = await screen.findByRole("link", { name: "JUST ROW" });
+    expect(door.textContent).toBe("JUST ROW");
+  });
+});
+
+/**
+ * PHASE JR PR 2, TASK 7 — the free row's recovery, BOTH gates (exit
+ * criterion 4, and the PM's own no-split condition: shipping the surface
+ * without this deliberately ships the defect ruling 9's correction found).
+ *
+ * The two gates as they stood: the row itself rendered only while
+ * `completedAt === null`, so a free row CLOSED by a link drop rendered
+ * nothing at all; and "Log it" rendered only for `workoutId !== null`, so
+ * an OPEN free row was discard-only — the only reachable action destroyed
+ * the record.
+ */
+describe("Today (JR): the free row's recovery row", () => {
+  function freeRow(overrides: Partial<MonitorRun>): MonitorRun {
+    return makeMonitorRun({
+      workoutId: null,
+      title: "Just Row",
+      mode: "justrow",
+      logSeed: { steps: [], paces: {} },
+      summaryTotals: { workElapsedSeconds: 620, workDistanceMeters: 2480 },
+      ...overrides,
+    });
+  }
+
+  it("an OPEN free row offers Log it, routing to the free-row log door", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(freeRow({ completedAt: null })),
+    );
+    mockReady();
+    const { default: Today } = await import("./Today");
+    render(
+      <MemoryRouter initialEntries={["/today"]}>
+        <Routes>
+          <Route path="/today" element={<Today />} />
+          <Route path="/justrow/log" element={<p>JUSTROW LOG DOOR</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Log it" }),
+    );
+    expect(await screen.findByText("JUSTROW LOG DOOR")).toBeInTheDocument();
+  });
+
+  it("a CLOSED free row still renders the row — the link-drop close must not go invisible", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(
+        freeRow({
+          completedAt: new Date().toISOString(),
+          endedBy: "interrupted",
+        }),
+      ),
+    );
+    mockReady();
+    await renderToday();
+
+    expect(await screen.findByRole("button", { name: "Log it" })).toBeVisible();
+  });
+
+  it("carries the numbers and no word implying the row can be resumed", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(freeRow({ completedAt: null })),
+    );
+    mockReady();
+    await renderToday();
+
+    // The board's copy, verbatim: the numbers ON the row, so "Log it"
+    // visibly means "keep these". 620 s → 10:20; 2,480 m.
+    expect(
+      await screen.findByText(/10:20 · 2,480 m, not logged\./),
+    ).toBeInTheDocument();
+    // The monitor stops advertising while a Just Row is open, so nothing
+    // here may suggest reconnection (capture finding N1).
+    expect(screen.queryByText(/resume/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reconnect/i)).not.toBeInTheDocument();
+  });
+
+  it("a completed PROGRAMMED record stays ruled out of the row — the widening is free-row only", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: new Date().toISOString() })),
+    );
+    mockReady();
+    await renderToday();
+
+    expect(
+      screen.queryByText(/interrupted connected session/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Log it" })).toBeNull();
   });
 });
