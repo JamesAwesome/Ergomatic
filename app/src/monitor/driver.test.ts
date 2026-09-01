@@ -12412,14 +12412,29 @@ describe("beginFreeRow", () => {
   });
 
   it("never reports the program dropped, because nothing was armed", () => {
-    const { transport, driver, events } = freeRowDriver();
+    // THE CLOCK IS THE POINT OF THIS SETUP. The watchdog needs BOTH halves
+    // of its rule — 3 consecutive identical mismatching armed ticks AND
+    // 2000ms held — and a first cut of this test notified twelve frames
+    // against a real clock, where `heldMs` never left single digits. It
+    // passed with the opt-out deleted: a gate that could not go red.
+    let clock = 0;
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { now: () => clock });
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
     driver.beginFreeRow();
 
-    // The structure watchdog only evaluates when `armedProgram() !== null`
-    // (`:4948`), which opening the run makes true. A free row has no armed
-    // structure for the readback to disagree with, so it must not be
-    // watched at all.
-    for (let i = 0; i < 12; i += 1) {
+    // WAITTOBEGIN maps to `armed` (`parse.ts:518`), and the structure the
+    // watchdog compares is decoded from these very bytes — workout type and
+    // the duration pair. A real Just Row sits here reporting a structure of
+    // its own, which cannot match `expectedArmedStructure({intervals: []})`.
+    // Four identical ticks over 4 seconds clears both halves of the rule.
+    for (let i = 0; i < 4; i += 1) {
+      clock += 1000;
       transport.notify(
         GENERAL_STATUS_UUID,
         buildGeneralStatusBytes({
@@ -12431,7 +12446,7 @@ describe("beginFreeRow", () => {
           rowingState: 0,
           strokeState: 0,
           totalWorkDistanceMeters: 0,
-          workoutDurationRaw: 0,
+          workoutDurationRaw: 12000,
           workoutDurationType: 0,
           dragFactor: 130,
         }),
