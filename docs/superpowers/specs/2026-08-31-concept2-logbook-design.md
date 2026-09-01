@@ -1,6 +1,7 @@
 # Wave E — the Concept2 logbook (design)
 
-**Date:** 2026-08-31 · **Status:** REV 2, awaiting James's review
+**Date:** 2026-08-31 · **Status:** REV 2 MERGED #244 (2026-08-31); PR1
+corrections folded on the PR #249 branch
 (rev 1 was revised at the anchor pass — verdict REVISE, three kill-shots;
 the corrections are folded in below and the vetted ground is recorded)
 **Wave:** E (ROADMAP "Wave E — The Concept2 logbook", opened 2026-08-31)
@@ -409,7 +410,11 @@ rather than inferred:**
 - **After PR1:** the migration adds only additive-nullable columns and
   two new tables nothing reads; every new route refuses (availability
   matrix) because `C2_LINK_ENABLED` is unset in prod; no client change.
-  Deployed prod behavior: unchanged.
+  Deployed prod behavior, the PM-corrected honest claim (not "unchanged"):
+  gains no capability; `GET /api/logs` rows grow four always-null fields
+  (`c2ResultId`, `c2UserId`, `completedAt`, `tz`); one new unauthenticated
+  route (`GET /api/concept2/callback`) answers 403 dark rather than not
+  existing.
 - **After PR1.5:** native browser plumbing exists but is reachable only
   from a surface that does not render while `available:false`. Deployed
   prod behavior: unchanged.

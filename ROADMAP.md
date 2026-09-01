@@ -896,7 +896,8 @@ closed with zero Concept2 contact.
       `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
       `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**
       All 9 tasks committed on `wave-e-pr1-server-broker` (2026-08-31,
-      including the measured refresh-endpoint corrections); PR opens next.
+      including the measured refresh-endpoint corrections); PR #249 open,
+      in James's review.
 - [ ] **PR1.5 — the native link flow**, on device: system-browser consent,
       foreground re-fetch, and (branch B only) the URL scheme + `appUrlOpen`
       handler. Split from PR1 so one reviewer never holds a token-broker
@@ -1130,8 +1131,12 @@ lifecycle spec and the `door` column respectively); RC-13/RC-14 dropped to the
 connected-surface table below with a fix-13-instrument-14 ruling; "Run it
 again" was declined; RC-38 was pulled forward and the rest of Phase PROTO
 held; the axis-quantity question opened the "say which number this is" design
-pass below; AUD-006 got its fix shape. **This table is now empty of live
-questions and only RC-30 remains, already declined.** A new row means a new
+pass below; AUD-006 got its fix shape. **This table now holds two rows, and
+neither is a live question needing James's decision: RC-30 is closed
+(declined at the RC close), and the C2 account injection row already carries
+its ruling** (PR1.5's design gate decides the fix, on device evidence about
+system-browser cookie sharing; the row stays until that PR closes it, since
+it blocks `C2_LINK_ENABLED=1` in the meantime). A new row means a new
 question, not a re-raised one.
 
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
