@@ -3493,10 +3493,40 @@ the monitor going quiet at the end of a workout and needing a reconnect.
 [CSAFE-DEF] **Appendix E**, "PM State Transitions" (p.173 in rev 0.31; the
 p.162 this file's §14 already cites in rev 0.27):
 
+> For any fixed duration workout or JustRow (no defined end) that is
+> terminated prior to reaching its defined end:
+> `WaitToBegin->WorkoutRow->Terminate (user or command)->Rearm->WaitToBegin`
+>
 > For any fixed duration workout (defined end) that reaches its defined end:
 > `WaitToBegin->WorkoutRow->WorkoutEnd->WorkoutLogged->[Menu button]->WorkoutRearm->WaitToBegin`
 >
 > `WaitToBegin->WorkoutRow->WorkoutEnd->WorkoutLogged->[Terminate command]->WaitToBegin`
+
+**The FIRST sequence was missing from this transcription until 2026-08-31,
+and its absence cost a spec claim.** It is the only Appendix E sequence that
+NAMES JustRow. Phase JR's spec read our truncated version, correctly noticed
+no JustRow attribution here, and concluded "the link was our own gloss" —
+filing a real citation as UNVERIFIED for a week.
+
+**But read the conditional before leaning on it** — *"that is terminated
+prior to reaching its defined end"*. It documents where a terminated JustRow GOES; it does not
+enumerate a JustRow's exits, and it is silent on the physical power-off
+concept2.com documents after inactivity. Phase JR briefly recorded it as
+"Terminate and nothing else"; that over-read is withdrawn. What it supports:
+the `1 → 11 → 0` sequence the 2026-08-31 capture saw on a Menu end
+(`docs/monitor/sessions/walk-2026-08-31-justrow/`). What stays open: whether
+anything closes a row nobody terminates — unobserved for 896.8 s there, and
+undocumented either way.
+
+**Related, and a standing trap:** `OBJ_WORKOUTSTATE_T` (rev 0.31 pp.102-103)
+enumerates 0-13 — WAITTOBEGIN, WORKOUTROW, COUNTDOWNPAUSE, INTERVALREST, …,
+WORKOUTEND(10), TERMINATE(11), WORKOUTLOGGED(12), REARM(13) — and has **no
+Paused member**. The "6 s inactivity → Paused" transition belongs to the
+PUBLIC CSAFE SLAVE state machine (Table 16 p.47), a different layer, and is
+**unobservable in 0x0031 byte 8 by construction**. COUNTDOWNPAUSE is a
+countdown pause, not an inactivity pause. Any report of the form "we saw no
+Paused transition in the frames" is reporting on a field that could never
+have shown one.
 
 On natural completion the PM **parks in `WorkoutLogged` and stays there**,
 answering CSAFE throughout — CSAFE is strictly poll-response in every state

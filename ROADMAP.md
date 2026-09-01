@@ -127,6 +127,46 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **C** | The submission surface      | L    | The most visible wave                       |
 | **E** | The Concept2 logbook        | M    | Only if it ships a send control             |
 
+## Phase JR — Just Row
+
+**Status: Active — PR 0a instrument built; PR 0b capture DONE 2026-08-31, six
+OPEN questions answered outright and OPEN 3 only within a bound; PR 1/2 blocked
+on a design RE-OPEN, and OPEN 3's physical-power/BLE half still wants
+evidence.** This is a deliberate household exception to the stranger-first
+ordering, requested by James on 2026-08-31. Walk record and full decodes:
+`docs/monitor/sessions/walk-2026-08-31-justrow/README.md`; runsheet at
+`docs/monitor/sessions/walk-phase-jr-capture/RUNSHEET.md`.
+
+**The headline is good: 0x0031's elapsed and distance do NOT reset at the
+5-minute auto-split**, so a long free row stores as its true length and PR 2's
+two headline numbers are safe. **Two capture findings re-open design,
+though, and they must be settled before PR 1 tags its enum** (both are
+written up in the spec's own CLOSED section):
+
+- **The PM5 does not advertise while a Just Row is open**, so the app cannot
+  connect mid-row and cannot reconnect after a mid-row link drop. The spec's
+  "already mid-Just-Row at connect" path is struck; the Today recovery row can
+  only mean "log what we have", never "resume".
+- **Nothing was observed closing a free row the rower walked away from** — the workout stayed
+  active for 896.8 s after the rower stopped, with frames still arriving and
+  no auto-terminate — a BOUNDED observation, since the operator ended the
+  capture rather than the monitor. Documentation neither confirms nor denies
+  a closer: CSAFE Appendix E's JustRow sentence is CONDITIONAL ("that is
+  terminated…") and describes the sequence AFTER a terminate, so it does not
+  enumerate exits, and Concept2's PM5 guide says the monitor powers down
+  after inactivity with no Bluetooth qualification. The proposed
+  `ended_by: "idle"` member still has no mapped signal, and PR 2 still needs
+  its own inactivity rule — but "the row never closes" is UNSETTLED, and the
+  physical-power/BLE question is the open half. (The old "6 s → 220 s → power off" chain turned out to be
+  three different layers; the timeouts are CSAFE slave-state ones that never
+  governed an unprogrammed row in either connection state.)
+
+Smaller reconciliations owed: `domain/monitor/pm5/uuids.ts` says 0x003F "has
+never been recorded" and one now has been; status frames arrive at 1.00/s, not
+the ~2.2/s the tooling assumes; and the observer heading renders
+`PM5 432331249 Row connected` because the advertised BLE name already ends in
+"Row".
+
 **Honest distance: three to five weeks of working sessions.** Waves D and B
 ship a tester nothing, so they release alongside C rather than alone — two
 consecutive empty release notes is how the invisible-but-necessary wave gets
@@ -1250,8 +1290,14 @@ Each needs erg time or a deliberate recording session.
   `webView.reload()`, destroying the driver, the recorder, and up to 30 s of
   unflushed series. _"'terminated no' disposes of force-quit, not of memory
   pressure."_ (`phase-ll.md`)
-- **JR PR 0b's capture walk** — see the deferred section; it rides the next erg
-  session regardless of whether JR is ever built.
+- ~~**JR PR 0b's capture walk**~~ — DONE 2026-08-31; six OPENs answered, OPEN 3
+  bounded. Record at `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`.
+- **JR OPEN 3's open half — does a PM5 power itself off with a central
+  connected?** Unobserved for 896.8 s and undocumented either way; the walk
+  ended by operator choice, not by the monitor. Rides any erg session: leave a
+  Just Row open, connected, and simply wait longer than 15 minutes.
+  `CSAFE_PM_GET_OPERATIONALSTATE` (0x8F) reads the actual power layer, but
+  polling it sends CSAFE and may itself perturb the state being measured.
 - **The hardware session shopping list** — three pairing and programming latency
   spans, the unrowed question from §17 item 5, §18's readings-still-owed, a
   genuine mid-piece disconnect, and **one `.5` pace target on the wire**
@@ -1457,16 +1503,6 @@ Each needs erg time or a deliberate recording session.
 Deferred, not killed. One line and one trigger each. No exits and no sizes — a
 trigger is the whole entry.
 
-- **Phase JR — Just Row.** Spec at rev 2 with both phase-open gates paid
-  (`docs/superpowers/specs/2026-08-24-just-row-design.md`); its "waits behind
-  RC's wave" blocker expired 2026-08-28. Four PRs including an L, TRIAD on PR 1.
-  Deferred because it is the deepest household feature in the file: it serves
-  someone who already owns a PM5, has paired it, and knows what Just Row is.
-  **Carve-out, and it is not deferred: PR 0b's capture walk rides your next erg
-  session.** It is erg time you are spending anyway, captures do not go stale,
-  and its headline question — do 0x0031's elapsed and distance RESET at the PM's
-  5-minute auto-splits — is a corpus fact worth owning either way. A naive
-  observer that gets this wrong stores about five minutes of a thirty-minute row.
 - **Phase PS — personal stats.** The app's stated purpose, and it matters most
   at day 30 and least at day 1: a stranger has no history to trend. **Trigger:**
   a tester has enough history for a trend to be honest. Carries a live hazard

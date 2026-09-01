@@ -531,6 +531,81 @@ async function assertNoA11yViolations(page: Page): Promise<void> {
   expect(results.violations).toEqual([]);
 }
 
+/**
+ * WHAT THIS FORGERY DOES AND DOES NOT PROVE (recurring failure 26).
+ *
+ * `__pm5FakeScript__` sends `resolveDefaultTransport()` down its FAKE arm,
+ * and that arm never installs a recording tap — only the real-web-transport
+ * arm does. So `__pm5Recording__` here is hand-built, and these assertions
+ * prove the observer renders its capture controls WHEN a tap is present.
+ * They do not prove the walk build installs one; that seam lives in
+ * `transports/index.ts` and is covered by its own tests. The unit suite
+ * installs its tap inside the transport's `connect()`, which is where the
+ * real seam does it, so the ordering has a gate even though this one cannot
+ * be it.
+ */
+async function injectJustRowObserverFake(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.__pm5FakeScript__ = {
+      program: { intervals: [] },
+      deviceName: "PM5 Observer",
+    };
+    window.__pm5Recording__ = {
+      lines: () => [],
+      eventCount: () => 1284,
+      download: () => Promise.resolve(),
+    };
+  });
+}
+
+test("Just Row observer: VITE-enabled route, accessibility, controls, and shell", async ({
+  page,
+}) => {
+  await injectJustRowObserverFake(page);
+  await signInViaBackdoor(page, {
+    email: "design-just-row-observer@e2e.test",
+    name: "Observer Design Tester",
+  });
+  await page.goto("/justrow/observe");
+
+  // The screen opens OFFLINE and connects from a tap, never from a mount
+  // effect: `scan()` reaches `navigator.bluetooth.requestDevice()` on the
+  // real arm, which is transient-activation gated, and a typed URL is a
+  // fresh Window with no activation. Driving the same tap here keeps this
+  // spec on the operator's actual path.
+  await expect(
+    page.getByRole("heading", { name: "Not connected" }),
+  ).toBeVisible();
+  const connect = page.getByRole("button", { name: "Connect" });
+  await expect(connect).toBeVisible();
+  // Swept BEFORE the tap as well as after: offline is the state the operator
+  // actually lands on, and it is the only one carrying the accent-filled L1.
+  await assertNoA11yViolations(page);
+  const connectBox = await stableBoundingBox(connect);
+  expect(connectBox).not.toBeNull();
+  expect(connectBox!.width).toBeGreaterThanOrEqual(44);
+  expect(connectBox!.height).toBeGreaterThanOrEqual(44);
+  await connect.click();
+
+  await expect(
+    page.getByRole("heading", { name: "PM5 Observer connected" }),
+  ).toBeVisible();
+  await expect(page.getByText("1284 events captured")).toBeVisible();
+  const download = page.getByRole("button", { name: "Download capture" });
+  const disconnect = page.getByRole("button", { name: "Disconnect" });
+  await expect(download).toBeVisible();
+  await expect(disconnect).toBeVisible();
+  await assertNoA11yViolations(page);
+
+  for (const control of [download, disconnect]) {
+    const box = await stableBoundingBox(control);
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+  await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0);
+});
+
 // --ink-4's own rgb (tokens.css #6f6a5f) — computed once here rather than
 // re-derived per call site.
 const INK_4_RGB = "rgb(111, 106, 95)";

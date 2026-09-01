@@ -656,14 +656,14 @@ export function applyContinuityCheck(
 }
 
 /**
- * Phase LT spec 2, Task 2 (design spec §4, S6). Requests persistent storage
- * once per successful connect — free either way, and this hook is
- * deliberately NOT what decides whether it is granted: `persist()` itself
- * is (S6's own PRIMARY citation, WebKit's policy blog — heuristics decide,
- * and a Capacitor WKWebView is "probably DENIED" by them). Fire-and-forget
- * (`bestEffort`) and never gates anything downstream: denial is TOLERATED,
- * stated in the spec's own words as "NOT as mitigation" — nothing about
- * `connect()`'s own success or failure reads this outcome.
+ * Phase LT spec 2, Task 2 (design spec §4, S6). By default, requests
+ * persistent storage once per successful connect — free either way, and
+ * this hook is deliberately NOT what decides whether it is granted:
+ * `persist()` itself is (S6's own PRIMARY citation, WebKit's policy blog —
+ * heuristics decide, and a Capacitor WKWebView is "probably DENIED" by them).
+ * Fire-and-forget (`bestEffort`) and never gates anything downstream: denial
+ * is TOLERATED, stated in the spec's own words as "NOT as mitigation" —
+ * nothing about `connect()`'s own success or failure reads this outcome.
  *
  * `navigator.storage`/`persist` are both optional-chained rather than
  * feature-detected up front on purpose: some runtimes — this repo's own
@@ -994,11 +994,17 @@ export interface MonitorSession {
  * `driver.test.ts` uses — a model of the machine we MET, empty arm
  * included) with no radio and no wall clock.
  *
- * All four are optional and default to production behaviour, so
+ * All dependencies are optional and default to production behaviour, so
  * `useMonitorSession()` — the zero-argument call Tasks 5-7 make — is the
  * shipped path.
  */
 export interface MonitorSessionDeps {
+  /** Requests durable browser storage after a successful connection unless
+   *  explicitly disabled. Defaults to `true`. */
+  requestStoragePersistence?: boolean;
+  /** Writes the teardown diagnostic snapshot to browser storage unless
+   *  explicitly disabled. Defaults to `true`. */
+  requestDiagnosticStash?: boolean;
   /** Builds the radio. `null` means "this platform/build has none" →
    *  `transport-missing`. May return a `Promise` — `connect()` always
    *  `await`s the result, so a caller building a real, synchronous
@@ -1652,6 +1658,30 @@ export function useMonitorSession(
   /** One `connect()` at a time — a second press while the monitor chooser is open
    *  must not open a second one. */
   const connectingRef = useRef(false);
+  /** WHICH connect attempt owns the flow. Bumped at the top of every
+   *  `connect()` and again by `cancel()`, so an attempt can ask whether it
+   *  is still the current one after each of its awaits.
+   *
+   *  This exists because `cancel()` used to be unable to stop an attempt
+   *  that had not yet built a driver: it claims `driverRef` synchronously
+   *  and finds nothing there during `scan()`/`connect()`, resets the UI to
+   *  `INITIAL_STATE`, and the abandoned attempt then runs to completion —
+   *  installing a driver and its ten subscriptions behind a screen that
+   *  says it is not connected, after which the visible Connect silently
+   *  no-ops on this function's own `driverRef.current !== null` guard.
+   *  `connect()`'s guard comment predicted exactly this and named the
+   *  precondition holding it off: "Unreachable today only because onExit()
+   *  unmounts the interstitial synchronously." `JustRowObserver` is the
+   *  caller that broke that precondition — it stays mounted through a
+   *  cancel and offers Connect again — so the guard got the `cancellingRef`
+   *  its own comment asked for, as an attempt counter rather than a flag
+   *  (a flag cannot tell a stale attempt from a fresh one).
+   *
+   *  A superseded attempt disposes of the transport IT created and returns
+   *  without touching shared state — ownership follows creation, and the
+   *  newer attempt's `connectingRef` claim is never cleared by an older
+   *  one's `finally`. */
+  const attemptRef = useRef(0);
   /** Phase LT spec 2, Task 2. This session's own in-memory `SeriesRecorder`
    *  (Task 1) — created at the exact moment `runRef` opens (the ready ->
    *  live promotion in `handleFrame` below), fed every live frame, stopped
@@ -3173,6 +3203,24 @@ export function useMonitorSession(
    *  path always takes the `driverRef.current` branch. */
   const teardown = useCallback(
     (alreadyTerminated = false, claimed: MonitorDriver | null = null): void => {
+      // RETIRE ANY IN-FLIGHT ATTEMPT FIRST, for the same reason `cancel()`
+      // does (see `attemptRef`). Everything below this line reasons about a
+      // driver, and an attempt still inside `createTransport()`/`scan()`/
+      // `transport.connect()` HAS no driver yet — so without this bump the
+      // cleanup finds `driverRef` null, does nothing, and the pending
+      // promise resumes afterwards with `superseded()` false and installs a
+      // driver and its subscriptions against a hook that is gone. That is
+      // the Cancel defect again, reached through UNMOUNT (navigation, a
+      // route change) rather than through the button, and `cancel()`'s own
+      // bump does not cover it: this effect's cleanup calls `teardown`
+      // directly, never `cancel`.
+      //
+      // Safe to put here rather than only at the unmount call site:
+      // `teardown` has exactly two callers, this hook's unmount effect and
+      // `cancel()`, and `connect()` never calls it — so no attempt can ever
+      // supersede itself. `cancel()` bumping and then calling `teardown`
+      // bumps twice, which a counter does not care about.
+      attemptRef.current += 1;
       // Resolved FIRST — every step below needs the same driver, and
       // clearing `driverRef` here (rather than after stash/unsubscribe, as
       // this used to) is a pure reordering: a re-entrant teardown
@@ -3301,6 +3349,7 @@ export function useMonitorSession(
       // evidence — the instrument would erase exactly the result it
       // exists to catch.
       const stash = (): void => {
+        if (depsRef.current.requestDiagnosticStash === false) return;
         const log = logRef.current;
         if (log === null) return;
         try {
@@ -3511,13 +3560,23 @@ export function useMonitorSession(
 
   const connect = useCallback(async (): Promise<void> => {
     // Since cancel() claims driverRef SYNCHRONOUSLY before its awaits (the
-    // MEDIUM-9 deadlock fix), this guard no longer covers an in-flight
+    // MEDIUM-9 deadlock fix), this guard alone does not cover an in-flight
     // cancel: driverRef is already null while cancel's terminate is still
-    // on the wire. Unreachable today only because onExit() unmounts the
-    // interstitial synchronously — nothing can press Connect mid-cancel.
-    // If cancel ever stops unmounting, this guard needs a cancellingRef.
+    // on the wire. This comment used to end "Unreachable today only because
+    // onExit() unmounts the interstitial synchronously … if cancel ever
+    // stops unmounting, this guard needs a cancellingRef." `JustRowObserver`
+    // is that caller, and this is that ref: `attemptRef` (its own doc
+    // comment carries the full account). The guard below is now the
+    // FIRST of two — it stops a second press, and the `superseded()`
+    // checks after each await stop an abandoned attempt.
     if (connectingRef.current || driverRef.current !== null) return;
     connectingRef.current = true;
+    const attempt = (attemptRef.current += 1);
+    /** True once `cancel()` (or a later `connect()`) has moved on. A
+     *  superseded attempt must not write shared state, must not clear a
+     *  `connectingRef` it no longer owns, and disposes only of the
+     *  transport it built itself. */
+    const superseded = (): boolean => attemptRef.current !== attempt;
     // Phase LL Task 2 review fix (task-1-report Minor, `useMonitorSession.
     // ts:1665` at the time it was filed): `livenessRef.current` used to be
     // set only after the `transport === null` check below, and never
@@ -3550,6 +3609,14 @@ export function useMonitorSession(
       depsRef.current.createTransport ??
       (() => defaultTransport(livenessDepsRef.current))
     )();
+    if (superseded()) {
+      // Cancelled while the transport was still resolving (the native and
+      // DEV arms both `await` a dynamic import here). Nothing was built
+      // beyond the transport itself, so hand it back and leave every shared
+      // ref to whoever owns them now.
+      if (transport !== null) bestEffort(transport.disconnect());
+      return;
+    }
     if (transport === null) {
       connectingRef.current = false;
       fail({
@@ -3568,6 +3635,10 @@ export function useMonitorSession(
       // in-process sheet on iOS). One result or none either way — the app
       // never sees a list (C2, as revised by phone-BLE §3).
       const found = await transport.scan();
+      if (superseded()) {
+        bestEffort(transport.disconnect());
+        return;
+      }
       const device = found[0];
       if (device === undefined) {
         fail({
@@ -3579,6 +3650,14 @@ export function useMonitorSession(
       }
       update({ phase: "pairing" });
       await transport.connect(device.id);
+      // THE ONE THAT MATTERS. Everything below builds and registers: the
+      // log, the driver, its ten subscriptions, the lifecycle listener.
+      // A cancel that landed during the GATT connect must stop here, or
+      // all of it comes up behind a screen that already says otherwise.
+      if (superseded()) {
+        bestEffort(transport.disconnect());
+        return;
+      }
       // Phase LL Task 1: the log's own `atMs` clock is the SAME `now` the
       // liveness decorator uses (`livenessDepsRef.current.now`) — one
       // clock, so a `liveness-silence`/`liveness-snapshot` entry's `atMs`
@@ -3595,10 +3674,12 @@ export function useMonitorSession(
       // background/foreground pair (or an interrupted one that never saw
       // its matching foreground) left behind.
       framesWhileHiddenRef.current = null;
-      // S6: once per connect, straight into this session's own ring —
-      // see `requestStoragePersistence`'s own doc comment for the full
-      // reasoning.
-      requestStoragePersistence(log);
+      // S6: once per ordinary product connect, straight into this session's
+      // own ring — see `requestStoragePersistence`'s own doc comment for the
+      // full reasoning.
+      if (depsRef.current.requestStoragePersistence !== false) {
+        requestStoragePersistence(log);
+      }
       // Phase LL Task 3 (§3, F-6), "say so in the ring": the
       // already-connected guard has no log to write to at `scan()` time
       // (this session's log did not exist yet — it is created here, only
@@ -3777,10 +3858,18 @@ export function useMonitorSession(
       // the caller's `program()` call, which owns the move to state 5.
       update({ deviceName: device.name });
     } catch (err) {
+      if (superseded()) {
+        // A throw from a radio nobody is waiting on any more is not this
+        // session's failure to report — the UI moved on at `cancel()`.
+        bestEffort(transport.disconnect());
+        return;
+      }
       fail(mapRadioFailure(err));
       bestEffort(transport.disconnect());
     } finally {
-      connectingRef.current = false;
+      // Ownership, not a reset: a superseded attempt must never release a
+      // claim a NEWER attempt is holding, or two connects run at once.
+      if (!superseded()) connectingRef.current = false;
     }
   }, [fail, handleEvent, update]);
 
@@ -3997,6 +4086,16 @@ export function useMonitorSession(
     // `"paused"` dropped from this guard with the phase member (task 5): a
     // frozen session is still `"live"`, so this already covered it.
     if (phase === "live" || phase === "ended") return;
+    // Retire any attempt still in flight, BEFORE the awaits below — the
+    // same synchronous-claim discipline `driverRef` uses one line down.
+    // An attempt inside `scan()`/`connect()` has no driver to tear down,
+    // so this counter is the only thing that can stop it building one
+    // after we have already returned the UI to idle. Releasing
+    // `connectingRef` here (rather than leaving it to that attempt's own
+    // `finally`, which now declines to touch it) is what lets the caller
+    // press Connect again immediately.
+    attemptRef.current += 1;
+    connectingRef.current = false;
     const driver = driverRef.current;
     // MEDIUM-9 (task-5 re-review), landed by the fix wave's H1: CLAIM the
     // ref synchronously, before the `await driver.terminate()` below

@@ -13,7 +13,9 @@ A rower who just wants to pull taps **Just Row** on Today, the app connects
 to the PM5 and watches the machine's own native Just Row mode — no program,
 no targets, no baseline required. When they finish (Done in the app, Menu on
 the erg, or walking away until the monitor powers itself off), the session
-closes with the machine's numbers and offers the log screen. The row lands
+closes with the machine's numbers and offers the log screen. (**The
+"walking away" closer has never been observed** — see the end-semantics
+section; the rower and link-lost closers stand.) The row lands
 in history and the future 8B calendar marked as what it is: a free row, not
 a workout.
 
@@ -43,6 +45,18 @@ deliberately refuses to infer a run without a program — naming a
    timeout, so the PM's stored piece can be longer than ours (coast-down
    plus whatever precedes Menu). The exit walk states this instead of
    discovering it.
+
+   **PREMISE IN DOUBT, RULING NOT REVERSED (2026-08-31 capture).** The
+   passive closer assumes the monitor powers itself off and drops the link.
+   We watched for 896.8 s, connected, and it did not — but that is a
+   bounded observation, not a refutation: concept2.com documents the
+   power-off plainly and says nothing about Bluetooth either way, and no
+   vendor document relates a connection to it. **What IS settled is that we
+   have never observed the signal**, and a closer we cannot observe is one
+   PR 1 cannot store, which is why `ended_by: "idle"` is withdrawn below.
+   The tension this leaves is real and is yours to resolve: only an
+   app-side threshold could produce a passive closer now, and this ruling's
+   second sentence forbids one. **James's call, not an implementer's.**
 6. **Approach A** — a parallel observer path; `ConnectedSurface` and
    `useMonitorSession` are not modified. **Corrected claim:** this is
    parallel-*safer*, not parallel-safe — the observer still needs driver
@@ -83,13 +97,37 @@ captures and transcriptions. This section is the corrected record.
   idle (SECONDARY, `pm5-session4a-final.log.gz` decoded at the anchor
   pass). The field identifies nothing we need. It is not part of this
   design.
-- **"JustRow ends only via Terminate" is UNVERIFIED.** The repo's Appendix
-  E transcription carries no JustRow attribution for the Terminate
-  sequence — the link was our own gloss — and this repo has already caught
-  Appendix E wrong about these exact ordinals (the keystone walk saw
-  5→12 with state 10 never appearing, `parse.ts:410-416`). Whether a real
-  Just Row can reach the `"finished"`-mapped state is a CAPTURE question,
-  and the design below tolerates either answer. INFERENCE until PR 0b.
+- **Appendix E DOES name JustRow — but it does not say Terminate is the
+  only exit, and an earlier version of this bullet claimed it did.** Rev 2
+  said our Appendix E transcription carried no JustRow attribution and that
+  "the link was our own gloss": true of OUR TRANSCRIPTION, false of the
+  SOURCE. The CSAFE Communication Definition rev 0.31, Appendix E "PM State
+  Transitions" p.173, verbatim:
+
+  > "For any fixed duration workout **or JustRow (no defined end)** that is
+  > terminated prior to reaching its defined end:
+  > `WaitToBegin->WorkoutRow->Terminate (user or command)->Rearm->WaitToBegin`"
+
+  **READ THE CONDITIONAL.** The sentence is *"…that **is terminated**
+  prior to reaching its defined end"* — it describes the state sequence
+  that FOLLOWS a terminate. It does not enumerate a JustRow's exits, and it
+  says nothing about physical power-off, which concept2.com separately
+  documents happening after inactivity with no Bluetooth qualification.
+  **A prior revision of this bullet read it as "Terminate and nothing else"
+  and tagged the result PRIMARY. That was an over-read** — a conditional
+  taken for an enumeration, recurring failure 16's second corollary,
+  committed in the same pass that was correcting a different instance of
+  it. Struck rather than softened.
+
+  What the line DOES establish, PRIMARY: a JustRow terminated early lands
+  on `Terminate → Rearm → WaitToBegin`, so our observed
+  `1 → 11 (two frames) → 0` on the Menu end is the documented sequence.
+  Everything about a row nobody terminates remains UNSETTLED at the
+  physical-power layer. `pm5-interface-notes.md:3496` had omitted this
+  sequence entirely, which is how we came to call our own correct reading a
+  gloss; it is restored there. The standing caution still applies (the
+  keystone walk caught Appendix E wrong about these ordinals,
+  `parse.ts:410-416`).
 - **Terminate IS observable at the frame seam**: `parse.ts:439` maps
   ordinal 11 → `state: "terminated"`, sole producer. SECONDARY, vetted.
 - **0x0039 HAS been captured** — the 2026-08-23 keystone walk recorded an
@@ -97,49 +135,155 @@ captures and transcriptions. This section is the corrected record.
   deafness, per that walk's README (SECONDARY). Still: arrival is not
   guaranteed (ecosystem reports drops), so 0x0039 remains an opportunistic
   cross-check, never the record.
-- **Idle chain** — 6 s inactivity → Paused, 220 s → Finished, then the
-  monitor powers off ("a couple of minutes… count starts once the
-  flywheel stops"). SECONDARY: the 6 s/220 s figures live in our own
-  research summary of the CSAFE slave state machine
-  (`docs/superpowers/research/2026-07-27-pm5-ble-research.md`), and the
-  power-off is concept2.com (PRIMARY). BLE-side effect of power-off
-  (link drop) is INFERENCE. Whether the timeout emits an auto-TERMINATE
-  first is an open assertion in `monitorRun.ts:145` — capture question.
+- **Idle chain — THREE LAYERS, and rev 2 collapsed them into one.** The
+  "6 s → 220 s → power off" chain was never a single mechanism. Corrected
+  2026-08-31 against the CSAFE Communication Definition rev 0.31 and the
+  walk. **An intermediate correction made on the walk day is itself
+  superseded and must not be reinstated:** it said the figures were
+  "FALSIFIED for the connected case" and "kept as the disconnected-case
+  claim they were sourced for." That preserved the layer error while
+  appearing to contain it — the figures do not apply in EITHER connection
+  state.
+
+  1. **6 s / 220 s belong to the PUBLIC CSAFE SLAVE state machine only**
+     (PRIMARY, rev 0.31 Table 16 p.47, under the heading "Public CSAFE
+     Default Configuration"): *"Inactivity During InUse State Timeout | 6
+     seconds"*, *"Inactivity During Pause State Timeout | 220 seconds …
+     before entering the Finished state"*. Table 17 p.49 narrows it
+     further: *"A timeout is employed to enter the Finished state in the
+     event **a configured workout** is never started or re-started."* A
+     Just Row is not a configured workout, and our observer sends no CSAFE
+     at all — the whole capture contains exactly one tx, the 1 Hz
+     sample-rate write. **These figures never governed an unprogrammed
+     Just Row. Connection state is irrelevant to why.**
+  2. **The WORKOUT state machine documents no timed exit for a JustRow,
+     which is not the same as documenting that none exists** — see the
+     Terminate entry above: that sequence is conditional on a terminate
+     having happened, so it settles where a terminated row goes and leaves
+     an un-terminated one unaddressed. This is the layer 0x0031 byte 8 reports,
+     and `OBJ_WORKOUTSTATE_T` (rev 0.31 pp.102-103) has **no Paused
+     member** at all, so "we saw no Paused transition" is not a finding
+     that field can deliver.
+  3. **Physical power-off is a separate layer, and the only one where
+     "a connection suppresses it" is a live hypothesis.** concept2.com
+     (PRIMARY): *"The PM turns off automatically after a couple of minutes
+     of inactivity. A spinning flywheel is considered activity, so the
+     count starts once the flywheel stops."* — and, notably, *"To keep
+     your monitor awake when you're taking a break during a long piece,
+     periodically press Display or Units on the monitor face."* We saw
+     neither the power-off nor any need for that mitigation across 897 s
+     connected. **Neither vendor document relates a BLE connection to any
+     timeout or to power state** (grepped: 10 "bluetooth" hits in rev
+     0.31, all transport/HR/byte-order). Concept2's own forum reports the
+     suppression consistently across years and several threads, but those
+     could not be read verbatim — SECONDARY, and weak. BLE-side effect of
+     a power-off (link drop) remains INFERENCE, untested.
+
+  **What this changes for the design: nothing softens.** PR 2 still needs
+  its own inactivity rule, and now for a stronger reason than "we saw no
+  timeout": no closer has ever been observed within 896.8 s, and none is
+  documented at any layer we can watch. **That is an absence of evidence, not
+  evidence of absence** — see the CLOSED 3 caveat — and it is already
+  sufficient, because a rule cannot map a signal nobody has seen. We are also, by definition,
+  never disconnected when we care.
 - **Auto-start**: the PM turns on and Just Row begins when the rower
   pulls (PRIMARY, concept2.com). Pull-from-menu auto-entry with the app
   already connected: INFERENCE, capture question.
 - **Persistence**: the PM saves a Just Row ≥1 min or ≥100 m; max
   50,000 m; auto-splits stored at 5 min, →10 min past 35:00, →20 min past
-  70:00 (PRIMARY, concept2.com). **The auto-splits create the phase's
-  single highest-value open question — see OPEN 1.**
+  70:00 (PRIMARY, concept2.com). **The auto-splits were the phase's single
+  highest-value open question and are now ANSWERED — see CLOSED 1: the
+  live counters do not reset across them.**
 
-### OPEN — closed by PR 0b's capture before PR 2 merges
+### CLOSED — answered by PR 0b's capture, 2026-08-31
 
-1. **Do 0x0031's elapsed/distance RESET at a Just Row auto-split?** If
-   they reset the way programmed interval boundaries reset, every free
-   row over five minutes would store the current split, not the row — a
-   30-minute row landing as ~5 minutes. This decides both headline
-   numbers. (Companion code fact, testable without hardware: with
-   `programLength <= 0` the series recorder's interval key pins at 0 and
-   an elapsed reset would silence the trace after the first split —
-   `intervalIndex.ts:183`. PR 2 must fix or bypass this regardless.)
-2. Do the auto-splits fire live on 0x0037/0x0038?
-3. Does the elapsed clock tick or hold through the 6 s Paused window, and
-   what does workoutState read when the 220 s timeout fires — is there an
-   auto-TERMINATE before power-off?
-4. Does a Menu-end emit 0x0039? (Stay connected ≥90 s after.)
-5. Does pulling from the main menu auto-enter Just Row with the app
-   connected?
-6. Does the post-Terminate auto-rearm cycle (Terminate → Rearm →
-   WaitToBegin, unaided) produce frame sequences that could re-trip a
-   naive motion detector? (The design guards against this — see
-   Detection — the capture confirms the guard's shape.)
-7. Can a real Just Row ever reach the `"finished"`-mapped state (12)?
+**Six are answered outright; OPEN 3 is answered only within a bound (see
+its own entry).** Evidence and full decodes:
+`docs/monitor/sessions/walk-2026-08-31-justrow/README.md`. Scope, per that
+README: PM5 serial 432331249, firmware not captured, one session — these
+are findings for this device and these runs, not firmware-general truths.
 
-**No genuine unprogrammed Just Row capture exists** — every recording in
-`docs/monitor/sessions/` is a programmed workout (verified frame-by-frame
-at the anchor pass). PR 0b's capture is both the evidence and PR 2's
-permanent replay fixture.
+1. **Do 0x0031's elapsed/distance RESET at a Just Row auto-split? NO.**
+   Row-cumulative, straight through the boundary: 302.09 s / 1074.0 m at
+   the split, still climbing to 393.58 s / 1396.6 m at the end, with no
+   non-monotonic step anywhere inside the row. **Both headline numbers are
+   safe.** (The companion code fact stands and is untouched by this: with
+   `programLength <= 0` the series recorder's interval key pins at 0 —
+   `intervalIndex.ts:183` — which PR 2 must still fix or bypass.)
+2. **Do the auto-splits fire live on 0x0037/0x0038? YES**, twice, each
+   paired with its 0x0038. The split's own fields are per-split
+   (300.0 s / 1074 m, then 93.6 s / 323 m); the frame's own elapsed and
+   distance are cumulative.
+3. **The clock HOLDS through a pause, and no auto-terminate arrived
+   within 897 s.** The deliberate stop froze elapsed at 185.81 s across
+   ~50 s of wall time — elapsed is rowing time, not wall time. The timeout
+   half is a **bounded negative**: after the rower stopped, `workoutState`
+   stayed at 1 for 896.8 s with frames still arriving and nothing
+   terminating. **Bounded, not "never" — the capture ended because the
+   operator stopped it, not because the monitor did anything.**
+
+   **Read this WITH the corrected idle-chain entry above, not as a
+   standalone surprise.** Two claims that looked like findings on the walk
+   day are not: the 220 s figure never governed an unprogrammed Just Row
+   in the first place (it is a CSAFE slave-state timeout, and we send no
+   CSAFE), and "no Paused transition" is unobservable — `OBJ_WORKOUTSTATE_T`
+   has no Paused member.
+
+   **And one claim made in the correction ITSELF is withdrawn.** That pass
+   read Appendix E p.173 as giving a JustRow "Terminate and nothing else"
+   and called the result PRIMARY-backed. The sentence does not say that. It
+   is CONDITIONAL — *"…or JustRow (no defined end) **that is terminated**
+   prior to reaching its defined end"* — and describes the state sequence
+   that FOLLOWS a terminate. It enumerates no exits and says nothing about
+   physical power-off, which concept2.com separately documents happening
+   after inactivity with no Bluetooth qualification at all. Reading a
+   conditional as an enumeration is precisely recurring failure 16's second
+   corollary, committed in the act of correcting a different instance of it.
+
+   **What actually stands:** no closer was observed within 896.8 s, and none
+   is documented at any layer we can watch. That is enough to keep `idle`
+   out of PR 1 — a rule cannot map a signal nobody has seen — and not enough
+   to say the machine never closes. The physical-power/BLE layer is the open
+   half, and OPEN 3 is answered only within its bound until it is settled.
+4. **Does a Menu-end emit 0x0039? YES**, with 0x003A and a 0x003F, 0.4 s
+   after the terminate. Its filed totals (393.60 s / 1396.0 m) agree with
+   the live stream (393.58 s / 1396.6 m) to 0.6 m. **This retires rev 2's
+   "0x0039 has appeared in zero of our five captures" claim.**
+5. **Does pulling from the main menu auto-enter Just Row? YES.**
+6. **Does the post-Terminate cycle risk re-tripping a motion detector?
+   NO.** The trace is `0 → 1 → 11 (two frames) → 0`. No rearm churn.
+7. **Can a real Just Row reach state 12? NOT on a Menu end** — only
+   states 0, 1 and 11 appeared across 1660 status frames. The idle closer
+   could not be tested because none occurred within the 896.8 s we watched
+   (see 3) — untested, not proven absent.
+
+#### Two findings the OPEN list did not anticipate — both bind PR 2
+
+**N1. The PM5 does not advertise while a Just Row is open, so a mid-row
+connect is impossible.** Isolated by a discriminating test at the erg: not
+discoverable with a row open, discoverable the instant Menu returned it to
+the main menu, nothing else changed. **This falsifies the Live-surface
+section's "If the rower is already mid-Just-Row at connect, frames show
+motion immediately" outright** — our transport's `connect(id)` only accepts
+an id its own `scan()` returned, so every connection needs discovery.
+**It also breaks recovery-by-reconnect:** the End-semantics promise that a
+mid-row link drop leaves a recoverable run assumes the app can get back,
+and it cannot while the row is still open. PR 2 designs for that or states
+plainly that a dropped link ends the app's involvement in that row.
+
+**N2. Nothing was observed closing a free row the rower walked away from.**
+Following from 3:
+the workout stayed open for the whole 896.8 s we watched, with frames still
+arriving, and we then stopped looking. PR 2 needs its own inactivity rule
+because it cannot map a closer nobody has observed, and the
+proposed new `ended_by: "idle"` member describes an event this walk could
+not produce. **Both are re-opened design questions, not implementation
+details — they want a brainstorm before PR 1 tags its enum**, since `idle`
+is one of the stored shapes PR 1 was going to migrate.
+
+Two smaller reconciliations owed: `domain/monitor/pm5/uuids.ts` says 0x003F
+"has never been recorded" and one now has been; and status frames arrive at
+1.00/s, not the ~2.2/s this repo's tooling assumes.
 
 ## Design
 
@@ -179,9 +323,15 @@ and series recorder. States: **Connecting → Ready ("pull to begin") →
 Live (elapsed, distance, current pace, SPM; a 44 px Done control) →
 Ended (summary of recorded numbers; Log it / discard)**.
 
-If the rower is already mid-Just-Row at connect, frames show motion
+~~If the rower is already mid-Just-Row at connect, frames show motion
 immediately: straight to Live with the machine's accumulated numbers —
-the record is the machine's whole row, not "since we connected."
+the record is the machine's whole row, not "since we connected."~~
+
+**FALSIFIED by the 2026-08-31 capture walk (finding N1 above).** The PM5
+does not advertise while a Just Row is open, so this state cannot be
+entered at all: the rower cannot connect mid-row. PR 2 must either require
+that the app is connected before the row starts, or say plainly that a row
+already underway is not joinable. Do not build against the struck text.
 
 **PR 2 rebuilds, not inherits, the session concerns that live in
 `useMonitorSession` rather than the driver** — priced into its size:
@@ -202,22 +352,49 @@ observer checks before opening — F5 data-loss class).
 | --- | --- | --- |
 | Done tap in the app | UI event | `rower` |
 | Menu/back on the erg | frame-seam `terminated` (ordinal 11) while our session is open | `rower` |
-| Machine idle power-off | terminate-then-link-drop, or link drop from a paused state | **`idle` — a NEW `ended_by` enum member** (migration, PR 1) |
+| ~~Machine idle power-off~~ | **WITHDRAWN — see below** | — |
 | Genuine link loss mid-row | link drop while Live/rowing | `link-lost` |
 
-Why the new member: `link-lost` renders "LINK LOST · the app lost the
-monitor before the end" and its release note promises "a row the app lost
-is never confused with a row you chose to end" — reusing it for the PM's
-*designed* idle power-off would label the most normal free-row ending a
-failure. `idle` gets its own honest copy ("the monitor switched itself
-off after the row"). The exact discrimination between `idle` and
-`link-lost` (was the machine paused/terminated when the link went?) is
-designed against OPEN 3's capture; the conservative fallback is: drop
-while paused → `idle`, drop while rowing → `link-lost`.
+**THE `idle` MEMBER IS WITHDRAWN. PR 1 MUST NOT MIGRATE IT.** Rev 2 argued
+for it from a premise the 2026-08-31 capture did NOT confirm: that a PM5 left
+alone powers itself off and drops the link. **The capture did not falsify
+that premise either — it bounded it.** Connected, the walk held the workout
+in its active state for the whole 896.8 s it watched, frames still arriving,
+with no terminate and no power-off, and then the operator ended the capture
+(CLOSED 3, and finding N2). concept2.com documents an inactivity power-off
+plainly and says nothing about Bluetooth either way, so the physical-power
+layer is unsettled, not disproved.
 
-If OPEN 7 shows a real Just Row reaching the `"finished"` state, the close
-maps to `finished` honestly — the "never `finished`" claim from rev 1 is
-retired; the stored value reflects what the wire showed.
+**The withdrawal does not depend on settling it.** What is settled is that
+**there is no observed signal to map, so there is nothing to store** — and
+that is sufficient on its own. Adding an enum value for an event we have
+never seen is exactly the "does the system HAVE the concept" failure this
+project has already paid for once, and an enum value is a stored shape:
+easy to add and, by our own ratchet, permanent.
+
+The rev 2 reasoning below is kept because it stays valid *if* a closer is
+ever found — it is not an argument for shipping one now:
+
+> `link-lost` renders "LINK LOST · the app lost the monitor before the
+> end" and its release note promises "a row the app lost is never confused
+> with a row you chose to end" — reusing it for a *designed* idle power-off
+> would label a normal free-row ending a failure.
+
+**What PR 2 needs instead is an inactivity rule of our own** (N2): with no
+observed machine-side closer, a row the rower walks away from has nothing
+known to close it.
+That rule is undesigned, it decides what a walked-away row stores, and it
+therefore wants a brainstorm and a fresh antagonist pass **before PR 1
+freezes any enum**. Until that lands, the closers are `rower` and
+`link-lost` only.
+
+**CLOSED 7 answered this: a Menu-ended Just Row does NOT reach the
+`"finished"` state.** Only workout states 0, 1 and 11 appeared across 1660
+status frames, so `finished` is not a closer PR 1 or PR 2 stores. The
+conditional this paragraph used to carry ("if OPEN 7 shows…") is spent, and
+rev 1's "never `finished`" claim is reinstated for the Menu closer — the
+only closer the walk could exercise, since no idle closer appeared within the
+896.8 s it watched. Whether one appears later is untested.
 
 All closers record the last live frame's numbers. If 0x0039 arrives, its
 totals are stored as a diagnostic cross-check (not authority).
@@ -226,6 +403,13 @@ A mid-row link drop or app death persists a recoverable `MonitorRun` so
 Today offers recovery. **Today's unlogged-run row currently renders
 discard-only for a null-workout run** (the documented latent) — PR 2
 gives it a real "Log it" path to the new log door.
+
+**NARROWED by the 2026-08-31 capture walk (finding N1 above).** Recovery
+here can only ever mean "log what we already have". It cannot mean
+reconnecting to finish the row: the monitor stops advertising while the row
+is open, so the app cannot get back in until the rower ends it on the erg.
+Whatever PR 2 offers on that Today row must not imply the session can be
+resumed.
 
 ### Stored shape (TRIAD — PR 1, tagged BEFORE PR 2)
 
@@ -237,12 +421,12 @@ One `session_logs` row:
 | `workout_title` | `"Just Row"` | display name; NOT NULL column |
 | `workout_type` | **`null`** | "No intensity was prescribed" — true of a free row, and true again of the targetless-workout follow-on. The column becomes NULLABLE in PR 1 (`DROP NOT NULL`, folded into the migration PR 1 already writes). It stays plain `text`, and stays OUR intensity axis only; Concept2's structural vocabulary never enters it. See "The stored type, decided". |
 | `steps` | `[]` | server branch: empty allowed **iff** `workoutType` is null. No fabricated steps — record, not projection. (Vetted: the only server consumer of steps is create-time validation; client renderers absorb `[]` — the summary self-gates on zero rows.) |
-| `time_seconds`, `distance_meters` | the observer's recorded totals | both headline numbers, matching the Logbook API's both-required rule. **Their correctness against auto-split resets is OPEN 1 — PR 2 does not merge until the capture answers it.** |
+| `time_seconds`, `distance_meters` | the observer's recorded totals | both headline numbers, matching the Logbook API's both-required rule. **ANSWERED (CLOSED 1): the counters do not reset at the auto-split, so the frame's own cumulative elapsed/distance ARE the row.** No longer a merge blocker. |
 | `avg_split_seconds` | **derived by us: `500 × time/distance`**, labelled ours | no live frame carries a piece average (the per-split field is split-scoped; the whole-row average lives only on unreliable 0x0039). This is a NEW derived number — named as such, tested, and covered by the TRIAD pass. |
 | `work_seconds/meters` | = the whole piece | rest does not exist for JustRow (Logbook-aligned) |
 | `rest_seconds/meters` | `null` | no rest concept to report |
-| `ended_by` | per the end-semantics table, incl. the new `idle` member | migration in PR 1 |
-| `series` | the 1 Hz trace | with the `programLength <= 0` interval-key fix (OPEN 1 companion) |
+| `ended_by` | per the end-semantics table: `rower` or `link-lost` | **no migration — the `idle` member is WITHDRAWN** (see the end-semantics section) |
+| `series` | the 1 Hz trace — measured, not assumed (CLOSED N4) | with the `programLength <= 0` interval-key fix, which CLOSED 1 leaves owed regardless |
 | `plan_key`/`plan_index` | `null` | see plan refusal below |
 | `baseline_k2/k6` | as at save (may be null) | unchanged |
 
@@ -328,13 +512,15 @@ rule between tags: once PR 1 shipped a validator CLOSING the column to a
 five-word set, removing `"JustRow"` later would be a narrowing the rule
 forbids — we would accept a value we had decided was wrong, permanently.
 The delta while PR 1 is unshipped is one cell in the table above, a
-`DROP NOT NULL` folded into the migration PR 1 is already writing for the
-`idle` enum member, and two client type widenings. Same PR, same gate, no
-extra tag.
+`DROP NOT NULL` folded into the migration PR 1 is already writing, and two
+client type widenings. Same PR, same gate, no extra tag. (Rev 2 said that
+migration was "for the `idle` enum member"; that member is withdrawn, so
+the `DROP NOT NULL` now stands on its own.)
 
 **Unchanged by this ruling** (decision-independent, still in PR 1): the
-read-side badge handling, the client type widening, the plan refusal, the
-`idle` enum member, and the MonitorRun `mode` field.
+read-side badge handling, the client type widening, the plan refusal, and
+the MonitorRun `mode` field. **The `idle` enum member was in this list and
+is now WITHDRAWN** — see the end-semantics section.
 
 ### The log door (B8/C6)
 
@@ -352,8 +538,8 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   badge at all** — an absence, matching this spec's own abstention rule
   for the steps widget. No AN/O2/AT/TR chip and no substitute for one.
 - **From-the-log:** renders without a steps widget — an absence, not an
-  empty version (the abstention ruling); `ended_by: idle` gets its own
-  copy line.
+  empty version (the abstention ruling). ~~`ended_by: idle` gets its own
+  copy line~~ — withdrawn with the member itself.
 - **8B calendar (future):** sees the row like any log — the all-logs
   ruling covers it; `plan_key` null means non-plan-linked, which is
   exactly 8B's spec.
@@ -385,11 +571,14 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   lands in `docs/monitor/sessions/`; findings amend this spec.
 - **PR 1 — every stored shape (TRIAD, tagged alone before PR 2):**
   the `session_logs` validation branch + `DROP NOT NULL` on
-  `workout_type`, the
-  `idle` enum migration, the plan refusal (both halves), the
+  `workout_type`, the plan refusal (both halves), the
   unknown-type badge fallback + client type widening, the MonitorRun
   `mode` field. Full antagonist pass + PM final-PR gate. Its PR body
   states plainly that it changes nothing visible.
+  **NO `idle` enum migration** — withdrawn by the 2026-08-31 capture (see
+  end semantics). **PR 1 is BLOCKED until the inactivity rule N2 asks for
+  is designed and approved**, because that design decides whether any new
+  `ended_by` value is needed at all.
 - **PR 2 — surface + session + log door (L, after RC's wave and after
   PR 0b's answers):** `/justrow` route, `JustRowSurface`,
   `useJustRowSession` (with the rebuilt-concerns list, the coexistence
@@ -420,10 +609,11 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
    steps widget (absence, not empty widget).
 4. A mid-row link drop yields a recoverable run and Today offers "Log
    it" routing to the Just Row log door.
-5. `ended_by` for a Just Row is one of `rower`/`idle`/`link-lost` per
-   the end-semantics table — and `finished` only if OPEN 7's capture
-   showed the machine itself produces it (in which case the table is
-   amended first).
+5. `ended_by` for a Just Row is one of `rower`/`link-lost` per the
+   end-semantics table. **NOT `idle`** — withdrawn, no observed closer
+   (CLOSED 3 / N2). **NOT `finished`** — CLOSED 7 saw only states 0, 1
+   and 11 across 1660 frames on a Menu end. This criterion is REPLACED,
+   not extended, once the inactivity rule lands.
 6. Opening a Just Row session with an unlogged timer `SessionRun` or
    `MonitorRun` present does not destroy it (coexistence guard test).
 

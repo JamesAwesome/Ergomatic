@@ -50,6 +50,90 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
+/** The recording tap is hand-built because `__pm5FakeScript__` routes
+ *  `resolveDefaultTransport()` down its fake arm, which installs none — see
+ *  `design.spec.ts`'s fuller note on what that does and does not prove. A
+ *  NON-ZERO count on purpose (recurring failure 7): a capture showing
+ *  "0 events captured" would document the empty state rather than the one an
+ *  operator reads mid-row. */
+async function injectJustRowObserverFake(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.__pm5FakeScript__ = {
+      program: { intervals: [] },
+      deviceName: "PM5 Observer",
+    };
+    window.__pm5Recording__ = {
+      lines: () => [],
+      eventCount: () => 1284,
+      download: () => Promise.resolve(),
+    };
+  });
+}
+
+async function openJustRowObserver(page: Page, email: string): Promise<void> {
+  await injectJustRowObserverFake(page);
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await page.goto("/justrow/observe");
+  await expect(
+    page.getByRole("heading", { name: "Not connected" }),
+  ).toBeVisible();
+}
+
+// The entry state, captured because it is the one an operator meets first:
+// the screen is reached by typing its URL, and the connect has to come from
+// this tap rather than a mount effect (`requestDevice()` is
+// transient-activation gated).
+test("just-row-observer-offline", async ({ page }) => {
+  await openJustRowObserver(page, "screenshots-just-row-offline@e2e.test");
+  await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "just-row-observer-offline.png"),
+  });
+});
+
+test("just-row-observer", async ({ page }) => {
+  await openJustRowObserver(page, "screenshots-just-row-observer@e2e.test");
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(
+    page.getByRole("heading", { name: "PM5 Observer connected" }),
+  ).toBeVisible();
+  await expect(page.getByText("1284 events captured")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Records raw monitor frames to a file, not to your log. Start the row on the erg.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Download capture" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Disconnect" })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "just-row-observer.png"),
+  });
+});
+
+// NO capture for the connecting/failed states, deliberately. Both are pinned
+// by `JustRowObserver.test.tsx` instead, where the transport is injectable.
+// Driving them here would mean depending on what headless Chromium does with
+// `requestDevice()` and no adapter — measured 2026-08-31: it exposes
+// `navigator.bluetooth`, opens a chooser that never resolves, and parks the
+// screen on "Connecting to monitor" with its Cancel control until the test
+// times out. A gate whose green depends on a hang is not a gate.
+
+// Landscape is the orientation a laptop walk actually runs in — the medium
+// `RUNSHEET.md` names. Same reference frame as the other landscape captures.
+test("just-row-observer-landscape", async ({ page }) => {
+  await openJustRowObserver(page, "screenshots-just-row-landscape@e2e.test");
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(
+    page.getByRole("heading", { name: "PM5 Observer connected" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "just-row-observer-landscape.png"),
+  });
+});
+
 // Phase WU (2026-08-21) deleted `setWarmup` (used to PUT the warm-up
 // preference for the "countdown", "you-warmup-on" and "post-workout-summary"
 // captures) along with the setting it drove. The countdown and
