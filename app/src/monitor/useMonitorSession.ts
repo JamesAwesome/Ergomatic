@@ -43,7 +43,7 @@
 // guarantees the wait ends at all when none of them ever comes. Injected as
 // `MonitorSessionDeps.schedule` so tests fire it rather than wait for it.
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type {
   IntervalActual,
@@ -1030,6 +1030,13 @@ export interface MonitorSessionDeps {
   createLog?: () => MonitorEventLog;
   /** The only clock in this file, and only for the record's ISO stamps. */
   now?: () => Date;
+  /** Mints `sessionIdRef`'s value at `connect()` — the LOGICAL connected
+   *  session's own opaque identity, `sessionLogHistory.ts`'s
+   *  `upsertSessionLog` key (review round 3, item 1). Defaults to
+   *  `crypto.randomUUID()`. Injected so a test can supply predictable ids
+   *  instead of asserting against whatever the platform's own UUID
+   *  generator happens to produce. */
+  createSessionId?: () => string;
   /** The ended hand-off's backstop timers — BOTH owed conditions'
    *  (`FINISH_HANDOFF_HOLD_MS` for the split condition,
    *  `BURST_HANDOFF_HOLD_MS` for the burst condition, storage-spine design
@@ -1572,18 +1579,6 @@ export function useMonitorSession(
 ): MonitorSession {
   const [state, setState] = useState<SessionState>(INITIAL_STATE);
 
-  // Review round 2, items 1+2: this hook INSTANCE's own stable identity —
-  // React's own guarantee (unique across the whole tree, stable for the
-  // component's lifetime) is what `sessionIdRef` (below) builds each
-  // CONNECT's id on top of, without adding any module-level mutable state
-  // (`handoffStoreBoundary.test.ts`'s own guard: only `handoffStore.ts` may
-  // hold module-scope state under `src/monitor/`, and a plain counter here
-  // would have been exactly the binding that guard exists to catch — see
-  // `sessionIdRef`'s own doc comment for the fuller account, including why
-  // the brief's original "module-level counter" sketch was dropped for
-  // this instead).
-  const sessionInstanceId = useId();
-
   // `state` mirrored into a ref, updated SYNCHRONOUSLY by `update` below.
   // Every decision in this file reads the ref, never `state`: React batches
   // `setState`, so a second call within the same tick would otherwise still
@@ -1734,23 +1729,38 @@ export function useMonitorSession(
   /** §6's other half: how many "foreground" transitions this connection has
    *  seen at all, latching or not — same lifetime as `resumeLatchCountRef`. */
   const resumeCountRef = useRef(0);
-  /** §6, fix round 1 (finding 2): true once THIS teardown's `stash()` has
-   *  already recorded `latch-count` — reset to `false` at the top of every
-   *  `teardown()` call (a ref, not a closure-local `let`: the
-   *  react-hooks/immutability rule rejects a plain variable a nested
-   *  closure mutates, the same reason every other per-call state in this
-   *  file already lives in a ref). The burst-eligible path calls `stash()`
-   *  TWICE per teardown (this function's own STEP 2 comment); without this
-   *  guard the second call would duplicate the identical line. */
+  /** §6, fix round 1 (finding 2): true once `stash()` has already recorded
+   *  `latch-count` for THIS logical connection — a ref, not a closure-local
+   *  `let` (the react-hooks/immutability rule rejects a plain variable a
+   *  nested closure mutates, the same reason every other per-call state in
+   *  this file already lives in a ref). The burst-eligible path calls
+   *  `stash()` TWICE within one `teardown()` (this function's own STEP 2
+   *  comment); without this guard the second call would duplicate the
+   *  identical line.
+   *
+   *  RESCOPED, review round 3, item 3: reset at `connect()`, the same
+   *  per-CONNECTION (never per-`teardown()`-call) lifetime `sessionIdRef`
+   *  has, not at the top of `teardown()` as fix round 1 originally had it.
+   *  The old reset meant a Cancel double-teardown — the exact interleaving
+   *  `sessionIdRef`'s own mint exists to survive, an unmount's `teardown()`
+   *  racing `cancel()`'s own later `teardown()` call — started this flag
+   *  fresh a SECOND time, so both calls recorded their own `latch-count`
+   *  line into what `sessionLogHistory.ts` converges into ONE entry: two
+   *  identical lines in one exported log. Spanning the connection instead
+   *  matches `resumeLatchCountRef`/`resumeCountRef` themselves (§6, above):
+   *  those already reset only at `connect()`, because they measure the
+   *  whole connection's resume rate, not one `teardown()` call's — this
+   *  guard exists to record that measurement exactly once per connection,
+   *  and now actually does. */
   const latchCountRecordedRef = useRef(false);
-  /** Review round 2, items 1+2 (P1+P2, PR #258): the LOGICAL connected
-   *  session's own identity, minted once per `connect()` (alongside the
-   *  other per-connect refs reset at that function's own top —
-   *  `livenessRef`/`hysteresisCancelRef`/`degradedUnsubRef`/
-   *  `lifecycleUnsubRef`) and held constant across however many
-   *  `teardown()` calls that ONE session produces before it ends —
-   *  possibly two (an interleaved unmount racing `cancel()`'s own call,
-   *  the Cancel defect this replaces), possibly one with two internal
+  /** Review round 2, items 1+2 (P1+P2, PR #258), MINTING CORRECTED in round
+   *  3: the LOGICAL connected session's own identity, minted once per
+   *  `connect()` (alongside the other per-connect refs reset at that
+   *  function's own top — `livenessRef`/`hysteresisCancelRef`/
+   *  `degradedUnsubRef`/`lifecycleUnsubRef`) and held constant across
+   *  however many `teardown()` calls that ONE session produces before it
+   *  ends — possibly two (an interleaved unmount racing `cancel()`'s own
+   *  call, the Cancel defect this replaces), possibly one with two internal
    *  `stash()` calls (the burst linger), always exactly one id either way.
    *  `sessionLogHistory.ts`'s `upsertSessionLog` keys its replace-vs-insert
    *  decision on this value, which is what lets EVERY `stash()` this
@@ -1759,34 +1769,27 @@ export function useMonitorSession(
    *  to desynchronize (see that module's own "IDENTITY-BOUND UPSERT"
    *  header paragraph for the two defects this fixes).
    *
-   *  Built from `sessionInstanceId` (React's own per-hook-instance identity,
-   *  above) plus `sessionConnectCounterRef` (below — a per-instance counter,
-   *  so two `connect()` calls on the SAME instance still mint distinct
-   *  ids), not `Date.now()` plus a module-level counter as this fix's
-   *  brief originally sketched: `handoffStoreBoundary.test.ts` pins the
-   *  exhaustive list of module-scope mutable bindings permitted anywhere
-   *  under `src/monitor/` OUTSIDE `handoffStore.ts` (today, exactly two —
-   *  `capacitorBle.ts`'s `initPromise` and this file's own
-   *  `receiptChannelOwner`), and a THIRD would have needed extending that
-   *  pin — the guard exists precisely to make a new one visible and
-   *  deliberate, not to be a rubber stamp. `useId()` gets equivalent
-   *  collision resistance (guaranteed unique per hook instance, so two
-   *  DIFFERENT instances — e.g. two `renderHook()` calls in the same test,
-   *  which is what first caught the `Date.now()`-collision version of this
-   *  id: two fresh instances minting their first id in the same
-   *  millisecond both produced `"<sameMs>-1"`) with no module state at
-   *  all. `null` before the first `connect()` ever runs this hook
-   *  instance — `stash()`'s own guard treats that as unreachable (see its
-   *  comment) rather than inventing a fallback id. */
+   *  Round 2 built this from `useId()` (React's own per-hook-instance
+   *  identity) plus a per-instance connect counter, reasoning that `useId()`
+   *  gives collision resistance ACROSS hook instances with no module state.
+   *  That reasoning missed a THIRD axis: `useId()`'s own id is deterministic
+   *  by RENDER-TREE POSITION, reset to the same starting sequence on every
+   *  fresh JS document — so the first `useMonitorSession()` mounted after
+   *  every relaunch (a real device backgrounded and evicted, a plain page
+   *  reload) mints the identical id its predecessor did, and that
+   *  predecessor's history entry was `upsertSessionLog`'s own opaque key
+   *  for a session from a whole prior document — a genuinely NEW connected
+   *  session replaced it instead of adding beside it. `mintSessionId`
+   *  (below, the `nowDate`/`depsRef.current.now` idiom) fixes this the same
+   *  way that idiom already keeps `MonitorSessionDeps` free of anything
+   *  session-position-based: `MonitorSessionDeps.createSessionId`,
+   *  defaulting to `crypto.randomUUID()` — collision-resistant PER
+   *  RELAUNCH, not just per hook instance within one document, and still no
+   *  module state (`crypto.randomUUID()` carries none of its own). `null`
+   *  before the first `connect()` ever runs this hook instance —
+   *  `stash()`'s own guard treats that as unreachable (see its comment)
+   *  rather than inventing a fallback id. */
   const sessionIdRef = useRef<string | null>(null);
-  /** The per-connect counter half of `sessionIdRef`'s own mint — see that
-   *  ref's doc comment. A plain `useRef(0)`, not a closure-local `let`
-   *  (react-hooks/immutability) and not module state (this ref's whole
-   *  point is to avoid needing that) — scoped to THIS hook instance only,
-   *  which is exactly right: it only has to disambiguate THIS instance's
-   *  own repeated `connect()` calls, and `sessionInstanceId` already
-   *  disambiguates one instance from another. */
-  const sessionConnectCounterRef = useRef(0);
   /** Phase LL Task 4 (design spec §4's continuity rule), widened to all
    *  three axes by F2a (design spec 2026-08-23-continuity-corroboration
    *  §2): the last live frame's own `totalWorkDistanceMeters`,
@@ -2092,6 +2095,24 @@ export function useMonitorSession(
 
   const nowDate = useCallback(
     (): Date => depsRef.current.now?.() ?? new Date(),
+    [],
+  );
+
+  /** Review round 3, item 1: `sessionIdRef`'s own mint, read at call time
+   *  from `depsRef` (never captured) for the identical reason `nowDate`
+   *  immediately above is — `deps` is a fresh object literal on every
+   *  render for the default `useMonitorSession()` call. Defaults to
+   *  `crypto.randomUUID()`, collision-resistant per relaunch (see
+   *  `sessionIdRef`'s own doc comment for why the round-2 `useId()` mint
+   *  was not). Every browser/WKWebView build this app targets carries
+   *  `crypto.randomUUID()` (Web Crypto API, universally supported in a
+   *  secure context since ~2022 — Capacitor's `capacitor://` origin is one)
+   *  — nothing in this repo polyfills or forbids it. Tests inject a
+   *  deterministic `createSessionId` where the id needs to be predictable;
+   *  where they don't, `crypto.randomUUID()` is present in the vitest
+   *  jsdom environment under Node 26 too (verified directly, not assumed). */
+  const mintSessionId = useCallback(
+    (): string => depsRef.current.createSessionId?.() ?? crypto.randomUUID(),
     [],
   );
 
@@ -3230,14 +3251,24 @@ export function useMonitorSession(
         rowingStreakRef.current = null;
         lastContinuityRef.current = null;
         runRef.current = null;
-        // Review round 2, items 1+2: same per-connect reset `sessionIdRef`
-        // gets everywhere else this hook fully closes out a session —
-        // this exit does not route through `teardown()`/`stash()`, so
-        // nothing reads it between here and the next `connect()`'s own
-        // fresh mint, but leaving a stale value behind is the same "must
-        // not seed the next run" hygiene every ref in this block already
-        // follows.
-        sessionIdRef.current = null;
+        // Review round 3, item 2: `sessionIdRef` is DELIBERATELY NOT
+        // cleared here, correcting round 2's own claim that this exit
+        // "does not route through `teardown()`/`stash()`". It does — not
+        // synchronously, but via `update({ ...INITIAL_STATE, programDropped:
+        // true })` a few lines down, which unmounts the interstitial and
+        // fires this hook's own unmount effect (`useEffect(() => teardown,
+        // [teardown])`, below), whose `stash()` is the ONLY place this
+        // pre-row attempt's trace ever reaches `sessionLogHistory.ts`. Round
+        // 2 cleared the id here, BEFORE that stash could run, so
+        // `stash()`'s own `sessionId !== null` guard skipped the upsert
+        // entirely and only the legacy single-slot key got the export — the
+        // ring silently dropped every programDropped-at-READY/programming
+        // exit. Leaving it alive costs nothing: the next `connect()`
+        // overwrites it with a fresh mint before anything else can read it,
+        // the identical "next mint wins" reasoning `cancel()`'s own
+        // post-`teardown()` clear already relies on (see its own comment,
+        // below) — the difference is ORDER, not whether the ref eventually
+        // gets a fresh value.
         // §3: same per-run reset as `freezeRef`/`rowingStreakRef`/
         // `lastContinuityRef` immediately above, and for the identical
         // reason — this exit does NOT route through `teardown()` (it
@@ -3608,8 +3639,12 @@ export function useMonitorSession(
       stopSeriesFlush();
 
       // §6, fix round 1: this teardown's own "has stash() already recorded
-      // latch-count" flag starts fresh — see the ref's own doc comment.
-      latchCountRecordedRef.current = false;
+      // latch-count" flag USED to start fresh here — round 3, item 3 moved
+      // the reset to `connect()` (see `latchCountRecordedRef`'s own doc
+      // comment): resetting per-`teardown()`-CALL let a Cancel double-
+      // teardown (`sessionIdRef`'s own interleaving) record `latch-count`
+      // twice for what is still one logical connection. The flag now spans
+      // the whole connection, same lifetime as `sessionIdRef` itself.
 
       // §3: a still-open resume-stale-run closes HERE, before the first
       // `stash()` below can see it — `teardown` is the single choke point
@@ -3975,10 +4010,17 @@ export function useMonitorSession(
     hysteresisCancelRef.current = null;
     degradedUnsubRef.current = null;
     lifecycleUnsubRef.current = null;
-    // Review round 2, items 1+2: mint THIS session's own identity here,
-    // alongside the other per-connect refs immediately above — see
-    // `sessionIdRef`'s own doc comment for what it's for and why.
-    sessionIdRef.current = `${sessionInstanceId}-${(sessionConnectCounterRef.current += 1)}`;
+    // Review round 2, items 1+2, mint corrected in round 3: mint THIS
+    // session's own identity here, alongside the other per-connect refs
+    // immediately above — see `sessionIdRef`'s own doc comment for what
+    // it's for and why, and `mintSessionId`'s for how.
+    sessionIdRef.current = mintSessionId();
+    // Review round 3, item 3: `latchCountRecordedRef`'s reset MOVED here
+    // from the top of `teardown()` — see that ref's own doc comment for
+    // why the old per-teardown-call reset let a Cancel double-teardown
+    // (the same interleaving `sessionIdRef` exists to survive) record
+    // `latch-count` twice for one connection.
+    latchCountRecordedRef.current = false;
     update({ phase: "picking", error: null, frameSilence: false });
     // Awaited unconditionally — the platform-conditional default
     // (`adapters/monitorTransport.ts`'s `defaultTransport`, ROADMAP CL item
@@ -4304,7 +4346,7 @@ export function useMonitorSession(
       // claim a NEWER attempt is holding, or two connects run at once.
       if (!superseded()) connectingRef.current = false;
     }
-  }, [fail, handleEvent, update, sessionInstanceId]);
+  }, [fail, handleEvent, update, mintSessionId]);
 
   const program = useCallback(
     async (p: WorkoutProgram, identity: RunIdentity): Promise<void> => {

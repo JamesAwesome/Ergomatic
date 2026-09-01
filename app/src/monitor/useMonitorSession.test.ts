@@ -6912,7 +6912,95 @@ describe("useMonitorSession: cancel", () => {
     // cancel()'s own teardown(armed, driver) call stashed a second time
     // once the deferred ack let it proceed. Same session id both times:
     // ONE history entry, not two.
-    expect(listSessionLogs()).toHaveLength(1);
+    const entries = listSessionLogs();
+    expect(entries).toHaveLength(1);
+    // Review round 3, item 3: `latchCountRecordedRef` used to reset at the
+    // top of EVERY `teardown()` call, so this same double-`teardown()`
+    // interleaving that used to burn two ring slots (fixed above) also
+    // recorded `latch-count` twice into what is now correctly ONE entry —
+    // the guard reset itself between the unmount's stash and cancel()'s
+    // own later one. Moving the reset to `connect()` (the same
+    // per-connection lifetime `sessionIdRef` has) makes it span both
+    // `teardown()` calls, so the final entry's bytes carry exactly one
+    // `latch-count` line.
+    const latchCountLines = (
+      JSON.parse(entries[0]!.exported) as { kind: string; detail: string }[]
+    ).filter((e) => e.kind === "latch-count");
+    expect(latchCountLines).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review round 3, item 1: round 2's `sessionIdRef` mint (`useId()` plus a
+// per-instance connect counter) is collision-resistant across DIFFERENT
+// hook instances within one JS document, but `useId()`'s own id is
+// deterministic by render-tree position and resets to the same starting
+// sequence on every fresh document — so the first `useMonitorSession()`
+// mounted after a real relaunch (background+evict, a page reload) minted
+// the IDENTICAL id its predecessor's first Connect always does, and
+// `upsertSessionLog`'s identity-bound upsert read that as "the same
+// session, write again" and REPLACED the prior relaunch's entry instead of
+// adding beside it. `mintSessionId`'s default, `crypto.randomUUID()`,
+// carries no such determinism.
+// ---------------------------------------------------------------------------
+
+describe("Review round 3, item 1: sessionId is collision-resistant across a full relaunch, not just across hook instances in one document", () => {
+  it("a fresh module's first Connect adds a SECOND ring entry beside a prior \"document\"'s, rather than replacing it", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+
+    // "Document" 1: an ordinary connect + unmount on this file's own
+    // `useMonitorSession` import, relying on the REAL default mint
+    // (`crypto.randomUUID()`) on both sides of this test — no
+    // `createSessionId` override anywhere. The default IS the thing under
+    // test: it is what makes two independent hook lifetimes
+    // distinguishable, where round 2's `useId()` mint was not.
+    const first = harness({ program: ONE_INTERVAL });
+    await connect(first.result);
+    act(() => {
+      first.unmount();
+    });
+    const afterFirst = listSessionLogs();
+    expect(afterFirst).toHaveLength(1);
+    const firstId = afterFirst[0]!.sessionId;
+
+    // Simulate a relaunch: fresh module state (`vi.resetModules()`), the
+    // identical idiom this file's own RC-37/READY-drop regression already
+    // uses. `localStorage`/`sessionStorage` are jsdom globals and survive
+    // the reset — exactly like a real device's persisted storage survives
+    // a relaunch — while every hook-internal binding starts fresh (had
+    // this fix not landed: `useId()`'s own render-tree-position counter,
+    // reset to its starting sequence).
+    vi.resetModules();
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+
+    const fake2 = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: ONE_INTERVAL,
+    });
+    const { result: second, unmount: unmountSecond } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => fake2,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+    await act(async () => {
+      await second.current.connect();
+    });
+    act(() => {
+      unmountSecond();
+    });
+
+    const afterSecond = listSessionLogs();
+    expect(afterSecond).toHaveLength(2);
+    const ids = afterSecond.map((entry) => entry.sessionId);
+    expect(ids).toContain(firstId);
+    expect(new Set(ids).size).toBe(2);
   });
 });
 
@@ -12296,6 +12384,20 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
     );
     expect(allStaleRunEntries).toHaveLength(1);
     expect(allStaleRunEntries[0]!.detail).toBe(resetEntries[0]!.detail);
+
+    // Review round 3, item 2: this attempt never left READY — its own
+    // `programDropped` branch runs BEFORE this unmount, and used to clear
+    // `sessionIdRef` right there, before the unmount's own `teardown()`/
+    // `stash()` could ever read it. `stash()`'s `sessionId !== null` guard
+    // then skipped the `upsertSessionLog` call entirely, so this trace
+    // reached only the perishable legacy `ergomatic:last-monitor-log`
+    // slot (asserted above) and never the three-entry ring at all — the
+    // ring silently dropped every programDropped-at-READY exit. Leaving
+    // the id alive through this unmount's teardown means the ring gets
+    // exactly the entry the legacy key got, byte-for-byte.
+    const ringEntries = listSessionLogs();
+    expect(ringEntries).toHaveLength(1);
+    expect(ringEntries[0]!.exported).toBe(stashed);
   });
 });
 
