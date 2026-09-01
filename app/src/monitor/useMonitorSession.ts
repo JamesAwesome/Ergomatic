@@ -1645,8 +1645,14 @@ export function useMonitorSession(
    *  `resume-frames` already record, reused rather than re-derived — and
    *  consumed by the very next `handleFrame` call, whatever phase it
    *  arrives in. Mirrors `framesWhileHiddenRef`'s own "armed here,
-   *  consumed there, then cleared" lifetime. `null` when no resume is
-   *  currently awaiting its first post-resume frame. */
+   *  consumed there, then cleared" lifetime for the CONNECTION (reset at
+   *  `connect()`, below). It ALSO gets the same per-run discard
+   *  `freezeRef`/`rowingStreakRef` use — a stale armed edge from a resume
+   *  that happened before a fresh `program()` (or the RC-37
+   *  programDropped/ready exit) must not be consumed by that NEW run's own
+   *  first frame — cleared at both of those sites for the identical reason
+   *  `rowingStreakRef` is. `null` when no resume is currently awaiting its
+   *  first post-resume frame. */
   const resumeEdgeArmedRef = useRef<{
     gapMs: number | null;
     preBackgroundKey: string | null;
@@ -1654,25 +1660,43 @@ export function useMonitorSession(
   } | null>(null);
   /** §3: the run of consecutive post-resume frames whose `freezeKey` still
    *  matches the frame that armed it (`resume-first-frame`'s own
-   *  `stale=true` case) — `null` whenever no such run is open. Cleared at
-   *  every per-run reset site `freezeRef`/`rowingStreakRef`/
-   *  `lastContinuityRef` already use, and closed with its own
-   *  `resume-stale-run` entry the instant a differing frame arrives, or
-   *  `teardown` runs first (that close happens once, at the top of
-   *  `teardown`, since it is the single choke point every exit path runs
-   *  through — see its own comment). */
+   *  `stale=true` case) — `null` whenever no such run is open. TWO
+   *  independent reset paths, not one: `connect()` clears it per
+   *  CONNECTION (same lifetime as `framesWhileHiddenRef`, below), and it
+   *  ALSO gets the same per-run discard `freezeRef`/`rowingStreakRef`/
+   *  `lastContinuityRef` use — a fresh `program()`'s own reset and the
+   *  RC-37 programDropped/ready exit both clear it too, so a run of
+   *  identical frames from the PREVIOUS run/resume can never be attributed
+   *  to the next one. Closed with its own `resume-stale-run` entry the
+   *  instant a differing frame arrives, or `teardown` runs first (that
+   *  close happens once, at the top of `teardown`, since it is the single
+   *  choke point every exit path runs through — see its own comment; every
+   *  exit that reaches `teardown`, including `cancel()`, is covered there
+   *  and does not need its own separate clear). */
   const resumeStaleRunRef = useRef<{ key: string; frames: number } | null>(
     null,
   );
   /** §6 (RC-29 latch counter): how many times THIS connection's own
    *  `decideResumeLatch` call latched `frameSilence` (below) — reset at
-   *  `connect()`, the same "per connection, not per run" lifetime
-   *  `framesWhileHiddenRef` already has, and read once by `stash()`'s own
-   *  `latch-count` entry. */
+   *  `connect()` ONLY, the strictly per-connection (never per-run)
+   *  lifetime `framesWhileHiddenRef` already has (unlike
+   *  `resumeEdgeArmedRef`/`resumeStaleRunRef` immediately above, which
+   *  ALSO discard per-run — this counter deliberately does not, since §6
+   *  measures the whole connection's own resume rate, not one row's), and
+   *  read once by `stash()`'s own `latch-count` entry. */
   const resumeLatchCountRef = useRef(0);
   /** §6's other half: how many "foreground" transitions this connection has
    *  seen at all, latching or not — same lifetime as `resumeLatchCountRef`. */
   const resumeCountRef = useRef(0);
+  /** §6, fix round 1 (finding 2): true once THIS teardown's `stash()` has
+   *  already recorded `latch-count` — reset to `false` at the top of every
+   *  `teardown()` call (a ref, not a closure-local `let`: the
+   *  react-hooks/immutability rule rejects a plain variable a nested
+   *  closure mutates, the same reason every other per-call state in this
+   *  file already lives in a ref). The burst-eligible path calls `stash()`
+   *  TWICE per teardown (this function's own STEP 2 comment); without this
+   *  guard the second call would duplicate the identical line. */
+  const latchCountRecordedRef = useRef(false);
   /** Phase LL Task 4 (design spec §4's continuity rule), widened to all
    *  three axes by F2a (design spec 2026-08-23-continuity-corroboration
    *  §2): the last live frame's own `totalWorkDistanceMeters`,
@@ -3100,6 +3124,16 @@ export function useMonitorSession(
         rowingStreakRef.current = null;
         lastContinuityRef.current = null;
         runRef.current = null;
+        // §3: same per-run reset as `freezeRef`/`rowingStreakRef`/
+        // `lastContinuityRef` immediately above, and for the identical
+        // reason — this exit does NOT route through `teardown()` (it
+        // inlines its own unsubscribe/disconnect, unchanged by this task),
+        // so it is the one exit `teardown()`'s own resume-stale-run
+        // closeout cannot reach; a resume measured before this drop must
+        // not be attributed to whatever the rower connects to next. Fix
+        // round 1: this used to be missing.
+        resumeEdgeArmedRef.current = null;
+        resumeStaleRunRef.current = null;
         // Hand-off store design spec §1: same per-run reset `cancel()`
         // applies to this ref, for the identical reason — see that
         // function's own comment.
@@ -3438,6 +3472,10 @@ export function useMonitorSession(
       // at t=0 on every path.
       stopSeriesFlush();
 
+      // §6, fix round 1: this teardown's own "has stash() already recorded
+      // latch-count" flag starts fresh — see the ref's own doc comment.
+      latchCountRecordedRef.current = false;
+
       // §3: a still-open resume-stale-run closes HERE, before the first
       // `stash()` below can see it — `teardown` is the single choke point
       // every exit path (unmount, `cancel()`, a natural/mid-row/continuity
@@ -3495,11 +3533,18 @@ export function useMonitorSession(
           // §6 (RC-29 latch counter): BEFORE `exportLog()`, so this line
           // rides every stashed copy this teardown produces — the
           // three-slot history `pushSessionLog` rotates into below, and a
-          // second, later stash from the burst linger if one fires.
-          log.record(
-            "latch-count",
-            `latches=${resumeLatchCountRef.current} resumes=${resumeCountRef.current}`,
-          );
+          // second, later stash from the burst linger if one fires. Guarded
+          // to fire at most ONCE per teardown (`latchCountRecordedRef`,
+          // reset at the top of this function) — the counts are read-only
+          // from here on, so a second stash would otherwise duplicate the
+          // identical line.
+          if (!latchCountRecordedRef.current) {
+            latchCountRecordedRef.current = true;
+            log.record(
+              "latch-count",
+              `latches=${resumeLatchCountRef.current} resumes=${resumeCountRef.current}`,
+            );
+          }
           const exported = log.exportLog();
           sessionStorage.setItem("ergomatic:last-monitor-log", exported);
           // A later attempt that never rowed (a failed pairing, a
@@ -3831,8 +3876,14 @@ export function useMonitorSession(
       // its matching foreground) left behind.
       framesWhileHiddenRef.current = null;
       // §3/§6: this connection's own resume-edge instrument and latch
-      // counters start fresh too — same "per connection, not per run"
-      // lifetime as `framesWhileHiddenRef` immediately above.
+      // counters start fresh too — same PER-CONNECTION lifetime as
+      // `framesWhileHiddenRef` immediately above. `resumeEdgeArmedRef`/
+      // `resumeStaleRunRef` ALSO get an additional per-RUN clear elsewhere
+      // (their own doc comments above have the full discipline —
+      // `program()`'s fresh-arm reset and the RC-37 programDropped/ready
+      // exit); this site only ever needs to cover the connection-wide
+      // floor, since every one of those per-run sites already runs INSIDE
+      // a connection this reset has already started fresh.
       resumeEdgeArmedRef.current = null;
       resumeStaleRunRef.current = null;
       resumeLatchCountRef.current = 0;
@@ -4072,6 +4123,13 @@ export function useMonitorSession(
       // NEW-2 — latent today, since no UI path re-programs from ready,
       // but one line closes it for whoever adds that path).
       rowingStreakRef.current = null;
+      // §3: the identical reasoning — a resume-edge measurement (armed or
+      // already open as a stale run) from BEFORE this fresh arm must not
+      // be attributed to the run this `program()` call is about to open.
+      // Fix round 1: this used to be missing (the ref's own doc comment
+      // claimed it and the code did not do it).
+      resumeEdgeArmedRef.current = null;
+      resumeStaleRunRef.current = null;
       const driver = driverRef.current;
       if (driver === null) {
         fail({

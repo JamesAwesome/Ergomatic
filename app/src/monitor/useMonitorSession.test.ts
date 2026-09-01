@@ -11788,3 +11788,315 @@ describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
     expect(latchEntries[0]!.detail).toBe("latches=0 resumes=1");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 2 review, fix round 1, finding 1: `resumeStaleRunRef`'s own doc
+// comment claimed the per-run discipline `freezeRef`/`rowingStreakRef`/
+// `lastContinuityRef` already use; the code only reset it per-connection.
+// This pins the RC-37 programDropped/ready exit's own new reset — the ONE
+// exit that does not route through `teardown()` (it inlines its own
+// unsubscribe/disconnect), so `teardown()`'s own resume-stale-run closeout
+// cannot reach it; the reset has to live at the drop site itself.
+// ---------------------------------------------------------------------------
+
+describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-run reset at the RC-37 programDropped/ready exit", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  /** Same hand-rolled stub `Transport` the RC-37 block and the "Wave F PR 1
+   *  Task 2" block above both use, redeclared here per this file's own
+   *  per-describe-block convention — `transports/fake.ts` derives its armed
+   *  structure honestly and cannot be scripted to report a wrong one. */
+  function rawTransport(): Transport & {
+    notify(uuid: string, bytes: Uint8Array): void;
+    writes: { uuid: string; bytes: Uint8Array }[];
+  } {
+    const subs = new Map<string, Set<(bytes: Uint8Array) => void>>();
+    const writes: { uuid: string; bytes: Uint8Array }[] = [];
+    return {
+      writes,
+      scan: () => Promise.resolve([{ id: "stub", name: "PM5 STUB" }]),
+      connect: () => Promise.resolve(),
+      write(uuid, bytes) {
+        writes.push({ uuid, bytes });
+        return Promise.resolve();
+      },
+      subscribe(uuid, cb) {
+        let set = subs.get(uuid);
+        if (!set) {
+          set = new Set();
+          subs.set(uuid, set);
+        }
+        set.add(cb);
+        return () => set!.delete(cb);
+      },
+      disconnect: () => Promise.resolve(),
+      onDisconnect: () => () => undefined,
+      notify(uuid, bytes) {
+        for (const cb of subs.get(uuid) ?? []) cb(bytes);
+      },
+    };
+  }
+
+  const READY_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+
+  /** The healthy armed readback for `READY_PROGRAM` — same encoding the
+   *  RC-37 block's own `armedStatus()` uses. Also this test's own
+   *  freezeKey baseline: `distanceMeters: 0` here, `currentSplit`/`spm`
+   *  both `0` from the zeroed AS1 seed below (never updated again), so
+   *  every `armedStatus()` notification in this test carries the IDENTICAL
+   *  `freezeKey`. */
+  function armedStatus(): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+  }
+
+  /** A DIFFERENT armed structure — the RC-37 block's own "empty arm" shape,
+   *  redeclared here. */
+  function wrongArmedStatus(): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 1,
+      intervalType: 1,
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 128,
+      dragFactor: 130,
+    });
+  }
+
+  function manualClock(startMs = 0): {
+    now: () => number;
+    advance(by: number): void;
+  } {
+    let ms = startMs;
+    return {
+      now: () => ms,
+      advance(by: number): void {
+        ms += by;
+      },
+    };
+  }
+
+  async function waitUntil(check: () => boolean, maxTicks = 50): Promise<void> {
+    for (let i = 0; i < maxTicks && !check(); i += 1) {
+      await Promise.resolve();
+    }
+  }
+
+  /** Drives `driver.ts`'s own armedWatch (RC-37's mechanism) to a genuine
+   *  `programDropped` while still at READY — three consecutive, stable,
+   *  wrong-structure WaitToBegin ticks, 1000ms apart, the identical
+   *  construction the other two RC-37-shaped describe blocks in this file
+   *  use for their own live-arm/outside-guard legs. */
+  function triggerReadyDrop(
+    transport: ReturnType<typeof rawTransport>,
+    clock: ReturnType<typeof manualClock>,
+  ): void {
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1000);
+      act(() => {
+        transport.notify(GENERAL_STATUS_UUID, wrongArmedStatus());
+      });
+    }
+  }
+
+  it("a resume-stale-run opened at READY does not survive the drop — no leaked run reaches the eventual unmount's own teardown/stash", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+
+    const transport = rawTransport();
+    const clock = manualClock();
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: clock.now,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // `maybeEmitFrame`'s own gate: General Status AND both Additional
+    // Status characteristics each need to have been seen once before any
+    // `frame` event fires at all — same idiom the other two RC-37-shaped
+    // blocks use, seeded once, up front.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    const sentCount = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const prepareChunkCount = buildTerminate()[0]!.length;
+    await act(async () => {
+      const start = sentCount();
+      const pending = result.current.program(READY_PROGRAM, TWO_IDENTITY);
+      await waitUntil(() => sentCount() > start);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "reject" }),
+      );
+      await waitUntil(() => sentCount() > start + prepareChunkCount);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "ok" }),
+      );
+      for (let i = 0; i < 50; i += 1) await Promise.resolve();
+      transport.notify(GENERAL_STATUS_UUID, armedStatus());
+      await pending;
+    });
+    expect(result.current.phase).toBe("ready");
+
+    // An explicit, known baseline frame right before backgrounding —
+    // `stateRef.current.frame` is what `resume-first-frame`'s own
+    // `preBackgroundKey` reads.
+    act(() => {
+      transport.notify(GENERAL_STATUS_UUID, armedStatus());
+    });
+
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    act(() => {
+      // Identical to the baseline above -> stale=true, opens the run.
+      transport.notify(GENERAL_STATUS_UUID, armedStatus());
+    });
+
+    const midExport = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntry = midExport.find(
+      (e) => e.kind === "resume-first-frame",
+    );
+    expect(firstFrameEntry?.detail).toContain("stale=true"); // sanity: the run is genuinely open
+    expect(midExport.some((e) => e.kind === "resume-stale-run")).toBe(false); // not yet closed
+
+    // Trip the RC-37 drop while still at READY — the branch under test.
+    triggerReadyDrop(transport, clock);
+    expect(result.current.programDropped).toBe(true);
+
+    // `teardown()` is unconditional on driver state (its own header
+    // comment: "exactly two callers, this hook's unmount effect and
+    // `cancel()`") and its own resume-stale-run closeout runs regardless —
+    // if the open run had leaked past the drop instead of being cleared
+    // there, THIS unmount's `stash()` would record it as
+    // `endedBy=teardown`.
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    expect(entries.some((e) => e.kind === "resume-stale-run")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2 review, fix round 1, finding 2: `stash()` recorded `latch-count`
+// unconditionally, and a burst-eligible teardown calls `stash()` TWICE (the
+// immediate t=0 stash, then a second one when the burst linger drains) —
+// same idiom as "(a-cap) LATE SIDE, PRODUCTION TIMING, NOTHING EVER
+// ARRIVES" above (storage-spine design spec §2, Task 3's own describe
+// block), which is the simplest reliable way to force the double-stash path.
+// ---------------------------------------------------------------------------
+
+describe("Wave F PR 2 Task 2, fix round 1 (finding 2): stash() records latch-count at most once per teardown", () => {
+  it("a burst-eligible teardown's SECOND stash (the linger drain) does not duplicate the first stash's latch-count line", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100); // natural finish -> burst-eligible, no summary yet
+    expect(result.current.phase).toBe("ended");
+
+    unmount(); // teardown's DEFERRED path — STEP 2's first stash runs here
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+    expect(transport.disconnects).toBe(0); // not yet — the linger is still open
+
+    // The linger's own cap fires (nothing ever arrived to complete the
+    // evidence early — same shape "(a-cap)" above pins) — `finish()` runs
+    // STEPS 1/3/4 and the SECOND stash.
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
+    expect(transport.disconnects).toBe(1); // confirms the second stash actually ran
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const latchEntries = entries.filter((e) => e.kind === "latch-count");
+    expect(latchEntries).toHaveLength(1);
+    expect(latchEntries[0]!.detail).toBe("latches=0 resumes=0");
+  });
+});
