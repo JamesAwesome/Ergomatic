@@ -5063,8 +5063,8 @@ describe("useMonitorSession: ending", () => {
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.some((e) => e.kind === "write")).toBe(true);
     // This session OPENED A RECORD, so it also keeps the rowed-only copy —
-    // the one a later never-rowed attempt (a failed pairing, a
-    // connect-then-cancel) cannot clobber.
+    // the one a later never-rowed SESSION (a pairing that failed after the
+    // link came up, a connect-then-cancel) cannot clobber.
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(stashed);
   });
 
@@ -7006,19 +7006,27 @@ describe("Review round 3, item 1: sessionId is collision-resistant across a full
 
 // ---------------------------------------------------------------------------
 // Round 4, item 1 (P1): `IPHONEOS_DEPLOYMENT_TARGET = 15.0`
-// (`ios/App/App.xcodeproj/project.pbxproj`), but `crypto.randomUUID()`
-// arrived in WKWebView only at iOS 15.4 — MDN's Browser compatibility table
-// for `Crypto.randomUUID()` (PRIMARY). On 15.0-15.3 the old unconditional
-// `crypto.randomUUID()` default threw SYNCHRONOUSLY inside `connect()`,
-// before its own `try` (this file's own `mintSessionId` call site, above),
-// which rejected the returned promise having already set `connectingRef.
-// current = true` two lines earlier — nothing downstream of the throw ever
-// ran, including the `finally` that is the ONLY place a successful attempt
-// clears that ref, so Connect went permanently dead. The fixed default
-// capability-checks `crypto.randomUUID` and falls back to a UUIDv4 built
-// from `crypto.getRandomValues()`, which iOS has carried since 15.0 (same
-// MDN table). These two legs stub exactly that gap: `crypto.randomUUID`
-// deleted, `crypto.getRandomValues` left real.
+// (`ios/App/App.xcodeproj/project.pbxproj`), while `crypto.randomUUID()` is
+// reported as arriving in Safari/WKWebView only at 15.4. On 15.0-15.3 the
+// old unconditional `crypto.randomUUID()` default threw SYNCHRONOUSLY inside
+// `connect()`, before its own `try`, which rejected the returned promise
+// having already set `connectingRef.current = true` two lines earlier —
+// nothing downstream of the throw ever ran, including the `finally` that is
+// the ONLY place a successful attempt clears that ref, so Connect went
+// permanently dead. The fixed default capability-checks `crypto.randomUUID`
+// and falls back to a UUIDv4 built from `crypto.getRandomValues()`. These
+// legs stub exactly that gap: `crypto.randomUUID` deleted,
+// `crypto.getRandomValues` left real.
+//
+// CITATION LABELS CORRECTED, round 5 item 3c: both version numbers come from
+// MDN's `browser-compat-data`, which is SECONDARY (a community dataset, not
+// a vendor document) — round 4 tagged it PRIMARY. The only WebKit-primary
+// source found is STP 132's release note ("Implemented `Crypto.randomUUID()`",
+// webkit.org/blog/11971/), which names no stable iOS version; webkit.org's
+// own "New WebKit Features in Safari 15.4" post does not mention the API at
+// all. `defaultSessionId`'s doc comment carries the full disposition,
+// including why a SECONDARY-only citation is acceptable for a fix that
+// capability-checks rather than version-sniffs.
 // ---------------------------------------------------------------------------
 
 describe("Round 4, item 1: the default sessionId factory survives no crypto.randomUUID (iOS 15.0-15.3)", () => {
@@ -7089,6 +7097,14 @@ describe("Round 4, item 1: the default sessionId factory survives no crypto.rand
     // (F1's cohort-unlock CRITICAL) while deliberately touching NOTHING
     // about the connect claim, so after it the ONLY thing standing between
     // this hook and a second scan is the `finally` under test.
+    //
+    // "F1: connect() again after a disconnected event reaches a genuinely
+    // fresh scan" (below) pins the same shape and IS bitten by the same
+    // mutation — deliberately not deleted here, because that one runs
+    // against the real `crypto.randomUUID`. This describe block's whole
+    // point is the 15.0-15.3 stub, and the claim being made is that the
+    // FALLBACK mint leaves Connect reusable, which only a test inside this
+    // block's `beforeEach` can say.
     act(() => {
       fake.injectDisconnect();
     });
@@ -12347,10 +12363,19 @@ describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
 // Task 2 review, fix round 1, finding 1: `resumeStaleRunRef`'s own doc
 // comment claimed the per-run discipline `freezeRef`/`rowingStreakRef`/
 // `lastContinuityRef` already use; the code only reset it per-connection.
-// This pins the RC-37 programDropped/ready exit's own new reset — the ONE
-// exit that does not route through `teardown()` (it inlines its own
-// unsubscribe/disconnect), so `teardown()`'s own resume-stale-run closeout
-// cannot reach it; the reset has to live at the drop site itself.
+// This pins the RC-37 programDropped/ready exit's own new reset.
+//
+// CORRECTED (round 5, item 3a — this comment carried round 2's version of
+// the story, which round 3 item 2 had already replaced in the source): that
+// exit DOES route through `teardown()`, just not SYNCHRONOUSLY. It inlines
+// its own unsubscribe/disconnect and then calls `update({ ...INITIAL_STATE,
+// programDropped: true })`, which unmounts the interstitial and fires this
+// hook's unmount effect — `teardown()` and its `stash()` run there, later.
+// The reset still has to live at the drop site itself, but for a REASON OF
+// ORDER rather than of reachability: by the time that late `teardown()`
+// runs, its own resume-stale-run closeout would attribute a resume measured
+// before the drop to whatever the rower connects to next. Recording and
+// clearing at the drop is what keeps the entry with the run it describes.
 // ---------------------------------------------------------------------------
 
 describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-run reset at the RC-37 programDropped/ready exit", () => {

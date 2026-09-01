@@ -1585,16 +1585,41 @@ function mapRadioFailure(err: unknown): ConnectedError {
  *
  *  Round 4, item 1 (P1, PR #258 review): the native floor is
  *  `IPHONEOS_DEPLOYMENT_TARGET = 15.0` (`ios/App/App.xcodeproj/
- *  project.pbxproj`, four build settings), but `crypto.randomUUID()` landed
- *  in WKWebView only at iOS 15.4 (MDN's Browser compatibility table for
- *  `Crypto.randomUUID()`, PRIMARY). On 15.0-15.3 the old unconditional
- *  `crypto.randomUUID()` call threw SYNCHRONOUSLY, inside `connect()` but
- *  before its own `try` — after `connectingRef.current = true` was already
- *  set, and before the `finally` that is the only place a successful
- *  attempt clears it — so the throw rejected `connect()`'s promise
- *  uncaught and left Connect permanently dead on exactly the OS versions
- *  this app's own deployment target admits. `crypto.getRandomValues()` has
- *  no such gap: same MDN table, supported since iOS 11. */
+ *  project.pbxproj`, four build settings), and `crypto.randomUUID()` is
+ *  reported as arriving in Safari/WKWebView only at 15.4. On 15.0-15.3 the
+ *  old unconditional `crypto.randomUUID()` call threw SYNCHRONOUSLY, inside
+ *  `connect()` but before its own `try` — after `connectingRef.current =
+ *  true` was already set, and before the `finally` that is the only place a
+ *  successful attempt clears it — so the throw rejected `connect()`'s
+ *  promise uncaught and left Connect permanently dead on exactly the OS
+ *  versions this app's own deployment target admits.
+ *  `crypto.getRandomValues()` has no such gap: reported supported since
+ *  Safari 6.1, long before iOS 15.
+ *
+ *  CITATIONS, RELABELLED HONESTLY (round 5, item 3c — round 4 tagged the
+ *  first of these PRIMARY, which it is not):
+ *  - MDN's Browser compatibility table for `Crypto.randomUUID()` —
+ *    **SECONDARY**. `browser-compat-data` is a community-maintained
+ *    dataset, not a vendor document; it is where both version numbers above
+ *    come from.
+ *  - WebKit's own release notes for Safari Technology Preview 132
+ *    (`webkit.org/blog/11971/`), under "Web API": "Implemented
+ *    `Crypto.randomUUID()`" — **PRIMARY**, and deliberately not stretched:
+ *    STP is a macOS-only preview channel and that note names no stable
+ *    Safari or iOS version at all. It corroborates WHEN WebKit implemented
+ *    the API (Sept 2021, about six months before 15.4 shipped); it does not
+ *    establish 15.4 as the iOS floor.
+ *  - **Nothing found**, and the absence is worth recording: webkit.org's
+ *    "New WebKit Features in Safari 15.4" (`/blog/12445/`) does not mention
+ *    `randomUUID` anywhere. Apple's own Safari 15.4 release-notes page is a
+ *    JS-rendered SPA and could not be read.
+ *
+ *  THE FIX DOES NOT REST ON THE VERSION NUMBER. This function
+ *  capability-checks `crypto.randomUUID` rather than sniffing a version, so
+ *  it is correct for any runtime where the method may be absent, whatever
+ *  the exact floor turns out to be. The 15.4 figure motivates the change; it
+ *  is not load-bearing for its correctness — which is the only reason a
+ *  SECONDARY-only citation is acceptable here. */
 function defaultSessionId(): string {
   const c = globalThis.crypto;
   if (typeof c?.randomUUID === "function") return c.randomUUID();
@@ -3780,12 +3805,14 @@ export function useMonitorSession(
           }
           exported = log.exportLog();
           sessionStorage.setItem("ergomatic:last-monitor-log", exported);
-          // A later attempt that never rowed (a failed pairing, a
-          // connect-then-cancel) overwrites the key above — which is the
-          // capture instrument eating the very capture it exists for
-          // (2026-08-08 antagonistic review, finding 4). Sessions that
-          // OPENED A RECORD keep their own copy under a key only another
-          // rowed session can touch.
+          // A later SESSION that never rowed (a pairing that failed after
+          // the link came up, a connect-then-cancel) overwrites the key
+          // above — which is the capture instrument eating the very capture
+          // it exists for (2026-08-08 antagonistic review, finding 4).
+          // Sessions that OPENED A RECORD keep their own copy under a key
+          // only another rowed session can touch. Round 5 shrank the set of
+          // things that can clobber it: an attempt that never reached the
+          // GATT connect is not a session and never gets here at all.
           if (runRef.current !== null) {
             sessionStorage.setItem("ergomatic:last-rowed-log", exported);
           }

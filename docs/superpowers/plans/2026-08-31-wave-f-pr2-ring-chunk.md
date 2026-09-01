@@ -172,10 +172,18 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
     triple identical to the last pre-background frame> rawRowingState=<n>
     framesWhileHidden=<n>`
   - `resume-stale-run` — recorded when the post-resume identical-freezeKey
-    run ENDS (a differing frame arrives) or the session tears down first,
-    detail: `frames=<count> endedBy=<changed|teardown>`
-  - `latch-count` — recorded by `stash()` once per logical connection, detail:
-    `latches=<n> resumes=<n>`
+    run ENDS, detail: `frames=<count>
+    endedBy=<changed|resumed|reset|teardown>`. FOUR closers, not two
+    (corrected round 5, item 3b; the shipped code has carried all four since
+    fix round 1 and final-review item 5): a differing frame arrives
+    (`changed`), a SECOND resume edge arrives while the tracker is still open
+    (`resumed`), a per-run reset fires — `program()`'s fresh arm or the RC-37
+    programDropped/ready exit (`reset`), or the session tears down first
+    (`teardown`).
+  - `latch-count` — recorded by `stash()` once per logical session, detail:
+    `latches=<n> resumes=<n>`. "Logical session" is a stricter thing than it
+    was: since round 5 it begins at the GATT connect, so an attempt that
+    never got a link records nothing and takes no history slot.
 
 - [x] **Step 1: failing parse test** — feed a captured 0x0031 payload whose
   rowingState byte is a non-1 value (build it from the parser test file's

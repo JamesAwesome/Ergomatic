@@ -283,9 +283,12 @@ rower's work silently.
       (the arrival gap, whether the first post-resume frame repeats the
       pre-background `freezeKey` triple, the raw `rowingState` byte); a
       repeating run is then tracked as `resume-stale-run` and closed with a
-      consecutive-identical count once it changes, ends at teardown, or the
-      per-run reset fires. §4's wait is now on the next natural occurrence
-      producing a reading through it, not on unbuilt plumbing.
+      consecutive-identical count by one of FOUR closers, each named in the
+      entry's own `endedBy=`: a differing frame (`changed`), a second resume
+      edge arriving while it is still open (`resumed`), a per-run reset
+      (`reset`), or teardown (`teardown`). §4's wait is now on the next
+      natural occurrence producing a reading through it, not on unbuilt
+      plumbing.
 - [x] **~~Recover the full ring before the lifecycle spec is written~~ —
       STRUCK 2026-08-31: it is UNRECOVERABLE, and the loss was ours.**
       `ergomatic:last-session-log` is written UNCONDITIONALLY on every
@@ -1002,15 +1005,23 @@ X" is a real disposition — most of these are single files.
   the v0.32.0 notes PR, tag on that (#231/#238 shape).
 - **The ring history's three-slot eviction has an incident-shaped failure
   mode, filed with its trigger** (PM gate on #258): the identity upsert
-  gives one slot per LOGICAL CONNECTION — a failed pairing or a
-  connect-then-cancel is still a fresh `connect()`, hence a fresh session id
-  and its own slot (spec §0.3's own finding about the neighbouring key) — so
-  three fumbled reconnects after an incident evict the incident, and
-  fumbled reconnects are what incidents produce. Ruled at the gate: ship
-  three, no invented size/rowing threshold on the teardown path. **Trigger:
-  if a field read ever finds the wanted session already evicted, raise the
-  slot count in that PR.** Evidence: `app/src/monitor/sessionLogHistory.ts`,
-  spec §0.3.
+  gives one slot per LOGICAL SESSION, so three fumbled reconnects after an
+  incident evict the incident, and fumbled reconnects are what incidents
+  produce. Ruled at the gate: ship three, no invented size/rowing threshold
+  on the teardown path. **Trigger: if a field read ever finds the wanted
+  session already evicted, raise the slot count in that PR.**
+  **NARROWED by #258's round-5 fix, and the narrowing is in this row's
+  favour:** a logical session now begins at the GATT CONNECT, not at the
+  `connect()` call. An attempt that never got a link — no transport, the
+  chooser dismissed, a radio throw, or Cancel pressed while the scan/connect
+  was still in flight — mints no identity and takes no slot at all; it does
+  not even write the perishable keys. Only a connect-then-cancel that
+  actually reached the monitor still consumes one. This row previously read
+  "a failed pairing or a connect-then-cancel is still a fresh `connect()`,
+  hence a fresh session id and its own slot", which was true of the code
+  then and is false of it now. Evidence:
+  `app/src/monitor/useMonitorSession.ts` (`LogicalSession`, and `stash()`'s
+  single read of it), `app/src/monitor/sessionLogHistory.ts`, spec §0.3.
 - **RC-29 — the 2.5 s banner, UNMEASURED on the current build.** Returned here
   from Wave F on 2026-08-31, the same day it was folded in, because the number
   it carried was pre-fix: `decideResumeLatch` (v0.24.0) killed the nine-banner
