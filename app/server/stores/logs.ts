@@ -389,9 +389,13 @@ const LOG_LIST_COLUMNS = {
  *  plain `text` and NULLABLE since Phase JR PR 1 (a free row prescribes no
  *  intensity). **The null widens a real client drop path:**
  *  `usePlanLinks.parseLink` discards a whole entry when this is not a
- *  string (`src/plan/usePlanLinks.ts:81`), which is unreachable only while
- *  the plan refusal holds — a free row never becomes a plan link in the
- *  first place. Two things now depend on that predicate, not one.
+ *  string (`src/plan/usePlanLinks.ts:81`) — so it now accepts null as
+ *  ABSENT rather than malformed. **That path is reachable in its own
+ *  right, not a backstop for the plan refusal:** the shared store contract
+ *  deliberately ADVANCES a row that names a workout and omits its type, and
+ *  such a row becomes a plan link carrying a null `workoutType`. (An
+ *  earlier version of this comment said it was "unreachable only while the
+ *  plan refusal holds" — wrong, and the truth table disproves it.)
  *  (schema.ts — deliberately NOT `workoutTypeEnum`, which is
  *  the `workouts` table's column). New writes are validated against the
  *  union at the route, but rows stored before that check exist, so every

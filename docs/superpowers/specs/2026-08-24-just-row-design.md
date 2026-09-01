@@ -698,8 +698,9 @@ citation was stale, that line is mid-comment). The two cannot ship
 together. The fallback fires when the phone-timer door has no matched
 draft AND the workout has left the library (`LogSession.tsx:450-458` calls
 this "a corrupted/partial localStorage state" — rare, not impossible).
-Retire it and that session posts `workoutType: null`, which PR 1's new
-type-blind plan refusal then declines to advance
+Retire it and that session posts `workoutType: null`, which — had the
+refusal shipped keyed on the type alone, as this paragraph originally
+assumed — would then have been declined
 (`server/stores/logs.ts:700`, `routes/data.ts:1534`): the rower taps "Log
 against plan", gets a `201`, and `SESSION n OF 84` does not move. Silently
 — no error surface exists for it.
@@ -709,11 +710,14 @@ refusal keys on "we do not know the type"; the fact it needs is "this was
 a free row". For an unmatched phone-timer session the sentence above is
 FALSE — an intensity was prescribed, the app merely lost the record of it.
 So: the `?? "O2"` fallback STAYS, and the refusal's predicate is scoped to
-what it actually means. **Whether the predicate becomes `workout_id IS
-NULL AND workout_type IS NULL`, or an explicit marker, is a PR 1
-implementation decision that the plan must state and test both ways** —
-the one thing it may not do is key on type alone while a second producer
-of null types exists.
+what it actually means. **DECIDED (James, 2026-09-01): the predicate is
+`workout_id IS NULL AND workout_type IS NULL`** — the pair, implemented as
+`isFreeRow` in `domain/types.ts` and shared by the plan refusal and the
+empty-`steps` allowance. An explicit marker column was considered and
+rejected: it adds a stored shape to buy what the pair already gives.
+(This paragraph previously left the choice open "for the plan to state and
+test both ways"; it is closed.) The one thing it may not do is key on type
+alone while a second producer of null types exists.
 
 **Why it had to be decided before PR 1 tags.** CLAUDE.md's additive-only
 rule between tags: once PR 1 shipped a validator CLOSING the column to a

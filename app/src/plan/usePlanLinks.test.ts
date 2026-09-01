@@ -224,9 +224,12 @@ describe("usePlanLinks", () => {
   // records for its own tri-state: null is "unknown", not malformed, and
   // rejecting the entry costs the row its name.
   //
-  // Reachable only if the server's plan refusal ever fails to hold — a free
-  // row never becomes a plan link — so this is the second thing depending
-  // on that predicate, and the reason it is tested here as well as there.
+  // Reachable in its own right, NOT a backstop for the plan refusal: the
+  // shared store contract deliberately advances a row that names a workout
+  // and omits its type, and such a row becomes a plan link carrying a null
+  // `workoutType`. (An earlier version of this comment said it was
+  // reachable "only if the refusal fails to hold"; the truth table
+  // disproves that.)
   it("KEEPS an entry whose workoutType is null — absent, not malformed", async () => {
     mockApiReturning({
       links: [wireLink({ planIndex: 3, id: "free", workoutType: null })],
