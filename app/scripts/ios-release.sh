@@ -59,12 +59,25 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # `.env.production.local`. A flag set in any of those is invisible to the
 # shell-var check above. This is a COURTESY early check, not the real
 # gate — a cheap grep can miss a value split across lines, an escaped
-# quote, or a name typo'd past it. The real, structural gate is the
-# dist:grep-after-build step below, which checks the ARTIFACT itself
-# rather than trying to enumerate every input path that could produce it.
+# quote, a name typo'd past it, or (round 8) a file this loop doesn't
+# enumerate at all. The real, structural gate is the dist:grep-after-build
+# step below, which checks the ARTIFACT itself rather than trying to
+# enumerate every input path that could produce it.
+#
+# Round 8 (MINOR, scoped re-review): the grep below was `^`-anchored and
+# missed a dotenv-legal `export VITE_ENABLE_C2_LINK_PROBE=1` line. This
+# vite version's own `loadEnv` (dist/node/chunks/node.js) parses these
+# files with Node's built-in `node:util.parseEnv`, not the `dotenv` npm
+# package (this project has no `dotenv` dependency) — verified empirically
+# this session: `node -e 'require("node:util").parseEnv("export
+# VITE_ENABLE_C2_LINK_PROBE=1\n")'` returns
+# `{ VITE_ENABLE_C2_LINK_PROBE: "1" }`, i.e. the `export ` prefix is
+# stripped and the value is live. Widened to match both forms. Still just
+# the courtesy check, not the backstop: the dist:grep-after-build step is
+# what actually catches anything this grep's own next miss lets through.
 for envfile in .env .env.local .env.production .env.production.local; do
   if [ -f "$APP_DIR/$envfile" ] &&
-    grep -qE '^VITE_ENABLE_C2_LINK_PROBE=.+' "$APP_DIR/$envfile" 2>/dev/null; then
+    grep -qE '^(export[[:space:]]+)?VITE_ENABLE_C2_LINK_PROBE=.+' "$APP_DIR/$envfile" 2>/dev/null; then
     echo "ios-release: refusing — $envfile defines VITE_ENABLE_C2_LINK_PROBE — remove it (probe card must never ship via ios:release)" >&2
     exit 1
   fi

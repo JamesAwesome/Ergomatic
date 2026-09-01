@@ -125,7 +125,26 @@ rm -rf "$SIM"
 ! grep -q 'defines VITE_ENABLE_C2_LINK_PROBE' <<<"$out"
 check ".env present without the flag: the env guard does not fire" $?
 
-# 9. STRUCTURAL check, finding 1b's real gate (the dist:grep-after-build
+# 9. Round 8 (MINOR, scoped re-review): the env-file grep was `^`-anchored
+#    and missed a dotenv-legal `export VITE_ENABLE_C2_LINK_PROBE=1` line —
+#    this vite version's own `loadEnv` parses these files with Node's
+#    built-in `node:util.parseEnv`, which strips a leading `export `
+#    (verified this session: `node -e 'require("node:util").parseEnv(...)'`
+#    returns the var live). One representative file suffices: the same
+#    regex change applies uniformly to all four in the loop above.
+SIM="$(mktemp -d)"
+mkdir -p "$SIM/scripts"
+cp "$HERE/ios-release.sh" "$SIM/scripts/ios-release.sh"
+echo "export VITE_ENABLE_C2_LINK_PROBE=1" >"$SIM/.env"
+out=$(bash "$SIM/scripts/ios-release.sh" 2>&1)
+rc=$?
+rm -rf "$SIM"
+[ "$rc" -eq 1 ]
+check ".env defines the flag via 'export ...': exits 1" $?
+grep -q '.env defines VITE_ENABLE_C2_LINK_PROBE' <<<"$out"
+check ".env defines the flag via 'export ...': refusal names this exact file" $?
+
+# 10. STRUCTURAL check, finding 1b's real gate (the dist:grep-after-build
 # step). Honestly labeled: this is a SOURCE-ORDERING proof, not a runtime
 # one — actually exercising it means a real `pnpm ios:build` (a full vite
 # build + `npx cap sync ios`) followed by a real `xcodebuild archive` if
