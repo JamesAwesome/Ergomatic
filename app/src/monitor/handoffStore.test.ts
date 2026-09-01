@@ -134,22 +134,24 @@ describe("setReceiptChannel", () => {
   });
 });
 
-// THE FREE-ROW SHAPE, THROUGH THE PRODUCTION WRITER (Phase JR PR 1 Task 3;
-// re-review of 83438df4, finding 3).
+// THE FREE-ROW SHAPE, WRITER TO COLD-START READER (Phase JR PR 1 Task 3;
+// re-reviews of 83438df4 and 19740279, finding 3 twice).
 //
-// An earlier version of this gate lived in `monitorRun.test.ts` and wrote
-// through `saveMonitorRun`, claiming to span the writer and the reader. It
-// did not: that function's own doc comment says it has **NO PRODUCTION
-// CALLERS** — every production write of `MONITOR_RUN_KEY` goes through this
-// store's `commit`/`retryDurable`, and `saveMonitorRun` survives only as a
-// fixture seeder. Testing a shape through a writer nothing uses proves the
-// shape is storable, not that the path that stores it keeps it.
+// Two earlier attempts at this gate did not cross the seam:
+//   1. It wrote through `saveMonitorRun`, whose own doc comment says it has
+//      NO PRODUCTION CALLERS — every production write goes through this
+//      store's `commit`/`retryDurable`.
+//   2. It then committed correctly but read back the SAME module instance's
+//      in-memory `current`, and `JSON.parse`d localStorage by hand. Neither
+//      read goes through hydration, so a hydration path that dropped or
+//      rejected `mode` would have left it green.
 //
-// So it lives here, against the real committer, and asserts BOTH tiers: the
-// store's own read and the durable localStorage record that a cold start
-// hydrates from.
-describe("commit — the free-row shape (Phase JR)", () => {
-  it("round-trips mode, an empty program and an empty seed through commit and durable hydration", () => {
+// This one commits through the real writer, throws the module away with the
+// durable bytes intact, and recovers the record the way a cold start does.
+// That is the only ordering in which a reader that cannot keep `mode` shows
+// up as a failure.
+describe("commit — the free-row shape, through to a cold start (Phase JR)", () => {
+  it("a Just Row record committed by the real writer survives a fresh module and hydrates whole", async () => {
     const run = freshRun(t0.toISOString(), {
       mode: "justrow",
       workoutId: null,
@@ -159,24 +161,33 @@ describe("commit — the free-row shape (Phase JR)", () => {
       actuals: [],
     });
 
-    const result = store.commit(run.startedAt, null, run);
-    expect(result).toStrictEqual({
+    expect(store.commit(run.startedAt, null, run)).toStrictEqual({
       accepted: true,
       revision: 0,
       verdict: "saved",
     });
 
-    // Tier 1: the store's own read.
-    expect(store.read(run.startedAt)?.run).toStrictEqual(run);
+    // Throw the module away. `freshStore` resets modules and re-imports;
+    // it does NOT touch localStorage, so the durable bytes the committer
+    // just wrote are all the new instance has — exactly a cold start.
+    await freshStore();
 
-    // Tier 2: the DURABLE record — what a cold start actually reads back,
-    // and where an unknown-key-intolerant validator would drop `mode`.
-    const durable = JSON.parse(
-      localStorage.getItem(MONITOR_RUN_KEY)!,
-    ) as MonitorRun;
-    expect(durable.mode).toBe("justrow");
-    expect(durable.program.intervals).toStrictEqual([]);
-    expect(durable.logSeed).toStrictEqual({ steps: [], paces: {} });
+    // Render-context reads must still see nothing before hydration: the
+    // free-row shape does not get its own special path in.
+    expect(store.read()).toBeNull();
+
+    // The non-render trigger is what recovers it, and it must come back
+    // WHOLE — `mode` included. An unknown-key-intolerant validator, or one
+    // that rejected an unfamiliar `mode`, fails here and nowhere else.
+    const recovered = store.currentUnretired();
+    expect(recovered).toStrictEqual({
+      sessionKey: run.startedAt,
+      revision: 0,
+      run,
+    });
+    expect(recovered?.run.mode).toBe("justrow");
+    expect(recovered?.run.program.intervals).toStrictEqual([]);
+    expect(recovered?.run.logSeed).toStrictEqual({ steps: [], paces: {} });
   });
 });
 
