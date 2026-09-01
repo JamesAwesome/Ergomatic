@@ -919,10 +919,53 @@ test("log-monitor-dropped", async ({ page }) => {
   // PNG was wrong). The strip sits at the very top of the document
   // (immediately after the nav, above the title — the artifact's own
   // placement words), so the plain 390×844 viewport this project already
-  // uses is exactly what the Gate 0 approval needs to see, with nothing to
-  // scroll into frame.
+  // uses is nothing to scroll into frame — but it is only PORTRAIT. The
+  // repo's own design-gate rule (CLAUDE.md, "A SPEC THAT CHANGES WHAT A
+  // ROWER READS OR SEES") requires the rendered thing in BOTH
+  // orientations before Gate 0 can be presented; the landscape capture
+  // lives in `log-monitor-dropped-landscape` immediately below.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor-dropped.png"),
+  });
+});
+
+// Wave F PR 1 round 2 fix (item 1b): the routed LANDSCAPE half of the
+// composition above — same seeded `MonitorRun`, same real
+// `/library/:id/log?from=monitor` route, same door, only the viewport
+// differs. Gate 0 needs both orientations (CLAUDE.md's design-gate rule);
+// `log-monitor-dropped` above covered portrait only. Same idiom as
+// `log-monitor-landscape` (844×390, `neutralizeFixedTabBarForFullPageCapture`
+// + `scrollTraceChartIntoFrame` before the shot — a no-op here if this
+// fixture's trace has nothing to scroll, since `scrollTraceChartIntoFrame`
+// itself no-ops when `.trace-figure` is absent).
+test("log-monitor-dropped-landscape", async ({ page }) => {
+  const title = "Hoarfrost";
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-monitor-dropped-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const workoutId = await libraryWorkoutId(page, title);
+  const run = buildDroppedMonitorRun(workoutId);
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: MONITOR_RUN_KEY,
+    value: JSON.stringify(run),
+  });
+
+  await page.goto(`/library/${workoutId}/log?from=monitor`);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.getByText("THE ERG DROPPED THE WORKOUT.")).toBeVisible();
+  await expect(
+    page.getByText(
+      "2 intervals kept. The row below is what the erg measured before it stopped.",
+    ),
+  ).toBeVisible();
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await neutralizeFixedTabBarForFullPageCapture(page);
+  await scrollTraceChartIntoFrame(page);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-monitor-dropped-landscape.png"),
   });
 });
 
