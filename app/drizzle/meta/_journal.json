@@ -127,6 +127,13 @@
       "when": 1788212447297,
       "tag": "0017_fair_whizzer",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788234044080,
+      "tag": "0018_natural_chronomancer",
+      "breakpoints": true
     }
   ]
 }

@@ -958,6 +958,38 @@ export function describeStoreContracts(
         });
       });
 
+      // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes):
+      // completedAt/tz, same round-trip shape as RC-2/RC-3's machine
+      // pair above — both scalars, so both stay IN the list projection
+      // (no jsonb blob to exclude here, unlike machineSummary).
+      it("create round-trips completedAt/tz exactly", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const completedAt = new Date("2026-08-30T12:00:00.000Z");
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({ completedAt, tz: "America/New_York" }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row?.completedAt?.getTime()).toBe(completedAt.getTime());
+        expect(row).toMatchObject({ tz: "America/New_York" });
+        const getRow = await stores.logs.get(userId, id);
+        expect(getRow?.completedAt?.getTime()).toBe(completedAt.getTime());
+        expect(getRow).toMatchObject({ tz: "America/New_York" });
+      });
+
+      it("create with no completedAt/tz posted stores both null (pre-PR2 body shape)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(userId, logInput());
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({ completedAt: null, tz: null });
+        const getRow = await stores.logs.get(userId, id);
+        expect(getRow).toMatchObject({ completedAt: null, tz: null });
+      });
+
       // From-the-log spec (2026-08-18), §3: the list projection explicitly
       // drops `steps` (zero client consumers — `RecentLog`, the response's
       // only reader, never carried it), while `get()` (the from-the-log

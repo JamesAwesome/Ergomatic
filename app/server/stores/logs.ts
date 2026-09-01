@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { planState, sessionLogs, workouts } from "../db/schema.js";
 import type { PlanKey } from "./planState.js";
@@ -211,10 +211,26 @@ export interface LogInput {
   machineWorkSeconds?: number | null;
   machineWorkMeters?: number | null;
   machineSummary?: Record<string, unknown> | null;
-  // Deliberately absent from this interface: `plan_key`/`plan_index` are
-  // NEVER client input. `create()` below derives them itself, inside the
-  // same transaction as the log insert, from the plan_state upsert's own
-  // `.returning()` — see that function's doc comment.
+  // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes):
+  // the client's MonitorRun.completedAt and IANA zone, optional/nullable,
+  // same convention as `deviceName`/`thumbs`/`endedBy` above — absent or
+  // explicit null both store null (an older client, or a save this phase
+  // doesn't post either field for, stores nothing). Posted at save from
+  // PR2 on; bounds-checked at the route before this type is ever
+  // constructed, same trust-boundary posture as every other field here.
+  completedAt?: Date | null;
+  tz?: string | null;
+  // Deliberately absent from this interface: `c2ResultId`/`c2UserId` are
+  // NEVER client input (see `db/schema.ts`'s `sessionLogs.c2ResultId`
+  // doc comment) — a later task's upload route writes them itself, after
+  // Concept2's own 2xx, the same "server-derived, not LogInput" posture
+  // `planKey`/`planIndex` already have below. `create()` does not set
+  // them yet; every row this task can produce reads them back null.
+  //
+  // Also absent: `plan_key`/`plan_index` are NEVER client input.
+  // `create()` below derives them itself, inside the same transaction as
+  // the log insert, from the plan_state upsert's own `.returning()` — see
+  // that function's doc comment.
 }
 
 // From-the-log spec (2026-08-18), §3: the API's first UPDATE. Every key is
@@ -305,6 +321,14 @@ const LOG_LIST_COLUMNS = {
   machineAvgPaceSecondsPer500m: sql<
     number | null
   >`case when jsonb_typeof(${sessionLogs.machineSummary}->'avgPaceSecondsPer500m') = 'number' then (${sessionLogs.machineSummary}->>'avgPaceSecondsPer500m')::double precision else null end`,
+  // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes):
+  // four more small scalars, same idiom as `endedBy`/the RC-1 pair
+  // above — included in the list projection (no jsonb blob to exclude
+  // here).
+  c2ResultId: sessionLogs.c2ResultId,
+  c2UserId: sessionLogs.c2UserId,
+  completedAt: sessionLogs.completedAt,
+  tz: sessionLogs.tz,
 };
 
 // Log-delete spec (2026-08-18), §2: the newest-wins resolution rule,
@@ -751,6 +775,8 @@ export function createLogsStore(db: Db) {
             machineWorkSeconds: input.machineWorkSeconds ?? null,
             machineWorkMeters: input.machineWorkMeters ?? null,
             machineSummary: input.machineSummary ?? null,
+            completedAt: input.completedAt ?? null,
+            tz: input.tz ?? null,
             planKey,
             planIndex,
           })
@@ -758,6 +784,70 @@ export function createLogsStore(db: Db) {
 
         return row;
       });
+    },
+
+    // Wave E PR1 Task 6 (task-6-brief.md): server-written only, after C2's
+    // own 2xx (route's own comment) — never client input (LogInput's own
+    // comment names why the two columns are absent from that interface).
+    // Owner-scoped UPDATE, same idiom as `update()` above; the boolean
+    // return is the route's seam for "row deleted concurrently between the
+    // eligibility read and this write" (RF25: this route owns that
+    // invariant, and the route's 502 branch is keyed on this return, not on
+    // a re-read).
+    async recordC2Result(
+      userId: string,
+      id: string,
+      c2ResultId: number,
+      c2UserId: number,
+    ): Promise<boolean> {
+      const rows = await db
+        .update(sessionLogs)
+        .set({ c2ResultId, c2UserId })
+        .where(and(eq(sessionLogs.userId, userId), eq(sessionLogs.id, id)))
+        .returning({ id: sessionLogs.id });
+      return rows.length === 1;
+    },
+
+    // Wave E PR1 Task 6, plan deviation 2: legacy-row upload persist-on-
+    // first-use. The `tz IS NULL` guard rides IN the WHERE clause (not a
+    // read-then-write in JS) so a concurrent second upload attempt for the
+    // same row can never clobber the zone the first attempt already wrote
+    // — the route's own dedup-stability property (a retry must build the
+    // SAME date string) depends on this write being idempotent-after-first,
+    // never a plain unconditional SET.
+    //
+    // Returns the EFFECTIVE stored zone, never `void` — when the guard
+    // blocks this call's own write (a concurrent writer got
+    // there first), the caller must build its payload from whatever zone
+    // actually landed, not silently keep using its own `tz` argument as if
+    // it had won. `RETURNING` on the guarded UPDATE reports the winning
+    // value for free when THIS call wrote it; when it didn't (zero rows
+    // returned), a plain re-read reports what the other writer stored.
+    async recordTz(userId: string, id: string, tz: string): Promise<string> {
+      const written = await db
+        .update(sessionLogs)
+        .set({ tz })
+        .where(
+          and(
+            eq(sessionLogs.userId, userId),
+            eq(sessionLogs.id, id),
+            isNull(sessionLogs.tz),
+          ),
+        )
+        .returning({ tz: sessionLogs.tz });
+      if (written[0]) return written[0].tz as string;
+
+      // The guard blocked this write — either a concurrent writer already
+      // stored a zone (the expected race), or the row no longer exists
+      // (caller has already resolved it to a row before calling this, so
+      // this is defensive only). `?? tz` covers the defensive case with the
+      // caller's own value rather than returning a nullable type for a
+      // structurally-unreachable branch.
+      const [current] = await db
+        .select({ tz: sessionLogs.tz })
+        .from(sessionLogs)
+        .where(and(eq(sessionLogs.userId, userId), eq(sessionLogs.id, id)));
+      return current?.tz ?? tz;
     },
 
     // Most-recent log per workout, as whole days since that log — feeds the

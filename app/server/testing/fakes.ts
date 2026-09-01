@@ -29,6 +29,12 @@ import {
 } from "../stores/preferences.js";
 import type { TestHistoryStore } from "../stores/testHistory.js";
 import type { NewWorkoutInput, WorkoutsStore } from "../stores/workouts.js";
+import type {
+  Concept2Link,
+  Concept2Store,
+  ConsumedConcept2Attempt,
+  NewConcept2Attempt,
+} from "../stores/concept2.js";
 
 // ---------------------------------------------------------------------------
 // In-memory fakes, keyed by userId, mirroring the real stores' signatures
@@ -374,6 +380,11 @@ type FakeLogRow = Omit<LogInput, "advancesPlan"> & {
   planKey: string | null;
   planIndex: number | null;
   seq: number;
+  // Wave E PR1 Task 6 (task-6-brief.md): server-written only, never on
+  // `LogInput` (that interface's own comment) — `create()` below always
+  // stamps both null, and `recordC2Result` is the ONE writer after that.
+  c2ResultId: number | null;
+  c2UserId: number | null;
 };
 
 // Log-delete spec (2026-08-18), §2: the SAME newest-wins resolution
@@ -689,6 +700,19 @@ function makeFakeLogsStore(
         machineWorkSeconds: stored.machineWorkSeconds ?? null,
         machineWorkMeters: stored.machineWorkMeters ?? null,
         machineSummary: stored.machineSummary ?? null,
+        // Wave E PR1 (migration 0018): same treatment. `c2ResultId`/
+        // `c2UserId` are deliberately absent here — they're not on
+        // `LogInput` at all yet (see that interface's own comment), so
+        // this fake never produces them, matching every current caller
+        // of the real store, which also never sets them.
+        completedAt: stored.completedAt ?? null,
+        tz: stored.tz ?? null,
+        // Wave E PR1 Task 6: server-written only (see `FakeLogRow`'s own
+        // comment) — every row this fake's `create()` produces starts with
+        // both null, matching the real store's `create()`, which never
+        // sets either column either.
+        c2ResultId: null,
+        c2UserId: null,
         planKey,
         planIndex,
         id: crypto.randomUUID(),
@@ -705,6 +729,41 @@ function makeFakeLogsStore(
         if (row.workoutId) result[row.workoutId] = 0;
       }
       return result;
+    },
+    // Wave E PR1 Task 6: mirrors the real store's owner-scoped UPDATE
+    // (stores/logs.ts's own comment) — a foreign or absent id writes
+    // nothing and returns false, the same "row deleted concurrently" seam
+    // the route's 502 branch is keyed on.
+    async recordC2Result(
+      userId: string,
+      id: string,
+      c2ResultId: number,
+      c2UserId: number,
+    ) {
+      const rows = byUser.get(userId) ?? [];
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx === -1) return false;
+      rows[idx] = { ...rows[idx], c2ResultId, c2UserId };
+      byUser.set(userId, rows);
+      return true;
+    },
+    // Wave E PR1 Task 6, plan deviation 2: mirrors the real store's
+    // `tz IS NULL` guard (stores/logs.ts's own comment) — a row that
+    // already carries a tz is left untouched, never overwritten.
+    // Mirrors the real store's return-the-effective-zone contract
+    // (stores/logs.ts's own comment) — a blocked write reports whatever's
+    // actually stored, never `void`.
+    async recordTz(userId: string, id: string, tz: string): Promise<string> {
+      const rows = byUser.get(userId) ?? [];
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx === -1) return tz;
+      // `?? tz` only ever guards TS's optional-property widening
+      // (`LogInput.tz` is `tz?: ...`) — `create()` always stamps a real
+      // `string | null`, never leaves the key absent.
+      if (rows[idx].tz !== null) return rows[idx].tz ?? tz;
+      rows[idx] = { ...rows[idx], tz };
+      byUser.set(userId, rows);
+      return tz;
     },
   } as unknown as LogsStore;
 }
@@ -812,6 +871,140 @@ function makeFakeArticleReadsStore(): ArticleReadsStore {
       byUser.get(userId)?.delete(slug);
     },
   } as unknown as ArticleReadsStore;
+}
+
+// Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD):
+// mirrors `stores/concept2.ts`'s `createConcept2Store` signature EXACTLY
+// (Task 6's router unit tests consume this fake). Not wired into
+// `makeFakeStores`/`Stores` yet — that's a later task's job, once
+// `routes/concept2.ts` exists to need it.
+//
+// `withLinkLock`'s serialization is a per-user promise-chain gate, not a
+// real lock: each call first awaits the PREVIOUS call's gate for the same
+// userId, then installs its OWN gate (resolved in a `finally`, so a
+// throwing `fn` still releases the next caller) before doing any work.
+// This reproduces the real store's observable guarantee — two overlapping
+// calls for the same user never interleave their read-decide-write — but
+// cannot prove real row-locking the way `concept2.integration.test.ts`'s
+// `FOR UPDATE` case does; that test exists precisely because no fake can
+// stand in for it.
+//
+// `clock` is injectable so a caller can control `consumeAttempt`'s and
+// `deleteExpiredAttempts`' notion of "now" without a real sleep — the real
+// store instead computes elapsed time in SQL against Postgres's own
+// `now()`, which a unit test has no equivalent lever for.
+export function makeFakeConcept2Store(
+  clock: () => Date = () => new Date(),
+): Concept2Store {
+  const links = new Map<string, Concept2Link>();
+  const attempts = new Map<string, NewConcept2Attempt & { createdAt: Date }>();
+  const gates = new Map<string, Promise<void>>();
+
+  return {
+    async getLink(userId: string) {
+      return links.get(userId) ?? null;
+    },
+
+    // Same posture as the real store: `needsReauthAt` is cleared on EVERY
+    // upsert, insert or replace alike — a successful relink IS the
+    // recovery (schema.ts's own `needsReauthAt` comment).
+    async upsertLink(userId, link) {
+      const existing = links.get(userId);
+      const now = clock();
+      links.set(userId, {
+        userId,
+        c2UserId: link.c2UserId,
+        accessToken: link.accessToken,
+        refreshToken: link.refreshToken,
+        expiresAt: link.expiresAt,
+        weightClass: link.weightClass,
+        needsReauthAt: null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      });
+    },
+
+    async deleteLink(userId: string) {
+      links.delete(userId);
+    },
+
+    async withLinkLock(userId, fn) {
+      const previousGate = gates.get(userId) ?? Promise.resolve();
+      let releaseGate: () => void = () => {};
+      const ownGate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+      gates.set(userId, ownGate);
+
+      await previousGate;
+      try {
+        const current = links.get(userId) ?? null;
+        const outcome = await fn(current);
+
+        if (outcome.action === "store") {
+          const existing = links.get(userId);
+          if (existing) {
+            // Controller ruling R2 (task-6-brief.md): mirrors the real
+            // store's own `needsReauthAt: null` on a successful refresh
+            // (concept2.ts's own comment on this branch).
+            links.set(userId, {
+              ...existing,
+              accessToken: outcome.tokens.accessToken,
+              refreshToken: outcome.tokens.refreshToken,
+              expiresAt: outcome.tokens.expiresAt,
+              needsReauthAt: null,
+              updatedAt: clock(),
+            });
+          }
+        } else if (outcome.action === "flagReauth") {
+          const existing = links.get(userId);
+          if (existing) {
+            links.set(userId, { ...existing, needsReauthAt: clock() });
+          }
+        }
+        // "none": no write.
+
+        return outcome.result;
+      } finally {
+        releaseGate();
+      }
+    },
+
+    async createAttempt(a: NewConcept2Attempt) {
+      attempts.set(a.nonce, { ...a, createdAt: clock() });
+    },
+
+    // Single-use, unconditional delete first — mirrors the real store's
+    // "delete every nonce exactly once, expired or not" contract (see
+    // `concept2.ts`'s own `consumeAttempt` comment for why the delete
+    // cannot be gated on age).
+    async consumeAttempt(
+      nonce: string,
+      maxAgeMs: number,
+    ): Promise<ConsumedConcept2Attempt | null> {
+      const row = attempts.get(nonce);
+      attempts.delete(nonce);
+      if (!row) return null;
+      const ageMs = clock().getTime() - row.createdAt.getTime();
+      if (ageMs > maxAgeMs) return null;
+      return { userId: row.userId, weightClass: row.weightClass };
+    },
+
+    async deleteExpiredAttempts(maxAgeMs: number) {
+      const now = clock().getTime();
+      for (const [nonce, row] of attempts) {
+        if (now - row.createdAt.getTime() > maxAgeMs) {
+          attempts.delete(nonce);
+        }
+      }
+    },
+
+    async deleteAttemptsFor(userId: string) {
+      for (const [nonce, row] of attempts) {
+        if (row.userId === userId) attempts.delete(nonce);
+      }
+    },
+  };
 }
 
 /** Complete per-user in-memory implementation of all seven data-router stores. */

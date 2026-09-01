@@ -125,7 +125,7 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **D** | The toolbox                 | M    | Nothing                                     |
 | **B** | Backups and telemetry       | M    | Nothing                                     |
 | **C** | The submission surface      | L    | The most visible wave                       |
-| **E** | The Concept2 logbook        | M    | Only if it ships a send control             |
+| **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
 ## Phase JR — Just Row
 
@@ -895,6 +895,9 @@ closed with zero Concept2 contact.
 - [ ] **PR1 — the server broker.** `concept2_links` + auth attempts + four
       `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
       `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**
+      All 9 tasks committed on `wave-e-pr1-server-broker` (2026-08-31,
+      including the measured refresh-endpoint corrections); PR #249 open,
+      in James's review.
 - [ ] **PR1.5 — the native link flow**, on device: system-browser consent,
       foreground re-fetch, and (branch B only) the URL scheme + `appUrlOpen`
       handler. Split from PR1 so one reviewer never holds a token-broker
@@ -1128,13 +1131,18 @@ lifecycle spec and the `door` column respectively); RC-13/RC-14 dropped to the
 connected-surface table below with a fix-13-instrument-14 ruling; "Run it
 again" was declined; RC-38 was pulled forward and the rest of Phase PROTO
 held; the axis-quantity question opened the "say which number this is" design
-pass below; AUD-006 got its fix shape. **This table is now empty of live
-questions and only RC-30 remains, already declined.** A new row means a new
+pass below; AUD-006 got its fix shape. **This table now holds two rows, and
+neither is a live question needing James's decision: RC-30 is closed
+(declined at the RC close), and the C2 account injection row already carries
+its ruling** (PR1.5's design gate decides the fix, on device evidence about
+system-browser cookie sharing; the row stays until that PR closes it, since
+it blocks `C2_LINK_ENABLED=1` in the meantime). A new row means a new
 question, not a re-raised one.
 
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today only by `ALLOWED_EMAILS` (household allowlist). **Ruled at PR1.5's design gate, on device evidence about system-browser cookie sharing (the fix depends on it, and PR1.5 is where the change is still cheap); blocks `C2_LINK_ENABLED=1` regardless.** | `2026-08-31-concept2-logbook-design.md` |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
@@ -1287,6 +1295,11 @@ new.
 - **`surfaceModel.ts:1573`'s `if (digits.startsWith("8")) return "AN";`** is the
   English article in "AN 800 M PIECE", not the workout type. A rename trap, not
   a task.
+- **Concept2 wire hardening (PR1 final review, M3)** — the C2 wire calls carry
+  no timeout, and the per-user token refresh holds a `FOR UPDATE` row lock plus
+  a pooled connection across the outbound refresh call (`client.ts`,
+  `stores/concept2.ts`). Follow-up hardening; household-scale acceptable today.
+  (`2026-08-31-concept2-logbook-design.md`)
 
 ## Owed captures and walk items
 

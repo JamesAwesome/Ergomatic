@@ -15,7 +15,14 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createDb, type Db } from "./index.js";
-import { baselines, sessionLogs, users, workouts } from "./schema.js";
+import {
+  baselines,
+  concept2AuthAttempts,
+  concept2Links,
+  sessionLogs,
+  users,
+  workouts,
+} from "./schema.js";
 import type pg from "pg";
 
 describe("migrations", () => {
@@ -1251,5 +1258,276 @@ describe("migration 0016: the machine summary columns", () => {
     expect(after.machineWorkSeconds).toBe(24.3);
     expect(after.machineWorkMeters).toBe(76);
     expect(after.machineSummary).toStrictEqual(machineSummary);
+  });
+});
+
+// Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD):
+// migration 0018, two new tables (concept2_links, concept2_auth_attempts)
+// plus four additive-optional session_logs columns (c2_result_id,
+// c2_user_id, completed_at, tz), no default, no backfill. Regenerated as
+// 0018 (originally minted as 0017_magical_hobgoblin) after PR #248 merged
+// first and took index 17 for its own migration
+// (`0017_fair_whizzer`, `ALTER TYPE ended_by ADD VALUE 'program-dropped'`)
+// — second-merger regenerates, per the standing rule (agent briefing:
+// "Drizzle migrations apply by TIMESTAMP, not journal order"). Same
+// pre/post-migration shape as 0016 above: a legacy row is seeded against a
+// migrations folder capped at 0017 (now including #248's own migration as
+// part of the PRE-ours set), then the real (full) migrate() applies 0018
+// and both cases below read shared state built once in beforeAll.
+describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c2/completedAt/tz columns", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+  let preMigrationRowId: string;
+
+  const PRE_0018_TAGS = [
+    "0000_skinny_silver_fox",
+    "0001_tan_thunderball",
+    "0002_rare_khan",
+    "0003_spicy_firedrake",
+    "0004_slippery_starjammers",
+    "0005_fine_radioactive_man",
+    "0006_windy_wendell_vaughn",
+    "0007_shallow_kang",
+    "0008_strip_wu_steps",
+    "0009_brief_kingpin",
+    "0010_familiar_maddog",
+    "0011_futuristic_roxanne_simpson",
+    "0012_amused_wild_child",
+    "0013_melodic_sphinx",
+    "0014_graceful_microchip",
+    "0015_gorgeous_black_queen",
+    "0016_fancy_quentin_quire",
+    "0017_fair_whizzer",
+  ];
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+
+    // A migrations folder containing only 0000-0017, so migrate() below
+    // cannot possibly apply 0018 — the legacy row (no c2_*/completed_at/tz
+    // columns at all, and no concept2_links/concept2_auth_attempts tables)
+    // gets seeded against exactly the schema a real pre-Wave-E-PR1 deploy
+    // would have (post-#248, since that migration is now part of the
+    // pre-ours baseline every real deploy already carries).
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0018-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const [i, tag] of PRE_0018_TAGS.entries()) {
+      const idx = String(i).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDir, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number }[] };
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 17),
+      }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "pre-0018-user",
+        email: "pre-0018@migrate.test",
+        name: "Pre 0018",
+      })
+      .returning();
+
+    // Seeded against the PRE-0018 schema (no c2_*/completed_at/tz columns
+    // at all) — raw SQL, same reason 0011/0013/0016's own blocks above use
+    // it: the typed `sessionLogs` insert builder already declares the new
+    // columns in this file's TS schema, and that statement would 500
+    // against the real pre-0018 table. Must run before the full migrate()
+    // call below.
+    const inserted = await db.execute<{ id: string }>(
+      sql`insert into "session_logs"
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
+          values (${u.id}, 'Pre-0018 session', 'AT', 'held', 2, '[]'::jsonb)
+          returning "id"`,
+    );
+    preMigrationRowId = inserted.rows[0]!.id;
+
+    // The real, full folder — only 0018 is new here (0000-0017's hashes
+    // already match what ran against tempDir above), so this is the moment
+    // `CREATE TABLE concept2_links`/`concept2_auth_attempts` and the four
+    // ADD COLUMN statements fire. Runs once, shared by every `it` below.
+    await migrate(db, { migrationsFolder: "drizzle" });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("creates concept2_links and concept2_auth_attempts with the expected columns", async () => {
+    const linkCols = await db.execute(
+      sql`select column_name from information_schema.columns where table_name = 'concept2_links'`,
+    );
+    const linkColNames = linkCols.rows.map((r) => r.column_name);
+    expect(linkColNames).toStrictEqual(
+      expect.arrayContaining([
+        "user_id",
+        "c2_user_id",
+        "access_token",
+        "refresh_token",
+        "expires_at",
+        "weight_class",
+        "needs_reauth_at",
+        "created_at",
+        "updated_at",
+      ]),
+    );
+
+    const attemptCols = await db.execute(
+      sql`select column_name from information_schema.columns where table_name = 'concept2_auth_attempts'`,
+    );
+    const attemptColNames = attemptCols.rows.map((r) => r.column_name);
+    expect(attemptColNames).toStrictEqual(
+      expect.arrayContaining([
+        "nonce",
+        "user_id",
+        "weight_class",
+        "created_at",
+      ]),
+    );
+  });
+
+  it("rejects a weight_class value outside the enum at the DB layer", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "bad-weight-class-user",
+        email: "bad-weight-class@migrate.test",
+        name: "Bad Weight Class",
+      })
+      .returning();
+
+    await expect(
+      pool.query(
+        `insert into "concept2_auth_attempts" ("nonce", "user_id", "weight_class") values ('n1', $1, 'M')`,
+        [u.id],
+      ),
+    ).rejects.toThrow(/invalid input value for enum weight_class/);
+  });
+
+  it("reads a pre-0018 row's existing fields unchanged, and all four new columns as null, after 0018 applies (never-migrate contract)", async () => {
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, preMigrationRowId));
+    expect(after.held).toBe("held");
+    expect(after.pain).toBe(2);
+    expect(after.c2ResultId).toBeNull();
+    expect(after.c2UserId).toBeNull();
+    expect(after.completedAt).toBeNull();
+    expect(after.tz).toBeNull();
+  });
+
+  it("accepts a NEW row with completedAt/tz populated, round-tripping exactly, once 0018 has applied", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "post-0018-user",
+        email: "post-0018@migrate.test",
+        name: "Post 0018",
+      })
+      .returning();
+
+    const completedAt = new Date("2026-08-30T12:00:00.000Z");
+    const [row] = await db
+      .insert(sessionLogs)
+      .values({
+        userId: u.id,
+        workoutTitle: "Concept2-linked row",
+        workoutType: "AT",
+        held: null,
+        pain: null,
+        steps: [],
+        c2ResultId: 4242,
+        c2UserId: 918273,
+        completedAt,
+        tz: "America/New_York",
+      })
+      .returning();
+
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, row.id));
+    expect(after.c2ResultId).toBe(4242);
+    expect(after.c2UserId).toBe(918273);
+    expect(after.completedAt).toStrictEqual(completedAt);
+    expect(after.tz).toBe("America/New_York");
+  });
+
+  it("round-trips a concept2_links row, including a set needs_reauth_at", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "c2-link-user",
+        email: "c2-link@migrate.test",
+        name: "C2 Link",
+      })
+      .returning();
+
+    const expiresAt = new Date("2026-09-01T00:00:00.000Z");
+    const needsReauthAt = new Date("2026-08-31T18:00:00.000Z");
+    await db.insert(concept2Links).values({
+      userId: u.id,
+      c2UserId: 555,
+      accessToken: "access-tok",
+      refreshToken: "refresh-tok",
+      expiresAt,
+      weightClass: "H",
+      needsReauthAt,
+    });
+
+    const [link] = await db
+      .select()
+      .from(concept2Links)
+      .where(eq(concept2Links.userId, u.id));
+    expect(link.c2UserId).toBe(555);
+    expect(link.accessToken).toBe("access-tok");
+    expect(link.refreshToken).toBe("refresh-tok");
+    expect(link.expiresAt).toStrictEqual(expiresAt);
+    expect(link.weightClass).toBe("H");
+    expect(link.needsReauthAt).toStrictEqual(needsReauthAt);
+  });
+
+  it("round-trips a concept2_auth_attempts row, needs_reauth_at absent by default", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "c2-attempt-user",
+        email: "c2-attempt@migrate.test",
+        name: "C2 Attempt",
+      })
+      .returning();
+
+    await db.insert(concept2AuthAttempts).values({
+      nonce: "nonce-1",
+      userId: u.id,
+      weightClass: "L",
+    });
+
+    const [attempt] = await db
+      .select()
+      .from(concept2AuthAttempts)
+      .where(eq(concept2AuthAttempts.nonce, "nonce-1"));
+    expect(attempt.userId).toBe(u.id);
+    expect(attempt.weightClass).toBe("L");
   });
 });
