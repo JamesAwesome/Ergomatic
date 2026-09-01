@@ -385,7 +385,10 @@ it); a second half, added below, reaches PHYSICALLY-CONFIRM, the SAME
 class as (c) — round 7 (finding 3) corrects fix round 5's own "TRUE
 prevention" label. Neither half of (d), nor any other BROWSER-side
 option in this document, achieves cryptographic principal binding —
-**(g), added round 9, does** — see the closing taxonomy note after (g).**
+**(g), added round 9, does ONLY WITH attempt-surface binding added
+(round 10 correction) — without it, the SAME web-mint downgrade this
+option's own proof below describes applies to (g) too** — see the
+closing taxonomy note after (g).**
 
 **The original (d) is not prevention, and here is the proof, not an
 assertion:** the attacker already holds a valid `state` (their own
@@ -460,9 +463,11 @@ continuation variant belongs in that same bucket, not in a separate
   Ergomatic session returning through an authenticated app/browser
   hand-off — which is exactly what §2's credential fact rules out
   reaching THIS BROWSER on native. No option INSIDE the browser does
-  this. **(g), added round 9, does — it moves the check to the APP,
-  where a real credential (the Keychain bearer) already exists** — see
-  the taxonomy note after (g).
+  this. **(g), added round 9, does — but ONLY WITH attempt-surface
+  binding added (round 10 correction) — it moves the check to the APP,
+  where a real credential (the Keychain bearer) already exists, PROVIDED
+  the completion is actually forced through that app-side check rather
+  than the existing web callback** — see the taxonomy note after (g).
 
 **Cost, honestly:** whether a cookie set by `/start` genuinely survives
 the FULL round trip — our origin, then C2's domain, then back to our
