@@ -4906,10 +4906,20 @@ pass did not:
   words, matching the gate doc's THEN-current taxonomy) was renamed by
   the gate doc's own round 7 to accept / detect / physically-confirm —
   nothing in the package as it stood achieved cryptographic principal
-  binding, so "prevent" was the wrong word throughout. Round 9 then added
-  a FOURTH bucket, app-bind (option (g), an authenticated app-return
-  exchange), which DOES achieve real principal binding — the first and
-  only option in the package that does.
+  binding, so "prevent" was the wrong word throughout. **The defect was
+  not merely a label, round 10 clarifies: finding 6's own claim that the
+  interstitial "prevents ... BEFORE anything is written" was FALSIFIED,
+  not just mislabeled — the gate doc's own §3(d) proof shows it is
+  BYPASSABLE by the publicly-constructible raw authorize URL, which
+  skips the interstitial's origin entirely.** Round 9 then added a
+  FOURTH bucket, app-bind (option (g), an authenticated app-return
+  exchange) — round 10 found the SAME bypass shape applies to (g) too:
+  as round 9 wrote it, (g) did NOT achieve unconditional principal
+  binding either, since nothing stops an attacker minting for the WEB
+  surface and completing through the existing, unauthenticated https
+  callback, never reaching (g)'s own check. (g) needs an added
+  precondition (a surface-binding column enforced at both routes) before
+  the "first and only option that does" claim holds.
 - "Attacked and HELD... §2's credential fact (attacked via
   `WKHTTPCookieStore` — no rescue, because there is no Ergomatic cookie on
   native to share, `api.ts:14-17`)" HELD for the NATIVE APP's own
