@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { freeRowTotals } from "../justrow/totals";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
@@ -779,7 +780,17 @@ function UnloggedMonitorRow({ entry }: { entry: HandoffEntry }) {
     if (stamped !== run) {
       commitHandoff(entry.sessionKey, entry.revision, stamped);
     }
-    navigate(`/library/${run.workoutId}/log?from=monitor`);
+    // Phase JR PR 2: a free row's log door is its own route — there is no
+    // workout id for `/library/:id/log` to match, and that route's monitor
+    // gate would (correctly) refuse the record. `completeInterruptedRun`
+    // above is a no-op for an already-closed record, so both the open
+    // (walked-away, stamp "interrupted") and closed (link-drop) cases pass
+    // through this one handler.
+    if (run.mode === "justrow") {
+      void navigate("/justrow/log");
+      return;
+    }
+    void navigate(`/library/${run.workoutId}/log?from=monitor`);
   }
 
   if (discard.armed) {
@@ -801,13 +812,41 @@ function UnloggedMonitorRow({ entry }: { entry: HandoffEntry }) {
     );
   }
 
+  // Phase JR PR 2: the free row's copy carries ITS NUMBERS, so "Log it"
+  // visibly means "keep these" (the approved board's own line), and no
+  // word suggests the row can be picked back up — the monitor does not
+  // advertise while a Just Row is open (N1), so recovery can only ever
+  // mean logging what we have. Totals resolve through the same helper the
+  // log door reads, so the row and the door can never name two numbers
+  // for one record. A free-row record whose burst AND trace are both
+  // empty falls back to the shipped interrupted copy.
+  const freeRowNumbers = run.mode === "justrow" ? freeRowTotals(run) : null;
+
   return (
     <div className="today-unlogged-line">
       <p className="today-unlogged-text">
-        <strong>{run.title}</strong>: interrupted connected session.
+        {freeRowNumbers !== null ? (
+          <>
+            <strong>{run.title}</strong>:{" "}
+            {fmtDuration(freeRowNumbers.seconds / 60)} ·{" "}
+            {new Intl.NumberFormat("en-US").format(
+              Math.round(freeRowNumbers.meters),
+            )}{" "}
+            m, not logged.
+          </>
+        ) : (
+          <>
+            <strong>{run.title}</strong>: interrupted connected session.
+          </>
+        )}
       </p>
       <div className="today-unlogged-actions">
-        {run.workoutId !== null && (
+        {/* Gate 1 of 2 (exit criterion 4): a free row's "Log it" exists
+            despite its null workoutId — the null-suppression below is
+            about records with no route to serve them, and /justrow/log is
+            exactly that route. Non-free null-id records keep the honest
+            suppression. */}
+        {(run.workoutId !== null || run.mode === "justrow") && (
           <button
             type="button"
             className="today-unlogged-link"
@@ -1465,9 +1504,19 @@ function TodayView({
           own doc comment explains why). Does not touch the stale-draft
           guard effect above; `todayGuard.pin.test.ts` pins that guard
           byte-identical. */}
-      {monitorEntry !== null && monitorEntry.run.completedAt === null && (
-        <UnloggedMonitorRow entry={monitorEntry} />
-      )}
+      {/* Phase JR PR 2 (exit criterion 4, gate 2 of 2): a FREE ROW renders
+          whether the record is open OR closed. The `completedAt === null`
+          rule above exists because a completed programmed record belongs to
+          7C's own log path — but a free row has no such path: a link drop
+          CLOSES its record, and under the old gate that close made the row
+          invisible, which is exactly the branch ruling 9's correction (F2)
+          found. Recovery here means "log what we have", never resume — the
+          monitor does not advertise while a Just Row is open (N1). */}
+      {monitorEntry !== null &&
+        (monitorEntry.run.completedAt === null ||
+          monitorEntry.run.mode === "justrow") && (
+          <UnloggedMonitorRow entry={monitorEntry} />
+        )}
 
       {/* Phase BL PR C: the three-door onboarding card (canvas Main)
           replaces the entire suggestion apparatus — header

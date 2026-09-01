@@ -8,6 +8,7 @@ import {
   type HandoffEntry,
 } from "../monitor/handoffStore";
 import { useLogForm } from "../session/LogSession";
+import { freeRowTotals } from "./totals";
 
 /**
  * `/justrow/log` — the workout-less log door (Phase JR PR 2, Gate 0
@@ -48,38 +49,6 @@ function freeRowEntry(): HandoffEntry | null {
   return entry;
 }
 
-/**
- * The two headline numbers, and where they come from — F4's answer, stated
- * rather than assumed.
- *
- * FIRST the machine's own 0x0039 (`summaryTotals`): both supported endings
- * produce it now that the free row opens a driver run — the erg answers our
- * End's terminate with its summary burst, and a Menu end emits the same
- * burst on its own (the walk's CLOSED 4). This is the figure MACHINE
- * CONFIRMED vouches for.
- *
- * FALLBACK, for a row whose burst never landed (a link-lost close, an
- * `interrupted` recovery): the series trace's last sample. Honest about its
- * bound: the trace is whole-second bucketed and capped at 4 hours of
- * rowing (`SERIES_SAMPLE_CAP`), so on a capped trace the tail UNDERSTATES
- * the row. `truncated` marks exactly that case, and this door still prefers
- * an understated number over refusing to log the row at all.
- */
-function totalsFor(
-  entry: HandoffEntry,
-): { seconds: number; meters: number } | null {
-  const { run } = entry;
-  if (run.summaryTotals !== undefined) {
-    return {
-      seconds: run.summaryTotals.workElapsedSeconds,
-      meters: run.summaryTotals.workDistanceMeters,
-    };
-  }
-  const tail = run.series?.samples.at(-1);
-  if (tail !== undefined) return { seconds: tail.t, meters: tail.d };
-  return null;
-}
-
 const PAIN_LEVELS = [1, 2, 3, 4, 5];
 
 export default function JustRowLog() {
@@ -105,7 +74,7 @@ export default function JustRowLog() {
     return <Navigate to="/today" replace />;
   }
 
-  const totals = totalsFor(entry);
+  const totals = freeRowTotals(entry.run);
   const avgSplitSeconds =
     totals !== null && totals.meters > 0
       ? (500 * totals.seconds) / totals.meters
