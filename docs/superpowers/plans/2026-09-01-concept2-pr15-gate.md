@@ -19,15 +19,31 @@ asked for at the end.**
   real cross-document conflict with PR1.5's own return-signal fix, and
   that three cheaper/different option classes were never considered. All
   folded in, every claim cited against the actual code read that session.
-- **Fix round 5 (scoped re-review), this revision:** (d) as written was
-  proven detection-grade only, not prevention (the raw C2 authorize URL
-  is publicly constructible and bypasses any interstitial); added the
-  real prevention variant (a browser-bound continuation cookie). §2's
-  absolute "SFSafariViewController can never carry a session" claim was
-  narrowed to what is actually true (the native app holds only a Keychain
-  bearer; whether the phone's own browser cookie jar carries a prior web
-  session is open and unmeasured, not closed). (c) relabeled as informed
-  physical confirmation, not authentication.
+- **Fix round 5 (scoped re-review):** (d) as written was proven
+  detection-grade only, not prevention (the raw C2 authorize URL is
+  publicly constructible and bypasses any interstitial); added a
+  browser-bound continuation cookie variant, at the time labeled "true
+  prevention." §2's absolute "SFSafariViewController can never carry a
+  session" claim was narrowed, speculating that the phone's own browser
+  cookie jar might carry a prior web session in — that speculation did
+  not survive round 7, below. (c) relabeled as informed physical
+  confirmation, not authentication.
+- **Fix round 6:** named `SameSite` as load-bearing for the continuation
+  cookie's web half (§3(d)) — a separate cookie from `erg_session`, so
+  the attribute has to be chosen deliberately rather than inherited.
+- **Fix round 7, this revision:** fetched Apple's own
+  SFSafariViewController documentation (PRIMARY, quoted at §2) and
+  dropped round 5's shared-jar speculation entirely — nothing in it
+  supports the guess, and the browser-bound continuation's plausible
+  mechanism turns out to need no cross-app cookie sharing at all, only
+  ordinary same-session persistence (still unmeasured on-device).
+  Reclassified the continuation from "prevention" into the SAME bucket
+  as (c), physically-confirm — it proves a browser visited `/start`,
+  never who is driving it (§2, §3(d), §6). Also corrected §1a's blast
+  radius: the attacker gains no tokens (never serialized to any client
+  response) — only a server-mediated capability to see/replace/unlink
+  the association metadata or post their own rows into the victim's
+  logbook.
 
 ## 1. The residual, restated — with its own bounds
 
@@ -484,16 +500,19 @@ checks the RETURN signal only — it opens a dev URL
 (`log-dev.concept2.com`), never a real Concept2 login, so it proves
 nothing about this document's ruling and is not a substitute for it.
 
-**Optional, on THIS build, if James wants an early read before choosing:**
-the walk card's dev-only probe cannot test the browser-bound-continuation
-cookie (that route doesn't exist yet), but it CAN give one weak, indirect
-data point toward §2's revised open question: whether Concept2's own
-sign-in page shows a fresh login on a SECOND `Browser.open` in the same
-walk session, or whether something about that browser's state looks
-carried over from the first. This is weak evidence (it is about C2's
-cookies, not a hypothetical `/start` cookie of ours) but it costs nothing
-extra during a walk already happening — the walk card's own "Also worth a
-glance" section covers exactly this.
+**On the walk build, one extra observation is available but is UX
+evidence only, not a security data point (fix round 7 correction, so a
+later reader doesn't restore the false framing):** whether Concept2's own
+sign-in page (`log-dev.concept2.com`) loads visibly fresh on a SECOND
+`Browser.open` in the same walk session, or looks cached compared to the
+first, is useful for PR2's copy about what the second-visit consent
+screen feels like. It says nothing toward §2's revised open question,
+which is about OUR OWN not-yet-built `/start` cookie surviving ONE
+continuous `SFSafariViewController` session — not about Concept2's own
+cookies persisting across two SEPARATE presentations, a different
+question. No substitute check exists until `/start` is built (see the
+walk card's own "Also worth a glance" section, which already carries this
+correction).
 
 Still owed, and this time genuinely blocked on which option James picks:
 
@@ -511,8 +530,8 @@ Still owed, and this time genuinely blocked on which option James picks:
   return signal (§3's finding 7) needs its OWN device check before PR2
   ships, not an assumption.
 
-## 5. Antagonist pass — full TRIAD, REVISE (round 3), scoped re-review
-(round 5, ongoing)
+## 5. Antagonist pass — full TRIAD, REVISE (round 3); scoped re-reviews
+at rounds 5-7
 
 **Full pass 2026-09-01 at `303987ab`, verdict REVISE, all findings folded
 in fix round 3 (this text is the fold, not a separate report).** AUTH
@@ -528,21 +547,25 @@ never named its collision with PR1.5's own return signal (now added
 inline), and three option classes were missing entirely (now (d), (e),
 (f)).
 
-**Round 5 scoped re-review, folded in this revision:** (d) as originally
-written was proven NOT to be prevention — the attacker can construct and
-hand out C2's raw, publicly-shaped authorize URL directly, bypassing any
-interstitial on our own origin entirely, since the callback has no way to
-tell whether a browser visited `/start` first. Downgraded to
-detection-grade, with the actual prevention mechanism (a browser-bound
-continuation cookie) added alongside it. §2's absolute "never carries a
-session" claim was also narrowed: the server DOES issue real
-`erg_session` cookies for web sessions; the true statement is that the
-NATIVE APP holds only a Keychain bearer, and whether the phone's own
-Safari/`SFSafariViewController` cookie jar carries a session cookie from
-prior web use is a real, unmeasured, open question — which STRENGTHENS
-rather than weakens the browser-bound continuation's plausibility. (c)
-relabeled as informed physical confirmation, never authentication of the
-consenting principal, matching what it actually proves.
+**Scoped re-reviews, rounds 5-7, folded into this revision (current
+state — see the revision history above for what changed when):** (d) as
+originally written is detection-grade only — the attacker can construct
+and hand out C2's raw, publicly-shaped authorize URL directly, bypassing
+any interstitial on our own origin entirely, since the callback has no
+way to tell whether a browser visited `/start` first. A browser-bound
+continuation cookie closes that specific bypass, but it proves only that
+a browser visited `/start`, never who is driving it — round 7
+reclassified it into the SAME bucket as (c), physically-confirm,
+correcting round 5's own "true prevention" label. §2's absolute "never
+carries a session" claim was narrowed twice: round 5 first speculated
+that the phone's own Safari cookie jar might carry a prior web session
+in; round 7 fetched Apple's own SFSafariViewController documentation
+(PRIMARY, quoted at §2) and dropped that speculation outright — nothing
+in Apple's docs supports it, and the continuation cookie's plausible
+mechanism needs no cross-app sharing at all, only ordinary same-session
+persistence, still unmeasured on-device. (c) remains relabeled as
+informed physical confirmation, never authentication of the consenting
+principal, matching what it actually proves.
 
 ## 6. Stop
 
