@@ -129,10 +129,13 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 ## Phase JR — Just Row
 
-**Status: Active — PR 0a instrument built; PR 0b capture DONE 2026-08-31, six
-OPEN questions answered outright and OPEN 3 only within a bound; PR 1/2 blocked
-on a design RE-OPEN, and OPEN 3's physical-power/BLE half still wants
-evidence.** This is a deliberate household exception to the stranger-first
+**Status: Active — PR 0a instrument and PR 0b capture both DONE 2026-08-31
+(#246). Six OPEN questions answered outright; OPEN 3's remaining half is
+CLOSED BY RULING, not by evidence (James, 2026-09-01: assume the connection
+stays open indefinitely). PR 1 blocked on ONE design question — what a row the
+APP closed stores as its `ended_by`.**
+
+This is a deliberate household exception to the stranger-first
 ordering, requested by James on 2026-08-31. Walk record and full decodes:
 `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`; runsheet at
 `docs/monitor/sessions/walk-phase-jr-capture/RUNSHEET.md`.
@@ -155,9 +158,13 @@ written up in the spec's own CLOSED section):
   terminated…") and describes the sequence AFTER a terminate, so it does not
   enumerate exits, and Concept2's PM5 guide says the monitor powers down
   after inactivity with no Bluetooth qualification. The proposed
-  `ended_by: "idle"` member still has no mapped signal, and PR 2 still needs
-  its own inactivity rule — but "the row never closes" is UNSETTLED, and the
-  physical-power/BLE question is the open half. (The old "6 s → 220 s → power off" chain turned out to be
+  `ended_by: "idle"` member is withdrawn and PR 2 owns the inactivity rule
+  outright. **Ruling 8 (2026-09-01) makes this the design's assumption rather
+  than an open question**, and reverses ruling 5's "the app never invents an
+  idle threshold": an app-side threshold is now the only possible closer. What
+  a row WE closed stores as its `ended_by` is the live design question — it
+  cannot claim the monitor switched itself off, because it did not.
+  (The old "6 s → 220 s → power off" chain turned out to be
   three different layers; the timeouts are CSAFE slave-state ones that never
   governed an unprogrammed row in either connection state.)
 
@@ -1292,12 +1299,12 @@ Each needs erg time or a deliberate recording session.
   pressure."_ (`phase-ll.md`)
 - ~~**JR PR 0b's capture walk**~~ — DONE 2026-08-31; six OPENs answered, OPEN 3
   bounded. Record at `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`.
-- **JR OPEN 3's open half — does a PM5 power itself off with a central
-  connected?** Unobserved for 896.8 s and undocumented either way; the walk
-  ended by operator choice, not by the monitor. Rides any erg session: leave a
-  Just Row open, connected, and simply wait longer than 15 minutes.
-  `CSAFE_PM_GET_OPERATIONALSTATE` (0x8F) reads the actual power layer, but
-  polling it sends CSAFE and may itself perturb the state being measured.
+- ~~**JR OPEN 3's open half — does a PM5 power itself off with a central
+  connected?**~~ RETIRED 2026-09-01 by ruling, not by evidence: James ruled we
+  assume the connection stays open indefinitely and design for it, rather than
+  spend an erg session settling it. Still unobserved and still undocumented —
+  if a closer ever turns up in the wild it is a bonus, never something the
+  design waits on.
 - **The hardware session shopping list** — three pairing and programming latency
   spans, the unrowed question from §17 item 5, §18's readings-still-owed, a
   genuine mid-piece disconnect, and **one `.5` pace target on the wire**
