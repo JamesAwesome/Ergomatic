@@ -2784,6 +2784,24 @@ export function useMonitorSession(
    *  path always takes the `driverRef.current` branch. */
   const teardown = useCallback(
     (alreadyTerminated = false, claimed: MonitorDriver | null = null): void => {
+      // RETIRE ANY IN-FLIGHT ATTEMPT FIRST, for the same reason `cancel()`
+      // does (see `attemptRef`). Everything below this line reasons about a
+      // driver, and an attempt still inside `createTransport()`/`scan()`/
+      // `transport.connect()` HAS no driver yet — so without this bump the
+      // cleanup finds `driverRef` null, does nothing, and the pending
+      // promise resumes afterwards with `superseded()` false and installs a
+      // driver and its subscriptions against a hook that is gone. That is
+      // the Cancel defect again, reached through UNMOUNT (navigation, a
+      // route change) rather than through the button, and `cancel()`'s own
+      // bump does not cover it: this effect's cleanup calls `teardown`
+      // directly, never `cancel`.
+      //
+      // Safe to put here rather than only at the unmount call site:
+      // `teardown` has exactly two callers, this hook's unmount effect and
+      // `cancel()`, and `connect()` never calls it — so no attempt can ever
+      // supersede itself. `cancel()` bumping and then calling `teardown`
+      // bumps twice, which a counter does not care about.
+      attemptRef.current += 1;
       // Resolved FIRST — every step below needs the same driver, and
       // clearing `driverRef` here (rather than after stash/unsubscribe, as
       // this used to) is a pure reordering: a re-entrant teardown

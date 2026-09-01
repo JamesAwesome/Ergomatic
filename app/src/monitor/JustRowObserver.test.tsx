@@ -294,6 +294,36 @@ describe("JustRowObserver", () => {
     expect(transport.connects).toBe(2);
   });
 
+  // The SAME hidden-connection failure, reached by navigating away instead
+  // of pressing Cancel. `cancel()` retires its attempt; the unmount effect
+  // calls `teardown()` directly and never goes through `cancel()`, so until
+  // `teardown()` retired the attempt too, an unmount during
+  // `scan()`/`connect()` left the promise to resume with nothing superseded
+  // and install a driver plus ten subscriptions against a hook that no
+  // longer exists.
+  it("an unmount mid-connect installs nothing when the attempt settles", async () => {
+    let releaseConnect!: () => void;
+    const connectGate = new Promise<void>((resolve) => {
+      releaseConnect = resolve;
+    });
+    const transport = observeTransport(connectGate);
+    const user = userEvent.setup();
+    const rendered = render(<JustRowObserver deps={deps(transport)} />);
+
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    await screen.findByRole("heading", { name: "Connecting to monitor" });
+    expect(transport.connects).toBe(1);
+
+    rendered.unmount();
+    await act(async () => {
+      releaseConnect();
+      await Promise.resolve();
+    });
+
+    expect(transport.subscribed).toStrictEqual([]);
+    await waitFor(() => expect(transport.disconnects).toBe(1));
+  });
+
   it("re-reads the capture count while the link is up", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let events = 7;
