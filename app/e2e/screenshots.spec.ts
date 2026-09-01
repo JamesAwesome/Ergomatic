@@ -923,7 +923,11 @@ test("log-monitor-dropped", async ({ page }) => {
   // repo's own design-gate rule (CLAUDE.md, "A SPEC THAT CHANGES WHAT A
   // ROWER READS OR SEES") requires the rendered thing in BOTH
   // orientations before Gate 0 can be presented; the landscape capture
-  // lives in `log-monitor-dropped-landscape` immediately below.
+  // lives in `log-monitor-dropped-landscape` immediately below. Together
+  // the two are the Gate-0 artifact James approved ("Gold approved",
+  // 2026-08-31, at `9bd4ddac`) — this file's captures ARE the approved
+  // record, so keep them in sync with the rendered surface, not just the
+  // strings above.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor-dropped.png"),
   });
@@ -933,7 +937,9 @@ test("log-monitor-dropped", async ({ page }) => {
 // composition above — same seeded `MonitorRun`, same real
 // `/library/:id/log?from=monitor` route, same door, only the viewport
 // differs. Gate 0 needs both orientations (CLAUDE.md's design-gate rule);
-// `log-monitor-dropped` above covered portrait only. Same idiom as
+// `log-monitor-dropped` above covered portrait only. Gate 0 CLEARED
+// (James: "Gold approved", 2026-08-31, on both this capture and the
+// portrait one, at `9bd4ddac`). Same idiom as
 // `log-monitor-landscape` (844×390, `neutralizeFixedTabBarForFullPageCapture`
 // + `scrollTraceChartIntoFrame` before the shot — a no-op here if this
 // fixture's trace has nothing to scroll, since `scrollTraceChartIntoFrame`

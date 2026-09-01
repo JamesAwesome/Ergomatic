@@ -204,8 +204,10 @@ describe("PostWorkoutSummary — title block (§2A)", () => {
 });
 
 // PR #248's round-1 review recommended this ("My recommendation is to
-// suppress the completion eyebrow"); implemented pending James's Gate-0
-// approval — not yet a ruling. This component's own half of the contract —
+// suppress the completion eyebrow"); implemented, then Gate-0 approved
+// (James: "Gold approved", 2026-08-31, on the rendered
+// `log-monitor-dropped.png` / `log-monitor-dropped-landscape.png` captures
+// at `9bd4ddac`). This component's own half of the contract —
 // `summaryModel.ts`'s `buildMonitorModel` is what DERIVES the flag from a
 // real `MonitorRun.endedBy` (see `summaryModel.test.ts`'s own describe
 // block of the same name); this file's job is only "does the screen obey

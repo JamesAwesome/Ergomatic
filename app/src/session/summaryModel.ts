@@ -290,9 +290,11 @@ export interface SummaryModel {
    *  carries a measurement"). */
   caption?: string;
   /** PR #248's round-1 review recommended suppression ("My recommendation
-   *  is to suppress the completion eyebrow"), and the rendered change is
-   *  IMPLEMENTED here pending James's Gate-0 approval — not yet a ruling.
-   *  `PostWorkoutSummary`'s own `WORKOUT COMPLETE` eyebrow lies on an
+   *  is to suppress the completion eyebrow"), implemented here, then
+   *  Gate-0 approved (James: "Gold approved", 2026-08-31, on the rendered
+   *  `log-monitor-dropped.png` / `log-monitor-dropped-landscape.png`
+   *  captures at `9bd4ddac`). `PostWorkoutSummary`'s own `WORKOUT COMPLETE`
+   *  eyebrow lies on an
    *  arrival that did not complete. Present-means-flag, same idiom as
    *  `MonitorRun.seriesDropped`/`MeasuredRow.onTarget` — absent (every
    *  timer/manual-door model, and every monitor model whose `run.endedBy`
@@ -1042,8 +1044,8 @@ function buildMonitorModel(run: MonitorRun): SummaryModel {
     sourceLabel: run.deviceName,
   };
 
-  // PR #248's round-1 review recommendation, implemented pending Gate-0
-  // approval (`SummaryModel.suppressCompletionEyebrow`'s own doc comment):
+  // PR #248's round-1 review recommendation, implemented and Gate-0
+  // approved (`SummaryModel.suppressCompletionEyebrow`'s own doc comment):
   // the three arrival types that did not complete, never a drop-only fork.
   const suppressCompletionEyebrow =
     run.endedBy === "program-dropped" ||

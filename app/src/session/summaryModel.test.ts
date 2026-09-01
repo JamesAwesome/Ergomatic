@@ -2520,8 +2520,10 @@ describe("the measured-anything rule, one rule across three shapes", () => {
 // ---------------------------------------------------------------------
 // PR #248's round-1 review recommended this ("My recommendation is to
 // suppress the completion eyebrow", scoped across dropped, link-lost, AND
-// interrupted arrivals — never a drop-only fork); implemented pending
-// James's Gate-0 approval, not yet a ruling.
+// interrupted arrivals — never a drop-only fork); implemented, then Gate-0
+// approved (James: "Gold approved", 2026-08-31, on the rendered
+// `log-monitor-dropped.png` / `log-monitor-dropped-landscape.png` captures
+// at `9bd4ddac`).
 // `SummaryModel.suppressCompletionEyebrow`
 // is set ONLY here, in `buildMonitorModel`, from the real `MonitorRun.endedBy`
 // — a real fixture through the real door, not a hand-set model field, so

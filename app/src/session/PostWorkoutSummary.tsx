@@ -653,13 +653,15 @@ export default function PostWorkoutSummary({
   return (
     <main className="screen">
       {/* PR #248's round-1 review recommended this ("My recommendation is to
-          suppress the completion eyebrow"); implemented here pending
-          James's Gate-0 approval — not yet a ruling. A not-completed
-          arrival (dropped, link-lost, interrupted) does not claim WORKOUT
-          COMPLETE. Nothing replaces the eyebrow — `.back-link` has no
-          top-margin dependency on a preceding sibling, so the layout simply
-          starts one element earlier; `model.suppressCompletionEyebrow`'s
-          own doc comment names which `endedBy` values set it. */}
+          suppress the completion eyebrow"); implemented here, then Gate-0
+          approved (James: "Gold approved", 2026-08-31, on the rendered
+          `log-monitor-dropped.png` / `log-monitor-dropped-landscape.png`
+          captures at `9bd4ddac`). A not-completed arrival (dropped,
+          link-lost, interrupted) does not claim WORKOUT COMPLETE. Nothing
+          replaces the eyebrow — `.back-link` has no top-margin dependency
+          on a preceding sibling, so the layout simply starts one element
+          earlier; `model.suppressCompletionEyebrow`'s own doc comment names
+          which `endedBy` values set it. */}
       {model.suppressCompletionEyebrow !== true && (
         <p className="summary-eyebrow">WORKOUT COMPLETE</p>
       )}
