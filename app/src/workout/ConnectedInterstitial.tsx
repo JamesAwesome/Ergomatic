@@ -783,6 +783,7 @@ export default function ConnectedInterstitial({
   // two records).
   return (
     <ConnectedSurface
+      freeRow={false}
       phases={phases}
       program={program}
       session={session}

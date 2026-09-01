@@ -363,6 +363,20 @@ export interface SurfaceModelInput {
    *  session, and the same floor `armedMirror`'s own "un-started,
    *  always" stance already assumes. */
   previousElapsedSeconds?: number;
+  /** Phase JR PR 2: this session is the machine's OWN free row — no
+   *  program, no targets, no plan. REQUIRED, not optional, for the same
+   *  reason `status` and `linkLost` are: every caller must say which kind
+   *  of session this render is, and a default is how a caller that forgot
+   *  silently renders a workout surface over a free row (the exact class
+   *  of laundering this module already deleted once — the `?? "live"`
+   *  case in this interface's own history).
+   *
+   *  Deliberately NOT inferred from `program.intervals.length === 0`:
+   *  `compileProgram` cannot emit a zero-interval program (its no-work
+   *  guard), so a length test would be a predicate with no second
+   *  producer today and a silent trap the day one appears — the same
+   *  reasoning the driver's own `freeRow` marker records. */
+  freeRow: boolean;
 }
 
 // --- Pane C's grid (handoff §3, "Pane C — the grid") ---------------------
@@ -618,6 +632,10 @@ export interface SurfaceModel {
    *  instead (connected-metrics design spec, States table) — see
    *  `buildSurfaceModel`'s own `targetSplitPhase` for the exact rule. */
   targetSplit: { main: string; sub: string | null; absent: boolean };
+  /** Phase JR PR 2: mirrored straight off `SurfaceModelInput.freeRow`, so
+   *  the panes branch on the MODEL rather than each re-deriving what kind
+   *  of session this is from a prop of their own. */
+  freeRow: boolean;
   /** That card's third line — the ref when there is one, and EMPTY when
    *  there isn't. It used to read `NO SPLIT TARGET` beside a dash; both
    *  surfaces now name the phase instead — `Easy`, `Rest`, `All out` for
@@ -1046,12 +1064,26 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // with no completed WORK phase behind it — a LEADING rest — suppresses
   // AVG even though 0x0033 may genuinely be holding a real number, because
   // there is no finished interval for that number to be a verdict on.
+  // PHASE JR PR 2 — the free row's AVG is DERIVED, not the wire's split
+  // average, and the distinction is a number's meaning (triad). 0x0032's
+  // `splitAvgPace` is SPLIT-scoped: on a free row the PM5 auto-splits every
+  // 5:00, so that field is the current five-minute chunk's average — while
+  // the figure this row STORES is the whole-piece `500 × time ÷ distance`
+  // (the log door's own derivation, spec "The AVG SPLIT disagreement").
+  // Showing the chunk under the same AVG label the saved row renders would
+  // put two numbers behind one word. So the live cell computes exactly what
+  // the record will keep: same formula, same inputs, no second definition.
+  // `avgAbsentByReferent` would otherwise suppress it outright — a free
+  // row's `intervalIndex` is always null by the driver's own contract.
   const rawAvg = frame.splitAvgPace;
-  const avgActual =
-    avgAbsentByReferent ||
-    avgSuppressedByRest ||
-    rawAvg === null ||
-    rawAvg === 0
+  const avgActual = input.freeRow
+    ? frame.sessionDistanceMeters > 0
+      ? (500 * frame.sessionElapsedSeconds) / frame.sessionDistanceMeters
+      : null
+    : avgAbsentByReferent ||
+        avgSuppressedByRest ||
+        rawAvg === null ||
+        rawAvg === 0
       ? null
       : rawAvg;
   // Judged ONLY at rest, against the FINISHED interval's own numeric split
@@ -1113,8 +1145,16 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     targetSplitPhase.targetSplit !== undefined
       ? targetSplitPhase.targetSplit
       : null;
-  const targetSplit =
-    targetSplitPhase && targetSplitPhaseSeconds !== null
+  // PHASE JR PR 2: `Free` in the slot, PRESENT rather than absent (Gate 0,
+  // approved as rendered). The word already means "this piece asks for no
+  // particular pace" everywhere this app says it, and here it is a
+  // statement about the whole row rather than a missing value — so it does
+  // not take the greyed `connected-value-absent` treatment a phase word
+  // gets. With no phase at all, the non-free fallthrough below would have
+  // rendered the DASH, which reads as a target that failed to load.
+  const targetSplit = input.freeRow
+    ? { main: FREE, sub: null, absent: false }
+    : targetSplitPhase && targetSplitPhaseSeconds !== null
       ? { ...targetSplitDisplay(targetSplitPhase), absent: false }
       : {
           main: targetSplitPhase ? targetSplitPhase.label : DASH,
@@ -1236,6 +1276,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
 
   return {
     status,
+    freeRow: input.freeRow,
     stale,
     measuredIntervals: measuredIntervalCount(input.actuals),
     linked: !stale,
@@ -1244,11 +1285,17 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // ARMED READS READY (CR2 spec 3 Task 2, design spec §2D — the READY
     // word ships HERE). Not-armed is entirely unchanged from before this
     // task: `ordinal === null ? kindWord : counted`.
-    intervalLabelShort: armedMirror
-      ? readyLabel
-      : ordinal === null
-        ? kindWord
-        : counted,
+    intervalLabelShort: input.freeRow
+      ? // Phase JR PR 2 (Gate 0): the row's identity, where a programmed
+        // row counts itself (`2 OF 5 · WORK`). Every status, including
+        // armed — a free row's ready screen is the interstitial, so by the
+        // time this surface renders the label there is a row to name.
+        "JUST ROW"
+      : armedMirror
+        ? readyLabel
+        : ordinal === null
+          ? kindWord
+          : counted,
     intervalOrdinalLabel,
     // ARMED CARRIES NO LABEL AT ALL (I-1, final whole-branch review — the
     // task seam that dropped this: `ConnectedSurface.test.tsx`'s own "Task
@@ -1297,9 +1344,15 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // calling it one index EARLIER (`phaseIndex - 1`) reads
     // `phases[phaseIndex]` exactly, reusing the existing FINISH-at-the-end
     // handling rather than duplicating it.
-    upNext: armedMirror
-      ? connectedNextText(phases, phaseIndex - 1)
-      : connectedNextText(phases, phaseIndex),
+    // Phase JR PR 2: EMPTY on a free row — there is no next to name, and
+    // `connectedNextText` over no phases would say FINISH about a row that
+    // has no finish line. The pane renders nothing for the empty string,
+    // the same absent-not-blank idiom `nowLabel` above already uses.
+    upNext: input.freeRow
+      ? ""
+      : armedMirror
+        ? connectedNextText(phases, phaseIndex - 1)
+        : connectedNextText(phases, phaseIndex),
     totalSeconds,
     // `totalLeftSeconds` stays a LOCAL value only (CR2 spec 3 Task 4): the
     // returned `SurfaceModel` no longer exposes it — see this field's own
@@ -1337,13 +1390,17 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // reason. The two halves of the slot now agree on every path, which is
     // the invariant a reader assumes when they see one of them.
     targetRate: {
-      main:
-        phase === undefined
+      // Phase JR PR 2: `Free`, present, same reasoning as `targetSplit`'s
+      // own free-row arm above — one statement about the row, not two
+      // fields disagreeing about whether anything is missing.
+      main: input.freeRow
+        ? FREE
+        : phase === undefined
           ? DASH
           : targetSpm === null
             ? FREE
             : String(targetSpm),
-      absent: targetSpm === null,
+      absent: input.freeRow ? false : targetSpm === null,
     },
     // `meters`/`hr` (the old JUDGED distance/HR) do NOT appear here (CR2
     // spec 3 Task 4) — see the doc comment above `targetSplit` for what

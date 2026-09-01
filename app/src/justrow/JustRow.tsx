@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ConnectAction from "../monitor/ConnectAction";
 import { deriveAxes } from "../monitor/connectedAxes";
 import { useMonitorSession } from "../monitor/useMonitorSession";
+import ConnectedSurface from "../workout/ConnectedSurface";
 
 /**
  * `/justrow` — the free row.
@@ -32,6 +33,11 @@ export default function JustRow() {
   const navigate = useNavigate();
   const session = useMonitorSession();
   const [started, setStarted] = useState(false);
+  // The rower asked for the numbers before pulling — the ready screen's own
+  // lead action, inherited from the programmed interstitial (Gate 0 kept
+  // both of its buttons). Motion makes this moot: once the record opens the
+  // surface takes over regardless.
+  const [showNumbers, setShowNumbers] = useState(false);
 
   const handleProceed = useCallback(() => {
     setStarted(true);
@@ -100,8 +106,28 @@ export default function JustRow() {
     );
   }
 
-  // The connecting and ready frames. Task 4 replaces the `ready` arm below
-  // with the live surface once the rower pulls.
+  // THE SURFACE TAKES OVER once a session exists (the record opened on
+  // motion, or the close/hand-off is under way), or the moment the rower
+  // asks for the numbers from ready — the same hand-over the programmed
+  // interstitial makes, on the same axis. The one `useMonitorSession`
+  // instance this component owns is handed DOWN, never re-called: two
+  // hooks would mean two drivers and two records.
+  if (axes.session !== "none" || (showNumbers && axes.program === "armed")) {
+    return (
+      <ConnectedSurface
+        freeRow={true}
+        phases={[]}
+        program={{ intervals: [] }}
+        session={session}
+        // Task 6 lands /justrow/log; until then the catch-all sends this
+        // to /today, which loses nothing — the record is closed and Today's
+        // recovery row (Task 7) is the net under every navigation.
+        onEnded={() => void navigate("/justrow/log")}
+      />
+    );
+  }
+
+  // The connecting and ready frames.
   //
   // `"armed"` is the axis's word for the phase this screen reaches, and it
   // is the internal name rather than a claim about the machine: a free row
@@ -126,6 +152,20 @@ export default function JustRow() {
         )}
       </div>
       <div className="action-stack connected-interstitial-actions">
+        {/* Gate 0 kept BOTH of the programmed ready screen's buttons. The
+            lead one hands over to the surface pre-pull; a free row has no
+            armed workout to check there, but the screen is where the
+            numbers will appear, and "worth a look" was answered by keeping
+            the reuse. */}
+        {ready && (
+          <button
+            type="button"
+            className="button-l1"
+            onClick={() => setShowNumbers(true)}
+          >
+            Show me the numbers
+          </button>
+        )}
         <button
           type="button"
           className="button-l2"

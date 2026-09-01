@@ -270,6 +270,7 @@ function renderSurface(
   const current = session(overrides);
   const view = render(
     <ConnectedSurface
+      freeRow={false}
       phases={FIXTURE.phases}
       program={FIXTURE.program}
       session={current}
@@ -471,6 +472,7 @@ function stoppedFrame(): MonitorFrame {
 function renderNeverRowed(overrides: Partial<MonitorSession> = {}) {
   return render(
     <ConnectedSurface
+      freeRow={false}
       phases={NO_OPENER.phases}
       program={NO_OPENER.program}
       session={session({
@@ -628,6 +630,7 @@ describe("EST LEFT: the monotonic clamp is threaded into the real component, not
 
     rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={{
@@ -2006,6 +2009,7 @@ describe("ended: the surface hands off and unmounts", () => {
     // thing standing between the rower and a double navigation.
     rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={s}
@@ -2055,6 +2059,7 @@ describe("ended: the surface hands off and unmounts", () => {
     // flag, and the hand-off goes through, once.
     rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={{ ...held, handoffHeld: false }}
@@ -2517,5 +2522,48 @@ describe("the connected walk, fake-driven", () => {
     // thoroughly pinned at the driver layer (`monitor/driver.test.ts`'s own
     // extensive `WORKOUTSTATE_INTERVALWORKTIME`/`_INTERVALREST` coverage);
     // only THIS integration test's UI-level double-check is gone.
+  });
+});
+
+/**
+ * PHASE JR PR 2, TASK 4 — the free-row surface.
+ *
+ * Two structural facts and one compile-time pin. The absent control is the
+ * board's own decision 6 (a one-cell segmented control is not a control),
+ * and the forced LIVE pane is its corollary: `loadLastPane()` restores the
+ * previous session's choice, and a rower whose programmed row ended on
+ * GRID must not open a free row onto a pane that cannot exist for it.
+ */
+describe("the free-row surface", () => {
+  it("renders no pane control at all, and PaneLive regardless of the stored pane", () => {
+    // Seed the stored pane to GRID first — the case that would go wrong.
+    localStorage.setItem("ergomatic:connected-pane", "grid");
+    const { container } = render(
+      <ConnectedSurface
+        freeRow={true}
+        phases={[]}
+        program={{ intervals: [] }}
+        session={session({
+          phase: "live",
+          frame: frame({ intervalIndex: null }),
+        })}
+        onEnded={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector(".connected-control")).toBeNull();
+    expect(container.querySelector(".connected-pane-live")).not.toBeNull();
+    expect(container.querySelector(".connected-grid-rows")).toBeNull();
+  });
+
+  it("requires the caller to say which kind of session it mounts", () => {
+    // @ts-expect-error — `freeRow` is a required prop of ConnectedSurfaceProps
+    const missing: ConnectedSurfaceProps = {
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      session: session(),
+      onEnded: () => undefined,
+    };
+    expect(missing).toBeDefined();
   });
 });

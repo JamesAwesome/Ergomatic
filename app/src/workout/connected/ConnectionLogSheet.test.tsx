@@ -176,6 +176,7 @@ function renderSurface(overrides: Partial<MonitorSession> = {}) {
   const current = session(overrides);
   const view = render(
     <ConnectedSurface
+      freeRow={false}
       phases={FIXTURE.phases}
       program={FIXTURE.program}
       session={current}
@@ -350,6 +351,7 @@ describe("the connection log sheet", () => {
     // The machine keeps talking; the sheet does not re-read.
     view.rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={session({

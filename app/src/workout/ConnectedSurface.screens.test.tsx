@@ -359,6 +359,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
   assertFramePossible(fixture, session.frame!);
   const view = render(
     <ConnectedSurface
+      freeRow={false}
       phases={fixture.phases}
       program={fixture.program}
       session={session}

@@ -292,6 +292,12 @@ export interface ConnectedSurfaceProps {
   program: WorkoutProgram;
   /** The live hook value, owned by the interstitial above. */
   session: MonitorSession;
+  /** Phase JR PR 2: this session is the machine's own free row. REQUIRED —
+   *  every caller says which kind of session it is mounting, the same rule
+   *  `SurfaceModelInput` applies to `status`/`linkLost` and for the same
+   *  laundering reason. Threaded straight into the model; this component's
+   *  own free-row branch is the pane control (a free row ships no GRID). */
+  freeRow: boolean;
   /** The session is over (End, or the machine got there first): route to
    *  the post-session flow. See this file's header on the mount decision —
    *  this callback is expected to navigate, and that navigation is what
@@ -303,6 +309,7 @@ export default function ConnectedSurface({
   phases,
   program,
   session,
+  freeRow,
   onEnded,
 }: ConnectedSurfaceProps) {
   const [pane, setPane] = useState<PaneId>(() => loadLastPane());
@@ -370,7 +377,15 @@ export default function ConnectedSurface({
    *  `choosePane` directly, never `handleControlPress` — a swipe must
    *  never count towards the triple-tap gesture (the old handler's own
    *  note, carried over: `registerTap` is a control-press-only concern). */
-  useSurfaceSwipe(surfaceRef, { pane, blocked: logOpen, onChange: choosePane });
+  // Phase JR PR 2: the swipe is the control's gesture twin, so a free row
+  // blocks it the same way it drops the control — otherwise a swipe would
+  // reach the GRID the control no longer offers, and persist that choice
+  // into the rower's next programmed session.
+  useSurfaceSwipe(surfaceRef, {
+    pane,
+    blocked: logOpen || freeRow,
+    onChange: choosePane,
+  });
 
   /** A control press does BOTH things, always: it selects the pane and it
    *  counts towards the diagnostics gesture. Three presses on the grid
@@ -581,6 +596,7 @@ export default function ConnectedSurface({
     deviceName: session.deviceName,
     actuals: session.actuals,
     previousElapsedSeconds,
+    freeRow,
   });
   // The comparison guard is what makes this SAFE to call during render
   // (React docs, "Adjusting state during rendering"): `setState` bails out
@@ -682,8 +698,12 @@ export default function ConnectedSurface({
       </div>
       {model.stale && <LostBanner kept={model.measuredIntervals} />}
       <div className="connected-surface-body">
-        {pane === "live" && <PaneLive model={model} />}
-        {pane === "grid" && <PaneGrid model={model} />}
+        {/* Phase JR PR 2: a free row ALWAYS renders LIVE, whatever
+            `loadLastPane()` restored — the persisted pane choice belongs to
+            programmed sessions, and GRID cannot exist for a row with no
+            intervals. See the control's own suppression comment below. */}
+        {(pane === "live" || freeRow) && <PaneLive model={model} />}
+        {pane === "grid" && !freeRow && <PaneGrid model={model} />}
       </div>
       {/* End's old footer slot survives as the frozen block's home, but its
           MECHANISM changed under connected-axes 2a (task 5) — this comment
@@ -724,7 +744,17 @@ export default function ConnectedSurface({
           of DOM/paint order, so this does not disturb the tab order below
           (`ConnectedSurface.test.tsx`/`e2e/screenshots.spec.ts` pin
           `End → scroller → control halves` in both orientations). */}
-      <SegmentedControl active={pane} onSelect={handleControlPress} />
+      {/* Phase JR PR 2 (Gate 0): NO control on a free row, not a disabled
+          one. The grid pane tabulates intervals and a free row has none —
+          the machine's auto-splits are refused at the record, deliberately
+          — so the control would be a one-cell segmented control, which is
+          not a control. The pane state above still initialises from
+          `loadLastPane()`, so `paneBody` also forces LIVE for a free row:
+          a rower whose last programmed session ended on GRID must not open
+          a free row onto a pane that cannot exist for it. */}
+      {!freeRow && (
+        <SegmentedControl active={pane} onSelect={handleControlPress} />
+      )}
       {logOpen && (
         <ConnectionLogSheet
           deviceCaption={model.deviceCaption}

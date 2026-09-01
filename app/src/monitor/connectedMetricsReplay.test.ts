@@ -395,6 +395,7 @@ describe("connected metrics — replay-based exit criteria (session-2-wu-4unequa
         frame: sample.frame,
         deviceName: DEVICE,
         actuals: [],
+        freeRow: false,
       });
 
       const expected = expectedSessionMeters(reading);
@@ -455,6 +456,7 @@ describe("connected metrics — replay-based exit criteria (session-2-wu-4unequa
         frame: sample.frame,
         deviceName: DEVICE,
         actuals: [],
+        freeRow: false,
       });
       expect(model.avg.absent).toBe(false);
       expect(model.avg.display).toBe(fmtSplit(sample.frame.splitAvgPace!));
@@ -486,6 +488,7 @@ describe("connected metrics — replay-based exit criteria (session-2-wu-4unequa
         frame: sample.frame,
         deviceName: DEVICE,
         actuals: [],
+        freeRow: false,
       });
       expect(model.avg.absent).toBe(false);
       expect(model.avg.display).toBe(fmtSplit(sample.frame.splitAvgPace!));
@@ -519,6 +522,7 @@ describe("connected metrics — replay-based exit criteria (session-2-wu-4unequa
         frame: sample.frame,
         deviceName: DEVICE,
         actuals: [],
+        freeRow: false,
       });
       expect(model.avg.absent).toBe(true);
       expect(model.avg.display).toBe("—");

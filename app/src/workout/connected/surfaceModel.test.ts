@@ -243,6 +243,7 @@ function model(over: Partial<SurfaceModelInput> = {}) {
     deviceName: DEVICE,
     actuals: [],
     ...over,
+    freeRow: false,
   });
 }
 
@@ -435,6 +436,7 @@ describe('status plumbs through, non-nullable — the `?? "live"` laundering is 
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     // If this suppression were ever exercised for real — a caller that
     // bypasses the type system, not one that fails to compile — the result
@@ -484,6 +486,7 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
       }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
 
     expect(m.rate.display).toBe("0");
@@ -563,6 +566,7 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
       }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     const activeRow = m.grid.rows[m.grid.activeIndex]!;
     expect(activeRow.index).toBe(0);
@@ -618,6 +622,7 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
       }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     const activeRow = m.grid.rows[m.grid.activeIndex]!;
     expect(activeRow.state).toBe("active");
@@ -634,6 +639,7 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
       frame: frame({ intervalIndex: 0 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(
       liveModel.grid.rows[liveModel.grid.activeIndex]!.countdown,
@@ -664,6 +670,7 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
       }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     // `totalLeftSeconds` died off `SurfaceModel` (CR2 spec 3 Task 4, spec
     // §3 fate table) — `totalLeftDisplay` is the only surviving carrier of
@@ -1013,6 +1020,7 @@ function armedNeverRowed(over: Partial<SurfaceModelInput> = {}): SurfaceModel {
     deviceName: DEVICE,
     actuals: [],
     ...over,
+    freeRow: false,
   });
 }
 
@@ -1202,6 +1210,7 @@ describe("READY (design spec §2D): the armed branch of intervalLabelShort", () 
       }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(m.intervalLabelShort).toBe("1 OF 5 · READY");
   });
@@ -1372,6 +1381,7 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
       }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     // Hardcoded, not `WORK ${fmtSplit(work.targetSplit)}` — same
     // anti-tautology reasoning as the property rows above.
@@ -1385,6 +1395,7 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
       frame: frame({ intervalIndex: 0 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     // The ordinary (non-armed) formula at interval 0 names the REST that
     // follows the first work phase, not the work phase itself — the exact
@@ -1439,6 +1450,7 @@ describe("elapsedSeconds: the model's own numeric elapsed (Task 3's progress bar
       }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(m.elapsedSeconds).toBe(0);
     // Not armed: the ordinary (EST LEFT) formula still applies — a
@@ -1622,6 +1634,7 @@ describe("live", () => {
       }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(EFFORT_MIN.phases[1]!.targetKind).toBe("effort");
     // EXACT, same reason as `TimerTargets.test.tsx`'s twin (close-out
@@ -1649,6 +1662,7 @@ describe("live", () => {
       frame: frame({ intervalIndex: 0 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(numeric.targetSplit.main).toBe("2:14.0"); // 6k 122 + 12
     expect(numeric.targetSplit.absent).toBe(false);
@@ -1662,6 +1676,7 @@ describe("live", () => {
       frame: frame({ intervalIndex: 0, currentSplit: 100 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(EFFORT_MAX.phases[0]!.targetKind).toBe("effort");
     expect(allOut.targetSplit.main).toBe("ALL OUT");
@@ -1785,6 +1800,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       frame: frame({ intervalIndex: 0, state: "rowing", splitAvgPace: 95 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(m.avg.display).toBe("1:35.0");
     expect(m.avg.judgement).toBe("within");
@@ -1813,6 +1829,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 90 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(m.avg.judgement).toBe("within");
     expect(m.avg.absent).toBe(false);
@@ -1850,6 +1867,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       frame: frame({ intervalIndex: 0, state: "rowing", splitAvgPace: 150 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(m.avg.display).toBe("2:30.0");
     expect(m.avg.judgement).toBe("within");
@@ -1916,6 +1934,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 200 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     // Shown, and plain ink: the finished opener is an EFFORT piece, so it
     // has no numeric target to judge the average against.
@@ -1949,6 +1968,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 200 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(m.avg.display).toBe("—");
     expect(m.avg.judgement).toBe("within");
@@ -2348,6 +2368,7 @@ describe("degenerate inputs", () => {
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     // Still the DASH here, and this is the ONLY case that keeps it: with
     // no phase there is no word to show. Everywhere else the slot names the
@@ -2484,6 +2505,7 @@ describe("every interval is numbered", () => {
       frame: frame({ intervalIndex: 0, state: "resting" }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(m.intervalLabelShort).toBe("1 OF 5 · REST");
     // …and a rest inside a later interval keeps its own number too.
@@ -2506,6 +2528,7 @@ describe("every interval is numbered", () => {
         frame: frame({ intervalIndex: i }),
         deviceName: DEVICE,
         actuals: [],
+        freeRow: false,
       });
       expect(m.intervalLabelShort).toBe(
         `${i + 1} OF ${NO_WARMUP.program.intervals.length} · WORK`,
@@ -2593,6 +2616,7 @@ describe("boundaries: where the intervals actually are", () => {
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     const bareOfN = Number(/ OF (\d+) /.exec(bare.intervalLabelShort)![1]);
     expect(bare.boundaries.seconds).toHaveLength(bareOfN - 1);
@@ -2666,6 +2690,7 @@ describe("boundaries: where the intervals actually are", () => {
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(m.boundaries.seconds).toStrictEqual([300, 540]);
   });
@@ -2682,6 +2707,7 @@ describe("boundaries: where the intervals actually are", () => {
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(m.boundaries).toStrictEqual({
       seconds: [],
@@ -3156,6 +3182,7 @@ describe("EST LEFT (Phase LL) — monotonicity across a whole real capture (desi
         deviceName: SESSION_2_DEVICE,
         actuals: [],
         previousElapsedSeconds,
+        freeRow: false,
       });
       expect(
         m.elapsedSeconds,
@@ -3206,6 +3233,7 @@ describe("EST LEFT (Phase LL) — monotonicity across a whole real capture (desi
         deviceName: SESSION_2_DEVICE,
         actuals: [],
         previousElapsedSeconds,
+        freeRow: false,
       });
       elapsedAt.set(s, m.elapsedSeconds);
       previousElapsedSeconds = m.elapsedSeconds;
@@ -3426,6 +3454,7 @@ function handoverHolds(
       deviceName: DEVICE,
       actuals: [],
       previousElapsedSeconds,
+      freeRow: false,
     });
     previousElapsedSeconds = m.elapsedSeconds;
     return { tMs: s.tMs, est: m.elapsedSeconds, state: s.frame.state };
@@ -3543,6 +3572,7 @@ describe("EST LEFT (Phase LL) — the DISTANCE-work limit, measured on a replay 
         deviceName: DEVICE,
         actuals: s.actuals,
         previousElapsedSeconds,
+        freeRow: false,
       });
       expect(
         m.elapsedSeconds,
@@ -3551,5 +3581,82 @@ describe("EST LEFT (Phase LL) — the DISTANCE-work limit, measured on a replay 
       prev = m.elapsedSeconds;
       previousElapsedSeconds = m.elapsedSeconds;
     }
+  });
+});
+
+/**
+ * PHASE JR PR 2, TASK 4 — the free-row model.
+ *
+ * Gate 0's own change list, and nothing else: `JUST ROW` where a programmed
+ * row reads `2 OF 5 · WORK`; `Free` in both target slots; no UP NEXT; ink
+ * heroes, never a judged colour. A free row's phases and program are both
+ * empty, so the TARGETS null out on their own — the branches under test are
+ * the ones that would otherwise render a DASH or a phase word where the
+ * board says `Free` and `JUST ROW`.
+ */
+describe("the free-row model", () => {
+  function freeRowModel(over: Partial<SurfaceModelInput> = {}) {
+    return buildSurfaceModel({
+      phases: [],
+      program: { intervals: [] },
+      status: "live",
+      linkLost: false,
+      frame: frame({ intervalIndex: null, splitAvgPace: 141 }),
+      deviceName: DEVICE,
+      actuals: [],
+      freeRow: true,
+      ...over,
+    });
+  }
+
+  it("labels the row JUST ROW, not a phase word", () => {
+    const m = freeRowModel();
+    expect(m.intervalLabelShort).toBe("JUST ROW");
+  });
+
+  it("fills both target slots with Free, present rather than absent", () => {
+    const m = freeRowModel();
+    // `absent: false` matters as much as the word: the absent flag is what
+    // paints a slot in the dimmed no-reading treatment, and `Free` is a
+    // statement, not a missing value.
+    expect(m.targetSplit).toStrictEqual({
+      main: "Free",
+      sub: null,
+      absent: false,
+    });
+    expect(m.targetRate).toStrictEqual({ main: "Free", absent: false });
+  });
+
+  it("offers no UP NEXT and no remaining estimate — there is no next and no goal", () => {
+    const m = freeRowModel();
+    expect(m.upNext).toBe("");
+    expect(m.hasRemainingEstimate).toBe(false);
+  });
+
+  it("judges nothing: both heroes read plain ink", () => {
+    const m = freeRowModel();
+    // `"within"` IS plain ink in this file's vocabulary (`judgedValue` with
+    // a null target always lands there; `timer-card-actual-within` paints
+    // no colour) — with no target, nothing can be faster or slower than
+    // anything, and `"stale"` is the one member that could still override
+    // it, so the link-up case is what this pins.
+    expect(m.pace.judgement).toBe("within");
+    expect(m.rate.judgement).toBe("within");
+  });
+
+  it("carries the flag through, so the panes can branch without re-deriving it", () => {
+    expect(freeRowModel().freeRow).toBe(true);
+    expect(
+      buildSurfaceModel({
+        phases: FIXTURE.phases,
+        program: FIXTURE.program,
+        status: "live",
+        linkLost: false,
+        frame: frame(),
+        deviceName: DEVICE,
+        actuals: [],
+        freeRow: false,
+      }).freeRow,
+    ).toBe(false);
   });
 });

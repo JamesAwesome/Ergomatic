@@ -133,6 +133,7 @@ function gridRowsElement(): HTMLElement {
     frame: null,
     deviceName: "PM5 432331249",
     actuals: [],
+    freeRow: false,
   });
   const { container } = render(createElement(PaneGrid, { model }));
   const rows = container.querySelector<HTMLElement>(

@@ -188,6 +188,24 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
             elapsedSeconds={model.elapsedSeconds}
           />
         )}
+        {/* Phase JR PR 2 (Gate 0): ONE bar, static and full. A free row has
+            no goal to be a fraction of, so a filling bar would count toward
+            nothing — but the meters counter keeps its shipped place at the
+            row's right end, and a counter floating beside NO bar reads as a
+            layout break. The single full segment is the bar saying "one
+            continuous piece", the same honesty as `Free` in the target
+            slots. `aria-hidden` like the real bar: decorative, its facts
+            live in the numbers beside it. */}
+        {model.freeRow && (
+          <div className="connected-progress" aria-hidden="true">
+            <div className="connected-progress-track">
+              <div
+                className="connected-progress-seg connected-progress-seg-done"
+                style={{ flexGrow: 1, flexBasis: 0, flexShrink: 0 }}
+              />
+            </div>
+          </div>
+        )}
         {/* NOTHING AT ALL before the first frame (design spec: "Absent
             until the first frame arrives; 0m thereafter") — the same
             "absent, not blank" idiom this file already uses for
@@ -327,15 +345,32 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           element. Class names are e2e-load-bearing (task brief):
           `connected-band`, `connected-band-upnext`,
           `connected-band-cell`. */}
-      <div className="connected-band">
-        <div className="connected-band-upnext">
-          {/* Portrait-only label (§2C); landscape hides it (§2A: "NO
+      {/* Phase JR PR 2 (Gate 0): the free row's band keeps ONE cell,
+          ELAPSED, and drops the other two. UP NEXT has no next to name and
+          EST LEFT has no estimate to make — but the slot itself earns its
+          keep, because elapsed is one of the two numbers this row stores
+          and without it the surface never shows the rower the time at all.
+          It takes EST LEFT's own cell classes, so it sits where a rower's
+          eye already looks for a time figure. */}
+      {model.freeRow ? (
+        <div className="connected-band">
+          <div className="connected-band-cell">
+            <span className="connected-band-cell-label">ELAPSED</span>
+            <span className="connected-band-cell-value">
+              {model.elapsedDisplay}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="connected-band">
+          <div className="connected-band-upnext">
+            {/* Portrait-only label (§2C); landscape hides it (§2A: "NO
               label") — CSS toggle, not a second markup, the same
               orientation-blind-component rule `UpNextStrip.tsx` already
               established for this exact string. */}
-          <span className="connected-band-upnext-label">UP NEXT</span>
-          <span className="connected-band-upnext-value">
-            {/* LANDSCAPE-ONLY "NEXT · " PREFIX (queue item 7, James's
+            <span className="connected-band-upnext-label">UP NEXT</span>
+            <span className="connected-band-upnext-value">
+              {/* LANDSCAPE-ONLY "NEXT · " PREFIX (queue item 7, James's
                 ruling: uniform beats special-casing, so the prefix is
                 unconditional — "NEXT · FINISH" as much as "NEXT · WORK
                 1500m · 2:13.0 @24"). Always in the DOM, hidden by
@@ -343,29 +378,30 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
                 query — portrait's OWN stacked `UP NEXT` label above
                 already names this line, so showing this prefix there too
                 would double-label it. */}
-            <span className="connected-band-upnext-next">NEXT · </span>
-            {/* Phase CS Item B (connected-polish design spec): the
+              <span className="connected-band-upnext-next">NEXT · </span>
+              {/* Phase CS Item B (connected-polish design spec): the
                 then-clause dies everywhere — one richer phase, not two.
                 `SurfaceModel.thenNext` is gone from the interface entirely,
                 so there is no second value left to append here; the CSS
                 rule that used to render the word and the frozen
                 `connected-*.html` fixtures that carried it are gone too
                 (task 2, named in the spec's blast radius). */}
-            {model.upNext}
-          </span>
-        </div>
-        {/* Same guard as the progress bar above — EST LEFT is founded on
-            the identical estimate, so an unpriced remainder hides both or
-            neither. */}
-        {model.hasRemainingEstimate && (
-          <div className="connected-band-cell">
-            <span className="connected-band-cell-label">EST LEFT</span>
-            <span className="connected-band-cell-value">
-              {model.totalLeftDisplay}
+              {model.upNext}
             </span>
           </div>
-        )}
-      </div>
+          {/* Same guard as the progress bar above — EST LEFT is founded on
+            the identical estimate, so an unpriced remainder hides both or
+            neither. */}
+          {model.hasRemainingEstimate && (
+            <div className="connected-band-cell">
+              <span className="connected-band-cell-label">EST LEFT</span>
+              <span className="connected-band-cell-value">
+                {model.totalLeftDisplay}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

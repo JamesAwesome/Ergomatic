@@ -3384,9 +3384,13 @@ export function useMonitorSession(
         // never pulled" case is unchanged by this task).
         if (driver === null) return;
         const phase = stateRef.current.phase;
+        // Phase JR PR 2: same free-row exclusion as `cancel()`'s own armed
+        // predicate, same reasoning — an unmount at `ready` on a free row
+        // must not terminate the machine's own row.
         if (
           !alreadyTerminated &&
-          (phase === "programming" || phase === "ready")
+          (phase === "programming" || phase === "ready") &&
+          identityRef.current.mode !== "justrow"
         ) {
           bestEffort(
             driver.terminate().finally(() => bestEffort(driver.disconnect())),
@@ -4268,8 +4272,16 @@ export function useMonitorSession(
     // open until `live`). The handoff's "nothing lost" is amended in
     // DEVIATIONS accordingly: nothing OF OURS is lost, and the erg is left
     // terminated rather than armed with an orphan.
+    // Phase JR PR 2: a free row is EXCLUDED from the terminate — the line
+    // above says why it exists ("it terminates what we armed") and a free
+    // row armed nothing, so the terminate would reach the machine's OWN
+    // row. Worst case is a rower who began pulling before the motion gate
+    // fired (~5 frames at the walk's measured 1 Hz): their row dies on the
+    // erg because they tapped Cancel in an app that was only watching.
     const armed =
-      driver !== null && (phase === "programming" || phase === "ready");
+      driver !== null &&
+      (phase === "programming" || phase === "ready") &&
+      identityRef.current.mode !== "justrow";
     if (armed) {
       try {
         await driver.terminate();

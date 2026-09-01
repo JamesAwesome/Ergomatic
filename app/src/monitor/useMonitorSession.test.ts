@@ -11472,6 +11472,36 @@ describe("beginFreeRow (the free row's own arm)", () => {
     expect(run?.verificationBytes).toBeDefined();
   });
 
+  /**
+   * CANCEL MUST NOT TERMINATE A ROW WE NEVER PROGRAMMED (the antagonist
+   * pass's own smaller finding, landed here because the free-row arm is
+   * what makes it reachable). `cancel()`'s armed predicate is "phase is
+   * programming or ready", and its own comment says why it terminates
+   * there: "it terminates what we armed". A free row sits at `ready`
+   * having armed NOTHING — and the terminate would reach the machine's
+   * own row. Worst case is a rower who began pulling before the motion
+   * gate fired (up to ~5 frames at the walk's measured 1 Hz): their row
+   * dies on the erg because they tapped Cancel in an app that was only
+   * ever watching.
+   */
+  it("cancel() at ready sends NO terminate on a free row — we armed nothing", async () => {
+    const { result, transport } = harness(freeRowScript());
+    await connect(result);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.phase).toBe("ready");
+    const writesAtReady = transport.wireWrites;
+
+    await act(async () => {
+      await result.current.cancel();
+      await flush();
+    });
+
+    expect(transport.wireWrites).toBe(writesAtReady);
+    expect(transport.disconnects).toBe(1);
+  });
+
   it("is a no-op while a programmed session is already under way", async () => {
     const { result, fake } = harness({
       program: LIBRARY.program,
