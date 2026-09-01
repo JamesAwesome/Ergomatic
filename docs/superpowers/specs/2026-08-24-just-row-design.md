@@ -866,8 +866,24 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
 ## Release call (PM gate, recorded)
 
 No tag on PR 0a/0b or PR 1 alone (instrument no tester can reach; stored
-fields nothing renders — but PR 1 still tags for the R-A read-side
-ordering, as a patch-level read-side tag). PR 2 is MINOR and the first
+fields nothing renders).
+
+**The "PR 1 still tags at patch level for R-A" clause is WITHDRAWN (PM
+gate, 2026-09-01, reversing that gate's own phase-open call).** R-A protects
+a row written by a NEW build reaching an OLD one; the only producer of a
+null-type row is PR 2's own door, which ships in a build that already
+carries the read side, so the skew window is empty — and when it does open
+the failure is a padded empty badge, not a wrong number or a lost record. A
+dedicated no-op TestFlight build, its notes PR and an `ios:release` run are
+real cost for that.
+
+**What R-A actually needs here is an ORDERING, not a tag: PR 1's read side
+must ship in a tag strictly EARLIER than PR 2's writer, and PR 2's own PM
+gate checks it.** Free to enforce, and given PR 2 is L and sits behind RC's
+wave, a tag will intervene on its own. `v0.31.0` was cut on 2026-09-01
+before PR 1 could merge, so PR 1 falls inside `v0.31.0..main` and the next
+tag's RF15 range check accounts for it with "no note needed: nothing
+tester-visible". PR 2 is MINOR and the first
 tag testers can falsify; its notes owe three clauses: the feature in one
 sentence, **that a Just Row never advances your plan**, and that these
 rows carry no targets and no type chip.

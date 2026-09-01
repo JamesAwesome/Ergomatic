@@ -3798,3 +3798,60 @@ does not match these numbers._
 - **Where a reviewer has sent a PR back twice for one class, the gate's first
   action is a repo-wide grep of that class's phrase** — it took one command
   and it was the only finding this gate produced.
+
+## Phase JR PR 1 final gate, 2026-09-01 (#255, TRIAD — stored shapes)
+
+- **R-A ("read-side-first") DOES NOT MEAN "the read side gets its own tag."
+  Reversing my own phase-open call.** The 2026-08-24 entry said PR 1 "still
+  tags READ-SIDE-FIRST at patch level." Tested at the final gate and
+  withdrawn: the only producer of a null-type row is PR 2's own door, which
+  ships in a build that already contains the read side, so the skew window is
+  empty — and even when it opens the failure is a padded empty badge, not a
+  wrong number. A pre-PR-1 build also already accepts `mode: "justrow"`
+  through unknown-key tolerance, so that field gains nothing from shipping
+  early either. **The invariant R-A actually needs is an ORDERING, not a tag:
+  the read side must ship in a tag strictly earlier than the writer, checked
+  at the writer's own gate.** Free to enforce; a dedicated no-op TestFlight
+  build is not. What made it concrete: `v0.31.0` was cut hours before PR 1
+  could merge, so "ride the next tag" was available at zero cost.
+- **A PR claiming "changes nothing a rower can see" is asserting a NEGATIVE
+  ABOUT STORED ROWS, and this repo counts those.** PR 1's TIER B1 fallback
+  (`?? row.avgSplitSeconds`) and its badge fallback both alter how EXISTING
+  rows render, and TIER B1 is the branch every prod row with a work pair
+  takes (machine fields were null on all sixteen — RF24, 2026-08-28). The
+  pre-existing empty-steps test passed only because its fixture defaulted
+  `avgSplitSeconds: null`; a green suite proved nothing about the population.
+  **Two SQL counts settle it, and CLAUDE.md's design gate ("a number change
+  is a design question too") turns on the answer.** Generalise: an
+  invisibility claim over stored data is a measurement, not a reading of the
+  diff.
+- **CRITERIA CLAIMED BY OMISSION.** #255's body named criteria 4 and 5 as
+  unattempted, which reads as "1, 2, 3, 6, 7 are done." Criterion 3 had no
+  assertion in the PR (it rides a pre-existing `rows.length === 0` return),
+  criterion 6 is PR 2's, and criterion 5 was declined on criterion 4's
+  reason. **Require an explicit one-line disposition for EVERY frozen
+  criterion — satisfied / satisfied-by-existing-gate / deferred to PR N —
+  never a list of exceptions.** Cheap to write, and the omissions were real.
+- **"The TRIAD pass covers this record's shape" is a circular reason for
+  parking a field early.** `mode?: "justrow"` shipped in PR 1 with no writer
+  and no reader; the PR was honest about it, and it is harmless. But a field
+  with no producer cannot yet be wrong, so the gate meant to scrutinise it
+  has nothing to bite. Accepted here on cost grounds (24 lines; splitting
+  costs more). **Do not cite it as precedent** — the test stays "does an
+  earlier build need to TOLERATE this shape", and for `mode` the answer was
+  no.
+- **RF24 caught live, by James, at the first review round.** Every new server
+  test called `logs.create()` directly, below the POST validator — the plan
+  itself had written the warning ("name that producer… it is what stops every
+  gate seeding past the break") and the implementer did not close it. The fix
+  (`freeRow.integration.test.ts`, POST → GET on real Postgres) is what exit
+  criterion 2's "proven on a build that predates PR 2's writer" clause was
+  for. **A spec criterion that names its supported producer is doing real
+  work; the plan restating it is not the same as a test entering above it.**
+- **PR 2 must NOT split at the recovery boundary.** Ruling 9's F2 correction
+  (the same day PR 1 opened) grew PR 2 by both `Today.tsx` gates and a new
+  log door. Splitting "surface now, recovery later" ships an interval in
+  which a walked-away Just Row is discard-only or invisible — the exact
+  defect the ruling found. One safely-deployable end state, not two. **PR 2
+  gets a fresh PM slate pass before implementation; its "L" sizing predates
+  the correction.**

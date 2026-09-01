@@ -18,10 +18,15 @@ const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
  *  computed, not eyeballed (recurring failure 6): `--on-color` #fffdf7 on
  *  `--ink-3` #57544c = **7.43:1**, comfortably over the 4.5:1 AA floor.
  *
- *  Before this, an unknown string produced `var(--type-JustRow)` — not a
- *  declared property, so the whole `background` declaration was dropped at
- *  parse time and the label rendered at 1.110:1 on `--page` (1.000:1 on
- *  `--surface`): invisible text, not a fallback. */
+ *  Before this, an unknown string produced **`var(undefined)`** — the
+ *  lookup below is keyed by the four literals, so indexing it with any
+ *  other string yields `undefined` and the template interpolates that
+ *  word. Either way it is not a declared custom property, so the whole
+ *  `background` declaration was dropped at parse time and the label
+ *  rendered at 1.110:1 on `--page` (1.000:1 on `--surface`): invisible
+ *  text, not a fallback. (An earlier version of this comment said
+ *  `var(--type-JustRow)`. The conclusion was right and the mechanism was
+ *  wrong, which reads as evidence — PM gate, 2026-09-01.) */
 const UNKNOWN_TYPE_VAR = "--ink-3";
 
 /**
