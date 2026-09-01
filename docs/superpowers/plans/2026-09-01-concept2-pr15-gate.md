@@ -302,7 +302,17 @@ credential fact is the reason to expect it plausibly DOES survive, not
 proof that it does; the walk card carries an optional probe for exactly
 this, §4). Web is comparatively straightforward — ordinary same-origin
 cookie behavior in a normal browser tab, no cross-app jar question at
-all. Needs the same by-id user lookup as (b)/(c)/(d)-detection, plus the
+all — **but not attribute-free: the arriving `/callback` request is a
+cross-site TOP-LEVEL GET (the browser was just on `concept2.com`,
+navigating back to us), so `SameSite` is the load-bearing attribute for
+the web half specifically** — `SameSite=Strict` would NOT send the
+`/start` cookie on that navigation at all, while `SameSite=Lax` does
+(Lax's whole exemption is top-level, safe-method navigations). Our
+existing `erg_session` cookie is already issued `sameSite: "lax"`
+(`server/auth/cookies.ts:20-29`), but this new continuation cookie is a
+SEPARATE cookie and must be issued `Lax` just as deliberately — inheriting
+it by copying `sessionCookie()`'s shape is not automatic just because the
+precedent exists. Needs the same by-id user lookup as (b)/(c)/(d)-detection, plus the
 cookie-issuing logic and the callback-side check; no `pending` stored
 state, no confirm-token route, no GC beyond `/start` cookies' own
 `Max-Age`.
