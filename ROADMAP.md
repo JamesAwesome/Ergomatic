@@ -322,9 +322,8 @@ rower's work silently.
       **§2 SHIPS in Wave F PR 2** (the ring chunk; PR number filled in at
       merge): a three-slot history beside the single perishable key (the last
       three LOGICAL connected sessions' exports all survive at once, one entry
-      per Connect however many teardown passes it takes,
-      `src/monitor/sessionLogHistory.ts`) and the ungated door that lists and
-      copies them (You → DIAGNOSTICS → Monitor logs,
+      per logical session, `src/monitor/sessionLogHistory.ts`) and the ungated
+      door that lists and copies them (You → DIAGNOSTICS → Monitor logs,
       `src/you/Diagnostics.tsx`/`MonitorLogs.tsx`, Gate 0 approved 2026-09-01) —
       exactly the fix that would have saved the pocketed-phone ring, now in
       place for the next one. The same PR also ships §3 (the resume-edge frame
