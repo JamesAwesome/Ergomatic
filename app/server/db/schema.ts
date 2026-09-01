@@ -332,7 +332,10 @@ export const sessionLogs = pgTable(
     // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes):
     // all four additive-optional, no default, no backfill — every
     // existing row reads them back null. c2ResultId: C2's own result id,
-    // written ONLY after C2's 2xx (a 409 leaves it null). c2UserId: WHICH
+    // written when C2 acknowledges the row — a 2xx, or a 409 whose body
+    // names the colliding id (RF25's durable-recovery write; James's
+    // ruling on #249's REVISE overrides this comment's earlier "written
+    // ONLY after C2's 2xx (a 409 leaves it null)"). c2UserId: WHICH
     // Concept2 account accepted it — the sent state renders only when
     // this matches the live link's (anchor F8). Both server-written at
     // upload, never client input.

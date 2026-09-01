@@ -193,9 +193,11 @@ so we build the RFC 8252 shape:
      surface at mint time.
    - Attempt rows expire (15 min) and are single-use; expiry/garbage
      collection is the server's, not a cron.
-4. **Link routes:** `GET /api/concept2/link` → `{linked, weightClass}`
-   (never tokens); `DELETE /api/concept2/link` → deletes the row (unlink
-   is local, V5).
+4. **Link routes:** `GET /api/concept2/link` → `{linked, weightClass,
+   c2UserId}` (never tokens — `c2UserId` added at James's #249 REVISE:
+   PR2's sent-state contract and its View-on-Concept2 link-out both need
+   the linked account's numeric id); `DELETE /api/concept2/link` →
+   deletes the row (unlink is local, V5).
 5. **Upload route** — `POST /api/concept2/results/:logId` (authed,
    ownership-checked). Loads the caller's `session_logs` row, applies the
    eligibility predicate (below), builds the C2 payload from the stored
