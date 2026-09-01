@@ -5,11 +5,14 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    // v0.31.0 (2026-09-01): range v0.30.0..main = 12 merges, accounted per
+    // v0.31.0 (2026-09-01): range v0.30.0..main = 13 merges, accounted per
     // RF15 (`git log v0.30.0..origin/main --oneline`, no --merges). Only
     // #248 is tester-visible; #246's JustRow observer is dev-gated (its
-    // own dist-grep needle proves production absence) and the other ten
-    // are docs/roadmap/spec. Item 2 is the disclosure the PM TRIAD gate
+    // own dist-grep needle proves production absence); #249's Concept2
+    // server broker is server-only and dark behind C2_LINK_ENABLED
+    // (merged after these notes were drafted — James flipped the order —
+    // its client surface arrives with a later Wave E PR and gets its note
+    // then); the other ten are docs/roadmap/spec. Item 2 is the disclosure the PM TRIAD gate
     // ruled owed "in the rower's words" — the in-flight interval's metres
     // were ALREADY unrecoverable before this release (IntervalActual is
     // written at a boundary); the note must not read as a new loss. Item 3
