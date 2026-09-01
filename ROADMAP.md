@@ -202,8 +202,8 @@ rower's work silently.
       **SHIPS as the live-drop PR from spec §1, 2026-08-31** — all five
       tasks committed (union widened end to end + migration; the hook's
       live arm publishing `closeReason`; the real-driver seam test; the
-      two Gate-0 surfaces; this composition drive-through). PR number
-      lands here once the controller opens it.
+      two Gate-0 surfaces; this composition drive-through). **PR #248**,
+      PM final gate GO-WITH-CONDITIONS 2026-08-31.
 - [ ] **The pocketed-phone window's two co-producers. RE-SCOPED on evidence
       2026-08-31 — one is not a defect.** `pause-declared` at 66 spm while
       rowing is real and stays here, owned by
@@ -1005,8 +1005,12 @@ X" is a real disposition — most of these are single files.
   (link-lost/interrupted arrivals already show it); the Gate-0 artifact's
   mock drew a nav bar where the real screen has the eyebrow, so the
   juxtaposition was invisible at the gate. James decides: keep, or suppress
-  the eyebrow on a dropped arrival (that change is itself Gate-0 copy).
-  Found at PR 1's final whole-branch review, 2026-08-31.
+  the eyebrow (that change is itself Gate-0 copy). **Scoped at the PM gate:
+  a suppression must cover all THREE arrival types that did not complete —
+  dropped, link-lost, and interrupted — or the fix ships a screen that
+  tells the truth on drops and keeps lying on the other two.** Found at
+  PR #248's final whole-branch review, re-scoped at its PM gate,
+  2026-08-31.
 - **The server's `EndedBy` mirror can be derived, not hand-copied.**
   `server/stores/logs.ts` already imports `../db/schema.js`, so
   `export type EndedBy = (typeof endedByEnum.enumValues)[number]` plus

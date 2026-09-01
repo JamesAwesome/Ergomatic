@@ -3682,3 +3682,64 @@ does not match these numbers._
   rebalance (67 at RC open, 24 on 2026-08-13). First large decrease ever
   recorded here, and it is the archive doing the work rather than execution.
   Roadmap presence **PASS** (spec + ROADMAP section in one commit, `066a36ef`).
+
+## TRIAD final-PR gate, 2026-08-31 (Wave F PR 1 — the live program drop, #248)
+
+- **A Gate-0 artifact that MOCKS a screen's chrome cannot clear that screen's
+  top, and this is RC-24 with a different element.** The artifact's three
+  log-screen frames drew `<div class="e-nav">← Log it</div>` where the real
+  screen has `WORKOUT COMPLETE` + `← DONE`; `grep -c "WORKOUT COMPLETE"` on
+  the artifact returns **0**. So the approved strip was never once seen
+  beneath the eyebrow that contradicts it. The implementer was RIGHT not to
+  fix it (Gate-0 copy on a shared element — #238's precedent), but the
+  disposition under-scoped it: `WORKOUT COMPLETE` already sits above
+  **link-lost and interrupted** arrivals too, so the decision James is being
+  handed covers three arrival types, not one. **At any gate on a NEW surface
+  added to an EXISTING screen, diff the artifact's chrome against the real
+  component's render tree — and when a pre-existing element is surfaced by
+  new work, count its other consumers before framing it as this PR's
+  finding.**
+- **The countable presentation rule fails when a fast-path artefact rides a
+  full-cycle PR.** 274 words above the fold against ~120 — of which **96
+  were a "Risk note (what I'd probe first)"**, an artefact CLAUDE.md
+  requires of *fast-path* PRs where James is the reviewer. This PR had five
+  task reviews and a whole-branch review; the note restated two bullets
+  sitting directly above it. Series: #228 ~270, #230 266, #239 **148**,
+  #248 274. **The check at every gate is "is there a risk note above the
+  fold on a non-fast-path PR" — a one-line lookup, and it was the whole
+  overage.**
+- **"Ship the honest failure now, fix the loss later" is right when the loss
+  already exists — say which.** `Nothing kept.` on a single-interval drop
+  reads as a regression and is not one: `IntervalActual` is written at a
+  boundary, so the in-flight metres were already unrecoverable on the
+  shipped build; the change is silence-plus-stranded-session → closed
+  record plus an explanation plus a usable form. **Ruling: ships, with the
+  limit in the release note in the rower's words ("the number is still on
+  the monitor").** The general test: does withholding the disclosure give
+  the rower back the thing they lost? If not, disclosure is not a downgrade
+  and only the note is owed.
+- **The cross-version check came back CLEAN for the first time in three
+  triad PRs, and that is worth saying out loud.** The shipped v0.30.0
+  client's readers of a stored `endedBy` are all equality/allowlist
+  (`storedSummary.ts:471-472`, `:901`), so a sixth enum value renders as an
+  ordinary unimproved row. Same question that white-screened at the PW
+  nullable ruling and forced a coordinated tag at #238. **Run it every
+  time; the answer varies.**
+- **A committed capture generated before the branch's last commit is a
+  stale record even when its pixels are identical.** #248's PNG predates a
+  fixture index fix (actuals 1/2 → 0/1) that moves which interval row
+  carries the "not measured" dash — below a viewport-only fold, so the
+  frame is unchanged. Confirm with a no-diff `pnpm screenshots` run rather
+  than reasoning about it. (Run by the controller post-gate:
+  `log-monitor-dropped.png` came back no-diff.)
+- **Release: MINOR, v0.31.0, alone.** First tester-visible change since
+  v0.30.0 (`v0.30.0..main` = 5 merges, 4 docs + 1 dev script). **Number
+  collision on file:** the same-day Wave E phase-open gate also reserved
+  v0.31.0 for the Concept2 wave after its PR2 — first to merge takes it,
+  the other moves to v0.32.0. **When two waves are open, a version
+  reservation is a claim, not an allocation; re-check it at the merge, not
+  at the phase open.**
+- **Still n=1 after 3,339 lines: an erg dropping its program mid-row has
+  been observed on exactly one walk.** Same residual #239's gate filed.
+  Forward obligation: the first tester report after this tag gets its
+  record read for `endedBy: "program-dropped"` before anything else.
