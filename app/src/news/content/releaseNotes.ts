@@ -5,6 +5,27 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.32.0 (2026-09-01): range v0.31.0..main = 2 merges, accounted per
+    // RF15 (`git log v0.31.0..origin/main --oneline`, no --merges). #259
+    // is all three items — Phase JR's PR 2, the whole Just Row feature.
+    // No note: #255 (PR 1, the stored shapes — fields nothing rendered
+    // until PR 2, the spec's own release call: "nothing tester-visible").
+    // The three items ARE the spec's frozen notes clauses (release call,
+    // PM gate): the feature in one sentence, that a Just Row never
+    // advances your plan, and that these rows carry no targets and no
+    // type chip. R-A note for the record: James relaxed the read-side-
+    // first tag ordering at #259's merge (the PM's case, their ledger),
+    // so this one tag carries PR 1's read side and PR 2's writer
+    // together.
+    version: "v0.32.0",
+    date: "2026-09-01",
+    items: [
+      "Just row. A JUST ROW button now sits at the top of Today: connect to the erg, pull, and the machine's own free row lands in your log with its time, distance, and average split. End it from the app or press Menu on the erg; either way the numbers are the monitor's own, and a row the app loses mid-link shows up on Today ready to log.",
+      "A Just Row never advances your plan. SESSION n OF 84 does not move when you save one: it is extra rowing, counted as itself.",
+      "These rows carry no targets and no type chip, on purpose. Nothing was prescribed, so there is nothing to hold and no intensity to badge: the log shows the row plain. What you rowed, how long, how far.",
+    ],
+  },
+  {
     // v0.31.0 (2026-09-01): range v0.30.0..main = 13 merges, accounted per
     // RF15 (`git log v0.30.0..origin/main --oneline`, no --merges). Only
     // #248 is tester-visible; #246's JustRow observer is dev-gated (its
