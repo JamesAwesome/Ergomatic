@@ -76,7 +76,10 @@ Availability = `C2_LINK_ENABLED === "1"` AND `C2_CLIENT_ID` AND `C2_CLIENT_SECRE
 
 **Files:**
 - Modify: `server/db/schema.ts` (two tables, one enum, four `session_logs` columns)
-- Create: `drizzle/0017_*.sql` via `pnpm db:generate` (never hand-written)
+- Create: `drizzle/0018_*.sql` via `pnpm db:generate` (never hand-written) —
+  minted as 0017_magical_hobgoblin originally; regenerated to 0018 after
+  PR #248 merged first and took index 17 for its own migration
+  (`0017_fair_whizzer`, `ALTER TYPE ended_by ADD VALUE 'program-dropped'`)
 - Modify: `server/stores/logs.ts` (`LOG_LIST_COLUMNS` + `LogInput` + `create()` for `completedAt`/`tz` — the c2 pair is server-written, never client input)
 - Modify: `server/testing/fakes.ts` (fake logs store mirrors the new columns — `LogInput`, `create()`'s row literal, and the list projection all three)
 - Modify: `server/stores/contracts/storeContracts.ts` (the pin at :1077-1084 asserts `keys(list) === keys(get) − {steps, series, machineSummary} + {machineAvgPaceSecondsPer500m}`; extend the seeded round-trip row to carry the new fields)
@@ -160,7 +163,7 @@ export const concept2AuthAttempts = pgTable("concept2_auth_attempts", {
 - [ ] **Step 4:** `pnpm db:generate` (in `app/`), inspect the generated SQL — additive only (2 CREATE TABLE, 1 CREATE TYPE, 4 ADD COLUMN, no defaults, no data rewrites).
 - [ ] **Step 5:** Add the four columns to `LOG_LIST_COLUMNS` (small scalars — the `endedBy` idiom) and `completedAt`/`tz` to `LogInput` + `create()` (`?? null`, the `deviceName` idiom — in the REAL store, the fake's `create()`, and the fake's row literal). The storeContracts pin derives list-keys from get-keys for the real store; the fake is self-consistent by construction, so:
 - [ ] **Step 6:** Run the integration + contract suites INCLUDING the Docker run (`contracts.real.integration.test.ts` — the fake-only run cannot catch a missed list column) → PASS. `pnpm lint && pnpm typecheck`.
-- [ ] **Step 7: Commit** `feat(c2): concept2_links + auth_attempts tables, four session_logs columns (migration 0017)`.
+- [ ] **Step 7: Commit** `feat(c2): concept2_links + auth_attempts tables, four session_logs columns (migration 0017)`. Regenerated to migration 0018 post-rebase (PR #248 merged first and took index 17).
 
 ### Task 2: `POST /api/logs` accepts `completedAt` + `tz`
 

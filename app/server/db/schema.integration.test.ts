@@ -1262,20 +1262,26 @@ describe("migration 0016: the machine summary columns", () => {
 });
 
 // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD):
-// migration 0017, two new tables (concept2_links, concept2_auth_attempts)
+// migration 0018, two new tables (concept2_links, concept2_auth_attempts)
 // plus four additive-optional session_logs columns (c2_result_id,
-// c2_user_id, completed_at, tz), no default, no backfill. Same
+// c2_user_id, completed_at, tz), no default, no backfill. Regenerated as
+// 0018 (originally minted as 0017_magical_hobgoblin) after PR #248 merged
+// first and took index 17 for its own migration
+// (`0017_fair_whizzer`, `ALTER TYPE ended_by ADD VALUE 'program-dropped'`)
+// — second-merger regenerates, per the standing rule (agent briefing:
+// "Drizzle migrations apply by TIMESTAMP, not journal order"). Same
 // pre/post-migration shape as 0016 above: a legacy row is seeded against a
-// migrations folder capped at 0016, then the real (full) migrate() applies
-// 0017 and both cases below read shared state built once in beforeAll.
-describe("migration 0017: concept2_links, concept2_auth_attempts, session_logs c2/completedAt/tz columns", () => {
+// migrations folder capped at 0017 (now including #248's own migration as
+// part of the PRE-ours set), then the real (full) migrate() applies 0018
+// and both cases below read shared state built once in beforeAll.
+describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c2/completedAt/tz columns", () => {
   let container: StartedPostgreSqlContainer;
   let pool: pg.Pool;
   let db: Db;
   let tempDir: string;
   let preMigrationRowId: string;
 
-  const PRE_0017_TAGS = [
+  const PRE_0018_TAGS = [
     "0000_skinny_silver_fox",
     "0001_tan_thunderball",
     "0002_rare_khan",
@@ -1293,20 +1299,22 @@ describe("migration 0017: concept2_links, concept2_auth_attempts, session_logs c
     "0014_graceful_microchip",
     "0015_gorgeous_black_queen",
     "0016_fancy_quentin_quire",
+    "0017_fair_whizzer",
   ];
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer("postgres:18.4").start();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
-    // A migrations folder containing only 0000-0016, so migrate() below
-    // cannot possibly apply 0017 — the legacy row (no c2_*/completed_at/tz
+    // A migrations folder containing only 0000-0017, so migrate() below
+    // cannot possibly apply 0018 — the legacy row (no c2_*/completed_at/tz
     // columns at all, and no concept2_links/concept2_auth_attempts tables)
     // gets seeded against exactly the schema a real pre-Wave-E-PR1 deploy
-    // would have.
-    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0017-"));
+    // would have (post-#248, since that migration is now part of the
+    // pre-ours baseline every real deploy already carries).
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0018-"));
     await mkdir(path.join(tempDir, "meta"));
-    for (const [i, tag] of PRE_0017_TAGS.entries()) {
+    for (const [i, tag] of PRE_0018_TAGS.entries()) {
       const idx = String(i).padStart(4, "0");
       await copyFile(
         path.join("drizzle", `${tag}.sql`),
@@ -1324,7 +1332,7 @@ describe("migration 0017: concept2_links, concept2_auth_attempts, session_logs c
       path.join(tempDir, "meta", "_journal.json"),
       JSON.stringify({
         ...journal,
-        entries: journal.entries.filter((e) => e.idx <= 16),
+        entries: journal.entries.filter((e) => e.idx <= 17),
       }),
     );
     await migrate(db, { migrationsFolder: tempDir });
@@ -1332,27 +1340,27 @@ describe("migration 0017: concept2_links, concept2_auth_attempts, session_logs c
     const [u] = await db
       .insert(users)
       .values({
-        googleSub: "pre-0017-user",
-        email: "pre-0017@migrate.test",
-        name: "Pre 0017",
+        googleSub: "pre-0018-user",
+        email: "pre-0018@migrate.test",
+        name: "Pre 0018",
       })
       .returning();
 
-    // Seeded against the PRE-0017 schema (no c2_*/completed_at/tz columns
+    // Seeded against the PRE-0018 schema (no c2_*/completed_at/tz columns
     // at all) — raw SQL, same reason 0011/0013/0016's own blocks above use
     // it: the typed `sessionLogs` insert builder already declares the new
     // columns in this file's TS schema, and that statement would 500
-    // against the real pre-0017 table. Must run before the full migrate()
+    // against the real pre-0018 table. Must run before the full migrate()
     // call below.
     const inserted = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
           ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
-          values (${u.id}, 'Pre-0017 session', 'AT', 'held', 2, '[]'::jsonb)
+          values (${u.id}, 'Pre-0018 session', 'AT', 'held', 2, '[]'::jsonb)
           returning "id"`,
     );
     preMigrationRowId = inserted.rows[0]!.id;
 
-    // The real, full folder — only 0017 is new here (0000-0016's hashes
+    // The real, full folder — only 0018 is new here (0000-0017's hashes
     // already match what ran against tempDir above), so this is the moment
     // `CREATE TABLE concept2_links`/`concept2_auth_attempts` and the four
     // ADD COLUMN statements fire. Runs once, shared by every `it` below.
@@ -1415,7 +1423,7 @@ describe("migration 0017: concept2_links, concept2_auth_attempts, session_logs c
     ).rejects.toThrow(/invalid input value for enum weight_class/);
   });
 
-  it("reads a pre-0017 row's existing fields unchanged, and all four new columns as null, after 0017 applies (never-migrate contract)", async () => {
+  it("reads a pre-0018 row's existing fields unchanged, and all four new columns as null, after 0018 applies (never-migrate contract)", async () => {
     const [after] = await db
       .select()
       .from(sessionLogs)
@@ -1428,13 +1436,13 @@ describe("migration 0017: concept2_links, concept2_auth_attempts, session_logs c
     expect(after.tz).toBeNull();
   });
 
-  it("accepts a NEW row with completedAt/tz populated, round-tripping exactly, once 0017 has applied", async () => {
+  it("accepts a NEW row with completedAt/tz populated, round-tripping exactly, once 0018 has applied", async () => {
     const [u] = await db
       .insert(users)
       .values({
-        googleSub: "post-0017-user",
-        email: "post-0017@migrate.test",
-        name: "Post 0017",
+        googleSub: "post-0018-user",
+        email: "post-0018@migrate.test",
+        name: "Post 0018",
       })
       .returning();
 

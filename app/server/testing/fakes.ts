@@ -700,7 +700,7 @@ function makeFakeLogsStore(
         machineWorkSeconds: stored.machineWorkSeconds ?? null,
         machineWorkMeters: stored.machineWorkMeters ?? null,
         machineSummary: stored.machineSummary ?? null,
-        // Wave E PR1 (migration 0017): same treatment. `c2ResultId`/
+        // Wave E PR1 (migration 0018): same treatment. `c2ResultId`/
         // `c2UserId` are deliberately absent here — they're not on
         // `LogInput` at all yet (see that interface's own comment), so
         // this fake never produces them, matching every current caller

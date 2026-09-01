@@ -1,6 +1,6 @@
 {
-  "id": "01da4a4f-8fe9-4a8c-bb9d-fec19772f935",
-  "prevId": "56c1f3ce-78d9-4dad-8ae5-aa6f9b676294",
+  "id": "33615377-6bea-45a1-817e-b55e5ef8dc1e",
+  "prevId": "01da4a4f-8fe9-4a8c-bb9d-fec19772f935",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -109,6 +109,143 @@
         "baselines_user_id_users_id_fk": {
           "name": "baselines_user_id_users_id_fk",
           "tableFrom": "baselines",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.concept2_auth_attempts": {
+      "name": "concept2_auth_attempts",
+      "schema": "",
+      "columns": {
+        "nonce": {
+          "name": "nonce",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "weight_class": {
+          "name": "weight_class",
+          "type": "weight_class",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "concept2_auth_attempts_user_id_users_id_fk": {
+          "name": "concept2_auth_attempts_user_id_users_id_fk",
+          "tableFrom": "concept2_auth_attempts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.concept2_links": {
+      "name": "concept2_links",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "c2_user_id": {
+          "name": "c2_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "access_token": {
+          "name": "access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "refresh_token": {
+          "name": "refresh_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "weight_class": {
+          "name": "weight_class",
+          "type": "weight_class",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "needs_reauth_at": {
+          "name": "needs_reauth_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "concept2_links_user_id_users_id_fk": {
+          "name": "concept2_links_user_id_users_id_fk",
+          "tableFrom": "concept2_links",
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
@@ -432,6 +569,30 @@
         "machine_summary": {
           "name": "machine_summary",
           "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "c2_result_id": {
+          "name": "c2_result_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "c2_user_id": {
+          "name": "c2_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tz": {
+          "name": "tz",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         }
@@ -913,6 +1074,14 @@
       "values": [
         "up",
         "down"
+      ]
+    },
+    "public.weight_class": {
+      "name": "weight_class",
+      "schema": "public",
+      "values": [
+        "H",
+        "L"
       ]
     },
     "public.workout_source": {

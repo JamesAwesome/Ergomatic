@@ -21,7 +21,8 @@ import { createWorkoutsStore } from "../stores/workouts.js";
 import type { Stores } from "./data.js";
 
 // Wave E PR1 Task 2 (2026-08-31-concept2-logbook-design.md §Stored shapes,
-// TRIAD): Task 1's migration 0017 integration test
+// TRIAD): Task 1's migration 0018 integration test (regenerated from 0017
+// after PR #248 merged first and took index 17 for its own migration)
 // (`db/schema.integration.test.ts`) proves completedAt/tz round-trip at the
 // DRIZZLE layer — a direct `db.insert(sessionLogs)` — but never exercises
 // the real POST /api/logs ROUTE, which is where this task's validators
