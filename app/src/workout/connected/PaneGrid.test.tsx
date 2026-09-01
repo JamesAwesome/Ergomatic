@@ -420,6 +420,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     closeReason: null,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
+    beginFreeRow: vi.fn(),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
@@ -437,6 +438,7 @@ function renderGrid(
   const current = session(overrides);
   const view = render(
     <ConnectedSurface
+      freeRow={false}
       phases={fixture.phases}
       program={fixture.program}
       session={current}
@@ -1271,6 +1273,7 @@ describe("THE ACCENT CENSUS: accent is a CONTROL colour, and nothing else", () =
       localStorage.setItem(LAST_PANE_KEY, pane);
       render(
         <ConnectedSurface
+          freeRow={false}
           phases={FILLING_LOW.phases}
           program={FILLING_LOW.program}
           session={session({ actuals: [actualFor(0, FILLING_LOW.program)] })}
@@ -1305,6 +1308,7 @@ describe("THE ACCENT CENSUS: accent is a CONTROL colour, and nothing else", () =
     localStorage.setItem(LAST_PANE_KEY, "grid");
     render(
       <ConnectedSurface
+        freeRow={false}
         phases={FILLING_LOW.phases}
         program={FILLING_LOW.program}
         session={session({ actuals: [actualFor(0, FILLING_LOW.program)] })}
@@ -1454,6 +1458,7 @@ describe("judged cells: pane C goes through the ONE helper", () => {
       localStorage.setItem(LAST_PANE_KEY, pane);
       render(
         <ConnectedSurface
+          freeRow={false}
           phases={FILLING_LOW.phases}
           program={FILLING_LOW.program}
           session={session({ actuals: [actualFor(0, FILLING_LOW.program)] })}
@@ -1588,6 +1593,7 @@ describe("contained scroll: only the rows move", () => {
 
     view.rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={SEA_SMOKE.phases}
         program={SEA_SMOKE.program}
         session={session({ frame: frame({ intervalIndex: 12 }) })}
@@ -1607,6 +1613,7 @@ describe("contained scroll: only the rows move", () => {
     expect(spy).toHaveBeenCalledTimes(1);
     view.rerender(
       <ConnectedSurface
+        freeRow={false}
         phases={SEA_SMOKE.phases}
         program={SEA_SMOKE.program}
         session={session({

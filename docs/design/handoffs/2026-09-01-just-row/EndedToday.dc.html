@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root {
+      --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade;
+      --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c;
+      --rule: #d8d3c4; --accent: #b5341f; --judge-slower: #962718;
+      --radius: 2px;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    a { color: var(--accent); } a:hover { color: #9c2c19; }
+    .board { width: 812px; box-sizing: border-box; padding: 24px; background: var(--page); display: flex; flex-direction: column; gap: 18px; }
+    .caption { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-3); margin: 0; }
+    .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+    .frame { background: var(--page); border: 1px solid var(--rule); padding: 20px; min-height: 190px; display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+    .frame-bad { border-color: var(--judge-slower); }
+    .status { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; color: var(--ink-3); margin: 0; }
+    .serif { font-family: var(--font-serif); font-size: 32px; font-weight: 500; color: var(--ink); margin: 0; }
+    .bodyline { font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); margin: 0; }
+    .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; margin: 0; }
+    .tag-bad { color: var(--judge-slower); }
+    .tag-good { color: var(--ink-3); }
+    .note { font-family: var(--font-sans); font-size: 13px; line-height: 1.5; color: var(--ink-2); margin: 0; max-width: 74ch; }
+    code { font-family: var(--font-mono); font-size: 12px; background: var(--surface-sunken); padding: 1px 4px; }
+  </style>
+</helmet>
+
+<div class="board">
+  <p class="caption">GATE 0 AMENDMENT &middot; THE ENDED FRAME, BEFORE AND AFTER</p>
+
+  <div class="pair">
+    <div>
+      <p class="tag tag-bad" style="margin-bottom: 8px;">WHAT A FREE ROW RENDERS TODAY</p>
+      <div class="frame frame-bad">
+        <p class="status">SESSION ENDED</p>
+        <h1 class="serif">Wrapping up</h1>
+        <p class="bodyline">No numbers to keep.</p>
+      </div>
+    </div>
+    <div>
+      <p class="tag tag-good" style="margin-bottom: 8px;">PROPOSED</p>
+      <div class="frame">
+        <p class="status">SESSION ENDED</p>
+        <h1 class="serif">Wrapping up</h1>
+        <p class="bodyline">6:33 &middot; 1,396 m kept.</p>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">
+    The line is picked by a five-way ternary on <code>closeReason</code>,
+    <code>kept</code> and <code>endedBy</code>
+    (<code>ConnectedSurface.tsx:503-511</code>), where <code>kept</code> is
+    <code>measuredIntervalCount(actuals)</code>. A free row has no intervals,
+    so <code>kept</code> is <code>0</code> and it lands on the
+    <code>kept === 0</code> arm: <strong>"No numbers to keep."</strong> on a
+    row that just banked real meters and is one navigation away from a log
+    door showing them.
+  </p>
+  <p class="note">
+    This frame sits ABOVE the surface model: the ended block returns at
+    <code>:515</code> and <code>buildSurfaceModel</code> is not called until
+    <code>:575</code>, so none of the live-surface changes on this board can
+    reach it. It needs its own branch.
+  </p>
+  <p class="note">
+    The replacement says what was actually kept, in the same words the lost
+    banner already uses one artboard over, so the two endings agree rather
+    than describing the same row two ways.
+  </p>
+</div>
+</x-dc>
+</body>
+</html>

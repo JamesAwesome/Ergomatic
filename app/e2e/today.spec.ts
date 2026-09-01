@@ -1221,3 +1221,38 @@ test.describe("Today: the plan checkpoint prescription (Phase 8A)", () => {
     await expect(page.getByText(/YOUR PICK/)).toBeVisible();
   });
 });
+
+/**
+ * PHASE JR PR 2 — the free row's door.
+ *
+ * The 44px floor lives here rather than in a client test on purpose: jsdom
+ * computes no stylesheet, so a `min-height` assertion there would measure
+ * nothing and pass whatever the CSS said. Recurring failure 21's shape —
+ * a gate that cannot go red.
+ */
+test.describe("Just Row door", () => {
+  test("Today's JUST ROW control clears the 44px floor and opens the door", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page);
+    await page.goto("/today");
+
+    const door = page.getByRole("link", { name: "JUST ROW" });
+    await expect(door).toBeVisible();
+
+    const box = await door.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+
+    await door.click();
+    await expect(page).toHaveURL(/\/justrow$/);
+    await expect(page.getByRole("heading", { name: "Just Row" })).toBeVisible();
+
+    // Connected-only is a ruling, and its evidence is an absence: the door
+    // offers exactly one action.
+    await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /start timer/i }),
+    ).toHaveCount(0);
+  });
+});

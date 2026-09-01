@@ -120,6 +120,7 @@ function renderPane(
     frame: frame(frameOverrides),
     deviceName: DEVICE,
     actuals: [],
+    freeRow: false,
   });
   return { ...render(<PaneLive model={model} />), model };
 }
@@ -366,6 +367,7 @@ describe("the unpriced-phase guard (design spec §4/§7 item 7)", () => {
       frame: frame({ intervalIndex: 0, ...overrides }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     return { ...render(<PaneLive model={model} />), model };
   }
@@ -490,6 +492,7 @@ describe("RC-27: the split hero counts a running rest (design spec option B)", (
       frame: frame({ state: "rowing", intervalIndex: 1, currentSplit: 80 }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(built.pace.judgement).not.toBe("within");
     const forced = { ...built, restCountdown: "0:30" };
@@ -556,6 +559,7 @@ describe("RC-27: the split hero counts a running rest (design spec option B)", (
       }),
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     // Sanity: the fixture genuinely produces a countdown and no stale
     // label before the override forces the conflict.
@@ -876,6 +880,7 @@ describe("the meters counter on the progress-bar row (connected-metrics design s
       frame: null,
       deviceName: DEVICE,
       actuals: [],
+      freeRow: false,
     });
     expect(model.sessionDistanceMeters).toBeNull();
     render(<PaneLive model={model} />);
@@ -943,5 +948,84 @@ describe("index.css: the disconnected step-down splits into two rules (design sp
     expect(splitRule?.body).toContain("86px");
     expect(rateRule?.body).toContain("70px");
     expect(tenthsRule?.body).toContain("44px");
+  });
+});
+
+/**
+ * PHASE JR PR 2, TASK 4 — the free-row pane.
+ *
+ * Structural assertions, never contrast (recurring failure 21's smell
+ * list): each one names the element the change actually produces or
+ * removes, so a mutation that flips the branch has a specific node to take
+ * away.
+ */
+describe("the free-row pane", () => {
+  function renderFreeRow() {
+    const model = buildSurfaceModel({
+      phases: [],
+      program: { intervals: [] },
+      status: "live",
+      linkLost: false,
+      frame: frame({ intervalIndex: null, splitAvgPace: null }),
+      deviceName: DEVICE,
+      actuals: [],
+      freeRow: true,
+    });
+    return { ...render(<PaneLive model={model} />), model };
+  }
+
+  it("renders no UP NEXT block and exactly one band cell, ELAPSED", () => {
+    const { container } = renderFreeRow();
+
+    expect(container.querySelector(".connected-band-upnext")).toBeNull();
+    const cells = container.querySelectorAll(".connected-band-cell");
+    expect(cells).toHaveLength(1);
+    expect(
+      cells[0]!.querySelector(".connected-band-cell-label")?.textContent,
+    ).toBe("ELAPSED");
+    // The value is the model's own elapsed display, not a second clock.
+    expect(
+      cells[0]!.querySelector(".connected-band-cell-value")?.textContent,
+    ).toBe("10:00");
+  });
+
+  it("renders the single static bar in the progress row", () => {
+    const { container } = renderFreeRow();
+
+    // One segment, done-filled — the programmed bar's own classes, so the
+    // geometry rules in index.css cover it without a parallel ruleset.
+    const segs = container.querySelectorAll(".connected-progress-seg");
+    expect(segs).toHaveLength(1);
+    expect(segs[0]!.classList.contains("connected-progress-seg-done")).toBe(
+      true,
+    );
+    // The meters counter keeps its shipped place beside it.
+    expect(
+      container.querySelector(".connected-progress-meters"),
+    ).not.toBeNull();
+  });
+
+  it("shows Free in both target slots at full presence", () => {
+    const { container } = renderFreeRow();
+
+    const targets = [
+      ...container.querySelectorAll(".connected-hero-target-value"),
+    ];
+    expect(targets.map((t) => t.textContent)).toStrictEqual(["Free", "Free"]);
+    // PRESENT: the absent class is the greyed no-reading treatment, and
+    // `Free` is a statement rather than a missing value.
+    for (const t of targets) {
+      expect(t.classList.contains("connected-value-absent")).toBe(false);
+    }
+  });
+
+  it("carries no judged colour on either hero", () => {
+    const { container } = renderFreeRow();
+
+    for (const el of container.querySelectorAll(
+      ".connected-hero-value, .connected-hero-rate .connected-hero-value",
+    )) {
+      expect(el.className).not.toMatch(/faster|slower/);
+    }
   });
 });

@@ -1074,6 +1074,27 @@ export function createPm5Driver(
    */
   let activeRun: {
     program: WorkoutProgram;
+    /**
+     * Phase JR PR 2: this run was opened by `beginFreeRow()`, not by
+     * `program()` — the rower is on the PM5's own Just Row and we sent it
+     * nothing.
+     *
+     * **Why a marker rather than `program.intervals.length === 0`.**
+     * `compileProgram` cannot emit a zero-interval program (its own no-work
+     * guard), so a length test would be a predicate with no second producer
+     * today and a silent trap the day one appears. This says what it means.
+     *
+     * **What it is FOR.** Opening a run at all is what buys back the
+     * machine close, the 0x0039 summary and correct boundary routing, all
+     * three of which are behind `runIsOpen()`. The cost is that
+     * `armedProgram()` is `activeRun?.program ?? null`, so opening one makes
+     * it NON-null — which switches on two subsystems that compare the
+     * machine against a program we never sent. Both consult this flag: the
+     * divergence escalation in `maybeEmitFrame`, and the structure watchdog
+     * in the status handler. Nothing else reads it; a free row is otherwise
+     * an ordinary open run, deliberately.
+     */
+    freeRow: boolean;
     closed: boolean;
     /** How many actuals this run has accumulated — kept only so the
      *  `run-replaced` entry can say what a silently-replaced run was
@@ -2545,7 +2566,13 @@ export function createPm5Driver(
     if (intervalActive && activeRun !== null && !activeRun.closed) {
       activeRun.lastActiveState = base.state;
     }
-    if (p && intervalActive && intervalIndex === null) {
+    // `activeRun.freeRow` opts out (Phase JR PR 2). The guard above reads
+    // "a program is armed", which a free row's own open run now satisfies —
+    // `armedProgram()` returns its `{ intervals: [] }` — while the thing
+    // this entry exists to report, a machine interval with no counterpart in
+    // the program we sent, cannot happen when we sent no program. Without
+    // this, every frame of every free row logs one.
+    if (p && !activeRun?.freeRow && intervalActive && intervalIndex === null) {
       log.record(
         "divergence",
         `intervalIndex=${status.intervalCount} (0x0033, state=${base.state}) has no corresponding interval in a ${programLength}-interval program`,
@@ -4945,7 +4972,14 @@ export function createPm5Driver(
         // gating on it closes the window `pendingVerify` alone does not.
         const armedWorkout = armedProgram();
         const armed = toMonitorFrame(raw as RawPm5Status).state === "armed";
-        if (armedWorkout !== null) {
+        // `activeRun.freeRow` opts out (Phase JR PR 2), for the same reason
+        // the divergence escalation does: this watchdog exists to notice the
+        // machine quietly ceasing to hold the workout WE armed, and a free
+        // row armed nothing. Opening its run makes `armedWorkout` non-null,
+        // so without this the watchdog would compare the machine's readback
+        // against a zero-interval program and could report the program
+        // dropped on a row that never had one.
+        if (armedWorkout !== null && !activeRun?.freeRow) {
           if (!armed) {
             // Left "armed" (rowing/resting/finished/terminated/idle) with
             // no verdict reached — the rower pulled, or the machine cycled
@@ -5804,6 +5838,53 @@ export function createPm5Driver(
   return {
     capabilities,
 
+    /**
+     * Phase JR PR 2: open a run for the PM5's own Just Row, sending the
+     * machine nothing.
+     *
+     * This is the free row's counterpart to `program()`, and it exists
+     * because `activeRun` had exactly one assignment — inside `program()` —
+     * so a rower on the machine's own mode left this driver holding no run
+     * at all. Everything gated on `runIsOpen()` was therefore dark for the
+     * whole row: no `terminated` on the rower's Menu press, no 0x0039 filed,
+     * and boundaries routed as if they belonged to nobody.
+     *
+     * DELIBERATELY SYNCHRONOUS AND UNACKED, unlike `program()`. There is no
+     * wire traffic to await and nothing for the machine to confirm: the row
+     * is already the PM5's, and this only tells the driver to start
+     * accounting for it. `program()`'s ack gating, prepare-settle wait and
+     * structural readback all exist to establish that the machine is holding
+     * OUR workout, a question a free row does not raise.
+     *
+     * Idempotent against an open run: a second call while one is live is
+     * ignored rather than replacing it, so a stray re-entry cannot silently
+     * discard a row in progress.
+     */
+    beginFreeRow(): void {
+      if (runIsOpen()) {
+        log.record(
+          "free-row-ignored",
+          "beginFreeRow() while a run is already open — ignored",
+        );
+        return;
+      }
+      activeRun = {
+        program: { intervals: [] },
+        freeRow: true,
+        closed: false,
+        actuals: 0,
+        recordedActuals: new Map(),
+        lastActiveState: null,
+        finishGraceUntil: null,
+        summaryInGrace: null,
+        graceClaimed: false,
+        verificationBytes: null,
+        terminatedAwaitingSummary: false,
+        finalFilledFromSummary: false,
+      };
+      log.record("free-row-open", "opened a free row (no program sent)");
+    },
+
     // D1 IS WITHDRAWN (interface-notes.md §19.2, on §19.1's per-send
     // re-derivation table), and this comment used to assert it: "a REJECTED
     // program WIPES whatever workout was already loaded", plus the rule
@@ -5991,6 +6072,7 @@ export function createPm5Driver(
         pendingTerminateObservations = null;
         activeRun = {
           program: p,
+          freeRow: false,
           closed: false,
           actuals: 0,
           recordedActuals: new Map(),

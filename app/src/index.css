@@ -9797,3 +9797,112 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 13px;
   margin: 8px 0 0;
 }
+
+/* ── PHASE JR PR 2: THE FREE ROW ─────────────────────────────────────────
+   Gate 0 board `docs/design/handoffs/2026-09-01-just-row/`, approved
+   2026-09-01. Every value here is lifted from an existing idiom rather
+   than invented: the door's control is the app's compact-pill shape (the
+   one FILTER and SHUFFLE already use), and the door's own body reuses the
+   workout detail's meta line and preview band. */
+
+/* The Today heading and its one control on one baseline. A grid rather
+   than `justify-content: space-between` on a flex row, so the control's
+   width cannot squeeze the serif title on a narrow phone — the title takes
+   the free column and the control takes exactly what it needs. */
+.today-title-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Two words, top right. `--ink` border rather than `--rule-3` (which the
+   FILTER/SHUFFLE pills use): those two are secondary controls beside a
+   section label, while this is the only way into a whole feature, and an
+   ink border is what the app's L2 geometry already means. 44px, like every
+   other tappable thing. */
+.today-justrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+}
+
+.today-justrow:hover {
+  background: var(--surface-sunken);
+}
+
+/* The door's meta line — the workout detail's own caption register
+   (mono, 12px, 0.14em, --ink-3 at 6.69:1 on --page). */
+.justrow-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+/* The door's preview band — the workout detail's own sunken strip.
+   `--ink-2` at 9.16:1 on `--surface-sunken`; deliberately NOT `--ink-4`,
+   which measures 4.48:1 there and fails the 4.5:1 floor. */
+.justrow-band {
+  background: var(--surface-sunken);
+  padding: 12px 14px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+
+/* The free-row log door's numbers card — three columns on one card, the
+   log-detail idiom at the door. `--ink-3` labels clear 6.69:1 on --page;
+   values are full ink. */
+.justrow-log-numbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.justrow-log-numlabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  margin: 0 0 4px;
+}
+
+.justrow-log-numvalue {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+
+/* Phase JR PR 2 (approved board, the landscape frame): the free row's one
+   band cell sits in EST LEFT's own corner — bottom-RIGHT — where a rower's
+   eye already looks for a time figure. With `.connected-band-upnext` absent
+   the row's single child would otherwise sit left; this pushes it over
+   without inventing a second band layout. Portrait is untouched: the base
+   column band has no horizontal position to argue about. */
+@media (orientation: landscape) {
+  .connected-pane-live .connected-band:has(.connected-band-cell:only-child) {
+    justify-content: flex-end;
+  }
+}

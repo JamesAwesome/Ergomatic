@@ -230,15 +230,30 @@ const ANONYMOUS_RUN: RunIdentity = {
   logSeed: EMPTY_LOG_SEED,
 };
 
-/** What a run would be filed under if one could open before `program()`
- *  ever ran. None can — `live` is downstream of `ready`, which is
- *  downstream of the `armed` event, which only `program()` produces — so
- *  this initial value is never read. It exists so the identity ref has no
- *  null state to branch on. */
-const NO_IDENTITY: { program: WorkoutProgram } & RunIdentity = {
+/** What a run would be filed under if one could open before either arm ran.
+ *
+ *  **RECONCILED, Phase JR PR 2.** This used to read: "None can — `live` is
+ *  downstream of `ready`, which is downstream of the `armed` event, which
+ *  only `program()` produces." The last clause is no longer true.
+ *  `beginFreeRow()` is a SECOND producer of `ready`, reaching it with no
+ *  wire traffic at all, so `ready` now has two doors rather than one.
+ *
+ *  The conclusion survives the correction: this value is still never read,
+ *  because both doors seed `identityRef` before flipping the phase. It
+ *  exists so the ref has no null state to branch on. */
+const NO_IDENTITY: FreeRowIdentity = {
   program: { intervals: [] },
   ...ANONYMOUS_RUN,
 };
+
+/** The identity ref's own shape: a `RunIdentity` plus the program it was
+ *  armed with, plus Phase JR PR 2's `mode`. `mode` lives HERE rather than on
+ *  `RunIdentity` because `RunIdentity` is what a CALLER of `program()`
+ *  supplies, and a caller of `program()` is by definition not a free row. */
+type FreeRowIdentity = {
+  program: WorkoutProgram;
+  mode?: "justrow";
+} & RunIdentity;
 
 /**
  * Plan Task 3 review (M7): ownership tracking for `handoffStore`'s ONE
@@ -950,6 +965,12 @@ export interface MonitorSession {
    *  header). */
   connect(): Promise<void>;
   program(p: WorkoutProgram, identity: RunIdentity): Promise<void>;
+  /** Phase JR PR 2: arms for the machine's OWN free row — reaches `ready`
+   *  with no wire traffic and files the record under a Just Row identity
+   *  (`workoutId: null`, `mode: "justrow"`). `program()`'s counterpart, and
+   *  synchronous because nothing is sent. A no-op while a programmed
+   *  session is `programming`/`ready`/`live`. */
+  beginFreeRow(): void;
   /** The rower's End. Idempotent, and idempotent specifically against a
    *  terminal event racing it (spec §2). */
   endSession(): Promise<void>;
@@ -2472,11 +2493,20 @@ export function useMonitorSession(
     if (run === null) return false;
     // No separate guard for a program with no intervals at all: `lastIndex`
     // would be `-1`, no actual can carry that index, and the hold would open
-    // and close on its own backstop a quarter second later. `compileProgram`
-    // cannot produce one (its no-work guard) and `createMonitorRun` is only
-    // ever handed a compiled program, so the branch would be unreachable
-    // code wearing a guard's clothes — and its worst case, if the premise
-    // ever broke, is a bounded 250 ms delay rather than anything wrong.
+    // and close on its own backstop a quarter second later.
+    //
+    // **RECONCILED, Phase JR PR 2 — the premise this used to lean on is
+    // gone, and the disclosed worst case is what stands.** This comment
+    // said `compileProgram` cannot produce a zero-interval program and
+    // `createMonitorRun` is "only ever handed a compiled program", making
+    // the branch "unreachable code wearing a guard's clothes".
+    // `beginFreeRow` now hands it `{ intervals: [] }` deliberately. The
+    // case is still practically out of reach — this SPLIT condition opens
+    // on a machine FINISH only, and a free row has no defined end to
+    // finish (state 12 never observed on a Just Row, CLOSED 7) — but if
+    // one ever arrives, what happens is exactly what this comment always
+    // priced: the hold opens and its own backstop releases it a quarter
+    // second later. A bounded delay, not a wrong number.
     const lastIndex = run.program.intervals.length - 1;
     if (run.actuals.some((a) => a.index === lastIndex)) return false;
     const schedule =
@@ -2719,6 +2749,10 @@ export function useMonitorSession(
               // `identity.program` (7C Task 1) — threaded straight through,
               // never re-derived here.
               logSeed: identity.logSeed,
+              // Phase JR PR 2: set by `beginFreeRow` and absent otherwise,
+              // so a programmed run's record is byte-identical to what it
+              // was before this phase.
+              mode: identity.mode,
             },
             nowDate(),
           );
@@ -3175,11 +3209,21 @@ export function useMonitorSession(
       }
       if (event.kind === "intervalComplete") {
         // THE FIRST PRODUCTION CALLER of `recordActual` (its own A2 note).
-        // Gated on our record being open: a boundary the machine reports
-        // outside any run of ours (a rower's JustRow auto-split,
-        // post-terminate housekeeping — the driver emits those with
-        // `index: null` and a `boundary-out-of-run` log) belongs to no
-        // program and must never be filed against one.
+        //
+        // **RECONCILED, Phase JR PR 2 — the rule below is unchanged and the
+        // guard that enforced it has MOVED.** This used to read: "Gated on
+        // our record being open: a boundary the machine reports outside any
+        // run of ours (a rower's JustRow auto-split, post-terminate
+        // housekeeping — the driver emits those with `index: null`) belongs
+        // to no program and must never be filed against one."
+        //
+        // The rule is right and still binding. What changed is that "outside
+        // any run of ours" stopped being the same thing as "a JustRow
+        // auto-split": a free row now HAS a run of ours, so its auto-splits
+        // arrive here with the record wide open, and `recordActual` gates on
+        // whether the record is closed, never on the index. The
+        // `run === null` check below therefore no longer covers the case its
+        // own comment named, and the free-row refusal underneath it does.
         //
         // THE FINISH GRACE (hardware walk 5, 2026-08-10): the ONE boundary
         // that legitimately arrives after this hook already closed the
@@ -3194,6 +3238,31 @@ export function useMonitorSession(
         // nothing else about the closed record's immutability moves.
         const run = runRef.current;
         if (run === null) return;
+        // THE FREE-ROW REFUSAL (Phase JR PR 2). A free row has no intervals
+        // — the machine's 5-minute auto-splits are its own bookkeeping, not
+        // structure anyone asked for — so NONE of them is filed, rather than
+        // only the `index: null` ones. Keying on the mode rather than the
+        // index says the actual thing: `MonitorRun.actuals` on a free row
+        // means "the intervals of this row", and there are none.
+        //
+        // This is also what keeps the surface honest. `measuredIntervalCount`
+        // reads `actuals` without ever looking at `index`, so a single
+        // phantom here is what makes the ended frame and the lost banner
+        // report intervals on a screen that shows none.
+        //
+        // MERGE NOTE (this branch): PR #259 wrote this line through
+        // `logRef.current?.record`. That ref no longer exists — the log is
+        // now a FIELD of the one `LogicalSession` value (`sessionRef`), so
+        // an entry can never be written into a log belonging to a different
+        // session than the id it will be stashed under. Same log, same
+        // entry, read off the value that owns it.
+        if (run.mode === "justrow") {
+          sessionRef.current?.log.record(
+            "record-actual",
+            `index=${event.actual.index} REFUSED (free row: the machine's own auto-split, not an interval of ours)`,
+          );
+          return;
+        }
         // Phase LT spec 2, Task 2: THE BOUNDARY FLUSH (§2's flush policy —
         // "the hook layer flushes after each boundary write lands"). Rather
         // than a second write chasing `recordActual`'s own, the freshest
@@ -3691,9 +3760,13 @@ export function useMonitorSession(
         // never pulled" case is unchanged by this task).
         if (driver === null) return;
         const phase = stateRef.current.phase;
+        // Phase JR PR 2: same free-row exclusion as `cancel()`'s own armed
+        // predicate, same reasoning — an unmount at `ready` on a free row
+        // must not terminate the machine's own row.
         if (
           !alreadyTerminated &&
-          (phase === "programming" || phase === "ready")
+          (phase === "programming" || phase === "ready") &&
+          identityRef.current.mode !== "justrow"
         ) {
           bestEffort(
             driver.terminate().finally(() => bestEffort(driver.disconnect())),
@@ -4115,7 +4188,37 @@ export function useMonitorSession(
     // once per cancelled attempt. The mint now lives at the ONE line that
     // replaces the log (`sessionRef.current = { ... }`, below the GATT
     // connect), so identity and trace can only ever change together.
-    update({ phase: "picking", error: null, frameSilence: false });
+    //
+    // THE PATCH BELOW IS NOT AN EXCEPTION TO THAT (merge of PR #259 into
+    // this branch). `deviceName` is PUBLISHED UI STATE, not session
+    // identity: it names the peripheral this attempt is about to talk to,
+    // it is read by callers deciding whether a driver is ready, and it is
+    // republished from the transport once this attempt has one. It carries
+    // no id, no log and no per-session counter, so clearing it here crosses
+    // no session boundary and the rule above stands without exception.
+    //
+    // `deviceName: null` joins this patch (review #2 on PR #259): a raw
+    // disconnect deliberately RETAINS the old name — the lost frames need
+    // it — but a FRESH ATTEMPT must not inherit it, because the name is
+    // the one driver-ready fact callers can see (`ConnectedInterstitial`'s
+    // own program effect keys on exactly it, and resets its dedupe on the
+    // null). Without this, a reconnect published `pairing` with the STALE
+    // name while `driverRef` was still null, and a caller arming on the
+    // name reached `beginFreeRow()` with no driver — `transport-missing`
+    // on a retry that should have worked. The same "a fresh connect()
+    // never inherits a stale PRIOR value" rule the block above documents
+    // for liveness and frameSilence; the name comes back at this attempt's
+    // own closing `update({ deviceName: device.name })` — the "Stays
+    // `pairing` on purpose" line at the end of the GATT block below — after
+    // the driver it vouches for exists. (The line number this used to cite
+    // was correct on main and is not here: the ring/session work above it
+    // moves it. Named rather than numbered for that reason.)
+    update({
+      phase: "picking",
+      error: null,
+      frameSilence: false,
+      deviceName: null,
+    });
     // Awaited unconditionally — the platform-conditional default
     // (`adapters/monitorTransport.ts`'s `defaultTransport`, ROADMAP CL item
     // 2) returns a `Promise` on the native arm (its own dynamic
@@ -4470,6 +4573,108 @@ export function useMonitorSession(
     }
   }, [fail, handleEvent, update, mintSessionId]);
 
+  /**
+   * PHASE JR PR 2 — the free row's arm, and `program()`'s counterpart.
+   *
+   * Reaches `ready` with no wire traffic, because the row is already the
+   * machine's own: the rower is in the PM5's Just Row and there is nothing
+   * to send, arm or verify. Everything downstream is inherited unchanged —
+   * `handleFrame`'s own `"ready"` branch opens the record on the first
+   * rowing frame with distance, which IS the spec's "user intent plus
+   * motion" rule (the tap on Just Row was the intent).
+   *
+   * SYNCHRONOUS, unlike `program()`: there is no promise to await when
+   * nothing is sent. That also makes the phase flip and the identity seed
+   * one indivisible step, so no frame can arrive between them.
+   *
+   * **The guard is not defensive tidiness.** Without it, calling this
+   * during a programmed session silently rewrites `identityRef` to the Just
+   * Row identity, and the rower's actual workout is then filed as a free
+   * row with `workoutId: null` — a lost record, not a cosmetic slip.
+   */
+  const beginFreeRow = useCallback((): void => {
+    const phase = stateRef.current.phase;
+    // "ended" is in this guard for the spec's own third detection clause:
+    // "Once Ended (any closer), the observer NEVER re-opens ... A new row
+    // requires a new user action." It was NOT here at first, and the e2e
+    // flow found the consequence: after the end, `deriveProgram("ended")`
+    // reads "none" and the link reads "up", so a caller arming on those
+    // axes re-armed the instant the row ended, re-seeded the identity over
+    // a closed record, and the next frame opened a second session — the
+    // exact fabricated-session hazard the driver documents for the PM5's
+    // own post-terminate housekeeping, rebuilt one layer up.
+    if (
+      phase === "programming" ||
+      phase === "ready" ||
+      phase === "live" ||
+      phase === "ended"
+    ) {
+      return;
+    }
+    const driver = driverRef.current;
+    if (driver === null) {
+      fail({
+        reason: "transport-missing",
+        detail: "No monitor is connected.",
+      });
+      return;
+    }
+    // A fresh arm is a fresh streak, the same reason `program()` clears it.
+    rowingStreakRef.current = null;
+    // MERGE OF PR #259 INTO THIS BRANCH — the per-ARM reset this branch added
+    // to `program()` has to cover BOTH arms, and #259 built the second one.
+    //
+    // Neither PR is wrong on its own. This branch's §3 fix round 1 closed a
+    // real misattribution at `program()`: a resume-edge measurement banked
+    // BEFORE a fresh arm (armed at a foreground transition, or an already-open
+    // stale run) must not be attributed to the run that arm is about to open.
+    // `beginFreeRow` is now a second producer of `ready`, and therefore a
+    // second arm — so without these three lines the free row inherits it.
+    // The reachable path: connect, phone locks and unlocks at `pairing`
+    // (`resumeEdgeArmedRef` armed, and no frame arrives to consume it), rower
+    // taps JUST ROW. The free row's first frame would then consume the prior
+    // arm and file that gap as this row's resume edge.
+    //
+    // Instrument-only today (§3/§6 are measurement, no consumer, no predicate
+    // reads them) — the same status `program()`'s copy has. It is here so the
+    // invariant is a property of "an arm", not of one arm's implementation.
+    //
+    // ORDERING NOTE: `program()` runs its copy BEFORE its `driver === null`
+    // check; this one runs after, beside the streak reset, because a
+    // `beginFreeRow` that fails `transport-missing` never armed anything and
+    // so has no measurement to disown.
+    //
+    // Final whole-branch review item 5's rule travels with it: an open stale
+    // run gets its own entry before the clear discards it.
+    if (resumeStaleRunRef.current !== null) {
+      sessionRef.current?.log.record(
+        "resume-stale-run",
+        `frames=${resumeStaleRunRef.current.frames} endedBy=reset`,
+      );
+    }
+    resumeEdgeArmedRef.current = null;
+    resumeStaleRunRef.current = null;
+    // Same per-run reset `resumeEdgeArmedRef` immediately above gets — see
+    // `preBackgroundFreezeKeyRef`'s own doc comment.
+    preBackgroundFreezeKeyRef.current = null;
+    identityRef.current = {
+      program: { intervals: [] },
+      workoutId: null,
+      // The record's display name, and the one the Today recovery row and
+      // the log door both read. Gate 0 copy.
+      title: "Just Row",
+      // Explicitly the EMPTY PAIR, never omitted: `buildMonitorLogSteps`
+      // reads `logSeed` first and throws `MonitorLogSeedError` on
+      // `undefined` before it ever compares lengths, and that throw is
+      // swallowed by the log door's condition-4 catch — which would
+      // silently disqualify every free row's record.
+      logSeed: EMPTY_LOG_SEED,
+      mode: "justrow",
+    };
+    driver.beginFreeRow();
+    update({ phase: "ready", error: null });
+  }, [fail, update]);
+
   const program = useCallback(
     async (p: WorkoutProgram, identity: RunIdentity): Promise<void> => {
       // THE DOUBLE-FIRE PIN (spec's I6 ruling: "DESIGNED, not asserted").
@@ -4737,8 +4942,16 @@ export function useMonitorSession(
     // open until `live`). The handoff's "nothing lost" is amended in
     // DEVIATIONS accordingly: nothing OF OURS is lost, and the erg is left
     // terminated rather than armed with an orphan.
+    // Phase JR PR 2: a free row is EXCLUDED from the terminate — the line
+    // above says why it exists ("it terminates what we armed") and a free
+    // row armed nothing, so the terminate would reach the machine's OWN
+    // row. Worst case is a rower who began pulling before the motion gate
+    // fired (~5 frames at the walk's measured 1 Hz): their row dies on the
+    // erg because they tapped Cancel in an app that was only watching.
     const armed =
-      driver !== null && (phase === "programming" || phase === "ready");
+      driver !== null &&
+      (phase === "programming" || phase === "ready") &&
+      identityRef.current.mode !== "justrow";
     if (armed) {
       try {
         await driver.terminate();
@@ -4871,6 +5084,7 @@ export function useMonitorSession(
     closeReason: state.closeReason,
     connect,
     program,
+    beginFreeRow,
     endSession,
     cancel,
     retryHandoffSave,

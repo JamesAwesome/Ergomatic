@@ -71,6 +71,10 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
+// Phase JR PR 2: the free-row ended frame renders the row's own elapsed in
+// the house positional format — the same helper the band's ELAPSED cell
+// reads through the model, so the two cannot drift apart.
+import { fmtDuration } from "../../domain/duration.js";
 import { deriveAxes } from "../monitor/connectedAxes";
 import type { MonitorSession } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
@@ -292,6 +296,24 @@ export interface ConnectedSurfaceProps {
   program: WorkoutProgram;
   /** The live hook value, owned by the interstitial above. */
   session: MonitorSession;
+  /** Phase JR PR 2: this session is the machine's own free row. REQUIRED —
+   *  every caller says which kind of session it is mounting, the same rule
+   *  `SurfaceModelInput` applies to `status`/`linkLost` and for the same
+   *  laundering reason. Threaded into the model; this component's own
+   *  free-row branches are the pane control (no GRID) and the ended frame.
+   *
+   *  NOT a bare boolean (PM final gate, B1): the ended frame renders the
+   *  row's kept numbers, and the first cut read them off
+   *  `session.frame ?? 0` — a DIFFERENT source than `freeRowTotals`, the
+   *  helper whose whole purpose is that no two screens name two numbers
+   *  for one record, and a fabricated `0:00 · 0 m kept.` when the frame
+   *  was null. Making the free-row arm CARRY the kept pair forces the one
+   *  caller that can read the record (`JustRow`, which owns the store
+   *  read) to supply the same figure the log door will show; this
+   *  component stays store-blind per its own layering rule ("this file
+   *  calls no driver, no transport and no monitorRun function"). `kept:
+   *  null` means the honest generic line, never a zero. */
+  freeRow: false | { kept: { seconds: number; meters: number } | null };
   /** The session is over (End, or the machine got there first): route to
    *  the post-session flow. See this file's header on the mount decision —
    *  this callback is expected to navigate, and that navigation is what
@@ -303,6 +325,7 @@ export default function ConnectedSurface({
   phases,
   program,
   session,
+  freeRow,
   onEnded,
 }: ConnectedSurfaceProps) {
   const [pane, setPane] = useState<PaneId>(() => loadLastPane());
@@ -370,7 +393,15 @@ export default function ConnectedSurface({
    *  `choosePane` directly, never `handleControlPress` — a swipe must
    *  never count towards the triple-tap gesture (the old handler's own
    *  note, carried over: `registerTap` is a control-press-only concern). */
-  useSurfaceSwipe(surfaceRef, { pane, blocked: logOpen, onChange: choosePane });
+  // Phase JR PR 2: the swipe is the control's gesture twin, so a free row
+  // blocks it the same way it drops the control — otherwise a swipe would
+  // reach the GRID the control no longer offers, and persist that choice
+  // into the rower's next programmed session.
+  useSurfaceSwipe(surfaceRef, {
+    pane,
+    blocked: logOpen || freeRow !== false,
+    onChange: choosePane,
+  });
 
   /** A control press does BOTH things, always: it selects the pane and it
    *  counts towards the diagnostics gesture. Three presses on the grid
@@ -500,15 +531,34 @@ export default function ConnectedSurface({
                 // is a different CAUSE, not a different count — the count
                 // itself still comes from the one shared
                 // `measuredIntervalCount` rule, never a second notion.
-                session.closeReason === "program-dropped"
-                ? kept === 0
-                  ? "The erg dropped the workout. Nothing kept."
-                  : `The erg dropped the workout. ${kept} ${kept === 1 ? "interval" : "intervals"} kept.`
-                : kept === 0
-                  ? "No numbers to keep."
-                  : session.endedBy === "machine"
-                    ? "The monitor finished it. Your numbers are kept."
-                    : "Your numbers are kept."}
+                // PHASE JR PR 2 (Gate 0 amendment, approved 2026-09-01,
+                // found by the antagonist pass): a free row has no
+                // intervals, so `kept` is 0 by construction and the
+                // `kept === 0` arm below said "No numbers to keep." about
+                // a row that just banked real meters — one navigation from
+                // a log door showing them. This branch states what was
+                // actually kept, in the same words the lost banner uses,
+                // so the two endings describe the row one way. FIRST in
+                // the ternary because every arm below reasons from an
+                // interval count a free row cannot have; `closeReason`
+                // cannot be "program-dropped" here (no program to drop —
+                // the driver's own freeRow watchdog opt-out).
+                freeRow
+                ? freeRow.kept !== null
+                  ? `${fmtDuration(freeRow.kept.seconds / 60)} · ${new Intl.NumberFormat("en-US").format(Math.round(freeRow.kept.meters))} m kept.`
+                  : // No summary and no trace: the generic line, never a
+                    // fabricated zero — the same refusal `freeRowTotals`
+                    // makes at the source (PM final gate, B1).
+                    "Your numbers are kept."
+                : session.closeReason === "program-dropped"
+                  ? kept === 0
+                    ? "The erg dropped the workout. Nothing kept."
+                    : `The erg dropped the workout. ${kept} ${kept === 1 ? "interval" : "intervals"} kept.`
+                  : kept === 0
+                    ? "No numbers to keep."
+                    : session.endedBy === "machine"
+                      ? "The monitor finished it. Your numbers are kept."
+                      : "Your numbers are kept."}
           </p>
         )}
       </main>
@@ -581,6 +631,7 @@ export default function ConnectedSurface({
     deviceName: session.deviceName,
     actuals: session.actuals,
     previousElapsedSeconds,
+    freeRow: freeRow !== false,
   });
   // The comparison guard is what makes this SAFE to call during render
   // (React docs, "Adjusting state during rendering"): `setState` bails out
@@ -682,8 +733,12 @@ export default function ConnectedSurface({
       </div>
       {model.stale && <LostBanner kept={model.measuredIntervals} />}
       <div className="connected-surface-body">
-        {pane === "live" && <PaneLive model={model} />}
-        {pane === "grid" && <PaneGrid model={model} />}
+        {/* Phase JR PR 2: a free row ALWAYS renders LIVE, whatever
+            `loadLastPane()` restored — the persisted pane choice belongs to
+            programmed sessions, and GRID cannot exist for a row with no
+            intervals. See the control's own suppression comment below. */}
+        {(pane === "live" || freeRow) && <PaneLive model={model} />}
+        {pane === "grid" && !freeRow && <PaneGrid model={model} />}
       </div>
       {/* End's old footer slot survives as the frozen block's home, but its
           MECHANISM changed under connected-axes 2a (task 5) — this comment
@@ -724,7 +779,17 @@ export default function ConnectedSurface({
           of DOM/paint order, so this does not disturb the tab order below
           (`ConnectedSurface.test.tsx`/`e2e/screenshots.spec.ts` pin
           `End → scroller → control halves` in both orientations). */}
-      <SegmentedControl active={pane} onSelect={handleControlPress} />
+      {/* Phase JR PR 2 (Gate 0): NO control on a free row, not a disabled
+          one. The grid pane tabulates intervals and a free row has none —
+          the machine's auto-splits are refused at the record, deliberately
+          — so the control would be a one-cell segmented control, which is
+          not a control. The pane state above still initialises from
+          `loadLastPane()`, so `paneBody` also forces LIVE for a free row:
+          a rower whose last programmed session ended on GRID must not open
+          a free row onto a pane that cannot exist for it. */}
+      {!freeRow && (
+        <SegmentedControl active={pane} onSelect={handleControlPress} />
+      )}
       {logOpen && (
         <ConnectionLogSheet
           deviceCaption={model.deviceCaption}

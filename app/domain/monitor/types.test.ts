@@ -162,7 +162,7 @@ describe("MonitorEvent", () => {
 // tenth-phase pin.
 
 describe("MonitorDriver", () => {
-  it("requires program/terminate/events/reconcile/disconnect, and rejects start()", () => {
+  it("requires program/beginFreeRow/terminate/events/reconcile/disconnect, and rejects start()", () => {
     const driver: MonitorDriver = {
       capabilities: {
         canProgram: true,
@@ -171,6 +171,11 @@ describe("MonitorDriver", () => {
         deviceName: "fake",
       },
       program: async () => {},
+      // Phase JR PR 2: a free row's own way to open a run, sending the
+      // machine nothing. Synchronous on purpose — there is no ack to wait
+      // for — which this pin also fixes: a `Promise`-returning one would
+      // not satisfy the interface.
+      beginFreeRow: () => {},
       terminate: async () => {},
       events: () => () => {},
       // Task 7 (CR2 spec 2a): the reconcile step teardown calls BEFORE it

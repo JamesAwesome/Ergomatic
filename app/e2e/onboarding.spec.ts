@@ -116,9 +116,17 @@ test.describe("Today onboarding — the fresh-user arc", () => {
     await page.goto("/today");
     const card = page.locator(".doorscard");
     await expect(card).toBeVisible();
-    // The card is the FIRST thing after the screen's own <h1> — red if
+    // The card is the FIRST thing after the screen's own heading — red if
     // any teaching block is ever restored above it.
+    //
+    // Phase JR PR 2: the heading now shares its row with the JUST ROW door,
+    // so child 1 is that row rather than the bare `h1`. The claim is
+    // unchanged — nothing sits between the heading and the card — and the
+    // heading is still asserted, through the row rather than in place of it.
     await expect(page.locator("main.screen > :nth-child(1)")).toHaveClass(
+      /today-title-row/,
+    );
+    await expect(page.locator("main.screen > :nth-child(1) > h1")).toHaveClass(
       /screen-title/,
     );
     await expect(page.locator("main.screen > :nth-child(2)")).toHaveClass(

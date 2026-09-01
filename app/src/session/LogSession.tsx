@@ -587,10 +587,14 @@ function recordPostSacrifice(status: number): void {
 // workout identity/steps come FROM (a frozen `SessionRun` vs a fetched
 // `LibraryWorkout`). `held`/`pain`/`notes` are NOT here: those are the
 // shared form state `useLogForm` itself owns and merges in below.
-interface LogFormFields {
+export interface LogFormFields {
   workoutId: string | null;
   workoutTitle: string;
-  workoutType: WorkoutType;
+  /** Phase JR PR 2: widened to nullable — a free row stores
+   *  `workout_type: null` ("no intensity was prescribed"), and PR 1's
+   *  server accepts exactly that. Both existing doors still always pass a
+   *  concrete type; the free-row door is the one caller of the null. */
+  workoutType: WorkoutType | null;
   steps: LogStep[];
   // 7C spec §6: the monitor mode's ONLY addition to the shared body shape —
   // `run.deviceName`, spread straight onto the wire body below (`{
@@ -712,7 +716,12 @@ interface LogFormFields {
  *  off the wire entirely (proving the server's own `?? true` default, same
  *  as before); `{ advancesPlan: false }` is what `Save without logging`
  *  passes. */
-function useLogForm(onSaved: (logId: string | null) => void) {
+// Phase JR PR 2: exported so the free-row door (`justrow/JustRowLog.tsx`)
+// posts through the SAME submit pipeline — retry policy, series sacrifice,
+// deviceName band, error surface — rather than a second hand-rolled copy of
+// any of it. The hook's behaviour is unchanged; only its visibility moved.
+// eslint-disable-next-line react-refresh/only-export-components
+export function useLogForm(onSaved: (logId: string | null) => void) {
   const [held, setHeld] = useState<HeldResult | null>(null);
   const [pain, setPain] = useState<number | null>(null);
   // Post-workout-summary spec (2026-08-17), §3: `thumbs` joins the

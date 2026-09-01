@@ -149,11 +149,6 @@
       "count": 2
     }
   },
-  "src/today/Today.tsx": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    }
-  },
   "src/workout/WorkoutDetail.tsx": {
     "@typescript-eslint/no-floating-promises": {
       "count": 2
