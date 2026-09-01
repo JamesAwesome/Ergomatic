@@ -561,9 +561,26 @@ Two corrections to what this paragraph used to say, both from PR 1:
    why it is unconditional.
 2. **The predicate is NOT "when `workoutType` is null".** It is
    `isFreeRow` — `workout_id` AND `workout_type` both null (James's
-   sign-off, 2026-09-01). Keying on the type alone would stall the plan for
-   the deleted-workout retry (`LogSession.tsx:780-790`), which posts a null
-   id and a resolved type for a legitimate prescribed session.
+   sign-off, 2026-09-01).
+
+   The deciding case is the deleted-workout retry
+   (`LogSession.tsx:775-793`), which re-posts with `workoutId: null` for a
+   legitimate prescribed session while `resolveWorkoutType` still yields a
+   type through its `?? "O2"` last resort. So that body is
+   `(null, "O2")`, and the three candidate predicates part company on it:
+
+   | Predicate | Deleted-workout retry | Verdict |
+   | --- | --- | --- |
+   | `workout_id` alone | REFUSED — plan stalls silently | wrong |
+   | `workout_type` alone | advances | right on this case, wrong on a genuine free row's sibling producers |
+   | **the pair** | advances | **shipped** |
+
+   An earlier version of this bullet said keying on the TYPE alone would
+   stall this retry. It would not — the retry carries `"O2"`. It is the
+   ID-only predicate that stalls it, and that is the one the pair exists to
+   avoid. **And this is exactly why retiring `?? "O2"` is cut from scope:**
+   without it the retry becomes `(null, null)`, which every predicate
+   including the pair refuses. See the fallback's own section.
 
 Pinned at BOTH layers: the shared store contract's truth table, and a route
 test that selects a plan and reads `GET /api/plan`'s `doneN` after the POST
@@ -698,12 +715,26 @@ citation was stale, that line is mid-comment). The two cannot ship
 together. The fallback fires when the phone-timer door has no matched
 draft AND the workout has left the library (`LogSession.tsx:450-458` calls
 this "a corrupted/partial localStorage state" — rare, not impossible).
-Retire it and that session posts `workoutType: null`, which — had the
-refusal shipped keyed on the type alone, as this paragraph originally
-assumed — would then have been declined
-(`server/stores/logs.ts:700`, `routes/data.ts:1534`): the rower taps "Log
-against plan", gets a `201`, and `SESSION n OF 84` does not move. Silently
-— no error surface exists for it.
+**Retire it and the SHIPPED pair predicate refuses that session too — this
+is not a hazard the pair fixed.** Trace the actual producer: the workout is
+deleted mid-session, the server 400s on `workoutId`, and the client's
+supported retry re-posts with `workoutId: null` (`LogSession.tsx:775-793`).
+`resolveWorkoutType` meanwhile has no matched draft and cannot find the
+workout, so WITHOUT the `?? "O2"` last resort it resolves to nothing and
+the body carries no type at all. The retried body is therefore
+`{ workoutId: null, workoutType: null }` — both null, which `isFreeRow`
+reads as a free row and the refusal declines
+(`server/stores/logs.ts`, `routes/data.ts`). The rower taps "Log against
+plan", gets a `201`, and `SESSION n OF 84` does not move. Silently — no
+error surface exists for it.
+
+**So the fallback is load-bearing for the predicate as built**, not merely
+for a type-only one. It is the only thing that keeps the deleted-workout
+retry distinguishable from a genuine free row: with it the retry is
+`(null, "O2")` and advances; without it the two shapes are identical and
+the plan stalls. (An earlier correction to this paragraph hedged it as
+"had the refusal been keyed on type alone" — that weakened the argument
+below what the facts support, and is withdrawn.)
 
 **The deeper point, and it is about the PREDICATE not the branch.** The
 refusal keys on "we do not know the type"; the fact it needs is "this was
@@ -801,9 +832,12 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   - **ADD `logSeed: { steps: [], paces: {} }`** to the `MonitorRun` shape
     (F4) — without it `buildMonitorLogSteps` throws rather than returning
     `[]`.
-  - **CUT retiring `resolveWorkoutType`'s `?? "O2"`** (F3). It collides
-    with the type-blind plan refusal and silently stops advancing plans for
-    unmatched phone-timer rows. The refusal's predicate is scoped instead.
+  - **CUT retiring `resolveWorkoutType`'s `?? "O2"`** (F3). Without it the
+    deleted-workout retry posts `{ workoutId: null, workoutType: null }`,
+    which the pair-based refusal reads as a free row and declines — a `201`
+    and a silently stalled plan. The fallback is what keeps that retry
+    distinguishable from a genuine free row, so it stays. (This bullet
+    previously called the refusal "type-blind"; it is keyed on the pair.)
   - **SERVER HALF ONLY for the plan refusal** (F5). The client half posts
     `advancesPlan: false` from a log door PR 2 builds; nothing in PR 1 can
     emit it. Say so rather than planning a caller that does not exist.
