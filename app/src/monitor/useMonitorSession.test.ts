@@ -11611,3 +11611,76 @@ describe("a free row banks no intervals", () => {
     expect(result.current.actuals).toStrictEqual([]);
   });
 });
+
+describe("beginFreeRow after Ended (the no-reopen rule)", () => {
+  /**
+   * THE SPEC'S OWN DETECTION RULE, third clause: "Once Ended (any closer),
+   * the observer NEVER re-opens on frames ... A new row requires a new
+   * user action." The e2e flow caught this component-side first — after
+   * the end, `deriveProgram("ended")` reads "none" and the link reads
+   * "up", so a caller arming on those two axes re-arms the instant the row
+   * ends, reopens a run, and the next frame fabricates a second session.
+   * The browser showed it as a surface that bounced back to "Ready when
+   * you pull" and a record that never stayed closed.
+   *
+   * The guard belongs HERE as well as at the caller: any future screen
+   * built on the same axes would repeat it otherwise.
+   */
+  it("is a no-op at phase ended — a new row requires a new user action", async () => {
+    const { result, fake } = harness(freeRowScriptForDebug());
+    await connect(result);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    tick(fake, 1000);
+    tick(fake, 1000);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+      await flush();
+    });
+    expect(result.current.phase).toBe("ended");
+    const closedAt = loadMonitorRun()?.completedAt;
+    expect(closedAt).not.toBeNull();
+
+    act(() => {
+      result.current.beginFreeRow();
+    });
+
+    // Still ended, and the closed record untouched — not back at ready
+    // with a fresh identity seeded over a row that is over.
+    expect(result.current.phase).toBe("ended");
+    expect(loadMonitorRun()?.completedAt).toBe(closedAt);
+  });
+});
+
+function freeRowScriptForDebug(): FakeScript {
+  return {
+    program: LIBRARY.program,
+    events: [
+      {
+        atMs: 1000,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 1,
+        distanceMeters: 4,
+        spm: 22,
+        currentSplit: 140,
+        heartRateBpm: null,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 2000,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 2,
+        distanceMeters: 11,
+        spm: 23,
+        currentSplit: 139,
+        heartRateBpm: null,
+        programIntervalIndex: 0,
+      },
+    ],
+  };
+}

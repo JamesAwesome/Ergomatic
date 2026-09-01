@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConnectAction from "../monitor/ConnectAction";
 import { deriveAxes } from "../monitor/connectedAxes";
@@ -61,13 +61,26 @@ export default function JustRow() {
   // through the platform's picker, so there is no moment inside
   // `handleProceed` where a driver exists to arm yet.
   //
-  // `program === "none"` is what stops this re-firing: the arm moves that
-  // axis to `"armed"`, so the condition is false on every render after the
-  // first. `beginFreeRow` is idempotent on its own account too, but relying
-  // on that alone would make this effect's correctness depend on a
-  // guard in another file.
+  // ONCE PER CONNECT PRESS, tracked here — this ref IS the spec's third
+  // detection clause ("Once Ended, the observer NEVER re-opens on frames
+  // ... a new row requires a new user action") said in React. The first
+  // version armed on the axes alone (`link up && program none`), and the
+  // e2e flow found what that means AFTER the end: `deriveProgram("ended")`
+  // reads "none" again, the link is still up, so the effect re-armed the
+  // instant the row ended, phase bounced back to ready over a closed
+  // record, and the next frame opened a second session — the surface
+  // visibly returned to "Ready when you pull" after END. The hook now
+  // refuses at "ended" too, but this component must not lean on another
+  // file's guard for its own loop.
+  const armedThisStart = useRef(false);
   useEffect(() => {
-    if (started && axes.link === "up" && axes.program === "none") {
+    if (
+      started &&
+      !armedThisStart.current &&
+      axes.link === "up" &&
+      axes.program === "none"
+    ) {
+      armedThisStart.current = true;
       session.beginFreeRow();
     }
   }, [started, axes.link, axes.program, session]);
@@ -119,9 +132,9 @@ export default function JustRow() {
         phases={[]}
         program={{ intervals: [] }}
         session={session}
-        // Task 6 lands /justrow/log; until then the catch-all sends this
-        // to /today, which loses nothing — the record is closed and Today's
-        // recovery row (Task 7) is the net under every navigation.
+        // The workout-less log door. Today's recovery row is the net under
+        // this navigation either way: the record is closed and committed
+        // before onEnded ever fires.
         onEnded={() => void navigate("/justrow/log")}
       />
     );
@@ -171,6 +184,9 @@ export default function JustRow() {
           className="button-l2"
           onClick={() => {
             void session.cancel();
+            // A fresh press is a fresh authorization: Cancel clears the
+            // once-latch so the NEXT Connect can arm again.
+            armedThisStart.current = false;
             setStarted(false);
           }}
         >

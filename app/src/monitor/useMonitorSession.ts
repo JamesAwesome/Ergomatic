@@ -4004,7 +4004,21 @@ export function useMonitorSession(
    */
   const beginFreeRow = useCallback((): void => {
     const phase = stateRef.current.phase;
-    if (phase === "programming" || phase === "ready" || phase === "live") {
+    // "ended" is in this guard for the spec's own third detection clause:
+    // "Once Ended (any closer), the observer NEVER re-opens ... A new row
+    // requires a new user action." It was NOT here at first, and the e2e
+    // flow found the consequence: after the end, `deriveProgram("ended")`
+    // reads "none" and the link reads "up", so a caller arming on those
+    // axes re-armed the instant the row ended, re-seeded the identity over
+    // a closed record, and the next frame opened a second session — the
+    // exact fabricated-session hazard the driver documents for the PM5's
+    // own post-terminate housekeeping, rebuilt one layer up.
+    if (
+      phase === "programming" ||
+      phase === "ready" ||
+      phase === "live" ||
+      phase === "ended"
+    ) {
       return;
     }
     const driver = driverRef.current;
