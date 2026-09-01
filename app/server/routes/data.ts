@@ -273,11 +273,21 @@ function checkCompletedAt(
   // themselves form a real calendar date, so building the naive UTC
   // timestamp straight from the literal typed digits (ignoring the offset)
   // and reading its calendar fields back is offset-agnostic by
-  // construction. `Date.UTC` silently rolls an impossible date/time
-  // forward (Feb 31 -> Mar 3, hour 24 -> next day's 00) instead of
-  // rejecting it; re-reading the constructed instant's own UTC fields and
-  // comparing them field-by-field against what was actually typed is what
-  // exposes that roll-over, because the fields come back changed.
+  // construction. An impossible date/time rolls forward (Feb 31 -> Mar 3);
+  // as a deliberate consequence, ISO 8601's `T24:00:00` end-of-day form
+  // rolls to the next day's 00:00:00 and is now REJECTED too — this
+  // route has never accepted it and nothing exercises it. Re-reading the
+  // constructed instant's own UTC fields and comparing them field-by-field
+  // against what was actually typed is what exposes any roll-over,
+  // because the fields come back changed.
+  //
+  // Coordinator re-review, M1: built with `setUTCFullYear`/`setUTCHours`,
+  // NEVER `Date.UTC`/`new Date(...)` for this — those two entry points
+  // alone carry the legacy ECMA-262 two-digit-year special case (years
+  // 0-99 silently become 1900-1999), which would misreport a genuinely
+  // valid year-0099 date as an invalid calendar (measured: `Date.UTC(99,
+  // 5, 15)` and `Date.UTC(1999, 5, 15)` are identical). `setUTCFullYear`
+  // has no such case — it sets the literal year passed to it.
   const [, yearStr, monthStr, dayStr, hourStr, minStr, secStr] = match;
   const year = Number(yearStr);
   const month = Number(monthStr);
@@ -285,8 +295,9 @@ function checkCompletedAt(
   const hour = Number(hourStr);
   const minute = Number(minStr);
   const second = Number(secStr);
-  const naiveUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
-  const rebuilt = new Date(naiveUtcMs);
+  const rebuilt = new Date(0);
+  rebuilt.setUTCFullYear(year, month - 1, day);
+  rebuilt.setUTCHours(hour, minute, second, 0);
   if (
     rebuilt.getUTCFullYear() !== year ||
     rebuilt.getUTCMonth() !== month - 1 ||

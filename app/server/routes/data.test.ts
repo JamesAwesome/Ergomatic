@@ -2016,6 +2016,28 @@ describe("GET/POST /api/logs", () => {
     expect(got.body.completedAt).toBeNull();
   });
 
+  // Coordinator re-review, M1: `Date.UTC`/the `Date` constructor apply the
+  // legacy ECMA-262 two-digit-year special case (years 0-99 map to
+  // 1900-1999) — but ONLY on those two entry points, never on
+  // `setUTCFullYear`. The strict calendar check must build its rebuilt
+  // instant with `setUTCFullYear` for exactly this reason: a real (if
+  // absurd) year-99 date is a genuinely valid calendar date, and it must
+  // fall to the ordinary wrong-clock coercion path (far outside
+  // `COMPLETED_AT_MIN_MS`) rather than being rejected outright as if it
+  // were malformed — the same principle `checkCompletedAt`'s own comment
+  // states for any implausible-but-well-formed instant.
+  it("a real year-0099 completedAt is accepted with 201, stored as null (wrong device clock, not a malformed calendar date)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      completedAt: "0099-06-15T12:00:00.000Z",
+    });
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBeNull();
+  });
+
   it("a parseable completedAt more than 48h in the future is accepted with 201, stored as null (wrong device clock, not a client bug)", async () => {
     const app = appFor(makeStores());
     const farFuture = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
