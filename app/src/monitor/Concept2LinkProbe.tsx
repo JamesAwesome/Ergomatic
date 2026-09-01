@@ -31,16 +31,23 @@ const PROBE_URL = "https://log-dev.concept2.com";
  * still raced the INITIAL async registration (mount happens before any
  * tap is possible, but the subscription that mount triggers is
  * asynchronous, so an impatient first tap could still open and finish the
- * browser before it settled). **Fix round 5 (P1) closes that gap for
- * real, not just documents it:** `useReturnToApp` now exposes `ready`,
- * `false` until BOTH its subscriptions have settled, and this button is
- * `disabled` (reading "Arming…") until `ready` is `true` — so tap 1 is
- * now ALSO guaranteed race-free, by construction, the same way tap 2
- * onward already was.
+ * browser before it settled). Fix round 5 (P1) closed that gap with a
+ * plain `ready: boolean`. **Fix round 7 (P1, finding 5): `ready` had no
+ * FAILURE state** — a rejected registration left the card pinned at
+ * "Arming…" forever, indistinguishable from "still settling." Migrated to
+ * `useReturnToApp`'s richer `status: "arming" | "ready" | "failed"` — the
+ * button now reads a genuine third state instead of silently hanging.
  */
 export default function Concept2LinkProbe() {
   const [returns, setReturns] = useState(0);
-  const { ready } = useReturnToApp(() => setReturns((n) => n + 1));
+  const { status } = useReturnToApp(() => setReturns((n) => n + 1));
+
+  const label =
+    status === "ready"
+      ? "Open consent browser"
+      : status === "failed"
+        ? "Failed to arm — see console"
+        : "Arming…";
 
   return (
     <section
@@ -51,10 +58,10 @@ export default function Concept2LinkProbe() {
       <button
         type="button"
         className="button-outline"
-        disabled={!ready}
+        disabled={status !== "ready"}
         onClick={() => void openExternalUrl(PROBE_URL)}
       >
-        {ready ? "Open consent browser" : "Arming…"}
+        {label}
       </button>
       <p>{`Returns detected: ${returns}`}</p>
     </section>

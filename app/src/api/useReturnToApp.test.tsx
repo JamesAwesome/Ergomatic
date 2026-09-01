@@ -249,17 +249,17 @@ describe("useReturnToApp (native path, mocked adapter)", () => {
   });
 });
 
-describe("useReturnToApp's ready flag (fix round 5, P1 — the first-open race)", () => {
-  it("web: ready is true once the (synchronous) subscription effect has run", async () => {
+describe("useReturnToApp's status (fix round 5 P1 first-open race; fix round 7 P1 finding 5 migrated ready:boolean to status)", () => {
+  it("web: status is ready once the (synchronous) subscription effect has run", async () => {
     const { useReturnToApp } = await import("./useReturnToApp");
     const { result } = renderHook(() => useReturnToApp(vi.fn()));
 
     await vi.waitFor(() => {
-      expect(result.current.ready).toBe(true);
+      expect(result.current.status).toBe("ready");
     });
   });
 
-  it("native: ready stays false until BOTH the appLifecycle and browserFinished Promises resolve, then flips true", async () => {
+  it("native: status stays arming until BOTH the appLifecycle and browserFinished Promises resolve, then flips to ready", async () => {
     let resolveLifecycle: (unsub: () => void) => void = () => undefined;
     const registerAppLifecycleListener = vi.fn(
       () =>
@@ -283,9 +283,9 @@ describe("useReturnToApp's ready flag (fix round 5, P1 — the first-open race)"
     const { useReturnToApp } = await import("./useReturnToApp");
 
     const { result } = renderHook(() => useReturnToApp(vi.fn()));
-    expect(result.current.ready).toBe(false);
+    expect(result.current.status).toBe("arming");
 
-    // Only ONE of the two has settled — still not ready. This is the
+    // Only ONE of the two has settled — still arming. This is the
     // exact case the reviewer's finding names: a caller free to act the
     // instant ONE signal looks live would still be racing the other.
     //
@@ -296,7 +296,7 @@ describe("useReturnToApp's ready flag (fix round 5, P1 — the first-open race)"
     // wait on (`registerAppLifecycleListener` having been CALLED) is
     // owned by the SYNCHRONOUS mount, not by the enrichment this
     // assertion is actually about — the `.then()` chain that runs once
-    // `resolveLifecycle` settles and decides whether `ready` flips. That
+    // `resolveLifecycle` settles and decides whether `status` flips. That
     // barrier is already true before mount even returns, so it proves
     // nothing about whether the `.then()` chain (and any resulting
     // `setState`) has actually run. Flushing two real microtask ticks
@@ -308,11 +308,11 @@ describe("useReturnToApp's ready flag (fix round 5, P1 — the first-open race)"
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(result.current.ready).toBe(false);
+    expect(result.current.status).toBe("arming");
 
     resolveBrowserFinished(vi.fn());
     await vi.waitFor(() => {
-      expect(result.current.ready).toBe(true);
+      expect(result.current.status).toBe("ready");
     });
   });
 
@@ -330,7 +330,142 @@ describe("useReturnToApp's ready flag (fix round 5, P1 — the first-open race)"
     const { result } = renderHook(() => useReturnToApp(vi.fn()));
 
     await vi.waitFor(() => {
-      expect(result.current.ready).toBe(true);
+      expect(result.current.status).toBe("ready");
     });
+  });
+});
+
+describe("useReturnToApp's failure handling (fix round 7, P1, finding 5)", () => {
+  // Every mocked Promise below is asserted for its OWN settlement via
+  // `expect(...).rejects` (or an equivalent `allSettled`/try-catch await)
+  // BEFORE the test ends — never a bare `Promise.reject()` left to be
+  // caught only by the hook, which is exactly the "is there an unhandled
+  // rejection anywhere" question this finding is about. Vitest fails a
+  // test on an unhandled rejection even if every assertion inside it
+  // passed, so a test file free of that failure mode is itself part of
+  // the proof, not just the explicit assertions below.
+
+  it("lifecycle registration rejects while mounted: status becomes failed, and the ALREADY-SUCCEEDED browserFinished arm is unsubscribed", async () => {
+    let rejectLifecycle: (reason: unknown) => void = () => undefined;
+    const lifecyclePromise = new Promise<() => void>((_resolve, reject) => {
+      rejectLifecycle = reject;
+    });
+    const registerAppLifecycleListener = vi.fn(() => lifecyclePromise);
+    const browserFinishedUnsubscribe = vi.fn();
+    const onBrowserFinished = vi.fn(async () => browserFinishedUnsubscribe);
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener,
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
+    vi.resetModules();
+    const { useReturnToApp } = await import("./useReturnToApp");
+
+    const { result } = renderHook(() => useReturnToApp(vi.fn()));
+    // Let browserFinished's arm succeed and get assigned FIRST.
+    await vi.waitFor(() => {
+      expect(onBrowserFinished).toHaveBeenCalledOnce();
+    });
+    expect(result.current.status).toBe("arming");
+
+    rejectLifecycle(new Error("dynamic import failed"));
+    await expect(lifecyclePromise).rejects.toThrow("dynamic import failed");
+    await vi.waitFor(() => {
+      expect(result.current.status).toBe("failed");
+    });
+    // The arm that DID succeed must not be left dangling once the other
+    // arm's rejection moves the whole hook to "failed".
+    expect(browserFinishedUnsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("browserFinished registration rejects while mounted: status becomes failed, and the ALREADY-SUCCEEDED lifecycle arm is unsubscribed", async () => {
+    const lifecycleUnsubscribe = vi.fn();
+    const registerAppLifecycleListener = vi.fn(
+      async () => lifecycleUnsubscribe,
+    );
+    let rejectBrowserFinished: (reason: unknown) => void = () => undefined;
+    const browserFinishedPromise = new Promise<() => void>(
+      (_resolve, reject) => {
+        rejectBrowserFinished = reject;
+      },
+    );
+    const onBrowserFinished = vi.fn(() => browserFinishedPromise);
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener,
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
+    vi.resetModules();
+    const { useReturnToApp } = await import("./useReturnToApp");
+
+    const { result } = renderHook(() => useReturnToApp(vi.fn()));
+    await vi.waitFor(() => {
+      expect(registerAppLifecycleListener).toHaveBeenCalledOnce();
+    });
+    expect(result.current.status).toBe("arming");
+
+    rejectBrowserFinished(new Error("addListener failed"));
+    await expect(browserFinishedPromise).rejects.toThrow("addListener failed");
+    await vi.waitFor(() => {
+      expect(result.current.status).toBe("failed");
+    });
+    expect(lifecycleUnsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("lifecycle registration rejecting AFTER unmount: settles quietly, no unhandled rejection, no state update on the unmounted hook", async () => {
+    let rejectLifecycle: (reason: unknown) => void = () => undefined;
+    const lifecyclePromise = new Promise<() => void>((_resolve, reject) => {
+      rejectLifecycle = reject;
+    });
+    const registerAppLifecycleListener = vi.fn(() => lifecyclePromise);
+    const onBrowserFinished = vi.fn(async () => vi.fn());
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener,
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
+    vi.resetModules();
+    const { useReturnToApp } = await import("./useReturnToApp");
+
+    const { result, unmount } = renderHook(() => useReturnToApp(vi.fn()));
+    unmount();
+    // Rejects AFTER unmount — the `cancelled` guard inside `fail()` must
+    // still consume this rejection (proving no unhandled rejection),
+    // while never touching `result.current` again (the assertion below
+    // pins whatever the LAST rendered value was, "arming", proving no
+    // late `setState` snuck through on an unmounted hook).
+    rejectLifecycle(new Error("dynamic import failed after unmount"));
+    await expect(lifecyclePromise).rejects.toThrow(
+      "dynamic import failed after unmount",
+    );
+    expect(result.current.status).toBe("arming");
+  });
+
+  it("browserFinished registration rejecting AFTER unmount: settles quietly, no unhandled rejection, no state update on the unmounted hook", async () => {
+    const registerAppLifecycleListener = vi.fn(
+      () => new Promise<() => void>(() => undefined),
+    );
+    let rejectBrowserFinished: (reason: unknown) => void = () => undefined;
+    const browserFinishedPromise = new Promise<() => void>(
+      (_resolve, reject) => {
+        rejectBrowserFinished = reject;
+      },
+    );
+    const onBrowserFinished = vi.fn(() => browserFinishedPromise);
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener,
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
+    vi.resetModules();
+    const { useReturnToApp } = await import("./useReturnToApp");
+
+    const { result, unmount } = renderHook(() => useReturnToApp(vi.fn()));
+    unmount();
+    rejectBrowserFinished(new Error("addListener failed after unmount"));
+    await expect(browserFinishedPromise).rejects.toThrow(
+      "addListener failed after unmount",
+    );
+    expect(result.current.status).toBe("arming");
   });
 });

@@ -78,23 +78,25 @@ import { onBrowserFinished } from "../adapters/externalBrowser";
 // dependency array is EMPTY — one subscription for the component's whole
 // mounted lifetime, never torn down by a `cb` identity change.
 //
-// **`ready`, fix round 5 (P1 — the first-open race):** the ONE
-// subscription above is still ASYNCHRONOUS on native (a dynamic
-// `import()` plus two plugin `addListener` Promises), and nothing
-// previously told a caller when it had actually settled. A caller free to
-// act immediately at mount (PR2's card, `Concept2LinkProbe.tsx`) could
-// open the consent browser and have the rower finish it before
-// registration completed, missing the exact signal this whole PR exists
-// to catch — for the FIRST open only; fix round 3's fix already means the
-// subscription never tears down again once established. `ready` is the
-// barrier: `false` until BOTH `registerAppLifecycleListener` and
-// `onBrowserFinished` have settled (native: both Promises resolved; web:
-// both calls are synchronous, so `ready` flips true on the very first
-// effect pass — no real wait, just the same code path). Callers MUST gate
-// their own "open" action on `ready`, the same way
-// `Concept2LinkProbe.tsx` gates its button's `disabled` prop — this hook
-// enforces nothing on the caller's behalf beyond exposing the flag.
-export function useReturnToApp(cb: () => void): { ready: boolean } {
+// **`status`, fix round 7 (P1, finding 5 — replaces fix round 5's plain
+// `ready: boolean`, which had no failure state at all):** `"arming"` until
+// BOTH `registerAppLifecycleListener` and `onBrowserFinished` have
+// settled, `"ready"` once both have SUCCEEDED, `"failed"` if EITHER
+// rejects. Fix round 5 attached only fulfillment handlers to both
+// Promises — a rejected dynamic `import()` (the module fails to load) or
+// a rejected `addListener` call was an UNHANDLED REJECTION, left whichever
+// arm DID succeed subscribed with nothing to ever clean it up on a normal
+// path, and pinned any caller gating on `ready` at "not ready" FOREVER
+// (a boolean has no way to represent "this will never become true").
+// `status` fixes this: a rejection on EITHER arm moves straight to
+// `"failed"`, unsubscribes whichever arm already succeeded (checking
+// BOTH orders — the surviving arm may resolve before or after the
+// rejecting one), and every `.then(onFulfilled, onRejected)` call attaches
+// its rejection handler in the SAME call, so neither Promise is ever
+// unhandled even for one microtask.
+export type ReturnToAppStatus = "arming" | "ready" | "failed";
+
+export function useReturnToApp(cb: () => void): { status: ReturnToAppStatus } {
   // Kept current via `useLayoutEffect` (no deps — runs after EVERY
   // render), never written during render itself: `eslint-plugin-
   // react-hooks@7`'s `react-hooks/refs` rule rejects a ref write in the
@@ -109,10 +111,11 @@ export function useReturnToApp(cb: () => void): { ready: boolean } {
     cbRef.current = cb;
   });
 
-  const [ready, setReady] = useState(false);
+  const [status, setStatus] = useState<ReturnToAppStatus>("arming");
 
   useEffect(() => {
     let cancelled = false;
+    let failed = false;
     let nativeUnsubscribe: (() => void) | undefined;
     let webUnsubscribe: (() => void) | undefined;
     let browserFinishedUnsubscribe: (() => void) | undefined;
@@ -120,9 +123,22 @@ export function useReturnToApp(cb: () => void): { ready: boolean } {
     let browserFinishedSettled = false;
 
     function markReadyIfBothSettled(): void {
-      if (!cancelled && lifecycleSettled && browserFinishedSettled) {
-        setReady(true);
+      if (!cancelled && !failed && lifecycleSettled && browserFinishedSettled) {
+        setStatus("ready");
       }
+    }
+
+    // Moves to "failed" on EITHER arm's rejection. Cleans up whichever arm
+    // already succeeded and got assigned — checking BOTH unsubscribe
+    // variables, since either arm can be the one that rejects and either
+    // can be the one that already settled successfully first.
+    function fail(): void {
+      if (cancelled || failed) return;
+      failed = true;
+      nativeUnsubscribe?.();
+      webUnsubscribe?.();
+      browserFinishedUnsubscribe?.();
+      setStatus("failed");
     }
 
     function trackAsyncUnsubscribe(
@@ -130,14 +146,25 @@ export function useReturnToApp(cb: () => void): { ready: boolean } {
       assign: (unsubscribe: () => void) => void,
       onSettled: () => void,
     ): void {
-      void promise.then((unsubscribe) => {
-        if (cancelled) {
-          unsubscribe();
-        } else {
-          assign(unsubscribe);
-        }
-        onSettled();
-      });
+      // Both handlers attached in the SAME `.then()` call — never a
+      // separate `.catch()` chained afterward, which would leave a real
+      // (if brief) window where the rejection has no handler yet.
+      void promise.then(
+        (unsubscribe) => {
+          if (cancelled || failed) {
+            // Either already torn down (unmount) or the OTHER arm already
+            // failed — this arm succeeded too late to matter either way,
+            // so it gets cleaned up immediately rather than left dangling.
+            unsubscribe();
+          } else {
+            assign(unsubscribe);
+          }
+          onSettled();
+        },
+        () => {
+          fail();
+        },
+      );
     }
 
     function onEvent(event: AppLifecycleEvent): void {
@@ -187,6 +214,8 @@ export function useReturnToApp(cb: () => void): { ready: boolean } {
       // discarded — nothing to clean up on that branch. The real listener
       // on this platform is the one below. Both calls are synchronous on
       // web, so readiness is immediate — no real wait, same code path.
+      // Neither can reject (both are plain synchronous calls, not
+      // Promises), so "failed" is unreachable on web by construction.
       webUnsubscribe = registerWebAppLifecycleListener(onEvent);
       lifecycleSettled = true;
       browserFinishedSettled = true;
@@ -205,5 +234,5 @@ export function useReturnToApp(cb: () => void): { ready: boolean } {
     // ref objects) and nothing else in this effect's closure changes.
   }, []);
 
-  return { ready };
+  return { status };
 }

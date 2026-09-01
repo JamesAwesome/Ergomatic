@@ -127,4 +127,40 @@ describe("Concept2LinkProbe", () => {
       "https://log-dev.concept2.com",
     );
   });
+
+  it("fix round 7 (finding 5): shows a FAILED state, not a permanent Arming…, when registration rejects", async () => {
+    let rejectLifecycle: (reason: unknown) => void = () => undefined;
+    const lifecyclePromise = new Promise<() => void>((_resolve, reject) => {
+      rejectLifecycle = reject;
+    });
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(() => lifecyclePromise),
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.doMock("../adapters/externalBrowser", () => ({
+      openExternalUrl: vi.fn(),
+      onBrowserFinished: vi.fn(async () => vi.fn()),
+    }));
+    vi.resetModules();
+    const { default: Concept2LinkProbe } = await import("./Concept2LinkProbe");
+    render(<Concept2LinkProbe />);
+
+    expect(screen.getByRole("button", { name: /arming/i })).toBeInTheDocument();
+
+    await act(async () => {
+      rejectLifecycle(new Error("dynamic import failed"));
+      // Same reasoning as useReturnToApp.test.tsx: assert the rejection
+      // is genuinely observed (not merely swallowed) before checking the
+      // rendered result.
+      await expect(lifecyclePromise).rejects.toThrow("dynamic import failed");
+    });
+
+    const failedButton = screen.getByRole("button", {
+      name: /failed to arm/i,
+    });
+    expect(failedButton).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: /^arming/i }),
+    ).not.toBeInTheDocument();
+  });
 });
