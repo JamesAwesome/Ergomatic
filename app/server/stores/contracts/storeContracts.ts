@@ -509,6 +509,54 @@ export function describeStoreContracts(
         });
       });
 
+      // THE FREE-ROW PREDICATE'S TRUTH TABLE (Phase JR PR 1, review of
+      // 29e00561). Lives HERE rather than in either implementation's own
+      // suite because that is the only thing that can catch the fake and
+      // the real store disagreeing — which is exactly what happened: the
+      // fake checked `advancesPlan` alone and advanced a free row while
+      // Postgres refused it, so the same input moved `doneN` in one and
+      // not the other.
+      //
+      // The pair matters, and row 2 is why. `LogSession.tsx:780-790`
+      // retries a save with `workoutId: null` when the server 400s
+      // specifically on `workoutId` (the workout was deleted between that
+      // door's mount and the Save click). That is a legitimate
+      // plan-advancing session posting a null id, and a predicate keyed on
+      // the id alone would stall its plan silently.
+      it.each([
+        ["a FREE ROW (both null)", null, null, 0],
+        ["a null id that still carries a type", null, "O2", 1],
+        ["a named workout with no type", "id", null, 1],
+        ["an ordinary row", "id", "O2", 1],
+      ])(
+        "create: %s asking to advance leaves done_n at %s",
+        async (_label, id, type, expected) => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const workoutId =
+            id === null
+              ? null
+              : (
+                  await stores.workouts.create(
+                    userId,
+                    workoutInput({ title: "JR predicate" }),
+                  )
+                ).id;
+
+          await stores.logs.create(
+            userId,
+            logInput({
+              workoutId,
+              workoutType: type,
+              advancesPlan: true,
+            }),
+          );
+
+          const state = await stores.planState.get(userId);
+          expect(state?.doneN ?? 0).toBe(expected);
+        },
+      );
+
       // Task 3: `advancesPlan: false` skips ONLY the plan_state upsert —
       // the log row itself is still created either way (proved via
       // `list`, not just the return value, since a failed insert would

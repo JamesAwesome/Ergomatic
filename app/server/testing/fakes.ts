@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { isFreeRow } from "../../domain/types.js";
 import type { SessionStore } from "../auth/sessions.js";
 import type { UserStore } from "../auth/users.js";
 import type { WorkoutInput, WorkoutType } from "../../domain/types.js";
@@ -661,7 +662,13 @@ function makeFakeLogsStore(
       // plan chosen (returned planKey null).
       let planKey: string | null = null;
       let planIndex: number | null = null;
-      if (advancesPlan) {
+      // Phase JR PR 1: mirrors the real store's FREE-ROW refusal
+      // (`stores/logs.ts`) — a Just Row never advances a plan, whatever the
+      // caller asked for. Kept in step by the shared contract suite rather
+      // than by this comment: `storeContracts.ts` runs the predicate's truth
+      // table against BOTH implementations, which is the only thing that
+      // can catch this fake and the real store disagreeing.
+      if (advancesPlan && !isFreeRow(input.workoutId, input.workoutType)) {
         const advanced = planState._advance(userId);
         if (advanced.planKey !== null) {
           planKey = advanced.planKey;
