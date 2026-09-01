@@ -281,7 +281,7 @@ function checkCompletedAt(
   // against what was actually typed is what exposes any roll-over,
   // because the fields come back changed.
   //
-  // Coordinator re-review, M1: built with `setUTCFullYear`/`setUTCHours`,
+  // Built with `setUTCFullYear`/`setUTCHours`,
   // NEVER `Date.UTC`/`new Date(...)` for this — those two entry points
   // alone carry the legacy ECMA-262 two-digit-year special case (years
   // 0-99 silently become 1900-1999), which would misreport a genuinely
