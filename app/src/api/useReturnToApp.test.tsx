@@ -248,3 +248,73 @@ describe("useReturnToApp (native path, mocked adapter)", () => {
     expect(cb2).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("useReturnToApp's ready flag (fix round 5, P1 — the first-open race)", () => {
+  it("web: ready is true once the (synchronous) subscription effect has run", async () => {
+    const { useReturnToApp } = await import("./useReturnToApp");
+    const { result } = renderHook(() => useReturnToApp(vi.fn()));
+
+    await vi.waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+  });
+
+  it("native: ready stays false until BOTH the appLifecycle and browserFinished Promises resolve, then flips true", async () => {
+    let resolveLifecycle: (unsub: () => void) => void = () => undefined;
+    const registerAppLifecycleListener = vi.fn(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveLifecycle = resolve;
+        }),
+    );
+    let resolveBrowserFinished: (unsub: () => void) => void = () => undefined;
+    const onBrowserFinished = vi.fn(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveBrowserFinished = resolve;
+        }),
+    );
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener,
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
+    vi.resetModules();
+    const { useReturnToApp } = await import("./useReturnToApp");
+
+    const { result } = renderHook(() => useReturnToApp(vi.fn()));
+    expect(result.current.ready).toBe(false);
+
+    // Only ONE of the two has settled — still not ready. This is the
+    // exact case the reviewer's finding names: a caller free to act the
+    // instant ONE signal looks live would still be racing the other.
+    resolveLifecycle(vi.fn());
+    await vi.waitFor(() => {
+      expect(registerAppLifecycleListener).toHaveBeenCalledOnce();
+    });
+    expect(result.current.ready).toBe(false);
+
+    resolveBrowserFinished(vi.fn());
+    await vi.waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+  });
+
+  it("native: still reaches ready even if onBrowserFinished somehow returns synchronously (defensive branch, not a real code path — both calls read the same isNative())", async () => {
+    const registerAppLifecycleListener = vi.fn(async () => vi.fn());
+    const onBrowserFinished = vi.fn(() => vi.fn());
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener,
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
+    vi.resetModules();
+    const { useReturnToApp } = await import("./useReturnToApp");
+
+    const { result } = renderHook(() => useReturnToApp(vi.fn()));
+
+    await vi.waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+  });
+});

@@ -34,6 +34,7 @@ afterEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
   vi.doUnmock("../adapters/externalBrowser");
+  vi.doUnmock("../adapters/appLifecycle");
   Object.defineProperty(document, "visibilityState", {
     value: "visible",
     configurable: true,
@@ -76,5 +77,54 @@ describe("Concept2LinkProbe", () => {
     setVisibility("visible");
 
     expect(screen.getByText("Returns detected: 1")).toBeInTheDocument();
+  });
+
+  it("disables the opener until BOTH useReturnToApp subscriptions settle (fix round 5, P1 — the first-open race the reviewer proved), then enables it and lets a real tap through", async () => {
+    const openExternalUrl = vi.fn();
+    // The native branch calls `onBrowserFinished` too — must be present on
+    // this mock or `useReturnToApp` throws (`onBrowserFinished is not a
+    // function`), the same reason the OTHER tests in this file, which stay
+    // on the web branch, get away with mocking `openExternalUrl` alone.
+    const onBrowserFinished = vi.fn(async () => vi.fn());
+    vi.doMock("../adapters/externalBrowser", () => ({
+      openExternalUrl,
+      onBrowserFinished,
+    }));
+    let resolveLifecycle: (unsubscribe: () => void) => void = () => undefined;
+    const registerAppLifecycleListener = vi.fn(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveLifecycle = resolve;
+        }),
+    );
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener,
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.resetModules();
+    const { default: Concept2LinkProbe } = await import("./Concept2LinkProbe");
+    render(<Concept2LinkProbe />);
+
+    // Unsettled: reads "Arming…", disabled, and — the actual invariant,
+    // not just the label — a tap does NOT reach openExternalUrl.
+    const armingButton = screen.getByRole("button", { name: /arming/i });
+    expect(armingButton).toBeDisabled();
+    await userEvent.click(armingButton);
+    expect(openExternalUrl).not.toHaveBeenCalled();
+
+    // Settle the lifecycle registration (onBrowserFinished's mock above
+    // already resolves on its own microtask) — NOW ready flips true.
+    await act(async () => {
+      resolveLifecycle(vi.fn());
+    });
+
+    const openButton = await screen.findByRole("button", {
+      name: /open consent browser/i,
+    });
+    expect(openButton).toBeEnabled();
+    await userEvent.click(openButton);
+    expect(openExternalUrl).toHaveBeenCalledExactlyOnceWith(
+      "https://log-dev.concept2.com",
+    );
   });
 });

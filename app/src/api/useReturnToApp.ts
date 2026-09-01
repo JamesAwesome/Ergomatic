@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   registerAppLifecycleListener,
   registerWebAppLifecycleListener,
@@ -77,7 +77,24 @@ import { onBrowserFinished } from "../adapters/externalBrowser";
 // in a ref, read fresh on every invocation, and the subscribing effect's
 // dependency array is EMPTY — one subscription for the component's whole
 // mounted lifetime, never torn down by a `cb` identity change.
-export function useReturnToApp(cb: () => void): void {
+//
+// **`ready`, fix round 5 (P1 — the first-open race):** the ONE
+// subscription above is still ASYNCHRONOUS on native (a dynamic
+// `import()` plus two plugin `addListener` Promises), and nothing
+// previously told a caller when it had actually settled. A caller free to
+// act immediately at mount (PR2's card, `Concept2LinkProbe.tsx`) could
+// open the consent browser and have the rower finish it before
+// registration completed, missing the exact signal this whole PR exists
+// to catch — for the FIRST open only; fix round 3's fix already means the
+// subscription never tears down again once established. `ready` is the
+// barrier: `false` until BOTH `registerAppLifecycleListener` and
+// `onBrowserFinished` have settled (native: both Promises resolved; web:
+// both calls are synchronous, so `ready` flips true on the very first
+// effect pass — no real wait, just the same code path). Callers MUST gate
+// their own "open" action on `ready`, the same way
+// `Concept2LinkProbe.tsx` gates its button's `disabled` prop — this hook
+// enforces nothing on the caller's behalf beyond exposing the flag.
+export function useReturnToApp(cb: () => void): { ready: boolean } {
   // Kept current via `useLayoutEffect` (no deps — runs after EVERY
   // render), never written during render itself: `eslint-plugin-
   // react-hooks@7`'s `react-hooks/refs` rule rejects a ref write in the
@@ -92,15 +109,26 @@ export function useReturnToApp(cb: () => void): void {
     cbRef.current = cb;
   });
 
+  const [ready, setReady] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     let nativeUnsubscribe: (() => void) | undefined;
     let webUnsubscribe: (() => void) | undefined;
     let browserFinishedUnsubscribe: (() => void) | undefined;
+    let lifecycleSettled = false;
+    let browserFinishedSettled = false;
+
+    function markReadyIfBothSettled(): void {
+      if (!cancelled && lifecycleSettled && browserFinishedSettled) {
+        setReady(true);
+      }
+    }
 
     function trackAsyncUnsubscribe(
       promise: Promise<() => void>,
       assign: (unsubscribe: () => void) => void,
+      onSettled: () => void,
     ): void {
       void promise.then((unsubscribe) => {
         if (cancelled) {
@@ -108,6 +136,7 @@ export function useReturnToApp(cb: () => void): void {
         } else {
           assign(unsubscribe);
         }
+        onSettled();
       });
     }
 
@@ -117,9 +146,16 @@ export function useReturnToApp(cb: () => void): void {
 
     const result = registerAppLifecycleListener(onEvent);
     if (result instanceof Promise) {
-      trackAsyncUnsubscribe(result, (unsubscribe) => {
-        nativeUnsubscribe = unsubscribe;
-      });
+      trackAsyncUnsubscribe(
+        result,
+        (unsubscribe) => {
+          nativeUnsubscribe = unsubscribe;
+        },
+        () => {
+          lifecycleSettled = true;
+          markReadyIfBothSettled();
+        },
+      );
 
       // The modal-dismiss signal `resume` alone cannot see (this file's
       // own header). Only reached when the lifecycle listener's own
@@ -128,15 +164,33 @@ export function useReturnToApp(cb: () => void): void {
       // not load-bearing).
       const browserResult = onBrowserFinished(() => cbRef.current());
       if (browserResult instanceof Promise) {
-        trackAsyncUnsubscribe(browserResult, (unsubscribe) => {
-          browserFinishedUnsubscribe = unsubscribe;
-        });
+        trackAsyncUnsubscribe(
+          browserResult,
+          (unsubscribe) => {
+            browserFinishedUnsubscribe = unsubscribe;
+          },
+          () => {
+            browserFinishedSettled = true;
+            markReadyIfBothSettled();
+          },
+        );
+      } else {
+        // Defensive only — real code never reaches this branch here (both
+        // calls read the SAME `isNative()`, so if one says native the
+        // other does too); kept so a test mocking them independently
+        // still marks readiness correctly rather than hanging forever.
+        browserFinishedSettled = true;
+        markReadyIfBothSettled();
       }
     } else {
       // `result` (the web arm's own no-op unsubscribe) is intentionally
       // discarded — nothing to clean up on that branch. The real listener
-      // on this platform is the one below.
+      // on this platform is the one below. Both calls are synchronous on
+      // web, so readiness is immediate — no real wait, same code path.
       webUnsubscribe = registerWebAppLifecycleListener(onEvent);
+      lifecycleSettled = true;
+      browserFinishedSettled = true;
+      markReadyIfBothSettled();
     }
 
     return () => {
@@ -150,4 +204,6 @@ export function useReturnToApp(cb: () => void): void {
     // needed — `cbRef` is a ref (exhaustive-deps already excludes stable
     // ref objects) and nothing else in this effect's closure changes.
   }, []);
+
+  return { ready };
 }

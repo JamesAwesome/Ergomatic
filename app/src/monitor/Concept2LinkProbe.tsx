@@ -23,34 +23,24 @@ const PROBE_URL = "https://log-dev.concept2.com";
  * from a production build with the flag unset. RF12 red proof and exact
  * operator steps: `docs/superpowers/plans/2026-09-01-concept2-pr15-walk.md`.
  *
- * **Fix round 3 (RF26 correction of an over-promoted claim):** this
- * comment used to say `onNativeBrowserFinished`'s "register before
- * opening" contract was satisfied "for free" because the hook mounts
- * before any tap can fire `openExternalUrl`. That was true only for the
- * FIRST tap: `useReturnToApp` (then `useForegroundRefetch`) depended on
- * `[cb]`, and this card passed a fresh inline arrow on every render, so
- * incrementing `returns` after tap 1 re-rendered the card, tore the
- * subscription down, and re-added it — reopening the exact race for tap
- * 2 onward (antagonist finding 1, fix round 3). `useReturnToApp` now
- * holds `cb` in a ref with an EMPTY effect dependency array (one
- * subscription for the component's whole mounted lifetime), fixing that
- * RE-subscription race for tap 2 onward.
- *
- * **Round 4 correction, the same over-promotion one layer down: tap 1
- * itself is still NOT guaranteed race-free.** Mounting happens before any
- * tap is POSSIBLE, but the subscription this mount triggers is
- * ASYNCHRONOUS — a dynamic `import()` plus `Browser.addListener`'s own
- * returned `Promise` (`onNativeBrowserFinished`) — so an impatient tap on
- * "Open consent browser" the instant the screen appears can still open
- * and finish the browser before that promise chain resolves, missing
- * `browserFinished` for THAT one round trip. Only from tap 2 onward is
- * registration guaranteed complete (once established, fix round 3's fix
- * means it never tears down again) — "for every tap" was still one tap
- * too many.
+ * **History of this comment's own over-promotions, kept rather than
+ * deleted (the pattern itself is worth remembering):** fix round 3 fixed
+ * the RE-subscription race (a `[cb]`-keyed effect tore down and rebuilt
+ * the subscription on every render/tap) but the comment then claimed
+ * "for every tap, not just the first" — round 4 caught that tap 1 ITSELF
+ * still raced the INITIAL async registration (mount happens before any
+ * tap is possible, but the subscription that mount triggers is
+ * asynchronous, so an impatient first tap could still open and finish the
+ * browser before it settled). **Fix round 5 (P1) closes that gap for
+ * real, not just documents it:** `useReturnToApp` now exposes `ready`,
+ * `false` until BOTH its subscriptions have settled, and this button is
+ * `disabled` (reading "Arming…") until `ready` is `true` — so tap 1 is
+ * now ALSO guaranteed race-free, by construction, the same way tap 2
+ * onward already was.
  */
 export default function Concept2LinkProbe() {
   const [returns, setReturns] = useState(0);
-  useReturnToApp(() => setReturns((n) => n + 1));
+  const { ready } = useReturnToApp(() => setReturns((n) => n + 1));
 
   return (
     <section
@@ -61,9 +51,10 @@ export default function Concept2LinkProbe() {
       <button
         type="button"
         className="button-outline"
+        disabled={!ready}
         onClick={() => void openExternalUrl(PROBE_URL)}
       >
-        Open consent browser
+        {ready ? "Open consent browser" : "Arming…"}
       </button>
       <p>{`Returns detected: ${returns}`}</p>
     </section>

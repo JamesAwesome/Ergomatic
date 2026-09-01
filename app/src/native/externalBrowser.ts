@@ -27,7 +27,14 @@ export async function openNativeExternalUrl(url: string): Promise<void> {
  * landing on our https callback page, which the rower still has to
  * dismiss by hand). **Register this BEFORE calling `Browser.open` at the
  * call site**: a browser that finishes before the listener attaches fires
- * nothing (`addListener` is not retroactive).
+ * nothing (`addListener` is not retroactive). **This is no longer just a
+ * documentation promise (fix round 5, P1 — the first-open race a prior
+ * revision of this comment did not enforce):** `useReturnToApp.ts`'s
+ * `ready` flag is the actual barrier now — it stays `false` until THIS
+ * call's returned `Promise` (and the lifecycle listener's) has resolved,
+ * and `Concept2LinkProbe.tsx` disables its own "open" action until
+ * `ready` is `true`. A caller that ignores `ready` and opens anyway is
+ * back to relying on this comment alone.
  *
  * PRIMARY (`@capacitor/browser@8.0.4`'s own shipped
  * `dist/esm/definitions.d.ts`, `BrowserPlugin.addListener`'s
