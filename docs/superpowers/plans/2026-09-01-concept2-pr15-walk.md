@@ -145,6 +145,17 @@ report it rather than continuing to step 6.
   this probe card, or any check against a PRIOR web session, can measure.
   There is no substitute check for this walk to carry until `/start`
   exists.
+- **Optional, round 9 (P2, gate doc §1a's provider-remedy claim):**
+  unrelated to this card's own probe (which never completes a real OAuth
+  exchange) — if you have login access to the log-dev Concept2 account
+  used for PR0's own anchor measurement (`user 2211`, spec's own
+  "Operator steps" line), it costs nothing extra to open that account's
+  **Applications** settings page (Profile → Edit Profile → Applications,
+  per Concept2's own Help page, `https://log.concept2.com/help`) and
+  confirm whether Ergomatic's registered client appears there with a
+  working **Revoke** button. This is the ONE piece of the gate doc's own
+  victim-remedy claim (§1a) that a real account login can settle rather
+  than infer — not blocking, not pass/fail, do it whenever convenient.
 
 ## Afterwards
 

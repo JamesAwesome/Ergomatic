@@ -30,11 +30,14 @@ export async function openNativeExternalUrl(url: string): Promise<void> {
  * nothing (`addListener` is not retroactive). **This is no longer just a
  * documentation promise (fix round 5, P1 — the first-open race a prior
  * revision of this comment did not enforce):** `useReturnToApp.ts`'s
- * `ready` flag is the actual barrier now — it stays `false` until THIS
- * call's returned `Promise` (and the lifecycle listener's) has resolved,
- * and `Concept2LinkProbe.tsx` disables its own "open" action until
- * `ready` is `true`. A caller that ignores `ready` and opens anyway is
- * back to relying on this comment alone.
+ * `status` (round 7: `"arming" | "ready" | "failed"` — a rejection needed
+ * a real failure state, so the plain `ready` boolean this comment
+ * originally named was replaced; see `useReturnToApp.ts`'s own header)
+ * is the actual barrier now — it stays `"arming"` until THIS call's
+ * returned `Promise` (and the lifecycle listener's) has resolved, and
+ * `Concept2LinkProbe.tsx` disables its own "open" action until `status`
+ * is `"ready"`. A caller that ignores `status` and opens anyway is back
+ * to relying on this comment alone.
  *
  * PRIMARY (`@capacitor/browser@8.0.4`'s own shipped
  * `dist/esm/definitions.d.ts`, `BrowserPlugin.addListener`'s

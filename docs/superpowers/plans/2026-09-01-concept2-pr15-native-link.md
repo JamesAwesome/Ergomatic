@@ -75,24 +75,31 @@ doc comment is the current source of truth, not this paragraph):**
 - Modify: `docs/superpowers/specs/2026-08-31-concept2-logbook-design.md` (§Architecture 3 Branch A: `appStateChange` → the corrected lifecycle wording, replace in place, cite Phase LM)
 - Create: `docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md` — the account-injection ruling package for James (this PR's design gate; ROADMAP's register row binds the ruling here)
 
-**The gate package contents — SUPERSEDED, fix round 5 (finding 3d): this
-numbered sketch (1 residual / 1 credential claim / three options a-c) is
-the ORIGINAL, pre-review shape and no longer matches the shipped package
-— re-describing it here a second time is exactly what went stale each
-prior round. `docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md` is
-the current, single source of truth: §1/§1a (the residual and its four
-bounds plus the blast radius), §2 (the credential fact, narrowed fix
-round 5 — the native app holds only a Keychain bearer, but the phone's
-Safari/SFSafariViewController cookie jar is a genuinely open, unmeasured
-question, not a closed "never"), §3 (six options a-f, neutrally costed,
-including fix round 5's correction that (d) alone is detection-grade only
-— a determined attacker can construct and hand out C2's raw, publicly-
-shaped authorize URL directly, bypassing any interstitial on our own
-origin — and the actual prevention variant, a browser-bound continuation
-cookie set at `/start` and required at `/callback`), §4 (the device-check
-card, including an optional on-device cookie-persistence probe), and §5
-(the full antagonist verdict). Assembled from evidence, no invention;
-still ends by asking for James's ruling, still choosing nothing itself.
+**The gate package contents — SUPERSEDED, fix round 5 (finding 3d), and
+stale again since (round 9 correction): this numbered sketch (1 residual
+/ 1 credential claim / three options a-c) is the ORIGINAL, pre-review
+shape and has never matched the shipped package since fix round 5 —
+re-describing it here a second time is exactly what went stale each
+prior round, and even this POINTER paragraph itself went stale between
+rounds 5 and 9 by trying to summarize content rather than only pointing
+at it. `docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md` is the
+current, single source of truth: §1/§1a (the residual, its four bounds,
+and the blast radius — round 7 corrected the blast radius itself: no
+tokens leak, only a server-mediated capability to see/replace/unlink the
+association or post the attacker's own rows into the victim's logbook),
+§2 (the credential fact — round 7 fetched Apple's own
+SFSafariViewController documentation and DROPPED round 5's speculation
+that the phone's browser cookie jar might carry a prior web session in;
+the native app's own credential, a Keychain bearer, is genuinely absent
+from the consent browser, full stop), §3 (SEVEN options a-g across FOUR
+buckets — accept, detect, physically-confirm, and, added round 9,
+app-bind via an authenticated app-return exchange, the only bucket
+achieving real principal binding; no browser-side option in the set
+does), §4 (the device-check card — round 7 dropped the on-device
+cookie-persistence probe entirely, since its premise, the shared-jar
+speculation, no longer exists), and §5 (the full antagonist verdict).
+Assembled from evidence, no invention; still ends by asking for James's
+ruling, still choosing nothing itself.
 
 - [ ] **Step 1:** Write both docs. **Step 2:** `pnpm format:check` untouched-by-prettier rule for root docs does not apply (these live under docs/superpowers — still never Prettier root markdown). **Step 3: Commit.**
 

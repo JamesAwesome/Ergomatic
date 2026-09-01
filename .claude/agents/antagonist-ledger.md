@@ -4894,3 +4894,29 @@ fold; every quote and nine spot-checked `file:line` citations.
   ruling.** Both directions count: bounds left out make "accept" look worse,
   and a cost over-stated makes "detect" look worse. Enumerate both halves
   from the code.
+
+**CORRECTION (2026-09-01, fix round 9 scoped re-review — a visible
+correction, not a silent rewrite: the entry above is left as this pass
+wrote it, since it is a record of what was found and believed AT THE
+TIME, and erasing it would just make the same claim easy to re-believe
+later).** Two claims in this entry were superseded by the SAME gate
+document this pass reviewed, after later rounds read primary sources this
+pass did not:
+- Finding 6's `"accept / detect / prevent"` phrasing (this entry's own
+  words, matching the gate doc's THEN-current taxonomy) was renamed by
+  the gate doc's own round 7 to accept / detect / physically-confirm —
+  nothing in the package as it stood achieved cryptographic principal
+  binding, so "prevent" was the wrong word throughout. Round 9 then added
+  a FOURTH bucket, app-bind (option (g), an authenticated app-return
+  exchange), which DOES achieve real principal binding — the first and
+  only option in the package that does.
+- "Attacked and HELD... §2's credential fact (attacked via
+  `WKHTTPCookieStore` — no rescue, because there is no Ergomatic cookie on
+  native to share, `api.ts:14-17`)" HELD for the NATIVE APP's own
+  credential specifically (a Keychain bearer, never a cookie) — that part
+  is still true today. But the broader shape of the claim, that no
+  Ergomatic-issued cookie exists anywhere in this flow, was narrowed by
+  the gate doc's own round 5/7: the SERVER does issue a real
+  `erg_session` cookie, for WEB sessions (`server/auth/cookies.ts:6,20-29`)
+  — only the native app itself never carries one. Neither correction
+  changes this pass's verdict (REVISE) or any of its other five findings.

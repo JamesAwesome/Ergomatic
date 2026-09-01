@@ -205,8 +205,13 @@ the in-repo precedent; C2 has no SDK, so we build the RFC 8252 shape:
      `attempt.user_id` alone, so an attacker who mints on their OWN
      Ergomatic account and delivers the resulting authorize URL to a
      victim links the VICTIM's Concept2 account under the ATTACKER's
-     user; bounded today only by `ALLOWED_EMAILS` (household allowlist),
-     and James's call is owed before prod cutover.
+     user. **Corrected round 9 — "bounded today only by `ALLOWED_EMAILS`"
+     was already stale when PR1.5's own gate package shipped: four real
+     bounds exist, not one, and seven options across four buckets are on
+     the table (`2026-09-01-concept2-pr15-gate.md` §1/§3), one of them
+     (g) this Branch B section's own shape.** James's call is owed
+     before prod cutover — see the gate doc, not this bullet, for the
+     current bound count and option set.
    - **Branch B (C2 does not echo `state`):** the callback cannot bind a
      user, so the CODE must come back through the app: register a
      private-use scheme (Info.plist), C2 redirects to
