@@ -95,7 +95,14 @@ test.describe("Just Row: the whole flow", () => {
     ).toBeVisible();
     await expect(page.getByText(/CONNECTED/)).toBeVisible();
 
-    // First motion hands over to the standard surface in its free-row
+    // "Show me the numbers" hands over to the surface BEFORE the first
+    // pull — the ready screen's own lead action, and the one branch only
+    // this layer can reach (jsdom cannot take the bare hook live). The
+    // frames have not started yet (STORY_START_MS), so this also pins that
+    // the pre-motion surface renders rather than waiting for motion.
+    await page.getByRole("button", { name: "Show me the numbers" }).click();
+
+    // First motion then fills the standard surface in its free-row
     // treatment: the identity where a count would be, Free in both target
     // slots, ELAPSED as the band's one cell, no GRID control anywhere.
     // The 15 s allowance is the story's own arithmetic, not slack: the
@@ -108,6 +115,14 @@ test.describe("Just Row: the whole flow", () => {
     await expect(page.getByText("ELAPSED")).toBeVisible();
     await expect(page.locator(".connected-control")).toHaveCount(0);
     await expect(page.getByText("UP NEXT")).toHaveCount(0);
+
+    // MOTION BEFORE THE END, pinned on a real number — the structural
+    // assertions above all pass on the PRE-motion surface too (the armed
+    // mirror renders the same treatment), and a first cut of this spec
+    // ended a row that never started: END at ready closes no record, the
+    // door finds nothing, and the flow lands on Today. 64m is frame 16's
+    // own meters.
+    await expect(page.getByText("64m")).toBeVisible({ timeout: 30_000 });
 
     // The rower ends the row from the app: the header END control, staged
     // (first tap arms TAP AGAIN). The ended frame is deliberately not

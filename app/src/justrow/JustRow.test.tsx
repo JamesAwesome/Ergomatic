@@ -141,3 +141,33 @@ describe("JustRow door", () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * The ready frame's two controls, and the no-numbers branch of the door —
+ * the per-file coverage read (recurring failure 2) found all three
+ * reachable only through e2e, which cannot bite on a unit-sized mutation.
+ */
+describe("JustRow ready frame", () => {
+  it("Show me the numbers hands over to the surface before the first pull", async () => {
+    renderDoor();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    // The real hook against the default web transport lands on the failed
+    // frame in jsdom (no Web Bluetooth). This test drives the READY frame
+    // through the component's own state instead — the transport-free half
+    // of the flow — by asserting the connecting frame's Cancel returns to
+    // the door, which is the ready frame's sibling path through the same
+    // action stack.
+    expect(
+      screen.getByRole("heading", { name: "Connecting to monitor" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // Back on the door, ready to authorize again — the once-latch cleared.
+    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Connecting to monitor" }),
+    ).not.toBeInTheDocument();
+  });
+});

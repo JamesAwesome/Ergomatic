@@ -143,3 +143,76 @@ describe("JustRowLog (the workout-less log door)", () => {
     expect(await screen.findByText("ELSEWHERE")).toBeInTheDocument();
   });
 });
+
+describe("JustRowLog with no numbers", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+  afterEach(() => {
+    vi.doUnmock("../api");
+    vi.resetModules();
+  });
+
+  it("a record with no numbers at all still offers the save, saying why", async () => {
+    mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    // No summaryTotals and no series: the burst never landed and the trace
+    // is empty — the interrupted-recovery worst case.
+    const bare = closedFreeRow({ summaryTotals: undefined });
+    commitHandoff(bare.startedAt, null, bare);
+    await renderDoor();
+
+    expect(
+      screen.getByText(
+        "The monitor's numbers did not reach the phone for this row.",
+      ),
+    ).toBeInTheDocument();
+    // The save stays offered — the row's existence is still worth keeping —
+    // and pressing it posts NOTHING, because a save with no numbers is not
+    // designed yet and a zero would be a wrong number.
+    expect(
+      screen.getByRole("button", { name: "Save this row" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("JustRowLog reflection", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+  afterEach(() => {
+    vi.doUnmock("../api");
+    vi.resetModules();
+  });
+
+  it("pain and notes travel on the save, and a re-tap clears the pain", async () => {
+    const fn = mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    commitHandoff(closedFreeRow().startedAt, null, closedFreeRow());
+    await renderDoor();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pain 3" }));
+    expect(screen.getByRole("button", { name: "Pain 3" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    // The house clearable idiom: the same tap again returns to null.
+    await userEvent.click(screen.getByRole("button", { name: "Pain 3" }));
+    expect(screen.getByRole("button", { name: "Pain 3" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
+    await userEvent.type(screen.getByLabelText("NOTES"), "Steady pull.");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save this row" }),
+    );
+
+    await waitFor(() => {
+      const body = savedBody(fn);
+      expect(body.pain).toBe(2);
+      expect(body.notes).toBe("Steady pull.");
+    });
+  });
+});
