@@ -1014,12 +1014,12 @@ X" is a real disposition — most of these are single files.
   favour:** a logical session now begins at the GATT CONNECT, not at the
   `connect()` call. An attempt that never got a link — no transport, the
   chooser dismissed, a radio throw, or Cancel pressed while the scan/connect
-  was still in flight — mints no NEW identity and takes no NEW slot. Its
+  was still in flight — creates no new logical session or identity. Its
   teardown may re-stash a RETAINED prior logical session under that
-  session's own unchanged id (legacy keys rewritten, the existing history
-  entry upserted in place); a hook holding no prior session writes nothing.
-  Only a connect-then-cancel that actually reached the monitor consumes a
-  slot of its own. This row previously read
+  unchanged id: updating the existing history entry, or inserting it if
+  the prior write never landed (denied-then-recovered). With no retained
+  prior session, teardown writes nothing. Only a session that actually
+  reached the monitor ever owns a slot. This row previously read
   "a failed pairing or a connect-then-cancel is still a fresh `connect()`,
   hence a fresh session id and its own slot", which was true of the code
   then and is false of it now. Evidence:

@@ -185,9 +185,10 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
   - `latch-count` — recorded by `stash()` once per logical session, detail:
     `latches=<n> resumes=<n>`. "Logical session" is a stricter thing than
     it was: since round 5 it begins at the GATT connect. A pre-GATT attempt
-    owns no NEW session or slot; its teardown may re-stash the retained
-    prior logical session under that session's own unchanged id, and a
-    hook holding no prior session writes nothing at all.
+    creates no new logical session or identity; its teardown may re-stash
+    the retained prior session under that unchanged id — updating an
+    existing entry, or inserting it if the prior write never landed — and
+    a hook holding no prior session writes nothing at all.
 
 - [x] **Step 1: failing parse test** — feed a captured 0x0031 payload whose
   rowingState byte is a non-1 value (build it from the parser test file's

@@ -994,12 +994,13 @@ function withDoorMisses(stash: string): string {
  *
  *  (Narrowed by PR #258's round-5 fix, which does NOT weaken any of the
  *  above: a pre-GATT attempt — no transport, chooser dismissed, radio
- *  throw, Cancel mid-scan — owns no NEW logical session or history slot.
- *  Its teardown MAY still re-stash a RETAINED prior logical session under
- *  that session's own unchanged id (legacy keys rewritten, the existing
- *  history entry upserted in place — never a new slot). A hook holding no
- *  prior session writes nothing at all. This comment used to say a
- *  pre-link failure "writes nothing", which overstated it. Everything that did reach a monitor
+ *  throw, Cancel mid-scan — creates no new logical session or identity.
+ *  Its teardown may re-stash a RETAINED prior logical session under that
+ *  unchanged id: legacy keys rewritten, and the history entry updated in
+ *  place — or INSERTED, if the prior session's own write never landed
+ *  (the denied-then-recovered case). With no retained prior session,
+ *  teardown writes nothing. This comment used to say a pre-link failure
+ *  "writes nothing", then "never a new slot"; both overstated it. Everything that did reach a monitor
  *  still does, so the gate below is needed for exactly the reason it always
  *  was.)
  *

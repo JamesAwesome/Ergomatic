@@ -1658,10 +1658,11 @@ function defaultSessionId(): string {
  *  A `null` here means NO logical session exists yet on this hook
  *  instance. A pre-GATT attempt (transport missing, scan dismissed, a
  *  radio throw, or a Cancel while the scan/connect was still in flight)
- *  never becomes a NEW session and takes no NEW slot — but this ref is
- *  deliberately RETAINED across attempts, so if a prior session exists,
- *  that attempt's teardown re-stashes the prior session under its own
- *  unchanged id; only a hook with no prior session writes nothing.
+ *  creates no new logical session or identity — but this ref is
+ *  deliberately RETAINED across attempts, so that attempt's teardown may
+ *  re-stash a retained prior session under that unchanged id: updating its
+ *  existing entry, or INSERTING it if the prior write never landed. With
+ *  no retained prior session, teardown writes nothing.
  *
  *  The mutable fields are §6's latch counters and the once-per-session
  *  guard over them. They live HERE rather than in refs of their own for
@@ -3813,10 +3814,11 @@ export function useMonitorSession(
           // it exists for (2026-08-08 antagonistic review, finding 4).
           // Sessions that OPENED A RECORD keep their own copy under a key
           // only another rowed session can touch. Round 5 shrank the set
-          // of things that can clobber it: a pre-GATT attempt mints no NEW
-          // session — its teardown reaches here only when a RETAINED prior
-          // session exists, and then re-stashes THAT session under its own
-          // unchanged id (an in-place upsert, never a new slot).
+          // of things that can clobber it: a pre-GATT attempt creates no
+          // new logical session or identity — its teardown reaches here
+          // only when a RETAINED prior session exists, and then re-stashes
+          // THAT session under its unchanged id (updating its entry, or
+          // inserting it if the prior write never landed).
           if (runRef.current !== null) {
             sessionStorage.setItem("ergomatic:last-rowed-log", exported);
           }

@@ -7,8 +7,12 @@
 // chance to read it. This module does not touch that key or its reader; it
 // adds a THREE-ENTRY HISTORY beside it, additive, so the last three LOGICAL
 // connected sessions' exports all survive at once (one entry per LOGICAL
-// SESSION — created at the GATT connect, so a pre-GATT `connect()` call
-// creates no entry; however many teardown passes it takes — review round 2's
+// SESSION — a session begins at the GATT connect. A pre-GATT attempt
+// creates no new logical session or identity; its teardown may re-stash a
+// retained prior session under that unchanged id — updating an existing
+// entry, or INSERTING it if the prior write never landed. With no retained
+// prior session, teardown writes nothing. However many teardown passes a
+// session takes — review round 2's
 // own identity-bound upsert, below, is what makes "session" rather than
 // "teardown call" the true unit). Task 3 builds the ungated door that lists
 // them; this module is read-and-write plumbing only.
