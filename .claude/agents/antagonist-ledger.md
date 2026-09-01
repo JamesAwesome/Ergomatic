@@ -4791,3 +4791,106 @@ SPLIT oracle were attacked.
   `armedProgram() !== null` (`driver.ts:4946-4948`); and Task 7 being genuinely
   upstream of the producer — with the caveat that it gates ONE reader while Today's
   own mount snapshot is the other.
+
+## Wave E PR1.5 full pass (TRIAD — AUTH), 2026-09-01, worktree head 303987ab
+
+Target: the revised native-link design — plan
+`docs/superpowers/plans/2026-09-01-concept2-pr15-native-link.md`, the rebuilt
+gate package `…-pr15-gate.md`, the walk card `…-pr15-walk.md`, and the round-2
+implementation. Verdict REVISE: two broken claims, five over-stated ones,
+three missing option classes, and the build-fold claim PROVEN by producing
+the artifact.
+
+**Falsified, and the technique that settled each**
+
+1. **"The register-before-open contract is satisfied by construction."**
+   BROKEN. `useForegroundRefetch.ts:107` depends on `[cb]`, and the only
+   consumer that exists (`Concept2LinkProbe.tsx:35`) passes an inline arrow —
+   so every render tears down and asynchronously re-adds the native
+   `browserFinished` listener, and a dismiss landing in that window is the
+   exact miss the fix round exists to close. Technique: **when a comment
+   claims a lifecycle property "for free", read the dependency array and then
+   read what the ONE real consumer passes into it.** The tests all pass a
+   stable `vi.fn()` hoisted outside the render function, so nothing could go
+   red — RF21/RF24 in hook form: the gate's fixture is the only shape it can
+   fail on.
+
+2. **"Step 7: the counter should read 2."** BROKEN, and determined, not
+   probabilistic. Backgrounding and returning restores the presented
+   `SFSafariViewController`, so the operator lands on the browser sheet and
+   cannot read the counter without dismissing — which fires `browserFinished`.
+   The real value is 3. Technique: **walk the operator's VIEW, not just their
+   taps — ask what is on screen when the instruction says "read the counter."**
+   RF13's class; the card also told him `log-dev.concept2.com` would show an
+   error page (it returns HTTP 200) and labelled a fold check as "confirm you
+   built with the flag" (it confirms neither the flag nor the phone's build).
+
+3. **"Bounded today by two things only: ALLOWED_EMAILS and the dark flag."**
+   Under-stated. Two more real bounds sit in the same file the doc cites:
+   one live attempt per user (`routes/concept2.ts:159-161`, its own comment
+   says so) and a 15-minute delivery window (`ATTEMPT_MAX_AGE_MS`,
+   `routes/concept2.ts:38`, enforced in `consumeAttempt`'s `fresh` column).
+   Technique: **for a ruling doc, enumerate the posture from the code, not
+   from the threat sentence** — the same read that finds the residual finds
+   the bounds, and leaving them out biases the ruling against "accept".
+
+4. **"(b)'s information cost: the email is shown to whoever holds the URL."**
+   Over-stated. Minting is `requireUser`-gated (`routes/concept2.ts:139`), so
+   the only way a URL exists is that someone holding that user's session made
+   it — in the attack scenario the email displayed is the ATTACKER's own, and
+   (b) makes the attack self-identifying. Technique: **trace who can CAUSE the
+   disclosure, not who can receive it.**
+
+5. **"(c) costs a second tap."** It costs more: (c)'s Confirm button competes
+   with the dismissal gesture in the same modal, and dismissal is exactly what
+   PR1.5's own return signal keys on and what the walk card trains. Technique:
+   **read the mitigation against the OTHER document shipped in the same PR** —
+   this collision is invisible from inside either doc alone.
+
+6. **The gate package's option list was missing its cheapest member.** A
+   pre-consent interstitial on our own origin (`/api/concept2/start?state=…`
+   → identity → 302 to C2) prevents at the consenting principal BEFORE
+   anything is written: no pending state, no confirm token, no GC, no stored
+   shape, no change to `consumeAttempt`. Also missing: shortening
+   `ATTEMPT_MAX_AGE_MS`, and a `UNIQUE` on `concept2_links.c2_user_id` — the
+   only option that gives the VICTIM a signal at zero disclosure. Technique:
+   **for any "accept / detect / prevent" package, ask separately about
+   constraining the TARGET and constraining the WINDOW** — those are option
+   classes, not variations, and a principal-shaped list will never contain
+   them.
+
+**Attacked and HELD**
+
+`browserFinished` as the right event (verbatim in the installed
+`definitions.d.ts:16-17`, corroborated in the plugin's own
+`safariViewControllerDidFinish` → `notifyListeners` iOS source); `resume`
+alone genuinely missing the modal dismiss (`@capacitor/app`
+`definitions.d.ts:217/227` map pause/resume to didEnterBackground/
+willEnterForeground, which a modal presentation never raises); §2's credential
+fact (attacked via `WKHTTPCookieStore` — no rescue, because there is no
+Ergomatic cookie on native to share, `api.ts:14-17`); (c) surviving the
+single-use nonce (verified against `routes/concept2.ts:193-196` +
+`stores/concept2.ts:181-196` — it mints a new token and confirms after the
+exchange, reopening nothing); §3's rebuild around the consenting principal
+(there is NO minter-binding fix, because minter == attacker); the build-time
+fold; every quote and nine spot-checked `file:line` citations.
+
+**Techniques worth keeping**
+
+- **Build it twice.** RF12's rule, applied to a NEW dev flag: `vite build`
+  with and without the exported var, grep six needles over both trees. It
+  settled the fold, the red proof, that a shell `export` of a `VITE_`-prefixed
+  var reaches a production build, that `ios:build` is the same invocation the
+  walk card names, AND the plan's own narrowed lazy-chunk claim — four
+  questions, one command run twice.
+- **`curl` the URL an operator instruction predicts.** "It will very likely
+  show an error page" is a factual claim about a host, and it costs one
+  command to check. It was wrong.
+- **Read the operator's SCREEN.** RF13's usual form is "the flag doesn't reach
+  the code"; this pass found the other form — the flag works, the taps work,
+  and the operator physically cannot see the readout at the step that tells
+  him to read it.
+- **A ruling document is evidence, and under-stating the posture biases the
+  ruling.** Both directions count: bounds left out make "accept" look worse,
+  and a cost over-stated makes "detect" look worse. Enumerate both halves
+  from the code.
