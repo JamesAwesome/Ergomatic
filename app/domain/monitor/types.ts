@@ -537,6 +537,21 @@ export interface MonitorDriver {
    * idle before programming" still stands until it does.
    */
   program(p: WorkoutProgram): Promise<void>;
+  /**
+   * Phase JR PR 2: opens a run for the machine's OWN unprogrammed row (the
+   * PM5's Just Row), writing nothing to the wire.
+   *
+   * The counterpart to `program()` for a row we did not create. Everything a
+   * driver does only while it holds an open run — reporting the rower's own
+   * Menu terminate, filing the machine's end-of-workout summary, attributing
+   * interval boundaries — is dark without one, so a rower on the machine's
+   * own mode needs this even though there is nothing to send.
+   *
+   * Synchronous and unacked, deliberately: `program()` returns a promise
+   * because it has to establish that the machine is holding OUR workout, and
+   * a free row raises no such question.
+   */
+  beginFreeRow(): void;
   terminate(): Promise<void>; // the documented terminate command — no start() exists
   events: (cb: (e: MonitorEvent) => void) => () => void;
   /**

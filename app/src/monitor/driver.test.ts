@@ -12306,3 +12306,138 @@ describe("restPairComplete (pure) — RC-9d fix round 1: the all-or-nothing gate
     );
   });
 });
+
+/**
+ * PHASE JR PR 2, TASK 1 — the free row's own driver run.
+ *
+ * `activeRun` is assigned in exactly one place, inside `program()`
+ * (`driver.ts:5992`). A free row never programs, so without `beginFreeRow`
+ * the driver holds no run and `runIsOpen()` is false for the whole row —
+ * which silently costs three things the rower's row depends on: the machine
+ * close never emits (`:2579` returns first), the machine's own 0x0039 is
+ * discarded ("nothing filed", `:2974`), and auto-split boundaries take the
+ * out-of-run branch.
+ *
+ * Opening the run buys those back and costs two things, because
+ * `armedProgram()` is `activeRun?.program ?? null` (`:1774`) and therefore
+ * becomes NON-null: the divergence escalation (`:2548`) and the structure
+ * watchdog (`:4948`) both start evaluating against a zero-interval program.
+ * Hence the explicit `freeRow` marker, and hence the last two tests here.
+ */
+describe("beginFreeRow", () => {
+  /** A free row's own status frame: rowing, no program, workoutType 8 as the
+   *  walk observed it (`docs/monitor/sessions/walk-2026-08-31-justrow/`). */
+  function freeRowStatus(elapsedSeconds: number, distanceMeters: number) {
+    return buildGeneralStatusBytes({
+      elapsedSeconds,
+      distanceMeters,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      rowingState: 1,
+      strokeState: 1,
+      totalWorkDistanceMeters: Math.round(distanceMeters),
+      workoutDurationRaw: 0,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+  }
+
+  function freeRowDriver() {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    return { transport, log, driver, events };
+  }
+
+  it("writes NOTHING to the wire", () => {
+    const { transport, driver } = freeRowDriver();
+    // The count BEFORE, not zero: the driver writes its own sample-rate
+    // command at construction. What this pins is that opening a free row
+    // adds no write of its own — asserted on the transport's write log
+    // rather than a spy over `program()`, because a spy proves a method was
+    // not called while the log proves the wire was silent.
+    const before = transport.writes.length;
+
+    driver.beginFreeRow();
+
+    expect(transport.writes.length).toBe(before);
+  });
+
+  it("emits `terminated` when the rower backs out on the erg", () => {
+    const { transport, driver, events } = freeRowDriver();
+    driver.beginFreeRow();
+    transport.notify(GENERAL_STATUS_UUID, freeRowStatus(60, 200));
+
+    // The walk's own ending: workoutState 1 -> 11. Without an open run this
+    // returns at `:2579` and the rower's Menu press reaches the hook as
+    // nothing at all.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 60,
+        distanceMeters: 200,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_TERMINATE,
+        rowingState: 0,
+        strokeState: 0,
+        totalWorkDistanceMeters: 200,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+
+    expect(events.some((e) => e.kind === "terminated")).toBe(true);
+  });
+
+  it("logs NO divergence entry across a free row's frames", () => {
+    const { transport, log, driver } = freeRowDriver();
+    driver.beginFreeRow();
+
+    // `toProgramIndex` returns null for every one of these (programLength is
+    // 0 by its own contract), so the escalation at `:2548` would fire on
+    // each frame if the free row were not opted out of it.
+    transport.notify(GENERAL_STATUS_UUID, freeRowStatus(10, 30));
+    transport.notify(GENERAL_STATUS_UUID, freeRowStatus(20, 70));
+    transport.notify(GENERAL_STATUS_UUID, freeRowStatus(30, 110));
+
+    const divergences = log.entries().filter((e) => e.kind === "divergence");
+    expect(divergences).toStrictEqual([]);
+  });
+
+  it("never reports the program dropped, because nothing was armed", () => {
+    const { transport, driver, events } = freeRowDriver();
+    driver.beginFreeRow();
+
+    // The structure watchdog only evaluates when `armedProgram() !== null`
+    // (`:4948`), which opening the run makes true. A free row has no armed
+    // structure for the readback to disagree with, so it must not be
+    // watched at all.
+    for (let i = 0; i < 12; i += 1) {
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        buildGeneralStatusBytes({
+          elapsedSeconds: 0,
+          distanceMeters: 0,
+          workoutType: 8,
+          intervalType: 0,
+          workoutState: WORKOUTSTATE_WAITTOBEGIN,
+          rowingState: 0,
+          strokeState: 0,
+          totalWorkDistanceMeters: 0,
+          workoutDurationRaw: 0,
+          workoutDurationType: 0,
+          dragFactor: 130,
+        }),
+      );
+    }
+
+    expect(events.some((e) => e.kind === "programDropped")).toBe(false);
+  });
+});
