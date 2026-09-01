@@ -153,8 +153,37 @@ and appears only as the dimmed link mark in `Lost`.
 Every tap target is ≥44px: JUST ROW 44, Connect 56, "Show me the numbers"
 56, Cancel 52, END 44, "Log it" 44, discard ✕ 44.
 
+## The ended frame (Gate 0 amendment, APPROVED 2026-09-01)
+
+Found by the antagonist pass on the plan, not by this board's first two
+rounds. The board had approved this frame reading `Your numbers are kept.`,
+which is what a **programmed** row renders. A free row does not reach that
+arm.
+
+`ConnectedSurface.tsx:503-511` picks the line with a five-way ternary on
+`closeReason`, `kept` and `endedBy`, where `kept` is
+`measuredIntervalCount(actuals)`. A free row has no intervals, so `kept` is
+`0` and it lands on the `kept === 0` arm:
+
+> **"No numbers to keep."**
+
+...on a row that just banked real meters and is one navigation from a log
+door showing them. The block's own comment already calls that string "the
+only false member of the three" for the case it was written for.
+
+**Approved replacement: `6:33 · 1,396 m kept.`** — the same words the lost
+banner uses, so the two endings describe the row the same way.
+
+**This frame sits ABOVE the surface model** and needs its own branch: the
+ended block returns at `:515`, and `buildSurfaceModel` is not called until
+`:575`, so no live-surface change can reach it.
+
+The **lost banner needs no amendment** — this board already rendered
+`6:33 · 1,396 m kept.` there. Only the code is wrong.
+
 ## Fidelity
 
-**Not yet approved.** Once Gate 0 passes, this section records the approval
-date and the board becomes copy-final: recreate pixel-perfectly with the
-app's existing idioms, and do not rewrite the rendered copy.
+**High fidelity. Gate 0 PASSED (James, 2026-09-01), including the ended-frame
+amendment above.** Colors, type, spacing and copy are final: recreate
+pixel-perfectly with the app's existing idioms, and do not rewrite the
+rendered copy.

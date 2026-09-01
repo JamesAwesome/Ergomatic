@@ -25,14 +25,28 @@
   </style>
 </helmet>
 
-<!-- INHERITED UNCHANGED from the programmed close (connected-ended.png).
-     Nothing about a free row makes this moment different: the record is
-     stamped and the screen is on its way to the log door. Reusing it is
-     also what stops a fifth ending state being invented. -->
+<!-- GATE 0 AMENDMENT (2026-09-01). This frame was on the board reading
+     "Your numbers are kept.", which is what a PROGRAMMED row renders. A
+     free row does not reach that arm.
+
+     ConnectedSurface.tsx:503-511 is a five-way ternary on closeReason,
+     `kept` and endedBy, where `kept` is measuredIntervalCount(actuals). A
+     free row has no intervals, so `kept` is 0 and the unbranched line a
+     free row renders today is:
+
+         "No numbers to keep."
+
+     ...on a row that just banked real meters and is one navigation from a
+     log door showing them. The block's own comment already calls that
+     string "the only false member of the three" in the case it was written
+     for; this is the same defect reached by a new door.
+
+     The replacement states what was actually kept, in the same words the
+     lost banner uses one artboard over, so the two endings agree. -->
 <div class="screen">
   <p class="status">SESSION ENDED</p>
   <h1 class="serif">Wrapping up</h1>
-  <p class="bodyline">Your numbers are kept.</p>
+  <p class="bodyline">6:33 &middot; 1,396 m kept.</p>
 </div>
 </x-dc>
 </body>

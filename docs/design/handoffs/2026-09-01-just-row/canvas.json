@@ -10,7 +10,8 @@
     { "file": "LiveLandscape.dc.html", "x": 0, "y": 1000, "w": 844, "h": 390, "title": "5 · live, landscape" },
     { "file": "Lost.dc.html", "x": 984, "y": 1000, "w": 390, "h": 844, "title": "Link lost mid-row" },
     { "file": "TodayRecovery.dc.html", "x": 1504, "y": 1000, "w": 390, "h": 844, "title": "Today · recovery, no baseline" },
-    { "file": "LogDoor.dc.html", "x": 2024, "y": 1000, "w": 390, "h": 1180, "title": "/justrow/log" }
+    { "file": "LogDoor.dc.html", "x": 2024, "y": 1000, "w": 390, "h": 1180, "title": "/justrow/log" },
+    { "file": "EndedToday.dc.html", "x": 984, "y": 2000, "w": 812, "h": 560, "title": "Gate 0 amendment · the ended frame" }
   ],
   "annotations": [
     {
@@ -33,6 +34,13 @@
       "y": 890,
       "w": 390,
       "text": "Ready is the shipped screen with one word changed: CONNECTED, not PROGRAMMED.\n\nWorth a look: both its buttons are inherited, but a free row has no armed workout to check. It could equally advance itself on the first stroke and keep only Cancel.\n\nLINK LOST (right) carries NO Log or Save button, because a programmed session that loses the link does not either (connected-ready-lost.png): the mark goes hollow, the device line gains \"· LOST\", and END is still the way out, through the ordinary ending into the log door. A free row with its own Save button here would be the one connected screen that ends differently from every other."
+    },
+    {
+      "id": "amendment",
+      "x": 984,
+      "y": 1900,
+      "w": 812,
+      "text": "GATE 0 AMENDMENT, 2026-09-01, found by the antagonist pass on the plan. The board approved this frame reading \"Your numbers are kept.\" - which is what a PROGRAMMED row renders. A free row does not reach that arm and says \"No numbers to keep.\" instead. This is the one frame the board did not cover, and it is the one the rower sees at the end of every free row."
     },
     {
       "id": "contrast",
