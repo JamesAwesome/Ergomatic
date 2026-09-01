@@ -313,7 +313,12 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
     expect(capturedPayload).toStrictEqual(EXPECTED_PAYLOAD);
   });
 
-  it("a 409 (duplicate) from Concept2 leaves the row's c2 columns null", async () => {
+  // James's ruling on #249 REVISE (blocker 2, RF25) OVERRIDES this test's
+  // old title/assertion: a 409 whose body names the colliding id is now
+  // recorded durably (route's own comment on the duplicate branch), so a
+  // row that collides on its FIRST send shows "sent" on the next read
+  // rather than unsent forever.
+  it("a 409 (duplicate) from Concept2 is durably recorded on the row (real Postgres)", async () => {
     fetchMock.mockImplementation(async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);
       if (url.endsWith("/oauth/access_token")) {
@@ -355,8 +360,8 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
     const stored = await request(app)
       .get(`/api/logs/${logId}`)
       .set("Authorization", bearer);
-    expect(stored.body.c2ResultId).toBeNull();
-    expect(stored.body.c2UserId).toBeNull();
+    expect(stored.body.c2ResultId).toBe(85560);
+    expect(stored.body.c2UserId).toBe(2211);
   });
 
   it("single-use through the real store: a second callback with the same state+code is rejected (attempt already consumed)", async () => {

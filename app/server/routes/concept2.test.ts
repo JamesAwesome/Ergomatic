@@ -624,9 +624,17 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(res.body).toStrictEqual({ available: true, linked: false });
   });
 
-  it("GET: available, linked — tokens never serialized", async () => {
+  // James's REVISE on #249, blocker 1: the sent-state contract (spec F8)
+  // renders "sent" only when a row's c2_user_id matches the LIVE link's,
+  // and the View-on-Concept2 URL is /profile/{c2_user_id}/log/{result_id}
+  // — PR2 needs c2UserId off this response, not just weightClass. Pinned
+  // with toStrictEqual so an accidental extra/renamed field fails loudly.
+  it("GET: available, linked — carries c2UserId, tokens never serialized", async () => {
     const store = makeFakeConcept2Store();
-    await store.upsertLink(userA.id, freshLink({ weightClass: "L" }));
+    await store.upsertLink(
+      userA.id,
+      freshLink({ weightClass: "L", c2UserId: 4477 }),
+    );
     const { app } = buildApp({ store });
     const res = await asA(request(app).get("/api/concept2/link"));
     expect(res.status).toBe(200);
@@ -634,6 +642,7 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
       available: true,
       linked: true,
       weightClass: "L",
+      c2UserId: 4477,
       needsReauth: false,
     });
     expect(JSON.stringify(res.body)).not.toContain(LINK_INPUT.accessToken);
@@ -1051,9 +1060,15 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(link?.needsReauthAt).toBeNull();
   });
 
-  it("C2 duplicate -> 409 with c2ResultId, row left untouched (a 409 leaves it null)", async () => {
+  // James's ruling on #249 REVISE (blocker 2, RF25) OVERRIDES the spec's
+  // "a 409 leaves it null": the 409 body names the colliding numeric
+  // result id, so it durably records it with the LOCKED link's identity
+  // BEFORE returning the duplicate response — otherwise a row that hits
+  // this exact path (first send happens to collide) shows unsent forever
+  // after reload or on a second device.
+  it("C2 duplicate on a FIRST send (no prior 201) -> 409 with c2ResultId, AND durably records it via the locked link's identity", async () => {
     const store = makeFakeConcept2Store();
-    await store.upsertLink(userA.id, freshLink());
+    await store.upsertLink(userA.id, freshLink({ c2UserId: 4477 }));
     const client = makeStubClient();
     vi.mocked(client.postResult).mockResolvedValue({
       ok: false,
@@ -1071,8 +1086,65 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(res.status).toBe(409);
     expect(res.body).toStrictEqual({ error: "duplicate", c2ResultId: 777 });
 
+    // Fresh read (drive the store, not any in-memory row this handler
+    // built) — the recovery's whole point is that a RELOAD sees "sent".
     const stored = await logs.get(userA.id, id);
-    expect(stored?.c2ResultId).toBeNull();
+    expect(stored?.c2ResultId).toBe(777);
+    expect(stored?.c2UserId).toBe(4477);
+  });
+
+  // The full recovery arc RF25 exists for: a real 201 whose own
+  // `recordC2Result` write fails (502, nothing recorded — the existing
+  // seam test above), followed by a RETRY that hits C2's 409 for the
+  // exact result C2 already has. That retry's duplicate-recovery write
+  // is the row's only route to ever showing "sent" again.
+  it("RF25 durable recovery: a recordC2Result failure after 201, then a retry that hits C2's 409, durably records both columns (asserted via a FRESH read)", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink({ c2UserId: 4477 }));
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValueOnce({
+      ok: true,
+      resultId: 85557,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+    const recordSpy = vi
+      .spyOn(logs, "recordC2Result")
+      .mockResolvedValueOnce(false);
+
+    const first = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(first.status).toBe(502);
+    expect(first.body).toStrictEqual({ error: "c2_error" });
+    const afterFirst = await logs.get(userA.id, id);
+    expect(afterFirst?.c2ResultId).toBeNull();
+    expect(afterFirst?.c2UserId).toBeNull();
+
+    // Retry: C2 now reports this exact result as a duplicate — the
+    // documented recovery path (route's own comment on the 201 branch).
+    vi.mocked(client.postResult).mockResolvedValueOnce({
+      ok: false,
+      kind: "duplicate",
+      resultId: 85557,
+    });
+    const second = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(second.status).toBe(409);
+    expect(second.body).toStrictEqual({
+      error: "duplicate",
+      c2ResultId: 85557,
+    });
+
+    const afterSecond = await logs.get(userA.id, id);
+    expect(afterSecond?.c2ResultId).toBe(85557);
+    expect(afterSecond?.c2UserId).toBe(4477);
+    expect(recordSpy).toHaveBeenCalledTimes(2);
   });
 
   it("C2 c2_error on post -> 502", async () => {
@@ -1370,6 +1442,46 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       expect.objectContaining({ weight_class: "L" }),
     );
     const stored = await logs.get(userA.id, id);
+    expect(stored?.c2UserId).toBe(222);
+  });
+
+  // Same I4-shaped race as the test above, but through the DUPLICATE
+  // recovery write specifically (blocker 2, test (c)): a relink landing
+  // between the route's unlocked `store.getLink` and the locked re-read
+  // must not pair the OLD account's identity with the duplicate C2 has
+  // already recorded under the NEW account.
+  it("duplicate-recovery write sources c2UserId from the LOCKED read, not the earlier unlocked getLink", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(
+      userA.id,
+      freshLink({ c2UserId: 111, weightClass: "H" }),
+    );
+    const client = makeStubClient();
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const staleLink = await store.getLink(userA.id);
+    vi.spyOn(store, "getLink").mockResolvedValueOnce(staleLink);
+    await store.upsertLink(
+      userA.id,
+      freshLink({ c2UserId: 222, weightClass: "L" }),
+    );
+
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: false,
+      kind: "duplicate",
+      resultId: 999,
+    });
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "duplicate", c2ResultId: 999 });
+    const stored = await logs.get(userA.id, id);
+    expect(stored?.c2ResultId).toBe(999);
     expect(stored?.c2UserId).toBe(222);
   });
 
