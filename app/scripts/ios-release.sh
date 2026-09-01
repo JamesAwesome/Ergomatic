@@ -26,8 +26,19 @@ set -Eeuo pipefail
 # out of `process.env`, no config file involved. Refuse outright rather
 # than silently building a release with dev tooling baked in. Placed
 # before EVERYTHING else (the tag check, GOOGLE_IOS_CLIENT_ID derivation,
-# the build itself) so this test can run the real script with no tag, no
-# Xcode, and no `pnpm ios:build` ever executing.
+# the build itself).
+#
+# **Round 6 correction (P1, reviewer-verified): this comment used to claim
+# "no tag, no Xcode, no `pnpm ios:build` ever executing" for testing this
+# guard — true ONLY for the flag-SET case.** For the flag-unset/empty
+# cases, this script proceeds PAST this guard into the real git-tag check
+# below and beyond — on a machine where HEAD happens to sit exactly on a
+# `vX.Y.Z` tag (i.e., James's own state right before cutting a release),
+# that is `pnpm ios:build` → `xcodebuild archive` → a REAL TestFlight
+# upload. `ios-release.test.sh`'s own cases 2/3 stay safe by forcing
+# `git describe` to fail outright first (`GIT_DIR=/nonexistent`), not by
+# anything this script does — this guard alone does not make those two
+# cases safe to run unmodified on a just-tagged checkout.
 if [ -n "${VITE_ENABLE_C2_LINK_PROBE:-}" ]; then
   echo "ios-release: refusing — VITE_ENABLE_C2_LINK_PROBE is set — unset it (probe card must never ship via ios:release)" >&2
   exit 1
