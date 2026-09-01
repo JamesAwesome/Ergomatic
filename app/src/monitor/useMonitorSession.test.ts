@@ -73,6 +73,7 @@ import {
   toMonitorState,
 } from "../../domain/monitor/pm5/parse.js";
 import { check as checkContinuity } from "./continuity";
+import { listSessionLogs } from "./sessionLogHistory";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import {
@@ -5153,6 +5154,22 @@ describe("useMonitorSession: ending", () => {
     const stash = localStorage.getItem("ergomatic:last-session-log");
     expect(stash).not.toBeNull();
     expect((JSON.parse(stash!) as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it("Task 1 (ring history spec §2): two full connect→teardown cycles leave two history entries, newest first, slot 1 matching the current last-session-log stash", async () => {
+    const first = await arriveArmedWithoutRowing();
+    await first.teardown();
+    const second = await arriveArmedWithoutRowing();
+    await second.teardown();
+
+    const entries = listSessionLogs();
+    expect(entries).toHaveLength(2);
+    expect(entries[0]!.slot).toBe(1);
+    expect(entries[1]!.slot).toBe(2);
+    // Newest first: slot 1 is the SECOND cycle's stash.
+    const currentStash = localStorage.getItem("ergomatic:last-session-log");
+    expect(currentStash).not.toBeNull();
+    expect(entries[0]!.exported).toBe(currentStash);
   });
 
   it("Task 1 (lost-monitor design spec): endSession closing with no record open writes a close-no-record entry naming what was closed, not why nothing was there", async () => {

@@ -83,6 +83,7 @@ import {
 } from "./handoffStore";
 import { check as checkContinuity } from "./continuity";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
+import { pushSessionLog } from "./sessionLogHistory";
 import { defaultTransport } from "../adapters/monitorTransport";
 import { registerAppLifecycleListener } from "../adapters/appLifecycle";
 import {
@@ -3407,6 +3408,13 @@ export function useMonitorSession(
             sessionStorage.setItem("ergomatic:last-rowed-log", exported);
           }
           localStorage.setItem("ergomatic:last-session-log", exported);
+          // Lifecycle design spec §2: the single key above is perishable —
+          // one slot, overwritten by the very next teardown — which is
+          // exactly what destroyed the pocketed-phone ring (§0.1). Rotate
+          // the same export into the three-slot history beside it so the
+          // last three teardowns all survive at once, readable through
+          // Task 3's ungated door.
+          pushSessionLog(exported, nowDate());
         } catch {
           // Quota or privacy mode: diagnostics never break a teardown.
         }
@@ -3515,7 +3523,7 @@ export function useMonitorSession(
       stash();
       unsubscribeAndDisconnect();
     },
-    [releaseHandoff, stopSeriesFlush],
+    [releaseHandoff, stopSeriesFlush, nowDate],
   );
 
   const fail = useCallback(
