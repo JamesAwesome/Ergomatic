@@ -191,6 +191,15 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
 
 ### Task 3: The door — **BLOCKED until its Gate 0 clears**
 
+> **SUPERSEDED IN PART by the approved Gate-0 artifact (rev 3) and the
+> external review:** the shipped shape is You → `DIAGNOSTICS` →
+> `/you/diagnostics` (menu) → `/you/diagnostics/monitor-logs` — a menu
+> layer James added at the gate; the direct `/you/monitor-logs` route below
+> is the pre-gate draft. Storage moved to ONE atomic key
+> (`ergomatic:session-log-history`) at the review's item 4; the h1/h2/h3
+> scheme below is historical. The artifact and the code are the record.
+
+
 The controller presents the rendered artifact (James approves BEFORE this
 task is dispatched). The approved copy and placement then bind verbatim.
 
