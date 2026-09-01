@@ -1145,6 +1145,26 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(afterSecond?.c2ResultId).toBe(85557);
     expect(afterSecond?.c2UserId).toBe(4477);
     expect(recordSpy).toHaveBeenCalledTimes(2);
+
+    // Coordinator re-review, F3: the duplicate-recovery write is a NEW
+    // producer of the "already sent" state (row.c2ResultId !== null &&
+    // row.c2UserId === link.c2UserId), and nothing upstream of it had
+    // ever reached that predicate — the pre-existing short-circuit test
+    // seeds `recordC2Result` directly, downstream of both producers. A
+    // THIRD request must actually reach the short-circuit THIS recovery
+    // write fed: 200 with the same resultId, and `postResult` still
+    // called only the two times above (no third wire call at all — both
+    // `mockResolvedValueOnce` queues from above are already drained, so
+    // a third call would fall through to the stub's default "not stubbed
+    // for this test" throw if the short-circuit failed to fire).
+    const third = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(third.status).toBe(200);
+    expect(third.body).toStrictEqual({ resultId: 85557 });
+    expect(client.postResult).toHaveBeenCalledTimes(2);
   });
 
   it("C2 c2_error on post -> 502", async () => {
