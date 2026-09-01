@@ -11654,6 +11654,70 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
     expect(exported.some((e) => e.kind === "resume-stale-run")).toBe(false);
   });
 
+  // Final whole-branch review, item 2: `resume-first-frame`'s own `stale`
+  // field is documented (its own comment on `resumeEdgeArmedRef`) to
+  // compare the first post-resume frame against the PRE-BACKGROUND one —
+  // but hidden frames still move `stateRef.current.frame` (`handleFrame`'s
+  // unconditional `update({ frame })` fall-through), so a resume with at
+  // least one hidden frame used to compare against THAT frame instead. This
+  // is the exact sequence that falsifies it: A before background, a
+  // DIFFERENT B while hidden, then B again as the first post-resume frame —
+  // the buggy comparison (B vs. the hidden B) says `stale=true`; the
+  // correct one (B vs. pre-background A) says `stale=false`, since A and B
+  // genuinely differ.
+  it("leg (e), item 2 fix: a hidden frame that arrives WHILE backgrounded does not become the staleness baseline — only the PRE-background frame does", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // pre-background baseline A
+      frame(1000, D0 + 30), // arrives WHILE HIDDEN — a DIFFERENT frame, B
+      frame(1500, D0 + 30), // first post-resume frame — identical to the HIDDEN frame B, but B is not the baseline
+    ];
+    const { fake, lifecycleCb, exportLog } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      lifecycleCb("background");
+    });
+    // The hidden frame B arrives HERE, strictly between background and
+    // foreground — the shape no existing leg in this describe block drives
+    // (every one of them calls `background`/`foreground` back-to-back with
+    // no tick in between).
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntries = exported.filter(
+      (e) => e.kind === "resume-first-frame",
+    );
+    expect(firstFrameEntries).toHaveLength(1);
+    // stale=false (correct: B differs from pre-background A) and
+    // framesWhileHidden=1 (the hidden B frame, counted before the resume
+    // clears the counter) — both readable off one line, same idiom every
+    // other leg in this block uses.
+    expect(firstFrameEntries[0]!.detail).toBe(
+      "gapMs=500 stale=false rawRowingState=1 framesWhileHidden=1",
+    );
+    expect(exported.some((e) => e.kind === "resume-stale-run")).toBe(false);
+  });
+
   it("leg (c): teardown while the identical run is still open closes it with resume-stale-run endedBy=teardown, and the entry rides the stashed export", async () => {
     sessionStorage.removeItem("ergomatic:last-monitor-log");
     vi.useFakeTimers();

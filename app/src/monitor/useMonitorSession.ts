@@ -1658,6 +1658,30 @@ export function useMonitorSession(
     preBackgroundKey: string | null;
     framesWhileHidden: number;
   } | null>(null);
+  /** Final whole-branch review, item 2: the baseline `resume-first-frame`'s
+   *  `stale` compares the first post-resume frame AGAINST, captured at the
+   *  BACKGROUND edge — the same moment `framesWhileHiddenRef` (below) is
+   *  armed — rather than re-derived from `stateRef.current.frame` at the
+   *  FOREGROUND edge the way `resumeEdgeArmedRef.preBackgroundKey` used to
+   *  be. That re-derivation was the bug: `handleFrame`'s own unconditional
+   *  `update({ frame })` (this file's own fall-through — see its comment)
+   *  means hidden frames DO keep moving `state.frame` while the app is
+   *  backgrounded, so "the last frame this hook saw at all" at foreground
+   *  time is the last HIDDEN frame, not the pre-background one — reading it
+   *  as "pre-background" made A-before-background -> B-while-hidden ->
+   *  B-at-foreground report `stale=true` (B matches itself) when the
+   *  correct comparison is A vs. B, which differ. `null` when this
+   *  connection has not yet seen a frame at the moment it backgrounds — the
+   *  same "no pre-background frame to compare against" case
+   *  `preBackgroundKey: null` already models. Cleared with the identical
+   *  per-connection/per-run lifetime `resumeEdgeArmedRef` itself uses
+   *  (`connect()`, a fresh `program()` arm, the RC-37 programDropped/ready
+   *  exit) — not strictly load-bearing for correctness, since every arming
+   *  read here is always preceded by a background edge that just wrote it
+   *  fresh, but kept in lockstep for the same reason those three sites
+   *  already clear `resumeEdgeArmedRef` itself: a leftover value from
+   *  before the reset must never be mistakable for a live one. */
+  const preBackgroundFreezeKeyRef = useRef<string | null>(null);
   /** §3: the run of consecutive post-resume frames whose `freezeKey` still
    *  matches the frame that armed it (`resume-first-frame`'s own
    *  `stale=true` case) — `null` whenever no such run is open. TWO
@@ -3189,6 +3213,10 @@ export function useMonitorSession(
         }
         resumeEdgeArmedRef.current = null;
         resumeStaleRunRef.current = null;
+        // Final whole-branch review, item 2: same per-run reset
+        // `resumeEdgeArmedRef` immediately above already gets — see
+        // `preBackgroundFreezeKeyRef`'s own doc comment.
+        preBackgroundFreezeKeyRef.current = null;
         // Hand-off store design spec §1: same per-run reset `cancel()`
         // applies to this ref, for the identical reason — see that
         // function's own comment.
@@ -3982,6 +4010,9 @@ export function useMonitorSession(
       // a connection this reset has already started fresh.
       resumeEdgeArmedRef.current = null;
       resumeStaleRunRef.current = null;
+      // Final whole-branch review, item 2: same per-connection floor as
+      // `resumeEdgeArmedRef` immediately above — see its own doc comment.
+      preBackgroundFreezeKeyRef.current = null;
       resumeLatchCountRef.current = 0;
       resumeCountRef.current = 0;
       // S6: once per ordinary product connect, straight into this session's
@@ -4086,6 +4117,14 @@ export function useMonitorSession(
           // `handleFrame`'s own counter to fill in — read back and
           // cleared at the matching "foreground" below.
           framesWhileHiddenRef.current = 0;
+          // Final whole-branch review, item 2: THE pre-background baseline,
+          // captured HERE — before any hidden frame can move
+          // `stateRef.current.frame` — rather than re-read at foreground
+          // time, when it would already be whatever arrived while hidden.
+          // See `preBackgroundFreezeKeyRef`'s own doc comment.
+          const preBackgroundFrame = stateRef.current.frame;
+          preBackgroundFreezeKeyRef.current =
+            preBackgroundFrame !== null ? freezeKey(preBackgroundFrame) : null;
           return;
         }
         // Task 1: with "background" handled above, `AppLifecycleEvent`'s
@@ -4153,13 +4192,19 @@ export function useMonitorSession(
         // `handleFrame` sees, reusing the identical `gapMs`/
         // `framesWhileHidden` readings `app-lifecycle`/`resume-frames` just
         // recorded above — one measurement, two ring entries, never a
-        // second derivation. `lastFrame` is the last frame this hook saw at
-        // all, which (no frames arrive while backgrounded) is exactly the
-        // last PRE-BACKGROUND frame `resume-first-frame`'s own `stale`
-        // field compares the next arrival against.
+        // second derivation. `lastFrame` (used only for the `resume-frames`
+        // entry's own `rowingActive` reading above) is whatever this hook
+        // has seen MOST RECENTLY, hidden frames included — final
+        // whole-branch review, item 2: that is NOT the same thing as the
+        // pre-background frame `resume-first-frame`'s own `stale` field
+        // needs to compare against (`handleFrame`'s unconditional
+        // `update({ frame })` fall-through means hidden frames keep moving
+        // `state.frame`), so `preBackgroundKey` below reads the dedicated
+        // `preBackgroundFreezeKeyRef` captured at the BACKGROUND edge
+        // instead of re-deriving from `lastFrame` here.
         resumeEdgeArmedRef.current = {
           gapMs,
-          preBackgroundKey: lastFrame !== null ? freezeKey(lastFrame) : null,
+          preBackgroundKey: preBackgroundFreezeKeyRef.current,
           framesWhileHidden,
         };
         // Only when we latched — see this handler's own header for why
@@ -4236,6 +4281,10 @@ export function useMonitorSession(
       }
       resumeEdgeArmedRef.current = null;
       resumeStaleRunRef.current = null;
+      // Final whole-branch review, item 2: same per-run reset
+      // `resumeEdgeArmedRef` immediately above already gets — see
+      // `preBackgroundFreezeKeyRef`'s own doc comment.
+      preBackgroundFreezeKeyRef.current = null;
       const driver = driverRef.current;
       if (driver === null) {
         fail({
