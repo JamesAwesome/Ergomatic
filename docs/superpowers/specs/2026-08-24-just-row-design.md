@@ -156,8 +156,11 @@ captures and transcriptions. This section is the corrected record.
      at all — the whole capture contains exactly one tx, the 1 Hz
      sample-rate write. **These figures never governed an unprogrammed
      Just Row. Connection state is irrelevant to why.**
-  2. **The WORKOUT state machine has no timed exit for a JustRow** — see
-     the Terminate entry above. This is the layer 0x0031 byte 8 reports,
+  2. **The WORKOUT state machine documents no timed exit for a JustRow,
+     which is not the same as documenting that none exists** — see the
+     Terminate entry above: that sequence is conditional on a terminate
+     having happened, so it settles where a terminated row goes and leaves
+     an un-terminated one unaddressed. This is the layer 0x0031 byte 8 reports,
      and `OBJ_WORKOUTSTATE_T` (rev 0.31 pp.102-103) has **no Paused
      member** at all, so "we saw no Paused transition" is not a finding
      that field can deliver.
@@ -178,10 +181,10 @@ captures and transcriptions. This section is the corrected record.
 
   **What this changes for the design: nothing softens.** PR 2 still needs
   its own inactivity rule, and now for a stronger reason than "we saw no
-  timeout": no closer has ever been observed, and none is documented at any
-  layer we can watch. **That is an absence of evidence, not evidence of
-  absence** — see the CLOSED 3 caveat — and it is already sufficient, because
-  a rule cannot map a signal nobody has seen. We are also, by definition,
+  timeout": no closer has ever been observed within 896.8 s, and none is
+  documented at any layer we can watch. **That is an absence of evidence, not
+  evidence of absence** — see the CLOSED 3 caveat — and it is already
+  sufficient, because a rule cannot map a signal nobody has seen. We are also, by definition,
   never disconnected when we care.
 - **Auto-start**: the PM turns on and Just Row begins when the rower
   pulls (PRIMARY, concept2.com). Pull-from-menu auto-entry with the app
@@ -353,12 +356,18 @@ observer checks before opening — F5 data-loss class).
 | Genuine link loss mid-row | link drop while Live/rowing | `link-lost` |
 
 **THE `idle` MEMBER IS WITHDRAWN. PR 1 MUST NOT MIGRATE IT.** Rev 2 argued
-for it from a premise the 2026-08-31 capture falsified: that a PM5 left
-alone powers itself off and drops the link. It does not, while a central is
-connected — the walk held the workout in its active state for ~15 minutes
-after the rower stopped, frames still arriving, with no terminate and no
-power-off (CLOSED 3, and finding N2). **There is no observed signal to map,
-so there is nothing to store.** Adding an enum value for an event we have
+for it from a premise the 2026-08-31 capture did NOT confirm: that a PM5 left
+alone powers itself off and drops the link. **The capture did not falsify
+that premise either — it bounded it.** Connected, the walk held the workout
+in its active state for the whole 896.8 s it watched, frames still arriving,
+with no terminate and no power-off, and then the operator ended the capture
+(CLOSED 3, and finding N2). concept2.com documents an inactivity power-off
+plainly and says nothing about Bluetooth either way, so the physical-power
+layer is unsettled, not disproved.
+
+**The withdrawal does not depend on settling it.** What is settled is that
+**there is no observed signal to map, so there is nothing to store** — and
+that is sufficient on its own. Adding an enum value for an event we have
 never seen is exactly the "does the system HAVE the concept" failure this
 project has already paid for once, and an enum value is a stored shape:
 easy to add and, by our own ratchet, permanent.
@@ -384,7 +393,8 @@ freezes any enum**. Until that lands, the closers are `rower` and
 status frames, so `finished` is not a closer PR 1 or PR 2 stores. The
 conditional this paragraph used to carry ("if OPEN 7 shows…") is spent, and
 rev 1's "never `finished`" claim is reinstated for the Menu closer — the
-only closer the walk could exercise, since the idle one does not occur.
+only closer the walk could exercise, since no idle closer appeared within the
+896.8 s it watched. Whether one appears later is untested.
 
 All closers record the last live frame's numbers. If 0x0039 arrives, its
 totals are stored as a diagnostic cross-check (not authority).

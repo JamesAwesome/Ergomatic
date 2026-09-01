@@ -3504,11 +3504,12 @@ p.162 this file's §14 already cites in rev 0.27):
 
 **The FIRST sequence was missing from this transcription until 2026-08-31,
 and its absence cost a spec claim.** It is the only Appendix E sequence that
-names JustRow, and the only exit it gives one. Phase JR's spec read our
-truncated version, correctly noticed no JustRow attribution here, and
-concluded "the link was our own gloss" — filing a PRIMARY fact as
-UNVERIFIED for a week. **Read the conditional, though** — *"that is terminated prior to reaching
-its defined end"*. It documents where a terminated JustRow GOES; it does not
+NAMES JustRow. Phase JR's spec read our truncated version, correctly noticed
+no JustRow attribution here, and concluded "the link was our own gloss" —
+filing a real citation as UNVERIFIED for a week.
+
+**But read the conditional before leaning on it** — *"that is terminated
+prior to reaching its defined end"*. It documents where a terminated JustRow GOES; it does not
 enumerate a JustRow's exits, and it is silent on the physical power-off
 concept2.com documents after inactivity. Phase JR briefly recorded it as
 "Terminate and nothing else"; that over-read is withdrawn. What it supports:

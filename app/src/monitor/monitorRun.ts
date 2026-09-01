@@ -160,10 +160,13 @@ export interface MonitorRun {
    *     unprogrammed Just Row, one device, one run, with the capture
    *     ended by the operator rather than by the monitor
    *     (`docs/monitor/sessions/walk-2026-08-31-justrow/`). Documentation
-   *     agrees as far as it goes — CSAFE rev 0.31 Appendix E gives a
-   *     JustRow only a Terminate exit, no timed one — but "none within
+   *     is silent, not agreeing: CSAFE rev 0.31 Appendix E's JustRow
+   *     sentence is CONDITIONAL ("…that IS TERMINATED prior to reaching
+   *     its defined end") and documents where a terminated JustRow goes,
+   *     so it enumerates no exits and says nothing about the inactivity
+   *     power-off concept2.com documents separately. "None within
    *     896.8 s" is not "never", and a PROGRAMMED workout was not tested
-   *     at all. The assertion stays open for that case.
+   *     at all. The assertion stays open for both cases.
    *   - `"link-lost"` — the End button with `linkGone === true`, OR a
    *     continuity reset (`useMonitorSession.ts`'s `applyContinuityCheck`,
    *     `completeContinuityReset` below) — RULED at Task 4's review

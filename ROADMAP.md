@@ -129,8 +129,9 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 ## Phase JR — Just Row
 
-**Status: Active — PR 0a instrument built; PR 0b capture DONE 2026-08-31, all
-seven OPEN questions answered; PR 1/2 now blocked on a design RE-OPEN, not on
+**Status: Active — PR 0a instrument built; PR 0b capture DONE 2026-08-31, six
+OPEN questions answered outright and OPEN 3 only within a bound; PR 1/2 blocked
+on a design RE-OPEN, and OPEN 3's physical-power/BLE half still wants
 evidence.** This is a deliberate household exception to the stranger-first
 ordering, requested by James on 2026-08-31. Walk record and full decodes:
 `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`; runsheet at
@@ -994,8 +995,14 @@ Each needs erg time or a deliberate recording session.
   `webView.reload()`, destroying the driver, the recorder, and up to 30 s of
   unflushed series. _"'terminated no' disposes of force-quit, not of memory
   pressure."_ (`phase-ll.md`)
-- ~~**JR PR 0b's capture walk**~~ — DONE 2026-08-31, all seven OPENs answered;
-  record at `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`.
+- ~~**JR PR 0b's capture walk**~~ — DONE 2026-08-31; six OPENs answered, OPEN 3
+  bounded. Record at `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`.
+- **JR OPEN 3's open half — does a PM5 power itself off with a central
+  connected?** Unobserved for 896.8 s and undocumented either way; the walk
+  ended by operator choice, not by the monitor. Rides any erg session: leave a
+  Just Row open, connected, and simply wait longer than 15 minutes.
+  `CSAFE_PM_GET_OPERATIONALSTATE` (0x8F) reads the actual power layer, but
+  polling it sends CSAFE and may itself perturb the state being measured.
 - **The hardware session shopping list** — three pairing and programming latency
   spans, the unrowed question from §17 item 5, §18's readings-still-owed, a
   genuine mid-piece disconnect, and **one `.5` pace target on the wire**
