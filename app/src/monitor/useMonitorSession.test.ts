@@ -5172,7 +5172,7 @@ describe("useMonitorSession: ending", () => {
     expect(entries[0]!.exported).toBe(currentStash);
   });
 
-  it("M-1 fix: a throwing legacy `ergomatic:last-monitor-log` write does not skip the three-slot history rotation — pushSessionLog runs even though an earlier setItem in the same stash denied", async () => {
+  it("M-1 fix: a throwing legacy `ergomatic:last-monitor-log` write does not skip the three-slot history — upsertSessionLog runs even though an earlier setItem in the same stash denied", async () => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function (
       this: Storage,
@@ -5190,9 +5190,9 @@ describe("useMonitorSession: ending", () => {
 
       // The legacy key's own write was denied and swallowed by stash()'s
       // try/catch — this is not asserting that succeeded, only that the
-      // denial did not also take pushSessionLog's rotation with it (the
-      // bug: `pushSessionLog` used to be the LAST statement inside that
-      // same try, so this throw skipped it before it ever ran).
+      // denial did not also take upsertSessionLog's own write with it (the
+      // bug: that call used to be the LAST statement inside that same try,
+      // so this throw skipped it before it ever ran).
       const entries = listSessionLogs();
       expect(entries).toHaveLength(1);
       expect(entries[0]!.slot).toBe(1);
@@ -6854,6 +6854,18 @@ describe("useMonitorSession: cancel", () => {
   // terminate. The fix is MEDIUM-9's own: `cancel()` CLAIMS the ref
   // synchronously, before its first `await`, and hands the captured driver
   // to `teardown` so the disconnect still happens exactly once.
+  //
+  // Review round 2, items 1+2 (P1+P2): this SAME interleaving — the
+  // unmount's own `teardown()` cleanup running first, then `cancel()`'s
+  // own `teardown(armed, driver)` call running a SECOND time once the
+  // monitor's ack finally arrives — is Defect A for the ring history: two
+  // separate `teardown()` invocations for what is still ONE connected
+  // session, each of which calls `stash()`. Before the identity fix this
+  // burned two `sessionLogHistory.ts` slots on a single Cancel; the
+  // assertion below is that regression, pinned here rather than only in
+  // `sessionLogHistory.test.ts` because THIS is the exact interleaving that
+  // produces it — a fixed module and an unfixed call site would still fail
+  // this way.
   it("cancel() racing an interleaved unmount sends at most ONE physical terminate even when the monitor answers asynchronously, as real hardware does (MEDIUM-9, for real this time)", async () => {
     const { result, fake, transport, unmount } = harness({
       program: TWO_INTERVALS,
@@ -6894,6 +6906,13 @@ describe("useMonitorSession: cancel", () => {
     expect(settled).toBe("settled");
     expect(transport.wireWrites - writesAtReady).toBe(1);
     expect(transport.disconnects).toBe(1);
+    // Review round 2, items 1+2: the unmount's own teardown() stashed
+    // first (driverRef already null by then — cancel() claimed it
+    // synchronously — so this teardown call did nothing BUT stash), and
+    // cancel()'s own teardown(armed, driver) call stashed a second time
+    // once the deferred ack let it proceed. Same session id both times:
+    // ONE history entry, not two.
+    expect(listSessionLogs()).toHaveLength(1);
   });
 });
 
@@ -12392,9 +12411,10 @@ describe("Final whole-branch review, item 1: one burst-eligible session consumes
     expect(transport.disconnects).toBe(1); // confirms the second stash actually ran
 
     const entries = listSessionLogs();
-    // THE BUG THIS GUARDS: two `pushSessionLog` calls in one teardown used
-    // to rotate twice, burning two of the three history slots on ONE
-    // session. Still exactly one entry.
+    // THE BUG THIS GUARDS: two `stash()` calls in one teardown used to
+    // rotate twice, burning two of the three history slots on ONE session.
+    // Now both `upsertSessionLog` calls share this session's own id, so
+    // this converges on one entry by construction — still exactly one.
     expect(entries).toHaveLength(1);
     // And it carries the SECOND stash's bytes, not the first's — the linger
     // stash sees STEPS 1/3/4's own ring entries (the disconnect sequence)

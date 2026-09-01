@@ -18,8 +18,8 @@
 //
 // STORAGE SHAPE — final whole-branch review, M-6 (atomic history storage):
 // ONE key, `ergomatic:session-log-history`, holding
-// `JSON.stringify({savedAt, exported}[])` — newest first, capped at
-// `MAX_ENTRIES`. This REPLACES the original three-key `h1`/`h2`/`h3`
+// `JSON.stringify({sessionId, savedAt, exported}[])` — newest first, capped
+// at `MAX_ENTRIES`. This REPLACES the original three-key `h1`/`h2`/`h3`
 // rotation (never released — no legacy migration needed, and this header
 // says so explicitly so a future reader doesn't go looking for one): that
 // shape needed TWO separate `localStorage.setItem` calls per push (h2->h3,
@@ -38,6 +38,40 @@
 // never re-serialized — so a rotation can never subtly change what a stash
 // contains.
 //
+// IDENTITY-BOUND UPSERT — review round 2, items 1+2 (P1+P2, PR #258): the
+// original API was a PAIR, `pushSessionLog` (rotate a new entry to the
+// front) and `updateNewestSessionLog` (overwrite the front entry in place),
+// with the CALLER (`useMonitorSession.ts`'s `stash()`) deciding which one to
+// call via a per-teardown-invocation ref — "has THIS teardown call already
+// pushed?". That guard was the bug, in two shapes: (A) a Cancel whose own
+// `teardown()` call runs AFTER an interleaved unmount's `teardown()` call
+// (the PM5's terminate ack arrives after the component is already gone) is
+// TWO SEPARATE invocations of the SAME function, each resetting its own
+// "already pushed" ref at its own top — so one connected session called
+// `pushSessionLog` twice and burned two ring slots on itself. (B) a DENIED
+// first write still flipped the guard (the write attempt happened; whether
+// it landed was never checked), so the caller's SECOND write called
+// `updateNewestSessionLog`, overwriting whatever the ring's current head
+// slot actually held — a DIFFERENT session's entry, not the one that just
+// failed to land.
+//
+// The fix removes the guard's job entirely by giving the history an
+// IDENTITY to key on instead of a call-count to track: every stored entry
+// carries the `sessionId` the caller minted once per `connect()` (a value
+// this module treats as opaque — it enforces no format, no uniqueness, no
+// lifetime; that is `useMonitorSession.ts`'s to own) and there is ONE public
+// write function, `upsertSessionLog`, which searches the ring for an entry
+// already carrying that id and REPLACES it in place if found, or INSERTS a
+// fresh entry at the head (evicting past `MAX_ENTRIES`) if not. However many
+// times a caller invokes it for the SAME session id — one stash, two, three,
+// across however many separate `teardown()` calls — the result converges on
+// exactly one entry, by construction: there is no per-call state to get out
+// of sync, because the only state that matters (does an entry with this id
+// exist right now) is read fresh from storage on every call. And a DENIED
+// write never gets a chance to mislead the next call: nothing landed, so
+// nothing matches, so the retry is an honest insert — never a replace of
+// whichever unrelated entry happened to sit at the head.
+//
 // Every export below follows `monitorRun.ts`'s "best-effort IO that never
 // throws" discipline: a corrupt or unreadable stored value is treated as
 // absent, not fatal, and a denied write is a silent no-op — same reason
@@ -47,6 +81,7 @@ const HISTORY_KEY = "ergomatic:session-log-history";
 const MAX_ENTRIES = 3;
 
 interface StoredEntry {
+  sessionId: string;
   savedAt: string;
   exported: string;
 }
@@ -56,30 +91,43 @@ export interface SessionLogHistoryEntry {
    *  no longer a literal key suffix now that the array shape holds one
    *  ordered list rather than three independently-addressed slots. */
   slot: 1 | 2 | 3;
+  /** The logical connected session this entry belongs to — opaque to this
+   *  module, minted once per `connect()` by `useMonitorSession.ts`. The
+   *  identity `upsertSessionLog` matches on (see the module header's
+   *  "IDENTITY-BOUND UPSERT" paragraph). */
+  sessionId: string;
   /** ISO timestamp written at rotation — the display "when". */
   savedAt: string;
   /** The ring's exported JSON, byte-identical to what teardown stashed. */
   exported: string;
 }
 
-/** M-7 (final whole-branch review): reject a `savedAt` that is well-formed
- *  JSON of the right SHAPE but not a value `Date.parse` can read — a
- *  corrupt/hand-edited string, or a shape a future writer gets wrong —
- *  rather than let it reach `MonitorLogs.tsx`'s `new Date(entry.savedAt)`
- *  and render the literal text "Invalid Date". Every other field-shape
- *  check below is a `typeof` guard; a value can pass every `typeof` guard
- *  and still fail this — `savedAt: "not-a-date"` is a `string`, so it needs
- *  its own check. `Number.isNaN(Date.parse(...))` is the same test the ECMA
- *  spec itself defines `Date`'s own parse failure as (a `NaN` time value),
- *  not a heuristic. */
+/** M-7 (final whole-branch review), TIGHTENED at review round 2, item 3:
+ *  the original check, `!Number.isNaN(Date.parse(value))`, rejects only a
+ *  value `Date` cannot parse at all — it does NOT reject a value `Date`
+ *  parses by NORMALIZING it to something else, e.g. `Date.parse` silently
+ *  rolls `"2026-02-30T00:00:00.000Z"` forward to March 2nd rather than
+ *  refusing it, and accepts a bare `"2026"` as midnight UTC on January 1st.
+ *  Neither shape is one `upsertSessionLog` — the only writer — ever
+ *  produces (it always stores `savedAt.toISOString()`), so REQUIRING the
+ *  exact round-trip (`new Date(value).toISOString() === value`) rejects
+ *  every value that parses to something OTHER than what it says, while
+ *  still accepting every value the writer actually stores — a strictly
+ *  narrower, still-correct filter for exactly the same reason the original
+ *  comment gives: reaching `MonitorLogs.tsx`'s `new Date(entry.savedAt)`
+ *  with a string that silently means a DIFFERENT instant than it displays
+ *  is its own kind of wrong, not just an outright parse failure. */
 function isValidSavedAt(value: string): boolean {
-  return !Number.isNaN(Date.parse(value));
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return date.toISOString() === value;
 }
 
 function isStoredEntry(value: unknown): value is StoredEntry {
   return (
     typeof value === "object" &&
     value !== null &&
+    typeof (value as Record<string, unknown>).sessionId === "string" &&
     typeof (value as Record<string, unknown>).savedAt === "string" &&
     isValidSavedAt((value as Record<string, unknown>).savedAt as string) &&
     typeof (value as Record<string, unknown>).exported === "string"
@@ -90,11 +138,12 @@ function isStoredEntry(value: unknown): value is StoredEntry {
  *  malformed storage, or a JSON value that parses but isn't an array —
  *  every one of those degrades to "no history", never a throw. Each
  *  ARRAY ELEMENT is independently validated: one corrupt entry (or one
- *  whose `savedAt` doesn't parse) is dropped, not fatal to its siblings —
- *  matching the old three-key shape's own "a corrupt slot is skipped, not
- *  fatal" contract. Over-length arrays (should not occur — every writer
- *  below caps at `MAX_ENTRIES` — but a hand-edited or future-version value
- *  is not this module's to trust) are trimmed to `MAX_ENTRIES` too. */
+ *  whose `savedAt` doesn't parse, or one missing `sessionId` entirely — the
+ *  shape a pre-review-round-2 stored value has, since there is no
+ *  migration, per the module header) is dropped, not fatal to its siblings.
+ *  Over-length arrays (should not occur — every writer below caps at
+ *  `MAX_ENTRIES` — but a hand-edited or future-version value is not this
+ *  module's to trust) are trimmed to `MAX_ENTRIES` too. */
 function readHistory(): StoredEntry[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
@@ -123,32 +172,36 @@ function writeHistory(entries: StoredEntry[]): void {
   }
 }
 
-/** Rotates `exported` into the front of the history, newest-first, evicting
- *  past `MAX_ENTRIES`. Never throws. */
-export function pushSessionLog(exported: string, savedAt: Date): void {
-  const entry: StoredEntry = { savedAt: savedAt.toISOString(), exported };
-  const next = [entry, ...readHistory()].slice(0, MAX_ENTRIES);
-  writeHistory(next);
-}
-
-/** M-5 (final whole-branch review, item 1 — a burst-eligible teardown's
- *  SECOND stash must not consume a second history slot): overwrites the
- *  NEWEST entry in place with fresher bytes from the SAME teardown, rather
- *  than rotating a second time. `useMonitorSession.ts`'s `stash()` calls
- *  this (guarded by its own per-teardown ref, the same idiom
- *  `latchCountRecordedRef` already uses) on every stash after the first one
- *  THIS teardown has already run. Falls back to a plain push when the
- *  history is empty — defensive only: `stash()`'s own guard means this is
- *  never called before `pushSessionLog` has already run at least once in
- *  the same teardown, so the read here is expected to see at least one
- *  entry, but a genuinely empty history (e.g. the FIRST push itself denied
- *  its write) still has to end up with something recorded rather than
- *  silently doing nothing. */
-export function updateNewestSessionLog(exported: string, savedAt: Date): void {
-  const entry: StoredEntry = { savedAt: savedAt.toISOString(), exported };
+/** THE ONLY PUBLIC WRITE FUNCTION (review round 2, items 1+2 — see the
+ *  module header's "IDENTITY-BOUND UPSERT" paragraph for the full account
+ *  of the two defects this replaces `pushSessionLog`/
+ *  `updateNewestSessionLog` to fix). Searches the current history for an
+ *  entry already carrying `sessionId`:
+ *  - FOUND: replaces that entry in place with fresher bytes — no rotation,
+ *    the list's length and the other entries' order are unchanged.
+ *  - NOT FOUND: inserts a fresh entry at the head, evicting past
+ *    `MAX_ENTRIES` — the ordinary "a new session's first stash" case.
+ *  Either branch ends in exactly one `writeHistory` call, so this is still
+ *  the atomic single-`setItem` write M-6 established. Never throws — the
+ *  read and the write below both already degrade to "no-op"/"empty" on
+ *  denial or corruption. */
+export function upsertSessionLog(
+  sessionId: string,
+  exported: string,
+  savedAt: Date,
+): void {
+  const entry: StoredEntry = {
+    sessionId,
+    savedAt: savedAt.toISOString(),
+    exported,
+  };
   const existing = readHistory();
-  const next = existing.length === 0 ? [entry] : [entry, ...existing.slice(1)];
-  writeHistory(next.slice(0, MAX_ENTRIES));
+  const index = existing.findIndex((e) => e.sessionId === sessionId);
+  const next =
+    index === -1
+      ? [entry, ...existing].slice(0, MAX_ENTRIES)
+      : existing.map((e, i) => (i === index ? entry : e));
+  writeHistory(next);
 }
 
 /** Newest-first list of whatever entries exist. Never throws; a corrupt or
@@ -157,6 +210,7 @@ export function updateNewestSessionLog(exported: string, savedAt: Date): void {
 export function listSessionLogs(): SessionLogHistoryEntry[] {
   return readHistory().map((entry, index) => ({
     slot: (index + 1) as 1 | 2 | 3,
+    sessionId: entry.sessionId,
     savedAt: entry.savedAt,
     exported: entry.exported,
   }));

@@ -1,13 +1,17 @@
 // Task 3 (Gate 0 rev 3): the monitor-logs door. Seeds through the REAL
-// `pushSessionLog` (Task 1's own module) rather than hand-built
-// localStorage JSON — the same "don't fake the producer" discipline
-// `sessionLogHistory.test.ts` itself follows for its own fixtures.
+// `upsertSessionLog` (Task 1's own module, renamed at review round 2's
+// identity fix) rather than hand-built localStorage JSON — the same "don't
+// fake the producer" discipline `sessionLogHistory.test.ts` itself follows
+// for its own fixtures. Each seeded row here is a distinct session id
+// ("s1", "s2", ...) — this screen has no reason to exercise the SAME
+// session upserting twice, that is `sessionLogHistory.test.ts`'s and
+// `useMonitorSession.test.ts`'s own job.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { pushSessionLog } from "../monitor/sessionLogHistory";
+import { upsertSessionLog } from "../monitor/sessionLogHistory";
 import { formatTimeOfDay } from "../session/summaryModel";
 import MonitorLogs, { sessionWhenLabel } from "./MonitorLogs";
 
@@ -82,9 +86,9 @@ describe("MonitorLogs — listing (newest-first)", () => {
   it("lists entries newest-first, each with an event count", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    pushSessionLog(ring(9), TWO_DAYS_AGO);
-    pushSessionLog(ring(37), YESTERDAY);
-    pushSessionLog(ring(214), NOW);
+    upsertSessionLog("s1", ring(9), TWO_DAYS_AGO);
+    upsertSessionLog("s2", ring(37), YESTERDAY);
+    upsertSessionLog("s3", ring(214), NOW);
     renderMonitorLogs();
 
     const cards = document.querySelectorAll(".diag-log-card");
@@ -99,7 +103,7 @@ describe("MonitorLogs — listing (newest-first)", () => {
   it("counts one event in the singular", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    pushSessionLog(ring(1), NOW);
+    upsertSessionLog("s1", ring(1), NOW);
     renderMonitorLogs();
     expect(screen.getByText("1 EVENT")).toBeInTheDocument();
   });
@@ -107,9 +111,9 @@ describe("MonitorLogs — listing (newest-first)", () => {
   it("a corrupt export renders no row — surviving entries still list", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    pushSessionLog(ring(9), TWO_DAYS_AGO);
-    pushSessionLog("not json{{{", YESTERDAY);
-    pushSessionLog(ring(214), NOW);
+    upsertSessionLog("s1", ring(9), TWO_DAYS_AGO);
+    upsertSessionLog("s2", "not json{{{", YESTERDAY);
+    upsertSessionLog("s3", ring(214), NOW);
     renderMonitorLogs();
 
     const cards = document.querySelectorAll(".diag-log-card");
@@ -121,7 +125,7 @@ describe("MonitorLogs — listing (newest-first)", () => {
   it("a valid-JSON export that isn't an array also renders no row", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    pushSessionLog(JSON.stringify({ unrelated: true }), NOW);
+    upsertSessionLog("s1", JSON.stringify({ unrelated: true }), NOW);
     renderMonitorLogs();
     expect(document.querySelectorAll(".diag-log-card")).toHaveLength(0);
     expect(
@@ -154,7 +158,7 @@ describe("MonitorLogs — the when label", () => {
   it("renders each entry's when label on screen", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    pushSessionLog(ring(1), NOW);
+    upsertSessionLog("s1", ring(1), NOW);
     renderMonitorLogs();
     expect(
       screen.getByText(sessionWhenLabel(NOW.toISOString(), NOW)),
@@ -174,14 +178,14 @@ describe("MonitorLogs — COPY (ConnectionLogSheet's own three-state contract)",
     const raw = `${JSON.stringify(JSON.parse(ring(3)), null, 2)}\n`;
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    pushSessionLog(raw, NOW);
+    upsertSessionLog("s1", raw, NOW);
     vi.useRealTimers();
     renderMonitorLogs();
 
     await userEvent.click(screen.getByRole("button", { name: "COPY" }));
     expect(clipboard.writeText).toHaveBeenCalledTimes(1);
     const copied = clipboard.writeText.mock.calls[0]![0] as string;
-    // The SAME string `pushSessionLog` was handed — not
+    // The SAME string `upsertSessionLog` was handed — not
     // `JSON.stringify(JSON.parse(raw))`, which would still be
     // deep-equal but is a different artefact (whitespace, key order).
     expect(copied).toBe(raw);
@@ -191,7 +195,7 @@ describe("MonitorLogs — COPY (ConnectionLogSheet's own three-state contract)",
     const clipboard = stubClipboard();
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    pushSessionLog(ring(1), NOW);
+    upsertSessionLog("s1", ring(1), NOW);
     vi.useRealTimers();
     renderMonitorLogs();
 
@@ -209,8 +213,8 @@ describe("MonitorLogs — COPY (ConnectionLogSheet's own three-state contract)",
     const clipboard = stubClipboard();
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    pushSessionLog(ring(9), TWO_DAYS_AGO);
-    pushSessionLog(ring(214), NOW);
+    upsertSessionLog("s1", ring(9), TWO_DAYS_AGO);
+    upsertSessionLog("s2", ring(214), NOW);
     vi.useRealTimers();
     renderMonitorLogs();
 
