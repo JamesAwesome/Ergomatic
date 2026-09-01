@@ -1639,6 +1639,40 @@ export function useMonitorSession(
    *  reported at resume). Set to `0` on every "background" transition,
    *  read and reset back to `null` on the matching "foreground" one. */
   const framesWhileHiddenRef = useRef<number | null>(null);
+  /** §3 (lifecycle design spec 2026-08-31): armed by the "foreground"
+   *  branch below with what it measured at the resume edge — the SAME
+   *  `gapMs`/`framesWhileHidden` readings that `app-lifecycle`/
+   *  `resume-frames` already record, reused rather than re-derived — and
+   *  consumed by the very next `handleFrame` call, whatever phase it
+   *  arrives in. Mirrors `framesWhileHiddenRef`'s own "armed here,
+   *  consumed there, then cleared" lifetime. `null` when no resume is
+   *  currently awaiting its first post-resume frame. */
+  const resumeEdgeArmedRef = useRef<{
+    gapMs: number | null;
+    preBackgroundKey: string | null;
+    framesWhileHidden: number;
+  } | null>(null);
+  /** §3: the run of consecutive post-resume frames whose `freezeKey` still
+   *  matches the frame that armed it (`resume-first-frame`'s own
+   *  `stale=true` case) — `null` whenever no such run is open. Cleared at
+   *  every per-run reset site `freezeRef`/`rowingStreakRef`/
+   *  `lastContinuityRef` already use, and closed with its own
+   *  `resume-stale-run` entry the instant a differing frame arrives, or
+   *  `teardown` runs first (that close happens once, at the top of
+   *  `teardown`, since it is the single choke point every exit path runs
+   *  through — see its own comment). */
+  const resumeStaleRunRef = useRef<{ key: string; frames: number } | null>(
+    null,
+  );
+  /** §6 (RC-29 latch counter): how many times THIS connection's own
+   *  `decideResumeLatch` call latched `frameSilence` (below) — reset at
+   *  `connect()`, the same "per connection, not per run" lifetime
+   *  `framesWhileHiddenRef` already has, and read once by `stash()`'s own
+   *  `latch-count` entry. */
+  const resumeLatchCountRef = useRef(0);
+  /** §6's other half: how many "foreground" transitions this connection has
+   *  seen at all, latching or not — same lifetime as `resumeLatchCountRef`. */
+  const resumeCountRef = useRef(0);
   /** Phase LL Task 4 (design spec §4's continuity rule), widened to all
    *  three axes by F2a (design spec 2026-08-23-continuity-corroboration
    *  §2): the last live frame's own `totalWorkDistanceMeters`,
@@ -2306,6 +2340,54 @@ export function useMonitorSession(
       // of what else this frame does.
       if (framesWhileHiddenRef.current !== null) {
         framesWhileHiddenRef.current += 1;
+      }
+      // §3 (lifecycle design spec 2026-08-31): the resume-edge instrument.
+      // Armed by the "foreground" branch below with what it measured;
+      // consumed here by the very next 0x0031, in whatever phase it
+      // arrives — the identical unconditional placement
+      // `framesWhileHiddenRef`'s own counter uses immediately above. Edge
+      // only: a `resume-first-frame` entry fires at most once per resume,
+      // never per frame, and the identical-run tracker it can open is
+      // closed by the first differing frame (`resume-stale-run
+      // endedBy=changed`) or by `teardown` (`endedBy=teardown`, this
+      // file's own single choke point for every exit path), never by a
+      // second `resume-first-frame`.
+      if (resumeEdgeArmedRef.current !== null) {
+        const arm = resumeEdgeArmedRef.current;
+        resumeEdgeArmedRef.current = null;
+        const key = freezeKey(frame);
+        const stale =
+          arm.preBackgroundKey !== null && key === arm.preBackgroundKey;
+        logRef.current?.record(
+          "resume-first-frame",
+          `gapMs=${arm.gapMs === null ? "unmeasured" : arm.gapMs} stale=${stale} ` +
+            // `?? "unknown"` is defensive, not reachable from this hook's own
+            // test suite: every frame that reaches `handleFrame` at all has
+            // already passed through `pm5/parse.ts`'s `toMonitorFrame`
+            // (directly, or via `driver.ts`'s own `...base` spread), which
+            // always sets `rawRowingState` — see that field's own doc
+            // comment (`domain/monitor/types.ts`). Kept for the same reason
+            // `lastContinuityRef`'s own `undefined` guards above are kept:
+            // a future `MonitorFrame` producer built bare should degrade
+            // honestly here, not throw on a missing field this hook never
+            // itself omits.
+            `rawRowingState=${frame.rawRowingState ?? "unknown"} framesWhileHidden=${arm.framesWhileHidden}`,
+        );
+        if (stale) {
+          resumeStaleRunRef.current = { key, frames: 1 };
+        }
+      } else if (resumeStaleRunRef.current !== null) {
+        const run = resumeStaleRunRef.current;
+        const key = freezeKey(frame);
+        if (key === run.key) {
+          resumeStaleRunRef.current = { key, frames: run.frames + 1 };
+        } else {
+          logRef.current?.record(
+            "resume-stale-run",
+            `frames=${run.frames} endedBy=changed`,
+          );
+          resumeStaleRunRef.current = null;
+        }
       }
       const phase = stateRef.current.phase;
       // FIRST ROWING FRAME WITH FLYWHEEL EVIDENCE -> live (spec §2:
@@ -3356,6 +3438,20 @@ export function useMonitorSession(
       // at t=0 on every path.
       stopSeriesFlush();
 
+      // §3: a still-open resume-stale-run closes HERE, before the first
+      // `stash()` below can see it — `teardown` is the single choke point
+      // every exit path (unmount, `cancel()`, a natural/mid-row/continuity
+      // close) runs through (this function's own header, above), so one
+      // close site here covers all of them without a matching call at each
+      // individual close.
+      if (resumeStaleRunRef.current !== null) {
+        logRef.current?.record(
+          "resume-stale-run",
+          `frames=${resumeStaleRunRef.current.frames} endedBy=teardown`,
+        );
+        resumeStaleRunRef.current = null;
+      }
+
       // STEP 2: STASH. THE LOG SURVIVES THE SESSION (2026-08-08, hardware
       // walk 2): the ended hand-off frame navigates away on its first
       // render, so the in-memory trace died exactly when the operator
@@ -3396,6 +3492,14 @@ export function useMonitorSession(
         const log = logRef.current;
         if (log === null) return;
         try {
+          // §6 (RC-29 latch counter): BEFORE `exportLog()`, so this line
+          // rides every stashed copy this teardown produces — the
+          // three-slot history `pushSessionLog` rotates into below, and a
+          // second, later stash from the burst linger if one fires.
+          log.record(
+            "latch-count",
+            `latches=${resumeLatchCountRef.current} resumes=${resumeCountRef.current}`,
+          );
           const exported = log.exportLog();
           sessionStorage.setItem("ergomatic:last-monitor-log", exported);
           // A later attempt that never rowed (a failed pairing, a
@@ -3726,6 +3830,13 @@ export function useMonitorSession(
       // background/foreground pair (or an interrupted one that never saw
       // its matching foreground) left behind.
       framesWhileHiddenRef.current = null;
+      // §3/§6: this connection's own resume-edge instrument and latch
+      // counters start fresh too — same "per connection, not per run"
+      // lifetime as `framesWhileHiddenRef` immediately above.
+      resumeEdgeArmedRef.current = null;
+      resumeStaleRunRef.current = null;
+      resumeLatchCountRef.current = 0;
+      resumeCountRef.current = 0;
       // S6: once per ordinary product connect, straight into this session's
       // own ring — see `requestStoragePersistence`'s own doc comment for the
       // full reasoning.
@@ -3844,7 +3955,13 @@ export function useMonitorSession(
           snapshot,
           SILENCE_THRESHOLD_MS,
         );
+        // §6 (RC-29 latch counter): every "foreground" transition counts as
+        // a resume, latching or not; a latch additionally bumps its own
+        // counter. Both are read once, at teardown, by `stash()`'s own
+        // `latch-count` entry.
+        resumeCountRef.current += 1;
         if (latch) {
+          resumeLatchCountRef.current += 1;
           hysteresisCancelRef.current?.();
           hysteresisCancelRef.current = null;
           update({ frameSilence: true });
@@ -3885,6 +4002,19 @@ export function useMonitorSession(
             `rowingActive=${lastFrame?.rowingActive ?? "unseen"} ` +
             `distanceIncreased=${distanceIncreased}`,
         );
+        // §3: arm the resume-edge instrument for the very next frame
+        // `handleFrame` sees, reusing the identical `gapMs`/
+        // `framesWhileHidden` readings `app-lifecycle`/`resume-frames` just
+        // recorded above — one measurement, two ring entries, never a
+        // second derivation. `lastFrame` is the last frame this hook saw at
+        // all, which (no frames arrive while backgrounded) is exactly the
+        // last PRE-BACKGROUND frame `resume-first-frame`'s own `stale`
+        // field compares the next arrival against.
+        resumeEdgeArmedRef.current = {
+          gapMs,
+          preBackgroundKey: lastFrame !== null ? freezeKey(lastFrame) : null,
+          framesWhileHidden,
+        };
         // Only when we latched — see this handler's own header for why
         // calling this on a non-latching resume would disarm the watchdog
         // and leave a genuinely silent stream showing nothing at all.

@@ -11354,3 +11354,437 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(flushTimer.calls[0]!.cancelled).toBe(true);
   }, 15000);
 });
+
+// ---------------------------------------------------------------------------
+// Wave F PR 2 Task 2: §3's resume-edge frame instrument, §6's RC-29 latch
+// counter (design spec 2026-08-31-lifecycle-design.md). Measurement only —
+// neither entry has a consumer yet, and neither changes what any predicate
+// decides. Same composition idiom every other resume test in this file
+// already uses (the REAL liveness decorator around the fake, the native-
+// shaped app-lifecycle dispatch) so `decideResumeLatch`/the new instrument
+// both read a genuine measured gap, never a bypass.
+// ---------------------------------------------------------------------------
+
+describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/monitorTransport");
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  const D0 = 40;
+  const SPLIT0 = 120;
+  const SPM0 = 22;
+
+  /** Composes the REAL liveness decorator and a native-shaped app-lifecycle
+   *  listener around a fresh fake, the same wiring every other resume test
+   *  in this file uses (e.g. "PHASE LM, THE FIX AT THE HOOK LEVEL", above) —
+   *  connects only, no `programAndArm`: §3's instrument sits at the very top
+   *  of `handleFrame`, unconditional on phase, the same placement
+   *  `framesWhileHiddenRef`'s own counter uses, and three other resume tests
+   *  in this file already exercise the lifecycle listener with no program
+   *  ever sent (the "PHASE LM" describe block's own tests, none of which
+   *  call `programAndArm` either). */
+  async function setupResumeInstrumentSession(
+    events: FakeTimelineEvent[],
+  ): Promise<{
+    fake: FakeControls;
+    lifecycleCb: (event: "background" | "foreground") => void;
+    exportLog: () => string;
+    unmount: () => void;
+  }> {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result, unmount } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(lifecycleCb).toBeDefined();
+    return {
+      fake,
+      lifecycleCb: lifecycleCb!,
+      exportLog: () => result.current.exportLog(),
+      unmount,
+    };
+  }
+
+  function frame(atMs: number, distanceMeters: number): FakeTimelineEvent {
+    return status(atMs, { distanceMeters, currentSplit: SPLIT0, spm: SPM0 });
+  }
+
+  it("leg (a): a resume whose first frame repeats the pre-background freezeKey triple logs resume-first-frame stale=true with the measured gap and the raw byte, and the run of identical frames that follows it closes with resume-stale-run endedBy=changed the instant a differing frame arrives", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // opens the pre-background baseline
+      frame(1000, D0), // identical
+      frame(1500, D0), // identical — the last pre-background frame
+      frame(2000, D0), // first post-resume frame — identical -> stale=true, run opens (frames=1)
+      frame(2500, D0), // still identical -> run continues (frames=2)
+      frame(3000, D0 + 50), // DIFFERENT -> closes the run
+    ];
+    const { fake, lifecycleCb, exportLog } =
+      await setupResumeInstrumentSession(events);
+
+    for (let i = 0; i < 3; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 3; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntries = exported.filter(
+      (e) => e.kind === "resume-first-frame",
+    );
+    expect(firstFrameEntries).toHaveLength(1);
+    // gapMs: the last pre-background frame's own arrival (recorded at
+    // system-clock 1000, before that iteration's own advance) against the
+    // clock reading at resume (1500, unchanged by the background/foreground
+    // pair itself) — the identical arithmetic the "PHASE LM" describe
+    // block's own `resume gap=500ms` pin uses.
+    expect(firstFrameEntries[0]!.detail).toBe(
+      "gapMs=500 stale=true rawRowingState=1 framesWhileHidden=0",
+    );
+
+    const staleRunEntries = exported.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(staleRunEntries).toHaveLength(1);
+    expect(staleRunEntries[0]!.detail).toBe("frames=2 endedBy=changed");
+  });
+
+  it("leg (a) supplement: gapMs reads 'unmeasured' when no liveness decorator is available — the same bare createTransport composition Task 1's own 'resume records frames' test uses, no defaultTransport/withLiveness involved", async () => {
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [frame(100, D0), frame(200, D0)],
+    });
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    tick(fake, 100); // the pre-background baseline — no liveness decorator wired at all
+
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+
+    tick(fake, 100); // first post-resume frame — consumes the arm, identical -> stale=true
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const entry = exported.find((e) => e.kind === "resume-first-frame");
+    expect(entry).toBeDefined();
+    expect(entry!.detail).toBe(
+      "gapMs=unmeasured stale=true rawRowingState=1 framesWhileHidden=0",
+    );
+  });
+
+  it("leg (b) supplement: a resume before this session has ever seen a frame never marks stale — there is no pre-background frame to compare against", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // the FIRST frame this session ever sees — arrives after the resume
+    ];
+    const { fake, lifecycleCb, exportLog } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    }); // no frame has arrived at all yet
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    }); // this session's first-ever frame, also the first post-resume frame
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const entry = exported.find((e) => e.kind === "resume-first-frame");
+    expect(entry).toBeDefined();
+    expect(entry!.detail).toBe(
+      "gapMs=unmeasured stale=false rawRowingState=1 framesWhileHidden=0",
+    );
+    expect(exported.some((e) => e.kind === "resume-stale-run")).toBe(false);
+  });
+
+  it("leg (b): a resume whose first frame differs from the pre-background triple logs stale=false, and no resume-stale-run is ever recorded", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // the pre-background baseline
+      frame(1000, D0 + 30), // first post-resume frame — DIFFERENT -> stale=false
+      frame(1500, D0 + 30), // identical to itself, but no run was ever opened
+    ];
+    const { fake, lifecycleCb, exportLog } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntries = exported.filter(
+      (e) => e.kind === "resume-first-frame",
+    );
+    expect(firstFrameEntries).toHaveLength(1);
+    expect(firstFrameEntries[0]!.detail).toBe(
+      "gapMs=500 stale=false rawRowingState=1 framesWhileHidden=0",
+    );
+    expect(exported.some((e) => e.kind === "resume-stale-run")).toBe(false);
+  });
+
+  it("leg (c): teardown while the identical run is still open closes it with resume-stale-run endedBy=teardown, and the entry rides the stashed export", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // pre-background baseline
+      frame(1000, D0), // first post-resume frame — identical -> run opens (frames=1)
+    ];
+    const { fake, lifecycleCb, unmount } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const staleRunEntries = entries.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(staleRunEntries).toHaveLength(1);
+    expect(staleRunEntries[0]!.detail).toBe("frames=1 endedBy=teardown");
+  });
+});
+
+describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/monitorTransport");
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  /** Same composition as Task 2 (§3)'s own `setupResumeInstrumentSession` —
+   *  duplicated locally rather than shared across `describe` blocks (this
+   *  file's own established practice: `resumeAfterGap`/`interceptingTransport`
+   *  above are local to their own block too). */
+  async function setupLatchCountSession(events: FakeTimelineEvent[]): Promise<{
+    fake: FakeControls;
+    lifecycleCb: (event: "background" | "foreground") => void;
+    unmount: () => void;
+  }> {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result, unmount } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(lifecycleCb).toBeDefined();
+    return { fake, lifecycleCb: lifecycleCb!, unmount };
+  }
+
+  it("leg (d), part 1: two latching resumes then teardown — the stashed export's latch-count line reads latches=2 resumes=2", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [status(500, {}), status(1000, {})];
+    const { fake, lifecycleCb, unmount } = await setupLatchCountSession(events);
+
+    // First latching resume: the gap since the last 0x0031 (recorded at
+    // system-clock 0) reaches SILENCE_THRESHOLD_MS before this resume, the
+    // same "PHASE LM: a resume over a stream that never stopped" pin's own
+    // arithmetic, but pushed PAST the threshold instead of comfortably under
+    // it.
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      vi.advanceTimersByTime(SILENCE_THRESHOLD_MS);
+    });
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    // A healthy frame between the two resumes, then the second latching
+    // resume, by the identical construction.
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      vi.advanceTimersByTime(SILENCE_THRESHOLD_MS);
+    });
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const latchEntries = entries.filter((e) => e.kind === "latch-count");
+    expect(latchEntries).toHaveLength(1);
+    expect(latchEntries[0]!.detail).toBe("latches=2 resumes=2");
+  });
+
+  it("leg (d), part 2: a non-latching resume increments only resumes, never latches", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [status(500, {})];
+    const { fake, lifecycleCb, unmount } = await setupLatchCountSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    // No further gap: the same comfortably-under-threshold shape "PHASE LM,
+    // THE FIX AT THE HOOK LEVEL" pins as non-latching.
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const latchEntries = entries.filter((e) => e.kind === "latch-count");
+    expect(latchEntries).toHaveLength(1);
+    expect(latchEntries[0]!.detail).toBe("latches=0 resumes=1");
+  });
+});
