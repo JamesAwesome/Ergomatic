@@ -441,6 +441,56 @@ describe("useReturnToApp's failure handling (fix round 7, P1, finding 5)", () =>
     expect(result.current.status).toBe("arming");
   });
 
+  it("lifecycle registration rejects FIRST, then browserFinished's own registration fulfills LATER: the late-succeeding arm is unsubscribed on the spot (never assigned), and status stays failed (round 8, scoped re-review — the `failed` operand of `cancelled || failed` at :154 had no test driving this ordering; every prior test either had both arms fulfill, or fulfill-then-reject, never reject-then-fulfil-later)", async () => {
+    let rejectLifecycle: (reason: unknown) => void = () => undefined;
+    const lifecyclePromise = new Promise<() => void>((_resolve, reject) => {
+      rejectLifecycle = reject;
+    });
+    const registerAppLifecycleListener = vi.fn(() => lifecyclePromise);
+
+    let resolveBrowserFinished: (unsubscribe: () => void) => void = () =>
+      undefined;
+    const browserFinishedPromise = new Promise<() => void>((resolve) => {
+      resolveBrowserFinished = resolve;
+    });
+    const onBrowserFinished = vi.fn(() => browserFinishedPromise);
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener,
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
+    vi.resetModules();
+    const { useReturnToApp } = await import("./useReturnToApp");
+
+    const { result } = renderHook(() => useReturnToApp(vi.fn()));
+    await vi.waitFor(() => {
+      expect(registerAppLifecycleListener).toHaveBeenCalledOnce();
+      expect(onBrowserFinished).toHaveBeenCalledOnce();
+    });
+
+    // The lifecycle arm rejects FIRST, while browserFinished's own
+    // registration Promise is STILL PENDING.
+    rejectLifecycle(new Error("dynamic import failed"));
+    await expect(lifecyclePromise).rejects.toThrow("dynamic import failed");
+    await vi.waitFor(() => {
+      expect(result.current.status).toBe("failed");
+    });
+
+    // NOW the surviving arm's own registration settles — AFTER the other
+    // arm already failed. It must be unsubscribed immediately (the
+    // `failed` operand of `cancelled || failed`), never assigned to a
+    // variable nothing will ever call again — a leaked live subscription
+    // on a hook that has already declared itself "failed".
+    const browserFinishedUnsubscribe = vi.fn();
+    resolveBrowserFinished(browserFinishedUnsubscribe);
+    await vi.waitFor(() => {
+      expect(browserFinishedUnsubscribe).toHaveBeenCalledOnce();
+    });
+
+    // The late settlement must not un-fail the hook.
+    expect(result.current.status).toBe("failed");
+  });
+
   it("browserFinished registration rejecting AFTER unmount: settles quietly, no unhandled rejection, no state update on the unmounted hook", async () => {
     const registerAppLifecycleListener = vi.fn(
       () => new Promise<() => void>(() => undefined),
