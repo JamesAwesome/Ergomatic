@@ -105,6 +105,27 @@ your phone) is your real confirmation this build has the flag.**
    "2 or briefly 3". If you background-and-return WITHOUT ever tapping
    Done, the counter stays at 2 until you do.
 
+## RESULT — PASS (James, on device, 2026-09-01, build 0.31.0/840)
+
+Measured by counter DELTA (unreliable to count taps by hand, so each path
+was run as an isolated single trial from a known starting value):
+
+- **browserFinished path:** counter 8 → 9 on a plain Done/X dismiss with NO
+  backgrounding — delta exactly +1. The signal this fix round exists to add
+  fires, once, on the modal-dismiss return path `pause`/`resume` alone misses.
+- **resume + browserFinished path:** 9 → 11 on background-app → return (lands
+  on the still-open sheet) → dismiss — delta exactly +2 (resume on return,
+  browserFinished on dismiss). No over-count (the lifecycle-event-overcount
+  class of RF is absent — a plain dismiss never triggers resume).
+- SFSafariViewController confirmed presented as an in-app sheet (X top-left,
+  `log-dev.concept2.com` in the bar, Concept2's real HTTP-200 page), not an
+  app-switch to Safari. Probe card rendered on You, armed to "Open consent
+  browser" (no stuck "Arming…").
+
+The earlier raw total of 8 before the controlled trials was background cycles
+mixed with plain dismisses (each cycle +2), consistent with the deltas above;
+the per-path deltas are the deterministic evidence, not the running total.
+
 ## What a PASS looks like
 
 - Step 5: counter went from 0 to 1 after a plain Done-tap dismiss, with NO
