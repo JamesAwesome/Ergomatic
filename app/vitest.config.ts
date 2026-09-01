@@ -65,16 +65,6 @@ export default defineConfig({
         // reaches `scripts/**` in the first place; listed here anyway for
         // the same reason the two adapters are — explicit, not implicit).
         "scripts/pm5-lab.ts",
-        // PR1.5's own instance of the same boundary, one file: jsdom's
-        // `window.location.assign` throws "Not implemented: navigation"
-        // when actually invoked and cannot even be `vi.spyOn`'d ("Cannot
-        // redefine property: assign", checked against this repo's jsdom) —
-        // no test environment here can exercise the real call.
-        // `externalBrowser.test.ts` covers this module's CONSUMER
-        // (`openExternalUrl` calls it, correctly, via `vi.doMock`); the one
-        // line inside is compile-tested only, same ceiling as the two
-        // Transport adapters above.
-        "src/adapters/webNavigate.ts",
         "src/platform.ts",
         "server/index.ts",
         "server/testDeps.ts",
