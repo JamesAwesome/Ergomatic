@@ -150,14 +150,20 @@ Concept2's present.
 
 ## Architecture
 
-**Server broker for secrets; system browser for consent; no cookie
-anywhere in the native path.** The anchor pass killed rev 1's
-redirect-chain flow: native auth is a Keychain bearer attached by
-`api.ts` to fetches — a top-level WebView navigation carries no
-credential, `CapacitorHttp` follows redirects into a JS string, and the
-callback browser has no session to bind. Google sign-in's native plugin
-flow (`docs/deploy.md:105-108`) is the in-repo precedent; C2 has no SDK,
-so we build the RFC 8252 shape:
+**Server broker for secrets; system browser for consent; no APP
+CREDENTIAL anywhere in the native path** (narrowed, PR1.5 fix round 7,
+finding 4 — this used to say "no cookie anywhere," which overclaimed:
+the design-gate ruling
+(`docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md` §3(d)) may yet
+introduce a PURPOSE-BUILT, non-credential cookie into the consent
+browser's own hop; that cookie would never carry the app's own Keychain
+bearer or an `erg_session`, which is the invariant this sentence actually
+needs). The anchor pass killed rev 1's redirect-chain flow: native auth
+is a Keychain bearer attached by `api.ts` to fetches — a top-level
+WebView navigation carries no credential, `CapacitorHttp` follows
+redirects into a JS string, and the callback browser has no session to
+bind. Google sign-in's native plugin flow (`docs/deploy.md:105-108`) is
+the in-repo precedent; C2 has no SDK, so we build the RFC 8252 shape:
 
 1. **Mint:** authed `POST /api/concept2/connect {weightClass}` (bearer or
    cookie — works on both surfaces). Server validates `H`/`L`, creates a

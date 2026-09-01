@@ -64,18 +64,43 @@ only the first two:**
    person, a link sent over a live chat the victim opens within minutes,
    or an attacker standing next to the victim.
 
-## 1a. The blast radius — what James is actually weighing
+## 1a. The blast radius — what James is actually weighing — CORRECTED
+round 7 (finding 4)
 
-Not previously stated. If the residual fires:
+Not previously stated in the original pass; round 7 found the FIRST
+correction below was itself wrong in a way that could change the ruling,
+and fixed it against the code rather than restating the error more
+carefully. If the residual fires:
 
-- **What the attacker gains, and how durable it is:** the victim's
-  Concept2 `accessToken` AND `refreshToken`
-  (`server/db/schema.ts:478-480`), plus `c2UserId` (surfaced to the
-  attacker's own session via `GET /api/concept2/link`,
-  `server/routes/concept2.ts:246`). This is not a one-time leak: the
-  refresh path (spec §Architecture 6, `needsReauthAt`) keeps the tokens
-  ALIVE indefinitely unless C2 itself invalidates them — the attacker's
-  access does not expire on its own.
+- **CORRECTED 2026-09-01 (round 7, finding 4): the attacker does NOT gain
+  the victim's tokens, or any client-visible credential at all — the
+  original bullet here overclaimed "token exfiltration."** Verified this
+  session: `server/db/schema.ts:472-478`'s own comment states plainly
+  "Tokens are never serialized to any client response —
+  `routes/concept2.ts` returns {available, linked, weightClass, c2UserId,
+  needsReauth} ... but never a token." `accessToken`/`refreshToken` are
+  server-side columns (`server/db/schema.ts:484-485`) that never leave
+  the server for ANY caller, including the account's own legitimate
+  owner. **What the attacker ACTUALLY gains is a SERVER-MEDIATED
+  CAPABILITY, not the tokens themselves:** for as long as the
+  misdirected link stands, the attacker's OWN Ergomatic account can (i)
+  see the linked identity via `GET /api/concept2/link`'s metadata-only
+  response (`c2UserId`, `weightClass`, `needsReauth` —
+  `server/routes/concept2.ts:246`), (ii) unlink or later re-link a
+  DIFFERENT C2 account under their own row (`DELETE
+  /api/concept2/link`), and (iii) POST their OWN eligible workout rows
+  into the VICTIM's C2 logbook — verified against the upload route itself
+  (`server/routes/concept2.ts:265,297-298`, `router.post(
+  "/api/concept2/results/:logId", requireUser, ...)` resolves `userId =
+  req.user!.id` and `logs.get(userId, logId)`, BOTH always the CALLER's
+  own id — the attacker can never reach or post the VICTIM's own rows,
+  only send their own into the victim's account). This is real —
+  unwanted rows appearing in someone's Concept2 logbook, indefinitely,
+  with no way for them to know why — but it is NOT arbitrary C2 API
+  access and NOT a credential leak. The refresh path (spec §Architecture
+  6, `needsReauthAt`) does keep the LINK itself alive indefinitely absent
+  C2-side invalidation; that durability claim stands, just not the
+  "tokens leaked" framing it was originally attached to.
 - **What the victim can do about it, in-app: NOTHING.** `DELETE
   /api/concept2/link` is caller-scoped (`server/routes/concept2.ts:251-260`,
   `deleteLink(req.user!.id)` — only ever touches the CALLER's own row,
@@ -91,7 +116,7 @@ Not previously stated. If the residual fires:
   (outside this app entirely, unverified this session — Concept2's own
   settings UI was not fetched).
 - **The victim's OWN link, if they have one, is undisturbed.**
-  `concept2_links.userId` is the PRIMARY KEY (`server/db/schema.ts:473-477`)
+  `concept2_links.userId` is the PRIMARY KEY (`server/db/schema.ts:479-483`)
   and `c2UserId` carries no unique constraint — `upsertLink`'s own
   `onConflictDoUpdate` targets `concept2Links.userId`
   (`server/stores/concept2.ts:85-86`). The attacker's row (keyed on the
@@ -123,30 +148,49 @@ distinction matters for §3(d)'s prevention variant below:**
   back via `getCookie(req.headers.cookie, SESSION_COOKIE)` whenever no
   bearer header is present. This is a live, working mechanism — just not
   one the NATIVE APP ever uses.
-- **The genuinely open question, stated as one rather than assumed:**
-  does the PHONE's own Safari/`SFSafariViewController` cookie jar hold an
-  `erg_session` cookie from some PRIOR visit to the app's web origin in
-  ordinary mobile Safari (before or alongside installing the native app)?
-  iOS's system WebKit cookie store is commonly shared between Safari and
-  `SFSafariViewController` instances (this is the whole reason
-  `SFSafariViewController` exists as a UX pattern — shared login state
-  across apps) — but this session did NOT fetch Apple's own documentation
-  of that sharing, and nothing in this repo has measured it on a real
-  device. **Correct statement: possible, unmeasured — not "never."**
+- **Round 7 correction (finding 2): the "a prior web session's
+  `erg_session` might be sitting in the shared Safari jar" idea above was
+  SPECULATION, and this round fetched the actual vendor documentation
+  rather than continuing to guess.** PRIMARY
+  (developer.apple.com/documentation/safariservices/sfsafariviewcontroller,
+  fetched via the docs JSON API this session — the HTML page is
+  JS-rendered and did not return usable text — `Overview` section, quoted
+  verbatim): **"Interactions with the web interface aren't visible to
+  your app, and you can't access AutoFill data, browsing history, or
+  website data."** and **"You don't need to secure data between your app
+  and Safari. To share data between your app and Safari, use
+  `ASWebAuthenticationSession` instead."** Read precisely: this states
+  what the HOST APP cannot access from an `SFSafariViewController`
+  session — it does not directly state whether that session's OWN cookie
+  jar is the same one Safari itself uses while browsing. But it does
+  establish, PRIMARY, that Apple's own recommended mechanism for
+  DELIBERATELY sharing session state between an app and Safari is a
+  DIFFERENT API (`ASWebAuthenticationSession`), not `SFSafariViewController`
+  — undermining rather than supporting a design that leans on
+  `SFSafariViewController` incidentally carrying a prior web session's
+  cookie. **The "ordinary Safari `erg_session` may be shared in"
+  speculation is dropped.** It was never load-bearing for PR1.5 itself
+  (native-only, no `/start` route exists yet) and this document should
+  not carry forward a claim it could not source.
 
 **Conclusion, revised:** on native, the APP's own credential (the
 Keychain bearer) is genuinely absent from the consent browser — that part
-of the original argument holds. But "no cookie can ever exist there" was
-an overclaim; whether a REAL `erg_session` cookie from prior web use is
-sitting in that browser's jar is an open, measurable question, not a
-closed one. **This actually STRENGTHENS §3(d)'s browser-bound-continuation
-variant below, rather than weakening it:** if an ordinary web-issued
-session cookie can plausibly survive in that same cookie jar across a
-`SFSafariViewController` presentation, then a purpose-built, short-lived
-cookie our OWN `/start` route sets for exactly this flow has a real,
-plausible transport mechanism to ride — this session just cannot certify
-it works without a device measurement (the walk card carries an optional
-probe for exactly this, see §4).
+of the original argument holds, and Apple's own doc reinforces it (the
+app cannot access that browser's website data regardless). **The
+plausible mechanism for §3's browser-bound continuation is narrower and
+does NOT depend on any cross-session/cross-app cookie sharing at all: a
+cookie set by our OWN `/start` route and consumed by our OWN `/callback`
+route WITHIN ONE CONTINUOUS `SFSafariViewController` PRESENTATION** — one
+browsing session, start → C2 → callback, never closed in between. This is
+ordinary same-session cookie persistence, the same guarantee any web
+browser gives any OAuth flow that redirects through a third party and
+back — it needs no claim about Safari's shared jar, no claim about
+`erg_session`, nothing beyond "a cookie set early in a session is still
+there later in the SAME session." **Still not certified by this session
+without a device measurement** (no vendor doc found that speaks to
+`SFSafariViewController`'s within-session cookie persistence specifically,
+as opposed to cross-app sharing) — but the claim being measured is now
+the ordinary, low-risk one, not the speculative one.
 
 **Web is different and out of scope for the residual as stated:** web's
 callback runs in the same browser as the app, cookie auth already exists
@@ -259,7 +303,11 @@ that does not exist for any other option here.
 
 **(d) A pre-consent interstitial on our OWN origin — DETECTION-GRADE
 ONLY as originally written, fix round 5 (finding 3a, the reviewer proved
-it); TRUE prevention needs a second half, added below.**
+it); a second half, added below, reaches PHYSICALLY-CONFIRM, the SAME
+class as (c) — round 7 (finding 3) corrects fix round 5's own "TRUE
+prevention" label. Neither half of (d), nor any other option in this
+document, achieves cryptographic principal binding — see the closing
+taxonomy note after (f).**
 
 **The original (d) is not prevention, and here is the proof, not an
 assertion:** the attacker already holds a valid `state` (their own
@@ -283,39 +331,86 @@ Continue) is still accurate as a DETECTION mechanism and still costs what
 it said: the same by-id user lookup (b)/(c) need, plus one new route, no
 stored-shape change.
 
-**The real prevention variant, fix round 5 (finding 3a, as the reviewer
-named it): a BROWSER-BOUND CONTINUATION.** `/api/concept2/start` sets a
-short-lived, single-purpose cookie in the CONSENT BROWSER itself (scoped
-to this flow only — not an `erg_session`, a purpose-built cookie naming
-nothing but "this browser visited `/start` for this attempt"). Because
-Concept2's redirect returns the SAME browser instance to our
-`/api/concept2/callback` (same origin, ordinary same-site cookie
-semantics), the callback can then REQUIRE that cookie's presence and
-REFUSE the exchange if it is missing — closing exactly the raw-URL-skip
-gap above, since a victim who never visited OUR `/start` (because the
-attacker handed them C2's raw URL directly) arrives at `/callback`
-without the cookie. **Cost, honestly:** whether a cookie set by
-`/start` genuinely survives the FULL round trip — our origin, then C2's
-domain, then back to our origin — inside `SFSafariViewController`/mobile
-Safari on a real device is UNMEASURED by this session (§2's revised
-credential fact is the reason to expect it plausibly DOES survive, not
-proof that it does; the walk card carries an optional probe for exactly
-this, §4). Web is comparatively straightforward — ordinary same-origin
-cookie behavior in a normal browser tab, no cross-app jar question at
-all — **but not attribute-free: the arriving `/callback` request is a
-cross-site TOP-LEVEL GET (the browser was just on `concept2.com`,
-navigating back to us), so `SameSite` is the load-bearing attribute for
-the web half specifically** — `SameSite=Strict` would NOT send the
-`/start` cookie on that navigation at all, while `SameSite=Lax` does
-(Lax's whole exemption is top-level, safe-method navigations). Our
-existing `erg_session` cookie is already issued `sameSite: "lax"`
-(`server/auth/cookies.ts:20-29`), but this new continuation cookie is a
-SEPARATE cookie and must be issued `Lax` just as deliberately — inheriting
-it by copying `sessionCookie()`'s shape is not automatic just because the
-precedent exists. Needs the same by-id user lookup as (b)/(c)/(d)-detection, plus the
-cookie-issuing logic and the callback-side check; no `pending` stored
-state, no confirm-token route, no GC beyond `/start` cookies' own
-`Max-Age`.
+**The stronger variant, fix round 5 (finding 3a): a BROWSER-BOUND
+CONTINUATION — round 7 RECLASSIFIED (finding 3): this is
+PHYSICALLY-CONFIRM, the same class as (c), NOT prevention.**
+`/api/concept2/start` sets a short-lived, single-purpose cookie in the
+CONSENT BROWSER itself (scoped to this flow only — not an `erg_session`,
+a purpose-built cookie naming nothing but "this browser visited `/start`
+for this attempt"). Because Concept2's redirect returns the SAME browser
+instance to our `/api/concept2/callback` (same origin, ordinary same-site
+cookie semantics — see the `SameSite` note below), the callback can then
+REQUIRE that cookie's presence and REFUSE the exchange if it is missing.
+
+**Why this is confirmation, not prevention — round 7 correction, stated
+plainly:** the cookie proves ONE fact only — "the browser present at
+`/callback` also visited `/start` earlier in this same session." It
+proves NOTHING about WHO is driving that browser at either end. An
+attacker can visit `/start` themselves (nothing there is
+identity-gated beyond the nonce, which the attacker already holds
+legitimately as the minter) and then hand the VICTIM the resulting,
+cookie-bearing continuation — a shared device, a screen-share, a
+"click this for me" — exactly as the raw-URL attack in (d)'s original
+write-up already assumed a cooperative-victim channel exists. The cookie
+closes the "skip our origin entirely" bypass; it does not, and cannot by
+itself, verify that the person completing consent is the one the design
+intends to be confirming. This is the SAME guarantee shape as (c)
+("informed physical confirmation, not authentication of the consenting
+principal," this document's own round-5 relabel of (c)) — (d)'s
+continuation variant belongs in that same bucket, not in a separate
+"prevention" bucket fix round 5 invented for it.
+
+**Missing requirements if this variant is pursued, costed honestly
+(round 7, finding 3) — none of these exist in the fix round 5 write-up:**
+- **Deliberate action, not a bare GET side effect.** Setting the cookie
+  and proceeding to C2 must ride an explicit POST or a tap-driven
+  navigation, never an automatic redirect a page load alone could
+  trigger — otherwise "the browser visited `/start`" can be true of a
+  link preview, a prefetch, or a passive page load nobody consciously
+  acted on, undermining even the "physical confirmation" reading.
+- **Anti-framing.** `/start`'s response needs `frame-ancestors`/
+  `X-Frame-Options` denying embedding — without it, an attacker can frame
+  the confirmation page invisibly (classic clickjacking) and collect a
+  "confirmation" the victim never knowingly gave.
+- **One-time/clearing semantics.** The continuation cookie should be
+  single-use and cleared on consumption (or expire on the SAME short
+  clock as the attempt nonce) — otherwise it can be replayed across
+  multiple attempts from the same browser.
+- **What would ACTUALLY bind the principal, named so James can weigh what
+  is NOT on offer:** genuine principal binding needs an authenticated
+  proof tied to a specific person — e.g., the SAME Ergomatic session
+  returning through an authenticated app/browser hand-off — which is
+  exactly what §2's credential fact rules out reaching this browser on
+  native. No option in this document does this; see the taxonomy note
+  after (f).
+
+**Cost, honestly:** whether a cookie set by `/start` genuinely survives
+the FULL round trip — our origin, then C2's domain, then back to our
+origin — inside `SFSafariViewController`/mobile Safari on a real device
+is UNMEASURED by this session. §2's round-7 correction narrows what this
+rests on: NOT a claim about Safari's shared cookie jar (dropped, no
+vendor support found), but the much more ordinary claim that a cookie
+set early in ONE continuous browsing session survives to the end of that
+SAME session — nothing beyond standard OAuth-redirect cookie behavior.
+Still unmeasured on `SFSafariViewController` specifically; the walk card
+used to carry a probe note aimed at the (now-dropped) shared-jar
+question and has been corrected accordingly (see that document). Web is
+comparatively straightforward — ordinary same-origin cookie behavior in
+a normal browser tab, no cross-app jar question at all — **but not
+attribute-free: the arriving `/callback` request is a cross-site
+TOP-LEVEL GET (the browser was just on `concept2.com`, navigating back to
+us), so `SameSite` is the load-bearing attribute for the web half
+specifically** — `SameSite=Strict` would NOT send the `/start` cookie on
+that navigation at all, while `SameSite=Lax` does (Lax's whole exemption
+is top-level, safe-method navigations). Our existing `erg_session`
+cookie is already issued `sameSite: "lax"` (`server/auth/cookies.ts:20-29`),
+but this new continuation cookie is a SEPARATE cookie and must be issued
+`Lax` just as deliberately — inheriting it by copying `sessionCookie()`'s
+shape is not automatic just because the precedent exists. Needs the same
+by-id user lookup as (b)/(c)/(d)-detection, plus the cookie-issuing logic,
+the callback-side check, the deliberate-action/anti-framing/one-time
+requirements above, and the same GC shape (b)/(c) already need; no
+`pending` stored state, no confirm-token route beyond what's listed here.
 
 **Either half of (d) is LOAD-BEARING FOR PR1.5 ITSELF, not just a
 server-side add-on:** it changes what PR2's card hands to
@@ -336,7 +431,7 @@ migration, no new route. Trade-off: a legitimate user who mints, gets
 distracted, and returns to consent later also has less slack.
 
 **(f) `UNIQUE` constraint on `concept2_links.c2_user_id`.**
-Not in either previous pass. Today (`server/db/schema.ts:477`) `c2UserId`
+Not in either previous pass. Today (`server/db/schema.ts:483`) `c2UserId`
 carries no uniqueness — the SAME Concept2 account can sit behind multiple
 Ergomatic `userId` rows simultaneously (§1a already establishes this is
 exactly how the attacker's row and the victim's own row coexist
@@ -357,6 +452,24 @@ STRUCTURALLY FORBID two different household members from ever linking the
 SAME shared Concept2 account (a family login used by two rowers) — if
 that is a real use case for this household app, (f) forecloses it
 entirely, not just for the attack scenario.
+
+**The taxonomy, corrected, round 7 (finding 3) — say this plainly so
+James rules on reality, not on a label:** every option above sorts into
+exactly one of three buckets — **accept** (a), **detect** (b, and
+(d)'s original interstitial half, at two different strengths — (b) after
+a completed consent, (d) before one), or **physically-confirm** (c, and
+(d)'s browser-bound-continuation half, also at two strengths — (c) binds
+to "this exact page render," (d)'s continuation binds to "this exact
+browser session"). (e) and (f) are orthogonal dials/signals that compose
+with any bucket. **NO option in this document achieves cryptographic
+principal binding — proof that the SPECIFIC person the design intends is
+the one who consented.** That would need an authenticated credential
+returning through the flow, and §2 already establishes the one credential
+this app has (the Keychain bearer) cannot reach the consent browser on
+native. "Prevention" was the wrong word for anything in this package;
+every option here either accepts the residual, makes it visible after
+the fact, or requires a deliberate action from whoever is physically
+present — none of them verify WHO that person is.
 
 ## 4. The device-check card
 
@@ -434,15 +547,21 @@ consenting principal, matching what it actually proves.
 ## 6. Stop
 
 This is the evidence; it is not the decision. **James's ruling is owed
-here: accept (a), add detection (b) or (d)-detection-only, add prevention
-(c) or (d)-with-browser-bound-continuation, turn the (e) dial (alone or
-combined with anything else), add the (f) constraint, or some
-combination — and if `ALLOWED_EMAILS`'s current scope is itself part of
-the answer, say so.** No PR1.5 code implements any of (a)-(f); PR1.5 is
-plumbing (and, as of fix round 2, a dev-only on-device probe) only.
-**Either half of (d), if chosen, changes PR1.5's own contract with PR2**
-(§3) — say so explicitly in the ruling if that is the direction, since it
-is not a PR2-only change the way (b)/(c)/(f) are. **If the
-browser-bound-continuation half of (d) is chosen, the device measurement
-in §4 has to happen before it can be trusted in production** — a design
-this session judged plausible, not one it verified.
+here — corrected, round 7, finding 3: choose from ACCEPT / DETECT /
+PHYSICALLY-CONFIRM, not "accept / detect / prevent"; nothing in this
+document prevents in the cryptographic-identity sense.** Accept (a); add
+detection (b) or (d)'s original interstitial half (two strengths); add a
+physical-confirm requirement via (c) or (d)'s browser-bound-continuation
+half (also two strengths); turn the (e) dial (alone or combined with
+anything else); add the (f) constraint; or some combination — and if
+`ALLOWED_EMAILS`'s current scope is itself part of the answer, say so.
+No PR1.5 code implements any of (a)-(f); PR1.5 is plumbing (and, as of
+fix round 2, a dev-only on-device probe) only. **Either half of (d), if
+chosen, changes PR1.5's own contract with PR2** (§3) — say so explicitly
+in the ruling if that is the direction, since it is not a PR2-only change
+the way (b)/(c)/(f) are. **If the browser-bound-continuation half of (d)
+is chosen, it additionally needs the deliberate-action, anti-framing, and
+one-time/clearing requirements §3 now names, plus the device measurement
+in §4, before it can be trusted in production** — a design this session
+judged plausible, not one it verified, and — round 7 correction — one
+this session no longer calls "prevention."
