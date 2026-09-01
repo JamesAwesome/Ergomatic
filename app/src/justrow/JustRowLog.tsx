@@ -152,9 +152,16 @@ export default function JustRowLog() {
       ) : (
         // A recovered record whose burst never landed AND whose trace is
         // empty: nothing numeric to show, and fabricating a zero would be a
-        // wrong number. The row can still be saved for its existence.
+        // wrong number. The save below is DISABLED for the same reason —
+        // the PM gate found the first cut rendering it enabled over a
+        // handler that silently returned, a dead button on exactly the
+        // recovery path the no-split condition protects. A numberless save
+        // would need its own design against the stored shape PR 1 froze;
+        // until someone does that work, the honest state is a disabled
+        // button and this line saying why.
         <p className="justrow-band">
-          The monitor's numbers did not reach the phone for this row.
+          The monitor's numbers did not reach the phone for this row, so there
+          is nothing to save.
         </p>
       )}
 
@@ -196,7 +203,7 @@ export default function JustRowLog() {
         <button
           type="button"
           className="button-l1"
-          disabled={saving}
+          disabled={saving || totals === null}
           onClick={handleSave}
         >
           Save this row

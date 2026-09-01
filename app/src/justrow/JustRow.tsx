@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConnectAction from "../monitor/ConnectAction";
 import { deriveAxes } from "../monitor/connectedAxes";
+import { read as readHandoff } from "../monitor/handoffStore";
 import { useMonitorSession } from "../monitor/useMonitorSession";
 import ConnectedSurface from "../workout/ConnectedSurface";
+import { freeRowTotals } from "./totals";
 
 /**
  * `/justrow` — the free row.
@@ -126,9 +128,23 @@ export default function JustRow() {
   // instance this component owns is handed DOWN, never re-called: two
   // hooks would mean two drivers and two records.
   if (axes.session !== "none" || (showNumbers && axes.program === "armed")) {
+    // THE KEPT PAIR, read here because this component owns the store read
+    // (`ConnectedSurface` is store-blind by its own layering rule) and
+    // resolved by `freeRowTotals` — the same single source the log door
+    // and Today's recovery row use, per the PM gate's B1: the ended frame
+    // must never name a different number than the door one tap away. This
+    // re-reads on every render, and the session updates that matter (the
+    // close, the summary folding during the hand-off hold) each re-render
+    // this component, so by the hold's release the figure is the
+    // machine's own.
+    const entry = readHandoff();
+    const kept =
+      entry !== null && entry.run.mode === "justrow"
+        ? freeRowTotals(entry.run)
+        : null;
     return (
       <ConnectedSurface
-        freeRow={true}
+        freeRow={{ kept }}
         phases={[]}
         program={{ intervals: [] }}
         session={session}

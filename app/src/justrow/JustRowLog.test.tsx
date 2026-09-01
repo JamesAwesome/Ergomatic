@@ -50,6 +50,18 @@ function closedFreeRow(over: Partial<MonitorRun> = {}): MonitorRun {
     completedAt: "2026-09-01T09:10:20.000Z",
     endedBy: "rower",
     summaryTotals: { workElapsedSeconds: 620, workDistanceMeters: 2480 },
+    summaryDetail: {
+      avgStrokeRate: 22,
+      endingHeartRateBpm: null,
+      avgHeartRateBpm: null,
+      minHeartRateBpm: null,
+      maxHeartRateBpm: null,
+      dragFactorAverage: 128,
+      workoutType: 8,
+      recoveryHeartRateBpm: null,
+      avgPaceSecondsPer500m: 125,
+    },
+    verificationBytes: [0x27, 0xd8, 0xf3, 0x6e],
     ...over,
   };
 }
@@ -132,6 +144,22 @@ describe("JustRowLog (the workout-less log door)", () => {
       // production helper's output (recurring failure 21).
       expect(body.avgSplitSeconds).toBe(125);
       expect(body.endedBy).toBe("rower");
+      // THE MACHINE FIELDS (PM final gate, B2 — the seam RF24 priced at
+      // zero of sixteen production rows on the programmed path): the PR's
+      // headline claim is that MACHINE CONFIRMED reaches free rows, and
+      // that claim is only true if THESE keys survive the post. Asserted
+      // against the fixture's own literals, machine detail and
+      // verification bytes included.
+      expect(body.machineWorkSeconds).toBe(620);
+      expect(body.machineWorkMeters).toBe(2480);
+      expect(
+        (body.machineSummary as { verificationBytes?: number[] })
+          .verificationBytes,
+      ).toStrictEqual([0x27, 0xd8, 0xf3, 0x6e]);
+      expect(
+        (body.machineSummary as { avgPaceSecondsPer500m?: number })
+          .avgPaceSecondsPer500m,
+      ).toBe(125);
     });
   });
 
@@ -154,25 +182,28 @@ describe("JustRowLog with no numbers", () => {
     vi.resetModules();
   });
 
-  it("a record with no numbers at all still offers the save, saying why", async () => {
+  it("a record with no numbers disables the save and says why", async () => {
     mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
     // No summaryTotals and no series: the burst never landed and the trace
-    // is empty — the interrupted-recovery worst case.
+    // is empty — the interrupted-recovery worst case (a flaky link drop).
     const bare = closedFreeRow({ summaryTotals: undefined });
     commitHandoff(bare.startedAt, null, bare);
     await renderDoor();
 
     expect(
       screen.getByText(
-        "The monitor's numbers did not reach the phone for this row.",
+        "The monitor's numbers did not reach the phone for this row, so there is nothing to save.",
       ),
     ).toBeInTheDocument();
-    // The save stays offered — the row's existence is still worth keeping —
-    // and pressing it posts NOTHING, because a save with no numbers is not
-    // designed yet and a zero would be a wrong number.
+    // DISABLED, not merely present (the PM gate's B5, and recurring
+    // failure 4's shape): the first cut asserted `toBeInTheDocument()` on a
+    // button whose handler silently returned — a dead control enshrined by
+    // its own test. A numberless save is undesigned work against the
+    // stored shape PR 1 froze, and the honest state until then is a
+    // disabled button over a line that says why.
     expect(
       screen.getByRole("button", { name: "Save this row" }),
-    ).toBeInTheDocument();
+    ).toBeDisabled();
   });
 });
 

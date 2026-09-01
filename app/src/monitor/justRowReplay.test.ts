@@ -29,7 +29,14 @@
 
 import { gunzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
-import { act, render, renderHook, screen } from "@testing-library/react";
+import {
+  act,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -66,6 +73,12 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
   afterEach(() => {
     vi.doUnmock("../adapters/monitorTransport");
     vi.doUnmock("../adapters/appLifecycle");
+    vi.doUnmock("../api");
+    vi.doUnmock("../api/useWorkouts");
+    vi.doUnmock("../api/useBaselines");
+    vi.doUnmock("../api/usePlan");
+    vi.doUnmock("../api/usePreferences");
+    vi.doUnmock("../api/useRecentLogs");
     vi.resetModules();
     vi.restoreAllMocks();
     localStorage.clear();
@@ -86,6 +99,13 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     vi.doMock("../adapters/appLifecycle", () => ({
       registerAppLifecycleListener: vi.fn(() => (): void => undefined),
     }));
+    // The api mock, in the SAME epoch as the door import below — so the
+    // Save press at the end of this test posts through the real submit
+    // pipeline into a body this test can read (PM final gate, B2).
+    const apiFn = vi.fn<
+      (path: string, init?: RequestInit) => Promise<Response>
+    >(async () => new Response(JSON.stringify({ id: "log-replay-1" })));
+    vi.doMock("../api", () => ({ api: apiFn }));
     vi.resetModules();
 
     // ONE module epoch for the hook, the store and the door — a static
@@ -152,10 +172,70 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
       0.15,
     );
 
-    // THE READER, mounted the way a rower reaches it — the same module
-    // epoch, reading the store the producer wrote. Rendered literals, not
-    // recomputed ones: 393.6 s rounds to 6:34 positional, 1,396 m, and the
-    // derivation displays 2:21.0 (140.97 to the nearest tenth).
+    // READER 1 — TODAY'S RECOVERY ROW, mounted after the real producer
+    // wrote (PM final gate, B3; the plan's own Task 7 requirement this
+    // branch first shipped without, RF24's exact seeding trap twice in one
+    // phase). `UnloggedMonitorRow` reads Today's own `useState` mount
+    // snapshot — the very shape RF24's original defect had — so only a
+    // mount that FOLLOWS the wire-driven close can vouch for this seam.
+    // Data hooks are mocked ready (Today.test.tsx's own idiom); the store
+    // is the real one this replay just filled.
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({ state: "ready", workouts: [] }),
+    }));
+    vi.doMock("../api/useBaselines", () => ({
+      useBaselines: () => ({
+        state: "ready",
+        baselines: { k2Seconds: 100, k6Seconds: 120 },
+      }),
+    }));
+    vi.doMock("../api/usePlan", () => ({
+      usePlan: () => ({
+        state: "ready",
+        plan: { planKey: null, doneN: 0, sequence: [] },
+      }),
+    }));
+    vi.doMock("../api/usePreferences", () => ({
+      usePreferences: () => ({
+        state: "ready",
+        // Today.test.tsx's own DEFAULT_PREFS shape — the filter tokens
+        // read `difficulties.length` unconditionally.
+        preferences: {
+          difficulties: ["easy", "medium", "hard"],
+          timeCapMinutes: 60,
+        },
+      }),
+    }));
+    vi.doMock("../api/useRecentLogs", () => ({
+      useRecentLogs: () => ({ state: "ready", logs: [] }),
+    }));
+    const { default: Today } = await import("../today/Today");
+    const todayView = render(
+      React.createElement(
+        MemoryRouter,
+        { initialEntries: ["/today"] },
+        React.createElement(
+          Routes,
+          null,
+          React.createElement(Route, {
+            path: "/today",
+            element: React.createElement(Today),
+          }),
+        ),
+      ),
+    );
+    // The closed record renders the row (gate 2's free-row widening), the
+    // numbers are the machine's own, and Log it is offered (gate 1's).
+    expect(
+      await screen.findByText(/6:34 · 1,396 m, not logged\./),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Log it" })).toBeInTheDocument();
+    todayView.unmount();
+
+    // READER 2 — the log door, the same module epoch, reading the store
+    // the producer wrote. Rendered literals, not recomputed ones: 393.6 s
+    // rounds to 6:34 positional, 1,396 m, and the derivation displays
+    // 2:21.0 (140.97 to the nearest tenth).
     const { default: JustRowLog } = await import("../justrow/JustRowLog");
     render(
       React.createElement(
@@ -183,5 +263,39 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     expect(
       screen.queryByText(/DID YOU HOLD THE TARGETS/),
     ).not.toBeInTheDocument();
+
+    // THE SAVE, pressed — one click further than the first cut went, and
+    // the click the PM gate's B2 named: nothing upstream of here had ever
+    // proven a free row's POST carries the machine fields, and the
+    // programmed path's identical claim shipped green three ways while
+    // reaching zero of sixteen production rows (RF24's own price tag).
+    // The bytes below are the CAPTURE's, decoded by the real driver off
+    // the real wire — not a fixture's.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save this row" }),
+    );
+    await waitFor(() => {
+      const call = apiFn.mock.calls.find(([path]) => path === "/api/logs");
+      expect(call).toBeDefined();
+      const body = JSON.parse(
+        (call![1] as RequestInit).body as string,
+      ) as Record<string, unknown>;
+      expect(body.machineWorkSeconds).toBeCloseTo(MACHINE_ELAPSED_SECONDS, 1);
+      expect(body.machineWorkMeters).toBeCloseTo(MACHINE_DISTANCE_METERS, 0);
+      // The verification code's raw bytes, present and non-empty — the
+      // thing MACHINE CONFIRMED's code renders from.
+      const summary = body.machineSummary as {
+        verificationBytes?: number[];
+        avgPaceSecondsPer500m?: number;
+      };
+      expect(summary.verificationBytes?.length).toBeGreaterThan(0);
+      // 0x0039's own average-pace field, the walk README's decode — the
+      // same independent oracle the live assertions above use.
+      expect(summary.avgPaceSecondsPer500m).toBeCloseTo(
+        MACHINE_AVG_PACE_SECONDS,
+        1,
+      );
+      expect(body.advancesPlan).toBe(false);
+    });
   });
 });

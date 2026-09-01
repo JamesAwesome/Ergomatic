@@ -299,9 +299,21 @@ export interface ConnectedSurfaceProps {
   /** Phase JR PR 2: this session is the machine's own free row. REQUIRED —
    *  every caller says which kind of session it is mounting, the same rule
    *  `SurfaceModelInput` applies to `status`/`linkLost` and for the same
-   *  laundering reason. Threaded straight into the model; this component's
-   *  own free-row branch is the pane control (a free row ships no GRID). */
-  freeRow: boolean;
+   *  laundering reason. Threaded into the model; this component's own
+   *  free-row branches are the pane control (no GRID) and the ended frame.
+   *
+   *  NOT a bare boolean (PM final gate, B1): the ended frame renders the
+   *  row's kept numbers, and the first cut read them off
+   *  `session.frame ?? 0` — a DIFFERENT source than `freeRowTotals`, the
+   *  helper whose whole purpose is that no two screens name two numbers
+   *  for one record, and a fabricated `0:00 · 0 m kept.` when the frame
+   *  was null. Making the free-row arm CARRY the kept pair forces the one
+   *  caller that can read the record (`JustRow`, which owns the store
+   *  read) to supply the same figure the log door will show; this
+   *  component stays store-blind per its own layering rule ("this file
+   *  calls no driver, no transport and no monitorRun function"). `kept:
+   *  null` means the honest generic line, never a zero. */
+  freeRow: false | { kept: { seconds: number; meters: number } | null };
   /** The session is over (End, or the machine got there first): route to
    *  the post-session flow. See this file's header on the mount decision —
    *  this callback is expected to navigate, and that navigation is what
@@ -387,7 +399,7 @@ export default function ConnectedSurface({
   // into the rower's next programmed session.
   useSurfaceSwipe(surfaceRef, {
     pane,
-    blocked: logOpen || freeRow,
+    blocked: logOpen || freeRow !== false,
     onChange: choosePane,
   });
 
@@ -532,7 +544,12 @@ export default function ConnectedSurface({
                 // cannot be "program-dropped" here (no program to drop —
                 // the driver's own freeRow watchdog opt-out).
                 freeRow
-                ? `${fmtDuration((session.frame?.sessionElapsedSeconds ?? 0) / 60)} · ${new Intl.NumberFormat("en-US").format(Math.round(session.frame?.sessionDistanceMeters ?? 0))} m kept.`
+                ? freeRow.kept !== null
+                  ? `${fmtDuration(freeRow.kept.seconds / 60)} · ${new Intl.NumberFormat("en-US").format(Math.round(freeRow.kept.meters))} m kept.`
+                  : // No summary and no trace: the generic line, never a
+                    // fabricated zero — the same refusal `freeRowTotals`
+                    // makes at the source (PM final gate, B1).
+                    "Your numbers are kept."
                 : session.closeReason === "program-dropped"
                   ? kept === 0
                     ? "The erg dropped the workout. Nothing kept."
@@ -614,7 +631,7 @@ export default function ConnectedSurface({
     deviceName: session.deviceName,
     actuals: session.actuals,
     previousElapsedSeconds,
-    freeRow,
+    freeRow: freeRow !== false,
   });
   // The comparison guard is what makes this SAFE to call during render
   // (React docs, "Adjusting state during rendering"): `setState` bails out

@@ -2540,7 +2540,7 @@ describe("the free-row surface", () => {
     localStorage.setItem("ergomatic:connected-pane", "grid");
     const { container } = render(
       <ConnectedSurface
-        freeRow={true}
+        freeRow={{ kept: null }}
         phases={[]}
         program={{ intervals: [] }}
         session={session({
@@ -2589,18 +2589,18 @@ describe("the free-row ended frame", () => {
   it("states what was kept — the row's own numbers, never 'No numbers to keep.'", () => {
     render(
       <ConnectedSurface
-        freeRow={true}
+        // The kept pair comes from the CALLER (freeRowTotals through
+        // JustRow), never off session.frame — the PM gate's B1: the first
+        // cut read the frame here, a different source than the log door
+        // one tap away, and fabricated a zero when the frame was null.
+        freeRow={{ kept: { seconds: 393, meters: 1396 } }}
         phases={[]}
         program={{ intervals: [] }}
         session={session({
           phase: "ended",
           handoffHeld: false,
           actuals: [],
-          frame: frame({
-            intervalIndex: null,
-            sessionElapsedSeconds: 393,
-            sessionDistanceMeters: 1396,
-          }),
+          frame: null,
         })}
         onEnded={vi.fn()}
       />,
@@ -2625,5 +2625,31 @@ describe("the free-row ended frame", () => {
     );
 
     expect(screen.getByText("No numbers to keep.")).toBeInTheDocument();
+  });
+});
+
+describe("the free-row ended frame with no numbers to vouch for", () => {
+  it("says the generic line, never a fabricated zero", () => {
+    render(
+      <ConnectedSurface
+        freeRow={{ kept: null }}
+        phases={[]}
+        program={{ intervals: [] }}
+        session={session({
+          phase: "ended",
+          handoffHeld: false,
+          actuals: [],
+          frame: null,
+        })}
+        onEnded={vi.fn()}
+      />,
+    );
+
+    // `kept: null` is freeRowTotals's own refusal carried through: no
+    // summary and no trace means nothing numeric to say, and "0:00 · 0 m
+    // kept." would be a wrong number wearing the kept promise.
+    expect(screen.getByText("Your numbers are kept.")).toBeInTheDocument();
+    expect(screen.queryByText(/0:00/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 m kept/)).not.toBeInTheDocument();
   });
 });
