@@ -1956,6 +1956,52 @@ test("diagnostics-monitor-logs", async ({ page }) => {
   });
 });
 
+// Final whole-branch review, item 3: landscape captures for both doors,
+// same idiom "connected-interstitial-failed-landscape" above uses (a
+// viewport resize, no `neutralizeFixedTabBarForFullPageCapture` needed —
+// both screens are `.overlay-screen`, fixed and full-viewport, not the
+// scrollable tab-bar-reserving `.app-shell` layout that helper exists for).
+test("diagnostics-landscape", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-diagnostics-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/you/diagnostics");
+  await page.getByText("Monitor logs").waitFor();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "diagnostics-landscape.png"),
+  });
+});
+
+test("diagnostics-monitor-logs-landscape", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-diagnostics-logs-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  await seedSessionLogHistory(page, [
+    {
+      savedAt: now.toISOString(),
+      exported: sessionLogRing(37),
+    },
+    {
+      savedAt: yesterday.toISOString(),
+      exported: sessionLogRing(9),
+    },
+  ]);
+  await page.goto("/you/diagnostics/monitor-logs");
+  await page
+    .getByText(/EVENTS/)
+    .first()
+    .waitFor();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "diagnostics-monitor-logs-landscape.png"),
+  });
+});
+
 // Phase 6B (Task 5): the pre-workout countdown, live timer (portrait +
 // 844×420 landscape), and the post-workout summary (Phase PW Task 5's own
 // screen, which replaced SessionComplete). Every capture drives a
