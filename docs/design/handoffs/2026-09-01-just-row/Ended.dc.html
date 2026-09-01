@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root {
+      --page: #f4f1e8; --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c;
+      --accent: #b5341f;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    a { color: var(--accent); } a:hover { color: #9c2c19; }
+    .screen { width: 390px; height: 844px; background: var(--page); box-sizing: border-box; padding: 20px; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+    .status { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; color: var(--ink-3); margin: 0; }
+    .serif { font-family: var(--font-serif); font-size: 36px; font-weight: 500; color: var(--ink); margin: 0; line-height: 1.05; }
+    .bodyline { font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); margin: 0; }
+  </style>
+</helmet>
+
+<!-- INHERITED UNCHANGED from the programmed close (connected-ended.png).
+     Nothing about a free row makes this moment different: the record is
+     stamped and the screen is on its way to the log door. Reusing it is
+     also what stops a fifth ending state being invented. -->
+<div class="screen">
+  <p class="status">SESSION ENDED</p>
+  <h1 class="serif">Wrapping up</h1>
+  <p class="bodyline">Your numbers are kept.</p>
+</div>
+</x-dc>
+</body>
+</html>

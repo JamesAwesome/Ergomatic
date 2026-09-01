@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root {
+      --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade;
+      --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c; --ink-4: #6f6a5f;
+      --rule: #d8d3c4; --rule-2: #ded8c9; --accent: #b5341f;
+      --radius: 2px; --tap: 44px;
+      /* Portrait connected ramp, verbatim from index.css. */
+      --c-size-hero: 100px; --c-size-hero-2: 84px; --c-size-tenths: 52px;
+      --c-size-target: 36px; --c-size-band: 28px; --c-size-status: 21px;
+      --c-size-label: 14px; --c-size-control: 13px;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    a { color: var(--accent); } a:hover { color: #9c2c19; }
+    .screen { width: 390px; height: 844px; background: var(--page); box-sizing: border-box; padding: 20px; display: flex; flex-direction: column; }
+    .head { display: flex; align-items: center; gap: 12px; }
+    .line { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+    .mark { width: 8px; height: 8px; background: var(--ink); flex: none; }
+    .device { font-family: var(--font-mono); font-size: var(--c-size-control); letter-spacing: 0.1em; color: var(--ink-2); }
+    .control { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); min-width: 56px; padding: 0 12px; border: 1px solid var(--accent); border-radius: var(--radius); color: var(--accent); background: transparent; font-family: var(--font-mono); font-size: var(--c-size-control); font-weight: 600; letter-spacing: 0.14em; }
+    .status { font-family: var(--font-mono); font-size: var(--c-size-status); letter-spacing: 0.1em; color: var(--ink); margin: 28px 0 0; }
+    /* THE SINGLE BAR. Shipped geometry: 6px, full width, --rule-2 track,
+       --ink fill, meters flex:none at the right end, 22px mono. One
+       segment, not the interval bar's many. */
+    .progress-row { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+    .track { flex: 1; display: flex; height: 6px; background: var(--rule-2); }
+    .seg { flex: 1; height: 100%; background: var(--ink); }
+    .meters { flex: none; font-family: var(--font-mono); font-size: 22px; letter-spacing: 0.02em; color: var(--ink); white-space: nowrap; }
+    /* The heroes and the band spread down the frame exactly as the shipped
+       pane does: top-down, not centred. */
+    .stack { flex: 1; display: flex; flex-direction: column; justify-content: space-between; margin-top: 26px; }
+    .hero { display: flex; flex-direction: column; min-width: 0; border-top: 2px solid var(--ink); padding-top: 16px; }
+    .hero-rate { border-top: 1px solid var(--rule); }
+    /* NO judged colour: with no target, nothing can be faster or slower
+       than anything. The shipped split is blue only because it has a
+       target to be judged against. */
+    .hero-value { font-family: var(--font-mono); font-size: var(--c-size-hero); line-height: 0.95; color: var(--ink); letter-spacing: -0.02em; }
+    .tenths { font-size: var(--c-size-tenths); }
+    .rate-value { font-family: var(--font-mono); font-size: var(--c-size-hero-2); line-height: 0.95; color: var(--ink); }
+    /* The shipped target row: target value, its source tag, then AVG and
+       the running average, all on ONE baseline. */
+    .target-row { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; }
+    .target-value { font-family: var(--font-mono); font-size: var(--c-size-target); color: var(--ink-3); }
+    .avg-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink-3); }
+    .avg-value { font-family: var(--font-mono); font-size: var(--c-size-target); color: var(--ink); }
+    .rate-unit { font-family: var(--font-mono); font-size: var(--c-size-label); letter-spacing: 0.1em; color: var(--ink-3); }
+    .band { display: flex; flex-direction: column; gap: 12px; }
+    .band-cell { display: flex; flex-direction: column; gap: 2px; }
+    .band-label { font-family: var(--font-mono); font-size: var(--c-size-label); letter-spacing: 0.1em; color: var(--ink-3); }
+    .band-value { font-family: var(--font-mono); font-size: var(--c-size-band); color: var(--ink); }
+  </style>
+</helmet>
+
+<div class="screen">
+  <div class="head">
+    <div class="line">
+      <span class="mark"></span>
+      <span class="device">PM5 432331249</span>
+    </div>
+    <span class="control">END</span>
+  </div>
+
+  <!-- Where a programmed row reads "2 OF 5 · WORK". -->
+  <p class="status">JUST ROW</p>
+
+  <div class="progress-row">
+    <div class="track"><span class="seg"></span></div>
+    <span class="meters">1,396m</span>
+  </div>
+
+  <div class="stack">
+    <div class="hero">
+      <span class="hero-value">2:14<span class="tenths">.0</span></span>
+      <!-- "Free" takes the target slot; the AVG cell beside it is the
+           shipped one, and a free row genuinely has a running average.
+           It is also the exact number that gets stored. -->
+      <div class="target-row">
+        <span class="target-value">Free</span>
+        <span class="avg-label">AVG</span>
+        <span class="avg-value">2:20.8</span>
+      </div>
+    </div>
+
+    <div class="hero hero-rate">
+      <span class="rate-value">22</span>
+      <div class="target-row">
+        <span class="target-value">Free</span>
+        <span class="rate-unit">SPM</span>
+      </div>
+    </div>
+
+    <!-- THE BAND, kept rather than dropped. UP NEXT goes (there is no
+         next) and EST LEFT goes (nothing ahead is priced, which the
+         shipped guard already handles), but the slot earns its place:
+         ELAPSED is one of the two numbers this row stores, and without it
+         the surface never showed the rower the time at all. -->
+    <div class="band">
+      <div class="band-cell">
+        <span class="band-label">ELAPSED</span>
+        <span class="band-value">6:33</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- NO LIVE / GRID FOOTER. The grid pane tabulates intervals and a free
+       row has none; the PM's own 5-minute auto-splits are out of scope for
+       this phase. A one-cell segmented control is not a control. -->
+</div>
+</x-dc>
+</body>
+</html>

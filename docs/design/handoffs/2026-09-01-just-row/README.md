@@ -1,0 +1,146 @@
+# Handoff: Just Row (Phase JR PR 2)
+
+**Origin:** Gate 0 for Phase JR PR 2 — the surface, the session and the
+workout-less log door. James approves the RENDERED screens (real
+proportions, both orientations, every colour pairing's contrast ratio
+computed and stated) before any implementation task starts.
+
+**Status: GATE 0 PASSED — James, 2026-09-01, on rev 3 of the board.** The
+board is final and gate-approved. Board history: rev 1, rev 2 after James's
+direction (below), rev 3 after a comparison against
+`connected-pane-live.png` and `connected-pane-live-landscape.png` restored
+the band, the AVG cell and the shipped vertical rhythm.
+
+**One approved amendment (James, at approval):** the link-lost action reads
+**`Log`**, not "Log what I rowed". The banner directly above it already
+states what was kept, so the button only has to name the action.
+
+**Two questions were rendered as proposals and are approved as rendered:**
+`Free` mirrored onto the split's target slot, and Ready keeping both of its
+inherited buttons rather than advancing on the first stroke.
+
+Spec: `docs/superpowers/specs/2026-08-24-just-row-design.md` (rev 4).
+Design reference: `docs/design/` tokens and conventions; 44px hit targets
+and WCAG AA are hard requirements; house style: no em-dashes in
+user-facing copy.
+
+## James's direction (2026-09-01) — rev 2 of this board
+
+Rev 1 proposed a persistent full-width Just Row row on Today and a bespoke
+`/justrow` live surface. Both are superseded:
+
+1. **"Just Row" is a button in the top right that only says "Just Row".**
+   No sub-line, no card, no full-width row.
+2. **Clicking it leads to Connect, almost as though it were a normal
+   workout.** So `/justrow` is a workout-detail-shaped door whose one
+   action is the same Connect control `WorkoutDetail` carries.
+3. **Reuse the standard connected interface** for the live row. There is no
+   `JustRowSurface`.
+4. **A single bar up top with total meters next to it.**
+5. **Show "Free" for rate / spm.**
+6. **In the log, "Actual Pain" is just "Pain".**
+
+## About the design files
+
+`just-row-state-board.html` is a **design reference created in HTML** — a
+rendered state board, not production code. Every artboard is drawn from the
+real `app/src/index.css` and `app/src/theme/tokens.css` values, not from
+the screenshots.
+
+| Artboard | What it settles |
+| --- | --- |
+| `Main` | The Today button, top right |
+| `JustRowDoor` | `/justrow` — the Connect door |
+| `Connecting` / `Ready` | The shipped interstitial, one word changed |
+| `Live` / `LiveLandscape` | The standard surface, both orientations |
+| `Ended` | The close hand-off (inherited unchanged) |
+| `Lost` | A mid-row link drop |
+| `TodayRecovery` | The workout-less recovery row, on a no-baseline rower |
+| `LogDoor` | `/justrow/log` |
+
+## What changes on the standard connected surface
+
+Nothing outside this list:
+
+1. **One bar**, not the interval bar's many segments, with total meters
+   beside it in its shipped place (6px track, `--rule-2`, `--ink` fill,
+   22px mono counter).
+2. **"JUST ROW"** where a programmed row reads `2 OF 5 · WORK`.
+3. **"Free" in both target slots.** James asked for rate/spm; the split is
+   mirrored because one slot reading `Free` beside a blank one looks like a
+   bug. **Open:** blank the split's slot instead?
+4. **The AVG cell stays** where it already sits on the split's target row
+   (`TGT · AVG` in the shipped layout). A free row genuinely has a running
+   average, and it is the exact figure that gets stored.
+5. **The band keeps one cell, `ELAPSED`.** `UP NEXT` goes (no next) and
+   `EST LEFT` goes (the shipped `hasRemainingEstimate` guard already hides
+   it whenever nothing ahead is priced, which for a free row is always) —
+   but the slot earns its place: without it the surface never showed the
+   rower the time at all, and elapsed is one of the two numbers this row
+   stores.
+6. **No `LIVE` / `GRID` control** (portrait footer, landscape top-left).
+   The grid pane tabulates intervals and a free row has none; the PM's own
+   5-minute auto-splits are out of scope for this phase.
+7. **Split and rate stay ink**, never the judged blue: with no target,
+   nothing can be faster or slower than anything.
+
+The layout otherwise follows `connected-pane-live.png` and
+`connected-pane-live-landscape.png` exactly: heroes and band flow down the
+frame rather than sitting centred; in landscape the status word moves to
+the right beside `END`, the heroes are a 62/38 split divided by a vertical
+rule with no top rules, and the band closes under a horizontal one.
+
+## Other decisions on the board
+
+- **`/justrow` carries one action.** No Start Timer and no "log it after":
+  ruling 2 makes this phase connected only. It uses the same
+  `--action-connect` control and the same staged guard — not decoration,
+  since opening a monitor session clears an unlogged phone-timer run and
+  this door must warn about that exactly as `WorkoutDetail` does.
+- **Ready changes one word**: `· CONNECTED`, not `· PROGRAMMED`. **Open:**
+  both its buttons are inherited, but a free row has no armed workout to
+  check, so it could advance itself on the first stroke and keep only
+  Cancel.
+- **Ended is inherited unchanged** ("Wrapping up / Your numbers are kept").
+- **Link lost offers one action**, not a Log/Discard pair: discard already
+  exists at the log door that button opens (recurring failure 23). No
+  Reconnect, and that is hardware, not simplification — the monitor stops
+  advertising while a Just Row is open.
+- **The log door** drops "DID YOU HOLD THE TARGETS?" outright, renders no
+  intervals table and no type chip (`steps: []`, `workout_type: null` —
+  absences, not empty widgets, per exit criteria 2 and 3), and labels the
+  rating **PAIN**: the word ACTUAL exists to contrast with the workout's
+  own EXPECTED figure beside it, which a free row does not have.
+- **The recovery row carries its numbers** so "Log it" visibly means "keep
+  these", and says nothing that implies the row can be resumed.
+
+## Contrast, computed
+
+WCAG 2.x, AA floor 4.5:1, computed with the standard relative-luminance
+formula over the token hexes rather than judged by eye.
+
+| Pairing | Ratio |
+| --- | --- |
+| `--ink` #1b1a17 on page / surface / sunken | 15.41 / 17.11 / 14.50 |
+| `--ink-2` #3f3c35 on page / surface / sunken | 9.74 / 10.81 / 9.16 |
+| `--ink-3` #57544c on page / surface / sunken | 6.69 / 7.43 / 6.30 |
+| `--accent` #b5341f on page / surface / sunken | 5.35 / 5.94 / 5.03 |
+| `--action-connect` #2a6275 on page / surface | 5.99 / 6.65 |
+| `--on-color` #fffdf7 on `--action-connect` (Connect) | 6.65 |
+| `--on-color` on `--accent` (primary buttons) | 5.94 |
+| `--marker` #7d5510 on sunken (ready band) | 5.50 |
+| `--surface` on `--judge-slower` #962718 (lost banner) | 7.94 |
+
+**Two that do not clear, and carry no text on this board:** `--ink-4`
+#6f6a5f on sunken is **4.48:1**, short of the floor by 0.02, so it must
+never carry text on a sunken surface; `--ink-5` #a09a8c on page is 2.48:1
+and appears only as the dimmed link mark in `Lost`.
+
+Every tap target is ≥44px: JUST ROW 44, Connect 56, "Show me the numbers"
+56, Cancel 52, END 44, "Log it" 44, discard ✕ 44.
+
+## Fidelity
+
+**Not yet approved.** Once Gate 0 passes, this section records the approval
+date and the board becomes copy-final: recreate pixel-perfectly with the
+app's existing idioms, and do not rewrite the rendered copy.
