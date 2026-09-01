@@ -29,16 +29,17 @@ export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
 
 /**
  * Phase LL Task 4 (design spec §4's writer table, the anchor pass's own
- * verification "writer by writer"): the four close reasons a WIRE EVENT
- * (or the P3b program-failure path) can honestly produce, excluding
- * `"interrupted"` — that value has exactly one writer,
+ * verification "writer by writer"): originally the four close reasons a
+ * WIRE EVENT (or the P3b program-failure path) could honestly produce
+ * (Wave F PR 1 Task 2 added a fifth, `"program-dropped"` — see below),
+ * excluding `"interrupted"` — that value has exactly one writer,
  * `completeInterruptedRun` below, and is never passed through this type
  * (F6's door has no wire event to report; "closed later with no evidence"
- * is a different shape of honesty than these four). `completeMonitorRun`'s
+ * is a different shape of honesty than the rest). `completeMonitorRun`'s
  * `args.endedBy` takes exactly this type, which is what makes "every
  * writer sets its value" a compiler-checked fact rather than a convention:
  * there is no way to close a run through that function without naming one
- * of these four.
+ * of these five.
  *
  * `"link-lost"` gains a SECOND producer at Task 4's own review (F1/I1):
  * `completeContinuityReset` below writes it too, for a continuity reset —
@@ -58,13 +59,12 @@ export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
  * succeeded — and with the ring unrecoverable (§0.3), `endedBy` is the
  * only durable field a future occurrence will leave behind. Conflating
  * the two would make a future count of live drops impossible. This task
- * widens the STORED SHAPE only (client union, server enum/union/
+ * widened the STORED SHAPE only (client union, server enum/union/
  * validator, migration); the honest wire-event producer that actually
- * writes this value through `completeMonitorRun` lands in a later task
- * of this same PR (spec §1's "Mechanism" section) — until then the type
- * permits a fifth value no writer yet emits, same shape as every other
- * additive-optional field in this file between its type-widening task and
- * its writer task.
+ * writes this value through `completeMonitorRun` landed in Task 2 of this
+ * same PR (spec §1's "Mechanism" section — `useMonitorSession.ts`'s live
+ * `programDropped` arm calls `closeRecord(true, "program-dropped")`), so
+ * the type no longer permits a value nothing emits.
  */
 export type CloseReason =
   "finished" | "rower" | "link-lost" | "program-failed" | "program-dropped";
@@ -292,9 +292,10 @@ export interface MonitorRun {
    * can still arrive AFTER `completeMonitorRun` already ran — re-summing
    * there is what keeps these four correct for that ordering rather than
    * permanently missing the final interval). Never written for any other
-   * `endedBy` (`"rower"`/`"link-lost"`/`"program-failed"`): a terminate or
-   * link-lost close's actuals are exactly the ones RC-1's own ROADMAP row
-   * calls incomplete by construction (the trailing-rest 0x0037 an END
+   * `endedBy` (`"rower"`/`"link-lost"`/`"program-failed"`/
+   * `"program-dropped"`): a terminate or link-lost close's actuals are
+   * exactly the ones RC-1's own ROADMAP row calls incomplete by
+   * construction (the trailing-rest 0x0037 an END
    * during a rest never gets to send), and the spec's bar is "never
    * estimated" — no attempt beats no number. **Also absent on a
    * `"finished"` close with EMPTY `actuals`** (final whole-branch review,
@@ -963,7 +964,7 @@ export function recordActual(
  * boundary), `terminated` (HOW THE MACHINE reported it, `MonitorRun.
  * terminated`'s own comment: 7C has to tell "logged 12 of 12" from
  * "abandoned at 8"), and now `endedBy` (HOW THE RECORD reports it —
- * `CloseReason`'s own doc comment names the four values and their one
+ * `CloseReason`'s own doc comment names the five values and their one
  * writer each). `args.endedBy` is REQUIRED, not optional: a close reason
  * that could be silently omitted would reintroduce exactly the
  * conflation §4 exists to fix (the two axes are independent — `finished`
@@ -1014,9 +1015,10 @@ export function completeMonitorRun(
     // machine's own finished tick (`openHandoffHold`'s own "the desktop
     // order" case), and is re-summed a second time by `recordActual`'s own
     // late-acceptance branch above when it doesn't. Never computed for any
-    // other `endedBy` — a terminate/link-lost/program-failed close's
-    // actuals are the ones ROADMAP's RC-1 row calls incomplete by
-    // construction, and this spec's bar is "never estimated."
+    // other `endedBy` — a terminate/link-lost/program-failed/
+    // program-dropped close's actuals are the ones ROADMAP's RC-1 row
+    // calls incomplete by construction, and this spec's bar is "never
+    // estimated."
     ...(args.endedBy === "finished" ? computeWorkRestSums(run.actuals) : {}),
   };
   return next;

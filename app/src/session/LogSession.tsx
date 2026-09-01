@@ -1826,9 +1826,9 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     // M2, binding) is the machine's own WORKOUTEND — `endedBy ===
     // "finished"` is the only close reason that proves the programmed
     // distance completed ("rower"/"link-lost"/"program-failed"/
-    // "interrupted"/absent all mean it did not, or cannot be shown to
-    // have), so an interrupted run's real-but-partial average split is
-    // never offered as a full-distance test result.
+    // "program-dropped"/"interrupted"/absent all mean it did not, or
+    // cannot be shown to have), so an interrupted run's real-but-partial
+    // average split is never offered as a full-distance test result.
     const monitorOffer = postTestOffer({
       workoutTitle: activeWorkout.title,
       workoutIsGlobal: activeWorkout.isGlobal,
