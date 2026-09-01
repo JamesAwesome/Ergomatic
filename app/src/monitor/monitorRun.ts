@@ -121,6 +121,23 @@ export interface MonitorRun {
   // record (predating this field) still satisfies the type when loaded —
   // `createMonitorRun` below always supplies one for a record it creates.
   logSeed?: LogSeed;
+  /** What KIND of run this is (Phase JR PR 1, spec rev 4's stored shape).
+   *
+   *  ADDITIVE and OPTIONAL, on an existing v2 record and with **no `v`
+   *  bump**: `isMonitorRun` is a positive conjunction with no unknown-key
+   *  check (it says so itself below), and `handoffStore.ts` persists the
+   *  whole object with `JSON.stringify` and re-admits through that same
+   *  validator — so an older build reading a newer record simply ignores
+   *  this, and a newer build reading an older one sees `undefined`, which
+   *  is "a programmed run" by construction.
+   *
+   *  **Be honest about what this buys in PR 1: nothing yet.** There is no
+   *  writer and no reader until PR 2 builds `/justrow`. It lands here
+   *  because PR 1 is the TRIAD pass on this record's shape, and adding a
+   *  stored field is exactly what that pass exists to scrutinise —
+   *  splitting it into PR 2 would move a stored-shape change out of the
+   *  review that is meant to cover it. */
+  mode?: "justrow";
   // CORRECTED (7C Task 5, adversarial m10): this paragraph used to say a
   // future 7C log screen "MUST handle" `IntervalActual.index === null`,
   // which implied it would surface those entries somehow. It does not.
@@ -463,6 +480,13 @@ export function isMonitorRun(value: unknown): value is MonitorRun {
     typeof value.startedAt === "string" &&
     (value.completedAt === null || typeof value.completedAt === "string") &&
     typeof value.terminated === "boolean" &&
+    // Phase JR PR 1 (review of 29e00561): `mode` is a KNOWN field, so it is
+    // validated like every other one. Declaring `mode?: "justrow"` and then
+    // never checking it let `mode: "corrupt"` load as a valid record, which
+    // is a different thing from the unknown-key tolerance this validator
+    // deliberately keeps — that tolerance is about fields this build has
+    // never heard of, not about a field it declares and then trusts.
+    (value.mode === undefined || value.mode === "justrow") &&
     // Phase LL Task 4, widened again by Wave F PR 1 (spec §1): a record
     // written by ANY era's writer (a legacy `"interrupted"` row, or one of
     // the five new `CloseReason` values) still loads. Shallow membership

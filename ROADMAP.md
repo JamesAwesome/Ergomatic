@@ -133,8 +133,15 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 (#246). Six OPEN questions answered outright; OPEN 3's remaining half is
 CLOSED BY RULING, not by evidence (James, 2026-09-01: assume the connection
 stays open indefinitely, and do not close it ourselves — let the link die by
-other means). **PR 1 IS UNBLOCKED**: no new `ended_by` member, no inactivity
-rule, and the walked-away case rides the recovery path that already exists.**
+other means). **PR 1 IS IN REVIEW (#255)**: no new `ended_by` member and no
+inactivity rule. **The walked-away case does NOT ride the existing recovery
+path — that claim was falsified at PR 1's antagonist pass (F2)**: Today's
+"Log it" is gated on a non-null `workoutId` and the row itself on
+`completedAt === null`, so a workout-less run is discard-only in one branch
+and invisible in the other. Opening both gates is PR 2's, and **PR 2 must
+not be split at that boundary** — shipping the surface without the recovery
+would deliberately ship the defect ruling 9's correction found (PM gate,
+2026-09-01).**
 
 This is a deliberate household exception to the stranger-first
 ordering, requested by James on 2026-08-31. Walk record and full decodes:
@@ -642,6 +649,21 @@ while we are in here.
       `stableBoundingBox` flake (`e2e/helpers.ts:89`). #152 landed evidence
       capture for a _third_ flake and produced
       `docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md`. **M**
+- [ ] **A THIRD flake class: integration, under container contention.**
+      `server/routes/isolation.integration.test.ts` failed once with
+      `expected 401 to be 400` on 2026-09-01, and a second run of the same
+      full sweep failed a different test
+      (`server/routes/data.test.ts`'s baseline-delete case) instead. Neither
+      reproduced: the unit project passed 3/3 alone, integration 301/301
+      alone. It appears only when `--project unit --project client --project
+      integration` run together and several Postgres containers start at
+      once, so the working theory is resource starvation rather than test
+      pollution — but nothing has been measured and the auth-boundary
+      symptom (401 where a 400 was expected) deserves better than a shrug.
+      Distinct from the e2e flakes above and from the two unit-project ones
+      further down; filed at the PM gate on #255 rather than left in a PR
+      comment (recurring failure 14). CI runs the projects separately and
+      has stayed green throughout. **S**
 - [ ] **Settle the mutation-testing gate, one way or the other.**
       `docs/TESTING.md` explicitly demoted the full `pnpm mutate` run from an
       unrun phase gate to an on-demand probe; its only baseline is still

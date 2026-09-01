@@ -538,7 +538,7 @@ One `session_logs` row:
 | `workout_id` | `null` | already nullable end-to-end |
 | `workout_title` | `"Just Row"` | display name; NOT NULL column |
 | `workout_type` | **`null`** | "No intensity was prescribed" — true of a free row, and true again of the targetless-workout follow-on. The column becomes NULLABLE in PR 1 (`DROP NOT NULL`, folded into the migration PR 1 already writes). It stays plain `text`, and stays OUR intensity axis only; Concept2's structural vocabulary never enters it. See "The stored type, decided". |
-| `steps` | `[]` | server branch: empty allowed **iff** `workoutType` is null. No fabricated steps — record, not projection. (Vetted: the only server consumer of steps is create-time validation; client renderers absorb `[]` — the summary self-gates on zero rows.) |
+| `steps` | `[]` | server branch: empty allowed **iff the row is a FREE ROW — `workout_id` AND `workout_type` both null**, keyed on the same `isFreeRow` predicate as the plan refusal (`domain/types.ts`). NOT "iff `workoutType` is null", which is what this cell said until the F3 correction below: a row that names a workout but omits its type is not free and still owes steps. No fabricated steps — record, not projection. (Vetted: the only server consumer of steps is create-time validation; client renderers absorb `[]` — the summary self-gates on zero rows.) |
 | `time_seconds`, `distance_meters` | the observer's recorded totals | both headline numbers, matching the Logbook API's both-required rule. **ANSWERED (CLOSED 1): the counters do not reset at the auto-split, so the frame's own cumulative elapsed/distance ARE the row.** No longer a merge blocker. |
 | `avg_split_seconds` | **derived by us: `500 × time/distance`**, labelled ours | no live frame carries a piece average (the per-split field is split-scoped; the whole-row average lives only on unreliable 0x0039). This is a NEW derived number — named as such, tested, and covered by the TRIAD pass. **Carries a READ-SIDE fix, see below — without it the two screens disagree.** |
 | `work_seconds/meters` | = the whole piece | rest does not exist for JustRow (Logbook-aligned) |
@@ -548,13 +548,44 @@ One `session_logs` row:
 | `plan_key`/`plan_index` | `null` | see plan refusal below |
 | `baseline_k2/k6` | as at save (may be null) | unchanged |
 
-**Plan refusal, both halves (B6/C5):** the server's `advancesPlan`
-defaults to TRUE and nothing is type-aware — as-is, a free row would tick
-"SESSION n OF 84" and deleting it would un-count a plan day. PR 1 ships
-both: the client posts `advancesPlan: false`, AND the server refuses to
-advance when `workoutType` is null regardless of the flag. Pinned
-by an integration test asserting **`plan_state.done_n` is unchanged
-across a Just Row save** (the non-tautological form).
+**Plan refusal — SERVER HALF ONLY in PR 1 (B6/C5, corrected twice).** The
+server's `advancesPlan` defaults to TRUE and nothing was type-aware, so a
+free row would tick "SESSION n OF 84" and deleting it would un-count a plan
+day.
+
+Two corrections to what this paragraph used to say, both from PR 1:
+
+1. **It is not "both halves".** The client half — a log door posting
+   `advancesPlan: false` — is PR 2's; nothing in PR 1 can emit it. The
+   server refusal is therefore the ONLY enforcement that exists, which is
+   why it is unconditional.
+2. **The predicate is NOT "when `workoutType` is null".** It is
+   `isFreeRow` — `workout_id` AND `workout_type` both null (James's
+   sign-off, 2026-09-01).
+
+   The deciding case is the deleted-workout retry
+   (`LogSession.tsx:775-793`), which re-posts with `workoutId: null` for a
+   legitimate prescribed session while `resolveWorkoutType` still yields a
+   type through its `?? "O2"` last resort. So that body is
+   `(null, "O2")`, and the three candidate predicates part company on it:
+
+   | Predicate | Deleted-workout retry | Verdict |
+   | --- | --- | --- |
+   | `workout_id` alone | REFUSED — plan stalls silently | wrong |
+   | `workout_type` alone | advances | right on this case, wrong on a genuine free row's sibling producers |
+   | **the pair** | advances | **shipped** |
+
+   An earlier version of this bullet said keying on the TYPE alone would
+   stall this retry. It would not — the retry carries `"O2"`. It is the
+   ID-only predicate that stalls it, and that is the one the pair exists to
+   avoid. **And this is exactly why retiring `?? "O2"` is cut from scope:**
+   without it the retry becomes `(null, null)`, which every predicate
+   including the pair refuses. See the fallback's own section.
+
+Pinned at BOTH layers: the shared store contract's truth table, and a route
+test that selects a plan and reads `GET /api/plan`'s `doneN` after the POST
+(the first version asserted a field `POST /api/logs` does not return, and so
+could not fail).
 
 **MonitorRun (stored localStorage shape — TRIAD, lives in PR 1):** the
 existing v2 record gains an additive `mode: "justrow"` field (the
@@ -684,22 +715,40 @@ citation was stale, that line is mid-comment). The two cannot ship
 together. The fallback fires when the phone-timer door has no matched
 draft AND the workout has left the library (`LogSession.tsx:450-458` calls
 this "a corrupted/partial localStorage state" — rare, not impossible).
-Retire it and that session posts `workoutType: null`, which PR 1's new
-type-blind plan refusal then declines to advance
-(`server/stores/logs.ts:700`, `routes/data.ts:1534`): the rower taps "Log
-against plan", gets a `201`, and `SESSION n OF 84` does not move. Silently
-— no error surface exists for it.
+**Retire it and the SHIPPED pair predicate refuses that session too — this
+is not a hazard the pair fixed.** Trace the actual producer: the workout is
+deleted mid-session, the server 400s on `workoutId`, and the client's
+supported retry re-posts with `workoutId: null` (`LogSession.tsx:775-793`).
+`resolveWorkoutType` meanwhile has no matched draft and cannot find the
+workout, so WITHOUT the `?? "O2"` last resort it resolves to nothing and
+the body carries no type at all. The retried body is therefore
+`{ workoutId: null, workoutType: null }` — both null, which `isFreeRow`
+reads as a free row and the refusal declines
+(`server/stores/logs.ts`, `routes/data.ts`). The rower taps "Log against
+plan", gets a `201`, and `SESSION n OF 84` does not move. Silently — no
+error surface exists for it.
+
+**So the fallback is load-bearing for the predicate as built**, not merely
+for a type-only one. It is the only thing that keeps the deleted-workout
+retry distinguishable from a genuine free row: with it the retry is
+`(null, "O2")` and advances; without it the two shapes are identical and
+the plan stalls. (An earlier correction to this paragraph hedged it as
+"had the refusal been keyed on type alone" — that weakened the argument
+below what the facts support, and is withdrawn.)
 
 **The deeper point, and it is about the PREDICATE not the branch.** The
 refusal keys on "we do not know the type"; the fact it needs is "this was
 a free row". For an unmatched phone-timer session the sentence above is
 FALSE — an intensity was prescribed, the app merely lost the record of it.
 So: the `?? "O2"` fallback STAYS, and the refusal's predicate is scoped to
-what it actually means. **Whether the predicate becomes `workout_id IS
-NULL AND workout_type IS NULL`, or an explicit marker, is a PR 1
-implementation decision that the plan must state and test both ways** —
-the one thing it may not do is key on type alone while a second producer
-of null types exists.
+what it actually means. **DECIDED (James, 2026-09-01): the predicate is
+`workout_id IS NULL AND workout_type IS NULL`** — the pair, implemented as
+`isFreeRow` in `domain/types.ts` and shared by the plan refusal and the
+empty-`steps` allowance. An explicit marker column was considered and
+rejected: it adds a stored shape to buy what the pair already gives.
+(This paragraph previously left the choice open "for the plan to state and
+test both ways"; it is closed.) The one thing it may not do is key on type
+alone while a second producer of null types exists.
 
 **Why it had to be decided before PR 1 tags.** CLAUDE.md's additive-only
 rule between tags: once PR 1 shipped a validator CLOSING the column to a
@@ -765,7 +814,8 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   lands in `docs/monitor/sessions/`; findings amend this spec.
 - **PR 1 — every stored shape (TRIAD, tagged alone before PR 2):**
   the `session_logs` validation branch + `DROP NOT NULL` on
-  `workout_type`, the plan refusal (both halves), the
+  `workout_type`, the plan refusal (SERVER HALF ONLY — the client half is
+  PR 2's; see the end-semantics correction), the
   unknown-type badge fallback + client type widening, the MonitorRun
   `mode` field. Full antagonist pass + PM final-PR gate. Its PR body
   states plainly that it changes nothing visible.
@@ -782,9 +832,12 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   - **ADD `logSeed: { steps: [], paces: {} }`** to the `MonitorRun` shape
     (F4) — without it `buildMonitorLogSteps` throws rather than returning
     `[]`.
-  - **CUT retiring `resolveWorkoutType`'s `?? "O2"`** (F3). It collides
-    with the type-blind plan refusal and silently stops advancing plans for
-    unmatched phone-timer rows. The refusal's predicate is scoped instead.
+  - **CUT retiring `resolveWorkoutType`'s `?? "O2"`** (F3). Without it the
+    deleted-workout retry posts `{ workoutId: null, workoutType: null }`,
+    which the pair-based refusal reads as a free row and declines — a `201`
+    and a silently stalled plan. The fallback is what keeps that retry
+    distinguishable from a genuine free row, so it stays. (This bullet
+    previously called the refusal "type-blind"; it is keyed on the pair.)
   - **SERVER HALF ONLY for the plan refusal** (F5). The client half posts
     `advancesPlan: false` from a log door PR 2 builds; nothing in PR 1 can
     emit it. Say so rather than planning a caller that does not exist.
@@ -792,11 +845,19 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
     Drizzle infer `string | null`, which widens `PlanLink.workoutType`
     (`stores/logs.ts:356`) and makes `usePlanLinks.parseLink`'s
     `if (typeof e.workoutType !== "string") return null;`
-    (`src/plan/usePlanLinks.ts:81`) discard a whole plan-link entry. It is
-    unreachable only while the plan refusal holds — so F3's predicate is
-    load-bearing twice, and both need the same test.
-  - **Generate the migration LAST** (F7). PRs #248 and #249 both already
-    mint drizzle index `0017` against a journal head of 16; PR 1 is a third
+    (`src/plan/usePlanLinks.ts:81`) discard a whole plan-link entry.
+    **CORRECTED at the PM re-review:** an earlier version of this bullet
+    said that was "unreachable only while the plan refusal holds." It is
+    reachable NOW — the truth table deliberately ADVANCES a row that names a
+    workout and omits its type, and such a row becomes a plan link carrying
+    a null `workoutType`. The guard is load-bearing in its own right, not a
+    backstop for the refusal, and `usePlanLinks.test.ts` pins it directly.
+  - **Generate the migration EARLY, regenerate before every push, and
+    check `gh pr list` at merge** (F7, REPLACING "generate it last" — that
+    instruction was unworkable: a null cannot be inserted while the column
+    is `NOT NULL`, so the branch is untestable without it). PRs #248 and
+    #249 both minted drizzle index `0017` against a journal head of 16; PR 1
+    was a third
     claimant. Regenerate off whatever lands, never off today's main.
 - **PR 2 — surface + session + log door (L, after RC's wave and after
   PR 0b's answers):** `/justrow` route, `JustRowSurface`,
@@ -866,8 +927,24 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
 ## Release call (PM gate, recorded)
 
 No tag on PR 0a/0b or PR 1 alone (instrument no tester can reach; stored
-fields nothing renders — but PR 1 still tags for the R-A read-side
-ordering, as a patch-level read-side tag). PR 2 is MINOR and the first
+fields nothing renders).
+
+**The "PR 1 still tags at patch level for R-A" clause is WITHDRAWN (PM
+gate, 2026-09-01, reversing that gate's own phase-open call).** R-A protects
+a row written by a NEW build reaching an OLD one; the only producer of a
+null-type row is PR 2's own door, which ships in a build that already
+carries the read side, so the skew window is empty — and when it does open
+the failure is a padded empty badge, not a wrong number or a lost record. A
+dedicated no-op TestFlight build, its notes PR and an `ios:release` run are
+real cost for that.
+
+**What R-A actually needs here is an ORDERING, not a tag: PR 1's read side
+must ship in a tag strictly EARLIER than PR 2's writer, and PR 2's own PM
+gate checks it.** Free to enforce, and given PR 2 is L and sits behind RC's
+wave, a tag will intervene on its own. `v0.31.0` was cut on 2026-09-01
+before PR 1 could merge, so PR 1 falls inside `v0.31.0..main` and the next
+tag's RF15 range check accounts for it with "no note needed: nothing
+tester-visible". PR 2 is MINOR and the first
 tag testers can falsify; its notes owe three clauses: the feature in one
 sentence, **that a Just Row never advances your plan**, and that these
 rows carry no targets and no type chip.

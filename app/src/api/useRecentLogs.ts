@@ -20,7 +20,10 @@ export interface RecentLog {
   id: string;
   workoutId: string | null;
   workoutTitle: string;
-  workoutType: WorkoutType;
+  /** Phase JR PR 1: NULLABLE. A free row (Just Row) prescribed no
+   *  intensity, so it stores none. `TypeBadge` renders NOTHING for null —
+   *  an absence, never an empty badge (exit criterion 2). */
+  workoutType: WorkoutType | null;
   loggedAt: string;
   // Nullable ahead of the write side (post-workout-summary spec, ruling
   // R-A): this read has to tolerate a null row before any code can write

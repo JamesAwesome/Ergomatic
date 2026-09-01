@@ -153,7 +153,13 @@ export const sessionLogs = pgTable(
       onDelete: "set null",
     }),
     workoutTitle: text("workout_title").notNull(),
-    workoutType: text("workout_type").notNull(),
+    // Phase JR PR 1: NULLABLE. `null` means "no intensity was prescribed" —
+    // a free row (Just Row) prescribes none. Stays plain `text`, never the
+    // `workoutTypeEnum` above (that types `workouts.type`); this column
+    // holds OUR intensity axis only and carries no index, CHECK or FK.
+    // R-A ordered: the null-tolerant read side ships in this same PR, the
+    // same shape migration 0009 used for `held`/`pain`.
+    workoutType: text("workout_type"),
     loggedAt: timestamp("logged_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

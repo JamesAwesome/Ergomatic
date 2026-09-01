@@ -140,7 +140,21 @@ function heroDistanceMeters(log: RecentLog): number | undefined {
 //  Both read the identical population by construction, so the two numbers
 //  agree without this list needing `steps` at all (which
 //  `LOG_LIST_COLUMNS` excludes for size) — proven for a shared exit-7
-//  fixture in `HistoryList.test.tsx`'s own tier-B1 case. For a FALLBACK
+//  fixture in `HistoryList.test.tsx`'s own tier-B1 case.
+//
+//  **THAT PREMISE HAS ONE EXCEPTION, AND IT IS NOW HANDLED ON THE OTHER
+//  SIDE (Phase JR PR 1, spec rev 4's F1).** "The identical population by
+//  construction" assumes both sides have a population. A FREE ROW (Just
+//  Row) stores `steps: []` — it prescribes nothing, so there is nothing to
+//  fabricate — and an empty population is exactly what falsifies the
+//  premise: this list still reads the stored column and shows a figure,
+//  while the detail screen's `tierBAvgSplitSeconds` returned `undefined`
+//  and showed NOTHING. This list is unchanged; `storedSummary.ts`'s TIER
+//  B1 now falls back to the same stored column when `steps` carries no PM5
+//  rows, which restores the agreement. Pinned across BOTH screens by
+//  `HistoryList.test.tsx`'s free-row case (exit criterion 7), whose two
+//  expectations are derived from one `buildStoredSummary` result so a
+//  change to the stored value must move both or fail. For a FALLBACK
 //  row (no machine totals, no work pair — a timer/manual row, a legacy
 //  monitor row, or a TIER B2 row per `heroDistanceMeters`' own note),
 //  this is ALSO `buildHeroes`' own FALLBACK avg split, so the two screens

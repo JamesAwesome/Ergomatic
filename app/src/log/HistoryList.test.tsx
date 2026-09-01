@@ -299,6 +299,54 @@ describe("HistoryList hero snippet — tier parity with the detail screen (RC-5 
     ).toBeVisible();
   });
 
+  // EXIT CRITERION 7 (Phase JR PR 1, spec rev 4's F1). A free row stores
+  // `steps: []`, so the detail screen's TIER B1 has no population to derive
+  // from and must read the stored column — the same column this list has
+  // always read. Before the fallback, this row rendered a figure in the
+  // list and NOTHING on the detail screen.
+  //
+  // The mutation the criterion asks for is built in: both expectations are
+  // derived from `detail.heroes`, so changing the stored `avgSplitSeconds`
+  // moves BOTH or the test fails. Two independently-written literals would
+  // let one screen drift.
+  it("TIER B1, FREE ROW (steps: []): the list and the detail screen show the SAME avg split, read from the stored column", () => {
+    const detail = buildStoredSummary(
+      baseStoredRow({
+        steps: [],
+        workSeconds: 393.58,
+        workMeters: 1396.6,
+        avgSplitSeconds: 140.9,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+      }),
+    );
+    const { avgSplit, distanceMeters } = detail.heroes;
+    expect(avgSplit).toBe("2:20.9");
+    expect(distanceMeters).toBe(1397);
+    // Narrowing for the snippet below, which must stay DERIVED from
+    // `detail` rather than re-stating a literal — that coupling is what
+    // makes a change to the stored value move both screens or fail.
+    if (distanceMeters === undefined) throw new Error("no distance hero");
+
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-free-row", {
+          machineWorkSeconds: null,
+          machineWorkMeters: null,
+          machineAvgPaceSecondsPer500m: null,
+          avgSplitSeconds: 140.9,
+          distanceMeters: 1397,
+        }),
+      ]),
+    );
+    renderHistoryList();
+    expect(
+      screen.getByText(
+        `AVG ${avgSplit} · ${distanceMeters.toLocaleString()} m`,
+      ),
+    ).toBeVisible();
+  });
+
   it("TIER A, build-738-era row (machine totals present, the scalar absent): renders DISTANCE alone, no AVG segment — never a fallback quotient off the OLD stored column, matching buildStoredSummary's own 'no avg-split hero' rule", () => {
     const detail = buildStoredSummary(
       baseStoredRow({

@@ -134,6 +134,13 @@
       "when": 1788234044080,
       "tag": "0018_natural_chronomancer",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788259191713,
+      "tag": "0019_happy_virginia_dare",
+      "breakpoints": true
     }
   ]
 }
