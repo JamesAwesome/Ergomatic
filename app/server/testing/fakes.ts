@@ -434,7 +434,7 @@ function resolveNewestFakeLink(
     {
       id: string;
       workoutTitle: string;
-      workoutType: string;
+      workoutType: string | null;
       workoutId: string | null;
       loggedAt: Date;
       seq: number;

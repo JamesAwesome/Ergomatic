@@ -6,6 +6,7 @@ import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { PLANS } from "../../domain/plans.js";
 import { suggest, type LibraryEntry } from "../../domain/suggest.js";
 import {
+  isFreeRow,
   isWorkoutType,
   type Baselines,
   type Difficulty,
@@ -1385,10 +1386,31 @@ export function createDataRouter({
     // reads a workout's enum-typed `type`; what some third party may have
     // POSTed is not knowable from here). Rows written before this check
     // exist, so readers stay tolerant — see `Plan.tsx`'s `rowedType`.
-    if (!isWorkoutType(body.workoutType)) {
-      badRequest(res, "workoutType must be one of AN|O2|AT|TR", "workoutType");
+    // Phase JR PR 1: `null` joins the union as a legal STORED value — "no
+    // intensity was prescribed", which is true of a free row and true again
+    // of the targetless-workout follow-on. The column becomes NULLABLE in
+    // this PR's own migration; this is the write side of that.
+    //
+    // Admissibility only. Whether a null type also RELAXES a rule (empty
+    // `steps`, the plan refusal) is a separate question keyed on
+    // `isFreeRow`'s pair, not on the type alone — see its doc comment for
+    // why the id half is load-bearing.
+    const typeAbsent =
+      body.workoutType === null || body.workoutType === undefined;
+    if (!typeAbsent && !isWorkoutType(body.workoutType)) {
+      badRequest(
+        res,
+        "workoutType must be one of AN|O2|AT|TR, or null",
+        "workoutType",
+      );
       return;
     }
+    // Re-narrowed rather than cast: the guard above already rejected any
+    // non-member that is not absent, so this ternary's false arm is only
+    // reachable for a genuinely absent type.
+    const workoutType: string | null = isWorkoutType(body.workoutType)
+      ? body.workoutType
+      : null;
     let workoutId: string | null = null;
     if (body.workoutId !== null && body.workoutId !== undefined) {
       if (typeof body.workoutId !== "string" || !UUID_RE.test(body.workoutId)) {
@@ -1591,7 +1613,21 @@ export function createDataRouter({
       badRequest(res, machineSummaryResult.message, "machineSummary");
       return;
     }
-    if (!Array.isArray(body.steps) || body.steps.length === 0) {
+    // Phase JR PR 1: a FREE ROW may store `steps: []` — a record, not a
+    // projection. It prescribes nothing, so there is nothing to fabricate,
+    // and the client renderers absorb the empty array as an ABSENCE (the
+    // summary block self-gates on zero rows, vetted at the antagonist
+    // pass). Every other row still owes at least one step.
+    //
+    // Keyed on the SAME `isFreeRow` pair the plan refusal uses, defined
+    // once in `domain/types.ts` — two rules keyed on one fact and written
+    // twice are two things to keep in step. A row that names a workout but
+    // omits its type is NOT free and still owes steps.
+    if (!Array.isArray(body.steps)) {
+      badRequest(res, "steps must be an array", "steps");
+      return;
+    }
+    if (body.steps.length === 0 && !isFreeRow(workoutId, workoutType)) {
       badRequest(res, "steps must be a non-empty array", "steps");
       return;
     }
@@ -1641,7 +1677,7 @@ export function createDataRouter({
     const { id } = await stores.logs.create(req.user!.id, {
       workoutId,
       workoutTitle: body.workoutTitle,
-      workoutType: body.workoutType,
+      workoutType,
       baselineK2: baselines?.k2Seconds ?? null,
       baselineK6: baselines?.k6Seconds ?? null,
       held: (body.held as HeldResult | null | undefined) ?? null,

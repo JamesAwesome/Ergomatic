@@ -669,6 +669,92 @@ describe("domain stores against real Postgres", () => {
       });
     });
 
+    // THE FREE-ROW PREDICATE, against real Postgres (Phase JR PR 1 Task 1;
+    // spec rev 4, James's sign-off 2026-09-01). Three rows, and the second
+    // and third are the regressions — the first is the easy one.
+    //
+    // The predicate is the PAIR (`workoutId` AND `workoutType` both null),
+    // never `workoutId` alone. Row 2 is why: `LogSession.tsx:780-790`
+    // retries a save with `workoutId: null` when the server 400s
+    // specifically on `workoutId` (the workout was deleted between that
+    // door's mount and the Save click). That is a legitimate
+    // plan-advancing session posting a null workout id, and an id-only
+    // predicate would stall its plan silently — a 201, and SESSION n OF 84
+    // does not move.
+    it("a FREE ROW (both null) never advances the plan, even asking to", async () => {
+      const logs = createLogsStore(db);
+      const planState = createPlanStateStore(db);
+      const users = createUserStore(db);
+      const fresh = await users.createUser({
+        googleSub: "jr-free-row",
+        email: "jrfreerow@x.com",
+        name: "JR",
+      });
+      await planState.set(fresh.id, "sprint");
+
+      const { id } = await logs.create(
+        fresh.id,
+        logInput({ workoutId: null, workoutType: null, advancesPlan: true }),
+      );
+
+      expect(await planState.get(fresh.id)).toStrictEqual({
+        planKey: "sprint",
+        doneN: 0,
+      });
+      const list = await logs.list(fresh.id, 10);
+      const stored = list.find((row) => row.id === id);
+      expect(stored?.planKey ?? null).toBeNull();
+    });
+
+    it("a null workout id that still carries a type DOES advance (the deleted-workout retry)", async () => {
+      const logs = createLogsStore(db);
+      const planState = createPlanStateStore(db);
+      const users = createUserStore(db);
+      const fresh = await users.createUser({
+        googleSub: "jr-deleted-workout-retry",
+        email: "jrdeleted@x.com",
+        name: "JR",
+      });
+      await planState.set(fresh.id, "sprint");
+
+      await logs.create(
+        fresh.id,
+        logInput({ workoutId: null, workoutType: "O2", advancesPlan: true }),
+      );
+
+      expect(await planState.get(fresh.id)).toStrictEqual({
+        planKey: "sprint",
+        doneN: 1,
+      });
+    });
+
+    it("a row naming a workout with no type DOES advance (not a free row)", async () => {
+      const logs = createLogsStore(db);
+      const planState = createPlanStateStore(db);
+      const users = createUserStore(db);
+      const workoutsStore = createWorkoutsStore(db);
+      const fresh = await users.createUser({
+        googleSub: "jr-named-no-type",
+        email: "jrnamed@x.com",
+        name: "JR",
+      });
+      const w = await workoutsStore.create(
+        fresh.id,
+        workoutInput({ title: "JR named" }),
+      );
+      await planState.set(fresh.id, "sprint");
+
+      await logs.create(
+        fresh.id,
+        logInput({ workoutId: w.id, workoutType: null, advancesPlan: true }),
+      );
+
+      expect(await planState.get(fresh.id)).toStrictEqual({
+        planKey: "sprint",
+        doneN: 1,
+      });
+    });
+
     it("list respects limit and is invisible across users", async () => {
       const logs = createLogsStore(db);
       const users = createUserStore(db);

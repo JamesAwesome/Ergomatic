@@ -1,4 +1,5 @@
 import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { isFreeRow } from "../../domain/types.js";
 import type { Db } from "../db/index.js";
 import { planState, sessionLogs, workouts } from "../db/schema.js";
 import type { PlanKey } from "./planState.js";
@@ -122,7 +123,12 @@ export interface LogSeries {
 export interface LogInput {
   workoutId: string | null;
   workoutTitle: string;
-  workoutType: string;
+  /** Phase JR PR 1: NULLABLE. `null` means "no intensity was prescribed" —
+   *  true of a free row (Just Row), and true again of the targetless-workout
+   *  follow-on. Plain `string` rather than `WorkoutType` for the reason the
+   *  `PlanLink` field below already gives: the column is plain `text`
+   *  (`schema.ts:147`), never the pgEnum. */
+  workoutType: string | null;
   baselineK2: number | null;
   baselineK6: number | null;
   // Post-workout-summary spec (2026-08-17), §3: nullable now (R-A ordered
@@ -379,8 +385,14 @@ const LOG_LIST_COLUMNS = {
  *  pointed at has since been deleted. That is UNKNOWN identity, never
  *  "personal".
  *
- *  `workoutType` is typed `string`, not `WorkoutType`: the column is plain
- *  `text` (schema.ts:147 — deliberately NOT `workoutTypeEnum`, which is
+ *  `workoutType` is typed `string | null`, not `WorkoutType`: the column is
+ *  plain `text` and NULLABLE since Phase JR PR 1 (a free row prescribes no
+ *  intensity). **The null widens a real client drop path:**
+ *  `usePlanLinks.parseLink` discards a whole entry when this is not a
+ *  string (`src/plan/usePlanLinks.ts:81`), which is unreachable only while
+ *  the plan refusal holds — a free row never becomes a plan link in the
+ *  first place. Two things now depend on that predicate, not one.
+ *  (schema.ts — deliberately NOT `workoutTypeEnum`, which is
  *  the `workouts` table's column). New writes are validated against the
  *  union at the route, but rows stored before that check exist, so every
  *  consumer still has to narrow it for itself. */
@@ -388,7 +400,7 @@ export interface PlanLink {
   planIndex: number;
   id: string;
   workoutTitle: string;
-  workoutType: string;
+  workoutType: string | null;
   linkedTitle: string | null;
   workoutIsGlobal: boolean | null;
 }
@@ -732,7 +744,22 @@ export function createLogsStore(db: Db) {
         let planKey: string | null = null;
         let planIndex: number | null = null;
 
-        if (input.advancesPlan) {
+        // THE PLAN REFUSAL (Phase JR PR 1, spec rev 4). A free row never
+        // advances a plan, whatever the caller asked for — a Just Row is
+        // not a prescribed session, so it cannot be session n of 84.
+        // Server-side and unconditional: the client half (a log door that
+        // posts `advancesPlan: false`) is PR 2's, so this is the only
+        // enforcement that exists, and it is the one that has to hold.
+        //
+        // Keyed on `isFreeRow`'s PAIR, never on `workoutId` alone — see
+        // that function's doc comment: the deleted-workout retry
+        // (`LogSession.tsx:780-790`) posts a null id for a legitimate
+        // plan-advancing session, and an id-only predicate would stall its
+        // plan silently.
+        if (
+          input.advancesPlan &&
+          !isFreeRow(input.workoutId, input.workoutType)
+        ) {
           const [advanced] = await tx
             .insert(planState)
             .values({ userId, doneN: 1 })
