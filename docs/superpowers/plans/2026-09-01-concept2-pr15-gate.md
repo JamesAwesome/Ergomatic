@@ -8,6 +8,31 @@ committed measurement; the three options are presented neutrally with their
 costs. **This document does not choose one — that is James's ruling, asked
 for at the end.**
 
+**Fix round 2 (P1b), rebuilt §3 only:** the reviewer caught that the
+original (b)/(c) below were built around the WRONG principal. The link
+lands under the ATTACKER's userId (`attempt.userId` in §1's own residual),
+so:
+- **(b) as originally written was dead:** it proposed surfacing the linked
+  identity on the VICTIM's own `GET /api/concept2/link` / linked-card — but
+  in the attack scenario, the victim's OWN account was never touched; the
+  attacker's account is what gained a foreign link, and the attacker has
+  every reason not to look or to unlink quietly. The victim has no card to
+  see anything on.
+- **(c) as originally written was dead the same way:** it proposed the
+  app's "own authenticated session" confirming on next foreground — but
+  the only session that IS authenticated for `attempt.userId` belongs to
+  the ATTACKER, who would simply confirm their own attack. The victim,
+  who is the only party with any incentive to refuse, never sees that
+  confirm at all.
+
+§3 below is rebuilt around the ONE party actually present at the moment
+that matters: the CONSENTING PRINCIPAL — whoever is sitting at Concept2's
+consent screen and then lands on OUR callback page in that SAME browser.
+That is the only surface any detection or confirmation can reach, because
+it is the only surface the consenting principal ever touches. §1 and §2
+are unchanged (the residual and the credential fact were never in
+question — only where detection/prevention could live).
+
 ## 1. The residual, restated
 
 Branch A's callback binds the exchange to the nonce alone
@@ -66,54 +91,115 @@ the https callback (cookie exists there)"). PR1.5 is Branch A + native
 only (Global Constraints); this gate package's native focus matches PR1.5's
 own scope, not an oversight of the web case.
 
-## 3. The options, with costs
+## 3. The options, with costs (rebuilt around the consenting principal)
+
+Every option below is verified against `server/routes/concept2.ts`'s
+actual callback route (lines 173-221 as read this session), not asserted.
+Three load-bearing facts about that route, all cited because (b)/(c)
+depend on them:
+
+- The attempt row carries `userId` and `weightClass` ONLY — no email
+  (`server/stores/concept2.ts:181-196`, `consumeAttempt`'s `RETURNING`
+  clause selects exactly those two columns). Rendering an identity on the
+  callback page therefore needs a NEW lookup: `Concept2RouterDeps`
+  (`server/routes/concept2.ts:21-33`) injects `store`/`logs`/`client`/
+  `requireUser`/`now` — no user store — and `server/auth/users.ts` itself
+  has no by-id lookup today (`findByGoogleSub`, `createUser`,
+  `updateProfile` only, `server/auth/users.ts:5-26`). Both (b) and (c)
+  below need this same new plumbing.
+- `consumeAttempt` is ONE atomic `DELETE ... RETURNING`
+  (`server/stores/concept2.ts:184-196`) that runs BEFORE the token
+  exchange, on purpose: the route's own comment says "consumed before
+  exchange even starts, so a retry after ANY later failure restarts at
+  mint" (`server/routes/concept2.ts:193-195`). There is no "peek without
+  consuming" method. A confirm-BEFORE-exchange design would have to
+  either add one (reopening the retry-restarts-at-mint guarantee that
+  comment protects) or confirm AFTER exchange, holding the written link in
+  a not-yet-final state.
+- `upsertLink` (line 213) — the actual write that creates the residual —
+  runs BEFORE `LINKED_HTML` renders (line 220). Nothing today runs between
+  "the account is linked" and "the browser sees success."
 
 **(a) Accept the residual, bounded by `ALLOWED_EMAILS`.**
-Zero code. The population that can hold an Ergomatic account today is the
-household allowlist (`server/auth/allowlist.ts`) — a closed set the
-attacker scenario in §1 already has to be a member of (or compromise a
-member's device) to mint an attempt at all. Revisit before any public
-opening (an unbounded `ALLOWED_EMAILS`, or its removal, changes this
-calculus completely and should re-trigger this same question).
+Unchanged from the original pass. Zero code. The population that can hold
+an Ergomatic account today is the household allowlist
+(`server/auth/allowlist.ts`) — a closed set the attacker scenario in §1
+already has to be a member of (or compromise a member's device) to mint
+an attempt at all. Revisit before any public opening.
 
-**(b) Detection: surface the linked identity, let the rower notice.**
-`GET /api/concept2/link` already returns `c2UserId` as of PR1
-(`server/routes/concept2.ts:246`, with its own comment: "PR2 needs the
-linked account's identity to render the sent-state contract... and to
-build the View-on-Concept2 URL"). PR2's linked-state card and the
-callback's own "Linked." page (spec §Architecture 3, item 3) both have a
-natural place to show that identity — a name or email the rower
-recognizes, or fails to. A victim whose OWN account got linked to a
-foreign Concept2 identity sees a Concept2 account that is not theirs and
-can unlink (`DELETE /api/concept2/link`, `server/routes/concept2.ts:251`).
-Cost: copy-level only — no schema change, no new state. Does not prevent
-the mislink, only makes it visible after the fact; relies on the rower
-looking.
+**(b) Detection at the callback page itself: show the target identity
+BEFORE the consenting principal leaves that page.**
+After `upsertLink` succeeds, `LINKED_HTML` (line 83, currently the fixed
+string "Linked. Return to the app.") renders instead: "Linked to
+`<email of attempt.userId>`. If that is not your account, [contact
+support / a plain-text explanation]." The consenting principal — the
+person who JUST completed Concept2's consent screen, in that SAME
+browser, is the only party who sees this, and it is shown to them
+immediately, not buried in an app screen they may never open. This is
+still detection, not prevention: the link is ALREADY WRITTEN
+(`upsertLink` already ran, line 213) by the time this page renders — an
+attacker who also controls that browser (the common non-attack case: they
+minted their own attempt and are simply linking their own account) sees
+their own email and nothing changes; a victim tricked into completing
+consent for someone else's Ergomatic account sees a foreign identity
+immediately, at the one moment they are actually looking at a screen.
+**Cost:** the new user-lookup plumbing above (a `findById`-shaped method
+plus a `users` dependency threaded into `Concept2RouterDeps` and its
+mount site), and an HONEST INFORMATION COST that must be named plainly:
+this displays an Ergomatic user's email to WHOEVER HOLDS THE AUTHORIZE
+URL and completes Concept2's consent screen — not necessarily anyone with
+an established relationship to that Ergomatic account. The nonce
+(`concept2_auth_attempts.nonce`) was designed as a user-BINDING, never as
+proof the bearer is AUTHORIZED to learn that user's identity (spec
+§Data model, quoted verbatim: "the browser hop carries no credential; the
+nonce is the user binding" — a binding, not a credential check). Whether
+that disclosure is acceptable
+is part of the ruling this document asks for, not something this option
+resolves on its own.
 
-**(c) Prevention: an in-app confirm after consent.**
-The link lands in a new `pending` status instead of live; the app's own
-authenticated session (the Keychain bearer, back on native ground) has to
-confirm it on the NEXT foreground, closing the exact gap §2 identifies
-(the confirm step happens in the app's own session, not the browser's).
-Cost: a stored-shape change (a status column or equivalent on
-`concept2_links`, a migration, a new confirm route) and a second
-deliberate tap for every legitimate link, every time — the common case
-pays a tax to close an edge case bounded today by (a) already.
+**(c) Prevention at the callback page: the exchange completes, but the
+link stays `pending` until the SAME browser confirms.**
+The callback still exchanges the code and calls the C2 API (unavoidable —
+that is how `me.c2UserId` is learned at all), but writes the link with a
+new `pending` flag instead of live, and renders a page showing the SAME
+target identity as (b) plus a **Confirm** button. That button POSTs back
+to a new route, re-presenting a short-lived confirm token minted for this
+attempt (NOT the original nonce — `consumeAttempt` already deleted that
+row per the fact above) — only THEN does the link flip to live. Binding
+is by the consenting principal being the one physically looking at that
+page in that moment, not by any Ergomatic session (§2's credential fact
+still holds: no session artifact exists in that browser on native
+either way). If the button is never pressed, the `pending` row needs the
+same kind of expiry `concept2_auth_attempts` already has (15 min, `ATTEMPT_MAX_AGE_MS`) — a
+genuinely new GC concern, not free to skip. **Cost:** a real stored-shape
+change (a `pending`/confirmed distinction on `concept2_links`, a new
+confirm-token concept and route, migration), the SAME information cost as
+(b) (the target identity is shown to the same population, at the same
+page), a second network round-trip inside the SAME browser session before
+the "Linked" state is final, and — unlike the dead (c) from the original
+pass — a design that no longer contradicts `consumeAttempt`'s own
+"restarts at mint on any failure" guarantee, because nothing about
+attempt consumption changes; only what happens to the ALREADY-WRITTEN
+link before it counts as final.
 
-## 4. The device-check card (first PR2-era build)
+## 4. The device-check card
 
-PR1.5 ships no surface of its own — nothing to observe on a device until
-PR2's card exists to trigger `openExternalUrl` and render the outcome.
-Recorded here so the first PR2 build's walk knows what to check:
+**Updated, fix round 2:** PR1.5 no longer ships NO surface of its own —
+the P1a-device fix round added a dev-only, build-time-flag-gated probe
+card (`src/monitor/Concept2LinkProbe.tsx`, `VITE_ENABLE_C2_LINK_PROBE`,
+folded out of any normal build — `pnpm dist:grep`'s eighth needle proves
+it) specifically to check the modal-return signal (fix round 2, P1a) on a
+real device ahead of PR2. Exact operator steps:
+`docs/superpowers/plans/2026-09-01-concept2-pr15-walk.md`. That walk
+checks the RETURN signal only — it opens a dev URL
+(`log-dev.concept2.com`), never a real Concept2 login, so it proves
+nothing about this section's ruling and is not a substitute for it.
 
-- `Browser.open` actually presents `SFSafariViewController` (not a bare
-  Safari app-switch) when `openExternalUrl` fires on a real device.
-- The callback's "Linked. Return to the app." page renders as designed
-  after a real consent grant.
-- The foreground re-fetch (`useForegroundRefetch`, PR1.5 Task 2) actually
-  fires `GET /api/concept2/link` again when the rower backgrounds
-  Safari-view and returns to the app — the `pause`/`resume` signal this
-  gate's §2 argument does NOT depend on, but PR2's UX does.
+Still owed at the first PR2-era build (unchanged from the original pass):
+
+- The callback's "Linked" page (whatever copy the ruling below settles on)
+  renders as designed after a REAL consent grant, not the dev probe's
+  fake URL.
 - What the consent browser's cookie state offers on return to it a second
   time (a fresh Google/Concept2 login prompt, vs. a Safari-shared session
   skipping straight to consent) — UX evidence for PR2's copy, not
@@ -126,5 +212,13 @@ This is the evidence; it is not the decision. **James's ruling is owed
 here: accept (a), add detection (b), add prevention (c), or some
 combination — and if `ALLOWED_EMAILS`'s current scope is itself part of
 the answer, say so.** No PR1.5 code implements any of (a)/(b)/(c); PR1.5
-is plumbing only (Global Constraints, "spoken antagonist skip: inherits
-the phase anchor; no new invariant class in the plumbing").
+is plumbing (and, as of this fix round, a dev-only on-device probe) only.
+
+**Antagonist pass: <controller fills after the pass>** — fix round 2,
+P2(i): this PR touches AUTH (the account-injection question this whole
+document is about), which triggers CLAUDE.md's standing TRIAD override
+regardless of phase position — the "spoken antagonist skip" this
+document's earlier revision claimed (inherited from the phase anchor) no
+longer applies. The controller runs the full antagonist pass against this
+revised design separately from this fix round; its verdict replaces this
+line rather than being appended beneath it.
