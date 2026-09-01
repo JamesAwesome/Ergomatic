@@ -162,6 +162,10 @@ jobs:
         run: |
           bash -n app/scripts/stack-env.sh
           bash app/scripts/stack-env.test.sh
+      - name: Test the Concept2 compose env passthrough
+        run: |
+          bash -n scripts/compose-env.test.sh
+          bash scripts/compose-env.test.sh
 
   deploy:
     needs: [changes, root-hooks, app, docker, e2e, scripts]
