@@ -129,19 +129,32 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 ## Phase JR — Just Row
 
-**Status: Active — PR 0a instrument and PR 0b capture both DONE 2026-08-31
-(#246). Six OPEN questions answered outright; OPEN 3's remaining half is
-CLOSED BY RULING, not by evidence (James, 2026-09-01: assume the connection
-stays open indefinitely, and do not close it ourselves — let the link die by
-other means). **PR 1 IS IN REVIEW (#255)**: no new `ended_by` member and no
-inactivity rule. **The walked-away case does NOT ride the existing recovery
-path — that claim was falsified at PR 1's antagonist pass (F2)**: Today's
-"Log it" is gated on a non-null `workoutId` and the row itself on
-`completedAt === null`, so a workout-less run is discard-only in one branch
-and invisible in the other. Opening both gates is PR 2's, and **PR 2 must
-not be split at that boundary** — shipping the surface without the recovery
-would deliberately ship the defect ruling 9's correction found (PM gate,
-2026-09-01).**
+**Status: Active — PR 2 IN REVIEW (#259).** PR 0a instrument + PR 0b
+capture DONE 2026-08-31 (#246); **PR 1 MERGED as #255** (2026-09-01, this
+line said "in review" until PR 2's PM gate caught it, RF9's shape); PR 2
+opened 2026-09-01 with Gate 0 passed
+(`docs/design/handoffs/2026-09-01-just-row/`) and the recovery UNSPLIT per
+the PM condition — both Today gates open in the same PR as the surface.
+Merge waits on James plus the R-A ordering question (a tag carrying PR 1,
+unless the PM's relaxation at PR 2's final gate is taken — that gate's
+report carries the case).
+
+- [x] PR 0a — the observe-only instrument (#246)
+- [x] PR 0b — the capture walk (walk-2026-08-31-justrow)
+- [x] PR 1 — every stored shape (#255, migration 0019)
+- [ ] PR 2 — surface + session + log door (#259, in review loop)
+- [ ] Exit walk — a real Just Row, both screens in one photograph, ended
+      once by Done and once by Menu (needs PR 2 on a device)
+
+**Owed within PR 2's own scope, recorded here so phase close can quote
+it:** a free row recovered with a `truncated` series trace (>4 h of rowing,
+no 0x0039) reports its numbers UNAVAILABLE rather than posting the cap as
+the row's end — the honest refusal, not a fixed bound; if a >4 h free row
+ever matters, the fix is persisting the latest cumulative frame, which is a
+stored-shape change. And `PULL TO RESUME` is reachable on a free row's
+frozen clock and appears on none of the Gate 0 artboards — literally true
+for a Just Row (the PM5's clock does resume on the next pull) but
+undesigned; noted in the handoff README.
 
 This is a deliberate household exception to the stranger-first
 ordering, requested by James on 2026-08-31. Walk record and full decodes:
@@ -1313,7 +1326,10 @@ new.
   Disclosed and accepted as correct for now at `program.ts:112`.
 - **Anonymous-run logging** — every storage layer accepts `workoutId: null`, no
   product path can create one, and `ANONYMOUS_RUN` is dead code by its own
-  comment. **Phase JR is the door that would create them.**
+  comment. **Phase JR is the door that would create them — and PR 2 (#259)
+  DISCHARGES this: `/justrow/log` posts `workoutId: null` with
+  `advancesPlan: false`, and Today's recovery row serves the id-less
+  record.**
 - **`surfaceModel.ts:1573`'s `if (digits.startsWith("8")) return "AN";`** is the
   English article in "AN 800 M PIECE", not the workout type. A rename trap, not
   a task.

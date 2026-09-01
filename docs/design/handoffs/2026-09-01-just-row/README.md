@@ -187,3 +187,13 @@ The **lost banner needs no amendment** — this board already rendered
 amendment above.** Colors, type, spacing and copy are final: recreate
 pixel-perfectly with the app's existing idioms, and do not rewrite the
 rendered copy.
+
+## Known undesigned state (recorded at the PM final gate, 2026-09-01)
+
+`PULL TO RESUME` is reachable on a free row — the frozen-clock treatment
+(`ConnectedSurface`'s paused block) fires when the rower stops, and this
+board renders it on none of its eleven artboards. It is not a false state:
+for a Just Row the words are literally true, the PM5's clock resumes on the
+next pull. It is simply undesigned, and whoever next touches this surface
+should either render it into the board or suppress it for free rows with a
+stated reason.
