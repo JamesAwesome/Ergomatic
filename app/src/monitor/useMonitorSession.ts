@@ -1655,11 +1655,13 @@ function defaultSessionId(): string {
  *  There is now ONE assignment site (`connect()`, immediately after the
  *  GATT connect resolves and the log is created) and one read (`stash()`),
  *  so an id can only ever be paired with the log it was minted beside.
- *  A `null` here means NO logical session exists yet on this hook instance
- *  — which is precisely what a pre-GATT attempt (transport missing, scan
- *  dismissed, a radio throw, or a Cancel while the scan/connect was still
- *  in flight) leaves behind: it never got a link, so it never became a
- *  session, and it takes no history slot.
+ *  A `null` here means NO logical session exists yet on this hook
+ *  instance. A pre-GATT attempt (transport missing, scan dismissed, a
+ *  radio throw, or a Cancel while the scan/connect was still in flight)
+ *  never becomes a NEW session and takes no NEW slot — but this ref is
+ *  deliberately RETAINED across attempts, so if a prior session exists,
+ *  that attempt's teardown re-stashes the prior session under its own
+ *  unchanged id; only a hook with no prior session writes nothing.
  *
  *  The mutable fields are §6's latch counters and the once-per-session
  *  guard over them. They live HERE rather than in refs of their own for

@@ -6,8 +6,9 @@
 // hypothesis was overwritten by the very next teardown, before anyone got a
 // chance to read it. This module does not touch that key or its reader; it
 // adds a THREE-ENTRY HISTORY beside it, additive, so the last three LOGICAL
-// connected sessions' exports all survive at once (one entry per `connect()`,
-// however many teardown passes it takes to close it out — review round 2's
+// connected sessions' exports all survive at once (one entry per LOGICAL
+// SESSION — created at the GATT connect, so a pre-GATT `connect()` call
+// creates no entry; however many teardown passes it takes — review round 2's
 // own identity-bound upsert, below, is what makes "session" rather than
 // "teardown call" the true unit). Task 3 builds the ungated door that lists
 // them; this module is read-and-write plumbing only.

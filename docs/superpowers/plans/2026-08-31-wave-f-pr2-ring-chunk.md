@@ -83,8 +83,8 @@ task.
 - Create: `src/monitor/sessionLogHistory.ts`,
   `src/monitor/sessionLogHistory.test.ts`
 - Modify: `src/monitor/useMonitorSession.ts` (the `stash()` closure, and
-  `connect()`'s own per-connect reset block, which mints the session
-  identity `stash()` reads)
+  the single post-GATT `LogicalSession` assignment inside `connect()` —
+  the site that mints the identity `stash()` reads; round 5)
 
 **Interfaces:**
 - Produces (Task 3 consumes):
@@ -94,7 +94,8 @@ export interface SessionLogHistoryEntry {
   /** 1 = newest, derived from array position. */
   slot: 1 | 2 | 3;
   /** The logical connected session this entry belongs to — opaque to this
-   *  module, minted once per `connect()` by `useMonitorSession.ts`. */
+   *  module, minted by `useMonitorSession.ts` once per logical session at
+   *  the post-GATT site that creates its ring. */
   sessionId: string;
   /** ISO timestamp written at write time — the display "when". */
   savedAt: string;
@@ -185,7 +186,8 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
     `latches=<n> resumes=<n>`. "Logical session" is a stricter thing than
     it was: since round 5 it begins at the GATT connect. A pre-GATT attempt
     owns no NEW session or slot; its teardown may re-stash the retained
-    prior logical session under that session's own unchanged id.
+    prior logical session under that session's own unchanged id, and a
+    hook holding no prior session writes nothing at all.
 
 - [x] **Step 1: failing parse test** — feed a captured 0x0031 payload whose
   rowingState byte is a non-1 value (build it from the parser test file's

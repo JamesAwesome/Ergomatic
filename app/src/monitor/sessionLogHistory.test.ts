@@ -310,7 +310,8 @@ describe("sessionLogHistory: M-6 — atomic history storage", () => {
 // through TWO SEPARATE `teardown()` invocations, each resetting its own
 // "already pushed this teardown" guard — so one connected session burned
 // two history slots. `upsertSessionLog`, keyed by the session's own id
-// (minted once per `connect()`, unchanged across however many `teardown()`
+// (minted once per LOGICAL SESSION at the post-GATT ring-creation site,
+// unchanged across however many `teardown()`
 // calls that one session produces), converges every stash on ONE entry by
 // construction: same id in, same array slot out, no per-call guard to reset.
 //
