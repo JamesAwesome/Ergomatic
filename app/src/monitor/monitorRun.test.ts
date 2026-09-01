@@ -183,6 +183,16 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
     expect(loaded?.mode).toBe("justrow");
   });
 
+  // `mode` is a KNOWN field, so a malformed value is REJECTED — distinct
+  // from the unknown-key tolerance this validator keeps on purpose. That
+  // tolerance is about fields this build has never heard of; a field it
+  // declares and then trusts blindly is just an unvalidated field.
+  it("rejects a record whose mode is a value this build does not know", () => {
+    const run = { ...freshMonitorRun(), mode: "corrupt" };
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+    expect(loadMonitorRun()).toBeNull();
+  });
+
   // The other direction of the same additive contract: a record written
   // WITHOUT `mode` — every record that exists today — still loads, and
   // reads as a programmed run by the absence.

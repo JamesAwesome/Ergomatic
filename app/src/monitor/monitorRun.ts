@@ -480,6 +480,13 @@ export function isMonitorRun(value: unknown): value is MonitorRun {
     typeof value.startedAt === "string" &&
     (value.completedAt === null || typeof value.completedAt === "string") &&
     typeof value.terminated === "boolean" &&
+    // Phase JR PR 1 (review of 29e00561): `mode` is a KNOWN field, so it is
+    // validated like every other one. Declaring `mode?: "justrow"` and then
+    // never checking it let `mode: "corrupt"` load as a valid record, which
+    // is a different thing from the unknown-key tolerance this validator
+    // deliberately keeps — that tolerance is about fields this build has
+    // never heard of, not about a field it declares and then trusts.
+    (value.mode === undefined || value.mode === "justrow") &&
     // Phase LL Task 4, widened again by Wave F PR 1 (spec §1): a record
     // written by ANY era's writer (a legacy `"interrupted"` row, or one of
     // the five new `CloseReason` values) still loads. Shallow membership
