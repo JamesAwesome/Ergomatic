@@ -9708,3 +9708,32 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.04em;
   color: var(--ink-2);
 }
+
+/* The free-row log door's numbers card — three columns on one card, the
+   log-detail idiom at the door. `--ink-3` labels clear 6.69:1 on --page;
+   values are full ink. */
+.justrow-log-numbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.justrow-log-numlabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  margin: 0 0 4px;
+}
+
+.justrow-log-numvalue {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}

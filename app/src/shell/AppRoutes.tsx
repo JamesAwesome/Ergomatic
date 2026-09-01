@@ -26,6 +26,7 @@ import { loadRun } from "../session/run";
 import LogSession from "../session/LogSession";
 import Timer from "../session/Timer";
 import JustRow from "../justrow/JustRow";
+import JustRowLog from "../justrow/JustRowLog";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
@@ -189,6 +190,10 @@ export default function AppRoutes({
             in index.css hide the bar by themselves once the connected
             frames mount. */}
         <Route path="/justrow" element={<JustRow />} />
+        {/* The workout-less log door — the free row's own `/library/:id/log`,
+            which cannot serve it (that route needs a workout id to match
+            and a free row has none). */}
+        <Route path="/justrow/log" element={<JustRowLog />} />
         <Route path="/news" element={<News />} />
         {/* React Router ranks a static segment over a dynamic one regardless
             of declaration order (same note as /library/import above), so
