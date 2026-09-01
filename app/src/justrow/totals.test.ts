@@ -31,28 +31,49 @@ describe("freeRowTotals — the headline pair's one source", () => {
         summaryTotals: { workElapsedSeconds: 393.6, workDistanceMeters: 1396 },
         // A trace whose tail DISAGREES, and must lose: the summary is the
         // machine's own record of the whole row, the tail is a bucketed
-        // sample.
-        series: { samples: [{ t: 390, d: 1380, p: 141, spm: 22 }] },
+        // sample. Tenths and decimetres, the recorder's own units.
+        series: { samples: [{ t: 3900, d: 13800, p: 1410, spm: 22 }] },
       }),
     );
     expect(totals).toStrictEqual({ seconds: 393.6, meters: 1396 });
   });
 
-  it("falls back to the series tail when the burst never landed — the link-lost recovery's own path", () => {
+  it("falls back to the series tail DECODED — tenths and decimetres, the recorder's own units", () => {
     const totals = freeRowTotals(
       closedFreeRow({
         endedBy: "interrupted",
         series: {
+          // The recorder writes Math.round(seconds * 10) and
+          // Math.round(meters * 10) — these two samples are 1.0 s / 4.0 m
+          // and 160.0 s / 640.0 m as a rower would say them. The first cut
+          // of the function under test read the raw fields as
+          // seconds/metres and displayed a link-lost row at 10x its real
+          // size; this fixture is in the units PRODUCTION writes, which is
+          // the only fixture that can catch that again.
           samples: [
-            { t: 10, d: 40, p: 140, spm: 22 },
-            { t: 160, d: 640, p: 125, spm: 22 },
+            { t: 10, d: 40, p: 1400, spm: 22 },
+            { t: 1600, d: 6400, p: 1250, spm: 22 },
           ],
         },
       }),
     );
-    // The LAST sample, not the first — an earlier tail would silently
-    // shrink every recovered row.
+    // The LAST sample, decoded — an earlier tail would silently shrink
+    // every recovered row, and an undecoded one grows it tenfold.
     expect(totals).toStrictEqual({ seconds: 160, meters: 640 });
+  });
+
+  it("returns null for a truncated trace — the tail is where the recorder stopped, not the row", () => {
+    expect(
+      freeRowTotals(
+        closedFreeRow({
+          endedBy: "interrupted",
+          series: {
+            samples: [{ t: 143990, d: 431970, p: 1250, spm: 22 }],
+            truncated: true,
+          },
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("returns null when neither source exists — a zero would be a wrong number", () => {
