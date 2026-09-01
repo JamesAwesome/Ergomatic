@@ -2903,7 +2903,13 @@ describe("Today (the no-baseline card)", () => {
       .getByRole("heading", { name: "Today" })
       .closest("main")!;
     const children = [...main.children];
-    expect(children[0]!.tagName).toBe("H1");
+    // Phase JR PR 2: the heading now shares its row with the JUST ROW door,
+    // so the first child is that row rather than the bare `h1`. What this
+    // test claims is unchanged and still the point — the doors card is the
+    // first CONTENT after the heading, ahead of everything else — so the
+    // heading is asserted through the row rather than in place of it.
+    expect(children[0]!.classList.contains("today-title-row")).toBe(true);
+    expect(children[0]!.querySelector("h1")).not.toBeNull();
     expect(children[1]!.classList.contains("doorscard")).toBe(true);
   });
 
@@ -3507,5 +3513,46 @@ describe("elapsedSinceStart", () => {
     expect(elapsedSinceStart(run, new Date("2026-08-01T11:59:00.000Z"))).toBe(
       0,
     );
+  });
+});
+
+/**
+ * PHASE JR PR 2 — the free row's door on Today.
+ *
+ * Gate 0 (James, 2026-09-01): "a button in the top right that only says
+ * Just Row". Two words, and no sub-line to explain itself — the door it
+ * opens does that.
+ */
+describe("Today (the Just Row door)", () => {
+  it("offers JUST ROW to a rower with a plan", async () => {
+    mockReady({});
+    await renderToday();
+
+    const door = await screen.findByRole("link", { name: "JUST ROW" });
+    expect(door).toHaveAttribute("href", "/justrow");
+  });
+
+  /**
+   * RULING 4: visible with or without a baseline. This is the case that
+   * matters and the one an all-fixtures-have-a-plan suite cannot see — a
+   * rower who has not set a baseline up yet is exactly the rower most
+   * likely to want to just pull, and Today hides its whole plan apparatus
+   * for them. The door is deliberately outside that guard.
+   */
+  it("offers JUST ROW to a rower with no baseline at all, where the doors card shows", async () => {
+    mockReady({ baselines: NO_BASELINES });
+    await renderToday();
+
+    expect(await screen.findByText("SET UP YOUR BASELINE")).toBeVisible();
+    const door = screen.getByRole("link", { name: "JUST ROW" });
+    expect(door).toHaveAttribute("href", "/justrow");
+  });
+
+  it("says only those two words", async () => {
+    mockReady({});
+    await renderToday();
+
+    const door = await screen.findByRole("link", { name: "JUST ROW" });
+    expect(door.textContent).toBe("JUST ROW");
   });
 });

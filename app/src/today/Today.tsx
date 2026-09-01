@@ -1322,7 +1322,21 @@ function TodayView({
 
   return (
     <main className="screen">
-      <h1 className="screen-title">Today</h1>
+      {/* PHASE JR PR 2 — the free row's door, two words, top right (Gate 0,
+          James, 2026-09-01: "a button in the top right that only says Just
+          Row").
+
+          DELIBERATELY OUTSIDE the `!needsDoors` guard below. Everything that
+          guard hides is plan apparatus, and this is the opposite of plan
+          apparatus: ruling 4 makes it visible with or without a baseline,
+          and a rower who has not set one up yet is exactly the rower most
+          likely to want to just pull. */}
+      <div className="today-title-row">
+        <h1 className="screen-title">Today</h1>
+        <Link to="/justrow" className="today-justrow">
+          JUST ROW
+        </Link>
+      </div>
       {/* Phase 6I (condition carried into BL PR C's doors): the whole
           plan/freestyle line, type-swap chips and descriptor word are
           "plan apparatus" (spec's own words) — hidden entirely while the

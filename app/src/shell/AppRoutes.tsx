@@ -25,6 +25,7 @@ import { isComplete } from "../session/engine";
 import { loadRun } from "../session/run";
 import LogSession from "../session/LogSession";
 import Timer from "../session/Timer";
+import JustRow from "../justrow/JustRow";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
@@ -180,6 +181,14 @@ export default function AppRoutes({
             so there's nothing an early exit could leave dangling — showing
             the tab bar costs this route nothing extra. */}
         <Route path="/library/:id/log" element={<LogSession />} />
+        {/* Phase JR PR 2. UNCONDITIONAL, unlike `/justrow/observe` below,
+            which is a dev-only instrument behind `monitorInstrumentEnabled`
+            — this is the shipped feature and every build serves it. The tab
+            bar stays: this door is an ordinary tabbed destination, shaped
+            after the workout detail it behaves like, and the `:has()` rules
+            in index.css hide the bar by themselves once the connected
+            frames mount. */}
+        <Route path="/justrow" element={<JustRow />} />
         <Route path="/news" element={<News />} />
         {/* React Router ranks a static segment over a dynamic one regardless
             of declaration order (same note as /library/import above), so
