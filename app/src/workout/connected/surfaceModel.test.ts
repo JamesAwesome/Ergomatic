@@ -3644,6 +3644,26 @@ describe("the free-row model", () => {
     expect(m.rate.judgement).toBe("within");
   });
 
+  it("derives AVG from the frame's cumulative pair — the stored formula, not the wire's split average", () => {
+    // Independent literals (recurring failure 21): 620 s over 2,480 m is
+    // 500 x 620 / 2480 = 125.0 s = 2:05.0. The frame's own `splitAvgPace`
+    // is set to a DIFFERENT number — the PM5's current five-minute
+    // auto-split average — and must lose: rendering it under the same AVG
+    // label the saved row uses would put two numbers behind one word,
+    // which is the disagreement this phase's spec already killed once
+    // (RC-5's shape, "The AVG SPLIT disagreement").
+    const m = freeRowModel({
+      frame: frame({
+        intervalIndex: null,
+        splitAvgPace: 141,
+        sessionElapsedSeconds: 620,
+        sessionDistanceMeters: 2480,
+      }),
+    });
+    expect(m.avg.absent).toBe(false);
+    expect(m.avg.display).toBe("2:05.0");
+  });
+
   it("carries the flag through, so the panes can branch without re-deriving it", () => {
     expect(freeRowModel().freeRow).toBe(true);
     expect(
