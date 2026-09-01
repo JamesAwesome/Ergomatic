@@ -161,6 +161,53 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
     expect(loadMonitorRun()).toStrictEqual(viaJson(run));
   });
 
+  // THE FREE-ROW RECORD (Phase JR PR 1 Task 3, spec rev 4's stored shape).
+  // `mode` is additive on an existing v2 record with NO `v` bump, which is
+  // only safe because `isMonitorRun` is a positive conjunction carrying no
+  // unknown-key check.
+  //
+  // **NARROWED CLAIM (re-review of 83438df4, finding 3).** This asserts the
+  // SERIALISER round-trips the shape, and nothing more. It does NOT span
+  // the production writer: `saveMonitorRun` has no production callers — see
+  // its own doc comment — and every production write goes through
+  // `handoffStore.commit`. The writer-to-reader gate lives in
+  // `handoffStore.test.ts`'s own free-row case; an earlier version of this
+  // comment claimed that role for this test, which was wrong.
+  it("round-trips a FREE ROW: mode, an empty program and an empty seed all survive", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      mode: "justrow",
+      workoutId: null,
+      program: { intervals: [] },
+      logSeed: { steps: [], paces: {} },
+      actuals: [],
+    };
+    saveMonitorRun(run);
+
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded?.mode).toBe("justrow");
+  });
+
+  // `mode` is a KNOWN field, so a malformed value is REJECTED — distinct
+  // from the unknown-key tolerance this validator keeps on purpose. That
+  // tolerance is about fields this build has never heard of; a field it
+  // declares and then trusts blindly is just an unvalidated field.
+  it("rejects a record whose mode is a value this build does not know", () => {
+    const run = { ...freshMonitorRun(), mode: "corrupt" };
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  // The other direction of the same additive contract: a record written
+  // WITHOUT `mode` — every record that exists today — still loads, and
+  // reads as a programmed run by the absence.
+  it("round-trips a record with no mode at all, which is what every existing record is", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+    expect(loadMonitorRun()?.mode).toBeUndefined();
+  });
+
   it("round-trips a run with recorded interval actuals and a terminated finish", () => {
     const run: MonitorRun = {
       ...freshMonitorRun(),

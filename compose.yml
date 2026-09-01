@@ -45,6 +45,20 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      # Wave E PR1: default-off passthrough (empty on every host that doesn't
+      # set them, which is every stack today — dev, e2e, and prod until the
+      # deliberate env-only cutover). C2_BASE_URL's default mirrors
+      # server/index.ts's own JS-side fallback (`?? "https://log-dev..."`)
+      # rather than an empty string: `??` only substitutes on null/undefined,
+      # never on an empty string, so an unadorned `${C2_BASE_URL:-}` would
+      # hand the server a defined-but-empty value and silently defeat that
+      # fallback — the one var here where "match the empty-default style"
+      # would have shipped a live footgun (a base URL of `""` throws inside
+      # `new URL()` the first time a rower tries to connect, not at boot).
+      C2_BASE_URL: ${C2_BASE_URL:-https://log-dev.concept2.com}
+      C2_CLIENT_ID: ${C2_CLIENT_ID:-}
+      C2_CLIENT_SECRET: ${C2_CLIENT_SECRET:-}
+      C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}
     depends_on:
       postgres:
         condition: service_healthy

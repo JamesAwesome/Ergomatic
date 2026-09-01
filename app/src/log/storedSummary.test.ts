@@ -451,6 +451,54 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     );
   });
 
+  // THE FREE-ROW AVG SPLIT (Phase JR PR 1 Task 2; spec rev 4's F1; James's
+  // sign-off 2026-09-01: the stored column is the authority).
+  //
+  // A Just Row stores `steps: []` — it prescribes nothing, so there is
+  // nothing to fabricate — plus a real work pair and a derived
+  // `avg_split_seconds`. Before this fallback, TIER B1 derived the hero
+  // from `steps` alone, which on `[]` gives `undefined` (`d` never leaves
+  // 0), while the history list falls through to the stored column
+  // (`LogRow.tsx:154`) and shows a figure. Same row, two screens, one
+  // number present and one absent — the defect RC-5 exists to kill, one
+  // screen over. Criterion 7 pins them together.
+  it("TIER B1: falls back to the STORED avg_split_seconds when steps carries no PM5 rows — a free row's hero must not vanish on the detail screen while the history list shows it", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: [],
+        workSeconds: 393.58,
+        workMeters: 1396.6,
+        avgSplitSeconds: 140.9,
+      }),
+    );
+
+    expect(view.heroes.distanceMeters).toBe(1397);
+    expect(view.heroes.timeSeconds).toBeCloseTo(393.58, 5);
+    // The stored column, not a re-derivation: 500 x 393.58 / 1396.6 is
+    // 140.89..., and the assertion is against what was STORED so a change
+    // to either side shows up rather than cancelling out.
+    expect(view.heroes.avgSplitSeconds).toBeCloseTo(140.9, 5);
+    expect(view.heroes.avgSplit).toBe("2:20.9");
+  });
+
+  // The fallback must not OUTRANK a real step-derived average: where steps
+  // carry PM5 actuals, they remain the source, because they are the
+  // population the row actually measured.
+  it("TIER B1: steps still win over the stored column when they carry PM5 actuals", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: EXIT7_STEPS,
+        workSeconds: 150.0,
+        workMeters: 560,
+        avgSplitSeconds: 999,
+      }),
+    );
+
+    expect(view.heroes.avgSplitSeconds).toBeCloseTo(124.0, 5);
+  });
+
   it("TIER B1: the RC-1 work pair NEVER derives a fallback-2 rest clause from its own gap against Σ steps or the stored fused columns — that gap is work (a dropped step), not rest, and attributing it as rest would double-count on top of a hero that is already complete", () => {
     const view = buildStoredSummary(
       baseRow({

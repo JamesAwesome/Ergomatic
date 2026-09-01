@@ -10,7 +10,7 @@
 # record/replay stage A) — because a single gate that only ever grows is
 # easier to trust than several that might drift apart.
 #
-# SIX needles, six different reasons — and every needle is a STRING
+# SEVEN needles, seven different reasons — and every needle is a STRING
 # LITERAL from the source, deliberately never a function/variable
 # identifier: `vite build` minifies the production bundle, which renames
 # every identifier it can (verified empirically this task — grepping for
@@ -86,6 +86,20 @@
 #   checks `pm5-recording` (the runtime module's own content) rather than
 #   `__pm5Recording__` (the always-present property name) — this needle
 #   follows that same precedent rather than inventing a new one.
+# - `C2_CLIENT_SECRET` — Concept2's OAuth client secret's ENV VAR NAME
+#   (`server/index.ts:119`, `process.env.C2_CLIENT_SECRET`), a
+#   server-only value read exclusively there (plus the standalone
+#   cross-connect script, `scripts/c2-crossconnect.ts`, a plain Node file
+#   nothing in `src/`/`domain/` ever imports — same shape as
+#   `PM5_BRIDGE_PORT` above). Unlike the six PM5 needles this one is not
+#   about a dev seam folding at build time: nothing in `src/` is meant to
+#   reference this name at all, so its appearance anywhere in
+#   `dist/client` — a stray import of server code into the client graph,
+#   a copy-pasted env read, a debug log — means the client bundle learned
+#   the name of a secret it must never learn. Named in
+#   `docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`'s
+#   `## Testing` section: "the client secret's env name proven absent
+#   from `dist/`, both directions" (Wave E PR1).
 #
 # Usage: `bash scripts/dist-grep.sh` from `app/`, AFTER `pnpm build` has
 # populated `dist/client`. Exits non-zero (and prints every match) the
@@ -99,7 +113,7 @@ if [ ! -d "$DIST" ]; then
   exit 1
 fi
 
-NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)")
+NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET")
 FAILED=0
 
 for needle in "${NEEDLES[@]}"; do

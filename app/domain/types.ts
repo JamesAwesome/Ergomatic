@@ -15,6 +15,32 @@ export function isWorkoutType(value: unknown): value is WorkoutType {
     (WORKOUT_TYPES as readonly string[]).includes(value)
   );
 }
+/** A FREE ROW: a Just Row, where no workout was chosen and so no intensity
+ *  was prescribed (Phase JR, spec rev 4). One predicate, two rules — the
+ *  server's plan refusal and its empty-`steps` allowance both call this, so
+ *  they cannot drift apart. James's sign-off, 2026-09-01.
+ *
+ *  **BOTH halves are load-bearing; `workoutId === null` alone is WRONG.**
+ *  `LogSession.tsx:780-790` retries a save with `workoutId: null` when the
+ *  server 400s specifically on `workoutId` — the workout was deleted
+ *  between that door's mount and the Save click. That is a legitimate
+ *  plan-advancing session posting a null workout id, and an id-only
+ *  predicate would refuse to advance its plan silently: a 201, and
+ *  `SESSION n OF 84` does not move. It stays distinguishable because
+ *  `resolveWorkoutType` still resolves a type through its `?? "O2"` last
+ *  resort (`LogSession.tsx:475`) — which is why spec rev 4 CUT retiring
+ *  that fallback from PR 1 (antagonist F3). Retiring it would collapse
+ *  these two cases into one and reintroduce the same silent stall.
+ *
+ *  Lives beside `isWorkoutType` for the reason that one gives: a predicate
+ *  with more than one caller belongs in one place, before the copies
+ *  drift. */
+export function isFreeRow(
+  workoutId: string | null,
+  workoutType: string | null,
+): boolean {
+  return workoutId === null && workoutType === null;
+}
 export type Difficulty = "easy" | "medium" | "hard";
 export type PaceBase = "2k" | "6k";
 export type Effort = "max" | "min";

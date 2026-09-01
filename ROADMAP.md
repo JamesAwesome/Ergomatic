@@ -125,7 +125,7 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **D** | The toolbox                 | M    | Nothing                                     |
 | **B** | Backups and telemetry       | M    | Nothing                                     |
 | **C** | The submission surface      | L    | The most visible wave                       |
-| **E** | The Concept2 logbook        | M    | Only if it ships a send control             |
+| **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
 ## Phase JR — Just Row
 
@@ -133,8 +133,15 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 (#246). Six OPEN questions answered outright; OPEN 3's remaining half is
 CLOSED BY RULING, not by evidence (James, 2026-09-01: assume the connection
 stays open indefinitely, and do not close it ourselves — let the link die by
-other means). **PR 1 IS UNBLOCKED**: no new `ended_by` member, no inactivity
-rule, and the walked-away case rides the recovery path that already exists.**
+other means). **PR 1 IS IN REVIEW (#255)**: no new `ended_by` member and no
+inactivity rule. **The walked-away case does NOT ride the existing recovery
+path — that claim was falsified at PR 1's antagonist pass (F2)**: Today's
+"Log it" is gated on a non-null `workoutId` and the row itself on
+`completedAt === null`, so a workout-less run is discard-only in one branch
+and invisible in the other. Opening both gates is PR 2's, and **PR 2 must
+not be split at that boundary** — shipping the surface without the recovery
+would deliberately ship the defect ruling 9's correction found (PM gate,
+2026-09-01).**
 
 This is a deliberate household exception to the stranger-first
 ordering, requested by James on 2026-08-31. Walk record and full decodes:
@@ -660,6 +667,21 @@ while we are in here.
       `stableBoundingBox` flake (`e2e/helpers.ts:89`). #152 landed evidence
       capture for a _third_ flake and produced
       `docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md`. **M**
+- [ ] **A THIRD flake class: integration, under container contention.**
+      `server/routes/isolation.integration.test.ts` failed once with
+      `expected 401 to be 400` on 2026-09-01, and a second run of the same
+      full sweep failed a different test
+      (`server/routes/data.test.ts`'s baseline-delete case) instead. Neither
+      reproduced: the unit project passed 3/3 alone, integration 301/301
+      alone. It appears only when `--project unit --project client --project
+      integration` run together and several Postgres containers start at
+      once, so the working theory is resource starvation rather than test
+      pollution — but nothing has been measured and the auth-boundary
+      symptom (401 where a 400 was expected) deserves better than a shrug.
+      Distinct from the e2e flakes above and from the two unit-project ones
+      further down; filed at the PM gate on #255 rather than left in a PR
+      comment (recurring failure 14). CI runs the projects separately and
+      has stayed green throughout. **S**
 - [ ] **Settle the mutation-testing gate, one way or the other.**
       `docs/TESTING.md` explicitly demoted the full `pnpm mutate` run from an
       unrun phase gate to an on-demand probe; its only baseline is still
@@ -919,6 +941,9 @@ closed with zero Concept2 contact.
 - [ ] **PR1 — the server broker.** `concept2_links` + auth attempts + four
       `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
       `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**
+      All 9 tasks committed on `wave-e-pr1-server-broker` (2026-08-31,
+      including the measured refresh-endpoint corrections); PR #249 open,
+      in James's review.
 - [ ] **PR1.5 — the native link flow**, on device: system-browser consent,
       foreground re-fetch, and (branch B only) the URL scheme + `appUrlOpen`
       handler. Split from PR1 so one reviewer never holds a token-broker
@@ -1172,13 +1197,18 @@ lifecycle spec and the `door` column respectively); RC-13/RC-14 dropped to the
 connected-surface table below with a fix-13-instrument-14 ruling; "Run it
 again" was declined; RC-38 was pulled forward and the rest of Phase PROTO
 held; the axis-quantity question opened the "say which number this is" design
-pass below; AUD-006 got its fix shape. **This table is now empty of live
-questions and only RC-30 remains, already declined.** A new row means a new
+pass below; AUD-006 got its fix shape. **This table now holds two rows, and
+neither is a live question needing James's decision: RC-30 is closed
+(declined at the RC close), and the C2 account injection row already carries
+its ruling** (PR1.5's design gate decides the fix, on device evidence about
+system-browser cookie sharing; the row stays until that PR closes it, since
+it blocks `C2_LINK_ENABLED=1` in the meantime). A new row means a new
 question, not a re-raised one.
 
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today only by `ALLOWED_EMAILS` (household allowlist). **Ruled at PR1.5's design gate, on device evidence about system-browser cookie sharing (the fix depends on it, and PR1.5 is where the change is still cheap); blocks `C2_LINK_ENABLED=1` regardless.** | `2026-08-31-concept2-logbook-design.md` |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
@@ -1331,6 +1361,11 @@ new.
 - **`surfaceModel.ts:1573`'s `if (digits.startsWith("8")) return "AN";`** is the
   English article in "AN 800 M PIECE", not the workout type. A rename trap, not
   a task.
+- **Concept2 wire hardening (PR1 final review, M3)** — the C2 wire calls carry
+  no timeout, and the per-user token refresh holds a `FOR UPDATE` row lock plus
+  a pooled connection across the outbound refresh call (`client.ts`,
+  `stores/concept2.ts`). Follow-up hardening; household-scale acceptable today.
+  (`2026-08-31-concept2-logbook-design.md`)
 
 ## Owed captures and walk items
 

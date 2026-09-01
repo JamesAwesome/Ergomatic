@@ -1,6 +1,7 @@
 # Wave E — the Concept2 logbook (design)
 
-**Date:** 2026-08-31 · **Status:** REV 2, awaiting James's review
+**Date:** 2026-08-31 · **Status:** REV 2, MERGED #244; corrections folded
+2026-09-01
 (rev 1 was revised at the anchor pass — verdict REVISE, three kill-shots;
 the corrections are folded in below and the vetted ground is recorded)
 **Wave:** E (ROADMAP "Wave E — The Concept2 logbook", opened 2026-08-31)
@@ -176,7 +177,13 @@ so we build the RFC 8252 shape:
      "Linked. Return to the app." page. The APP never sees the code; it
      learns the outcome by re-fetching `GET /api/concept2/link` on
      foreground (native `appStateChange` via `@capacitor/app`, already a
-     dependency) or on page focus (web).
+     dependency) or on page focus (web). **SUSPECTED, decision owed
+     (PR1 premise pass, 2026-08-31):** the nonce binds the exchange to
+     `attempt.user_id` alone, so an attacker who mints on their OWN
+     Ergomatic account and delivers the resulting authorize URL to a
+     victim links the VICTIM's Concept2 account under the ATTACKER's
+     user; bounded today only by `ALLOWED_EMAILS` (household allowlist),
+     and James's call is owed before prod cutover.
    - **Branch B (C2 does not echo `state`):** the callback cannot bind a
      user, so the CODE must come back through the app: register a
      private-use scheme (Info.plist), C2 redirects to
@@ -187,9 +194,11 @@ so we build the RFC 8252 shape:
      surface at mint time.
    - Attempt rows expire (15 min) and are single-use; expiry/garbage
      collection is the server's, not a cron.
-4. **Link routes:** `GET /api/concept2/link` → `{linked, weightClass}`
-   (never tokens); `DELETE /api/concept2/link` → deletes the row (unlink
-   is local, V5).
+4. **Link routes:** `GET /api/concept2/link` → `{linked, weightClass,
+   c2UserId}` (never tokens — `c2UserId` is the linked account's numeric
+   id, which PR2's sent-state contract and its View-on-Concept2 link-out
+   both need); `DELETE /api/concept2/link` →
+   deletes the row (unlink is local, V5).
 5. **Upload route** — `POST /api/concept2/results/:logId` (authed,
    ownership-checked). Loads the caller's `session_logs` row, applies the
    eligibility predicate (below), builds the C2 payload from the stored
@@ -200,15 +209,30 @@ so we build the RFC 8252 shape:
    type- and band-checked by the upload route before forwarding, omitted
    when they fail — POSTs with the user's access token (refresh first if
    `expires_at` passed; pair replaced atomically), writes `c2_result_id`
-   + `c2_user_id` on the row only after C2's 2xx, and returns
-   `{resultId}` or a typed failure (`duplicate`, `unlinked`,
-   `not_eligible`, `c2_error`). RF25: this route owns the end-to-end
-   invariant; the named recovery for "C2 accepted, our write failed" is
-   re-send → 409 → a state the UI already has.
-6. **Refresh failure discrimination (anchor F9):** only `invalid_grant`
-   (the OAuth error code for a revoked/expired grant) destroys the link.
-   Network errors, 5xx, timeouts are `c2_error`, retryable, link intact —
-   a DNS blip must not un-link a user and re-ask the one PII question.
+   + `c2_user_id` on the row when C2 ACKNOWLEDGES it — a 2xx, or a 409 whose
+   body names the colliding id — and returns `{resultId}` or a typed failure
+   (`duplicate`, `unlinked`, `not_eligible`, `c2_error`). RF25: this route
+   owns the end-to-end invariant; a 409 IS that acknowledgment, so the
+   recovery for "C2 accepted, our write failed" is re-send → 409 → durably
+   recorded, the same write path as the 2xx branch, never a dead end that
+   leaves the row unsent forever.
+6. **Refresh failure discrimination (measured, `docs/monitor/c2-crossconnect-2026-09/refresh-probe-2026-08-31.md`):**
+   C2 never emitted `invalid_grant` in any measurement; the measured
+   dead-grant shape is `HTTP 400 {"message":"The refresh token is
+   invalid.","status_code":400}` (Probe 0's garbage token and Probe B's
+   genuinely-rotated one are byte-identical). Rule: refresh 400/401 →
+   set `needs_reauth_at` (link and `weight_class` survive; the surface
+   prompts re-consent). No automatic path ever deletes a link on a
+   token-endpoint error — C2's own docs show 400/401 for OUR malformed
+   request and OUR client credentials too, so an automatic delete would
+   destroy links on a server bug or a rotated secret, not only on a
+   genuinely dead grant. Network errors, 5xx, timeouts are `c2_error`,
+   retryable, no flag set — a DNS blip must not un-link a user and re-ask
+   the one PII question. Refresh is serialized per user (`SELECT … FOR
+   UPDATE` on the link row) because rotation invalidates the OLD refresh
+   token IMMEDIATELY (measured, Probe B) — an unserialized second refresh
+   against the same stored token would otherwise race and fail
+   unpredictably.
 7. **Env:** `C2_BASE_URL` (defaults `https://log-dev.concept2.com`),
    `C2_CLIENT_ID`, `C2_CLIENT_SECRET`, and `C2_LINK_ENABLED` (default
    OFF). Real env only. Prod cutover is env + the write-approval check.
@@ -259,19 +283,23 @@ so we build the RFC 8252 shape:
 | `refresh_token` | text, not null | rotates: replaced together with `access_token` on every refresh |
 | `expires_at` | timestamptz, not null | from `expires_in` |
 | `weight_class` | text, enum `H`/`L`, not null | James's ruling: asked at link time only |
+| `needs_reauth_at` | timestamptz, nullable | set when a refresh 400/401s (§Architecture 6); link and `weight_class` survive, the surface prompts re-consent, and a successful relink clears it |
 | `created_at` / `updated_at` | timestamptz | house pattern |
 
 **`concept2_auth_attempts`** — `{nonce (pk), user_id FK, weight_class,
-redirect_kind, created_at}`; single-use, 15-minute expiry, consumed at
-exchange. Exists because the browser hop carries no credential; the nonce
-is the user binding.
+created_at}`; single-use, 15-minute expiry, consumed at exchange. Exists
+because the browser hop carries no credential; the nonce is the user
+binding. No `redirect_kind` column: Branch A is the chosen and measured
+path (PR0's `state` probe), so the redirect URI is one env-derived boot
+constant rather than a per-attempt choice (plan deviation 1).
 
 **`session_logs` additions**, all additive-optional, no default, no
 backfill (house pattern):
 
 - `c2_result_id` integer — C2's own id (their POST 201 example returns
-  `"id": 339`, integer — V11's citation). Written only after a 2xx; a
-  409 leaves it null.
+  `"id": 339`, integer — V11's citation). Written when C2 acknowledges
+  the row: a 2xx, or a 409 whose body names the colliding id (RF25's
+  durable-recovery write).
 - `c2_user_id` integer — WHICH Concept2 account accepted it (anchor F8:
   without this, unlink-then-relink-a-different-account renders "sent"
   for rows the current grant cannot see; the sent state renders only
@@ -310,7 +338,7 @@ shape for the follow-on.
 | C2 field | source | notes |
 | --- | --- | --- |
 | `type` | literal `"rower"` | |
-| `date` | `completed_at` rendered as local wall-clock in `tz`, `yyyy-mm-dd hh:mm:ss` | fallback for rows saved before these columns: `logged_at` rendered in the LINK's capture zone, honestly late by save-delay — stated in PR0's report, and the population question below decides whether legacy rows are worth sending at all |
+| `date` | `completed_at` rendered as local wall-clock in `tz`, `yyyy-mm-dd hh:mm:ss` | fallback for legacy rows (null `completed_at`/`tz`): `logged_at` rendered in the zone the UPLOAD request supplies, which the route PERSISTS onto the row's `tz` column on first use so every later retry reads the same stored zone and renders one stable date (plan deviation 2) — C2's dedup key is second-granular (PR0 probe C), so an unstable zone would file a SECOND C2 row instead of hitting the 409 recovery |
 | `timezone` | `tz` | first-class C2 POST parameter |
 | `distance` | `work_meters` | work-only (V12) |
 | `time` | `round(work_seconds * 10)` | tenths; safe at the doublePrecision boundary (V8: sums of tenths carry ~1e-12 vs a 0.05 margin; a true half-tenth cannot arise from summing tenths) |
@@ -379,7 +407,11 @@ rather than inferred:**
 - **After PR1:** the migration adds only additive-nullable columns and
   two new tables nothing reads; every new route refuses (availability
   matrix) because `C2_LINK_ENABLED` is unset in prod; no client change.
-  Deployed prod behavior: unchanged.
+  Deployed prod behavior, the PM-corrected honest claim (not "unchanged"):
+  gains no capability; `GET /api/logs` rows grow four always-null fields
+  (`c2ResultId`, `c2UserId`, `completedAt`, `tz`); one new unauthenticated
+  route (`GET /api/concept2/callback`) answers 403 dark rather than not
+  existing.
 - **After PR1.5:** native browser plumbing exists but is reachable only
   from a surface that does not render while `available:false`. Deployed
   prod behavior: unchanged.
@@ -445,12 +477,14 @@ safe; the flag, not PR ordering, is the safety mechanism.
 - **The RF24 seam test:** one integration test starts upstream — seeds a
   stored row + link row, drives the upload route against a stubbed C2
   (responses transcribed from PR0's REAL sandbox transcripts), asserts
-  `c2_result_id`/`c2_user_id` land on 2xx and do not land on 409.
+  `c2_result_id`/`c2_user_id` land on a 2xx AND on a 409 whose body names
+  the colliding id (RF25's durable-recovery write).
 - **Mutation probes (RF21/22):** committed-then-probed, one per new
   assertion, reports say what the failure said; one mutation ABOVE the
   seam (forge eligibility at the route boundary).
 - **Link flow:** attempt-row expiry and single-use both asserted by
-  driving the exchange twice; `invalid_grant` vs 5xx discrimination
+  driving the exchange twice; refresh 400/401 (`needs_reauth_at`, link
+  survives) vs 5xx (`c2_error`, retryable, no flag) discrimination
   tested with both stub responses.
 - **`dist:grep`:** the client secret's env name proven absent from
   `dist/`, both directions.

@@ -134,6 +134,63 @@ describe("setReceiptChannel", () => {
   });
 });
 
+// THE FREE-ROW SHAPE, WRITER TO COLD-START READER (Phase JR PR 1 Task 3;
+// re-reviews of 83438df4 and 19740279, finding 3 twice).
+//
+// Two earlier attempts at this gate did not cross the seam:
+//   1. It wrote through `saveMonitorRun`, whose own doc comment says it has
+//      NO PRODUCTION CALLERS — every production write goes through this
+//      store's `commit`/`retryDurable`.
+//   2. It then committed correctly but read back the SAME module instance's
+//      in-memory `current`, and `JSON.parse`d localStorage by hand. Neither
+//      read goes through hydration, so a hydration path that dropped or
+//      rejected `mode` would have left it green.
+//
+// This one commits through the real writer, throws the module away with the
+// durable bytes intact, and recovers the record the way a cold start does.
+// That is the only ordering in which a reader that cannot keep `mode` shows
+// up as a failure.
+describe("commit — the free-row shape, through to a cold start (Phase JR)", () => {
+  it("a Just Row record committed by the real writer survives a fresh module and hydrates whole", async () => {
+    const run = freshRun(t0.toISOString(), {
+      mode: "justrow",
+      workoutId: null,
+      title: "Just Row",
+      program: { intervals: [] },
+      logSeed: { steps: [], paces: {} },
+      actuals: [],
+    });
+
+    expect(store.commit(run.startedAt, null, run)).toStrictEqual({
+      accepted: true,
+      revision: 0,
+      verdict: "saved",
+    });
+
+    // Throw the module away. `freshStore` resets modules and re-imports;
+    // it does NOT touch localStorage, so the durable bytes the committer
+    // just wrote are all the new instance has — exactly a cold start.
+    await freshStore();
+
+    // Render-context reads must still see nothing before hydration: the
+    // free-row shape does not get its own special path in.
+    expect(store.read()).toBeNull();
+
+    // The non-render trigger is what recovers it, and it must come back
+    // WHOLE — `mode` included. An unknown-key-intolerant validator, or one
+    // that rejected an unfamiliar `mode`, fails here and nowhere else.
+    const recovered = store.currentUnretired();
+    expect(recovered).toStrictEqual({
+      sessionKey: run.startedAt,
+      revision: 0,
+      run,
+    });
+    expect(recovered?.run.mode).toBe("justrow");
+    expect(recovered?.run.program.intervals).toStrictEqual([]);
+    expect(recovered?.run.logSeed).toStrictEqual({ steps: [], paces: {} });
+  });
+});
+
 describe("commit — create (expectedRevision: null)", () => {
   it("accepts a create against an empty store at revision 0, verdict saved, and persists durably", () => {
     const run = freshRun(t0.toISOString());

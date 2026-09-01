@@ -6,7 +6,10 @@ import type { OAuthProvider } from "./auth/google.js";
 import type { NativeTokenVerifier } from "./auth/nativeVerify.js";
 import type { SessionStore } from "./auth/sessions.js";
 import type { UserStore } from "./auth/users.js";
+import type { C2Client } from "./concept2/client.js";
+import { createConcept2Router } from "./routes/concept2.js";
 import { createDataRouter, type Stores } from "./routes/data.js";
+import type { Concept2Store } from "./stores/concept2.js";
 
 export interface AppDeps {
   checkDb: () => Promise<boolean>;
@@ -23,6 +26,20 @@ export interface AppDeps {
   // when TEST_AUTH_SECRET is explicitly set (index.ts) — the route it guards
   // is absent entirely (404), not just secret-checked, when this is null.
   testAuthSecret: string | null;
+  // Wave E PR1 Task 7 (task-7-brief.md): OPTIONAL — not `| null` alone but
+  // genuinely optional — so the four pre-existing hand-written `AppDeps`
+  // literals (`testDeps.ts`, `index.ts`, `auth/routes.test.ts`,
+  // `auth/testSignin.test.ts`) stay untouched; every reader treats it as
+  // `deps.concept2 ?? null`. `available` gates BEHAVIOR (every concept2
+  // route re-checks it), never whether the router is MOUNTED — the router
+  // mounts whenever `stores` is also present (it needs `stores.logs`), so
+  // `C2_LINK_ENABLED` unset in production still serves 403/{available:false}
+  // from a live router rather than a 404 from an absent one.
+  concept2?: {
+    available: () => boolean;
+    store: Concept2Store;
+    client: C2Client;
+  } | null;
 }
 
 export function createApp(deps: AppDeps) {
@@ -69,6 +86,30 @@ export function createApp(deps: AppDeps) {
         sessions: deps.sessions,
         users: deps.users,
         testAuthSecret: deps.testAuthSecret,
+      }),
+    );
+  }
+
+  // Controller ruling R1 (task-7-brief.md): mounted BESIDE `createAuthRouter`
+  // (above), BEFORE the `if (deps.stores)` data-router block below —
+  // `routes/data.ts`'s own `router.use("/api", requireUser)` 401s every
+  // /api/* request that enters the data router first, and the concept2
+  // callback route is deliberately unauthenticated (the nonce binds, not a
+  // session; `routes/concept2.ts`'s own comment). Mounting here, after this
+  // file's own `originCheck` above but ahead of the data router, keeps the
+  // authed POST/DELETE concept2 routes under CSRF cover while the callback
+  // never reaches a gate meant for the rest of the API. Requires BOTH
+  // `deps.concept2` and `deps.stores` (the router needs `stores.logs`) —
+  // `deps.concept2 ?? null` per the AppDeps field's own comment.
+  const concept2Deps = deps.concept2 ?? null;
+  if (concept2Deps && deps.stores) {
+    app.use(
+      createConcept2Router({
+        available: concept2Deps.available,
+        store: concept2Deps.store,
+        logs: deps.stores.logs,
+        client: concept2Deps.client,
+        requireUser: requireUser(deps.sessions),
       }),
     );
   }

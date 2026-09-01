@@ -5,6 +5,30 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.31.0 (2026-09-01): range v0.30.0..main = 13 merges, accounted per
+    // RF15 (`git log v0.30.0..origin/main --oneline`, no --merges). Only
+    // #248 is tester-visible; #246's JustRow observer is dev-gated (its
+    // own dist-grep needle proves production absence); #249's Concept2
+    // server broker is server-only and dark behind C2_LINK_ENABLED
+    // (merged after these notes were drafted — James flipped the order —
+    // its client surface arrives with a later Wave E PR and gets its note
+    // then); the other ten are docs/roadmap/spec. Item 2 is the disclosure the PM TRIAD gate
+    // ruled owed "in the rower's words" — the in-flight interval's metres
+    // were ALREADY unrecoverable before this release (IntervalActual is
+    // written at a boundary); the note must not read as a new loss. Item 3
+    // covers the eyebrow suppression James approved at #248's Gate-0
+    // iteration ("Gold approved"), which also changed link-lost and
+    // interrupted arrivals — that wider blast radius is why it is its own
+    // item rather than a clause of item 1.
+    version: "v0.31.0",
+    date: "2026-09-01",
+    items: [
+      "If the erg throws away the workout mid-row, the app now keeps what you rowed instead of losing it. The session closes, every finished interval is saved, and you land on the log screen under THE ERG DROPPED THE WORKOUT. with a count of what survived. Before, the app kept showing a live screen for a workout the erg no longer had, and the row was gone.",
+      "One limit, stated plainly: an interval you were still in the middle of is not saved. On a single-interval piece that reads Nothing kept. The number is still on the monitor; the log screen is ready for you to type it in. That number was never recoverable before either; the app just never told you.",
+      "WORKOUT COMPLETE no longer appears at the top of the log screen for sessions that did not complete: the erg dropped it, the connection was lost, or the session was interrupted. The heading now only says complete when it was.",
+    ],
+  },
+  {
     // v0.30.0 (2026-08-31): range v0.29.0..main = #239 alone, accounted
     // per RF15 (`git log v0.29.0..main --oneline`, no --merges). The
     // hand-off store: one module now owns the connected record on both

@@ -1904,6 +1904,207 @@ describe("GET/POST /api/logs", () => {
     expect(got.body.machineSummary).toBeNull();
   });
 
+  // Wave E PR1 Task 2 (2026-08-31-concept2-logbook-design.md §Stored
+  // shapes, TRIAD): `completedAt`/`tz`, optional/nullable, same
+  // additive-only-between-tags posture as every other field on this
+  // route. `completedAt` is the run's own close stamp (C2's `date` is the
+  // END of the workout — spec anchor K3); `tz` is checked for IANA
+  // membership, not merely "Intl accepts it" (see `tzError`'s own
+  // comment in data.ts).
+  it("accepts a valid completedAt + tz and round-trips both through GET", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      completedAt: "2026-08-30T12:00:00.000Z",
+      tz: "America/New_York",
+    });
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBe(
+      new Date("2026-08-30T12:00:00.000Z").toISOString(),
+    );
+    expect(got.body.tz).toBe("America/New_York");
+  });
+
+  it("POST with neither completedAt nor tz still 201s and stores both null (pre-PR1 body shape, additive-only between tags)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send(validLogBody());
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBeNull();
+    expect(got.body.tz).toBeNull();
+  });
+
+  it.each([
+    ["not-a-date", "not-a-date"],
+    ["a non-ISO human date string", "March 5, 2020"],
+    ["a number, not a string", 12345],
+    // Node's Date.parse NORMALIZES an impossible calendar date instead of
+    // rejecting it — "2026-02-31" (no such day; February has 28) silently
+    // becomes 2026-03-03, and "2026-04-31" (April has 30 days) silently
+    // becomes 2026-05-01. Both are a CLIENT BUG, loud, same 400 as any
+    // other malformed string — distinct from the out-of-band wrong-clock
+    // coercion below, which stays a well-formed, merely implausible
+    // instant.
+    ["an impossible calendar day (Feb 31)", "2026-02-31T12:00:00.000Z"],
+    ["an impossible calendar day (Apr 31)", "2026-04-31T12:00:00.000Z"],
+  ])(
+    "rejects a malformed completedAt (%s) with 400, field named",
+    async (_label, value) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        completedAt: value,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("completedAt");
+      expect(res.body.error).toBe(
+        "completedAt must be an ISO 8601 timestamp string or null",
+      );
+    },
+  );
+
+  // Regression pins for the same fix: real calendar dates that sit
+  // adjacent to the invalid ones above must keep working exactly as
+  // before — the strict check must never reject a genuinely valid date.
+  it("accepts 2026-02-28 (last real day of a non-leap February) with 201", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        completedAt: "2026-02-28T12:00:00.000Z",
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts 2024-02-29 (a real leap day) with 201", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        completedAt: "2024-02-29T12:00:00.000Z",
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts a valid calendar date carrying a non-Z offset (+05:30) with 201", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        completedAt: "2026-06-15T12:00:00.000+05:30",
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  // RF25's shape (a wrong device clock must never cost the rower the
+  // save): a PARSEABLE stamp outside the plausible band is coerced to
+  // null, not rejected — the save still 201s and the upload mapping's own
+  // `loggedAt` fallback covers the missing stamp.
+  it("a parseable completedAt before 2020 is accepted with 201, stored as null (wrong device clock, not a client bug)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      completedAt: "2019-12-31T23:59:59.000Z",
+    });
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBeNull();
+  });
+
+  // `Date.UTC`/the `Date` constructor apply the legacy ECMA-262
+  // two-digit-year special case (years 0-99 map to
+  // 1900-1999) — but ONLY on those two entry points, never on
+  // `setUTCFullYear`. The strict calendar check must build its rebuilt
+  // instant with `setUTCFullYear` for exactly this reason: a real (if
+  // absurd) year-99 date is a genuinely valid calendar date, and it must
+  // fall to the ordinary wrong-clock coercion path (far outside
+  // `COMPLETED_AT_MIN_MS`) rather than being rejected outright as if it
+  // were malformed — the same principle `checkCompletedAt`'s own comment
+  // states for any implausible-but-well-formed instant.
+  it("a real year-0099 completedAt is accepted with 201, stored as null (wrong device clock, not a malformed calendar date)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      completedAt: "0099-06-15T12:00:00.000Z",
+    });
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBeNull();
+  });
+
+  it("a parseable completedAt more than 48h in the future is accepted with 201, stored as null (wrong device clock, not a client bug)", async () => {
+    const app = appFor(makeStores());
+    const farFuture = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      completedAt: farFuture,
+    });
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.completedAt).toBeNull();
+  });
+
+  it("accepts an explicit null completedAt", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        completedAt: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it.each([
+    ["an unknown zone name", "Not/AZone"],
+    ["a raw UTC offset, not a zone name", "+05:00"],
+    // Task 2 review (deferred, fixed at Task 6): "GMT+5" is NOT an
+    // Intl-accepted legacy alias — `Intl.DateTimeFormat` throws
+    // "Invalid time zone specified: GMT+5" on it, same as any other
+    // unrecognized string. This case pins that ordinary rejection, not a
+    // looser-than-IANA acceptance the validator has to narrow.
+    ["a string Intl itself rejects outright, same as an unknown zone", "GMT+5"],
+  ])(
+    "rejects an invalid tz (%s) with 400, field named",
+    async (_label, value) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        tz: value,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("tz");
+      expect(res.body.error).toBe("tz must be an IANA timezone name or null");
+    },
+  );
+
+  it("accepts tz: 'UTC' (the client's resolvedOptions().timeZone can legitimately produce this)", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        tz: "UTC",
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts an explicit null tz", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        tz: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
   it("rejects an invalid pain value with 400, still naming the field, when pain is present", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {

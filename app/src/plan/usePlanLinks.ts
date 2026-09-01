@@ -10,10 +10,12 @@ import type { PlanKey } from "../api/usePlan";
  *  (same `src/`-independent-of-`server/` convention `useRecentLogs.ts`'s
  *  own header states for `RecentLog`).
  *
- *  `workoutType` is a bare `string`, mirroring the column it comes from
- *  (`session_logs.workout_type` is plain `text`, deliberately NOT the
- *  workouts table's enum) — the Plan screen narrows it to a `WorkoutType`
- *  for itself, and falls back to the plan's own type when it cannot.
+ *  `workoutType` is a bare `string | null`, mirroring the column it comes
+ *  from (`session_logs.workout_type` is plain `text`, deliberately NOT the
+ *  workouts table's enum, and NULLABLE since Phase JR PR 1 — a free row
+ *  prescribed no intensity) — the Plan screen narrows it to a
+ *  `WorkoutType` for itself, and falls back to the plan's own type when it
+ *  cannot, which now includes the null case.
  *
  *  `linkedTitle`/`workoutIsGlobal` are the LINKED workout row's own title
  *  and ownership — what the row IS, as opposed to what it displays. They
@@ -27,7 +29,7 @@ import type { PlanKey } from "../api/usePlan";
 export interface PlanLink {
   id: string;
   workoutTitle: string;
-  workoutType: string;
+  workoutType: string | null;
   linkedTitle: string | null;
   workoutIsGlobal: boolean | null;
 }
@@ -78,7 +80,15 @@ function parseLink(
   }
   if (typeof e.id !== "string" || e.id.length === 0) return null;
   if (typeof e.workoutTitle !== "string") return null;
-  if (typeof e.workoutType !== "string") return null;
+  // Phase JR PR 1: NULL is ACCEPTED — a free row (Just Row) prescribed no
+  // intensity, so the column is legitimately absent. Same tri-state
+  // reasoning the `workoutIsGlobal` guard below already records: null is
+  // "unknown", not malformed, and rejecting the entry would blank the
+  // row's name over a field that is allowed to be empty. A
+  // present-but-wrong-shaped value (a number, an object) still fails.
+  if (e.workoutType !== null && typeof e.workoutType !== "string") {
+    return null;
+  }
   // Tri-state, and the three states are genuinely different: true/false
   // are answers, null is "unknown". A MISSING key is also unknown rather
   // than a rejection — that is what an older server sends, and rejecting

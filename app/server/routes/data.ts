@@ -6,6 +6,7 @@ import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { PLANS } from "../../domain/plans.js";
 import { suggest, type LibraryEntry } from "../../domain/suggest.js";
 import {
+  isFreeRow,
   isWorkoutType,
   type Baselines,
   type Difficulty,
@@ -233,6 +234,103 @@ function workRestQuantityError(
 function notesError(value: unknown): string | null {
   if (value !== null && value !== undefined && typeof value !== "string") {
     return "notes must be a string or null";
+  }
+  return null;
+}
+
+// Wave E PR1: completedAt is the run's own close stamp (C2's `date` is the
+// END of the workout — spec anchor K3). Malformed input is a client BUG and
+// 400s; a PARSEABLE stamp outside the plausible band is a wrong device
+// clock, and the save must survive it — the caller coerces to null (the
+// column is nullable and the upload mapping already has a loggedAt
+// fallback). This band is a save-time sanity bound only; C2's own
+// future-date bound applies at UPLOAD time to a different instant.
+// Capturing groups on the wall-clock fields (year/month/day/hour/min/sec):
+// the regex alone only shapes the string; a value like
+// "2026-02-31T12:00:00.000Z" matches it and parses (`Date.parse`
+// NORMALIZES an impossible calendar day into the next month rather than
+// rejecting it), so a strict calendar check runs on these captures below,
+// separate from mere format shape.
+const COMPLETED_AT_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const COMPLETED_AT_MIN_MS = Date.parse("2020-01-01T00:00:00Z");
+const COMPLETED_AT_FUTURE_SKEW_MS = 48 * 3600 * 1000;
+type CompletedAtCheck =
+  { ok: true; value: Date | null } | { ok: false; message: string };
+function checkCompletedAt(
+  value: unknown,
+  now: () => number = Date.now,
+): CompletedAtCheck {
+  if (value === undefined || value === null) return { ok: true, value: null };
+  const match = typeof value === "string" ? COMPLETED_AT_RE.exec(value) : null;
+  if (match === null || Number.isNaN(Date.parse(value as string))) {
+    return {
+      ok: false,
+      message: "completedAt must be an ISO 8601 timestamp string or null",
+    };
+  }
+  // Strict calendar validation: an offset (or "Z") only shifts a wall-clock
+  // instant to UTC — it never changes whether the WALL-CLOCK fields
+  // themselves form a real calendar date, so building the naive UTC
+  // timestamp straight from the literal typed digits (ignoring the offset)
+  // and reading its calendar fields back is offset-agnostic by
+  // construction. An impossible date/time rolls forward (Feb 31 -> Mar 3);
+  // as a deliberate consequence, ISO 8601's `T24:00:00` end-of-day form
+  // rolls to the next day's 00:00:00 and is now REJECTED too — this
+  // route has never accepted it and nothing exercises it. Re-reading the
+  // constructed instant's own UTC fields and comparing them field-by-field
+  // against what was actually typed is what exposes any roll-over,
+  // because the fields come back changed.
+  //
+  // Built with `setUTCFullYear`/`setUTCHours`,
+  // NEVER `Date.UTC`/`new Date(...)` for this — those two entry points
+  // alone carry the legacy ECMA-262 two-digit-year special case (years
+  // 0-99 silently become 1900-1999), which would misreport a genuinely
+  // valid year-0099 date as an invalid calendar (measured: `Date.UTC(99,
+  // 5, 15)` and `Date.UTC(1999, 5, 15)` are identical). `setUTCFullYear`
+  // has no such case — it sets the literal year passed to it.
+  const [, yearStr, monthStr, dayStr, hourStr, minStr, secStr] = match;
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  const hour = Number(hourStr);
+  const minute = Number(minStr);
+  const second = Number(secStr);
+  const rebuilt = new Date(0);
+  rebuilt.setUTCFullYear(year, month - 1, day);
+  rebuilt.setUTCHours(hour, minute, second, 0);
+  if (
+    rebuilt.getUTCFullYear() !== year ||
+    rebuilt.getUTCMonth() !== month - 1 ||
+    rebuilt.getUTCDate() !== day ||
+    rebuilt.getUTCHours() !== hour ||
+    rebuilt.getUTCMinutes() !== minute ||
+    rebuilt.getUTCSeconds() !== second
+  ) {
+    return {
+      ok: false,
+      message: "completedAt must be an ISO 8601 timestamp string or null",
+    };
+  }
+  const ms = Date.parse(value as string);
+  if (ms < COMPLETED_AT_MIN_MS || ms > now() + COMPLETED_AT_FUTURE_SKEW_MS) {
+    return { ok: true, value: null }; // wrong clock: drop the stamp, keep the save
+  }
+  return { ok: true, value: new Date(ms) };
+}
+
+// IANA membership, not "Intl accepts it" — Intl.DateTimeFormat also accepts
+// offsets ("+05:00") and legacy aliases, and C2's `timezone` feeds their
+// date_utc derivation, so only canonical zone names (plus "UTC", which the
+// client's resolvedOptions().timeZone can legitimately produce) pass.
+const IANA_ZONES = new Set<string>([
+  ...Intl.supportedValuesOf("timeZone"),
+  "UTC",
+]);
+export function tzError(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !IANA_ZONES.has(value)) {
+    return "tz must be an IANA timezone name or null";
   }
   return null;
 }
@@ -1288,10 +1386,31 @@ export function createDataRouter({
     // reads a workout's enum-typed `type`; what some third party may have
     // POSTed is not knowable from here). Rows written before this check
     // exist, so readers stay tolerant — see `Plan.tsx`'s `rowedType`.
-    if (!isWorkoutType(body.workoutType)) {
-      badRequest(res, "workoutType must be one of AN|O2|AT|TR", "workoutType");
+    // Phase JR PR 1: `null` joins the union as a legal STORED value — "no
+    // intensity was prescribed", which is true of a free row and true again
+    // of the targetless-workout follow-on. The column becomes NULLABLE in
+    // this PR's own migration; this is the write side of that.
+    //
+    // Admissibility only. Whether a null type also RELAXES a rule (empty
+    // `steps`, the plan refusal) is a separate question keyed on
+    // `isFreeRow`'s pair, not on the type alone — see its doc comment for
+    // why the id half is load-bearing.
+    const typeAbsent =
+      body.workoutType === null || body.workoutType === undefined;
+    if (!typeAbsent && !isWorkoutType(body.workoutType)) {
+      badRequest(
+        res,
+        "workoutType must be one of AN|O2|AT|TR, or null",
+        "workoutType",
+      );
       return;
     }
+    // Re-narrowed rather than cast: the guard above already rejected any
+    // non-member that is not absent, so this ternary's false arm is only
+    // reachable for a genuinely absent type.
+    const workoutType: string | null = isWorkoutType(body.workoutType)
+      ? body.workoutType
+      : null;
     let workoutId: string | null = null;
     if (body.workoutId !== null && body.workoutId !== undefined) {
       if (typeof body.workoutId !== "string" || !UUID_RE.test(body.workoutId)) {
@@ -1494,7 +1613,21 @@ export function createDataRouter({
       badRequest(res, machineSummaryResult.message, "machineSummary");
       return;
     }
-    if (!Array.isArray(body.steps) || body.steps.length === 0) {
+    // Phase JR PR 1: a FREE ROW may store `steps: []` — a record, not a
+    // projection. It prescribes nothing, so there is nothing to fabricate,
+    // and the client renderers absorb the empty array as an ABSENCE (the
+    // summary block self-gates on zero rows, vetted at the antagonist
+    // pass). Every other row still owes at least one step.
+    //
+    // Keyed on the SAME `isFreeRow` pair the plan refusal uses, defined
+    // once in `domain/types.ts` — two rules keyed on one fact and written
+    // twice are two things to keep in step. A row that names a workout but
+    // omits its type is NOT free and still owes steps.
+    if (!Array.isArray(body.steps)) {
+      badRequest(res, "steps must be an array", "steps");
+      return;
+    }
+    if (body.steps.length === 0 && !isFreeRow(workoutId, workoutType)) {
       badRequest(res, "steps must be a non-empty array", "steps");
       return;
     }
@@ -1526,11 +1659,25 @@ export function createDataRouter({
       return;
     }
 
+    // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes,
+    // TRIAD): the client's MonitorRun.completedAt and IANA zone, same
+    // optional/nullable, field-named-400 pattern as every field above.
+    const completedAtCheck = checkCompletedAt(body.completedAt);
+    if (!completedAtCheck.ok) {
+      badRequest(res, completedAtCheck.message, "completedAt");
+      return;
+    }
+    const tzErr = tzError(body.tz);
+    if (tzErr) {
+      badRequest(res, tzErr, "tz");
+      return;
+    }
+
     const baselines = await stores.baselines.get(req.user!.id);
     const { id } = await stores.logs.create(req.user!.id, {
       workoutId,
       workoutTitle: body.workoutTitle,
-      workoutType: body.workoutType,
+      workoutType,
       baselineK2: baselines?.k2Seconds ?? null,
       baselineK6: baselines?.k6Seconds ?? null,
       held: (body.held as HeldResult | null | undefined) ?? null,
@@ -1556,6 +1703,8 @@ export function createDataRouter({
       machineWorkMeters:
         (body.machineWorkMeters as number | null | undefined) ?? null,
       machineSummary: machineSummaryResult.summary,
+      completedAt: completedAtCheck.value,
+      tz: (body.tz as string | null | undefined) ?? null,
     });
     res.status(201).json({ id });
   });

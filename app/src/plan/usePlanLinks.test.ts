@@ -192,7 +192,7 @@ describe("usePlanLinks", () => {
     ["a missing workoutTitle", { workoutTitle: undefined }],
     ["a non-string workoutTitle", { workoutTitle: 42 }],
     ["a missing workoutType", { workoutType: undefined }],
-    ["a non-string workoutType", { workoutType: null }],
+    ["a numeric workoutType", { workoutType: 42 }],
     ["a non-boolean workoutIsGlobal", { workoutIsGlobal: "yes" }],
     ["a non-string linkedTitle", { linkedTitle: 42 }],
     ["a numeric workoutIsGlobal", { workoutIsGlobal: 1 }],
@@ -213,6 +213,33 @@ describe("usePlanLinks", () => {
 
     await waitFor(() => expect(result.current.size).toBe(1));
     expect(result.current.get(2)?.id).toBe("good");
+  });
+
+  // Phase JR PR 1 (spec rev 4's F5). `workout_type` became NULLABLE — a
+  // free row prescribed no intensity — and `parseLink` rejected the WHOLE
+  // entry on a non-string type, which would blank a plan row's name over a
+  // field that is now legitimately absent.
+  //
+  // Exactly the reasoning the `workoutIsGlobal` guard beside it already
+  // records for its own tri-state: null is "unknown", not malformed, and
+  // rejecting the entry costs the row its name.
+  //
+  // Reachable in its own right, NOT a backstop for the plan refusal: the
+  // shared store contract deliberately advances a row that names a workout
+  // and omits its type, and such a row becomes a plan link carrying a null
+  // `workoutType`. (An earlier version of this comment said it was
+  // reachable "only if the refusal fails to hold"; the truth table
+  // disproves that.)
+  it("KEEPS an entry whose workoutType is null — absent, not malformed", async () => {
+    mockApiReturning({
+      links: [wireLink({ planIndex: 3, id: "free", workoutType: null })],
+    });
+    const { usePlanLinks } = await import("./usePlanLinks");
+    const { result } = renderHook(() => usePlanLinks("sprint"));
+
+    await waitFor(() => expect(result.current.size).toBe(1));
+    expect(result.current.get(3)?.id).toBe("free");
+    expect(result.current.get(3)?.workoutType).toBeNull();
   });
 
   it.each([

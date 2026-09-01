@@ -669,6 +669,92 @@ describe("domain stores against real Postgres", () => {
       });
     });
 
+    // THE FREE-ROW PREDICATE, against real Postgres (Phase JR PR 1 Task 1;
+    // spec rev 4, James's sign-off 2026-09-01). Three rows, and the second
+    // and third are the regressions — the first is the easy one.
+    //
+    // The predicate is the PAIR (`workoutId` AND `workoutType` both null),
+    // never `workoutId` alone. Row 2 is why: `LogSession.tsx:780-790`
+    // retries a save with `workoutId: null` when the server 400s
+    // specifically on `workoutId` (the workout was deleted between that
+    // door's mount and the Save click). That is a legitimate
+    // plan-advancing session posting a null workout id, and an id-only
+    // predicate would stall its plan silently — a 201, and SESSION n OF 84
+    // does not move.
+    it("a FREE ROW (both null) never advances the plan, even asking to", async () => {
+      const logs = createLogsStore(db);
+      const planState = createPlanStateStore(db);
+      const users = createUserStore(db);
+      const fresh = await users.createUser({
+        googleSub: "jr-free-row",
+        email: "jrfreerow@x.com",
+        name: "JR",
+      });
+      await planState.set(fresh.id, "sprint");
+
+      const { id } = await logs.create(
+        fresh.id,
+        logInput({ workoutId: null, workoutType: null, advancesPlan: true }),
+      );
+
+      expect(await planState.get(fresh.id)).toStrictEqual({
+        planKey: "sprint",
+        doneN: 0,
+      });
+      const list = await logs.list(fresh.id, 10);
+      const stored = list.find((row) => row.id === id);
+      expect(stored?.planKey ?? null).toBeNull();
+    });
+
+    it("a null workout id that still carries a type DOES advance (the deleted-workout retry)", async () => {
+      const logs = createLogsStore(db);
+      const planState = createPlanStateStore(db);
+      const users = createUserStore(db);
+      const fresh = await users.createUser({
+        googleSub: "jr-deleted-workout-retry",
+        email: "jrdeleted@x.com",
+        name: "JR",
+      });
+      await planState.set(fresh.id, "sprint");
+
+      await logs.create(
+        fresh.id,
+        logInput({ workoutId: null, workoutType: "O2", advancesPlan: true }),
+      );
+
+      expect(await planState.get(fresh.id)).toStrictEqual({
+        planKey: "sprint",
+        doneN: 1,
+      });
+    });
+
+    it("a row naming a workout with no type DOES advance (not a free row)", async () => {
+      const logs = createLogsStore(db);
+      const planState = createPlanStateStore(db);
+      const users = createUserStore(db);
+      const workoutsStore = createWorkoutsStore(db);
+      const fresh = await users.createUser({
+        googleSub: "jr-named-no-type",
+        email: "jrnamed@x.com",
+        name: "JR",
+      });
+      const w = await workoutsStore.create(
+        fresh.id,
+        workoutInput({ title: "JR named" }),
+      );
+      await planState.set(fresh.id, "sprint");
+
+      await logs.create(
+        fresh.id,
+        logInput({ workoutId: w.id, workoutType: null, advancesPlan: true }),
+      );
+
+      expect(await planState.get(fresh.id)).toStrictEqual({
+        planKey: "sprint",
+        doneN: 1,
+      });
+    });
+
     it("list respects limit and is invisible across users", async () => {
       const logs = createLogsStore(db);
       const users = createUserStore(db);
@@ -746,6 +832,128 @@ describe("domain stores against real Postgres", () => {
         name: "LDC",
       });
       expect(await logs.lastDonePerWorkout(other.id)).toStrictEqual({});
+    });
+
+    // Wave E PR1 Task 6 (task-6-brief.md): real-Postgres proof of the
+    // owner-scoped UPDATE and its row-count return — the router's own unit
+    // suite (concept2.test.ts) only ever exercises the FAKE for this
+    // method.
+    describe("recordC2Result", () => {
+      it("writes both columns and returns true for the owning user's row", async () => {
+        const logs = createLogsStore(db);
+        const users = createUserStore(db);
+        const fresh = await users.createUser({
+          googleSub: "log-c2-result-owner",
+          email: "c2resultowner@x.com",
+          name: "LCO",
+        });
+        const { id } = await logs.create(fresh.id, logInput());
+
+        const wrote = await logs.recordC2Result(fresh.id, id, 85557, 2211);
+        expect(wrote).toBe(true);
+
+        const row = await logs.get(fresh.id, id);
+        expect(row?.c2ResultId).toBe(85557);
+        expect(row?.c2UserId).toBe(2211);
+      });
+
+      it("returns false and writes nothing for a foreign user's id (no existence leak)", async () => {
+        const logs = createLogsStore(db);
+        const users = createUserStore(db);
+        const owner = await users.createUser({
+          googleSub: "log-c2-result-real-owner",
+          email: "c2resultrealowner@x.com",
+          name: "LCRO",
+        });
+        const stranger = await users.createUser({
+          googleSub: "log-c2-result-stranger",
+          email: "c2resultstranger@x.com",
+          name: "LCS",
+        });
+        const { id } = await logs.create(owner.id, logInput());
+
+        const wrote = await logs.recordC2Result(stranger.id, id, 1, 1);
+        expect(wrote).toBe(false);
+
+        const row = await logs.get(owner.id, id);
+        expect(row?.c2ResultId).toBeNull();
+        expect(row?.c2UserId).toBeNull();
+      });
+    });
+
+    // Wave E PR1 Task 6, plan deviation 2: the `tz IS NULL` guard rides IN
+    // the WHERE clause (stores/logs.ts's own comment) — proven here against
+    // real Postgres because the router's own `row.tz === null` pre-check
+    // makes a SECOND recordTz call for the same row unreachable through the
+    // router itself (a sequential router-level retry never re-enters this
+    // branch once the first call has stored a zone), so only a DIRECT
+    // second call against the store can exercise the guard at all — the
+    // same reasoning this task's mutation probe against the fake surfaced.
+    describe("recordTz", () => {
+      it("writes tz on a null column", async () => {
+        const logs = createLogsStore(db);
+        const users = createUserStore(db);
+        const fresh = await users.createUser({
+          googleSub: "log-tz-null",
+          email: "logtznull@x.com",
+          name: "LTN",
+        });
+        const { id } = await logs.create(fresh.id, logInput());
+
+        // `recordTz` returns the EFFECTIVE stored zone, never `void` —
+        // asserted here, not just via a follow-up `get()`.
+        const returned = await logs.recordTz(
+          fresh.id,
+          id,
+          "America/Los_Angeles",
+        );
+        expect(returned).toBe("America/Los_Angeles");
+        const row = await logs.get(fresh.id, id);
+        expect(row?.tz).toBe("America/Los_Angeles");
+      });
+
+      it("a second call for the same row is a no-op — first write wins, and its return value proves it", async () => {
+        const logs = createLogsStore(db);
+        const users = createUserStore(db);
+        const fresh = await users.createUser({
+          googleSub: "log-tz-guard",
+          email: "logtzguard@x.com",
+          name: "LTG",
+        });
+        const { id } = await logs.create(fresh.id, logInput());
+
+        const first = await logs.recordTz(fresh.id, id, "America/Los_Angeles");
+        expect(first).toBe("America/Los_Angeles");
+        // The SECOND call's own return value must report the zone that
+        // actually won (the first one), never echo back its
+        // own "UTC" argument as if it had written it — this is the exact
+        // property a concurrent writer needs to build the SAME payload.
+        const second = await logs.recordTz(fresh.id, id, "UTC");
+        expect(second).toBe("America/Los_Angeles");
+
+        const row = await logs.get(fresh.id, id);
+        expect(row?.tz).toBe("America/Los_Angeles");
+      });
+
+      it("never overwrites a tz the row was CREATED with, and reports THAT zone back", async () => {
+        const logs = createLogsStore(db);
+        const users = createUserStore(db);
+        const fresh = await users.createUser({
+          googleSub: "log-tz-created",
+          email: "logtzcreated@x.com",
+          name: "LTC",
+        });
+        const { id } = await logs.create(
+          fresh.id,
+          logInput({ tz: "America/New_York" }),
+        );
+
+        const returned = await logs.recordTz(fresh.id, id, "UTC");
+        expect(returned).toBe("America/New_York");
+
+        const row = await logs.get(fresh.id, id);
+        expect(row?.tz).toBe("America/New_York");
+      });
     });
   });
 

@@ -509,6 +509,54 @@ export function describeStoreContracts(
         });
       });
 
+      // THE FREE-ROW PREDICATE'S TRUTH TABLE (Phase JR PR 1, review of
+      // 29e00561). Lives HERE rather than in either implementation's own
+      // suite because that is the only thing that can catch the fake and
+      // the real store disagreeing — which is exactly what happened: the
+      // fake checked `advancesPlan` alone and advanced a free row while
+      // Postgres refused it, so the same input moved `doneN` in one and
+      // not the other.
+      //
+      // The pair matters, and row 2 is why. `LogSession.tsx:780-790`
+      // retries a save with `workoutId: null` when the server 400s
+      // specifically on `workoutId` (the workout was deleted between that
+      // door's mount and the Save click). That is a legitimate
+      // plan-advancing session posting a null id, and a predicate keyed on
+      // the id alone would stall its plan silently.
+      it.each([
+        ["a FREE ROW (both null)", null, null, 0],
+        ["a null id that still carries a type", null, "O2", 1],
+        ["a named workout with no type", "id", null, 1],
+        ["an ordinary row", "id", "O2", 1],
+      ])(
+        "create: %s asking to advance leaves done_n at %s",
+        async (_label, id, type, expected) => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const workoutId =
+            id === null
+              ? null
+              : (
+                  await stores.workouts.create(
+                    userId,
+                    workoutInput({ title: "JR predicate" }),
+                  )
+                ).id;
+
+          await stores.logs.create(
+            userId,
+            logInput({
+              workoutId,
+              workoutType: type,
+              advancesPlan: true,
+            }),
+          );
+
+          const state = await stores.planState.get(userId);
+          expect(state?.doneN ?? 0).toBe(expected);
+        },
+      );
+
       // Task 3: `advancesPlan: false` skips ONLY the plan_state upsert —
       // the log row itself is still created either way (proved via
       // `list`, not just the return value, since a failed insert would
@@ -956,6 +1004,38 @@ export function describeStoreContracts(
           machineWorkSeconds: 0,
           machineWorkMeters: 0,
         });
+      });
+
+      // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes):
+      // completedAt/tz, same round-trip shape as RC-2/RC-3's machine
+      // pair above — both scalars, so both stay IN the list projection
+      // (no jsonb blob to exclude here, unlike machineSummary).
+      it("create round-trips completedAt/tz exactly", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const completedAt = new Date("2026-08-30T12:00:00.000Z");
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({ completedAt, tz: "America/New_York" }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row?.completedAt?.getTime()).toBe(completedAt.getTime());
+        expect(row).toMatchObject({ tz: "America/New_York" });
+        const getRow = await stores.logs.get(userId, id);
+        expect(getRow?.completedAt?.getTime()).toBe(completedAt.getTime());
+        expect(getRow).toMatchObject({ tz: "America/New_York" });
+      });
+
+      it("create with no completedAt/tz posted stores both null (pre-PR2 body shape)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(userId, logInput());
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({ completedAt: null, tz: null });
+        const getRow = await stores.logs.get(userId, id);
+        expect(getRow).toMatchObject({ completedAt: null, tz: null });
       });
 
       // From-the-log spec (2026-08-18), §3: the list projection explicitly
