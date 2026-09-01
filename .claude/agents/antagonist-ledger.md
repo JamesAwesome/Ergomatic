@@ -4694,3 +4694,100 @@ precedent. The `endedBy`/`deviceName` idioms.
   `+05:00`, `utc`, `US/Pacific`, `EST5EDT`; `Date.parse` accepts
   `"March 5, 2020"` and `"2026"`. Both error messages claimed stricter
   contracts than the code enforced.
+
+## Phase JR, PR 2 plan — delta pass (2026-09-01, worktree `just-row-pr2` @ e77dda0f)
+
+Verdict REVISE. Anchor + PR 1 ground inherited; only the shared-hook architecture
+ruling, the plan's three read-derived hazards, Task 7's RF24 claim and the AVG
+SPLIT oracle were attacked.
+
+- **"`toProgramIndex` returns null for an empty program, so today every frame of a
+  free row writes a `divergence` entry."** False, and the falsifier is nine lines
+  from the cited line. `driver.ts:2548` is `if (p && intervalActive && intervalIndex
+  === null)` — already gated on an armed program — and its own comment says why:
+  *"Gated on a program actually being armed: with none, `programLength` is 0 and
+  `toProgramIndex` always returns `null` by its own contract — informative about
+  nothing."* A free row's `armedProgram()` is null (`:1774`), so the escalation never
+  runs. A whole task existed to fix nothing.
+  **Technique: when a plan derives a hazard from a pure function's contract, do not
+  stop at the function — read the CALL SITE's guard. A contract that returns a
+  sentinel is usually already handled by whoever asked for it; the defect, if any,
+  lives in the caller's `if`, not the callee's `return`.**
+
+- **"Everything downstream of `ready` is inherited unchanged."** Half true, and the
+  false half is the machine-facing half. `phase: "ready"` and the driver's
+  `activeRun` are opened by DIFFERENT things — `beginFreeRow()` moves the hook,
+  `program()` alone opens `activeRun` — so a free row silently loses three
+  subsystems at once: `workoutComplete`/`terminated` never emit
+  (`driver.ts:2579` `if (!runIsOpen()) … return`), the machine's own 0x0039 is
+  never filed (`:2974-2981`, `if (run === null) … "nothing filed"; return`), and
+  auto-split boundaries take the out-of-run branch (`:4438`) — where the hook,
+  now holding an open record, files them anyway.
+  **Technique: when a plan says "we reach state X by a new door and inherit
+  everything downstream", ask what ELSE the OLD door set on the way through.
+  Grep the layer below for the field the old door wrote (`activeRun`) and list
+  its guards. A phase flip is one variable; a door is a sequence.**
+
+- **"Only the entry door and the log door are new components; the ended surface is
+  shared."** True, and that is the defect. `ConnectedSurface.tsx:397`'s ended block
+  returns at `:515`, BEFORE `buildSurfaceModel` is called at `:575` — so no
+  `SurfaceModel` branch can reach it. It renders `kept =
+  measuredIntervalCount(session.actuals)`, and `readingOfIntervalActual`
+  (`summaryModel.ts:639`) never reads `index`, so a free row's population is the
+  PM5's auto-splits: **"No numbers to keep."** under 5:00 (zero splits) and
+  **"2 intervals kept."** over it. The block's own comment (`:405-414`) documents
+  the identical defect being fixed once already.
+  **Technique: for any screen a new mode inherits, find where the render function
+  RETURNS EARLY. A model-shaped fix cannot reach anything above the model's own
+  construction, and early-return frames are exactly the ones nobody re-reads.**
+
+- **A hold whose exit condition the new mode cannot produce.** `openBurstHold`
+  (`useMonitorSession.ts:2268-2282`) opens on `endedBy: "rower"` +
+  `summaryTotals === undefined`; the free row can never obtain `summaryTotals`
+  (above), so the only exit is the 2000 ms backstop — two seconds of *"Getting the
+  monitor's own numbers."* for a number that is structurally unobtainable.
+  **Technique: for every timeout-backed wait a new mode inherits, name the EVENT
+  that satisfies it and prove that event can still be produced. A hold whose
+  satisfier is unreachable is not a delay, it is a screen making a promise.**
+
+- **A plan can pin a rendered number with no persisted source.** The plan pins
+  `Just Row: 6:33 · 1,396 m`, derives `AVG SPLIT = 500 × time ÷ distance`, and tells
+  a task to assert all three — while `MonitorRun`'s complete field list
+  (`monitorRun.ts:114-183`) carries no cumulative elapsed/distance pair at all
+  (`actuals` empty under 5:00, `summaryTotals` unwritable).
+  **Technique: read the persisted TYPE's field list end to end before believing any
+  plan that renders a number from a stored record. "The frame has it" is not
+  "the record has it", and the gap is invisible in every test that seeds the record
+  by hand.**
+  **Controller's follow-up (2026-09-01), since the pass left it open: `series` is
+  the only remaining candidate and it is NOT a sound one as-is. `Sample` carries
+  `t`/`d` (`seriesRecorder.ts:219-224`), so the tail LOOKS like the pair — but the
+  trace is whole-second-bucketed, capped by `SERIES_SAMPLE_CAP`, and carries its own
+  `truncated?: true` (`:237-240`). On a truncated trace the last sample is not the
+  row's end, so reading the headline totals off it is wrong precisely on the long
+  rows the phase exists to support.**
+
+- **Mirror check.** No mirror in the unit test (independent literals — correct). One
+  in the replay test: asserting avg split as `500 × rendered-time ÷ rendered-distance`
+  can never go red. The capture carries a real oracle nobody used — 0x0039's own
+  average-pace FIELD (140.9 s vs our 140.97), decoded from a different wire field
+  than elapsed/distance.
+  **Technique (extends RF11's amendment): a same-quantity comparison across two
+  DECODES of the same two fields is a transcription check; only a comparison against
+  the machine's own DERIVED field is a definition check. Say which one a walk bought
+  you before spending it as evidence.**
+
+- **Attacked and NOT broken (PR 2's vetted ground):** the detection-rule equivalence
+  (spec `:408-410` vs `useMonitorSession.ts:2356-2359` — same three terms, same
+  seam, with an undisclosed 5-frame fallback disjunct that cannot false-trip at
+  `workoutState 0`); `phase: "ready"` having exactly one write site (`:2864`); the
+  staged-retire hazard exactly as derived (the `armed` handler's retire at
+  `:2160-2164` is unreachable, `createMonitorRun-defense` at `:2453-2461` is the sole
+  executor, and the same-key adoption branch is what stops it self-tombstoning);
+  Today's two recovery gates being the only two; `createMonitorRun`'s unconditional
+  `clearRun()` being authorized by `connectGuardStage`; the new-log-door
+  justification (`LogSession.tsx:386`, the `workoutId` mismatch return);
+  `program-dropped` being unreachable because `armedWatch` only evaluates when
+  `armedProgram() !== null` (`driver.ts:4946-4948`); and Task 7 being genuinely
+  upstream of the producer — with the caveat that it gates ONE reader while Today's
+  own mount snapshot is the other.
