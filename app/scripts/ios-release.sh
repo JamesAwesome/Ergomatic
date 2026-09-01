@@ -45,6 +45,31 @@ if [ -n "${VITE_ENABLE_C2_LINK_PROBE:-}" ]; then
 fi
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Round 7 review (P1, finding 1b): the shell-var check above only sees a
+# flag set as a plain shell export. Vite ALSO loads env files, PRIMARY
+# (https://vite.dev/guide/env-and-mode, quoted verbatim): "Vite uses
+# dotenv to load additional environment variables from the following
+# files in your environment directory: .env (loaded in all cases),
+# .env.local (loaded in all cases, ignored by git), .env.[mode] (only
+# loaded in specified mode), .env.[mode].local (only loaded in specified
+# mode, ignored by git)" — `vite build` with no `--mode` flag (exactly
+# what `pnpm ios:build` runs) defaults to mode "production", so the four
+# files that matter here are `.env`, `.env.local`, `.env.production`,
+# `.env.production.local`. A flag set in any of those is invisible to the
+# shell-var check above. This is a COURTESY early check, not the real
+# gate — a cheap grep can miss a value split across lines, an escaped
+# quote, or a name typo'd past it. The real, structural gate is the
+# dist:grep-after-build step below, which checks the ARTIFACT itself
+# rather than trying to enumerate every input path that could produce it.
+for envfile in .env .env.local .env.production .env.production.local; do
+  if [ -f "$APP_DIR/$envfile" ] &&
+    grep -qE '^VITE_ENABLE_C2_LINK_PROBE=.+' "$APP_DIR/$envfile" 2>/dev/null; then
+    echo "ios-release: refusing — $envfile defines VITE_ENABLE_C2_LINK_PROBE — remove it (probe card must never ship via ios:release)" >&2
+    exit 1
+  fi
+done
+
 PLIST="$APP_DIR/ios/App/App/Info.plist"
 
 # HEAD must be the tagged release commit: the build stamp derives from the
@@ -71,6 +96,22 @@ fi
 
 echo "ios-release: building web bundle + cap sync ($describe)"
 (cd "$APP_DIR" && pnpm ios:build)
+
+# Round 7 review (P1, finding 1b): THE ARTIFACT IS THE GATE. Whatever path
+# a dev-only flag took to reach this build — a shell export, one of the
+# four env files the guard above greps, or something neither this script
+# nor its reviewer thought of — the built bundle either carries the
+# probe card's literal or it doesn't. `pnpm dist:grep`'s eighth needle
+# ("C2 link probe (dev harness)") already exists for exactly this;
+# running it here, BEFORE archiving, closes the whole class of bypass by
+# construction rather than by enumeration. Placed after `pnpm ios:build`
+# (the artifact has to exist to be checked) and before `mktemp`/archiving
+# (nothing about a real release should happen once this fails).
+echo "ios-release: verifying the built bundle carries no dev-only tooling (dist:grep)"
+if ! (cd "$APP_DIR" && pnpm dist:grep); then
+  echo "ios-release: refusing to archive — dist:grep found dev-only tooling in the built bundle (see above)" >&2
+  exit 1
+fi
 
 WORK="$(mktemp -d /tmp/ios-release.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT

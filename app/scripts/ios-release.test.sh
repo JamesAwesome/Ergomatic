@@ -20,6 +20,16 @@
 # of the real repo state, stopping the script at the tag check
 # deterministically — see each case's own comment for the verified
 # failure text.
+#
+# **Round 7 (P1, finding 1a):** `GIT_DIR=/nonexistent` now also covers
+# case 1 — defense in depth: case 1 already stops at the release-flag
+# guard itself and never reaches `git describe`, but if that guard were
+# ever broken (exactly what the guard-deletion mutation probes), case 1's
+# OWN invocation should be no more exposed than 2/3 already are. Also
+# adds isolated coverage for the round 7 `.env`-file guard (finding 1b's
+# early check) and a STRUCTURAL check for the dist:grep-after-build gate
+# (finding 1b's real, artifact-level check) — see that section's own
+# comment for why it is structural rather than a live run.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,7 +45,8 @@ check() { # name, condition-result
 }
 
 # 1. Flag set: refuses immediately, names the flag and the reason.
-out=$(VITE_ENABLE_C2_LINK_PROBE=1 bash "$HERE/ios-release.sh" 2>&1)
+#    GIT_DIR=/nonexistent added round 7 (defense in depth — see header).
+out=$(VITE_ENABLE_C2_LINK_PROBE=1 GIT_DIR=/nonexistent bash "$HERE/ios-release.sh" 2>&1)
 rc=$?
 [ "$rc" -eq 1 ]
 check "flag set: exits 1 before doing anything else" $?
@@ -75,6 +86,74 @@ check "flag set empty: the guard does not fire" $?
 out=$(env -u VITE_ENABLE_C2_LINK_PROBE GIT_DIR=/nonexistent bash "$HERE/ios-release.sh" 2>&1)
 ! grep -q 'VITE_ENABLE_C2_LINK_PROBE is set' <<<"$out"
 check "flag unset: the guard does not fire" $?
+
+# 4-7. Round 7 (P1, finding 1b): the .env-file guard. `APP_DIR` inside
+# ios-release.sh is derived from the SCRIPT'S OWN location
+# (`dirname "${BASH_SOURCE[0]}")/..`), never the caller's cwd — so testing
+# this WITHOUT ever writing an `.env*` file into the real `app/` checkout
+# means copying the script into its own throwaway `scripts/../` structure
+# first. Each case writes exactly one of Vite's four production-mode env
+# files (vite.dev/guide/env-and-mode, quoted in ios-release.sh's own
+# comment) with the flag defined, and expects the SAME refusal shape the
+# shell-var guard uses, naming the specific file. No `.git` exists in
+# these throwaway dirs, so even a case that somehow got PAST the env
+# guard would only ever reach `git describe`'s own natural "not a git
+# repository" failure — never real tooling.
+for envfile in .env .env.local .env.production .env.production.local; do
+  SIM="$(mktemp -d)"
+  mkdir -p "$SIM/scripts"
+  cp "$HERE/ios-release.sh" "$SIM/scripts/ios-release.sh"
+  echo "VITE_ENABLE_C2_LINK_PROBE=1" >"$SIM/$envfile"
+  out=$(bash "$SIM/scripts/ios-release.sh" 2>&1)
+  rc=$?
+  rm -rf "$SIM"
+  [ "$rc" -eq 1 ]
+  check "$envfile defines the flag: exits 1" $?
+  grep -q "$envfile defines VITE_ENABLE_C2_LINK_PROBE" <<<"$out"
+  check "$envfile defines the flag: refusal names this exact file" $?
+done
+
+# 8. Negative control: an env file present but the flag genuinely absent
+#    from it must NOT trigger the env guard's message (proves the grep is
+#    conditional on the file's CONTENT, not merely its existence).
+SIM="$(mktemp -d)"
+mkdir -p "$SIM/scripts"
+cp "$HERE/ios-release.sh" "$SIM/scripts/ios-release.sh"
+echo "SOME_OTHER_VAR=1" >"$SIM/.env"
+out=$(bash "$SIM/scripts/ios-release.sh" 2>&1)
+rm -rf "$SIM"
+! grep -q 'defines VITE_ENABLE_C2_LINK_PROBE' <<<"$out"
+check ".env present without the flag: the env guard does not fire" $?
+
+# 9. STRUCTURAL check, finding 1b's real gate (the dist:grep-after-build
+# step). Honestly labeled: this is a SOURCE-ORDERING proof, not a runtime
+# one — actually exercising it means a real `pnpm ios:build` (a full vite
+# build + `npx cap sync ios`) followed by a real `xcodebuild archive` if
+# it were to fail open, which needs a macOS+Xcode toolchain this repo's
+# own `scripts` CI job (ubuntu-latest) does not have, and which this
+# session verified MANUALLY instead this round (PATH-stubbed
+# xcodebuild/agvtool, a real temp git tag, guard-deletion mutation applied
+# and reverted — see the commit message / task report for that
+# evidence). What this DOES prove, cheaply and on every CI run: an ACTUAL
+# INVOCATION of `pnpm dist:grep` exists in the script's source, textually
+# AFTER the `pnpm ios:build` invocation and BEFORE the `xcodebuild ...
+# archive` invocation.
+#
+# CODE lines only (`grep -v '^\s*#'`) — a mutation probe caught this test
+# passing vacuously on its first draft: deleting the real `if ! (cd
+# "$APP_DIR" && pnpm dist:grep); then ... fi` block still left a comment
+# mentioning "`pnpm dist:grep`'s eighth needle" nearby, and a naive
+# `grep -n 'pnpm dist:grep'` matched THAT instead, reporting "found" with
+# the gate gone. Stripping comment-only lines before searching, and
+# anchoring on the actual subshell-call shape (not just the bare string),
+# fixed it — see the mutation record below.
+code_only=$(grep -v '^[[:space:]]*#' "$HERE/ios-release.sh")
+build_line=$(grep -n 'pnpm ios:build' <<<"$code_only" | head -1 | cut -d: -f1)
+gate_line=$(grep -n 'cd "\$APP_DIR" && pnpm dist:grep' <<<"$code_only" | head -1 | cut -d: -f1)
+archive_line=$(grep -n -- '-archivePath .* archive ' <<<"$code_only" | head -1 | cut -d: -f1)
+[ -n "$build_line" ] && [ -n "$gate_line" ] && [ -n "$archive_line" ] &&
+  [ "$gate_line" -gt "$build_line" ] && [ "$archive_line" -gt "$gate_line" ]
+check "dist:grep is actually INVOKED (in source order) between ios:build and archive" $?
 
 if [ "$fails" -gt 0 ]; then
   echo "ios-release.test.sh: $fails failure(s)"
