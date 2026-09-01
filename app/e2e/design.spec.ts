@@ -4189,7 +4189,11 @@ function designSweepSessionLogRing(n: number): string {
 // tap-target/axe pass never exercising `.diag-copy`, the only interactive
 // element this screen has beyond the back link) — two entries, matching
 // `sessionLogHistory.ts`'s own single-key array shape (M-6, final
-// whole-branch review item 4): newest first.
+// whole-branch review item 4; `sessionId` added at review round 2, items
+// 1+2 — an entry missing it fails `isStoredEntry`'s shape check and is
+// dropped as corrupt, same as any other malformed entry, so this fixture
+// must carry one per entry or the screen renders its EMPTY state instead):
+// newest first.
 test.describe("diagnostics: monitor logs screen", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {
@@ -4201,8 +4205,13 @@ test.describe("diagnostics: monitor logs screen", () => {
     await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
       key: "ergomatic:session-log-history",
       value: JSON.stringify([
-        { savedAt: now.toISOString(), exported: designSweepSessionLogRing(37) },
         {
+          sessionId: "design-sweep-newest",
+          savedAt: now.toISOString(),
+          exported: designSweepSessionLogRing(37),
+        },
+        {
+          sessionId: "design-sweep-oldest",
           savedAt: yesterday.toISOString(),
           exported: designSweepSessionLogRing(9),
         },

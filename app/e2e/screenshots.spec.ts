@@ -1907,10 +1907,14 @@ function sessionLogRing(n: number): string {
 
 async function seedSessionLogHistory(
   page: Page,
-  entries: { savedAt: string; exported: string }[],
+  entries: { sessionId: string; savedAt: string; exported: string }[],
 ): Promise<void> {
-  // Newest first, matching `sessionLogHistory.ts`'s own `pushSessionLog`
-  // ordering — the caller passes entries in that order already.
+  // Newest first, matching `sessionLogHistory.ts`'s own `upsertSessionLog`
+  // ordering — the caller passes entries in that order already. `sessionId`
+  // is required (review round 2, items 1+2): an entry missing it fails
+  // `isStoredEntry`'s shape check and is silently dropped as corrupt, which
+  // used to leave this seed producing an empty screen instead of the
+  // populated one these captures exist to show.
   await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
     key: "ergomatic:session-log-history",
     value: JSON.stringify(entries),
@@ -1938,10 +1942,12 @@ test("diagnostics-monitor-logs", async ({ page }) => {
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   await seedSessionLogHistory(page, [
     {
+      sessionId: "screenshots-newest",
       savedAt: now.toISOString(),
       exported: sessionLogRing(37),
     },
     {
+      sessionId: "screenshots-oldest",
       savedAt: yesterday.toISOString(),
       exported: sessionLogRing(9),
     },
@@ -1983,10 +1989,12 @@ test("diagnostics-monitor-logs-landscape", async ({ page }) => {
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   await seedSessionLogHistory(page, [
     {
+      sessionId: "screenshots-landscape-newest",
       savedAt: now.toISOString(),
       exported: sessionLogRing(37),
     },
     {
+      sessionId: "screenshots-landscape-oldest",
       savedAt: yesterday.toISOString(),
       exported: sessionLogRing(9),
     },
