@@ -1226,18 +1226,20 @@ lifecycle spec and the `door` column respectively); RC-13/RC-14 dropped to the
 connected-surface table below with a fix-13-instrument-14 ruling; "Run it
 again" was declined; RC-38 was pulled forward and the rest of Phase PROTO
 held; the axis-quantity question opened the "say which number this is" design
-pass below; AUD-006 got its fix shape. **This table now holds two rows: RC-30
-is closed (declined at the RC close, a record not a question), and the C2
-account injection row IS a live question — REQUESTED, not yet ruled** (the
-evidence package is `docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md`;
-the deadline stays PR1.5's design gate, where James's actual ruling lands; the
-row stays until that PR closes it, since it blocks `C2_LINK_ENABLED=1` in the
-meantime). A new row means a new question, not a re-raised one.
+pass below; AUD-006 got its fix shape. **This table now holds two rows, both
+closed as records rather than live questions: RC-30 (declined at the RC close)
+and the C2 account injection row — RULED by James at PR1.5's design gate
+(2026-09-01): ACCEPT the bounded residual for the dark plumbing; fully
+authenticated option (g) — attempt-surface binding AND identity-checked
+completion on BOTH surfaces — is a hard precondition for setting
+`C2_LINK_ENABLED=1` on any real cohort, absent an explicit re-ruling, and the
+detect-identity treatment ships with PR2's surface.** A new row means a new
+question, not a re-raised one.
 
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
-| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by `ALLOWED_EMAILS`, the dark flag, one live attempt per user, and a 15-minute window (§1). **REQUESTED, not yet ruled, at PR1.5's design gate** — seven options across four buckets (accept/detect/physically-confirm/app-bind, `2026-09-01-concept2-pr15-gate.md`), James's call still owed; blocks `C2_LINK_ENABLED=1` regardless in the meantime. | `2026-09-01-concept2-pr15-gate.md` |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by `ALLOWED_EMAILS`, the dark flag, one live attempt per user, and a 15-minute window (§1); blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing.** Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange; the web callback is unauthenticated today) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 

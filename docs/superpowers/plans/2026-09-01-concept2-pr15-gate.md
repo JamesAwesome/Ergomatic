@@ -901,10 +901,28 @@ persistence, still unmeasured on-device. (c) remains relabeled as
 informed physical confirmation, never authentication of the consenting
 principal, matching what it actually proves.
 
-## 6. Stop
+## 6. Ruling
 
-This is the evidence; it is not the decision. **James's ruling is owed
-here — corrected, round 7, finding 3, extended round 9, corrected again
+**RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded
+residual (option (a)) for the dark plumbing.** Rationale: the surface is
+unreachable in production (dark behind `C2_LINK_ENABLED`; no client
+surface until PR2; prod stays flag-off until Concept2 write approval is
+confirmed), the attacker population is bounded to `ALLOWED_EMAILS` plus
+the one-attempt/15-minute limits, and the blast radius is a
+server-mediated capability, not token exfiltration.
+
+**Hard precondition (recorded in ROADMAP's open-item register):** setting
+`C2_LINK_ENABLED=1` on any real cohort requires option (g) FULLY
+authenticated — attempt-surface binding AND `attempt.userId ===
+req.user.id` on BOTH the native app-return exchange and the
+currently-unauthenticated web callback — or an explicit re-ruling.
+**Shipping with PR2's surface:** the detect-identity treatment (option
+(b) — the callback and linked card naming which Ergomatic account
+receives the link), the cheap hedge that makes the attack
+self-identifying. Everything below is the evidence this ruling rests on.
+
+This was the decision input. **James's ruling (above) was made from this
+package — corrected, round 7, finding 3, extended round 9, corrected again
 round 10 (F1), corrected a SECOND time round 12 on the same option:
 choose from ACCEPT / DETECT / PHYSICALLY-CONFIRM / APP-BIND, not
 "accept / detect / prevent"; no BROWSER-side option in this document
