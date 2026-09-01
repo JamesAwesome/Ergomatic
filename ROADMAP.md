@@ -895,6 +895,8 @@ closed with zero Concept2 contact.
 - [ ] **PR1 — the server broker.** `concept2_links` + auth attempts + four
       `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
       `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**
+      All 9 tasks committed on `wave-e-pr1-server-broker` (2026-08-31,
+      including the measured refresh-endpoint corrections); PR opens next.
 - [ ] **PR1.5 — the native link flow**, on device: system-browser consent,
       foreground re-fetch, and (branch B only) the URL scheme + `appUrlOpen`
       handler. Split from PR1 so one reviewer never holds a token-broker

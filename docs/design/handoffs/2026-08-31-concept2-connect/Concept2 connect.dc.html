@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400..700;1,400..700&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ddd8cc}
+a{color:#b5341f;text-decoration:none}a:hover{color:#9c2c19;text-decoration:underline}
+</style>
+</helmet>
+<section style="padding:44px 48px 80px;font-family:Archivo,sans-serif;color:#1b1a17;display:flex;flex-direction:column;gap:36px">
+
+  <div style="max-width:900px">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.2em;color:#57544c">WAVE E · GATE 0 · 2026-08-31</div>
+    <div style="font-family:Newsreader,serif;font-size:34px;font-weight:500;margin-top:6px">Concept2 connect + send</div>
+    <div style="font-size:14px;color:#3f3c35;margin-top:6px;line-height:1.5;text-wrap:pretty">Two surfaces. The You card owns the link (and the one required question, weight class H/L, asked here and only here). The log row owns the manual send. Every state rendered at real proportions, both orientations; contrast for every pairing computed in the table at the bottom.</div>
+  </div>
+
+  <!-- ============ ROW 1 · SURFACE 1: YOU CARD ============ -->
+  <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.16em;border-bottom:2px solid #1b1a17;padding-bottom:8px;max-width:900px">SURFACE 1 · YOU: THE CONCEPT2 CARD</div>
+  <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+
+    <!-- 1a full You screen, unlinked -->
+    <div id="1a">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">1A</span>YOU · UNLINKED · IN SITU · 390×844</div>
+      <div style="width:390px;height:844px;background:#f4f1e8;border:1px solid #b8b2a3;display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:20px 20px 0;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #1b1a17;padding-bottom:14px">
+            <div style="width:46px;height:46px;background:#1b1a17;color:#fffdf7;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600">RC</div>
+            <div style="flex:1">
+              <div style="font-family:Newsreader,serif;font-size:24px;font-weight:500">Rowan Calloway</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#57544c">SESSION 12 · 2 000 M SPRINT</div>
+            </div>
+            <div style="min-height:44px;display:flex;align-items:center;padding:0 12px;border:1px solid #c9c3b2;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#1b1a17">SWITCH</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:#efeade;border:1px solid #d8d3c4;padding:12px 14px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#6f6a5f">BASELINES</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">2k 1:52.0 · 6k 2:02.0</span>
+          </div>
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#6f6a5f">NOT LINKED</span>
+            </div>
+            <div style="font-size:13px;color:#3f3c35;line-height:1.5;text-wrap:pretty">Sends finished monitor rows to your Concept2 logbook. Manual, per row, from the log.</div>
+            <div style="height:1px;background:#ded8c9"></div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">WEIGHT CLASS</div>
+            <div style="font-size:14px;color:#1b1a17;line-height:1.45;text-wrap:pretty">Concept2 requires a weight class. Asked once, at connect.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;border:1px solid #c9c3b2">
+              <div style="min-height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.08em">H · HEAVYWEIGHT</div>
+              <div style="min-height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #c9c3b2;color:#57544c;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em">L · LIGHTWEIGHT</div>
+            </div>
+            <div style="font-size:12px;color:#57544c;line-height:1.5;text-wrap:pretty">Lightweight: 61.5 kg or under (women) · 75 kg or under (men). Otherwise heavyweight.</div>
+            <div style="min-height:48px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.16em">CONNECT TO CONCEPT2 →</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#6f6a5f;text-align:center">OPENS CONCEPT2 IN YOUR BROWSER · YOU COME BACK HERE</div>
+          </div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="display:flex;border-top:1px solid #d8d3c4">
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TODAY</span></div>
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">NEWS</span></div>
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LIBRARY</span></div>
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">PLAN</span></div>
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px;background:#b5341f"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#1b1a17;font-weight:600">YOU</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1b waiting / just returned -->
+    <div id="1b" style="display:flex;flex-direction:column;gap:20px">
+      <div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">1B</span>WAITING FOR CONCEPT2 · CARD</div>
+        <div style="width:390px;background:#f4f1e8;border:1px solid #b8b2a3;padding:20px">
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#6f6a5f">WAITING</span>
+            </div>
+            <div style="background:#efeade;border:1px solid #d8d3c4;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">WAITING FOR CONCEPT2</div>
+              <div style="font-size:13px;color:#3f3c35;line-height:1.5;text-wrap:pretty">Approve access in the browser. On return, this card confirms the link.</div>
+            </div>
+            <div style="min-height:44px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;color:#1b1a17;font-size:15px;font-weight:600">Cancel</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px">SAME CARD · JUST RETURNED, APP CONFIRMING</div>
+        <div style="width:390px;background:#f4f1e8;border:1px solid #b8b2a3;padding:20px">
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#6f6a5f">CHECKING</span>
+            </div>
+            <div style="background:#efeade;border:1px solid #d8d3c4;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONFIRMING THE LINK</div>
+              <div style="font-size:13px;color:#3f3c35;line-height:1.5;text-wrap:pretty">Checking the link with Concept2.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1c linked + 1d armed -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div id="1c">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">1C</span>LINKED · CARD</div>
+        <div style="width:390px;background:#f4f1e8;border:1px solid #b8b2a3;padding:20px">
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;color:#1b1a17">LINKED ✓</span>
+            </div>
+            <div style="font-size:12px;color:#57544c;line-height:1.5;text-wrap:pretty">Finished monitor rows can be sent from the log. Send state shows on each row.</div>
+            <div style="height:1px;background:#d8d3c4"></div>
+            <div style="min-height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #b5341f;color:#b5341f;font-size:16px;font-weight:600">Unlink Concept2</div>
+          </div>
+        </div>
+      </div>
+      <div id="1d">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">1D</span>UNLINK · ARMED CONFIRM</div>
+        <div style="width:390px;background:#f4f1e8;border:1px solid #b8b2a3;padding:20px">
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;color:#1b1a17">LINKED ✓</span>
+            </div>
+            <div style="font-size:13px;color:#3f3c35;line-height:1.5;text-wrap:pretty">Unlink removes this app's access. Rows already sent stay on Concept2.</div>
+            <div style="min-height:52px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;font-size:16px;font-weight:600">Tap again to unlink</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#6f6a5f;text-align:center">DISARMS ON ITS OWN IN 4 SECONDS</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1e failed -->
+    <div id="1e">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">1E</span>LINK FAILED · RETRYABLE</div>
+      <div style="width:390px;background:#f4f1e8;border:1px solid #b8b2a3;padding:20px">
+        <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#6f6a5f">NOT LINKED</span>
+          </div>
+          <div style="background:#efeade;border:1px solid #d8d3c4;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">THE LINK DIDN'T FINISH</div>
+            <div style="font-size:13px;color:#3f3c35;line-height:1.5;text-wrap:pretty">The connection didn't complete. Nothing was linked, nothing was saved. Your weight class pick is kept.</div>
+          </div>
+          <div style="min-height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;color:#1b1a17;font-size:16px;font-weight:600">Try again</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ROW 2 · SURFACE 2: LOG ROW SEND ============ -->
+  <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.16em;border-bottom:2px solid #1b1a17;padding-bottom:8px;max-width:900px;margin-top:12px">SURFACE 2 · LOG DETAIL: SEND TO CONCEPT2</div>
+  <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+
+    <!-- 2a in situ, scrolled to bottom -->
+    <div id="2a">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">2A</span>LOG DETAIL · SCROLLED TO THE SEND BLOCK · 390×844</div>
+      <div style="width:390px;height:844px;background:#f4f1e8;border:1px solid #b8b2a3;display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:16px 20px 0;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;flex-direction:column;gap:0">
+            <div style="display:flex;align-items:center;gap:10px;min-height:30px;border-bottom:1px solid #ded8c9;font-family:'IBM Plex Mono',monospace;font-size:13px">
+              <span style="color:#57544c">1</span><span style="color:#57544c">1:08</span><span style="font-weight:600">2:07.0</span><span style="font-weight:600;color:#a03123">2:15.8</span><span>25</span><span style="flex:1"></span><div style="width:34px;height:8px;background:#a03123;opacity:0.85"></div><span style="color:#a03123">+8.8</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;min-height:30px;font-family:'IBM Plex Mono',monospace;font-size:13px">
+              <span style="color:#57544c">2</span><span style="color:#57544c">0:56</span><span style="font-weight:600">2:07.0</span><span style="font-weight:600;color:#2a6275">1:52.2</span><span>28</span><span style="flex:1"></span><div style="width:28px;height:8px;background:#2a6275"></div><span style="color:#2a6275">−14.8</span>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c;text-align:center;padding:6px 0">← FASTER (BLUE) · SLOWER (RED) →</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.1em;color:#1b1a17">MACHINE CONFIRMED · WORK ONLY</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">2:04.0 work · 500 m</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">CODE AF99-4706 C021-B054</div>
+          </div>
+          <div style="display:flex;border:1px solid #c9c3b2;width:fit-content">
+            <div style="min-width:56px;min-height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">PACE</div>
+            <div style="min-width:56px;min-height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #c9c3b2;color:#57544c;font-family:'IBM Plex Mono',monospace;font-size:12px">RATE</div>
+            <div style="min-width:48px;min-height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #c9c3b2;color:#57544c;font-family:'IBM Plex Mono',monospace;font-size:12px">HR</div>
+          </div>
+          <svg viewBox="0 0 350 150" style="width:100%;height:150px">
+            <text x="44" y="24" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10" fill="#57544c">1:50.0</text>
+            <text x="44" y="56" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10" fill="#57544c">2:00.0</text>
+            <text x="44" y="88" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10" fill="#57544c">2:10.0</text>
+            <text x="44" y="120" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10" fill="#57544c">2:20.0</text>
+            <polyline points="56,110 150,110 150,20 218,20 218,124 250,124" fill="none" stroke="#1b1a17" stroke-width="2"></polyline>
+            <rect x="150" y="118" width="66" height="8" fill="#8a5f18"></rect>
+            <rect x="252" y="118" width="70" height="8" fill="#8a5f18"></rect>
+            <text x="56" y="144" font-family="IBM Plex Mono,monospace" font-size="10" fill="#57544c">0:00</text>
+            <text x="170" y="144" font-family="IBM Plex Mono,monospace" font-size="10" fill="#57544c">1:40</text>
+            <text x="284" y="144" font-family="IBM Plex Mono,monospace" font-size="10" fill="#57544c">3:20</text>
+          </svg>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c;text-align:center">BAND = REST</div>
+          <div style="font-size:13px;color:#3f3c35">Logged to Sprint (2k) Prep · SESSION 1 OF 84</div>
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#6f6a5f">NOT SENT</span>
+            </div>
+            <div style="min-height:48px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;color:#1b1a17;font-size:15px;font-weight:600">Send to Concept2</div>
+            <div style="font-size:12px;color:#57544c;line-height:1.5;text-wrap:pretty">Sends this row's work time and meters to your Concept2 logbook.</div>
+          </div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="display:flex;border-top:1px solid #d8d3c4">
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px;background:#b5341f"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#1b1a17;font-weight:600">TODAY</span></div>
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">NEWS</span></div>
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LIBRARY</span></div>
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">PLAN</span></div>
+          <div style="flex:1;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">YOU</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2b-2g state crops -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div id="2b">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">2B</span>SENDING</div>
+        <div style="width:390px;background:#f4f1e8;border:1px solid #b8b2a3;padding:20px">
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#6f6a5f">SENDING</span>
+            </div>
+            <div style="min-height:48px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #c9c3b2;color:#57544c;font-size:15px;font-weight:600">Sending to Concept2 …</div>
+            <div style="font-size:12px;color:#57544c;line-height:1.5">Sends this row's work time and meters to your Concept2 logbook.</div>
+          </div>
+        </div>
+      </div>
+      <div id="2c">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">2C</span>SENT · PERSISTS ON THE ROW</div>
+        <div style="width:390px;background:#f4f1e8;border:1px solid #b8b2a3;padding:20px">
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;color:#1b1a17">SENT ✓</span>
+            </div>
+            <div style="font-size:13px;color:#3f3c35;line-height:1.5">Accepted by Concept2 · Aug 27, 11:31</div>
+            <div style="min-height:44px;display:flex;align-items:center"><span style="font-size:14px;font-weight:600;color:#b5341f">View on Concept2 →</span></div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#6f6a5f">RESULT 339 · OPENS YOUR CONCEPT2 LOGBOOK</div>
+          </div>
+        </div>
+      </div>
+      <div id="2d">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">2D</span>DUPLICATE · NO RETRY</div>
+        <div style="width:390px;background:#f4f1e8;border:1px solid #b8b2a3;padding:20px">
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;color:#1b1a17">ALREADY THERE</span>
+            </div>
+            <div style="font-size:13px;color:#3f3c35;line-height:1.5;text-wrap:pretty">Concept2 already has this row: same date, time and distance. Nothing changed.</div>
+            <div style="min-height:44px;display:flex;align-items:center"><span style="font-size:14px;font-weight:600;color:#b5341f">Open your Concept2 logbook →</span></div>
+          </div>
+        </div>
+      </div>
+      <div id="2e">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">2E</span>FAILED · RETRYABLE</div>
+        <div style="width:390px;background:#f4f1e8;border:1px solid #b8b2a3;padding:20px">
+          <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;color:#1b1a17">SEND FAILED</span>
+            </div>
+            <div style="font-size:13px;color:#3f3c35;line-height:1.5;text-wrap:pretty">The send didn't reach Concept2. This row is unchanged.</div>
+            <div style="min-height:48px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;color:#1b1a17;font-size:15px;font-weight:600">Retry send</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 3a + 3b landscape -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div id="3a">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">3A</span>LANDSCAPE · LOG DETAIL, SEND BLOCK · 844×390</div>
+        <div style="width:844px;height:390px;background:#f4f1e8;border:1px solid #b8b2a3;display:flex;flex-direction:column;overflow:hidden">
+          <div style="padding:20px 20px 0;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.1em;color:#1b1a17">MACHINE CONFIRMED · WORK ONLY</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">2:04.0 work · 500 m · CODE AF99-4706 C021-B054</div>
+            </div>
+            <div style="font-size:13px;color:#3f3c35">Logged to Sprint (2k) Prep · SESSION 1 OF 84</div>
+            <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#6f6a5f">NOT SENT</span>
+              </div>
+              <div style="min-height:48px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;color:#1b1a17;font-size:15px;font-weight:600">Send to Concept2</div>
+              <div style="font-size:12px;color:#57544c;line-height:1.5">Sends this row's work time and meters to your Concept2 logbook.</div>
+            </div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;border-top:1px solid #d8d3c4">
+            <div style="flex:1;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px;background:#b5341f"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#1b1a17;font-weight:600">TODAY</span></div>
+            <div style="flex:1;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">NEWS</span></div>
+            <div style="flex:1;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LIBRARY</span></div>
+            <div style="flex:1;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">PLAN</span></div>
+            <div style="flex:1;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="width:16px;height:3px"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">YOU</span></div>
+          </div>
+        </div>
+      </div>
+      <div id="3b">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;margin-bottom:8px"><span style="background:#1b1a17;color:#fffdf7;padding:2px 6px;font-weight:600;margin-right:8px">3B</span>LANDSCAPE · YOU, SCROLLED TO THE CARD · 844×390</div>
+        <div style="width:844px;height:390px;background:#f4f1e8;border:1px solid #b8b2a3;display:flex;flex-direction:column;overflow:hidden">
+          <div style="padding:20px 20px 0">
+            <div style="background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px;display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">CONCEPT2</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#6f6a5f">NOT LINKED</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <div style="font-size:13px;color:#3f3c35;line-height:1.5;text-wrap:pretty">Sends finished monitor rows to your Concept2 logbook. Manual, per row, from the log.</div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">WEIGHT CLASS</div>
+                  <div style="font-size:14px;color:#1b1a17;line-height:1.45">Concept2 requires a weight class. Asked once, at connect.</div>
+                  <div style="font-size:12px;color:#57544c;line-height:1.5;text-wrap:pretty">Lightweight: 61.5 kg or under (women) · 75 kg or under (men). Otherwise heavyweight.</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;border:1px solid #c9c3b2">
+                    <div style="min-height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.08em">H · HEAVYWEIGHT</div>
+                    <div style="min-height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #c9c3b2;color:#57544c;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em">L · LIGHTWEIGHT</div>
+                  </div>
+                  <div style="min-height:48px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.16em">CONNECT TO CONCEPT2 →</div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#6f6a5f;text-align:center">OPENS CONCEPT2 IN YOUR BROWSER · YOU COME BACK HERE</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ROW 3 · NOTES ============ -->
+  <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.16em;border-bottom:2px solid #1b1a17;padding-bottom:8px;max-width:900px;margin-top:12px">NOTES FOR THE GATE</div>
+  <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+
+    <div style="width:430px;background:#fffdf7;border:1px solid #d8d3c4;padding:18px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em">COPY UNDER APPROVAL</div>
+      <div style="font-size:13px;color:#3f3c35;line-height:1.6">
+        <div style="margin-bottom:8px;background:#efeade;border:1px solid #d8d3c4;padding:8px 10px"><strong>FLAG · weight class ask is conditional.</strong> James (this review): do not ask H/L if Concept2 already has a weight class on the account. Check after the OAuth exchange (or via the API if it exposes it); ask only when blank on Concept2. The rendered ask (<a href="#1a">1a</a>) stays in the design for that case. Open question for PR0: whether the API exposes the account's stored class — <code>GET /api/users/me</code> as documented returns no weight field, which may force the ask anyway; if so this flag needs a ruling.</div>
+        <div style="margin-bottom:8px"><strong>The H/L ask</strong> (<a href="#1a">1a</a>, conditional per the flag above): "Concept2 requires a weight class. Asked once, at connect." Options "H · HEAVYWEIGHT" / "L · LIGHTWEIGHT", helper: "Lightweight: 61.5 kg or under (women) · 75 kg or under (men). Otherwise heavyweight."</div>
+        <div style="margin-bottom:8px"><strong>Duplicate</strong> (<a href="#2d">2d</a>): "Concept2 already has this row: same date, time and distance. Nothing changed."</div>
+        <div><strong>Unlink confirm</strong> (<a href="#1d">1d</a>): "Unlink removes this app's access. Rows already sent stay on Concept2." Armed label "Tap again to unlink", 4 s auto-disarm.</div>
+      </div>
+    </div>
+
+    <div style="width:430px;background:#fffdf7;border:1px solid #d8d3c4;padding:18px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em">DECISIONS THE SPEC LEFT TO DESIGN</div>
+      <div style="font-size:13px;color:#3f3c35;line-height:1.6">
+        <div style="margin-bottom:8px"><strong>Non-qualifying rows: absent.</strong> Manual and terminated rows never qualify, so a disabled control would sit on them forever explaining itself. The block simply does not render; the You card is the teaching surface.</div>
+        <div style="margin-bottom:8px"><strong>Not linked: nothing on the row.</strong> The Concept2 block renders only when an account is linked. The You card is the sole discovery surface.</div>
+        <div style="margin-bottom:8px"><strong>Sent is past tense</strong> (<a href="#2c">2c</a>): "Concept2 accepted this row · date." The logbook is the rower's; if they delete the row there, our record stands and the link-out 404s honestly. Sent renders only when the row's Concept2 account matches the live link.</div>
+        <div><strong>Pre-pick Connect</strong>: until a class is picked the Connect block is dimmed (border #c9c3b2, label #57544c) and inert; disabled state, AA-exempt but still 7.4:1.</div>
+      </div>
+    </div>
+
+    <div style="width:430px;background:#fffdf7;border:1px solid #d8d3c4;padding:18px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em">RF23 · WHAT ALREADY SITS ON THE LOG ROW</div>
+      <div style="font-size:13px;color:#3f3c35;line-height:1.6">Title · date/time/PM5 id · AVG SPLIT hero with TIME and DISTANCE · coasting line · tags panel (UNDER/FASTER/PAIN/LIKED + note) · Edit · INTERVALS table with faster/slower legend · MACHINE CONFIRMED · WORK ONLY block with code · PACE/RATE/HR chart · "Logged to" plan line. The new block lands after the "Logged to" line, end of scroll: it duplicates nothing (send is not Edit; "View on Concept2" is the surface's only link-out) and crowds nothing above the fold.</div>
+    </div>
+
+    <div style="width:430px;background:#fffdf7;border:1px solid #d8d3c4;padding:18px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em">CONTRAST · RF6 · COMPUTED, WCAG AA ≥ 4.5</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#1b1a17;line-height:1.9">
+        <div style="display:flex;justify-content:space-between"><span>#1b1a17 on #fffdf7 · body, headers</span><span>17.11 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#3f3c35 on #fffdf7 · card copy</span><span>10.81 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#57544c on #fffdf7 · helpers, inactive</span><span>7.43 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#6f6a5f on #fffdf7 · mono ≥11px labels</span><span>5.29 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#fffdf7 on #1b1a17 · segmented, Connect</span><span>17.11 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#fffdf7 on #b5341f · armed unlink</span><span>5.94 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#b5341f on #fffdf7 · unlink label, links</span><span>5.94 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#1b1a17 on #efeade · sunken panels</span><span>14.50 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#57544c on #efeade · panel helpers</span><span>6.30 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#1b1a17 on #f4f1e8 · page text</span><span>15.41 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#57544c on #f4f1e8 · page helpers</span><span>6.69 ✓</span></div>
+        <div style="display:flex;justify-content:space-between"><span>#6f6a5f on #f4f1e8 · page mono ≥11px</span><span>4.76 ✓</span></div>
+      </div>
+      <div style="font-size:12px;color:#57544c;line-height:1.5">All tappables ≥44px. Accent used only per its four meanings: destructive unlink + armed fill, link-outs as text links. No new colors introduced.</div>
+    </div>
+  </div>
+</section>
+</x-dc>
+</body>
+</html>
