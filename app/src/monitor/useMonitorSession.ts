@@ -1668,16 +1668,21 @@ export function useMonitorSession(
    *  RC-37 programDropped/ready exit both clear it too, so a run of
    *  identical frames from the PREVIOUS run/resume can never be attributed
    *  to the next one. Closed with its own `resume-stale-run` entry by
-   *  whichever of THREE things happens first: the first differing frame
+   *  whichever of FOUR things happens first: the first differing frame
    *  (`endedBy=changed`), a SECOND resume arriving while this tracker is
    *  still open (`endedBy=resumed` — closed at the top of the
    *  `resumeEdgeArmedRef` arm-consumption branch, before the new arm is
    *  consumed, so a second resume can neither overwrite the open run nor
-   *  silently merge into it), or `teardown` running first (`endedBy=teardown`,
-   *  that close happens once, at the top of `teardown`, since it is the
-   *  single choke point every exit path runs through — see its own comment;
-   *  every exit that reaches `teardown`, including `cancel()`, is covered
-   *  there and does not need its own separate clear). */
+   *  silently merge into it), a fresh `program()` arm or the RC-37
+   *  programDropped/ready exit finding it still open (`endedBy=reset` —
+   *  final whole-branch review, item 5: these two per-run resets used to
+   *  discard an open run with no entry at all, contradicting this
+   *  comment's own claim that every close is recorded), or `teardown`
+   *  running first (`endedBy=teardown`, that close happens once, at the
+   *  top of `teardown`, since it is the single choke point every exit path
+   *  runs through — see its own comment; every exit that reaches
+   *  `teardown`, including `cancel()`, is covered there and does not need
+   *  its own separate clear). */
   const resumeStaleRunRef = useRef<{ key: string; frames: number } | null>(
     null,
   );
@@ -2392,9 +2397,10 @@ export function useMonitorSession(
       // closed by the first differing frame (`resume-stale-run
       // endedBy=changed`), by a SECOND resume arriving while the tracker is
       // still open (`resume-stale-run endedBy=resumed`, below — a second
-      // resume must not overwrite or silently merge into the first), or by
-      // `teardown` (`endedBy=teardown`, this file's own single choke point
-      // for every exit path).
+      // resume must not overwrite or silently merge into the first), by a
+      // fresh `program()` arm or the RC-37 programDropped/ready exit
+      // (`endedBy=reset`), or by `teardown` (`endedBy=teardown`, this
+      // file's own single choke point for every exit path).
       if (resumeEdgeArmedRef.current !== null) {
         // Close any still-open stale-run tracker from a PRIOR resume before
         // consuming this new arm — without this, a second resume while a
@@ -3164,6 +3170,23 @@ export function useMonitorSession(
         // closeout cannot reach; a resume measured before this drop must
         // not be attributed to whatever the rower connects to next. Fix
         // round 1: this used to be missing.
+        //
+        // Final whole-branch review, item 5: an OPEN run gets its own
+        // `resume-stale-run` entry here, `endedBy=reset`, before the clear
+        // — matching what this ref's own doc comment already claimed
+        // (three closers) but the code did not do (a silent fourth). This
+        // is the same "record the close, don't just discard the state"
+        // discipline every OTHER closer of this ref already follows
+        // (`endedBy=changed`, `endedBy=resumed`, `endedBy=teardown`,
+        // immediately below/above) — a run that was open here and closed
+        // by this exit is exactly as real as one closed by any of those
+        // three, and belongs in the same ring.
+        if (resumeStaleRunRef.current !== null) {
+          logRef.current?.record(
+            "resume-stale-run",
+            `frames=${resumeStaleRunRef.current.frames} endedBy=reset`,
+          );
+        }
         resumeEdgeArmedRef.current = null;
         resumeStaleRunRef.current = null;
         // Hand-off store design spec §1: same per-run reset `cancel()`
@@ -4201,6 +4224,16 @@ export function useMonitorSession(
       // be attributed to the run this `program()` call is about to open.
       // Fix round 1: this used to be missing (the ref's own doc comment
       // claimed it and the code did not do it).
+      //
+      // Final whole-branch review, item 5: same reasoning as the RC-37 exit
+      // site's own comment — an open run gets its own `resume-stale-run`
+      // entry, `endedBy=reset`, before this clear discards it silently.
+      if (resumeStaleRunRef.current !== null) {
+        logRef.current?.record(
+          "resume-stale-run",
+          `frames=${resumeStaleRunRef.current.frames} endedBy=reset`,
+        );
+      }
       resumeEdgeArmedRef.current = null;
       resumeStaleRunRef.current = null;
       const driver = driverRef.current;

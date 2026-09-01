@@ -11424,6 +11424,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
     lifecycleCb: (event: "background" | "foreground") => void;
     exportLog: () => string;
     unmount: () => void;
+    program: (p: WorkoutProgram, identity: RunIdentity) => void;
   }> {
     const fake = createFakeTransport({
       deviceName: DEVICE_NAME,
@@ -11461,6 +11462,11 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       lifecycleCb: lifecycleCb!,
       exportLog: () => result.current.exportLog(),
       unmount,
+      // Final whole-branch review, item 5's own second site: `program()`'s
+      // fresh-arm reset needs a live `result` to call, not just the export.
+      program: (p: WorkoutProgram, identity: RunIdentity): void => {
+        void result.current.program(p, identity);
+      },
     };
   }
 
@@ -11747,6 +11753,64 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
     expect(staleRunEntries[0]!.detail).toBe("frames=2 endedBy=resumed");
     expect(staleRunEntries[1]!.detail).toBe("frames=1 endedBy=teardown");
   });
+
+  // Final whole-branch review, item 5's OTHER site: `program()`'s own
+  // fresh-arm reset (the RC-37 exit's sibling test, in a later describe
+  // block below, is the FIRST of the two sites the brief names). The guard
+  // at the top of `program()` only refuses a SECOND call while already
+  // `"programming"` — it does not require a prior `program()` call to have
+  // happened at all — so calling it here, once, while a stale run is open,
+  // exercises the exact reset lines a real re-program-from-ready would
+  // hit.
+  it("a resume-stale-run open when program() re-arms closes with its own endedBy=reset entry, not silently", async () => {
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // pre-background baseline
+      frame(1000, D0), // first post-resume frame — identical -> stale=true, opens the run (frames=1)
+      frame(1500, D0), // still identical -> run continues (frames=2)
+    ];
+    const { fake, lifecycleCb, exportLog, program } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    const preProgramExport = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(preProgramExport.some((e) => e.kind === "resume-stale-run")).toBe(
+      false,
+    ); // sanity: still open, nothing recorded yet
+
+    act(() => {
+      program(TWO_INTERVALS, TWO_IDENTITY);
+    });
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const staleRunEntriesAfterProgram = exported.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(staleRunEntriesAfterProgram).toHaveLength(1);
+    expect(staleRunEntriesAfterProgram[0]!.detail).toBe(
+      "frames=2 endedBy=reset",
+    );
+  });
 });
 
 describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
@@ -12021,7 +12085,7 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
     }
   }
 
-  it("a resume-stale-run opened at READY does not survive the drop — no leaked run reaches the eventual unmount's own teardown/stash", async () => {
+  it("a resume-stale-run opened at READY does not survive the drop — final whole-branch review item 5: it closes THERE with its own endedBy=reset entry, not silently, and does not ALSO close a second time at the eventual unmount's teardown", async () => {
     sessionStorage.removeItem("ergomatic:last-monitor-log");
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
     vi.doMock("../adapters/appLifecycle", () => ({
@@ -12116,12 +12180,27 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
     triggerReadyDrop(transport, clock);
     expect(result.current.programDropped).toBe(true);
 
+    // Final whole-branch review, item 5: the drop closes the still-open run
+    // HERE, with its own `resume-stale-run endedBy=reset` entry — this
+    // used to clear `resumeStaleRunRef` with no entry at all, which is the
+    // "no leaked run reaches teardown" title this test originally carried;
+    // the leak is now a RECORDED close instead of a silent discard.
+    const postDropExport = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const resetEntries = postDropExport.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(resetEntries).toHaveLength(1);
+    expect(resetEntries[0]!.detail).toMatch(/^frames=\d+ endedBy=reset$/);
+
     // `teardown()` is unconditional on driver state (its own header
     // comment: "exactly two callers, this hook's unmount effect and
     // `cancel()`") and its own resume-stale-run closeout runs regardless —
-    // if the open run had leaked past the drop instead of being cleared
-    // there, THIS unmount's `stash()` would record it as
-    // `endedBy=teardown`.
+    // if the open run had ALSO leaked past the drop instead of being
+    // closed there, THIS unmount's `stash()` would record a SECOND entry,
+    // `endedBy=teardown`. It must not: the drop already cleared the ref.
     act(() => {
       unmount();
     });
@@ -12129,7 +12208,11 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
     const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
-    expect(entries.some((e) => e.kind === "resume-stale-run")).toBe(false);
+    const allStaleRunEntries = entries.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(allStaleRunEntries).toHaveLength(1);
+    expect(allStaleRunEntries[0]!.detail).toBe(resetEntries[0]!.detail);
   });
 });
 
