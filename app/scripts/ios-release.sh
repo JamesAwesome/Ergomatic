@@ -17,6 +17,22 @@
 # (minutes).
 set -Eeuo pipefail
 
+# Wave E PR1.5 round 5 review (P1, reviewer proved it): the on-device walk
+# card (docs/superpowers/plans/2026-09-01-concept2-pr15-walk.md) has the
+# operator `export VITE_ENABLE_C2_LINK_PROBE=1` in their shell. Without
+# this guard, a LATER `pnpm ios:release` run in that SAME shell ships the
+# dev-only probe card (`Concept2LinkProbe.tsx`) — `pnpm ios:build` below
+# runs a plain `vite build`, which reads any `VITE_`-prefixed var straight
+# out of `process.env`, no config file involved. Refuse outright rather
+# than silently building a release with dev tooling baked in. Placed
+# before EVERYTHING else (the tag check, GOOGLE_IOS_CLIENT_ID derivation,
+# the build itself) so this test can run the real script with no tag, no
+# Xcode, and no `pnpm ios:build` ever executing.
+if [ -n "${VITE_ENABLE_C2_LINK_PROBE:-}" ]; then
+  echo "ios-release: refusing — VITE_ENABLE_C2_LINK_PROBE is set — unset it (probe card must never ship via ios:release)" >&2
+  exit 1
+fi
+
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLIST="$APP_DIR/ios/App/App/Info.plist"
 
