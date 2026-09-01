@@ -999,6 +999,20 @@ X" is a real disposition — most of these are single files.
   already REJECTS leading rest, so only the consecutive case is live. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`
   (§AUD-006, §V4).
+- **The dropped-arrival log screen reads `WORKOUT COMPLETE` two lines above
+  `THE ERG DROPPED THE WORKOUT.`** `.summary-eyebrow`
+  (`PostWorkoutSummary.tsx:655`) is unconditional and predates this work
+  (link-lost/interrupted arrivals already show it); the Gate-0 artifact's
+  mock drew a nav bar where the real screen has the eyebrow, so the
+  juxtaposition was invisible at the gate. James decides: keep, or suppress
+  the eyebrow on a dropped arrival (that change is itself Gate-0 copy).
+  Found at PR 1's final whole-branch review, 2026-08-31.
+- **The server's `EndedBy` mirror can be derived, not hand-copied.**
+  `server/stores/logs.ts` already imports `../db/schema.js`, so
+  `export type EndedBy = (typeof endedByEnum.enumValues)[number]` plus
+  deriving `ENDED_BY_VALUES` from `endedByEnum.enumValues` would collapse
+  three mirrors to one; the POST seam test is the current gate. Rides the
+  next PR touching `server/stores/logs.ts`. Found same review.
 
 ## Tooling
 

@@ -257,7 +257,7 @@ export interface StoredSummaryView {
   planFooter?: string;
   /** Cohort-unlock spec (2026-08-23), §2: the exact marked line, present
    *  only when `row.endedBy === "link-lost"` — every other `endedBy`
-   *  value (including the other four real ones and absent/null) renders
+   *  value (including every other real one and absent/null) renders
    *  nothing here; this spec is the lost-link surface, not an `endedBy`
    *  taxonomy display (spec's own line). */
   linkLostLine?: string;
@@ -439,8 +439,9 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  every timer/manual-door row (neither door ever writes the field —
 //  their heroes were already work-only before this task and stay
 //  byte-identical), any monitor row predating the 2026-08-08 amendment
-//  entirely, AND — new at fix round 2 — every link-lost/program-failed/
-//  interrupted/burst-less-terminate monitor row, forever: the stored
+//  entirely, AND — new at fix round 2 — every non-finished/rower monitor
+//  row (link-lost, program-failed, program-dropped, interrupted,
+//  burst-less-terminate), forever: the stored
 //  `avgSplitSeconds`/`timeSeconds`/`distanceMeters` render exactly as
 //  saved, unimproved but never silently wrong. `buildStoredTotalLine` is
 //  called with an EMPTY `stepSums` here too (fix round 2) — a declined
@@ -893,10 +894,10 @@ function buildPlanFooter(row: StoredLog): string | undefined {
 const LINK_LOST_LINE = "LINK LOST · the app lost the monitor before the end";
 
 // §2: "no other endedBy values render anything." A plain equality check
-// against the one value this spec owns — never a negation of the other
-// four (which would silently start rendering the line for any FUTURE
-// sixth value the union might grow, exactly the taxonomy-display this
-// spec explicitly declines to be).
+// against the one value this spec owns — never a negation of every
+// other close reason (which would silently start rendering the line for
+// any future value the union might grow, exactly the taxonomy-display
+// this spec explicitly declines to be).
 function buildLinkLostLine(row: StoredLog): string | undefined {
   return row.endedBy === "link-lost" ? LINK_LOST_LINE : undefined;
 }

@@ -2232,8 +2232,9 @@ export function useMonitorSession(
    *  `openHandoffHold` above returns it. Called from all three burst-
    *  eligible `ended` transitions (`endByMachine`'s two branches,
    *  `endSession`) — `run === null`/a non-burst-eligible `endedBy` (a
-   *  never-rowed close, `link-lost`, `program-failed`) all return `false`
-   *  via this one predicate rather than each caller special-casing it. */
+   *  never-rowed close, or any non-finished/rower close: `link-lost`,
+   *  `program-failed`, `program-dropped`) all return `false` via this one
+   *  predicate rather than each caller special-casing it. */
   const openBurstHold = useCallback((): boolean => {
     const run = runRef.current;
     if (run === null) return false;
@@ -3385,15 +3386,17 @@ export function useMonitorSession(
       // because this teardown hung up at t=0 while the burst was still
       // ~1s out (notes §25's lab measurement, `lab-terminate-ring.json`).
       // The honest predicate is "the link was still up when this record
-      // closed" — the complement of `link-lost`/`program-failed`, which is
-      // exactly `{"finished", "rower"}`. `"rower"` covers BOTH venues (a
-      // Menu press at the erg and the app's own End button —
-      // `MonitorRun.endedBy`'s own table) and stays correct if walk
-      // question W8's PM5 inactivity auto-terminate lands in `"rower"`
-      // later. `monitorRun.ts`'s `appendSummaryObservations` admits the
-      // identical pair (spec §1's GATE 4) — one predicate, two enforcement
-      // points, deliberately: this one decides whether the bytes can still
-      // ARRIVE, that one decides whether they may be WRITTEN.
+      // closed" — every non-finished/rower close (`link-lost`,
+      // `program-failed`, `program-dropped`, `interrupted`) declines; the
+      // burst-eligible set is exactly `{"finished", "rower"}`. `"rower"`
+      // covers BOTH venues (a Menu press at the erg and the app's own End
+      // button — `MonitorRun.endedBy`'s own table) and stays correct if
+      // walk question W8's PM5 inactivity auto-terminate lands in
+      // `"rower"` later. `monitorRun.ts`'s `appendSummaryObservations`
+      // admits the identical pair (spec §1's GATE 4) — one predicate, two
+      // enforcement points, deliberately: this one decides whether the
+      // bytes can still ARRIVE, that one decides whether they may be
+      // WRITTEN.
       //
       // Everything else about the linger is unchanged — same
       // `BURST_LINGER_MS` cap, same one-shot `finish`, same second stash.
@@ -3941,9 +3944,10 @@ export function useMonitorSession(
     // -> rower", "End with the link gone -> link-lost".
     closeRecord(true, linkGone ? "link-lost" : "rower");
     // Storage-spine design spec §2, Task 3: THE THIRD BURST-ELIGIBLE ARM.
-    // `openBurstHold()`'s own predicate is the complement of
-    // `link-lost`/`program-failed`, so a `linkGone` close (`endedBy:
-    // "link-lost"`) already opens nothing — no special case needed here,
+    // `openBurstHold()`'s own predicate declines every non-finished/rower
+    // close (`link-lost`, `program-failed`, `program-dropped`,
+    // `interrupted`), so a `linkGone` close (`endedBy: "link-lost"`)
+    // already opens nothing — no special case needed here,
     // the predicate does it. A link-up End (`endedBy: "rower"`) owes the
     // burst exactly like a Menu terminate does: the machine still emits
     // its summary over a link that is, by definition, still up (the

@@ -186,6 +186,10 @@ export interface MonitorRun {
    *     value.
    *   - `"program-failed"` — a failed `program()` closing a run still open
    *     (P3b).
+   *   - `"program-dropped"` — the erg discarded a program that had
+   *     already succeeded, detected mid-row by RC-37's armed-watch (Wave
+   *     F PR 1, lifecycle spec §1). Distinct from `"program-failed"`,
+   *     which is OUR `program()` call failing (P3b).
    *   - `"interrupted"` — closed later through Today's row (F6), with NO
    *     evidence of a cause. Never conflate this with the others: this is
    *     the ABSENCE of a story, not a sixth story.
@@ -1146,13 +1150,14 @@ export function completeContinuityReset(
  *
  *   1. `run.completedAt === null` — still live; no completion writer has
  *      run yet.
- *   2. `run.endedBy` is neither `"finished"` nor `"rower"` (the complement
- *      of link-lost/program-failed, RC-3 Task 2, spec §1 gate 1: `"rower"`
+ *   2. `run.endedBy` is neither `"finished"` nor `"rower"` (every other
+ *      close reason — link-lost, program-failed, program-dropped,
+ *      interrupted — RC-3 Task 2, spec §1 gate 1: `"rower"`
  *      covers BOTH venues — Menu-at-the-erg and the app's End button,
  *      `CloseReason`'s own doc comment — and the machine speaks the
  *      identical burst for a Menu terminate, notes §25 — and this stays
  *      correct if W8's inactivity auto-terminate lands in `"rower"`
- *      later). A link-lost or program-failed close's burst status is
+ *      later). A non-finished/rower close's burst status is
  *      still UNKNOWN (§1) and still declines.
  *   3. `run.summaryTotals` already exists — write-once: a second burst
  *      arriving for a record already carrying observations (the two
@@ -1190,7 +1195,8 @@ export function appendSummaryObservations(
   },
 ): MonitorRun | null {
   if (run.completedAt === null) return null;
-  // Burst-eligible closes only: the complement of link-lost/program-failed.
+  // Burst-eligible closes only: every non-finished/rower close (link-lost,
+  // program-failed, program-dropped, interrupted) declines.
   // "rower" covers BOTH venues (Menu-at-the-erg and the app's End button,
   // CloseReason's own doc) and stays correct if W8's inactivity
   // auto-terminate lands in "rower" later (spec §1 gate 1).

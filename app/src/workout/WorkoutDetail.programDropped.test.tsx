@@ -349,6 +349,12 @@ describe("WorkoutDetail -> real live program drop -> LogSession (Wave F PR 1 Tas
     const records = observer.takeRecords();
     observer.disconnect();
 
+    // The read loop below scans only each record's `addedNodes` — if
+    // `ConnectedSurface`'s ended frame ever reconciles the body line's text
+    // IN PLACE instead of adding a new node, this assertion fails LOUD
+    // (null vs a string) rather than silently passing, which is the safe
+    // direction, but whoever sees that failure should know the read loop is
+    // why.
     let dropBodyLineText: string | null = null;
     let sawSessionEnded = false;
     for (const record of records) {

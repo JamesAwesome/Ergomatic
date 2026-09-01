@@ -845,7 +845,7 @@ function buildDroppedMonitorRun(workoutId: string): MonitorRun {
   const logSeed = buildLogSeed(built.phases, MONITOR_FIXTURE_BASELINES);
   const actuals: IntervalActual[] = [
     {
-      index: 1,
+      index: 0,
       elapsedSeconds: 705,
       distanceMeters: 2000,
       avgSplit: 140,
@@ -854,7 +854,7 @@ function buildDroppedMonitorRun(workoutId: string): MonitorRun {
       restDistanceMeters: 0,
     },
     {
-      index: 2,
+      index: 1,
       elapsedSeconds: 2500,
       distanceMeters: 10000,
       avgSplit: 125,
