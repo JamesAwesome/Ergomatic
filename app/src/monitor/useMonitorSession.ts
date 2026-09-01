@@ -2891,11 +2891,21 @@ export function useMonitorSession(
       }
       if (event.kind === "intervalComplete") {
         // THE FIRST PRODUCTION CALLER of `recordActual` (its own A2 note).
-        // Gated on our record being open: a boundary the machine reports
-        // outside any run of ours (a rower's JustRow auto-split,
-        // post-terminate housekeeping — the driver emits those with
-        // `index: null` and a `boundary-out-of-run` log) belongs to no
-        // program and must never be filed against one.
+        //
+        // **RECONCILED, Phase JR PR 2 — the rule below is unchanged and the
+        // guard that enforced it has MOVED.** This used to read: "Gated on
+        // our record being open: a boundary the machine reports outside any
+        // run of ours (a rower's JustRow auto-split, post-terminate
+        // housekeeping — the driver emits those with `index: null`) belongs
+        // to no program and must never be filed against one."
+        //
+        // The rule is right and still binding. What changed is that "outside
+        // any run of ours" stopped being the same thing as "a JustRow
+        // auto-split": a free row now HAS a run of ours, so its auto-splits
+        // arrive here with the record wide open, and `recordActual` gates on
+        // whether the record is closed, never on the index. The
+        // `run === null` check below therefore no longer covers the case its
+        // own comment named, and the free-row refusal underneath it does.
         //
         // THE FINISH GRACE (hardware walk 5, 2026-08-10): the ONE boundary
         // that legitimately arrives after this hook already closed the
@@ -2910,6 +2920,24 @@ export function useMonitorSession(
         // nothing else about the closed record's immutability moves.
         const run = runRef.current;
         if (run === null) return;
+        // THE FREE-ROW REFUSAL (Phase JR PR 2). A free row has no intervals
+        // — the machine's 5-minute auto-splits are its own bookkeeping, not
+        // structure anyone asked for — so NONE of them is filed, rather than
+        // only the `index: null` ones. Keying on the mode rather than the
+        // index says the actual thing: `MonitorRun.actuals` on a free row
+        // means "the intervals of this row", and there are none.
+        //
+        // This is also what keeps the surface honest. `measuredIntervalCount`
+        // reads `actuals` without ever looking at `index`, so a single
+        // phantom here is what makes the ended frame and the lost banner
+        // report intervals on a screen that shows none.
+        if (run.mode === "justrow") {
+          logRef.current?.record(
+            "record-actual",
+            `index=${event.actual.index} REFUSED (free row: the machine's own auto-split, not an interval of ours)`,
+          );
+          return;
+        }
         // Phase LT spec 2, Task 2: THE BOUNDARY FLUSH (§2's flush policy —
         // "the hook layer flushes after each boundary write lands"). Rather
         // than a second write chasing `recordActual`'s own, the freshest

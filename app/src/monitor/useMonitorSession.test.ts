@@ -11507,3 +11507,77 @@ describe("beginFreeRow (the free row's own arm)", () => {
     expect(run?.mode).toBeUndefined();
   });
 });
+
+/**
+ * PHASE JR PR 2, TASK 2 — the PM5's own auto-splits must not become
+ * intervals in our record.
+ *
+ * The machine splits a free row by itself at 5:00 (then every 10:00 past
+ * 35:00, every 20:00 past 70:00). Those boundaries belong to the machine's
+ * own bookkeeping, not to any program of ours, and the driver emits them
+ * with `index: null`.
+ *
+ * They were harmless until this phase for one reason only: the hook dropped
+ * them because there was no open record to file them against. PR 2 opens
+ * one, and `recordActual` gates on whether the record is CLOSED, never on
+ * the index — so without this refusal a 6-minute free row banks one phantom
+ * interval and a 40-minute one banks several, on a screen whose whole design
+ * says a free row has no intervals at all.
+ */
+describe("a free row banks no intervals", () => {
+  it("refuses the machine's own auto-split boundary", async () => {
+    const { result, fake } = harness({
+      program: LIBRARY.program,
+      events: [
+        {
+          atMs: 1000,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 1,
+          distanceMeters: 4,
+          spm: 22,
+          currentSplit: 140,
+          heartRateBpm: null,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 2000,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 2,
+          distanceMeters: 11,
+          spm: 23,
+          currentSplit: 139,
+          heartRateBpm: null,
+          programIntervalIndex: 0,
+        },
+        // The PM5's own 5-minute auto-split. The walk fired two of these in
+        // 6.5 minutes.
+        {
+          atMs: 3000,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 300,
+            distanceMeters: 1074,
+            avgSpm: 24,
+            avgHeartRateBpm: null,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 300,
+          cumulativeDistanceMeters: 1074,
+        },
+      ],
+    });
+    await connect(result);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    tick(fake, 1000);
+    tick(fake, 1000);
+    tick(fake, 1000);
+
+    expect(loadMonitorRun()?.actuals).toStrictEqual([]);
+    expect(result.current.actuals).toStrictEqual([]);
+  });
+});
