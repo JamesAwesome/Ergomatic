@@ -9715,7 +9715,7 @@ describe("Phase LM: decideResumeLatch (pure) — the resume alarm keys on a meas
 // ---------------------------------------------------------------------------
 // Phase LL Task 1: THE HOOK'S OWN WIRING — proving `livenessDepsRef`'s
 // `onSilence`/`onRecovery` closures (built inside the hook, never passed
-// `logRef` itself — `react-hooks/refs` forbids that) really do write into
+// the session ref itself — `react-hooks/refs` forbids that) really do write into
 // THIS session's log once one exists. Every other test in this file
 // overrides `MonitorSessionDeps.createTransport`, which bypasses
 // `defaultTransport` (and therefore `livenessDepsRef`) entirely — this is
@@ -9829,12 +9829,12 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
     // `catch (err) { fail(mapRadioFailure(err)); ... }`, the SAME catch a
     // real driver-construction failure would hit. Picked deliberately over
     // `scan-dismissed`/a `connect()` throw: BOTH of those fail before
-    // `logRef.current` is ever assigned (device not yet picked, or
+    // `sessionRef.current` is ever assigned (device not yet picked, or
     // `transport.connect()` not yet resolved) — the ring literally has
     // nothing to append into yet, which would make this test pass whether
-    // or not the append logic is correct. Failing here, AFTER `logRef
-    // .current = log` (the line right before `createPm5Driver` runs), is
-    // what actually exercises the append.
+    // or not the append logic is correct. Failing here, AFTER
+    // `sessionRef.current = session` (the line right before
+    // `createPm5Driver` runs), is what actually exercises the append.
     const stubTransport: Transport & { snapshot(): unknown } = {
       scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
       connect: vi.fn(async () => undefined),

@@ -1781,8 +1781,8 @@ export function useMonitorSession(
    *  file calls `handoffStore.commit`. */
   const lastAcceptedRevisionRef = useRef<number | null>(null);
   /** What the next `live` transition will file the record under — captured
-   *  at `program()` (the only moment the caller tells us what workout this
-   *  is), not at `live`. */
+   *  at `program()` or, since #259, at `beginFreeRow()` (the two moments
+   *  the caller tells us what this session is), not at `live`. */
   const identityRef = useRef(NO_IDENTITY);
   const freezeRef = useRef<FreezeRun>(NO_FREEZE);
   /** The `ready`-only streak behind `ROWING_ACTIVE_FALLBACK_FRAMES`. Only
@@ -1805,9 +1805,10 @@ export function useMonitorSession(
    *  consumed there, then cleared" lifetime for the CONNECTION (reset at
    *  `connect()`, below). It ALSO gets the same per-run discard
    *  `freezeRef`/`rowingStreakRef` use — a stale armed edge from a resume
-   *  that happened before a fresh `program()` (or the RC-37
-   *  programDropped/ready exit) must not be consumed by that NEW run's own
-   *  first frame — cleared at both of those sites for the identical reason
+   *  that happened before a fresh arm (`program()` or `beginFreeRow()`,
+   *  or the RC-37 programDropped/ready exit) must not be consumed by that
+   *  NEW run's own first frame — cleared at all three of those sites for
+   *  the identical reason
    *  `rowingStreakRef` is. `null` when no resume is currently awaiting its
    *  first post-resume frame. */
   const resumeEdgeArmedRef = useRef<{
@@ -1832,21 +1833,23 @@ export function useMonitorSession(
    *  same "no pre-background frame to compare against" case
    *  `preBackgroundKey: null` already models. Cleared with the identical
    *  per-connection/per-run lifetime `resumeEdgeArmedRef` itself uses
-   *  (`connect()`, a fresh `program()` arm, the RC-37 programDropped/ready
-   *  exit) — not strictly load-bearing for correctness, since every arming
-   *  read here is always preceded by a background edge that just wrote it
-   *  fresh, but kept in lockstep for the same reason those three sites
+   *  (`connect()`, a fresh arm — `program()` or `beginFreeRow()` — and
+   *  the RC-37 programDropped/ready exit) — not strictly load-bearing for
+   *  correctness, since every arming read here is always preceded by a
+   *  background edge that just wrote it fresh, but kept in lockstep for
+   *  the same reason those four sites
    *  already clear `resumeEdgeArmedRef` itself: a leftover value from
    *  before the reset must never be mistakable for a live one. */
   const preBackgroundFreezeKeyRef = useRef<string | null>(null);
   /** §3: the run of consecutive post-resume frames whose `freezeKey` still
    *  matches the frame that armed it (`resume-first-frame`'s own
-   *  `stale=true` case) — `null` whenever no such run is open. TWO
+   *  `stale=true` case) — `null` whenever no such run is open. THREE
    *  independent reset paths, not one: `connect()` clears it per
    *  CONNECTION (same lifetime as `framesWhileHiddenRef`, below), and it
    *  ALSO gets the same per-run discard `freezeRef`/`rowingStreakRef`/
-   *  `lastContinuityRef` use — a fresh `program()`'s own reset and the
-   *  RC-37 programDropped/ready exit both clear it too, so a run of
+   *  `lastContinuityRef` use — a fresh arm (`program()` or
+   *  `beginFreeRow()`, the #259-merge's third arm) and the RC-37
+   *  programDropped/ready exit all clear it too, so a run of
    *  identical frames from the PREVIOUS run/resume can never be attributed
    *  to the next one. Closed with its own `resume-stale-run` entry by
    *  whichever of FOUR things happens first: the first differing frame
@@ -1854,11 +1857,12 @@ export function useMonitorSession(
    *  still open (`endedBy=resumed` — closed at the top of the
    *  `resumeEdgeArmedRef` arm-consumption branch, before the new arm is
    *  consumed, so a second resume can neither overwrite the open run nor
-   *  silently merge into it), a fresh `program()` arm or the RC-37
-   *  programDropped/ready exit finding it still open (`endedBy=reset` —
-   *  final whole-branch review, item 5: these two per-run resets used to
-   *  discard an open run with no entry at all, contradicting this
-   *  comment's own claim that every close is recorded), or `teardown`
+   *  silently merge into it), a fresh arm — `program()` or
+   *  `beginFreeRow()` — or the RC-37 programDropped/ready exit finding it
+   *  still open (`endedBy=reset` — final whole-branch review, item 5:
+   *  per-run resets used to discard an open run with no entry at all,
+   *  contradicting this comment's own claim that every close is
+   *  recorded), or `teardown`
    *  running first (`endedBy=teardown`, that close happens once, at the
    *  top of `teardown`, since it is the single choke point every exit path
    *  runs through — see its own comment; every exit that reaches
