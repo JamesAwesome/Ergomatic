@@ -1941,13 +1941,13 @@ describe("GET/POST /api/logs", () => {
     ["not-a-date", "not-a-date"],
     ["a non-ISO human date string", "March 5, 2020"],
     ["a number, not a string", 12345],
-    // James's REVISE on #249, blocker 3: Node's Date.parse NORMALIZES an
-    // impossible calendar date instead of rejecting it — "2026-02-31" (no
-    // such day; February has 28) silently becomes 2026-03-03, and
-    // "2026-04-31" (April has 30 days) silently becomes 2026-05-01. Both
-    // are a CLIENT BUG, loud, same 400 as any other malformed string —
-    // distinct from the out-of-band wrong-clock coercion below, which
-    // stays a well-formed, merely implausible instant.
+    // Node's Date.parse NORMALIZES an impossible calendar date instead of
+    // rejecting it — "2026-02-31" (no such day; February has 28) silently
+    // becomes 2026-03-03, and "2026-04-31" (April has 30 days) silently
+    // becomes 2026-05-01. Both are a CLIENT BUG, loud, same 400 as any
+    // other malformed string — distinct from the out-of-band wrong-clock
+    // coercion below, which stays a well-formed, merely implausible
+    // instant.
     ["an impossible calendar day (Feb 31)", "2026-02-31T12:00:00.000Z"],
     ["an impossible calendar day (Apr 31)", "2026-04-31T12:00:00.000Z"],
   ])(

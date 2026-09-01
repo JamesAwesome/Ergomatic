@@ -238,11 +238,11 @@ export function createConcept2Router({
       available: true,
       linked: true,
       weightClass: link.weightClass,
-      // James's REVISE on #249, blocker 1: PR2 needs the linked account's
-      // identity to render the sent-state contract (spec F8: "sent" only
-      // when a row's c2_user_id matches the LIVE link's) and to build the
-      // View-on-Concept2 URL (/profile/{c2_user_id}/log/{result_id}).
-      // Still no token on this response — only the numeric account id.
+      // PR2 needs the linked account's identity to render the sent-state
+      // contract (spec F8: "sent" only when a row's c2_user_id matches
+      // the LIVE link's) and to build the View-on-Concept2 URL
+      // (/profile/{c2_user_id}/log/{result_id}). Still no token on this
+      // response — only the numeric account id.
       c2UserId: link.c2UserId,
       needsReauth: link.needsReauthAt !== null,
     });

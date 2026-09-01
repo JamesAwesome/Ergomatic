@@ -1,7 +1,7 @@
 # Wave E — the Concept2 logbook (design)
 
-**Date:** 2026-08-31 · **Status:** REV 2 MERGED #244 (2026-08-31); PR1
-corrections folded on the PR #249 branch
+**Date:** 2026-08-31 · **Status:** REV 2, MERGED #244; corrections folded
+2026-09-01
 (rev 1 was revised at the anchor pass — verdict REVISE, three kill-shots;
 the corrections are folded in below and the vetted ground is recorded)
 **Wave:** E (ROADMAP "Wave E — The Concept2 logbook", opened 2026-08-31)

@@ -624,11 +624,11 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(res.body).toStrictEqual({ available: true, linked: false });
   });
 
-  // James's REVISE on #249, blocker 1: the sent-state contract (spec F8)
-  // renders "sent" only when a row's c2_user_id matches the LIVE link's,
-  // and the View-on-Concept2 URL is /profile/{c2_user_id}/log/{result_id}
-  // — PR2 needs c2UserId off this response, not just weightClass. Pinned
-  // with toStrictEqual so an accidental extra/renamed field fails loudly.
+  // The sent-state contract (spec F8) renders "sent" only when a row's
+  // c2_user_id matches the LIVE link's, and the View-on-Concept2 URL is
+  // /profile/{c2_user_id}/log/{result_id} — PR2 needs c2UserId off this
+  // response, not just weightClass. Pinned with toStrictEqual so an
+  // accidental extra/renamed field fails loudly.
   it("GET: available, linked — carries c2UserId, tokens never serialized", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(

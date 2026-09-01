@@ -244,12 +244,12 @@ function notesError(value: unknown): string | null {
 // column is nullable and the upload mapping already has a loggedAt
 // fallback). This band is a save-time sanity bound only; C2's own
 // future-date bound applies at UPLOAD time to a different instant.
-// Capturing groups on the wall-clock fields (year/month/day/hour/min/sec) —
-// James's REVISE on #249, blocker 3: the regex alone only shapes the
-// string; a value like "2026-02-31T12:00:00.000Z" matches it and parses
-// (`Date.parse` NORMALIZES an impossible calendar day into the next month
-// rather than rejecting it), so a strict calendar check runs on these
-// captures below, separate from mere format shape.
+// Capturing groups on the wall-clock fields (year/month/day/hour/min/sec):
+// the regex alone only shapes the string; a value like
+// "2026-02-31T12:00:00.000Z" matches it and parses (`Date.parse`
+// NORMALIZES an impossible calendar day into the next month rather than
+// rejecting it), so a strict calendar check runs on these captures below,
+// separate from mere format shape.
 const COMPLETED_AT_RE =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const COMPLETED_AT_MIN_MS = Date.parse("2020-01-01T00:00:00Z");
