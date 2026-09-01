@@ -161,7 +161,16 @@ export function useReturnToApp(cb: () => void): { status: ReturnToAppStatus } {
           }
           onSettled();
         },
-        () => {
+        (reason: unknown) => {
+          // Fix round 9 (item 6): `fail()` only ever set `status` —
+          // `Concept2LinkProbe.tsx`'s "Failed to arm — see console" copy
+          // had nothing in the console to point at, since the rejection
+          // reason itself was discarded right here. Logged with a stable
+          // prefix so a walk operator (or anyone else) can grep for it;
+          // logged even when `cancelled` is already true (a post-unmount
+          // rejection), since the reason is still real diagnostic
+          // information and costs nothing to surface.
+          console.error("[useReturnToApp] registration rejected:", reason);
           fail();
         },
       );

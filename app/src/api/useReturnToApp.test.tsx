@@ -345,7 +345,10 @@ describe("useReturnToApp's failure handling (fix round 7, P1, finding 5)", () =>
   // passed, so a test file free of that failure mode is itself part of
   // the proof, not just the explicit assertions below.
 
-  it("lifecycle registration rejects while mounted: status becomes failed, and the ALREADY-SUCCEEDED browserFinished arm is unsubscribed", async () => {
+  it("lifecycle registration rejects while mounted: status becomes failed, the ALREADY-SUCCEEDED browserFinished arm is unsubscribed, and the reason is logged (fix round 9, item 6 — Concept2LinkProbe's 'see console' copy needs something there)", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     let rejectLifecycle: (reason: unknown) => void = () => undefined;
     const lifecyclePromise = new Promise<() => void>((_resolve, reject) => {
       rejectLifecycle = reject;
@@ -368,7 +371,8 @@ describe("useReturnToApp's failure handling (fix round 7, P1, finding 5)", () =>
     });
     expect(result.current.status).toBe("arming");
 
-    rejectLifecycle(new Error("dynamic import failed"));
+    const reason = new Error("dynamic import failed");
+    rejectLifecycle(reason);
     await expect(lifecyclePromise).rejects.toThrow("dynamic import failed");
     await vi.waitFor(() => {
       expect(result.current.status).toBe("failed");
@@ -376,9 +380,18 @@ describe("useReturnToApp's failure handling (fix round 7, P1, finding 5)", () =>
     // The arm that DID succeed must not be left dangling once the other
     // arm's rejection moves the whole hook to "failed".
     expect(browserFinishedUnsubscribe).toHaveBeenCalledOnce();
+    // The rejection reason must actually reach the console, with a stable
+    // prefix a walk operator could grep for — not just a status flip.
+    expect(consoleError).toHaveBeenCalledWith(
+      "[useReturnToApp] registration rejected:",
+      reason,
+    );
   });
 
-  it("browserFinished registration rejects while mounted: status becomes failed, and the ALREADY-SUCCEEDED lifecycle arm is unsubscribed", async () => {
+  it("browserFinished registration rejects while mounted: status becomes failed, the ALREADY-SUCCEEDED lifecycle arm is unsubscribed, and the reason is logged", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     const lifecycleUnsubscribe = vi.fn();
     const registerAppLifecycleListener = vi.fn(
       async () => lifecycleUnsubscribe,
@@ -404,12 +417,17 @@ describe("useReturnToApp's failure handling (fix round 7, P1, finding 5)", () =>
     });
     expect(result.current.status).toBe("arming");
 
-    rejectBrowserFinished(new Error("addListener failed"));
+    const reason = new Error("addListener failed");
+    rejectBrowserFinished(reason);
     await expect(browserFinishedPromise).rejects.toThrow("addListener failed");
     await vi.waitFor(() => {
       expect(result.current.status).toBe("failed");
     });
     expect(lifecycleUnsubscribe).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith(
+      "[useReturnToApp] registration rejected:",
+      reason,
+    );
   });
 
   it("lifecycle registration rejecting AFTER unmount: settles quietly, no unhandled rejection, no state update on the unmounted hook", async () => {
