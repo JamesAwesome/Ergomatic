@@ -127,7 +127,8 @@ export interface StoredLog {
   id: string;
   workoutId: string | null;
   workoutTitle: string;
-  workoutType: WorkoutType;
+  /** Phase JR PR 1: NULLABLE — see `RecentLog.workoutType`. */
+  workoutType: WorkoutType | null;
   loggedAt: string;
   held: HeldResult | null;
   pain: number | null;
