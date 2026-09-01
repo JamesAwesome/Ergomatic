@@ -188,7 +188,7 @@ describe("useReturnToApp (native path, mocked adapter)", () => {
     });
   });
 
-  it("holds cb in a ref: re-rendering with a NEW cb identity does not re-subscribe (fix round 3, antagonist finding 1 — the headline break), and the LATEST cb is what fires", async () => {
+  it("holds cb in a ref: re-rendering with a NEW cb identity does not re-subscribe (fix round 3, antagonist finding 1 — the headline break), and the LATEST cb is what fires — via BOTH the appLifecycle listener AND browserFinished", async () => {
     let capturedOnEvent: ((e: "background" | "foreground") => void) | undefined;
     const registerAppLifecycleListener = vi.fn(
       async (onEvent: (e: "background" | "foreground") => void) => {
@@ -196,7 +196,18 @@ describe("useReturnToApp (native path, mocked adapter)", () => {
         return vi.fn();
       },
     );
-    const onBrowserFinished = vi.fn(async () => vi.fn());
+    // Round 4 finding (IMPORTANT): captured the same way the earlier
+    // native test above already does (`fireBrowserFinished`), so THIS
+    // test can fire it AFTER the rerender — the freshness gap
+    // `onBrowserFinished(() => cbRef.current())` guards against had NO
+    // biting mutation before this: `onBrowserFinished(cb)` (closing over
+    // the STALE `cb1` at subscribe time) left every prior test green,
+    // because none of them ever fired browserFinished after a rerender.
+    let fireBrowserFinished: () => void = () => undefined;
+    const onBrowserFinished = vi.fn(async (finishedCb: () => void) => {
+      fireBrowserFinished = finishedCb;
+      return vi.fn();
+    });
     vi.doMock("../adapters/appLifecycle", () => ({
       registerAppLifecycleListener,
       registerWebAppLifecycleListener: vi.fn(),
@@ -226,9 +237,14 @@ describe("useReturnToApp (native path, mocked adapter)", () => {
     expect(onBrowserFinished).toHaveBeenCalledOnce();
 
     // The listener captured at the ONE subscribe time must still call
-    // whichever `cb` is CURRENT, not the one captured at subscribe time.
+    // whichever `cb` is CURRENT, not the one captured at subscribe time —
+    // checked on BOTH signals, not just the appLifecycle one.
     capturedOnEvent!("foreground");
     expect(cb1).not.toHaveBeenCalled();
     expect(cb2).toHaveBeenCalledOnce();
+
+    fireBrowserFinished();
+    expect(cb1).not.toHaveBeenCalled();
+    expect(cb2).toHaveBeenCalledTimes(2);
   });
 });

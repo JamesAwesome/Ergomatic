@@ -45,13 +45,25 @@
 
 ### Task 2: the foreground re-fetch seam
 
-**Files:**
-- Create: `app/src/api/useForegroundRefetch.ts` (or beside the api hooks — match where `useRecentLogs` lives)
-- Test: `app/src/api/useForegroundRefetch.test.tsx` (client project, jsdom)
+**Files (renamed, fix round 3 — see below for why):**
+- Create: `app/src/api/useReturnToApp.ts` (was `useForegroundRefetch.ts`; or
+  beside the api hooks — match where `useRecentLogs` lives)
+- Test: `app/src/api/useReturnToApp.test.tsx` (was
+  `useForegroundRefetch.test.tsx`; client project, jsdom)
 
-**Interfaces:**
-- Consumes: `registerAppLifecycleListener` (native arm) and `registerWebAppLifecycleListener` (web arm) from `adapters/appLifecycle.ts`.
-- Produces: `useForegroundRefetch(cb: () => void): void` — invokes `cb` on every `"foreground"` transition; on native rides the adapter's native arm; on web rides the raw web mapping (plan correction 2); unsubscribes on unmount; never fires on `"background"`. PR2's Concept2 card calls this with its `GET /api/concept2/link` re-fetch.
+**Interfaces (superseded by fix rounds 2-3 — `useReturnToApp.ts`'s own
+doc comment is the current source of truth, not this paragraph):**
+- Consumes: `registerAppLifecycleListener` (native arm) and `registerWebAppLifecycleListener` (web arm) from `adapters/appLifecycle.ts`. **Fix round 2 added:** `onBrowserFinished` from `adapters/externalBrowser.ts` (composed on the native branch alongside `resume` — `resume` alone misses the modal-dismiss return path).
+- Produces (renamed `useReturnToApp`, fix round 3 — the old name promised
+  only foreground transitions): `(cb: () => void): void` — fires `cb`
+  AT-LEAST-ONCE per return to the app (foreground transition OR
+  `browserFinished`, never on `"background"`); on native rides the
+  adapter's native arm plus `browserFinished`; on web rides the raw web
+  mapping (plan correction 2); unsubscribes on unmount; `cb` is held in a
+  ref with an empty effect dependency array (fix round 3 finding 1 — a
+  `[cb]`-keyed effect re-subscribed on every render of a caller passing an
+  inline arrow, dropping events in the async re-subscribe window). PR2's
+  Concept2 card calls this with its `GET /api/concept2/link` re-fetch.
 
 - [ ] **Step 1: Failing tests:** dispatching `visibilitychange` with `visibilityState: "visible"` fires `cb` once; `"hidden"` never fires it; unmount unsubscribes (a later event fires nothing); a fake-native platform reaches the adapter's native path (mock `registerAppLifecycleListener`, assert subscription + foreground filtering + the returned-Promise unsubscribe is awaited and called on unmount — the async-unsubscribe shape is the adapter's own documented contract).
 - [ ] **Step 2-4:** run/fail, implement, pass. Mutation probes: drop the event filter (fire on background too) → filter test red; drop the unsubscribe → unmount test red. Record texts.

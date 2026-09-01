@@ -33,9 +33,20 @@ const PROBE_URL = "https://log-dev.concept2.com";
  * subscription down, and re-added it — reopening the exact race for tap
  * 2 onward (antagonist finding 1, fix round 3). `useReturnToApp` now
  * holds `cb` in a ref with an EMPTY effect dependency array (one
- * subscription for the component's whole mounted lifetime), so THIS
- * card's mount-before-any-tap ordering genuinely satisfies "register
- * before opening" now, for every tap, not just the first.
+ * subscription for the component's whole mounted lifetime), fixing that
+ * RE-subscription race for tap 2 onward.
+ *
+ * **Round 4 correction, the same over-promotion one layer down: tap 1
+ * itself is still NOT guaranteed race-free.** Mounting happens before any
+ * tap is POSSIBLE, but the subscription this mount triggers is
+ * ASYNCHRONOUS — a dynamic `import()` plus `Browser.addListener`'s own
+ * returned `Promise` (`onNativeBrowserFinished`) — so an impatient tap on
+ * "Open consent browser" the instant the screen appears can still open
+ * and finish the browser before that promise chain resolves, missing
+ * `browserFinished` for THAT one round trip. Only from tap 2 onward is
+ * registration guaranteed complete (once established, fix round 3's fix
+ * means it never tears down again) — "for every tap" was still one tap
+ * too many.
  */
 export default function Concept2LinkProbe() {
   const [returns, setReturns] = useState(0);
