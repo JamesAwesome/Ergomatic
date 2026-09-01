@@ -177,13 +177,13 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
   - `latch-count` — recorded by `stash()` once per teardown, detail:
     `latches=<n> resumes=<n>`
 
-- [ ] **Step 1: failing parse test** — feed a captured 0x0031 payload whose
+- [x] **Step 1: failing parse test** — feed a captured 0x0031 payload whose
   rowingState byte is a non-1 value (build it from the parser test file's
   existing payload helpers) and assert `rawRowingState` carries the raw
   byte while `rowingActive` stays false; a `=== 1` payload carries both
   `true` and `1`.
-- [ ] **Step 2: red, implement (additive field in `toMonitorFrame`), green.**
-- [ ] **Step 3: failing hook tests** (scripted-transport idiom; the
+- [x] **Step 2: red, implement (additive field in `toMonitorFrame`), green.**
+- [x] **Step 3: failing hook tests** (scripted-transport idiom; the
   lifecycle-event injection idiom is in the existing resume tests — find
   them by `decideResumeLatch` / `app-lifecycle`):
   - (a) background → 3 frames identical to the last pre-background
@@ -198,7 +198,7 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
   - (d) two latching resumes then teardown → the stashed export's
     `latch-count` line reads `latches=2 resumes=2`; a non-latching resume
     increments only `resumes`.
-- [ ] **Step 4: red, implement.** The first-frame instrument lives in the
+- [x] **Step 4: red, implement.** The first-frame instrument lives in the
   frame handler behind a small ref armed by the foreground branch (the
   handler already owns `framesWhileHiddenRef` with exactly this lifetime —
   mirror its reset discipline); the stale-run tracker is a second ref
@@ -207,8 +207,8 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
   `update({ frameSilence: true })` latch site; the resume counter beside
   the `app-lifecycle` record. `stash()` records `latch-count` BEFORE
   `exportLog()` so the line rides every stashed copy.
-- [ ] **Step 5: green; full unit+client run.**
-- [ ] **Step 6: commit, then mutations:** (a) point the staleness compare at
+- [x] **Step 5: green; full unit+client run.**
+- [x] **Step 6: commit, then mutations:** (a) point the staleness compare at
   `elapsedSeconds` instead of the freezeKey triple → leg (a) red (elapsed
   always moves, `stale` would read false); (b) never record
   `resume-stale-run` on teardown → leg (c) red; (c) increment latches on
@@ -238,7 +238,7 @@ task is dispatched). The approved copy and placement then bind verbatim.
 **Interfaces:**
 - Consumes: Task 1's `listSessionLogs()` and `SessionLogHistoryEntry`.
 
-- [ ] **Step 1: failing client tests**: the You row navigates to
+- [x] **Step 1: failing client tests**: the You row navigates to
   `/you/diagnostics`; that menu's "Monitor logs" card navigates to
   `/you/diagnostics/monitor-logs`; the screen lists entries newest-first
   with their `savedAt` rendered per the Gate-0-approved format; empty state
@@ -247,14 +247,14 @@ task is dispatched). The approved copy and placement then bind verbatim.
   `ConnectionLogSheet` COPY LOG contract: one serialization, never
   re-stringified) and flips its label per the approved states; a corrupt
   entry simply doesn't render.
-- [ ] **Step 2: red, implement** (screen reads `listSessionLogs()` once at
+- [x] **Step 2: red, implement** (screen reads `listSessionLogs()` once at
   mount — `useState` initializer, the repo's on-open snapshot idiom;
   clipboard via `navigator.clipboard.writeText` with the failed state, the
   `ConnectionLogSheet` pattern).
-- [ ] **Step 3: green; commit; mutations:** (a) render oldest-first → the
+- [x] **Step 3: green; commit; mutations:** (a) render oldest-first → the
   order leg red; (b) re-stringify the export before copy → the
   byte-identity leg red. Record failure text.
-- [ ] **Step 4: `pnpm e2e` and `pnpm screenshots`** — the new screen and row
+- [x] **Step 4: `pnpm e2e` and `pnpm screenshots`** — the new screen and row
   are layout changes: add a capture (seed at least two history entries),
   open and look (RF7); revert unrelated flaky capture diffs.
 
@@ -269,14 +269,14 @@ task is dispatched). The approved copy and placement then bind verbatim.
   that reference them), `docs/design/DEVIATIONS.md` if any row touches You's
   row list.
 
-- [ ] **Step 1:** the e2e leg (this is the RF24 composition: teardown writes,
+- [x] **Step 1:** the e2e leg (this is the RF24 composition: teardown writes,
   the door reads — one test starting before the producer).
-- [ ] **Step 2:** full gates: `pnpm lint && pnpm typecheck && pnpm test`
+- [x] **Step 2:** full gates: `pnpm lint && pnpm typecheck && pnpm test`
   (Docker), `pnpm build && bash scripts/dist-grep.sh`, per-file coverage.
-- [ ] **Step 3:** ROADMAP: the ring-durability register/wave rows gain their
+- [x] **Step 3:** ROADMAP: the ring-durability register/wave rows gain their
   SHIPPED pointers (hand-wrapped); note that RC-29's counter now ships and
   its register row's "no threshold moves until ordinary use produces the
   number" clause is now armed.
-- [ ] **Step 4:** commit; push; PR with the human-first body (~120 words
+- [x] **Step 4:** commit; push; PR with the human-first body (~120 words
   above the fold, no risk note above the fold — PM ledger rule), captures,
   and Record block. **Present and STOP — James merges.**

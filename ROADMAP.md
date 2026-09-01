@@ -304,15 +304,15 @@ rower's work silently.
       the ring is the only instrument that reaches production, and today it
       can only be read by destroying it.
       **§2 SHIPS in Wave F PR 2** (the ring chunk; PR number filled in at
-      merge): a three-slot history beside the single perishable key (last
-      three teardowns' exports all survive at once,
-      `src/monitor/sessionLogHistory.ts`) and the ungated door that lists
-      and copies them (You → DIAGNOSTICS → Monitor logs,
-      `src/you/Diagnostics.tsx`/`MonitorLogs.tsx`, Gate 0 approved
-      2026-09-01) — exactly the fix that would have saved the pocketed-phone
-      ring, now in place for the next one. The same PR also ships §3 (the
-      resume-edge frame instrument) and §6 (the RC-29 latch counter, see
-      that register row).
+      merge): a three-slot history beside the single perishable key (the last
+      three LOGICAL connected sessions' exports all survive at once, one entry
+      per Connect however many teardown passes it takes,
+      `src/monitor/sessionLogHistory.ts`) and the ungated door that lists and
+      copies them (You → DIAGNOSTICS → Monitor logs,
+      `src/you/Diagnostics.tsx`/`MonitorLogs.tsx`, Gate 0 approved 2026-09-01) —
+      exactly the fix that would have saved the pocketed-phone ring, now in
+      place for the next one. The same PR also ships §3 (the resume-edge frame
+      instrument) and §6 (the RC-29 latch counter, see that register row).
 
 - [ ] **Correct resume** (was LM PR 2). James's ruling, 2026-08-20:
       **"CORRECT RESUME, not a background mode."** **Unblocked 2026-08-26** —

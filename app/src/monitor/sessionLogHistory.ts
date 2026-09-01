@@ -5,9 +5,12 @@
 // pocketed-phone ring: the log that would have proven or refuted §0.1's
 // hypothesis was overwritten by the very next teardown, before anyone got a
 // chance to read it. This module does not touch that key or its reader; it
-// adds a THREE-ENTRY HISTORY beside it, additive, so the last three
-// teardowns' exports all survive at once. Task 3 builds the ungated door
-// that lists them; this module is read-and-write plumbing only.
+// adds a THREE-ENTRY HISTORY beside it, additive, so the last three LOGICAL
+// connected sessions' exports all survive at once (one entry per `connect()`,
+// however many teardown passes it takes to close it out — review round 2's
+// own identity-bound upsert, below, is what makes "session" rather than
+// "teardown call" the true unit). Task 3 builds the ungated door that lists
+// them; this module is read-and-write plumbing only.
 //
 // CLIENT-ONLY DIAGNOSTICS, not a record: same tier as `last-session-log`
 // itself — losable (device storage can be cleared, denied, or full at any
