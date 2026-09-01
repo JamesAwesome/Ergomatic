@@ -3,12 +3,12 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 
 // Wave F PR 2 Task 4 — the composition leg (recurring failure 24): a
 // connected TEARDOWN WRITES the diagnostics ring
-// (`sessionLogHistory.ts`'s `pushSessionLog`, called unconditionally from
+// (`sessionLogHistory.ts`'s `upsertSessionLog`, called unconditionally from
 // `useMonitorSession.ts`'s `stash()`), and the diagnostics door (Task 3,
 // `/you/diagnostics/monitor-logs`) READS it back. Every other test that
 // touches either half stops at its own producer (`sessionLogHistory.test.ts`,
 // `useMonitorSession.test.ts`) or its own consumer
-// (`MonitorLogs.test.tsx`, seeded by hand-calling `pushSessionLog` — never
+// (`MonitorLogs.test.tsx`, seeded by hand-calling `upsertSessionLog` — never
 // through a real teardown) — this is the one test that starts BEFORE the
 // write and finishes AFTER the read, so a broken seam between them (a key
 // typo, a storage-shape mismatch, a stale snapshot) has somewhere to fail
@@ -22,7 +22,7 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // completion alone; its own story does not start until well after that
 // point). With zero rowing frames, `run` (`useMonitorSession.ts`) stays
 // `null`, so `burstEligible` is false and the End teardown takes the
-// IMMEDIATE path: `stash()` — and with it `pushSessionLog` — runs
+// IMMEDIATE path: `stash()` — and with it `upsertSessionLog` — runs
 // synchronously off the second End tap, with no "Wrapping up" burst hold
 // to wait out and no dependence on whether any interval was ever measured.
 // The ring write this leg proves out does not care whether a record ever
