@@ -9737,3 +9737,15 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink);
   margin: 0;
 }
+
+/* Phase JR PR 2 (approved board, the landscape frame): the free row's one
+   band cell sits in EST LEFT's own corner — bottom-RIGHT — where a rower's
+   eye already looks for a time figure. With `.connected-band-upnext` absent
+   the row's single child would otherwise sit left; this pushes it over
+   without inventing a second band layout. Portrait is untouched: the base
+   column band has no horizontal position to argue about. */
+@media (orientation: landscape) {
+  .connected-pane-live .connected-band:has(.connected-band-cell:only-child) {
+    justify-content: flex-end;
+  }
+}

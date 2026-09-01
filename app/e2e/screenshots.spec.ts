@@ -4490,3 +4490,104 @@ for (const name of CONNECTED_STATES) {
     });
   });
 }
+
+// ── PHASE JR PR 2: the free row ─────────────────────────────────────────
+// Real data throughout (recurring failure 7): the live and log captures are
+// driven through the real connect → arm → frames pipeline off the fake, so
+// every number on screen is one the pipeline computed, not one the capture
+// seeded. Recompute the headline by eye when reviewing: AVG must equal
+// 500 × elapsed ÷ meters for the frame in shot (64 s over 256 m = 125.0 =
+// 2:05.0).
+
+const JR_STORY_START_MS = 8000;
+
+async function injectJustRowShotFake(page: Page): Promise<void> {
+  await page.addInitScript(
+    ({ startMs }) => {
+      window.__pm5FakeScript__ = {
+        // Required by the script shape, never consulted: a free row sends no
+        // programming bytes for the fake's byte assertion to check.
+        program: {
+          intervals: [
+            {
+              type: "work",
+              kind: "distance",
+              value: 100,
+              targetSplit: null,
+              displaySpm: null,
+              restSeconds: 0,
+            },
+          ],
+        },
+        deviceName: "PM5 432331249",
+        events: Array.from({ length: 90 }, (_, i) => ({
+          atMs: startMs + 1000 + i * 1000,
+          kind: "status",
+          workoutState: 4, // WORKOUTSTATE_INTERVALWORKTIME
+          elapsedSeconds: i + 1,
+          distanceMeters: (i + 1) * 4,
+          spm: 22,
+          currentSplit: 140,
+          heartRateBpm: null,
+          programIntervalIndex: 0,
+        })),
+      };
+    },
+    { startMs: JR_STORY_START_MS },
+  );
+}
+
+async function openJustRowLive(page: Page, email: string): Promise<void> {
+  await injectJustRowShotFake(page);
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await page.goto("/justrow");
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Ready when you pull" }),
+  ).toBeVisible();
+  // The surface takes over on first motion; the sixteenth frame puts a
+  // legible 0:16 / 64 m on screen.
+  await expect(page.getByText("ELAPSED")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("0:16")).toBeVisible({ timeout: 20_000 });
+}
+
+test("justrow-door", async ({ page }) => {
+  await injectJustRowShotFake(page);
+  await signInViaBackdoor(page, {
+    email: "screenshots-justrow-door@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/justrow");
+  await expect(page.getByRole("heading", { name: "Just Row" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-door.png"),
+  });
+});
+
+test("justrow-live", async ({ page }) => {
+  await openJustRowLive(page, "screenshots-justrow-live@e2e.test");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-live.png"),
+  });
+});
+
+test("justrow-live-landscape", async ({ page }) => {
+  await openJustRowLive(page, "screenshots-justrow-live-landscape@e2e.test");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(page.getByText("ELAPSED")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-live-landscape.png"),
+  });
+});
+
+test("justrow-log", async ({ page }) => {
+  await openJustRowLive(page, "screenshots-justrow-log@e2e.test");
+  await page.getByRole("button", { name: "End session" }).click();
+  await page.getByRole("button", { name: "Tap again to end" }).click();
+  await expect(page).toHaveURL(/\/justrow\/log$/, { timeout: 15_000 });
+  await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-log.png"),
+  });
+});
