@@ -165,7 +165,13 @@ describe("MonitorLogs — the when label", () => {
 describe("MonitorLogs — COPY (ConnectionLogSheet's own three-state contract)", () => {
   it("copies the entry's exported bytes byte-for-byte, never re-stringified", async () => {
     const clipboard = stubClipboard();
-    const raw = ring(3);
+    // Deliberately NOT canonical `JSON.stringify` output (pretty-printed,
+    // trailing newline): `JSON.parse` then compact `JSON.stringify` would
+    // round-trip to a DIFFERENT string, so this fixture is the one that
+    // actually distinguishes "copied verbatim" from "re-serialized" —
+    // `ring()`'s own compact output happens to be a fixed point of that
+    // round-trip and would pass even a re-stringifying implementation.
+    const raw = `${JSON.stringify(JSON.parse(ring(3)), null, 2)}\n`;
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     pushSessionLog(raw, NOW);
