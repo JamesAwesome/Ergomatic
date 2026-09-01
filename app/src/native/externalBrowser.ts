@@ -13,7 +13,7 @@ import { Browser } from "@capacitor/browser";
  * (P1a, reviewer finding): dismissing it this way does NOT background or
  * foreground the host app, so `adapters/appLifecycle.ts`'s `pause`/`resume`
  * translation never fires for this return path — `onNativeBrowserFinished`
- * below, not `useForegroundRefetch.ts` alone, is what notices a successful
+ * below, not `useReturnToApp.ts` alone, is what notices a successful
  * in-modal return.
  */
 export async function openNativeExternalUrl(url: string): Promise<void> {

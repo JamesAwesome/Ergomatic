@@ -37,11 +37,11 @@ afterEach(() => {
   });
 });
 
-describe("useForegroundRefetch (web arm, real DOM)", () => {
+describe("useReturnToApp (web arm, real DOM)", () => {
   it("fires cb once when the tab becomes visible", async () => {
-    const { useForegroundRefetch } = await import("./useForegroundRefetch");
+    const { useReturnToApp } = await import("./useReturnToApp");
     const cb = vi.fn();
-    renderHook(() => useForegroundRefetch(cb));
+    renderHook(() => useReturnToApp(cb));
 
     setVisibility("hidden");
     setVisibility("visible");
@@ -50,9 +50,9 @@ describe("useForegroundRefetch (web arm, real DOM)", () => {
   });
 
   it("never fires cb on background (hidden)", async () => {
-    const { useForegroundRefetch } = await import("./useForegroundRefetch");
+    const { useReturnToApp } = await import("./useReturnToApp");
     const cb = vi.fn();
-    renderHook(() => useForegroundRefetch(cb));
+    renderHook(() => useReturnToApp(cb));
 
     setVisibility("hidden");
 
@@ -60,9 +60,9 @@ describe("useForegroundRefetch (web arm, real DOM)", () => {
   });
 
   it("unsubscribes on unmount — a later event fires nothing", async () => {
-    const { useForegroundRefetch } = await import("./useForegroundRefetch");
+    const { useReturnToApp } = await import("./useReturnToApp");
     const cb = vi.fn();
-    const { unmount } = renderHook(() => useForegroundRefetch(cb));
+    const { unmount } = renderHook(() => useReturnToApp(cb));
 
     unmount();
     setVisibility("hidden");
@@ -72,7 +72,7 @@ describe("useForegroundRefetch (web arm, real DOM)", () => {
   });
 });
 
-describe("useForegroundRefetch (native path, mocked adapter)", () => {
+describe("useReturnToApp (native path, mocked adapter)", () => {
   it("subscribes via the adapter's native path AND browserFinished, forwards only foreground/finished, and awaits+calls both Promise unsubscribes on unmount", async () => {
     const unsubscribe = vi.fn();
     const registerAppLifecycleListener = vi.fn(
@@ -99,10 +99,10 @@ describe("useForegroundRefetch (native path, mocked adapter)", () => {
     vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
 
     vi.resetModules();
-    const { useForegroundRefetch } = await import("./useForegroundRefetch");
+    const { useReturnToApp } = await import("./useReturnToApp");
     const cb = vi.fn();
 
-    const { unmount } = renderHook(() => useForegroundRefetch(cb));
+    const { unmount } = renderHook(() => useReturnToApp(cb));
     // Let both mocked Promises settle before asserting/unmounting.
     await vi.waitFor(() => {
       expect(registerAppLifecycleListener).toHaveBeenCalledOnce();
@@ -145,9 +145,9 @@ describe("useForegroundRefetch (native path, mocked adapter)", () => {
     );
     vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
     vi.resetModules();
-    const { useForegroundRefetch } = await import("./useForegroundRefetch");
+    const { useReturnToApp } = await import("./useReturnToApp");
 
-    const { unmount } = renderHook(() => useForegroundRefetch(vi.fn()));
+    const { unmount } = renderHook(() => useReturnToApp(vi.fn()));
     unmount();
     // Settles AFTER unmount — the `cancelled` branch this guards against
     // calls the just-resolved unsubscribe immediately instead of stashing
@@ -174,9 +174,9 @@ describe("useForegroundRefetch (native path, mocked adapter)", () => {
       registerWebAppLifecycleListener: vi.fn(),
     }));
     vi.resetModules();
-    const { useForegroundRefetch } = await import("./useForegroundRefetch");
+    const { useReturnToApp } = await import("./useReturnToApp");
 
-    const { unmount } = renderHook(() => useForegroundRefetch(vi.fn()));
+    const { unmount } = renderHook(() => useReturnToApp(vi.fn()));
     unmount();
     // The registration only settles AFTER unmount — the `cancelled` branch
     // this guards against calls the just-resolved unsubscribe immediately
@@ -186,5 +186,49 @@ describe("useForegroundRefetch (native path, mocked adapter)", () => {
     await vi.waitFor(() => {
       expect(unsubscribe).toHaveBeenCalledOnce();
     });
+  });
+
+  it("holds cb in a ref: re-rendering with a NEW cb identity does not re-subscribe (fix round 3, antagonist finding 1 — the headline break), and the LATEST cb is what fires", async () => {
+    let capturedOnEvent: ((e: "background" | "foreground") => void) | undefined;
+    const registerAppLifecycleListener = vi.fn(
+      async (onEvent: (e: "background" | "foreground") => void) => {
+        capturedOnEvent = onEvent;
+        return vi.fn();
+      },
+    );
+    const onBrowserFinished = vi.fn(async () => vi.fn());
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener,
+      registerWebAppLifecycleListener: vi.fn(),
+    }));
+    vi.doMock("../adapters/externalBrowser", () => ({ onBrowserFinished }));
+    vi.resetModules();
+    const { useReturnToApp } = await import("./useReturnToApp");
+
+    const cb1 = vi.fn();
+    const { rerender } = renderHook(({ cb }) => useReturnToApp(cb), {
+      initialProps: { cb: cb1 },
+    });
+    await vi.waitFor(() => {
+      expect(registerAppLifecycleListener).toHaveBeenCalledOnce();
+      expect(onBrowserFinished).toHaveBeenCalledOnce();
+    });
+
+    const cb2 = vi.fn();
+    rerender({ cb: cb2 });
+
+    // The whole point: a NEW `cb` identity across a re-render must NOT
+    // tear down and re-add the subscription. Before the fix, `[cb]`
+    // deps made this fire a second time on every re-render — exactly the
+    // async re-subscribe window a real `browserFinished`/`resume` could
+    // land in and be silently dropped.
+    expect(registerAppLifecycleListener).toHaveBeenCalledOnce();
+    expect(onBrowserFinished).toHaveBeenCalledOnce();
+
+    // The listener captured at the ONE subscribe time must still call
+    // whichever `cb` is CURRENT, not the one captured at subscribe time.
+    capturedOnEvent!("foreground");
+    expect(cb1).not.toHaveBeenCalled();
+    expect(cb2).toHaveBeenCalledOnce();
   });
 });

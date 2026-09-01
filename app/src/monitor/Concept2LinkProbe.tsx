@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { openExternalUrl } from "../adapters/externalBrowser";
-import { useForegroundRefetch } from "../api/useForegroundRefetch";
+import { useReturnToApp } from "../api/useReturnToApp";
 
 /**
  * A dev-only probe, never a real link: `log-dev.concept2.com` never sees a
@@ -23,16 +23,23 @@ const PROBE_URL = "https://log-dev.concept2.com";
  * from a production build with the flag unset. RF12 red proof and exact
  * operator steps: `docs/superpowers/plans/2026-09-01-concept2-pr15-walk.md`.
  *
- * `useForegroundRefetch` is mounted BEFORE any tap can fire `openExternalUrl`
- * below — React wires this hook's subscriptions at mount, and the button
- * that calls `openExternalUrl` cannot be tapped before the screen has
- * mounted — satisfying `onNativeBrowserFinished`'s own "register before
- * opening" contract for free, the same way any real screen using this hook
- * would.
+ * **Fix round 3 (RF26 correction of an over-promoted claim):** this
+ * comment used to say `onNativeBrowserFinished`'s "register before
+ * opening" contract was satisfied "for free" because the hook mounts
+ * before any tap can fire `openExternalUrl`. That was true only for the
+ * FIRST tap: `useReturnToApp` (then `useForegroundRefetch`) depended on
+ * `[cb]`, and this card passed a fresh inline arrow on every render, so
+ * incrementing `returns` after tap 1 re-rendered the card, tore the
+ * subscription down, and re-added it — reopening the exact race for tap
+ * 2 onward (antagonist finding 1, fix round 3). `useReturnToApp` now
+ * holds `cb` in a ref with an EMPTY effect dependency array (one
+ * subscription for the component's whole mounted lifetime), so THIS
+ * card's mount-before-any-tap ordering genuinely satisfies "register
+ * before opening" now, for every tap, not just the first.
  */
 export default function Concept2LinkProbe() {
   const [returns, setReturns] = useState(0);
-  useForegroundRefetch(() => setReturns((n) => n + 1));
+  useReturnToApp(() => setReturns((n) => n + 1));
 
   return (
     <section

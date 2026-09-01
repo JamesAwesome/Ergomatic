@@ -62,7 +62,7 @@ describe("openExternalUrl", () => {
   });
 });
 
-// Fix round 2 (P1a): the modal-dismiss signal `useForegroundRefetch.ts`
+// Fix round 2 (P1a): the modal-dismiss signal `useReturnToApp.ts`
 // composes alongside `resume` — see that adapter's own tests for the
 // composition; these two cover `onBrowserFinished`'s own platform dispatch
 // in isolation, the same split `openExternalUrl`'s tests above already use.

@@ -7,10 +7,11 @@ import userEvent from "@testing-library/user-event";
 // on-device walk and the RF12 build-with/without-the-flag red proof —
 // neither is a unit-test concern). These tests cover its own two jobs:
 // the button reaches `openExternalUrl`, and the counter reaches
-// `useForegroundRefetch`'s already-tested composition (real DOM
-// `visibilitychange`, same idiom `useForegroundRefetch.test.tsx` itself
+// `useReturnToApp`'s already-tested composition (real DOM
+// `visibilitychange`, same idiom `useReturnToApp.test.tsx` itself
 // uses for its web arm — this file does not re-test that hook's native
-// path, already covered there).
+// path or its ref-based subscription-lifetime fix (fix round 3), both
+// already covered there).
 
 function setVisibility(state: "visible" | "hidden"): void {
   act(() => {

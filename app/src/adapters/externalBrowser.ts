@@ -32,7 +32,7 @@ import { navigateWeb } from "./webNavigate";
  * Web: synchronous plain navigation. Native: async — resolves once
  * `Browser.open` has handed off to `SFSafariViewController`; the app has no
  * further say over that surface until the rower returns. **Fix round 2
- * (P1a):** that return is noticed by `useForegroundRefetch.ts`'s composed
+ * (P1a):** that return is noticed by `useReturnToApp.ts`'s composed
  * `resume`/`browserFinished` signal, NOT `resume` alone — see
  * `onBrowserFinished` below for why `resume` on its own misses the modal
  * dismiss.
@@ -66,7 +66,7 @@ export function openExternalUrl(url: string): void | Promise<void> {
  * `registerAppLifecycleListener` web no-op shape exactly.
  *
  * Same return-shape contract as that function too: synchronous on web (a
- * no-op unsubscribe), a `Promise` on native — so `useForegroundRefetch.ts`
+ * no-op unsubscribe), a `Promise` on native — so `useReturnToApp.ts`
  * can dispatch on the shape with no `isNative()` of its own, the same way
  * it already does for `registerAppLifecycleListener`.
  */
