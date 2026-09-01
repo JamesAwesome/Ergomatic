@@ -129,19 +129,22 @@ report it rather than continuing to step 6.
   covers why this card's platform has no Ergomatic session artifact to
   observe either way — this is purely about Concept2's OWN page,
   observed, never signed into).
-- **Optional, fix round 5 — the design gate's own open question
-  (§2/§4 there):** if you already have Ergomatic open in ordinary mobile
-  Safari signed in (a genuinely separate thing from this native app —
-  visit the web build's URL in Safari directly and sign in there first,
-  skip this if you haven't), check whether Safari's dev tools or a quick
-  `document.cookie` read in that Safari tab show an `erg_session` cookie,
-  then note whether the SFSafariViewController sheet this card opens
-  seems to share any state with that Safari session (there's no visible
-  UI signal for this today — it is a weak, informal check, not a real
-  measurement of the browser-bound-continuation cookie the gate doc
-  describes, since that route doesn't exist yet). Skip entirely if you
-  don't already have a web session open; do not sign in ANYWHERE new
-  just to check this.
+- **Dropped, fix round 7 (finding 2):** this bullet used to ask you to
+  check `document.cookie` in mobile Safari for an `erg_session` cookie
+  and compare it against this card's `SFSafariViewController` sheet. Two
+  things made that unworkable, found this round: `erg_session` is
+  `HttpOnly` (`server/auth/cookies.ts:20-29`) — `document.cookie` can
+  never see it regardless of any sharing question — and the underlying
+  premise (a PRE-EXISTING web session cookie riding along into the
+  consent browser) was itself dropped from the design-gate doc this
+  round; Apple's own docs point at a different mechanism
+  (`ASWebAuthenticationSession`) for deliberately sharing session state,
+  not `SFSafariViewController`. The design-gate's actual open question
+  now (§2/§4/§3(d)) is whether a cookie our OWN not-yet-built `/start`
+  route sets survives ONE continuous consent-browser session — nothing
+  this probe card, or any check against a PRIOR web session, can measure.
+  There is no substitute check for this walk to carry until `/start`
+  exists.
 
 ## Afterwards
 
