@@ -192,7 +192,7 @@ describe("usePlanLinks", () => {
     ["a missing workoutTitle", { workoutTitle: undefined }],
     ["a non-string workoutTitle", { workoutTitle: 42 }],
     ["a missing workoutType", { workoutType: undefined }],
-    ["a non-string workoutType", { workoutType: null }],
+    ["a numeric workoutType", { workoutType: 42 }],
     ["a non-boolean workoutIsGlobal", { workoutIsGlobal: "yes" }],
     ["a non-string linkedTitle", { linkedTitle: 42 }],
     ["a numeric workoutIsGlobal", { workoutIsGlobal: 1 }],
@@ -213,6 +213,30 @@ describe("usePlanLinks", () => {
 
     await waitFor(() => expect(result.current.size).toBe(1));
     expect(result.current.get(2)?.id).toBe("good");
+  });
+
+  // Phase JR PR 1 (spec rev 4's F5). `workout_type` became NULLABLE — a
+  // free row prescribed no intensity — and `parseLink` rejected the WHOLE
+  // entry on a non-string type, which would blank a plan row's name over a
+  // field that is now legitimately absent.
+  //
+  // Exactly the reasoning the `workoutIsGlobal` guard beside it already
+  // records for its own tri-state: null is "unknown", not malformed, and
+  // rejecting the entry costs the row its name.
+  //
+  // Reachable only if the server's plan refusal ever fails to hold — a free
+  // row never becomes a plan link — so this is the second thing depending
+  // on that predicate, and the reason it is tested here as well as there.
+  it("KEEPS an entry whose workoutType is null — absent, not malformed", async () => {
+    mockApiReturning({
+      links: [wireLink({ planIndex: 3, id: "free", workoutType: null })],
+    });
+    const { usePlanLinks } = await import("./usePlanLinks");
+    const { result } = renderHook(() => usePlanLinks("sprint"));
+
+    await waitFor(() => expect(result.current.size).toBe(1));
+    expect(result.current.get(3)?.id).toBe("free");
+    expect(result.current.get(3)?.workoutType).toBeNull();
   });
 
   it.each([
