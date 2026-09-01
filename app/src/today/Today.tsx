@@ -669,11 +669,15 @@ function UnloggedRow({ run }: { run: SessionRun }) {
  *    stash (`ergomatic:last-monitor-log`/`ergomatic:last-rowed-log`,
  *    `sessionStorage`) is left standing on purpose: a rower who reports a
  *    bug right after discarding still has the wire trace to hand over;
- *  - the null-`workoutId` latent — no "Log it" at all when `run.workoutId`
- *    is null (unreachable today: only `WorkoutDetail`'s Connect flow
- *    programs a `MonitorRun`, and it always carries a real workout id, but
- *    `MonitorRun.workoutId`'s own type says otherwise, so this row honors
- *    it rather than asserting a narrower type the record doesn't have).
+ *  - the null-`workoutId` handling — RECONCILED, Phase JR PR 2. This
+ *    bullet used to call it "the null-`workoutId` latent … unreachable
+ *    today: only `WorkoutDetail`'s Connect flow programs a `MonitorRun`".
+ *    `beginFreeRow` is the second producer that comment was waiting for,
+ *    and a free row's null id is the NORMAL case now, not a latent: it
+ *    gets its own "Log it" routing to `/justrow/log` (the route that
+ *    serves an id-less record), while a null id on a NON-free record
+ *    keeps the honest suppression — that is still a record with no route
+ *    to serve it.
  *
  *  Distinct accessible name on the ✕ (antagonist correction, this task's
  *  brief): `UnloggedRow`'s own "Discard without logging" would otherwise

@@ -2248,11 +2248,20 @@ export function useMonitorSession(
     if (run === null) return false;
     // No separate guard for a program with no intervals at all: `lastIndex`
     // would be `-1`, no actual can carry that index, and the hold would open
-    // and close on its own backstop a quarter second later. `compileProgram`
-    // cannot produce one (its no-work guard) and `createMonitorRun` is only
-    // ever handed a compiled program, so the branch would be unreachable
-    // code wearing a guard's clothes — and its worst case, if the premise
-    // ever broke, is a bounded 250 ms delay rather than anything wrong.
+    // and close on its own backstop a quarter second later.
+    //
+    // **RECONCILED, Phase JR PR 2 — the premise this used to lean on is
+    // gone, and the disclosed worst case is what stands.** This comment
+    // said `compileProgram` cannot produce a zero-interval program and
+    // `createMonitorRun` is "only ever handed a compiled program", making
+    // the branch "unreachable code wearing a guard's clothes".
+    // `beginFreeRow` now hands it `{ intervals: [] }` deliberately. The
+    // case is still practically out of reach — this SPLIT condition opens
+    // on a machine FINISH only, and a free row has no defined end to
+    // finish (state 12 never observed on a Just Row, CLOSED 7) — but if
+    // one ever arrives, what happens is exactly what this comment always
+    // priced: the hold opens and its own backstop releases it a quarter
+    // second later. A bounded delay, not a wrong number.
     const lastIndex = run.program.intervals.length - 1;
     if (run.actuals.some((a) => a.index === lastIndex)) return false;
     const schedule =
