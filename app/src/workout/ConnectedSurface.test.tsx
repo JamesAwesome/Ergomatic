@@ -2567,3 +2567,63 @@ describe("the free-row surface", () => {
     expect(missing).toBeDefined();
   });
 });
+
+/**
+ * PHASE JR PR 2, TASK 5 — the ended frame (Gate 0 amendment, approved
+ * 2026-09-01).
+ *
+ * The board's first two rounds approved this frame reading "Your numbers
+ * are kept." — which is what a PROGRAMMED row renders. A free row never
+ * reaches that arm: the line is picked by `measuredIntervalCount(actuals)`,
+ * a free row has no intervals, so it lands on `kept === 0` and says
+ * "No numbers to keep." on a row that just banked real meters, one
+ * navigation from a log door showing them. The block's own comment calls
+ * that string "the only false member of the three" for the case it was
+ * written for.
+ *
+ * No model change can reach this: the ended block returns before
+ * `buildSurfaceModel` is called. It needs its own branch, and this test is
+ * the antagonist's traced-but-unexecuted claim becoming executed evidence.
+ */
+describe("the free-row ended frame", () => {
+  it("states what was kept — the row's own numbers, never 'No numbers to keep.'", () => {
+    render(
+      <ConnectedSurface
+        freeRow={true}
+        phases={[]}
+        program={{ intervals: [] }}
+        session={session({
+          phase: "ended",
+          handoffHeld: false,
+          actuals: [],
+          frame: frame({
+            intervalIndex: null,
+            sessionElapsedSeconds: 393,
+            sessionDistanceMeters: 1396,
+          }),
+        })}
+        onEnded={vi.fn()}
+      />,
+    );
+
+    // The approved copy, with the same words the lost banner uses so the
+    // two endings describe the row one way: elapsed, a middle dot, meters,
+    // "kept." — 393 s renders 6:33, 1396 renders 1,396 m.
+    expect(screen.getByText("6:33 · 1,396 m kept.")).toBeInTheDocument();
+    expect(screen.queryByText("No numbers to keep.")).not.toBeInTheDocument();
+  });
+
+  it("a programmed row's ended copy is untouched", () => {
+    render(
+      <ConnectedSurface
+        freeRow={false}
+        phases={FIXTURE.phases}
+        program={FIXTURE.program}
+        session={session({ phase: "ended", handoffHeld: false, actuals: [] })}
+        onEnded={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("No numbers to keep.")).toBeInTheDocument();
+  });
+});

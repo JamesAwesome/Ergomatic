@@ -71,6 +71,10 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
+// Phase JR PR 2: the free-row ended frame renders the row's own elapsed in
+// the house positional format — the same helper the band's ELAPSED cell
+// reads through the model, so the two cannot drift apart.
+import { fmtDuration } from "../../domain/duration.js";
 import { deriveAxes } from "../monitor/connectedAxes";
 import type { MonitorSession } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
@@ -515,15 +519,29 @@ export default function ConnectedSurface({
                 // is a different CAUSE, not a different count — the count
                 // itself still comes from the one shared
                 // `measuredIntervalCount` rule, never a second notion.
-                session.closeReason === "program-dropped"
-                ? kept === 0
-                  ? "The erg dropped the workout. Nothing kept."
-                  : `The erg dropped the workout. ${kept} ${kept === 1 ? "interval" : "intervals"} kept.`
-                : kept === 0
-                  ? "No numbers to keep."
-                  : session.endedBy === "machine"
-                    ? "The monitor finished it. Your numbers are kept."
-                    : "Your numbers are kept."}
+                // PHASE JR PR 2 (Gate 0 amendment, approved 2026-09-01,
+                // found by the antagonist pass): a free row has no
+                // intervals, so `kept` is 0 by construction and the
+                // `kept === 0` arm below said "No numbers to keep." about
+                // a row that just banked real meters — one navigation from
+                // a log door showing them. This branch states what was
+                // actually kept, in the same words the lost banner uses,
+                // so the two endings describe the row one way. FIRST in
+                // the ternary because every arm below reasons from an
+                // interval count a free row cannot have; `closeReason`
+                // cannot be "program-dropped" here (no program to drop —
+                // the driver's own freeRow watchdog opt-out).
+                freeRow
+                ? `${fmtDuration((session.frame?.sessionElapsedSeconds ?? 0) / 60)} · ${new Intl.NumberFormat("en-US").format(Math.round(session.frame?.sessionDistanceMeters ?? 0))} m kept.`
+                : session.closeReason === "program-dropped"
+                  ? kept === 0
+                    ? "The erg dropped the workout. Nothing kept."
+                    : `The erg dropped the workout. ${kept} ${kept === 1 ? "interval" : "intervals"} kept.`
+                  : kept === 0
+                    ? "No numbers to keep."
+                    : session.endedBy === "machine"
+                      ? "The monitor finished it. Your numbers are kept."
+                      : "Your numbers are kept."}
           </p>
         )}
       </main>
