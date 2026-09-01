@@ -11,9 +11,15 @@ direction (below), rev 3 after a comparison against
 `connected-pane-live.png` and `connected-pane-live-landscape.png` restored
 the band, the AVG cell and the shipped vertical rhythm.
 
-**One approved amendment (James, at approval):** the link-lost action reads
-**`Log`**, not "Log what I rowed". The banner directly above it already
-states what was kept, so the button only has to name the action.
+**Amendment (James, at approval), and where it landed:** the link-lost
+action was to read `Log`, then `Save this row`, with the stated requirement
+"consistent with what you see if you lost a non just-row session mid-row".
+Checked against `connected-ready-lost.png`: **a programmed session that
+loses the link carries no Log or Save button at all.** The mark goes hollow,
+the device line gains `· LOST`, and `END` is still the way out, through the
+ordinary ending into the log door. So the button is **removed** rather than
+relabelled, and `END` stays in the header — consistency here means having no
+extra action, not a better-worded one.
 
 **Two questions were rendered as proposals and are approved as rendered:**
 `Free` mirrored onto the split's target slot, and Ready keeping both of its
@@ -102,10 +108,18 @@ rule with no top rules, and the band closes under a horizontal one.
   check, so it could advance itself on the first stroke and keep only
   Cancel.
 - **Ended is inherited unchanged** ("Wrapping up / Your numbers are kept").
-- **Link lost offers one action**, not a Log/Discard pair: discard already
-  exists at the log door that button opens (recurring failure 23). No
-  Reconnect, and that is hardware, not simplification — the monitor stops
-  advertising while a Just Row is open.
+- **Link lost offers no action of its own** — `END` in the header, exactly
+  as a programmed lost session does. No Reconnect either, and that one is
+  hardware rather than a consistency choice: the monitor stops advertising
+  while a Just Row is open, so the app cannot get back in until the rower
+  ends the row on the erg. Whatever this screen offered could never be
+  "resume".
+- **The log door's primary reads `Save this row`, which is NEW copy.** The
+  shipped door offers `Log against plan` and `Save without logging`, a
+  choice about whether the session counts toward the plan. A free row can
+  never count, so there is one path and no choice to name — and "Save
+  without logging" on a screen whose job is logging would read as a
+  contradiction.
 - **The log door** drops "DID YOU HOLD THE TARGETS?" outright, renders no
   intervals table and no type chip (`steps: []`, `workout_type: null` —
   absences, not empty widgets, per exit criteria 2 and 3), and labels the

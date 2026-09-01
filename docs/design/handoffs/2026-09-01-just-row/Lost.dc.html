@@ -28,7 +28,9 @@
     .lost-body { font-family: var(--font-sans); font-size: 13px; line-height: 1.4; color: var(--surface); }
     .head { display: flex; align-items: center; gap: 12px; }
     .line { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-    .mark { width: 8px; height: 8px; background: var(--ink-5); flex: none; }
+    /* Hollow, not filled: the shipped lost state's own mark. */
+    .mark { width: 8px; height: 8px; background: transparent; border: 1px solid var(--ink-3); box-sizing: border-box; flex: none; }
+    .control { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); min-width: 56px; padding: 0 12px; border: 1px solid var(--accent); border-radius: var(--radius); color: var(--accent); background: transparent; font-family: var(--font-mono); font-size: var(--c-size-control); font-weight: 600; letter-spacing: 0.14em; }
     .device { font-family: var(--font-mono); font-size: var(--c-size-control); letter-spacing: 0.1em; color: var(--ink-2); }
     .status { font-family: var(--font-mono); font-size: var(--c-size-status); letter-spacing: 0.1em; color: var(--ink); margin: 20px 0 0; }
     .progress-row { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
@@ -69,11 +71,19 @@
     <span class="lost-body">6:33 &middot; 1,396 m kept.</span>
   </div>
 
+  <!-- END STAYS, and there is no second action anywhere on this screen.
+       That is not a simplification: it is what a programmed session does
+       when it loses the link (connected-ready-lost.png). The mark goes
+       hollow, the device line gains "· LOST", and END is still the way out
+       — through the ordinary ending, into the log door. A free row that
+       offered its own Save button here would be the one connected screen
+       that ends differently from every other. -->
   <div class="head">
     <div class="line">
       <span class="mark"></span>
-      <span class="device">PM5 432331249</span>
+      <span class="device">PM5 432331249 &middot; LOST</span>
     </div>
+    <span class="control">END</span>
   </div>
 
   <p class="status">JUST ROW</p>
@@ -105,15 +115,10 @@
     </div>
   </div>
 
-  <!-- ONE action, not a Log/Discard pair: discard already exists at the log
-       door this button opens, and two mechanisms for one decision is how
-       the better-informed offer loses silently. No Reconnect either, and
-       that is a hardware fact rather than a simplification: the monitor
-       stops advertising while a Just Row is open, so the app cannot get
-       back in until the rower ends the row on the erg. -->
-  <div class="actions">
-    <div class="l1">Log</div>
-  </div>
+  <!-- No Reconnect either, and that one IS a hardware fact rather than a
+       consistency choice: the monitor stops advertising while a Just Row is
+       open, so the app cannot get back in until the rower ends the row on
+       the erg. Whatever this screen offered, it could never be "resume". -->
 </div>
 </x-dc>
 </body>

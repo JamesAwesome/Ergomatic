@@ -32,7 +32,7 @@
       "x": 1560,
       "y": 890,
       "w": 390,
-      "text": "Ready is the shipped screen with one word changed: CONNECTED, not PROGRAMMED.\n\nWorth a look: both its buttons are inherited, but a free row has no armed workout to check. It could equally advance itself on the first stroke and keep only Cancel."
+      "text": "Ready is the shipped screen with one word changed: CONNECTED, not PROGRAMMED.\n\nWorth a look: both its buttons are inherited, but a free row has no armed workout to check. It could equally advance itself on the first stroke and keep only Cancel.\n\nLINK LOST (right) carries NO Log or Save button, because a programmed session that loses the link does not either (connected-ready-lost.png): the mark goes hollow, the device line gains \"· LOST\", and END is still the way out, through the ordinary ending into the log door. A free row with its own Save button here would be the one connected screen that ends differently from every other."
     },
     {
       "id": "contrast",
@@ -46,7 +46,7 @@
       "x": 2024,
       "y": 2240,
       "w": 460,
-      "text": "THE LOG DOOR\n\n\"PAIN\", not \"ACTUAL PAIN\": the word ACTUAL exists to contrast with the workout's own EXPECTED rating sitting beside it, and a free row has no expectation to contrast with.\n\n\"DID YOU HOLD THE TARGETS?\" is gone outright rather than disabled. No intervals table and no type chip either: steps is [] and workout_type is null, and both render as absences rather than empty widgets.\n\nAVG SPLIT is the one number this phase derives: 500 x 393 s / 1396 m = 140.8 s."
+      "text": "THE LOG DOOR\n\n\"PAIN\", not \"ACTUAL PAIN\": the word ACTUAL exists to contrast with the workout's own EXPECTED rating sitting beside it, and a free row has no expectation to contrast with.\n\n\"DID YOU HOLD THE TARGETS?\" is gone outright rather than disabled. No intervals table and no type chip either: steps is [] and workout_type is null, and both render as absences rather than empty widgets.\n\n\"Save this row\" is NEW copy, not one of the shipped pair. The door normally offers \"Log against plan\" and \"Save without logging\" - a choice about whether the session counts toward the plan. A free row can never count, so there is one path and no choice to name.\n\nAVG SPLIT is the one number this phase derives: 500 x 393 s / 1396 m = 140.8 s."
     }
   ],
   "launch": { "view": "canvas" }
