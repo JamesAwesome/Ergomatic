@@ -3705,7 +3705,24 @@ export function useMonitorSession(
     hysteresisCancelRef.current = null;
     degradedUnsubRef.current = null;
     lifecycleUnsubRef.current = null;
-    update({ phase: "picking", error: null, frameSilence: false });
+    // `deviceName: null` joins this patch (review #2 on PR #259): a raw
+    // disconnect deliberately RETAINS the old name — the lost frames need
+    // it — but a FRESH ATTEMPT must not inherit it, because the name is
+    // the one driver-ready fact callers can see (`ConnectedInterstitial`'s
+    // own program effect keys on exactly it, and resets its dedupe on the
+    // null). Without this, a reconnect published `pairing` with the STALE
+    // name while `driverRef` was still null, and a caller arming on the
+    // name reached `beginFreeRow()` with no driver — `transport-missing`
+    // on a retry that should have worked. The same "a fresh connect()
+    // never inherits a stale PRIOR value" rule the block above documents
+    // for liveness and frameSilence; the name comes back at `:3969`, after
+    // the driver it vouches for exists.
+    update({
+      phase: "picking",
+      error: null,
+      frameSilence: false,
+      deviceName: null,
+    });
     // Awaited unconditionally — the platform-conditional default
     // (`adapters/monitorTransport.ts`'s `defaultTransport`, ROADMAP CL item
     // 2) returns a `Promise` on the native arm (its own dynamic

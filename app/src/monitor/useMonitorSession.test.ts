@@ -11502,6 +11502,43 @@ describe("beginFreeRow (the free row's own arm)", () => {
     expect(transport.disconnects).toBe(1);
   });
 
+  /**
+   * REVIEW #2 on PR #259: a fresh connect attempt must not inherit the
+   * previous connection's device name. A raw disconnect deliberately
+   * RETAINS it (the lost frames render it), but the name is the one
+   * driver-ready fact callers can see — `ConnectedInterstitial`'s program
+   * effect and `JustRow`'s arm both key on it — and a retry that
+   * publishes `pairing` while still wearing the STALE name invites a
+   * caller to act before `driverRef` exists.
+   *
+   * Pinned SYNCHRONOUSLY: the null lands in the same first patch as
+   * `phase: "picking"`, before the attempt's first await, so no caller
+   * can observe a fresh attempt wearing an old name even for a render.
+   */
+  it("a reconnect attempt nulls the retained device name in its first patch", async () => {
+    const { result, fake } = harness(freeRowScriptForDebug());
+    await connect(result);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.deviceName).not.toBeNull();
+
+    act(() => {
+      fake.injectDisconnect();
+    });
+    // The disconnect RETAINS the name — the lost frames' own requirement,
+    // unchanged by this fix.
+    expect(result.current.phase).toBe("disconnected");
+    expect(result.current.deviceName).not.toBeNull();
+
+    // A fresh attempt: the very first patch clears it, synchronously.
+    act(() => {
+      void result.current.connect();
+    });
+    expect(result.current.phase).toBe("picking");
+    expect(result.current.deviceName).toBeNull();
+  });
+
   it("is a no-op while a programmed session is already under way", async () => {
     const { result, fake } = harness({
       program: LIBRARY.program,

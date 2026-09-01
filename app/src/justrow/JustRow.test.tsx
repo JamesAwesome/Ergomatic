@@ -300,6 +300,63 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
     expect(connect).toHaveBeenCalledTimes(2);
   });
 
+  /**
+   * REVIEW #2's own requested regression: Lost → Try again on a SLOW
+   * reconnect must not arm until the NEW driver exists. Before the hook
+   * nulled the stale name at attempt start, this ordering saw link "up"
+   * (pairing) + program "none" + the RETAINED old name, armed with no
+   * driver, and failed the retry as transport-missing. The mock is
+   * STATEFUL — the component re-reads it each render — and is walked
+   * through the real reconnect ordering the hook now produces:
+   * disconnected (name retained) → pairing with the name NULLED (the
+   * fix's own first patch) → pairing with the name set (driver built).
+   */
+  it("Lost → Try again on a slow radio arms only once the NEW driver exists", async () => {
+    const state: Record<string, unknown> = {
+      phase: "disconnected",
+      deviceName: "PM5 432331249", // retained by the disconnect, on purpose
+    };
+    mockSession(state);
+    const { default: JustRow } = await import("./JustRow");
+    const view = render(
+      <MemoryRouter initialEntries={["/justrow"]}>
+        <JustRow />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(
+      screen.getByRole("heading", { name: "Lost the monitor" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(connect).toHaveBeenCalled();
+    expect(beginFreeRow).not.toHaveBeenCalled();
+
+    // The attempt's first patch: pairing, name NULLED (the hook fix). The
+    // link axis reads "up" here — the exact window that used to arm on the
+    // stale name.
+    state.phase = "pairing";
+    state.deviceName = null;
+    view.rerender(
+      <MemoryRouter initialEntries={["/justrow"]}>
+        <JustRow />
+      </MemoryRouter>,
+    );
+    expect(beginFreeRow).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Connecting to monitor" }),
+    ).toBeInTheDocument();
+
+    // The driver is built and the name it vouches for is published.
+    state.deviceName = "PM5 432331249";
+    view.rerender(
+      <MemoryRouter initialEntries={["/justrow"]}>
+        <JustRow />
+      </MemoryRouter>,
+    );
+    expect(beginFreeRow).toHaveBeenCalledTimes(1);
+  });
+
   it("renders the lost frame when the link dies before any run opened", async () => {
     mockSession({ phase: "disconnected", deviceName: "PM5 432331249" });
     await renderMocked();
