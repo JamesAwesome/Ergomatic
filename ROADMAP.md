@@ -953,12 +953,13 @@ closed with zero Concept2 contact.
       consequence a stated INFERENCE (direct two-app observation open);
       zero-rest interval post accepted; raw 0x003F bytes are not the
       verification format. Report: `docs/monitor/c2-crossconnect-2026-09/`.
-- [ ] **PR1 — the server broker.** `concept2_links` + auth attempts + four
+- [x] **PR1 — the server broker.** `concept2_links` + auth attempts + four
       `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
       `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**
       All 9 tasks committed on `wave-e-pr1-server-broker` (2026-08-31,
-      including the measured refresh-endpoint corrections); PR #249 open,
-      in James's review.
+      including the measured refresh-endpoint corrections); **PR #249
+      MERGED** 2026-09-01 (main `27fe6b4a`) — fixed here, fix round 5,
+      after this row was found still calling it open past its merge.
 - [ ] **PR1.5 — the native link flow**, on device: system-browser consent,
       foreground re-fetch, and (branch B only) the URL scheme + `appUrlOpen`
       handler. Split from PR1 so one reviewer never holds a token-broker
@@ -1225,18 +1226,18 @@ lifecycle spec and the `door` column respectively); RC-13/RC-14 dropped to the
 connected-surface table below with a fix-13-instrument-14 ruling; "Run it
 again" was declined; RC-38 was pulled forward and the rest of Phase PROTO
 held; the axis-quantity question opened the "say which number this is" design
-pass below; AUD-006 got its fix shape. **This table now holds two rows, and
-neither is a live question needing James's decision: RC-30 is closed
-(declined at the RC close), and the C2 account injection row already carries
-its ruling** (PR1.5's design gate decides the fix, on device evidence about
-system-browser cookie sharing; the row stays until that PR closes it, since
-it blocks `C2_LINK_ENABLED=1` in the meantime). A new row means a new
-question, not a re-raised one.
+pass below; AUD-006 got its fix shape. **This table now holds two rows: RC-30
+is closed (declined at the RC close, a record not a question), and the C2
+account injection row IS a live question — REQUESTED, not yet ruled** (the
+evidence package is `docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md`;
+the deadline stays PR1.5's design gate, where James's actual ruling lands; the
+row stays until that PR closes it, since it blocks `C2_LINK_ENABLED=1` in the
+meantime). A new row means a new question, not a re-raised one.
 
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
-| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today only by `ALLOWED_EMAILS` (household allowlist). **Ruled at PR1.5's design gate, on device evidence about system-browser cookie sharing (the fix depends on it, and PR1.5 is where the change is still cheap); blocks `C2_LINK_ENABLED=1` regardless.** | `2026-08-31-concept2-logbook-design.md` |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by `ALLOWED_EMAILS`, the dark flag, one live attempt per user, and a 15-minute window (§1). **REQUESTED, not yet ruled, at PR1.5's design gate** — six options (accept/detect/prevent, `2026-09-01-concept2-pr15-gate.md`), James's call still owed; blocks `C2_LINK_ENABLED=1` regardless in the meantime. | `2026-09-01-concept2-pr15-gate.md` |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 

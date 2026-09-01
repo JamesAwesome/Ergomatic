@@ -8,6 +8,17 @@ mechanism, not your phone's artifact; and `log-dev.concept2.com`
 corrected from a guessed "error page" to its measured reality (a real
 Concept2 sign-in page, HTTP 200) with an explicit do-not-sign-in warning.
 
+**Revised, fix round 5** (reviewer P1: the first-open race): the opener
+now DISABLES itself (reading "Arming…") until `useReturnToApp`'s two
+subscriptions actually settle, closing the race where an impatient first
+tap could open-and-finish the browser before registration completed —
+step 2 updated to describe it, and a final step added: `ios-release.sh`
+now refuses to run while `VITE_ENABLE_C2_LINK_PROBE` is exported in your
+shell (reviewer proved a walk operator's own shell could otherwise ship
+the probe card via a later release) — unset it when you're done. Also
+added an optional device probe for the design-gate's own open cookie
+question (§4 there).
+
 **What this is for:** proving the modal-return signal (fix round 2, P1a)
 actually fires on a real device. `src/native/**` is coverage-exempt (RF19)
 and `pnpm e2e` runs on web — nothing in this repo's own gates can reach
@@ -57,10 +68,15 @@ your phone) is your real confirmation this build has the flag.**
 
 1. Open the app, go to the **You** tab (bottom tab bar).
 2. Scroll to the bottom. You should see a card titled
-   **"C2 LINK PROBE (DEV HARNESS)"** with a button labeled **"Open consent
-   browser"** and a line reading **"Returns detected: 0"**. If you don't
-   see this card, the build did not carry the flag — stop and re-check the
-   export above before continuing.
+   **"C2 LINK PROBE (DEV HARNESS)"** with a line reading **"Returns
+   detected: 0"**. The button may briefly read **"Arming…"** and be
+   un-tappable for a moment right after the screen appears — that is
+   expected (fix round 5: it is disabled until the return-signal
+   subscriptions are actually live, closing the exact race this whole
+   card exists to catch) — wait for it to become **"Open consent
+   browser"** before continuing. If you don't see this card at all, the
+   build did not carry the flag — stop and re-check the export above
+   before continuing.
 3. Tap **"Open consent browser"**. A browser sheet should slide up over
    the app (this IS `SFSafariViewController` — it should look like an
    in-app browser, not a full app-switch to Safari) showing
@@ -113,9 +129,30 @@ report it rather than continuing to step 6.
   covers why this card's platform has no Ergomatic session artifact to
   observe either way — this is purely about Concept2's OWN page,
   observed, never signed into).
+- **Optional, fix round 5 — the design gate's own open question
+  (§2/§4 there):** if you already have Ergomatic open in ordinary mobile
+  Safari signed in (a genuinely separate thing from this native app —
+  visit the web build's URL in Safari directly and sign in there first,
+  skip this if you haven't), check whether Safari's dev tools or a quick
+  `document.cookie` read in that Safari tab show an `erg_session` cookie,
+  then note whether the SFSafariViewController sheet this card opens
+  seems to share any state with that Safari session (there's no visible
+  UI signal for this today — it is a weak, informal check, not a real
+  measurement of the browser-bound-continuation cookie the gate doc
+  describes, since that route doesn't exist yet). Skip entirely if you
+  don't already have a web session open; do not sign in ANYWHERE new
+  just to check this.
 
 ## Afterwards
 
 Nothing to clean up on the phone — this build is disposable. Don't ship
 it; the next real TestFlight build should go out via the normal
 `pnpm ios:release` (which never sets `VITE_ENABLE_C2_LINK_PROBE`).
+
+**Last step, do this even if you're stopping here — fix round 5 (P1, the
+release-flag leak the reviewer proved):** `unset VITE_ENABLE_C2_LINK_PROBE`
+in this shell, or just close the terminal. `pnpm ios:release` now
+refuses outright while that variable is exported — it exists specifically
+so a real release built later in this SAME shell can never silently ship
+the probe card — but the safest habit is still to unset it the moment
+you're done with the walk, not to rely on the guard alone.

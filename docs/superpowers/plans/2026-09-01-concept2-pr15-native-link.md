@@ -75,12 +75,24 @@ doc comment is the current source of truth, not this paragraph):**
 - Modify: `docs/superpowers/specs/2026-08-31-concept2-logbook-design.md` (§Architecture 3 Branch A: `appStateChange` → the corrected lifecycle wording, replace in place, cite Phase LM)
 - Create: `docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md` — the account-injection ruling package for James (this PR's design gate; ROADMAP's register row binds the ruling here)
 
-**The gate package contents (decision doc, assembled from evidence — no invention):**
-1. The residual, restated: the nonce binds the exchange to the MINTING user; an attacker who mints and delivers the URL links the victim's C2 account under the attacker's Ergomatic user. Bounded today by `ALLOWED_EMAILS` and the dark flag.
-2. **The credential fact, code-derived (cite the files):** the consent browser can never carry an Ergomatic session on native — auth is a Keychain bearer attached by `api.ts` fetches (`src/native/session.ts`); no cookie exists in the app; SFSafariViewController has no access to either. So a cookie-binding fix has NOTHING to bind on native — the classic web mitigation is structurally unavailable. (Tag: PRIMARY, our own code. The Apple isolation page was not fetchable; nothing rests on it.)
-3. **The options, with costs:** (a) ACCEPT the residual while `ALLOWED_EMAILS` bounds the population (household), revisit at any public opening — zero code; (b) DETECTION: the callback's "Linked" page and PR2's linked card both display the C2 account identity (c2UserId is already in `GET /link` since PR1), so a victim SEES a foreign link and unlinks — copy-level cost; (c) PREVENTION: a post-consent in-app confirm (link lands `pending`, the app's authenticated session confirms it on foreground) — a stored-shape change (pending state on `concept2_links`) and a second tap for every legitimate link.
-4. **The device-check card** for the first PR2-era build (the plumbing has no surface until then): verify Browser.open presents, the callback page renders, the foreground re-fetch fires on return, and record what the consent browser's cookie state offered (fresh login vs Safari-shared session) — UX evidence, not security-load-bearing.
-5. STOP after presenting. The gate is James's ruling, not the presentation.
+**The gate package contents — SUPERSEDED, fix round 5 (finding 3d): this
+numbered sketch (1 residual / 1 credential claim / three options a-c) is
+the ORIGINAL, pre-review shape and no longer matches the shipped package
+— re-describing it here a second time is exactly what went stale each
+prior round. `docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md` is
+the current, single source of truth: §1/§1a (the residual and its four
+bounds plus the blast radius), §2 (the credential fact, narrowed fix
+round 5 — the native app holds only a Keychain bearer, but the phone's
+Safari/SFSafariViewController cookie jar is a genuinely open, unmeasured
+question, not a closed "never"), §3 (six options a-f, neutrally costed,
+including fix round 5's correction that (d) alone is detection-grade only
+— a determined attacker can construct and hand out C2's raw, publicly-
+shaped authorize URL directly, bypassing any interstitial on our own
+origin — and the actual prevention variant, a browser-bound continuation
+cookie set at `/start` and required at `/callback`), §4 (the device-check
+card, including an optional on-device cookie-persistence probe), and §5
+(the full antagonist verdict). Assembled from evidence, no invention;
+still ends by asking for James's ruling, still choosing nothing itself.
 
 - [ ] **Step 1:** Write both docs. **Step 2:** `pnpm format:check` untouched-by-prettier rule for root docs does not apply (these live under docs/superpowers — still never Prettier root markdown). **Step 3: Commit.**
 

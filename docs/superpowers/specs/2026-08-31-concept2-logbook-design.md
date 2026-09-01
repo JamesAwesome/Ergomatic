@@ -176,15 +176,25 @@ so we build the RFC 8252 shape:
      for the attempt's user, consumes the attempt, and renders a plain
      "Linked. Return to the app." page. The APP never sees the code; it
      learns the outcome by re-fetching `GET /api/concept2/link` on
-     foreground — **PR1.5 plan correction, superseding this paragraph's
-     original `appStateChange` wording:** `adapters/appLifecycle.ts`'s own
-     `pause`/`resume` translation (native, via `@capacitor/app`, already a
-     dependency), composed with `registerWebAppLifecycleListener`'s raw
-     Page Visibility mapping (web) — never native `appStateChange`. Phase
-     LM found that event is iOS's ACTIVE/INACTIVE signal, firing on a
-     Control Centre swipe without the app ever leaving the foreground, and
-     it made a lost-link banner fire nine times over a link that never
-     dropped (`adapters/appLifecycle.ts:27-31`). **SUSPECTED, decision owed
+     return — **PR1.5 plan correction, superseding this paragraph's
+     original `appStateChange` wording, updated again by PR1.5 fix round
+     2 (P1a):** `useReturnToApp.ts` composes THREE signals, not one:
+     `adapters/appLifecycle.ts`'s own `pause`/`resume` translation
+     (native, via `@capacitor/app`, already a dependency),
+     `registerWebAppLifecycleListener`'s raw Page Visibility mapping
+     (web), AND — load-bearing on native, not optional —
+     `@capacitor/browser`'s own `browserFinished` event
+     (`adapters/externalBrowser.ts`'s `onBrowserFinished`). `resume` alone
+     MISSES the common return path: `Browser.open` presents
+     `SFSafariViewController` MODALLY inside the app, and dismissing it
+     (Done, swipe-down, a completed consent) never backgrounds/foregrounds
+     the host app, so `pause`/`resume` never fires for that return —
+     `browserFinished` is what does. Never native `appStateChange` either
+     way. Phase LM found that event is iOS's ACTIVE/INACTIVE signal,
+     firing on a Control Centre swipe without the app ever leaving the
+     foreground, and it made a lost-link banner fire nine times over a
+     link that never dropped (`adapters/appLifecycle.ts:27-31`).
+     **SUSPECTED, decision owed
      (PR1 premise pass, 2026-08-31):** the nonce binds the exchange to
      `attempt.user_id` alone, so an attacker who mints on their OWN
      Ergomatic account and delivers the resulting authorize URL to a
