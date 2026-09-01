@@ -606,6 +606,10 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
     spm: raw.spm,
     heartRateBpm: raw.heartRateBpm,
     rowingActive: raw.rowingState === 1,
+    // §3 (lifecycle design spec 2026-08-31): the raw byte, unflattened —
+    // see `MonitorFrame.rawRowingState`'s own doc comment
+    // (`domain/monitor/types.ts`).
+    rawRowingState: raw.rowingState,
     // Unconditional pass-through, same choice as `currentSplit` above —
     // see `MonitorFrame.splitAvgPace`'s own doc comment for the driver-side
     // clearing this function does NOT do (it has no frame history to

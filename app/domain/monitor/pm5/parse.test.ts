@@ -711,6 +711,20 @@ describe("toMonitorFrame: field mapping", () => {
     expect(toMonitorFrame(baseRaw()).intervalRemaining).toBeNull();
   });
 
+  // §3 (lifecycle design spec 2026-08-31): `rawRowingState` carries the wire
+  // byte before `rowingActive`'s strict `=== 1` flattening.
+  it("rawRowingState carries the raw wire byte for a non-1 rowingState, while rowingActive stays false", () => {
+    const frame = toMonitorFrame(baseRaw({ rowingState: 2 }));
+    expect(frame.rawRowingState).toBe(2);
+    expect(frame.rowingActive).toBe(false);
+  });
+
+  it("a rowingState===1 payload carries both rowingActive true and rawRowingState 1", () => {
+    const frame = toMonitorFrame(baseRaw({ rowingState: 1 }));
+    expect(frame.rawRowingState).toBe(1);
+    expect(frame.rowingActive).toBe(true);
+  });
+
   // Phase LL Task 4 (design spec §4's continuity rule): unconditional
   // pass-through, same choice as `restSeconds`/`splitAvgPace` above —
   // `src/monitor/continuity.ts`'s own consumption reads this field off a

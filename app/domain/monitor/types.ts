@@ -86,6 +86,15 @@ export interface MonitorFrame {
   //   runs while a stopped rower sits still, and a coasting flywheel
   //   banks meters on a piece the PM5 itself does not consider started.
   //   This byte is what the PM5 knew each time.
+  /** §3 (lifecycle design spec 2026-08-31): 0x0031's own Rowing State byte,
+   *  UNFLATTENED — the raw value `rowingActive` above collapses to a strict
+   *  `=== 1` comparison, with no way for a consumer to say which non-1 value
+   *  a byte actually carried. Additive-optional, the same
+   *  `totalWorkDistanceMeters` convention: `pm5/parse.ts`'s `toMonitorFrame`
+   *  always sets it (byte-faithful, no opinion beyond passing it through),
+   *  `undefined` only for the many pre-existing `MonitorFrame` test literals
+   *  across this codebase that build one without it. */
+  rawRowingState?: number;
   splitAvgPace: number | null;
   // ^ 0x0033's (Additional Status 2) own Split Average Pace — seconds/500m
   //   for the CURRENT interval's own average while rowing, and the
