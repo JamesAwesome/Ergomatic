@@ -83,7 +83,7 @@ import {
 } from "./handoffStore";
 import { check as checkContinuity } from "./continuity";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
-import { pushSessionLog } from "./sessionLogHistory";
+import { pushSessionLog, updateNewestSessionLog } from "./sessionLogHistory";
 import { defaultTransport } from "../adapters/monitorTransport";
 import { registerAppLifecycleListener } from "../adapters/appLifecycle";
 import {
@@ -1702,6 +1702,18 @@ export function useMonitorSession(
    *  TWICE per teardown (this function's own STEP 2 comment); without this
    *  guard the second call would duplicate the identical line. */
   const latchCountRecordedRef = useRef(false);
+  /** Final whole-branch review, item 1: the identical "at most once per
+   *  teardown" idiom `latchCountRecordedRef` immediately above already
+   *  uses, for the SAME double-stash cause (the burst-eligible path calls
+   *  `stash()` TWICE — this function's own STEP 2 comment) but a different
+   *  symptom: `pushSessionLog` is a ROTATION, so a second unguarded call
+   *  didn't duplicate one line inside an export, it consumed a SECOND
+   *  three-entry history slot for what is still ONE connected session.
+   *  `false` until this teardown's first `stash()` has pushed; `stash()`
+   *  reads it to decide push vs. update-in-place (below), then sets it.
+   *  Reset to `false` at the top of every `teardown()` call, same as
+   *  `latchCountRecordedRef`. */
+  const historyPushedThisTeardownRef = useRef(false);
   /** Phase LL Task 4 (design spec §4's continuity rule), widened to all
    *  three axes by F2a (design spec 2026-08-23-continuity-corroboration
    *  §2): the last live frame's own `totalWorkDistanceMeters`,
@@ -3495,6 +3507,10 @@ export function useMonitorSession(
       // §6, fix round 1: this teardown's own "has stash() already recorded
       // latch-count" flag starts fresh — see the ref's own doc comment.
       latchCountRecordedRef.current = false;
+      // Final whole-branch review, item 1: this teardown's own "has
+      // stash() already pushed a history entry" flag starts fresh too —
+      // same reasoning, see the ref's own doc comment.
+      historyPushedThisTeardownRef.current = false;
 
       // §3: a still-open resume-stale-run closes HERE, before the first
       // `stash()` below can see it — `teardown` is the single choke point
@@ -3603,10 +3619,26 @@ export function useMonitorSession(
           // Lifecycle design spec §2: the single key above is perishable —
           // one slot, overwritten by the very next teardown — which is
           // exactly what destroyed the pocketed-phone ring (§0.1). Rotate
-          // the same export into the three-slot history beside it so the
+          // the same export into the three-entry history beside it so the
           // last three teardowns all survive at once, readable through
           // Task 3's ungated door.
-          pushSessionLog(exported, nowDate());
+          //
+          // Final whole-branch review, item 1: ROTATE only on the FIRST
+          // stash this teardown produces. The burst-eligible path (this
+          // function's own STEP 2 comment) calls `stash()` a SECOND time
+          // when the linger drains — same session, fresher bytes (the
+          // drain's own STEPS 1/3/4 ring entries this first stash could not
+          // have seen yet) — and an unguarded second `pushSessionLog` would
+          // burn a SECOND history slot on what is still one connected
+          // session, the mirror of `latchCountRecordedRef`'s own bug for a
+          // single ring LINE rather than a whole history ENTRY. Update the
+          // entry the first stash just pushed, in place, instead.
+          if (!historyPushedThisTeardownRef.current) {
+            historyPushedThisTeardownRef.current = true;
+            pushSessionLog(exported, nowDate());
+          } else {
+            updateNewestSessionLog(exported, nowDate());
+          }
         }
       };
 

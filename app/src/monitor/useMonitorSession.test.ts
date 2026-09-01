@@ -12191,3 +12191,69 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 2): stash() records latch-cou
     expect(latchEntries[0]!.detail).toBe("latches=0 resumes=0");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Final whole-branch review, item 1 (P1): a burst-eligible teardown's SECOND
+// stash (the linger drain) must not consume a SECOND history slot. Mirrors
+// "fix round 1 (finding 2)" immediately above — the identical double-stash
+// path (natural finish, no summary heard yet) — but asserts the OTHER thing
+// that call duplicated: not just the latch-count LINE inside one export, but
+// the whole export landing in `sessionLogHistory.ts`'s history TWICE.
+// ---------------------------------------------------------------------------
+
+describe("Final whole-branch review, item 1: one burst-eligible session consumes ONE history slot", () => {
+  it("the linger's second stash UPDATES the newest history entry in place — exactly one entry, carrying the second stash's own bytes", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100); // natural finish -> burst-eligible, no summary yet
+    expect(result.current.phase).toBe("ended");
+
+    unmount(); // teardown's DEFERRED path — STEP 2's FIRST stash runs here
+    // Exactly one entry after the first stash — the floor this test's own
+    // "extend or mirror" brief names.
+    expect(listSessionLogs()).toHaveLength(1);
+    const afterFirstStash = listSessionLogs()[0]!.exported;
+
+    // The linger's own cap fires — `finish()` runs STEPS 1/3/4 (a real
+    // `disconnect-*` entry among them, per this describe block's sibling
+    // above) and the SECOND stash.
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
+    expect(transport.disconnects).toBe(1); // confirms the second stash actually ran
+
+    const entries = listSessionLogs();
+    // THE BUG THIS GUARDS: two `pushSessionLog` calls in one teardown used
+    // to rotate twice, burning two of the three history slots on ONE
+    // session. Still exactly one entry.
+    expect(entries).toHaveLength(1);
+    // And it carries the SECOND stash's bytes, not the first's — the linger
+    // stash sees STEPS 1/3/4's own ring entries (the disconnect sequence)
+    // that the first stash, taken before any of them ran, could not have.
+    const afterSecondStash = entries[0]!.exported;
+    expect(afterSecondStash).not.toBe(afterFirstStash);
+    expect(afterSecondStash.length).toBeGreaterThan(afterFirstStash.length);
+  });
+});
