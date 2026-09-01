@@ -674,7 +674,25 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
   if (hasWorkPair) {
     const distanceMeters = Math.round(row.workMeters!);
     const timeSeconds = row.workSeconds!;
-    const avgSplitSeconds = tierBAvgSplitSeconds(row.steps);
+    // Steps first — they are the population this row actually measured, so
+    // where they carry PM5 actuals they outrank anything stored.
+    //
+    // THE FALLBACK (Phase JR PR 1, spec rev 4's F1). When they carry none,
+    // read the STORED column rather than returning `undefined`. A free row
+    // (Just Row) stores `steps: []` — it prescribes nothing, so there is
+    // nothing to fabricate — with a real work pair and a derived
+    // `avg_split_seconds`. Without this, `tierBAvgSplitSeconds` returns
+    // `undefined` (its `d` never leaves 0) and this screen shows NO avg
+    // split, while the history list falls through to that same stored
+    // column (`LogRow.tsx:154`) and shows one. Same row, two screens, one
+    // number present and one absent — the defect RC-5 exists to kill, one
+    // screen over, and `LogRow.tsx`'s "identical population by
+    // construction" premise is exactly what an empty `steps` falsifies.
+    //
+    // `?? undefined` because the column is `number | null` and every hero
+    // in this module speaks `undefined` for absent.
+    const avgSplitSeconds =
+      tierBAvgSplitSeconds(row.steps) ?? row.avgSplitSeconds ?? undefined;
     return {
       distanceMeters,
       time: fmtDuration(timeSeconds / 60),
