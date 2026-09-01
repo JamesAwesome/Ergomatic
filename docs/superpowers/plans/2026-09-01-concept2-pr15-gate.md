@@ -4,9 +4,9 @@
 flagged as owed (`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`
 §Architecture 3, Branch A: "SUSPECTED, decision owed (PR1 premise pass,
 2026-08-31)"). Everything below is derived from code read this session or a
-committed measurement; the six options in §3 are presented neutrally with
-their costs. **This document does not choose one — that is James's ruling,
-asked for at the end.**
+committed measurement; the seven options in §3 are presented neutrally
+with their costs. **This document does not choose one — that is James's
+ruling, asked for at the end.**
 
 **Revision history:**
 - Fix round 2 (P1b) rebuilt §3 around the CONSENTING PRINCIPAL after the
@@ -31,7 +31,7 @@ asked for at the end.**
 - **Fix round 6:** named `SameSite` as load-bearing for the continuation
   cookie's web half (§3(d)) — a separate cookie from `erg_session`, so
   the attribute has to be chosen deliberately rather than inherited.
-- **Fix round 7, this revision:** fetched Apple's own
+- **Fix round 7:** fetched Apple's own
   SFSafariViewController documentation (PRIMARY, quoted at §2) and
   dropped round 5's shared-jar speculation entirely — nothing in it
   supports the guess, and the browser-bound continuation's plausible
@@ -44,6 +44,22 @@ asked for at the end.**
   response) — only a server-mediated capability to see/replace/unlink
   the association metadata or post their own rows into the victim's
   logbook.
+- **Fix round 9, this revision:** added **(g)**, a fourth taxonomy
+  bucket — app-bind — the ONLY option in this package that achieves real
+  principal binding: the repo's own Branch B shape (spec §Architecture 3),
+  where the callback returns to the APP and the server requires
+  `attempt.userId === req.user.id` before exchanging. Cited RFC 8252 §7.1
+  (PRIMARY, the external-browser-to-app return mechanism) and Apple's own
+  `ASWebAuthenticationSession` documentation (PRIMARY, fetched this
+  session: it "ensures that only the calling app's session receives the
+  authentication callback, even when more than one app registers the
+  same callback URL scheme") — priced honestly against C2's own
+  undocumented PKCE support (anchor ground: "nothing found") and named as
+  NOT chosen, joining the taxonomy alongside the other six. Also
+  re-priced the victim's provider-side remedy (§1a) against Concept2's
+  own Help page (SECONDARY until account-verified — an optional walk
+  step now checks it) and corrected the refresh-token durability claim:
+  renewable WITH USE, not an indefinite idle capability.
 
 ## 1. The residual, restated — with its own bounds
 
@@ -113,10 +129,26 @@ carefully. If the residual fires:
   only send their own into the victim's account). This is real —
   unwanted rows appearing in someone's Concept2 logbook, indefinitely,
   with no way for them to know why — but it is NOT arbitrary C2 API
-  access and NOT a credential leak. The refresh path (spec §Architecture
-  6, `needsReauthAt`) does keep the LINK itself alive indefinitely absent
-  C2-side invalidation; that durability claim stands, just not the
-  "tokens leaked" framing it was originally attached to.
+  access and NOT a credential leak. **The refresh path's durability,
+  narrowed round 9 (item 3):** the spec's own research record says the
+  refresh token is "currently one year" and ROTATES on every use — a new
+  access+refresh pair each time (spec §Data model research). Refreshing
+  itself is LAZY, never a cron: `server/routes/concept2.ts:429-444`
+  only calls `client.refreshTokens` when an authenticated action (a
+  results POST) actually needs a near-expired access token
+  (`TOKEN_REFRESH_SKEW_MS`). So the link stays alive INDEFINITELY only
+  so long as SOMETHING keeps exercising it at least once within each
+  ~year window — the attacker's own continued posting, in the common
+  case (§1a above). A genuinely DORMANT attacker-held link (never
+  exercised again) is NOT an indefinite idle capability: once the
+  refresh token itself lapses, the next attempted use fails with
+  `refreshTokens`'s own `grantDead` signal and the route flags
+  `needsReauthAt` (`server/routes/concept2.ts:455-462`) rather than
+  silently succeeding — requiring a fresh consent grant, which the
+  attacker cannot obtain without repeating the whole residual. "Renewable
+  WITH USE, not indefinite while idle" is the accurate statement; the
+  "tokens leaked" framing this bullet originally carried was already
+  wrong (corrected round 7, above).
 - **What the victim can do about it, in-app: NOTHING.** `DELETE
   /api/concept2/link` is caller-scoped (`server/routes/concept2.ts:251-260`,
   `deleteLink(req.user!.id)` — only ever touches the CALLER's own row,
@@ -127,10 +159,20 @@ carefully. If the residual fires:
   revocation endpoint at all** — anchor ground, spec's own research pass:
   "**No token-revocation endpoint** — nothing found; unlink is necessarily
   local (V5)" (`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md:136-139`).
-  The only real remedy is the victim changing their C2 PASSWORD or using
-  whatever session-revocation Concept2's OWN account settings offer
-  (outside this app entirely, unverified this session — Concept2's own
-  settings UI was not fetched).
+  **The real remedy, re-priced round 9 (item 3): likely provider-side
+  revoke, unverified on a real account — the account oracle is one login
+  away.** SECONDARY (Concept2's own Help page,
+  `https://log.concept2.com/help`, fetched this session, quoted
+  verbatim): "If you ever want to stop uploading to a site, go back to
+  the Applications page and click on Revoke next to the service you no
+  longer wish to send your workouts to." Tagged SECONDARY rather than
+  PRIMARY-and-settled because this session did not log into a real C2
+  account to confirm Ergomatic actually appears there post-link, or that
+  Revoke there genuinely severs what this app's own refresh path relies
+  on — an optional walk step now asks for exactly that confirmation
+  (`docs/superpowers/plans/2026-09-01-concept2-pr15-walk.md`, "Also worth
+  a glance"). Changing the C2 password remains the fallback if Revoke
+  turns out not to cover this app's grant specifically.
 - **The victim's OWN link, if they have one, is undisturbed.**
   `concept2_links.userId` is the PRIMARY KEY (`server/db/schema.ts:479-483`)
   and `c2UserId` carries no unique constraint — `upsertLink`'s own
@@ -146,7 +188,8 @@ finding 3b: the original claim was absolute and wrong)
 
 **Original claim, too strong:** "the consent browser can never carry an
 Ergomatic session on native." **What is actually true, and the
-distinction matters for §3(d)'s prevention variant below:**
+distinction matters for §3(d)'s browser-bound-continuation variant below
+(round 9: not "prevention" — physically-confirm, same bucket as (c)):**
 
 - **The NATIVE APP itself holds only a Keychain bearer, never a cookie —
   this part stands.** `app/src/api.ts:5-8` (comment, quoted verbatim):
@@ -216,7 +259,7 @@ the https callback (cookie exists there)"). PR1.5 is Branch A + native
 only (Global Constraints); this gate package's native focus matches PR1.5's
 own scope, not an oversight of the web case.
 
-## 3. The options, with costs (six classes, a-f)
+## 3. The options, with costs (seven classes, a-g)
 
 Every option below is verified against `server/routes/concept2.ts`'s
 actual callback route (lines 173-221 as read this session), not asserted.
@@ -278,7 +321,9 @@ the new user-lookup plumbing above (a `findById`-shaped method plus a
 `users` dependency threaded into `Concept2RouterDeps` and its mount
 site). No stored-shape change.
 
-**(c) Prevention at the callback page: the exchange completes, but the
+**(c) Physically-confirm at the callback page (round 9: heading corrected
+— the body below was relabeled off "prevention" back in round 5, but
+this heading itself never was): the exchange completes, but the
 link stays `pending` until the SAME browser confirms.**
 The callback still exchanges the code and calls the C2 API (unavoidable —
 that is how `me.c2UserId` is learned at all), but writes the link with a
@@ -321,9 +366,9 @@ that does not exist for any other option here.
 ONLY as originally written, fix round 5 (finding 3a, the reviewer proved
 it); a second half, added below, reaches PHYSICALLY-CONFIRM, the SAME
 class as (c) — round 7 (finding 3) corrects fix round 5's own "TRUE
-prevention" label. Neither half of (d), nor any other option in this
-document, achieves cryptographic principal binding — see the closing
-taxonomy note after (f).**
+prevention" label. Neither half of (d), nor any other BROWSER-side
+option in this document, achieves cryptographic principal binding —
+**(g), added round 9, does** — see the closing taxonomy note after (g).**
 
 **The original (d) is not prevention, and here is the proof, not an
 assertion:** the attacker already holds a valid `state` (their own
@@ -393,12 +438,14 @@ continuation variant belongs in that same bucket, not in a separate
   clock as the attempt nonce) — otherwise it can be replayed across
   multiple attempts from the same browser.
 - **What would ACTUALLY bind the principal, named so James can weigh what
-  is NOT on offer:** genuine principal binding needs an authenticated
-  proof tied to a specific person — e.g., the SAME Ergomatic session
-  returning through an authenticated app/browser hand-off — which is
-  exactly what §2's credential fact rules out reaching this browser on
-  native. No option in this document does this; see the taxonomy note
-  after (f).
+  is NOT on offer here:** genuine principal binding needs an
+  authenticated proof tied to a specific person — e.g., the SAME
+  Ergomatic session returning through an authenticated app/browser
+  hand-off — which is exactly what §2's credential fact rules out
+  reaching THIS BROWSER on native. No option INSIDE the browser does
+  this. **(g), added round 9, does — it moves the check to the APP,
+  where a real credential (the Keychain bearer) already exists** — see
+  the taxonomy note after (g).
 
 **Cost, honestly:** whether a cookie set by `/start` genuinely survives
 the FULL round trip — our origin, then C2's domain, then back to our
@@ -441,7 +488,7 @@ Not in either previous pass. One constant
 (2-3 minutes, say) narrows §1's own bound 4 further, killing more of the
 asynchronous-delivery surface (an attacker now has less time to get a
 victim to complete consent after minting). **Composes with every other
-option here** — it is not an alternative to (a)-(d)/(f), it is a dial any
+option here** — it is not an alternative to (a)-(d)/(f)/(g), it is a dial any
 of them can also turn. **Cost:** effectively zero — one line, no
 migration, no new route. Trade-off: a legitimate user who mints, gets
 distracted, and returns to consent later also has less slack.
@@ -469,23 +516,125 @@ SAME shared Concept2 account (a family login used by two rowers) — if
 that is a real use case for this household app, (f) forecloses it
 entirely, not just for the attack scenario.
 
-**The taxonomy, corrected, round 7 (finding 3) — say this plainly so
-James rules on reality, not on a label:** every option above sorts into
-exactly one of three buckets — **accept** (a), **detect** (b, and
-(d)'s original interstitial half, at two different strengths — (b) after
-a completed consent, (d) before one), or **physically-confirm** (c, and
-(d)'s browser-bound-continuation half, also at two strengths — (c) binds
-to "this exact page render," (d)'s continuation binds to "this exact
-browser session"). (e) and (f) are orthogonal dials/signals that compose
-with any bucket. **NO option in this document achieves cryptographic
-principal binding — proof that the SPECIFIC person the design intends is
-the one who consented.** That would need an authenticated credential
-returning through the flow, and §2 already establishes the one credential
-this app has (the Keychain bearer) cannot reach the consent browser on
-native. "Prevention" was the wrong word for anything in this package;
-every option here either accepts the residual, makes it visible after
-the fact, or requires a deliberate action from whoever is physically
-present — none of them verify WHO that person is.
+**(g) Authenticated app-return binding — the repo's own Branch B shape
+(spec §Architecture 3, `2026-08-31-concept2-logbook-design.md:210-217`) —
+added round 9, and the ONLY option in this document that achieves real
+principal binding.**
+Every option (a)-(f) above operates entirely INSIDE THE BROWSER, where
+§2 already establishes no Ergomatic-issued credential reaches native.
+(g) moves the check to the APP instead, where a real credential (the
+Keychain bearer) already exists: the callback returns `code`+`state` to
+the app (a private-use URL scheme registered in Info.plist, per the
+spec's own Branch B design, or `ASWebAuthenticationSession` — see the
+interception note below), an `appUrlOpen` handler (or
+`ASWebAuthenticationSession`'s own completion handler) hands `{code,
+state}` to a NEW authenticated exchange route, `POST
+/api/concept2/exchange`, carrying the app's own Keychain bearer
+(`app/src/api.ts:14-17`), and the server REQUIRES
+`attempt.userId === req.user.id` before ever calling C2's token
+endpoint — a mismatch is rejected outright, no link written, no exchange
+attempted. An attacker's raw authorize URL, completed by consent in a
+SEPARATELY authenticated victim's own app instance, fails this check:
+the returning bearer identifies the victim, the attempt row identifies
+the attacker, and the two never match.
+
+**Why this is genuinely stronger, cited, not asserted:** RFC 8252 §7.1
+(PRIMARY, fetched this session) describes the general mechanism the
+spec's Branch B already names: "When the authorization server completes
+the request, it redirects to the client's redirection URI as it would
+normally. As the redirection URI uses a private-use URI scheme, it
+results in the operating system launching the native app, passing in the
+URI as a launch parameter." Apple's own `ASWebAuthenticationSession`
+documentation (PRIMARY, fetched this session via the docs JSON API — the
+same technique round 7 used for `SFSafariViewController`'s own
+JS-rendered page — `developer.apple.com/documentation/authenticationservices/aswebauthenticationsession`),
+quoted verbatim: **"ASWebAuthenticationSession ensures that only the
+calling app's session receives the authentication callback, even when
+more than one app registers the same callback URL scheme."** These are
+two DIFFERENT guarantees, kept separate deliberately: the Apple quote
+protects against a DIFFERENT app hijacking the redirect on-device (a
+real, documented weakness of a bare custom URL scheme + `appUrlOpen`,
+which the spec's Branch B as drafted uses — iOS resolves scheme-
+registration collisions with no user-visible arbitration); it says
+nothing about C2's own missing PKCE (below), which no client-side
+mechanism can retrofit.
+
+**Honest limit, named so James can weigh it against (c)/(d):** (g) binds
+the exchange to whichever APP INSTANCE's authenticated session actually
+receives the callback — not to a specific PERSON. On a device where the
+ATTACKER's own Ergomatic session is the one signed in and live (a shared
+device the attacker controls, or one they hand the victim mid-session),
+the callback still authenticates as the attacker, and the check passes
+trivially (`attempt.userId` and `req.user.id` are both the attacker's) —
+the injection outcome is unchanged. (g) closes the residual specifically
+for the common case §1's bound 4 already names as the surviving
+delivery channel — a forwarded link or QR code the victim opens on THEIR
+OWN signed-in device — which is the majority case this whole document is
+about; it does not close the shared-device case, the same case
+(c)/(d)'s physically-confirm bucket also cannot close.
+
+**The interception risk, named plainly, per the spec's own anchor
+ground (PRIMARY, already in the repo): "PKCE: nothing found — no 'PKCE'
+or 'code_challenge' on the page"** (spec §Research record,
+`2026-08-31-concept2-logbook-design.md:59-60`). Concept2's OAuth
+implementation has no proof-of-possession check at its token endpoint.
+If the redirect were intercepted BEFORE reaching our intended app (the
+scheme-collision risk above, on a device carrying a second app
+registered for the same scheme), the intercepting party would hold a
+bare authorization `code` that C2's OWN token endpoint would exchange
+for anyone presenting it with the right `client_id`/`client_secret` — no
+`code_verifier` binds the code to the app that requested it. This
+specific exposure is narrower here than a typical PKCE-less mobile
+client, because OUR server (not the client) holds `client_secret` (spec's
+own V2) — a third party that merely intercepted the redirect still lacks
+the secret needed to complete an exchange against C2 directly. But
+`ASWebAuthenticationSession`'s exclusivity guarantee above is still the
+more direct fix for the interception vector ITSELF, since it prevents a
+second app from ever seeing the redirect URI in the first place,
+regardless of PKCE.
+
+**Cost, honestly:** URL-scheme registration in Info.plist, or the
+`ASWebAuthenticationSession` Capacitor plugin (none installed today —
+`@capacitor/browser`, already added this PR, is a DIFFERENT plugin with
+no callback-delivery mechanism of its own); Concept2's OWN approval of a
+NEW `redirect_uri` for that scheme (the dev credential's registered
+`redirect_uri` is the https callback only, per the spec's own "Operator
+steps" section — a new one needs registering with C2 before this could
+work at all); a new authenticated exchange route
+(`POST /api/concept2/exchange`) — notably, this does NOT need the by-id
+user lookup (b)/(c)/(d) all require, since the bearer itself already IS
+the identity, no email lookup needed; and PER-SURFACE redirect selection
+at mint time (the spec's own Branch B line: "`redirect_uri` chosen per
+surface at mint time" — web keeps the https callback, since web already
+has cookie auth and Branch B was never proposed for it). **(g) is the
+ONLY option in this document that changes PR1.5's own mint-time contract
+on native, not just the `openExternalUrl` argument the way (d) does** —
+a new redirect KIND, not just a different URL.
+
+Not chosen — it joins the taxonomy as a fourth bucket, below.
+
+**The taxonomy, corrected, round 7 (finding 3), extended round 9 to a
+FOURTH bucket — say this plainly so James rules on reality, not on a
+label:** every option above sorts into exactly one of four buckets —
+**accept** (a), **detect** (b, and (d)'s original interstitial half, at
+two different strengths — (b) after a completed consent, (d) before
+one), **physically-confirm** (c, and (d)'s browser-bound-continuation
+half, also at two strengths — (c) binds to "this exact page render,"
+(d)'s continuation binds to "this exact browser session"), or
+**app-bind** (g) — the only bucket that binds to an authenticated
+PERSON, not merely a page render or a browser session, and the only one
+NOT confined to the browser. (e) and (f) are orthogonal dials/signals
+that compose with any bucket. **NO BROWSER-SIDE option in this document
+achieves cryptographic principal binding — proof that the SPECIFIC
+person the design intends is the one who consented — but (g) does,
+subject to its own honest limit above (it binds the APP INSTANCE, not
+the physical person controlling it).** "Prevention" was the wrong word
+for (a)-(f); every one of them either accepts the residual, makes it
+visible after the fact, or requires a deliberate action from whoever is
+physically present, without verifying WHO that person is. (g) is the
+one option that verifies something closer to that — a specific
+AUTHENTICATED IDENTITY — at the cost of the shared-device gap named
+above.
 
 ## 4. The device-check card
 
@@ -570,21 +719,29 @@ principal, matching what it actually proves.
 ## 6. Stop
 
 This is the evidence; it is not the decision. **James's ruling is owed
-here — corrected, round 7, finding 3: choose from ACCEPT / DETECT /
-PHYSICALLY-CONFIRM, not "accept / detect / prevent"; nothing in this
-document prevents in the cryptographic-identity sense.** Accept (a); add
+here — corrected, round 7, finding 3, extended round 9: choose from
+ACCEPT / DETECT / PHYSICALLY-CONFIRM / APP-BIND, not "accept / detect /
+prevent"; no BROWSER-side option in this document prevents in the
+cryptographic-identity sense, but (g) does bind an authenticated
+identity, subject to its own honest limit (§3).** Accept (a); add
 detection (b) or (d)'s original interstitial half (two strengths); add a
 physical-confirm requirement via (c) or (d)'s browser-bound-continuation
-half (also two strengths); turn the (e) dial (alone or combined with
-anything else); add the (f) constraint; or some combination — and if
+half (also two strengths); add app-bind via (g), the repo's own Branch B
+shape, requiring `attempt.userId === req.user.id` at an authenticated
+app-return exchange; turn the (e) dial (alone or combined with anything
+else); add the (f) constraint; or some combination — and if
 `ALLOWED_EMAILS`'s current scope is itself part of the answer, say so.
-No PR1.5 code implements any of (a)-(f); PR1.5 is plumbing (and, as of
-fix round 2, a dev-only on-device probe) only. **Either half of (d), if
-chosen, changes PR1.5's own contract with PR2** (§3) — say so explicitly
-in the ruling if that is the direction, since it is not a PR2-only change
-the way (b)/(c)/(f) are. **If the browser-bound-continuation half of (d)
-is chosen, it additionally needs the deliberate-action, anti-framing, and
+No PR1.5 code implements any of (a)-(g); PR1.5 is plumbing (and, as of
+fix round 2, a dev-only on-device probe) only. **Either half of (d), OR
+(g), if chosen, changes PR1.5's own contract with PR2** (§3) — say so
+explicitly in the ruling if that is the direction, since it is not a
+PR2-only change the way (b)/(c)/(f) are; (g) changes it more
+fundamentally still, since it changes what redirect KIND `openExternalUrl`
+is even handed. **If the browser-bound-continuation half of (d) is
+chosen, it additionally needs the deliberate-action, anti-framing, and
 one-time/clearing requirements §3 now names, plus the device measurement
 in §4, before it can be trusted in production** — a design this session
 judged plausible, not one it verified, and — round 7 correction — one
-this session no longer calls "prevention."
+this session no longer calls "prevention." **If (g) is chosen, it needs
+C2's own approval of a new `redirect_uri` before any of it can be built
+at all — a real external dependency the other options do not have.**
