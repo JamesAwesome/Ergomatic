@@ -60,7 +60,9 @@
 //
 // The fix removes the guard's job entirely by giving the history an
 // IDENTITY to key on instead of a call-count to track: every stored entry
-// carries the `sessionId` the caller minted once per `connect()` (a value
+// carries the `sessionId` the caller mints once per LOGICAL SESSION — at
+// the post-GATT site that creates the session's ring, never at
+// `connect()` entry (a value
 // this module treats as opaque — it enforces no format, no uniqueness, no
 // lifetime; that is `useMonitorSession.ts`'s to own) and there is ONE public
 // write function, `upsertSessionLog`, which searches the ring for an entry
@@ -95,7 +97,8 @@ export interface SessionLogHistoryEntry {
    *  ordered list rather than three independently-addressed slots. */
   slot: 1 | 2 | 3;
   /** The logical connected session this entry belongs to — opaque to this
-   *  module, minted once per `connect()` by `useMonitorSession.ts`. The
+   *  module, minted by `useMonitorSession.ts` once per logical session at
+   *  the post-GATT site that creates its ring. The
    *  identity `upsertSessionLog` matches on (see the module header's
    *  "IDENTITY-BOUND UPSERT" paragraph). */
   sessionId: string;

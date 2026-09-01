@@ -57,7 +57,7 @@ task.
 | --- | --- |
 | `src/monitor/sessionLogHistory.ts` (new) | the three-entry history under ONE atomic key, keyed on session identity (`upsertSessionLog`): write, list, read; never-throw |
 | `src/monitor/sessionLogHistory.test.ts` (new) | its unit suite |
-| `src/monitor/useMonitorSession.ts` | stash()'s `upsertSessionLog` call, keyed on `sessionIdRef` (minted once per `connect()`); §3 resume instruments; §6 latch counter |
+| `src/monitor/useMonitorSession.ts` | stash()'s `upsertSessionLog` call, keyed on `LogicalSession.id` (minted once per logical session at the post-GATT ring-creation site — round 5); §3 resume instruments; §6 latch counter |
 | `src/monitor/useMonitorSession.test.ts` | instrument unit legs |
 | `domain/monitor/pm5/parse.ts` + `domain/monitor/types.ts` | additive `rawRowingState` on the frame |
 | `src/you/Diagnostics.tsx` (new, added at Gate 0) + `src/you/MonitorLogs.tsx` (new) + `src/You.tsx` + `src/shell/AppRoutes.tsx` | the You DIAGNOSTICS row → `/you/diagnostics` menu → "Monitor logs" card → `/you/diagnostics/monitor-logs` screen |
@@ -134,10 +134,11 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
   session id converges on one entry; a denied write for a new session never
   wins a wrong-entry replace on retry).
 - [x] **Step 2: run, red; implement; green.**
-- [x] **Step 3: wire into `stash()`** — `upsertSessionLog(sessionId,
-  exported, nowDate())` where `sessionId` is `sessionIdRef.current`, minted
-  once per `connect()` (alongside that function's other per-connect ref
-  resets) and read, never re-minted, at every `stash()` call — including a
+- [x] **Step 3: wire into `stash()`** — `upsertSessionLog(session.id,
+  exported, nowDate())` where `session` is the hook's one `LogicalSession`
+  value (id, ring, and per-session counters created TOGETHER at the single
+  post-GATT site — round 5) and read, never re-minted, at every `stash()`
+  call — including a
   second `teardown()` invocation for the SAME logical session (the Cancel
   defect) and the burst linger's second stash within one `teardown()` call.
 - [x] **Step 4: hook-level tests**: two full connect→teardown cycles leave
@@ -181,9 +182,10 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
     programDropped/ready exit (`reset`), or the session tears down first
     (`teardown`).
   - `latch-count` — recorded by `stash()` once per logical session, detail:
-    `latches=<n> resumes=<n>`. "Logical session" is a stricter thing than it
-    was: since round 5 it begins at the GATT connect, so an attempt that
-    never got a link records nothing and takes no history slot.
+    `latches=<n> resumes=<n>`. "Logical session" is a stricter thing than
+    it was: since round 5 it begins at the GATT connect. A pre-GATT attempt
+    owns no NEW session or slot; its teardown may re-stash the retained
+    prior logical session under that session's own unchanged id.
 
 - [x] **Step 1: failing parse test** — feed a captured 0x0031 payload whose
   rowingState byte is a non-1 value (build it from the parser test file's

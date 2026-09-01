@@ -3810,9 +3810,11 @@ export function useMonitorSession(
           // above — which is the capture instrument eating the very capture
           // it exists for (2026-08-08 antagonistic review, finding 4).
           // Sessions that OPENED A RECORD keep their own copy under a key
-          // only another rowed session can touch. Round 5 shrank the set of
-          // things that can clobber it: an attempt that never reached the
-          // GATT connect is not a session and never gets here at all.
+          // only another rowed session can touch. Round 5 shrank the set
+          // of things that can clobber it: a pre-GATT attempt mints no NEW
+          // session — its teardown reaches here only when a RETAINED prior
+          // session exists, and then re-stashes THAT session under its own
+          // unchanged id (an in-place upsert, never a new slot).
           if (runRef.current !== null) {
             sessionStorage.setItem("ergomatic:last-rowed-log", exported);
           }
