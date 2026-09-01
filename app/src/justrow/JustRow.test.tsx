@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -367,6 +367,107 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Try again" }),
+    ).toBeInTheDocument();
+  });
+});
+
+/**
+ * REVIEW #3 on PR #259 — the supported path, through the REAL hook.
+ *
+ * The previous round's two pins each stopped at a boundary (the component
+ * test at a mocked hook, the hook test at `picking`), so both could stay
+ * green if a later `pairing` patch republished the retained name before
+ * the new driver existed. This is RF24's own rule applied to the ordering:
+ * one test begins upstream of the producer (the real `connect()` against a
+ * controllable transport) and asserts after the reader (JustRow's rendered
+ * frames and the arm's effect on the wire).
+ *
+ * The transport's SECOND `connect()` is held on a promise this test
+ * releases by hand — the slow radio, made deterministic.
+ */
+describe("JustRow: Lost → Try again through the real hook", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/monitorTransport");
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+
+  it("holds Connecting through a delayed reconnect, then arms into Ready", async () => {
+    let disconnectCb: ((reason: string) => void) | null = null;
+    let connectCalls = 0;
+    let releaseSecondConnect: (() => void) | null = null;
+    const transport = {
+      scan: async () => [{ id: "pm5-1", name: "PM5 432331249" }],
+      connect: async () => {
+        connectCalls += 1;
+        if (connectCalls >= 2) {
+          await new Promise<void>((resolve) => {
+            releaseSecondConnect = resolve;
+          });
+        }
+      },
+      write: async () => undefined,
+      subscribe: () => () => undefined,
+      disconnect: async () => undefined,
+      onDisconnect: (cb: (reason: string) => void) => {
+        disconnectCb = cb;
+        return () => undefined;
+      },
+    };
+    vi.resetModules();
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: () => transport,
+    }));
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(() => (): void => undefined),
+    }));
+
+    const { default: JustRow } = await import("./JustRow");
+    render(
+      <MemoryRouter initialEntries={["/justrow"]}>
+        <JustRow />
+      </MemoryRouter>,
+    );
+
+    // First connection: straight through to Ready — the real arm on the
+    // real hook, no mock supplying any state.
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(
+      await screen.findByRole("heading", { name: "Ready when you pull" }),
+    ).toBeInTheDocument();
+
+    // The link dies before any motion: pre-run, so the Lost frame.
+    act(() => {
+      disconnectCb?.("radio out of range");
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Lost the monitor" }),
+    ).toBeInTheDocument();
+
+    // Try again — and the second transport.connect() is HELD. The screen
+    // must sit honestly on Connecting: no arm (the retained name is
+    // cleared by the attempt's first patch), and no failure.
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(
+      await screen.findByRole("heading", { name: "Connecting to monitor" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Ready when you pull" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Could not connect" }),
+    ).not.toBeInTheDocument();
+
+    // Release the radio: the new driver is built, the name it vouches for
+    // is republished, and the arm fires into Ready.
+    await act(async () => {
+      releaseSecondConnect?.();
+      await Promise.resolve();
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Ready when you pull" }),
     ).toBeInTheDocument();
   });
 });
