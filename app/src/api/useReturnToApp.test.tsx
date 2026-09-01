@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 
 // Web: tested against the REAL `adapters/appLifecycle.ts` (unmocked) —
 // `isNative()` is always `false` under Vitest (no Capacitor native runtime
@@ -288,9 +288,25 @@ describe("useReturnToApp's ready flag (fix round 5, P1 — the first-open race)"
     // Only ONE of the two has settled — still not ready. This is the
     // exact case the reviewer's finding names: a caller free to act the
     // instant ONE signal looks live would still be racing the other.
+    //
+    // Round 6 correction (P1, reviewer-verified — CLAUDE.md's
+    // negative-async-assertion rule: "before asserting that
+    // asynchronously enriched UI has NO mark ... first await an
+    // observable OWNED BY THAT ENRICHMENT"): the barrier this used to
+    // wait on (`registerAppLifecycleListener` having been CALLED) is
+    // owned by the SYNCHRONOUS mount, not by the enrichment this
+    // assertion is actually about — the `.then()` chain that runs once
+    // `resolveLifecycle` settles and decides whether `ready` flips. That
+    // barrier is already true before mount even returns, so it proves
+    // nothing about whether the `.then()` chain (and any resulting
+    // `setState`) has actually run. Flushing two real microtask ticks
+    // inside `act()` (so React commits any resulting state update into
+    // `result.current` before we read it) is what actually lets this
+    // assertion observe post-settle state.
     resolveLifecycle(vi.fn());
-    await vi.waitFor(() => {
-      expect(registerAppLifecycleListener).toHaveBeenCalledOnce();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
     expect(result.current.ready).toBe(false);
 
