@@ -343,6 +343,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     runOpen: true,
     frameSilence: options.frameSilence ?? false,
     programDropped: false,
+    closeReason: null,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),

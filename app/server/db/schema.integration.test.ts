@@ -895,6 +895,7 @@ describe("migration 0012: the ended_by column", () => {
       "rower",
       "link-lost",
       "program-failed",
+      "program-dropped",
       "interrupted",
     ] as const;
 

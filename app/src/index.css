@@ -8786,6 +8786,70 @@ section:not(.news-pinned) .news-row:last-of-type {
      judge-slower on page (a slower row's pace/deviation/bar) 7.15:1
      ink on surface (the secondary save button) 17.11:1
    All comfortably clear the 4.5:1 AA floor. */
+/* THE DROP STRIP (Wave F PR 1 Task 4, design spec
+   2026-08-31-lifecycle-design.md §1, Gate 0 CLEARED 2026-08-31,
+   "PLACEMENT REVISED with the destination ruling — the strip sits at the
+   top of the LOG screen ... above the title, identical in both
+   orientations"). Rendered only when the loaded MonitorRun's own
+   `endedBy === "program-dropped"` (LogSession.tsx's own `droppedStrip`) —
+   the erg discarded its program mid-row, so the strip blames the machine
+   plainly rather than letting the ordinary summary imply a normal finish.
+   3px left rule matches the house's other "state marker" strips
+   (`.connected-keep-on`, `.plan-row-today`, `.step-card`) — a familiar
+   shape, not a new device invented for one strip.
+
+   TINTED GOLD at James's request (PR #248 Gate-0 iteration, 2026-08-31),
+   joining the ready-screen `.connected-keep-on` / held-error
+   `COULD NOT KEEP THE RECORD` gold warning family (`ConnectedSurface.tsx`'s
+   `holdError === "storage-failed"` block) rather than `--accent` red —
+   this file already fixes gold's meaning as "LOOK HERE", never a verdict
+   on the rower, and `--accent` stays reserved for lead-action buttons like
+   that block's own "Log it anyway" (the act-now CTA), not for warning text
+   or rule colour. The earlier neutral `--ink`/`--ink-3` choice and its
+   reasoning stay in git history.
+
+   Contrast, computed via the WCAG relative-luminance formula (never
+   eyeballed, house rule):
+     --marker (title) #7d5510 on --surface #fffdf7 (this strip's own
+       background, the only one the title ever sits on): 6.49:1
+     --marker (left border) #7d5510 on --page #f4f1e8 (the screen
+       background the strip's outer edge sits against): 5.85:1
+     --ink-3 (body) on --surface: 7.43:1
+     --ink-2 (the bold kept-count clause, `.log-dropped-body b`)
+       on --surface: 10.81:1
+   The title clears the 4.5:1 AA text floor; the border clears the 3:1
+   non-text floor. Both --marker figures match this token's own precedent
+   pairings already computed for `.connected-keep-on` (5.50:1 on
+   --surface-sunken, 6.49:1 on --surface) and for `--marker` itself in
+   `theme/tokens.css` (6.49:1 on --surface, 5.85:1 on --page). */
+.log-dropped-strip {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  border-left: 3px solid var(--marker);
+  border-radius: 4px;
+}
+
+.log-dropped-title {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--marker);
+}
+
+.log-dropped-body {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.log-dropped-body b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
 .summary-eyebrow {
   margin: 0 0 6px;
   font-family: var(--font-mono);

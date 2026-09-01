@@ -552,6 +552,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     ["rower", "rower"],
     ["link-lost", "link-lost"],
     ["program-failed", "program-failed"],
+    ["program-dropped", "program-dropped"],
     ["interrupted", "interrupted"],
   ] as const)(
     "TIER B2 DECLINES to FALLBACK when endedBy is %s — never trusts Σ steps for a row that could be an ongoing, un-bounded population",
@@ -1185,7 +1186,7 @@ describe("buildStoredSummary — targets-only caption", () => {
 
 // Cohort-unlock spec (2026-08-23), §2: `linkLostLine` is present, with
 // the exact copy, for `endedBy === "link-lost"` alone — every other
-// value (including the other four real ones, and absent/null) renders
+// value (including the other five real ones, and absent/null) renders
 // nothing here, proven by exact equality against several distinct
 // non-link-lost values rather than a single negative case (spec's own
 // "no endedBy taxonomy display" line — a check that merely negated
@@ -1220,6 +1221,7 @@ describe("buildStoredSummary — cohort-unlock §2 link-lost line", () => {
     ["finished", "finished"],
     ["rower", "rower"],
     ["program-failed", "program-failed"],
+    ["program-dropped", "program-dropped"],
     ["interrupted", "interrupted"],
     ["null", null],
     ["absent", undefined],

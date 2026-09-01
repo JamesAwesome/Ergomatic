@@ -1014,13 +1014,18 @@ describe("RC-1 — work and rest, summed separately at natural close (storage-sp
     expect(done.restMeters).toBeUndefined();
   });
 
-  it("computed ONLY for endedBy === 'finished' — a terminate/link-lost/program-failed close never gets these four fields, even with rest-complete actuals in hand", () => {
+  it("computed ONLY for endedBy === 'finished' — a terminate/link-lost/program-failed/program-dropped close never gets these four fields, even with rest-complete actuals in hand", () => {
     const withRest: IntervalActual = {
       ...actual1,
       restSeconds: 30,
       restDistanceMeters: 10,
     };
-    for (const endedBy of ["rower", "link-lost", "program-failed"] as const) {
+    for (const endedBy of [
+      "rower",
+      "link-lost",
+      "program-failed",
+      "program-dropped",
+    ] as const) {
       const run: MonitorRun = { ...freshMonitorRun(), actuals: [withRest] };
       const done = completeMonitorRun(
         run,
@@ -1304,9 +1309,10 @@ describe("connectGuardStage: the Connect door's lock", () => {
 // session" door (Today's row) stamps on a `MonitorRun` that never got a
 // `workoutComplete`/`terminated` event from the machine at all — the phone
 // was disconnected, backgrounded past recovery, or the rower simply walked
-// away. Task 4 widens the SAME field to the four `CloseReason` values
-// every ordinary wire-driven close now also carries (see `CloseReason`'s
-// own doc comment for the full table) — `"interrupted"` keeps its
+// away. Task 4 widens the SAME field to the `CloseReason` values every
+// ordinary wire-driven close now also carries (five, since program-dropped
+// landed — see `CloseReason`'s own doc comment for the full table) —
+// `"interrupted"` keeps its
 // original, unchanged meaning throughout: absent means "normal completion"
 // (or "still live"); it is never inferred from `terminated` or
 // `completedAt` alone, because both of those already mean something else
@@ -1328,7 +1334,13 @@ describe("endedBy: the additive close-reason marker (F6, widened Phase LL Task 4
     expect(loaded!.endedBy).toBe("interrupted");
   });
 
-  it.each(["finished", "rower", "link-lost", "program-failed"] as const)(
+  it.each([
+    "finished",
+    "rower",
+    "link-lost",
+    "program-failed",
+    "program-dropped",
+  ] as const)(
     "round-trips the NEW value endedBy: %s through save/load",
     (value) => {
       const run: MonitorRun = {
@@ -1969,8 +1981,12 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
     expect(after?.summaryDetail).toStrictEqual(detail);
   });
 
-  it("still refuses link-lost and program-failed closes", () => {
-    for (const endedBy of ["link-lost", "program-failed"] as const) {
+  it("still refuses link-lost, program-failed, and program-dropped closes", () => {
+    for (const endedBy of [
+      "link-lost",
+      "program-failed",
+      "program-dropped",
+    ] as const) {
       const run: MonitorRun = {
         ...freshMonitorRun(),
         v: 2,

@@ -120,6 +120,13 @@
       "when": 1787613749253,
       "tag": "0016_fancy_quentin_quire",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788212447297,
+      "tag": "0017_fair_whizzer",
+      "breakpoints": true
     }
   ]
 }

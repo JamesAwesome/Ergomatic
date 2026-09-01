@@ -76,7 +76,8 @@ function hasMachineTotals(log: RecentLog): boolean {
 // window that cannot grow" — that premise was false.**
 // `computeWorkRestSums`/`appendSummaryObservations` (the work-pair and
 // machine-totals writers) only ever fire for `"finished"`/`"rower"`
-// closes, so a link-lost/program-failed/interrupted/burst-less-terminate
+// closes, so any other non-finished/rower close (link-lost,
+// program-failed, program-dropped, interrupted, burst-less-terminate) on a
 // monitor row can NEVER carry either pair, forever — an ONGOING
 // population, not a closed window. `storedSummary.ts`'s own TIER B2 now
 // gates on `isReconstructableClose(row.endedBy)` for exactly this reason

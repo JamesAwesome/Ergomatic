@@ -257,7 +257,7 @@ export interface StoredSummaryView {
   planFooter?: string;
   /** Cohort-unlock spec (2026-08-23), §2: the exact marked line, present
    *  only when `row.endedBy === "link-lost"` — every other `endedBy`
-   *  value (including the other four real ones and absent/null) renders
+   *  value (including every other real one and absent/null) renders
    *  nothing here; this spec is the lost-link surface, not an `endedBy`
    *  taxonomy display (spec's own line). */
   linkLostLine?: string;
@@ -360,8 +360,9 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  (`completeMonitorRun`'s own gate, `monitorRun.ts`), and
 //  `appendSummaryObservations` (the machine-totals writer) admits only
 //  `"finished"`/`"rower"` — so a row closed `"link-lost"`,
-//  `"program-failed"`, `"interrupted"`, OR a `"rower"` terminate whose
-//  burst never arrived can NEVER carry machine totals OR the work pair,
+//  `"program-failed"`, `"program-dropped"`, `"interrupted"`, OR a
+//  `"rower"` terminate whose burst never arrived can NEVER carry machine
+//  totals OR the work pair,
 //  by design, FOREVER — not a closed window, an ONGOING population that
 //  grows with every future interrupted/lost-link session. The
 //  `row.endedBy` GATE ABOVE is the fix: it restricts THIS branch (Σ
@@ -372,7 +373,7 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  unconditionally whenever it has any actuals at all (the same reason a
 //  `"finished"` row with `hasStepActuals` true can never lack it) — and
 //  `null`/`undefined` `endedBy` predates Phase LL Task 4 (2026-08-2X,
-//  before RC-1 too). A row whose `endedBy` is one of the four
+//  before RC-1 too). A row whose `endedBy` is one of the five
 //  "incomplete by construction" reasons (RC-1's own ROADMAP row's
 //  phrase) is EXCLUDED from this branch regardless of when it was saved
 //  — see the RISK NOTE below for why, and DECLINE (FALLBACK) for what it
@@ -439,8 +440,9 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  every timer/manual-door row (neither door ever writes the field —
 //  their heroes were already work-only before this task and stay
 //  byte-identical), any monitor row predating the 2026-08-08 amendment
-//  entirely, AND — new at fix round 2 — every link-lost/program-failed/
-//  interrupted/burst-less-terminate monitor row, forever: the stored
+//  entirely, AND — new at fix round 2 — every non-finished/rower monitor
+//  row (link-lost, program-failed, program-dropped, interrupted,
+//  burst-less-terminate), forever: the stored
 //  `avgSplitSeconds`/`timeSeconds`/`distanceMeters` render exactly as
 //  saved, unimproved but never silently wrong. `buildStoredTotalLine` is
 //  called with an EMPTY `stepSums` here too (fix round 2) — a declined
@@ -450,24 +452,28 @@ function buildMeta(row: StoredLog): SummaryMeta {
 // Fix round 2 (final whole-branch review, IMPORTANT finding I1): TIER
 // B2's own gate — TRUE for `"finished"`, `null`, and `undefined` (every
 // shape that PROVES this row predates RC-1, 2026-08-24 — see the TIER B2
-// comment block above for why), FALSE for the four close reasons RC-1's
+// comment block above for why), FALSE for the five close reasons RC-1's
 // own ROADMAP row calls "incomplete by construction": `"rower"` (a
 // terminate whose burst never arrived, so it never became tier A),
-// `"link-lost"`, `"program-failed"`, `"interrupted"`. A row failing this
-// check falls through to FALLBACK instead of trusting Σ steps.
+// `"link-lost"`, `"program-failed"`, `"program-dropped"` (Wave F PR 1 —
+// a live drop keeps whatever was rowed but never gets another boundary,
+// same incompleteness shape as the others), `"interrupted"`. A row
+// failing this check falls through to FALLBACK instead of trusting Σ
+// steps.
 // Fix round 3 (re-review, Minor): an ALLOWLIST, not a denylist — the
 // earlier `!== "rower" && !== "link-lost" && ...` shape fails OPEN: a
-// FIFTH `CloseReason` added later (`monitorRun.ts:1099` already
+// new `CloseReason` added later (`monitorRun.ts:1099` already
 // anticipates one, W8's inactivity auto-terminate) would silently pass
 // this check and re-enter the trusted TIER B2 branch, resurrecting the
 // exact under-count/misattribution bug this fix round closed — no type
-// error, no failing test, just a quiet regression the day that fifth
-// value ships. This form fails CLOSED instead: only the two shapes that
+// error, no failing test, just a quiet regression the day that value
+// ships. This form fails CLOSED instead: only the two shapes that
 // PROVE a row historical (`"finished"`, or `null`/`undefined` predating
 // `endedBy` entirely) are trusted; anything else — including a value
 // this union doesn't even know about yet — declines. Byte-identical
-// behavior today (the five current values partition the same way either
-// direction), different behavior the day a sixth value exists.
+// behavior today (the six current values, `"program-dropped"` now among
+// them, partition the same way either direction), different behavior the
+// day a seventh value exists.
 function isReconstructableClose(endedBy: StoredLog["endedBy"]): boolean {
   return endedBy === "finished" || endedBy == null;
 }
@@ -893,10 +899,10 @@ function buildPlanFooter(row: StoredLog): string | undefined {
 const LINK_LOST_LINE = "LINK LOST · the app lost the monitor before the end";
 
 // §2: "no other endedBy values render anything." A plain equality check
-// against the one value this spec owns — never a negation of the other
-// four (which would silently start rendering the line for any FUTURE
-// sixth value the union might grow, exactly the taxonomy-display this
-// spec explicitly declines to be).
+// against the one value this spec owns — never a negation of every
+// other close reason (which would silently start rendering the line for
+// any future value the union might grow, exactly the taxonomy-display
+// this spec explicitly declines to be).
 function buildLinkLostLine(row: StoredLog): string | undefined {
   return row.endedBy === "link-lost" ? LINK_LOST_LINE : undefined;
 }

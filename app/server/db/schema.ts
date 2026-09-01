@@ -65,11 +65,20 @@ export const testDistanceEnum = pgEnum("test_distance", ["2k", "6k"]);
 // writer (F6, Today's row) predates this task — the client-side field
 // already widened to include it, and posting it through unchanged is what
 // makes the widened union additive rather than a second, competing shape.
+// Wave F PR 1 (lifecycle design spec §1, "The migration, owned"): a real
+// Postgres pgEnum TYPE, so the sixth value needs its own migration
+// (`ALTER TYPE ... ADD VALUE`), not just a type-level edit — this array,
+// `server/stores/logs.ts`'s hand-copied `EndedBy` union, and
+// `server/routes/data.ts`'s `ENDED_BY_VALUES` are three independent
+// mirrors of the same value set with no shared source, so widening one
+// without the other two typechecks clean and fails only at runtime on a
+// phone. All three move together in the same commit.
 export const endedByEnum = pgEnum("ended_by", [
   "finished",
   "rower",
   "link-lost",
   "program-failed",
+  "program-dropped",
   "interrupted",
 ]);
 // Phase BL PR A (baseline-onboarding spec 2026-08-22 rev 2, "The stored

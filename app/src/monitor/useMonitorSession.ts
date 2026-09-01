@@ -937,6 +937,11 @@ export interface MonitorSession {
    *  never sticks, and never needs clearing back to `false` itself (the
    *  component it's read from unmounts right after). */
   programDropped: boolean;
+  /** Wave F PR 1 Task 2 (design spec 2026-08-31-lifecycle-design.md §1): a
+   *  record-derived mirror set only by the live-drop close, in the SAME
+   *  patch that flips the phase — spec §1 Mechanism; null everywhere
+   *  else. */
+  closeReason: CloseReason | null;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
@@ -1439,6 +1444,11 @@ interface SessionState {
    *  truth, `state` is what React reads" split every other field in this
    *  interface already follows. */
   programDropped: boolean;
+  /** `MonitorSession.closeReason`'s own doc comment carries the full
+   *  reasoning — mirrored here as internal state for the same "the ref is
+   *  truth, `state` is what React reads" split every other field in this
+   *  interface already follows. */
+  closeReason: CloseReason | null;
 }
 
 const INITIAL_STATE: SessionState = {
@@ -1454,6 +1464,7 @@ const INITIAL_STATE: SessionState = {
   runOpen: false,
   frameSilence: false,
   programDropped: false,
+  closeReason: null,
 };
 
 /** Everything a rejected `program()` can throw, mapped onto the typed
@@ -2251,8 +2262,9 @@ export function useMonitorSession(
    *  `openHandoffHold` above returns it. Called from all three burst-
    *  eligible `ended` transitions (`endByMachine`'s two branches,
    *  `endSession`) — `run === null`/a non-burst-eligible `endedBy` (a
-   *  never-rowed close, `link-lost`, `program-failed`) all return `false`
-   *  via this one predicate rather than each caller special-casing it. */
+   *  never-rowed close, or any non-finished/rower close: `link-lost`,
+   *  `program-failed`, `program-dropped`) all return `false` via this one
+   *  predicate rather than each caller special-casing it. */
   const openBurstHold = useCallback((): boolean => {
     const run = runRef.current;
     if (run === null) return false;
@@ -2940,13 +2952,41 @@ export function useMonitorSession(
       if (event.kind === "programDropped") {
         // RC-37 ([R5], design spec 2026-08-27-link-authority-design.md §1):
         // the detector fired — the PM5 already left the program it was
-        // holding (confirmed trigger: Menu at READY). Meaningful only
-        // pre-live, the same states Cancel itself is valid from
-        // (`cancel()`'s own `armed` check just below in this file) — a
-        // structural mismatch reported once a run is already live or ended
-        // is outside this task's own scope (the walk's trigger is READY,
-        // never a live session) and is left alone rather than guessed at.
+        // holding. `driver.ts`'s own armedWatch is independent of this
+        // hook's `phase` (it runs off raw wire ticks alone), so the SAME
+        // event can arrive at READY (Menu press, the walk's own confirmed
+        // trigger — handled below, unchanged) or mid-row (the live arm
+        // immediately below). Wave F PR 1 Task 2 (design spec
+        // 2026-08-31-lifecycle-design.md §1, §0.2): the live case is no
+        // longer left alone — §0.2 falsifies the premise an earlier
+        // revision of this comment scoped it out on.
         const phase = stateRef.current.phase;
+        if (phase === "live") {
+          // Spec §1 (lifecycle design, rev 4): the erg dropped its own
+          // program mid-row. A third endByMachine-shaped close: keep what
+          // was rowed, no terminate (RC-37 ruling — the machine already
+          // left), no holds (there will never be another boundary, and a
+          // burst can neither arrive nor be stored for this close reason),
+          // synchronous verify.
+          const run = runRef.current;
+          if (run !== null && run.completedAt !== null) return; // P3b pin
+          closeRecord(true, "program-dropped");
+          const { handoffHeld, holdError } = noHoldCloseVerdict(false);
+          // closeReason rides the SAME patch as the phase flip so no frame
+          // can render "ended" without it (review P1-1's transport).
+          // programDropped stays false: that flag is the pre-row exit
+          // signal and would arm ConnectedInterstitial's onExit effect
+          // against this navigation.
+          update({
+            phase: "ended",
+            endedBy: "machine",
+            closeReason: "program-dropped",
+            handoffHeld,
+            holdError,
+            runOpen: false,
+          });
+          return;
+        }
         if (phase !== "programming" && phase !== "ready") return;
         // [R5], James's own words: "Loose any new banners. Just take it
         // back here and remember any nudges." Exit exactly like Cancel
@@ -3156,6 +3196,8 @@ export function useMonitorSession(
       update,
       withSeries,
       applyProducerCommit,
+      closeRecord,
+      noHoldCloseVerdict,
     ],
   );
 
@@ -3393,15 +3435,17 @@ export function useMonitorSession(
       // because this teardown hung up at t=0 while the burst was still
       // ~1s out (notes §25's lab measurement, `lab-terminate-ring.json`).
       // The honest predicate is "the link was still up when this record
-      // closed" — the complement of `link-lost`/`program-failed`, which is
-      // exactly `{"finished", "rower"}`. `"rower"` covers BOTH venues (a
-      // Menu press at the erg and the app's own End button —
-      // `MonitorRun.endedBy`'s own table) and stays correct if walk
-      // question W8's PM5 inactivity auto-terminate lands in `"rower"`
-      // later. `monitorRun.ts`'s `appendSummaryObservations` admits the
-      // identical pair (spec §1's GATE 4) — one predicate, two enforcement
-      // points, deliberately: this one decides whether the bytes can still
-      // ARRIVE, that one decides whether they may be WRITTEN.
+      // closed" — every non-finished/rower close (`link-lost`,
+      // `program-failed`, `program-dropped`, `interrupted`) declines; the
+      // burst-eligible set is exactly `{"finished", "rower"}`. `"rower"`
+      // covers BOTH venues (a Menu press at the erg and the app's own End
+      // button — `MonitorRun.endedBy`'s own table) and stays correct if
+      // walk question W8's PM5 inactivity auto-terminate lands in
+      // `"rower"` later. `monitorRun.ts`'s `appendSummaryObservations`
+      // admits the identical pair (spec §1's GATE 4) — one predicate, two
+      // enforcement points, deliberately: this one decides whether the
+      // bytes can still ARRIVE, that one decides whether they may be
+      // WRITTEN.
       //
       // Everything else about the linger is unchanged — same
       // `BURST_LINGER_MS` cap, same one-shot `finish`, same second stash.
@@ -3989,9 +4033,10 @@ export function useMonitorSession(
     // -> rower", "End with the link gone -> link-lost".
     closeRecord(true, linkGone ? "link-lost" : "rower");
     // Storage-spine design spec §2, Task 3: THE THIRD BURST-ELIGIBLE ARM.
-    // `openBurstHold()`'s own predicate is the complement of
-    // `link-lost`/`program-failed`, so a `linkGone` close (`endedBy:
-    // "link-lost"`) already opens nothing — no special case needed here,
+    // `openBurstHold()`'s own predicate declines every non-finished/rower
+    // close (`link-lost`, `program-failed`, `program-dropped`,
+    // `interrupted`), so a `linkGone` close (`endedBy: "link-lost"`)
+    // already opens nothing — no special case needed here,
     // the predicate does it. A link-up End (`endedBy: "rower"`) owes the
     // burst exactly like a Menu terminate does: the machine still emits
     // its summary over a link that is, by definition, still up (the
@@ -4240,6 +4285,7 @@ export function useMonitorSession(
     runOpen: state.runOpen,
     frameSilence: state.frameSilence,
     programDropped: state.programDropped,
+    closeReason: state.closeReason,
     connect,
     program,
     endSession,

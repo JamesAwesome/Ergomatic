@@ -48,7 +48,11 @@ import type { MonitorLogEntry } from "../monitor/eventLog";
 import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import PostWorkoutSummary, { singleTargetHint } from "./PostWorkoutSummary";
-import { buildSummaryModel, type SummaryModel } from "./summaryModel";
+import {
+  buildSummaryModel,
+  measuredIntervalCount,
+  type SummaryModel,
+} from "./summaryModel";
 import { postTestOffer, type PostTestOffer } from "./postTestOffer";
 import PostTestPrompt from "./PostTestPrompt";
 import { recordTestResult } from "../api/testHistory";
@@ -1822,15 +1826,41 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     // M2, binding) is the machine's own WORKOUTEND — `endedBy ===
     // "finished"` is the only close reason that proves the programmed
     // distance completed ("rower"/"link-lost"/"program-failed"/
-    // "interrupted"/absent all mean it did not, or cannot be shown to
-    // have), so an interrupted run's real-but-partial average split is
-    // never offered as a full-distance test result.
+    // "program-dropped"/"interrupted"/absent all mean it did not, or
+    // cannot be shown to have), so an interrupted run's real-but-partial
+    // average split is never offered as a full-distance test result.
     const monitorOffer = postTestOffer({
       workoutTitle: activeWorkout.title,
       workoutIsGlobal: activeWorkout.isGlobal,
       avgSplitSeconds: model.heroes.avgSplitSeconds,
       completedFullDistance: monitorRun.endedBy === "finished",
     });
+
+    // Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1,
+    // Gate 0 CLEARED 2026-08-31): the DURABLE record's own `endedBy`, never
+    // the session's `closeReason` (that field dies with the session at
+    // navigation — the spec's own correction of its rev-2 draft, "the
+    // record is the only authority that survives the navigation"). `kept`
+    // is `summaryModel.ts`'s shared `measuredIntervalCount` rule, the same
+    // one the connected surface's own drop copy and the LOST THE MONITOR
+    // banner read — never a second notion of "kept" invented here.
+    const monitorDropped = monitorRun.endedBy === "program-dropped";
+    const droppedKept = measuredIntervalCount(monitorRun.actuals);
+    const droppedStrip = !monitorDropped ? undefined : (
+      <div className="log-dropped-strip">
+        <p className="log-dropped-title">THE ERG DROPPED THE WORKOUT.</p>
+        <p className="log-dropped-body">
+          <b>
+            {droppedKept === 0
+              ? "Nothing kept."
+              : `${droppedKept} ${droppedKept === 1 ? "interval" : "intervals"} kept.`}
+          </b>{" "}
+          {droppedKept === 0
+            ? "You had not finished an interval yet."
+            : "The row below is what the erg measured before it stopped."}
+        </p>
+      </div>
+    );
 
     const handleMonitorSave = (opts: { advancesPlan?: boolean } = {}) => {
       pendingOfferRef.current = monitorOffer;
@@ -1954,6 +1984,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         // omit this prop entirely (neither has a PM5), which is the
         // "absent" case `PostWorkoutSummary`'s own doc comment names.
         series={monitorRun.series}
+        stripSlot={droppedStrip}
         discardSlot={
           <button
             type="button"

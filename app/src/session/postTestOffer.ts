@@ -34,7 +34,8 @@ export interface PostTestOffer {
  *  - COMPLETENESS (M2, new with this phase): the split was measured over
  *    the test's full distance. The caller answers per session source:
  *    monitor = `endedBy === "finished"` (the machine's own WORKOUTEND —
- *    "rower"/"link-lost"/"program-failed"/"interrupted"/absent all mean
+ *    every non-finished endedBy ("rower"/"link-lost"/"program-failed"/
+ *    "program-dropped"/"interrupted") or absent all mean
  *    the programmed distance is not proven complete); timer =
  *    `isComplete(run)` (the phone has no distance oracle — advancing
  *    through every phase IS the door's definition of rowing the

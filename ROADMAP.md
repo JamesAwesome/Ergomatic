@@ -252,6 +252,11 @@ rower's work silently.
       James's rev-2 review; that was the client-side story only). **TRIAD**
       (stored close reason + the enum migration). Gate 0 CLEARED in full
       (2026-08-31, with the spec PR's merge word).
+      **SHIPS as the live-drop PR from spec §1, 2026-08-31** — all five
+      tasks committed (union widened end to end + migration; the hook's
+      live arm publishing `closeReason`; the real-driver seam test; the
+      two Gate-0 surfaces; this composition drive-through). **PR #248**,
+      PM final gate GO-WITH-CONDITIONS 2026-08-31.
 - [ ] **The pocketed-phone window's two co-producers. RE-SCOPED on evidence
       2026-08-31 — one is not a defect.** `pause-declared` at 66 spm while
       rowing is real and stays here, owned by
@@ -1067,6 +1072,27 @@ X" is a real disposition — most of these are single files.
   already REJECTS leading rest, so only the consecutive case is live. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`
   (§AUD-006, §V4).
+- **RESOLVED (James, 2026-08-31: "Gold approved" on the rendered
+  `log-monitor-dropped.png` / `log-monitor-dropped-landscape.png` captures
+  at `9bd4ddac`)** — the completion-eyebrow suppression recommended at
+  PR #248's round-1 review ("My recommendation is to suppress the
+  completion eyebrow") is Gate-0 approved: the dropped-arrival log screen
+  no longer reads `WORKOUT COMPLETE` two lines above `THE ERG DROPPED THE
+  WORKOUT.` Scoped across all THREE arrival types that did not complete,
+  never a drop-only fork (`.summary-eyebrow` suppresses on
+  `endedBy === "program-dropped" | "link-lost" | "interrupted"`,
+  `SummaryModel.suppressCompletionEyebrow`), unchanged everywhere else.
+  The controller's ruling stands approved with it: the composed-route
+  evidence (portrait + landscape, real LogSession → PostWorkoutSummary
+  composition) covers the dropped arrival only; link-lost and interrupted
+  share the identical derivation and renderer, so no routed captures are
+  owed for those two unless James asks for them.
+- **The server's `EndedBy` mirror can be derived, not hand-copied.**
+  `server/stores/logs.ts` already imports `../db/schema.js`, so
+  `export type EndedBy = (typeof endedByEnum.enumValues)[number]` plus
+  deriving `ENDED_BY_VALUES` from `endedByEnum.enumValues` would collapse
+  three mirrors to one; the POST seam test is the current gate. Rides the
+  next PR touching `server/stores/logs.ts`. Found same review.
 
 ## Tooling
 

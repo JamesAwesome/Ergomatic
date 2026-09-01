@@ -882,6 +882,183 @@ test("today-interrupted", async ({ page }) => {
   });
 });
 
+// Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1, Gate 0
+// CLEARED 2026-08-31): the log door's own drop strip. Same lightweight
+// direct-seed idiom as `buildInterruptedMonitorRun`/`today-interrupted`
+// above (this screen renders a stored `MonitorRun`, not live session state,
+// so seeding it directly is both faster and closer to what the screen
+// actually reads — same rationale `postLog`'s own header states for the
+// from-the-log capture) rather than driving the fake transport through a
+// real structure-mismatch detection (Task 3's own `liveDropSeamReplay.
+// test.ts` already proves that seam at the unit level; Task 5's composition
+// test proves the real navigation). `completedAt` set and `terminated:
+// true` — the SAME shape `closeRecord(true, "program-dropped")` writes
+// (useMonitorSession.ts's own live drop arm), never `today-interrupted`'s
+// dead (`completedAt: null`) shape. Both work intervals measured (the same
+// realistic pair `buildMonitorFixture`'s own default actuals use in the
+// unit suite) — a real "kept 2" capture, not an empty state
+// (CLAUDE.md's own recurring-failure #7).
+function buildDroppedMonitorRun(workoutId: string): MonitorRun {
+  const hoarfrost = library("Hoarfrost");
+  const timeWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  const calmSea = library("Calm Sea");
+  const distanceWork = calmSea.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  const draft = buildDraft({
+    id: workoutId,
+    title: hoarfrost.title,
+    type: hoarfrost.type as WorkoutType,
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { effort: "min" },
+      },
+      timeWork,
+      distanceWork,
+    ],
+  });
+  const started = startDraft(draft);
+  const built = buildRun(started, MONITOR_FIXTURE_BASELINES, MONITOR_FIXED_NOW);
+  const program = compileOrThrow(built.phases);
+  const logSeed = buildLogSeed(built.phases, MONITOR_FIXTURE_BASELINES);
+  const actuals: IntervalActual[] = [
+    {
+      index: 0,
+      elapsedSeconds: 705,
+      distanceMeters: 2000,
+      avgSplit: 140,
+      avgSpm: 24,
+      avgHeartRateBpm: 138,
+      restDistanceMeters: 0,
+    },
+    {
+      index: 1,
+      elapsedSeconds: 2500,
+      distanceMeters: 10000,
+      avgSplit: 125,
+      avgSpm: 26,
+      avgHeartRateBpm: 150,
+      restDistanceMeters: 0,
+    },
+  ];
+  const completedAt = new Date(
+    MONITOR_FIXED_NOW.getTime() + 20 * 60 * 1000,
+  ).toISOString();
+  return {
+    v: 2,
+    workoutId,
+    title: hoarfrost.title,
+    program,
+    logSeed,
+    actuals,
+    deviceName: "PM5 432331249 Row",
+    startedAt: MONITOR_FIXED_NOW.toISOString(),
+    completedAt,
+    terminated: true,
+    endedBy: "program-dropped",
+  };
+}
+
+test("log-monitor-dropped", async ({ page }) => {
+  const title = "Hoarfrost";
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-monitor-dropped@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const workoutId = await libraryWorkoutId(page, title);
+  const run = buildDroppedMonitorRun(workoutId);
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: MONITOR_RUN_KEY,
+    value: JSON.stringify(run),
+  });
+
+  await page.goto(`/library/${workoutId}/log?from=monitor`);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.getByText("THE ERG DROPPED THE WORKOUT.")).toBeVisible();
+  await expect(
+    page.getByText(
+      "2 intervals kept. The row below is what the erg measured before it stopped.",
+    ),
+  ).toBeVisible();
+
+  // Viewport-only, not `fullPage: true` — this file's own stated
+  // convention (the `log-monitor` capture's own comment, immediately
+  // above its identical `neutralizeFixedTabBarForFullPageCapture` note):
+  // `/library/:id/log` is NOT in `HIDDEN_TABBAR_PREFIXES`, so the fixed
+  // `.tabbar` is really on screen here, and a `fullPage` capture on a
+  // page taller than the viewport re-paints that FIXED element at every
+  // stitched segment — caught this session: a first `fullPage: true` draft
+  // of this exact capture rendered the tab bar's own text stacked directly
+  // over the strip's neighbour, the interval list's row 1 (confirmed
+  // absent from NEITHER the DOM — a live `$$eval(".summary-row")` on the
+  // real render read all 3 rows, "1"/"2"/"3" — NOR the strip's own
+  // assertions above, both of which pass regardless; only the STITCHED
+  // PNG was wrong). The strip sits at the very top of the document
+  // (immediately after the nav, above the title — the artifact's own
+  // placement words), so the plain 390×844 viewport this project already
+  // uses is nothing to scroll into frame — but it is only PORTRAIT. The
+  // repo's own design-gate rule (CLAUDE.md, "A SPEC THAT CHANGES WHAT A
+  // ROWER READS OR SEES") requires the rendered thing in BOTH
+  // orientations before Gate 0 can be presented; the landscape capture
+  // lives in `log-monitor-dropped-landscape` immediately below. Together
+  // the two are the Gate-0 artifact James approved ("Gold approved",
+  // 2026-08-31, at `9bd4ddac`) — this file's captures ARE the approved
+  // record, so keep them in sync with the rendered surface, not just the
+  // strings above.
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-monitor-dropped.png"),
+  });
+});
+
+// Wave F PR 1 round 2 fix (item 1b): the routed LANDSCAPE half of the
+// composition above — same seeded `MonitorRun`, same real
+// `/library/:id/log?from=monitor` route, same door, only the viewport
+// differs. Gate 0 needs both orientations (CLAUDE.md's design-gate rule);
+// `log-monitor-dropped` above covered portrait only. Gate 0 CLEARED
+// (James: "Gold approved", 2026-08-31, on both this capture and the
+// portrait one, at `9bd4ddac`). Same idiom as
+// `log-monitor-landscape` (844×390, `neutralizeFixedTabBarForFullPageCapture`
+// + `scrollTraceChartIntoFrame` before the shot — a no-op here if this
+// fixture's trace has nothing to scroll, since `scrollTraceChartIntoFrame`
+// itself no-ops when `.trace-figure` is absent).
+test("log-monitor-dropped-landscape", async ({ page }) => {
+  const title = "Hoarfrost";
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-monitor-dropped-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const workoutId = await libraryWorkoutId(page, title);
+  const run = buildDroppedMonitorRun(workoutId);
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: MONITOR_RUN_KEY,
+    value: JSON.stringify(run),
+  });
+
+  await page.goto(`/library/${workoutId}/log?from=monitor`);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.getByText("THE ERG DROPPED THE WORKOUT.")).toBeVisible();
+  await expect(
+    page.getByText(
+      "2 intervals kept. The row below is what the erg measured before it stopped.",
+    ),
+  ).toBeVisible();
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await neutralizeFixedTabBarForFullPageCapture(page);
+  await scrollTraceChartIntoFrame(page);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-monitor-dropped-landscape.png"),
+  });
+});
+
 test("plan", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-plan@e2e.test",
