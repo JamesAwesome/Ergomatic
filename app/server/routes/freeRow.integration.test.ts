@@ -113,25 +113,96 @@ describe("POST/GET /api/logs: a FREE ROW round-trips, and never advances the pla
     expect(log.body.steps).toStrictEqual([]);
   });
 
-  // Criterion 1, through the route rather than the store: the client asked
-  // to advance and the server refused anyway, because a free row is not a
-  // prescribed session. The client half (a door posting advancesPlan:
-  // false) is PR 2's, so this refusal is the only enforcement there is.
+  // CRITERION 1, THROUGH THE ROUTE — and the earlier version of this test
+  // could not fail. It asserted `created.body.planIndex`, but
+  // `POST /api/logs` returns only `{ id }`, so that read was always
+  // undefined; and with no plan selected, the log's own `planKey`/
+  // `planIndex` stay null whether or not the refusal fires. It survived the
+  // exact mutation it existed to catch — RF21, committed while fixing an
+  // RF24.
+  //
+  // Fixed by observing the thing that actually moves: select a plan first,
+  // then read `GET /api/plan`'s `doneN` after the POST. Removing the
+  // refusal takes that from 0 to 1.
   it("refuses to advance the plan even when the body asks to (criterion 1)", async () => {
     const bearer = await bearerToken();
+    const chosen = await request(app)
+      .put("/api/plan")
+      .set("Authorization", bearer)
+      .send({ planKey: "sprint" });
+    expect(chosen.status).toBe(200);
+    expect(chosen.body.doneN).toBe(0);
+
     const created = await request(app)
       .post("/api/logs")
       .set("Authorization", bearer)
       .send(freeRowBody());
     expect(created.status).toBe(201);
-    expect(created.body.planIndex ?? null).toBeNull();
+
+    const plan = await request(app)
+      .get("/api/plan")
+      .set("Authorization", bearer);
+    expect(plan.status).toBe(200);
+    expect(plan.body.planKey).toBe("sprint");
+    expect(plan.body.doneN).toBe(0);
 
     const log = await request(app)
       .get(`/api/logs/${created.body.id}`)
       .set("Authorization", bearer);
     expect(log.status).toBe(200);
     expect(log.body.planKey ?? null).toBeNull();
-    expect(log.body.planIndex ?? null).toBeNull();
+  });
+
+  // THE FROZEN DELETE REGRESSION (criterion 1's second half). It is a
+  // DEPENDENT pin, not an independent gate — `delete()` returns
+  // `unCounted: false` for any `planKey === null` row, which the create-side
+  // refusal already forces. Frozen all the same, and it was missing: the
+  // pre-existing non-plan-linked delete test never creates a free row and
+  // never looks at plan state.
+  it("deleting a free row leaves done_n unchanged (criterion 1, delete half)", async () => {
+    const bearer = await bearerToken();
+    await request(app)
+      .put("/api/plan")
+      .set("Authorization", bearer)
+      .send({ planKey: "sprint" });
+
+    // A real prescribed session first, so `doneN` is non-zero and a wrong
+    // un-count would move it DOWN rather than being invisible against 0.
+    const ordinary = await request(app)
+      .post("/api/logs")
+      .set("Authorization", bearer)
+      .send(
+        freeRowBody({
+          workoutType: "AN",
+          workoutTitle: "Prescribed",
+          steps: [{ label: "2000 m" }],
+        }),
+      );
+    expect(ordinary.status).toBe(201);
+    const afterOrdinary = await request(app)
+      .get("/api/plan")
+      .set("Authorization", bearer);
+    expect(afterOrdinary.body.doneN).toBe(1);
+
+    const free = await request(app)
+      .post("/api/logs")
+      .set("Authorization", bearer)
+      .send(freeRowBody());
+    expect(free.status).toBe(201);
+    const afterFree = await request(app)
+      .get("/api/plan")
+      .set("Authorization", bearer);
+    expect(afterFree.body.doneN).toBe(1);
+
+    const removed = await request(app)
+      .delete(`/api/logs/${free.body.id}`)
+      .set("Authorization", bearer);
+    expect(removed.status).toBe(200);
+
+    const afterDelete = await request(app)
+      .get("/api/plan")
+      .set("Authorization", bearer);
+    expect(afterDelete.body.doneN).toBe(1);
   });
 
   // The other side of the same validator: empty steps are allowed ONLY for
