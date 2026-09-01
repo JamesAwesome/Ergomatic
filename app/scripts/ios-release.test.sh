@@ -174,6 +174,75 @@ archive_line=$(grep -n -- '-archivePath .* archive ' <<<"$code_only" | head -1 |
   [ "$gate_line" -gt "$build_line" ] && [ "$archive_line" -gt "$gate_line" ]
 check "dist:grep is actually INVOKED (in source order) between ios:build and archive" $?
 
+# 11. Round 9 (P1, reviewer): case 10 above is a SOURCE-ORDERING proof
+# only — it never actually RUNS the gate, so deleting the `exit 1` at
+# ios-release.sh's own dist:grep-refusal line would leave case 10 fully
+# green. This case closes that gap with an isolated, PATH-stubbed RUNTIME
+# execution of the real script: `git`, `pnpm`, and `xcodebuild` are all
+# stubbed on PATH (no real repo, build, or Xcode toolchain touched), the
+# stub `pnpm dist:grep` deliberately FAILS (mimicking a real dev-only
+# literal found in the built bundle), and the assertions are that the
+# script (a) exits non-zero, (b) prints the refusal, and (c) NEVER
+# invokes the stub `xcodebuild` — proving the refusal actually stops the
+# pipeline before archiving, not just that the source mentions the right
+# call in the right order. `GOOGLE_IOS_CLIENT_ID` is pre-set so the
+# script's own PlistBuddy derivation is skipped entirely — real
+# `/usr/libexec/PlistBuddy` calls are absolute-path, so PATH stubbing
+# can't intercept them, and skipping the one call this path would
+# otherwise reach keeps the case free of any real Info.plist.
+SIM="$(mktemp -d)"
+mkdir -p "$SIM/scripts" "$SIM/bin"
+cp "$HERE/ios-release.sh" "$SIM/scripts/ios-release.sh"
+STUB_LOG="$SIM/stub.log"
+: >"$STUB_LOG"
+
+cat >"$SIM/bin/git" <<'STUB'
+#!/usr/bin/env bash
+echo "git $*" >>"$STUB_LOG"
+if printf '%s' "$*" | grep -q 'describe'; then
+  echo "v0.0.0-fake"
+fi
+exit 0
+STUB
+chmod +x "$SIM/bin/git"
+
+cat >"$SIM/bin/pnpm" <<'STUB'
+#!/usr/bin/env bash
+echo "pnpm $*" >>"$STUB_LOG"
+case "$1" in
+  ios:build) exit 0 ;;
+  dist:grep)
+    echo "dist-grep: FOUND dev-only reference (stub, round 9 case)" >&2
+    exit 1
+    ;;
+esac
+exit 0
+STUB
+chmod +x "$SIM/bin/pnpm"
+
+cat >"$SIM/bin/xcodebuild" <<'STUB'
+#!/usr/bin/env bash
+echo "xcodebuild $*" >>"$STUB_LOG"
+exit 0
+STUB
+chmod +x "$SIM/bin/xcodebuild"
+
+out=$(PATH="$SIM/bin:$PATH" STUB_LOG="$STUB_LOG" \
+  GOOGLE_IOS_CLIENT_ID="fake.apps.googleusercontent.com" \
+  bash "$SIM/scripts/ios-release.sh" 2>&1)
+rc=$?
+stub_log_contents="$(cat "$STUB_LOG")"
+rm -rf "$SIM"
+
+[ "$rc" -ne 0 ]
+check "dist:grep failure (runtime): script exits non-zero" $?
+grep -q 'refusing to archive' <<<"$out"
+check "dist:grep failure (runtime): refusal message printed" $?
+grep -q 'pnpm ios:build' <<<"$stub_log_contents"
+check "dist:grep failure (runtime): reached ios:build before the gate (sanity)" $?
+! grep -q 'xcodebuild' <<<"$stub_log_contents"
+check "dist:grep failure (runtime): xcodebuild is NEVER invoked" $?
+
 if [ "$fails" -gt 0 ]; then
   echo "ios-release.test.sh: $fails failure(s)"
   exit 1
