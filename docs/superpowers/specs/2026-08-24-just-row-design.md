@@ -46,14 +46,16 @@ deliberately refuses to infer a run without a program — naming a
    plus whatever precedes Menu). The exit walk states this instead of
    discovering it.
 
-   **SUPERSEDED IN PART BY RULING 8 (James, 2026-09-01).** The capture
-   found no machine-side closer within 896.8 s connected; ruling 8 now
-   tells us to design as though there is none at all. Under it this
-   ruling keeps its first clause (Done in the app, Menu on the erg) and
-   loses the rest: **the machine's idle power-off is no longer a closer we
-   wait for, and "the app never invents an idle threshold" is REVERSED** —
-   an app-side threshold is now the only thing that can close a walked-away
-   row. See ruling 8 for what that opens.
+   **AMENDED BY RULINGS 8 AND 9 (James, 2026-09-01), which land in
+   opposite directions and settle together.** Ruling 8 says design as
+   though the machine never closes a connected row, which briefly made an
+   app-side threshold the only possible closer and reversed this ruling's
+   second sentence. Ruling 9 then declines to build one. **Net: this
+   ruling's first clause stands (Done in the app, Menu on the erg), its
+   second sentence STANDS as originally written (the app never invents an
+   idle threshold), and only the passive closer changes** — it is no longer
+   the machine's idle power-off we wait for, but whatever takes the link,
+   handled by the existing recovery path.
 6. **Approach A** — a parallel observer path; `ConnectedSurface` and
    `useMonitorSession` are not modified. **Corrected claim:** this is
    parallel-*safer*, not parallel-safe — the observer still needs driver
@@ -83,23 +85,51 @@ deliberately refuses to infer a run without a program — naming a
    possible closer for a walked-away row, so inventing one is now required
    rather than forbidden.
 
-   **What it OPENS, and this needs design before PR 1 tags any enum.** The
-   stored `ended_by` for a row the APP closed cannot be the old `idle`,
-   whose copy was "the monitor switched itself off after the row". Under
-   this ruling the monitor did no such thing — we did. Storing `idle` would
-   assert the machine's agency for our own decision, which is precisely the
-   PAUSED-state failure this spec's own "does the system have the concept"
-   section exists to prevent. **Whatever value lands must say WE closed
-   it**, and its copy must not describe machine behaviour we invented.
-   Naming, threshold length, and whether this is even a new enum member are
-   a brainstorm, with the antagonist pass the TRIAD requires.
+   **What it opened is closed by ruling 9 below.** Briefly, for the record:
+   a row the APP closed could not have stored the old `idle`, whose copy
+   was "the monitor switched itself off after the row" — under ruling 8 the
+   monitor did no such thing, we did, and storing `idle` would assert the
+   machine's agency for our own decision. Ruling 9 removes the app-side
+   close entirely, so no such value is needed.
 
-   **One thing the capture already de-risks:** the machine's own elapsed
-   and distance HOLD while the rower is away (CLOSED 3 — frozen at 64.45 s
-   / 222.8 m across the whole 896.8 s). So an app-side close at any moment
-   stores the last-motion numbers automatically; there is no inflation to
-   subtract and no "numbers at close vs numbers at last stroke" problem to
-   design around.
+   **One thing the capture already de-risks, and it survives ruling 9:**
+   the machine's own elapsed and distance HOLD while the rower is away
+   (CLOSED 3 — frozen at 64.45 s / 222.8 m across the whole 896.8 s). So a
+   close at ANY moment, by any cause, stores the last-motion numbers
+   automatically. There is no inflation to subtract and no "numbers at
+   close vs numbers at last stroke" problem to design around.
+9. **DO NOT CLOSE IT AT ALL — let the link die by other means (James,
+   2026-09-01).** No app-side inactivity threshold. A Just Row nobody ends
+   simply runs until something else takes the connection: the phone
+   sleeping, the app being killed, the rower walking out of range, a flat
+   battery, or the monitor eventually powering itself off after all.
+
+   **This REINSTATES ruling 5's second sentence**, which ruling 8 had
+   reversed. Net position across rulings 5, 8 and 9: the app never invents
+   an idle threshold, and it does not wait for a machine closer either — it
+   simply keeps observing until the link goes.
+
+   **It needs no new mechanism and no new enum value, because the existing
+   recovery path already IS this.** A link drop or app death leaves the
+   `MonitorRun` open; Today offers it; `completeInterruptedRun`
+   (`Today.tsx:778`) stamps `endedBy: "interrupted"` when the rower deals
+   with it. That value's documented meaning is *"closed later with no
+   evidence … a different shape of honesty than these four"*
+   (`monitorRun.ts:34-37`), which is exactly and only what we know about a
+   row that ended while nobody was watching. **`ended_by: "idle"` is
+   withdrawn permanently — nothing needs it now, and PR 1's last blocking
+   design question is dissolved rather than answered.**
+
+   **The accepted cost, stated so it is not discovered later.** Storage is
+   not the cost: the series buckets by the WORK clock, which freezes when
+   the rower stops, so idle time adds essentially nothing — measured on the
+   walk's own piece 2, 890 frames with a frozen clock collapsed into ONE
+   sample, and 14:57 of sitting there grew the trace by that one sample.
+   `SERIES_SAMPLE_CAP` already bounds the whole trace at 4 hours of rowing.
+   **The real cost is the live session**: the BLE link and the wake lock
+   stay up until something else ends them, which is battery on both the
+   phone and the PM5. That is the price of this ruling and it is accepted
+   deliberately.
 
 ## Does the system have the concept? (the mandatory question)
 
@@ -408,14 +438,15 @@ layer is unsettled, not disproved.
 has now removed the need to settle it at all** — we design as though the
 machine never closes a connected row.
 
-**The withdrawal STANDS, but its reason has changed.** It is no longer "no
-signal to map": under ruling 8 there IS a closer, and it is OURS. What PR 1
-must not migrate is the OLD member, whose copy read "the monitor switched
-itself off after the row" — a sentence about machine behaviour we would be
-inventing. The replacement value has to name our own agency, and naming it
-is a design question with a TRIAD pass on it, not an implementation
-detail. Until that lands, the closers PR 1 knows about are `rower` and
-`link-lost`. Adding an enum value for an event we have
+**The withdrawal is now PERMANENT, and needs no replacement** (ruling 9).
+There is no app-side close to name, so nothing has to assert anyone's
+agency. A row that ends while nobody is watching runs through the existing
+recovery path and stamps the `"interrupted"` value that already exists,
+whose documented meaning — "closed later with no evidence" — is precisely
+what we know. **PR 1 adds no `ended_by` member at all.** The closers it
+knows about are `rower`, `link-lost`, and `interrupted` via recovery.
+
+Adding an enum value for an event we have
 never seen is exactly the "does the system HAVE the concept" failure this
 project has already paid for once, and an enum value is a stored shape:
 easy to add and, by our own ratchet, permanent.
@@ -428,9 +459,10 @@ ever found — it is not an argument for shipping one now:
 > with a row you chose to end" — reusing it for a *designed* idle power-off
 > would label a normal free-row ending a failure.
 
-**What PR 2 needs instead is an inactivity rule of our own** (N2, and now
-required outright by ruling 8): with no machine-side closer to wait for, a
-row the rower walks away from has nothing to close it but us.
+**PR 2 needs NO inactivity rule** (rulings 8 and 9 together): there is no
+machine closer to wait for and we decline to invent one, so a walked-away
+row simply stays open until the link goes and then takes the recovery path
+that already exists. N2 is resolved by declining it, not by designing it.
 That rule is undesigned, it decides what a walked-away row stores, and it
 therefore wants a brainstorm and a fresh antagonist pass **before PR 1
 freezes any enum**. Until that lands, the closers are `rower` and

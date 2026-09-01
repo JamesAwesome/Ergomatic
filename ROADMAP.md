@@ -132,8 +132,9 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 **Status: Active — PR 0a instrument and PR 0b capture both DONE 2026-08-31
 (#246). Six OPEN questions answered outright; OPEN 3's remaining half is
 CLOSED BY RULING, not by evidence (James, 2026-09-01: assume the connection
-stays open indefinitely). PR 1 blocked on ONE design question — what a row the
-APP closed stores as its `ended_by`.**
+stays open indefinitely, and do not close it ourselves — let the link die by
+other means). **PR 1 IS UNBLOCKED**: no new `ended_by` member, no inactivity
+rule, and the walked-away case rides the recovery path that already exists.**
 
 This is a deliberate household exception to the stranger-first
 ordering, requested by James on 2026-08-31. Walk record and full decodes:
@@ -158,12 +159,17 @@ written up in the spec's own CLOSED section):
   terminated…") and describes the sequence AFTER a terminate, so it does not
   enumerate exits, and Concept2's PM5 guide says the monitor powers down
   after inactivity with no Bluetooth qualification. The proposed
-  `ended_by: "idle"` member is withdrawn and PR 2 owns the inactivity rule
-  outright. **Ruling 8 (2026-09-01) makes this the design's assumption rather
-  than an open question**, and reverses ruling 5's "the app never invents an
-  idle threshold": an app-side threshold is now the only possible closer. What
-  a row WE closed stores as its `ended_by` is the live design question — it
-  cannot claim the monitor switched itself off, because it did not.
+  `ended_by: "idle"` member is withdrawn PERMANENTLY. **Rulings 8 and 9
+  (2026-09-01) settle it together**: assume the machine never closes a
+  connected row, and decline to close it ourselves either — a Just Row nobody
+  ends runs until the phone sleeps, the app dies, the rower leaves range or
+  the battery goes. That needs no new mechanism, because a link drop already
+  leaves a recoverable `MonitorRun` that Today offers and
+  `completeInterruptedRun` stamps `"interrupted"` — a value whose documented
+  meaning, "closed later with no evidence", is exactly what we know. **The
+  accepted cost is battery, not storage**: idle adds ~one series sample
+  (measured — 890 frozen-clock frames collapsed into one), but the BLE link
+  and wake lock stay up until something else ends them.
   (The old "6 s → 220 s → power off" chain turned out to be
   three different layers; the timeouts are CSAFE slave-state ones that never
   governed an unprogrammed row in either connection state.)
