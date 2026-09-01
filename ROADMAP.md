@@ -723,10 +723,16 @@ for a stranger — no backup, and no idea when their app breaks.
       summary defect survived five hardware walks and a phase close: a rower
       can never report it, and James caught it only by looking before saving.
       **The evidence already survives the process kill** —
-      `useMonitorSession.ts:2617` writes `ergomatic:last-session-log` to
+      `useMonitorSession.ts` writes `ergomatic:last-session-log` to
       localStorage unconditionally, its own comment citing "no console on
-      iOS". It has no reader. **Whatever this item builds, a rower must be
-      able to send a saved row's diagnostics without knowing a gesture.**
+      iOS". **PARTIALLY DISCHARGED by Wave F PR 2 (#258, 2026-09-01):** the
+      gesture-free half is done — a three-slot history and the You →
+      DIAGNOSTICS → Monitor logs door give any of the last three connected
+      sessions' logs a reader and a COPY, no gesture, no erg. The SAVED-ROW
+      half is NOT: `session_logs` still has no diagnostics column, so once a
+      row's three slots are evicted its diagnostics are gone. This item's
+      remaining demand narrows to: **a rower must be able to send a SAVED
+      row's diagnostics — storage that outlives the three-slot window.**
 - [ ] **An in-app "something went wrong" that reaches a human.** Pairs with the
       reporter above, and with the support URL the store surface will owe. **S**
 
@@ -963,6 +969,21 @@ X" is a real disposition — most of these are single files.
 
 ## Codebase-audit owners
 
+- **v0.32.0's notes owe the DIAGNOSTICS door its affordance sentence** (PM
+  gate on #258, 2026-09-01): where it is (You → DIAGNOSTICS → Monitor logs),
+  WHEN a rower would tap it (something went wrong in a connected session and
+  someone asks for the log), and what COPY does. The note is the affordance,
+  not the announcement — the row itself never says when to tap it. Ships in
+  the v0.32.0 notes PR, tag on that (#231/#238 shape).
+- **The ring history's three-slot eviction has an incident-shaped failure
+  mode, filed with its trigger** (PM gate on #258): every connected teardown
+  pushes a slot, INCLUDING failed pairings and connect-then-cancel (spec
+  §0.3's own finding about the neighbouring key), so three fumbled
+  reconnects after an incident evict the incident — and fumbled reconnects
+  are what incidents produce. Ruled at the gate: ship three, no invented
+  size/rowing threshold on the teardown path. **Trigger: if a field read
+  ever finds the wanted session already evicted, raise the slot count in
+  that PR.** Evidence: `app/src/monitor/sessionLogHistory.ts`, spec §0.3.
 - **RC-29 — the 2.5 s banner, UNMEASURED on the current build.** Returned here
   from Wave F on 2026-08-31, the same day it was folded in, because the number
   it carried was pre-fix: `decideResumeLatch` (v0.24.0) killed the nine-banner
