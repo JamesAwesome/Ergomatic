@@ -8798,22 +8798,36 @@ section:not(.news-pinned) .news-row:last-of-type {
    (`.connected-keep-on`, `.plan-row-today`, `.step-card`) — a familiar
    shape, not a new device invented for one strip.
 
+   TINTED GOLD at James's request (PR #248 Gate-0 iteration, 2026-08-31),
+   joining the ready-screen `.connected-keep-on` / held-error
+   `COULD NOT KEEP THE RECORD` gold warning family (`ConnectedSurface.tsx`'s
+   `holdError === "storage-failed"` block) rather than `--accent` red —
+   this file already fixes gold's meaning as "LOOK HERE", never a verdict
+   on the rower, and `--accent` stays reserved for lead-action buttons like
+   that block's own "Log it anyway" (the act-now CTA), not for warning text
+   or rule colour. The earlier neutral `--ink`/`--ink-3` choice and its
+   reasoning stay in git history.
+
    Contrast, computed via the WCAG relative-luminance formula (never
-   eyeballed, house rule), all three against `--surface` (this strip's own
-   background, the only one it ever sits on):
-     --ink (title) on --surface: 17.11:1
+   eyeballed, house rule):
+     --marker (title) #7d5510 on --surface #fffdf7 (this strip's own
+       background, the only one the title ever sits on): 6.49:1
+     --marker (left border) #7d5510 on --page #f4f1e8 (the screen
+       background the strip's outer edge sits against): 5.85:1
      --ink-3 (body) on --surface: 7.43:1
      --ink-2 (the bold kept-count clause, `.log-dropped-body b`)
        on --surface: 10.81:1
-   All three clear the 4.5:1 AA floor with wide headroom — the same three
-   pairings this file's own TraceChart comment (above) already computed for
-   this exact token trio on this exact background. */
+   The title clears the 4.5:1 AA text floor; the border clears the 3:1
+   non-text floor. Both --marker figures match this token's own precedent
+   pairings already computed for `.connected-keep-on` (5.50:1 on
+   --surface-sunken, 6.49:1 on --surface) and for `--marker` itself in
+   `theme/tokens.css` (6.49:1 on --surface, 5.85:1 on --page). */
 .log-dropped-strip {
   margin: 12px 0 0;
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--rule-2);
-  border-left: 3px solid var(--ink-3);
+  border-left: 3px solid var(--marker);
   border-radius: 4px;
 }
 
@@ -8822,7 +8836,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.12em;
-  color: var(--ink);
+  color: var(--marker);
 }
 
 .log-dropped-body {
