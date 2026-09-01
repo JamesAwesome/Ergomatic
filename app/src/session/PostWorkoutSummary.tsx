@@ -652,7 +652,16 @@ export default function PostWorkoutSummary({
 
   return (
     <main className="screen">
-      <p className="summary-eyebrow">WORKOUT COMPLETE</p>
+      {/* PR #248 review (James, RULED — "My recommendation is to suppress
+          the completion eyebrow"): a not-completed arrival (dropped,
+          link-lost, interrupted) does not claim WORKOUT COMPLETE. Nothing
+          replaces the eyebrow — `.back-link` has no top-margin dependency
+          on a preceding sibling, so the layout simply starts one element
+          earlier; `model.suppressCompletionEyebrow`'s own doc comment
+          names which `endedBy` values set it. */}
+      {model.suppressCompletionEyebrow !== true && (
+        <p className="summary-eyebrow">WORKOUT COMPLETE</p>
+      )}
       <BackLink fallback={backFallback} label="← DONE" />
       {stripSlot}
       <SummaryMetaBlock title={title} meta={meta} />

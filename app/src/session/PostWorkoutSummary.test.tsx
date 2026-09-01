@@ -203,6 +203,51 @@ describe("PostWorkoutSummary — title block (§2A)", () => {
   });
 });
 
+// PR #248 review (James, RULED — "My recommendation is to suppress the
+// completion eyebrow"): this component's own half of the contract —
+// `summaryModel.ts`'s `buildMonitorModel` is what DERIVES the flag from a
+// real `MonitorRun.endedBy` (see `summaryModel.test.ts`'s own describe
+// block of the same name); this file's job is only "does the screen obey
+// the flag it's handed", the render half of the split RF24 asks for.
+describe("PostWorkoutSummary — the completion eyebrow suppression (PR #248 review, RULED)", () => {
+  it("suppressCompletionEyebrow: true hides the eyebrow, and nothing replaces it", () => {
+    renderSummary({
+      model: monitorModel({ suppressCompletionEyebrow: true }),
+    });
+    expect(screen.queryByText("WORKOUT COMPLETE")).not.toBeInTheDocument();
+    // The title still renders as the screen's first heading — the layout
+    // starts one element earlier, it doesn't leave a placeholder gap.
+    expect(
+      screen.getByRole("heading", { name: "Silver Thaw" }),
+    ).toBeInTheDocument();
+  });
+
+  // The pin: a genuine finish (the default monitor-door fixture carries no
+  // `endedBy` override, i.e. it never sets the flag) still shows the
+  // eyebrow — already covered by the title-block describe above; this name
+  // states the leg explicitly for the fix-round record.
+  it("pin: a model with no suppressCompletionEyebrow (an ordinary finished monitor summary) still shows the eyebrow", () => {
+    renderSummary({ model: monitorModel() });
+    expect(screen.getByText("WORKOUT COMPLETE")).toBeInTheDocument();
+  });
+
+  // The timer door has no PM5 and so no `endedBy` at all — `buildTimerModel`
+  // never sets `suppressCompletionEyebrow`, and this pins that a
+  // timer-shaped model (not just an un-overridden monitor one) still shows
+  // the eyebrow: the suppression is scoped to the three RULED monitor
+  // arrivals, never a blanket "connected-looking model" rule.
+  it("pin: a timer-door-shaped model (no PM5, TIMER source, no series) still shows the eyebrow", () => {
+    renderSummary({
+      model: {
+        meta: { dateLabel: "AUG 10", timeLabel: "18:57", sourceLabel: "TIMER" },
+        heroes: { avgSplit: "2:09.2", time: "25:50" },
+        rows: [],
+      },
+    });
+    expect(screen.getByText("WORKOUT COMPLETE")).toBeInTheDocument();
+  });
+});
+
 describe("PostWorkoutSummary — heroes (§2B)", () => {
   it("renders all three heroes when every input is present, AVG SPLIT leading", () => {
     renderSummary();

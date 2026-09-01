@@ -2516,3 +2516,89 @@ describe("the measured-anything rule, one rule across three shapes", () => {
     ).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------
+// PR #248 review (James, RULED — "My recommendation is to suppress the
+// completion eyebrow", scoped across dropped, link-lost, AND interrupted
+// arrivals — never a drop-only fork). `SummaryModel.suppressCompletionEyebrow`
+// is set ONLY here, in `buildMonitorModel`, from the real `MonitorRun.endedBy`
+// — a real fixture through the real door, not a hand-set model field, so
+// this proves the DERIVATION, not just that the render component obeys a
+// flag someone else already set (RF24: seeding past the producer proves
+// nothing about the producer).
+// ---------------------------------------------------------------------
+describe("buildSummaryModel — the completion eyebrow suppression (PR #248 review, RULED)", () => {
+  it("program-dropped: suppressCompletionEyebrow is true", () => {
+    const run = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "program-dropped",
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.suppressCompletionEyebrow).toBe(true);
+  });
+
+  it("link-lost: suppressCompletionEyebrow is true", () => {
+    const run = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "link-lost",
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.suppressCompletionEyebrow).toBe(true);
+  });
+
+  it("interrupted: suppressCompletionEyebrow is true", () => {
+    const run = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "interrupted",
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.suppressCompletionEyebrow).toBe(true);
+  });
+
+  // The pin: a genuine finish never suppresses. This is also this suite's
+  // own mutation target (see the fix-round report) — flipping the
+  // suppression list to include `"finished"` must make this fail.
+  it("finished: suppressCompletionEyebrow is absent (the eyebrow still shows)", () => {
+    const run = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "finished",
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.suppressCompletionEyebrow).toBeUndefined();
+  });
+
+  // Two more non-suppressed reasons, so the allowlist isn't proven only at
+  // its two ends (RC-1's "incomplete by construction" set is FIVE close
+  // reasons; only three of them suppress).
+  it("rower and program-failed: suppressCompletionEyebrow is absent (a rower End or a P3b program-failure is not one of the three RULED arrival types)", () => {
+    const rowerRun = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "rower",
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run: rowerRun })
+        .suppressCompletionEyebrow,
+    ).toBeUndefined();
+
+    const failedRun = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "program-failed",
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run: failedRun })
+        .suppressCompletionEyebrow,
+    ).toBeUndefined();
+  });
+
+  it("absent endedBy (a record predating the field): suppressCompletionEyebrow is absent", () => {
+    const run = monitorRun({ program: { intervals: [] }, actuals: [] });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.suppressCompletionEyebrow).toBeUndefined();
+  });
+});
