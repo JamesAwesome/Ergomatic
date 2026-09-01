@@ -195,9 +195,9 @@ so we build the RFC 8252 shape:
    - Attempt rows expire (15 min) and are single-use; expiry/garbage
      collection is the server's, not a cron.
 4. **Link routes:** `GET /api/concept2/link` → `{linked, weightClass,
-   c2UserId}` (never tokens — `c2UserId` added at James's #249 REVISE:
-   PR2's sent-state contract and its View-on-Concept2 link-out both need
-   the linked account's numeric id); `DELETE /api/concept2/link` →
+   c2UserId}` (never tokens — `c2UserId` is the linked account's numeric
+   id, which PR2's sent-state contract and its View-on-Concept2 link-out
+   both need); `DELETE /api/concept2/link` →
    deletes the row (unlink is local, V5).
 5. **Upload route** — `POST /api/concept2/results/:logId` (authed,
    ownership-checked). Loads the caller's `session_logs` row, applies the
@@ -209,15 +209,13 @@ so we build the RFC 8252 shape:
    type- and band-checked by the upload route before forwarding, omitted
    when they fail — POSTs with the user's access token (refresh first if
    `expires_at` passed; pair replaced atomically), writes `c2_result_id`
-   + `c2_user_id` on the row when C2 ACKNOWLEDGES it — a 2xx, or a 409
-   whose body names the colliding id (James's ruling on #249's REVISE,
-   overriding this doc's earlier "only after C2's 2xx") — and returns
-   `{resultId}` or a typed failure (`duplicate`, `unlinked`,
-   `not_eligible`, `c2_error`). RF25: this route owns the end-to-end
-   invariant; a 409 IS that acknowledgment, so the recovery for "C2
-   accepted, our write failed" is re-send → 409 → durably recorded, the
-   same write path as the 2xx branch, never a dead end that leaves the
-   row unsent forever.
+   + `c2_user_id` on the row when C2 ACKNOWLEDGES it — a 2xx, or a 409 whose
+   body names the colliding id — and returns `{resultId}` or a typed failure
+   (`duplicate`, `unlinked`, `not_eligible`, `c2_error`). RF25: this route
+   owns the end-to-end invariant; a 409 IS that acknowledgment, so the
+   recovery for "C2 accepted, our write failed" is re-send → 409 → durably
+   recorded, the same write path as the 2xx branch, never a dead end that
+   leaves the row unsent forever.
 6. **Refresh failure discrimination (measured, `docs/monitor/c2-crossconnect-2026-09/refresh-probe-2026-08-31.md`):**
    C2 never emitted `invalid_grant` in any measurement; the measured
    dead-grant shape is `HTTP 400 {"message":"The refresh token is
@@ -301,8 +299,7 @@ backfill (house pattern):
 - `c2_result_id` integer — C2's own id (their POST 201 example returns
   `"id": 339`, integer — V11's citation). Written when C2 acknowledges
   the row: a 2xx, or a 409 whose body names the colliding id (RF25's
-  durable-recovery write — James's ruling on #249's REVISE overrides
-  this doc's earlier "a 409 leaves it null").
+  durable-recovery write).
 - `c2_user_id` integer — WHICH Concept2 account accepted it (anchor F8:
   without this, unlink-then-relink-a-different-account renders "sent"
   for rows the current grant cannot see; the sent state renders only
@@ -481,8 +478,7 @@ safe; the flag, not PR ordering, is the safety mechanism.
   stored row + link row, drives the upload route against a stubbed C2
   (responses transcribed from PR0's REAL sandbox transcripts), asserts
   `c2_result_id`/`c2_user_id` land on a 2xx AND on a 409 whose body names
-  the colliding id (RF25's durable-recovery write, James's ruling on
-  #249's REVISE).
+  the colliding id (RF25's durable-recovery write).
 - **Mutation probes (RF21/22):** committed-then-probed, one per new
   assertion, reports say what the failure said; one mutation ABOVE the
   seam (forge eligibility at the route boundary).

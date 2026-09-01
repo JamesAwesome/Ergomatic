@@ -110,9 +110,11 @@ const stores: Stores = {
 
 // Wave E PR1 Task 7 (task-7-brief.md): the concept2 broker is wired ALWAYS
 // (never behind a runtime `if`) — `computeAvailable` gates BEHAVIOR (every
-// concept2 route re-checks `available()`), never mounting, so
-// `C2_LINK_ENABLED` unset in production leaves the deployed shape unchanged
-// end-to-end: a live router answering 403/{available:false} on every route,
+// concept2 route re-checks `available()`), never mounting. With
+// `C2_LINK_ENABLED` unset in production: no new capability; `GET /api/logs`
+// rows carry four always-null fields (`c2ResultId`, `c2UserId`,
+// `completedAt`, `tz`); one new unauthenticated route
+// (`GET /api/concept2/callback`) answers 403 dark rather than not existing —
 // the spec's own "safe end state" (task-7-brief.md's "Produces" line).
 const c2BaseUrl = process.env.C2_BASE_URL ?? "https://log-dev.concept2.com";
 const c2ClientId = process.env.C2_CLIENT_ID ?? "";

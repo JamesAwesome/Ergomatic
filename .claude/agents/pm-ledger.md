@@ -3743,3 +3743,58 @@ does not match these numbers._
   been observed on exactly one walk.** Same residual #239's gate filed.
   Forward obligation: the first tester report after this tag gets its
   record read for `endedBy: "program-dropped"` before anything else.
+
+## TRIAD final-PR gate, 2026-08-31 (Wave E PR1 — the Concept2 server broker, #249)
+
+- **Two PRs opened 24 seconds apart both minted Drizzle migration index 17, and
+  neither body mentioned the other.** #249 (`0017_magical_hobgoblin`, concept2
+  tables) and #248 (`0017_fair_whizzer`, `ALTER TYPE ended_by ADD VALUE`) were
+  both `MERGEABLE` at this gate; the second to merge is silently skipped and
+  serves 500s on a missing column. The briefing names this trap verbatim and
+  nothing in the SDLC checks it — the branch author cannot see a sibling branch
+  minted after theirs. **Add `gh pr list --json headRefName` + a `ls
+  app/drizzle/` index comparison to every gate on a PR carrying a migration**,
+  and put the regeneration commitment in the SECOND PR's body before either
+  merge word. Order by cost of regeneration, not by PR number.
+- **A residual's DEADLINE is a product decision separate from its severity, and
+  "before the flag flip" is usually the wrong one.** #249's account-injection
+  residual was correctly classified — unreachable behind `C2_LINK_ENABLED`,
+  registered in the ROADMAP open-item register, not a merge blocker. But its
+  stated deadline (prod cutover) sat AFTER the only PR that can fix it cheaply:
+  the fix depends on whether the system browser shares cookies with the app
+  origin, which PR1.5 measures on device, and by cutover the client is built
+  against the current contract. **Ask of every deferred residual: at which
+  gate does the evidence to settle it first exist, and at which gate does the
+  fix stop being cheap? The deadline is the earlier of the two, never
+  "before release."**
+- **A finding-disposition table that omits one row reads as complete.** #249's
+  Record accounted for six of the final review's seven findings; the seventh
+  (no timeout on C2 wire calls, a `FOR UPDATE` lock held across the outbound
+  refresh) was absent from the body while present in the SDD ledger and the
+  ROADMAP register. **At every final gate, diff the progress ledger's finding
+  list against the PR body's, by identifier.**
+- **"Gains no capability" is the claim that survives; "behavior unchanged" is
+  the one that gets falsified by a projection.** The safe-deployable claim
+  survived verification except that `LOG_LIST_COLUMNS` grew four always-null
+  fields, so `GET /api/logs` changes shape for every installed build —
+  additive and RELEASING-compliant, but not literally "unchanged".
+- **Presentation: 225 words above the fold against a ~120 ceiling — third
+  consecutive counted failure (#228 ~270, #230 266, #249 225).** When the fold
+  is over budget and one block is a decision James owes, cut mechanism, never
+  the decision.
+
+## Scoped TRIAD re-gate, 2026-08-31 (Wave E PR1, PR #249 at 2d20c6e6)
+
+- **When a plan carries a code block that IS a file's comment, the fix wave
+  reconciles the PLAN and forgets the FILE.** The round-1 sweep corrected the
+  plan's copy of the `concept2Links` comment and left the real one at
+  `app/server/db/schema.ts` stale — in a commit that edited `schema.ts` 140
+  lines earlier for a sibling finding, and whose own message enumerated "four
+  stale statements" when there were five. **A sweep is checked by grepping the
+  stale phrase, never by reading the sweep's own enumeration** — the
+  enumeration is the artefact of the same attention that missed the site.
+- **A fix commit that lists what it fixed is a claim, and it gets the same
+  evidence bar as any other.** RF16's shape inside our own process record.
+- **Where a reviewer has sent a PR back twice for one class, the gate's first
+  action is a repo-wide grep of that class's phrase** — it took one command
+  and it was the only finding this gate produced.

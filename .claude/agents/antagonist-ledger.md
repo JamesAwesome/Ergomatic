@@ -4569,3 +4569,128 @@ ruling ("Just go to log") resolved kill-shots 1 and 4 in one move.
   `gh pr diff <n> --name-only | grep drizzle` FIRST. Two of this repo's named traps
   (competing migration index, three unshared enum mirrors) are only visible from the
   open-PR set, and no amount of reading main can see them.**
+
+## Wave E PR1 — premise pass on the server-broker plan (2026-08-31)
+
+Verdict REVISE. The spec's anchor ground was inherited; only the plan's six
+deviations and its fresh factual claims were attacked.
+
+**Falsified**
+
+1. **"A 400 or 401 from C2's token endpoint on refresh = grant dead."**
+   C2's own doc assigns 400 to *"one or more of the request parameters is
+   missing"* (its example error_description literally says `Check the
+   "client_secret" parameter`) and 401 to *"Incorrect login or **client**
+   credentials"*. Both documented meanings are OUR bug or OUR config, not the
+   user's grant — so the rule destroys links on a code defect or a rotated
+   client secret. A reachable producer sat in the same plan: `scope` is
+   `Required: Yes` on every token call including refresh, and the plan's
+   refresh body never mentioned it. **Technique: for any status-code
+   discrimination, read the vendor's own table for what that code MEANS
+   before assigning it a meaning — the shape you measured is not the
+   semantics you inferred.**
+2. **"C2 never emits RFC 6749's `{"error":...}` shape."** The documented
+   token-endpoint bodies are exactly `{error, error_description}`
+   (`invalid_request`, `invalid_credentials`). The measured
+   `{"message":…,"status_code":…}` is the API's generic envelope. **Technique:
+   a "never" from one observation dies to the vendor's response examples;
+   fetch the page and grep it rather than generalising a probe.**
+3. **The refresh-error measurement existed only in the plan file.** `grep`
+   for the quoted body across the whole repo: zero hits outside the plan;
+   `raw-output.txt` contained no `refresh`, no `401`, no `access_token` — while
+   the plan told the implementer to transcribe stubs from "the measured refresh
+   probe". **Technique: grep the repo for the literal string a plan says was
+   measured. A "MEASURED" tag is a claim about the RECORD, and this repo has
+   shipped conversation-only wire facts before.**
+4. **"u8 wire band" as the authority for stroke_rate 1..99.** u8 is 0..255,
+   and `routes/data.ts` says so verbatim. The band is right; its real
+   authority is the house convention `ACTUAL_SPM_MIN`/`PM5_SPM_MAX`.
+   **Technique: when a plan justifies a number from "the wire", read the
+   decode (`readU8`) — the wire's range is almost never the product's range,
+   and the repo usually already has the right precedent.**
+5. **"RC-16's 2× anomaly is terminate-only."** `phase-rc.md:1962-1968` records
+   RC-16 as *CLOSED UNBUILT — PREMISE FALSIFIED*, 2-of-3 terminates, cause
+   *"unknown and deliberately not guessed"*, n=1 on the finished side.
+   **Technique: an item cited as support may have been CLOSED as refuted —
+   read the item's status line, not its title.**
+6. **`commands.ts:386` as evidence for the 0x0039 workout-type ordinal.**
+   That line is 0x0031 armed-readback prose. Wrong characteristic, wrong
+   layer. **Technique: CLAUDE.md #21's layer corollary applies inside one
+   file — a doc comment near the right word can describe a different
+   characteristic entirely.**
+7. **"Mounted like `stores`" would have killed Branch A.** `data.ts`'s
+   `router.use("/api", requireUser)` runs for every `/api/*` that enters the
+   root-mounted data router, so an unauthenticated `GET
+   /api/concept2/callback` mounted after it 401s. Demonstrated with a minimal
+   express reproduction of both orders (401 vs 200). `originCheck` skipping
+   GETs is true and is not the gate that bites. **Technique: for a new
+   unauthenticated route, find every middleware that runs BEFORE it by mount
+   order, and demonstrate the order rather than reasoning about it — the
+   in-repo precedent (`createAuthRouter` mounted before the data router) is
+   the tell.**
+
+**Heuristic-vs-deterministic (the standing axis)**
+
+The plan's rotation-race guard was a HEURISTIC: it inferred "another request
+rotated first" from a value comparison against a row that may not be
+committed yet. Named false-negative: the loser re-reads inside the window
+between the winner's HTTP 200 and the winner's DB commit, sees equality,
+destroys a healthy link. Named false-positive-adjacent: two refreshes that
+both SUCCEED never trigger the guard, and Postgres Read Committed applies
+the second UPDATE over the first with no error raised (PRIMARY, docs 13.2.1)
+— silent last-write-wins. The premise itself was unmeasured: C2's doc is
+SILENT on whether rotation invalidates the old refresh token. Deterministic
+replacement adopted: `SELECT … FOR UPDATE` on the link row (the machine
+tells us) plus a `needs_reauth` flag instead of `deleteLink` (which retires
+the guard entirely and preserves the one PII answer). The premise was then
+MEASURED (refresh-probe-2026-08-31.md): rotation invalidates the old token
+immediately — the race is real, and the serialization is the right fix.
+
+**Consequences found by following a measurement into a design**
+
+The plan moved the legacy-date zone from link-time to upload-time. PR0 had
+already measured dedup as datetime-granular to the second — so the same
+legacy row re-sent from a different zone renders a different `date` and
+lands as a SECOND row on C2 instead of the 409 the spec's RF25 recovery
+depends on. PR0's own census says all 6 currently eligible prod rows are
+legacy, i.e. 100% of the affected class. Fixed by persist-on-first-use.
+**Technique: when a deviation makes a payload field vary per attempt, check
+it against every measured idempotency/dedup key in the same evidence
+directory.**
+
+**Gates that cannot go red**
+
+Every committed `machineSummary` fixture carries `workoutType: 1`; none
+carries 8. The one fixture labelled "a REAL, capture-derived observation set"
+is `avgStrokeRate: 44, workoutType: 1` — a TERMINATED row carrying the 2×
+anomaly, i.e. an ineligible row. A `{8: "VariableInterval"}` map tested
+against the committed corpus maps nothing. Fixed: PR1 transcribed a fresh
+finished-row fixture from the ring JSON. **Technique: before trusting an
+enum map's test, grep the corpus for the literal value the map's key
+expects.**
+
+**Attacked and HELD**
+
+`redirect_kind` dropped (C2 documents `redirect_uri` must match the
+authorize call, and Branch A has exactly one env-derived URI captured once
+at boot; a mid-hop `SITE_URL` change costs one recoverable attempt). The
+upload-time-tz PII reading (exit criterion 3 governs the LINK flow's bodies,
+so a mint-body zone would literally be a second attribute). The already-sent
+short-circuit contradicts no spec line. `endedBy "rower"` is a real enum
+member. Migration index free across every ref. The Google redirect
+precedent. The `endedBy`/`deviceName` idioms.
+
+**Techniques worth keeping**
+
+- **Grep the repo for the literal string a plan calls "MEASURED".** Two of
+  this plan's three C2 responses lived only in the plan file.
+- **Read the vendor's status-code table before assigning a status a meaning.**
+- **Demonstrate mount order; do not reason about it.** Twenty lines of
+  express settled a 401 that would have shipped as "Branch A doesn't work".
+- **Ask what a validator rejecting the whole request costs.** A sanity band
+  on one optional field was rejecting the entire workout save — RF25's
+  shape, pointed at the product's own north star.
+- **Run the validator's own primitives.** `Intl.DateTimeFormat` accepts
+  `+05:00`, `utc`, `US/Pacific`, `EST5EDT`; `Date.parse` accepts
+  `"March 5, 2020"` and `"2026"`. Both error messages claimed stricter
+  contracts than the code enforced.

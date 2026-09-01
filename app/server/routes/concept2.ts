@@ -565,22 +565,20 @@ export function createConcept2Router({
       return;
     }
     if (postResult.kind === "duplicate") {
-      // James's ruling on #249 REVISE (blocker 2, RF25) OVERRIDES the
-      // spec's "a 409 leaves it null": C2's 409 body names the colliding
-      // numeric result id, which is C2 acknowledging this row — the same
-      // acknowledgment a 2xx would be. Recording it here BEFORE
-      // responding is what makes the RF25 recovery durable: the row that
-      // reaches this branch either sent for the first time and collided,
-      // or already got a real 201 whose OWN `recordC2Result` write
-      // failed (the 502 branch above) and is now retrying into C2's own
-      // duplicate rejection — without this write that row shows unsent
-      // forever, across reload and across devices. The identity written
-      // is `lockedLink`'s (I4: the LOCKED re-read, never the route's
-      // earlier unlocked `store.getLink`), same as the 2xx branch above.
-      // If THIS write also fails, still return duplicate — the retry
-      // loop this branch itself came from remains the open recovery
-      // path, exactly as the 2xx branch's own `recorded` check documents
-      // for its symmetric failure.
+      // RF25: C2's 409 body names the colliding numeric result id, which
+      // is C2 acknowledging this row — the same acknowledgment a 2xx
+      // would be. Recording it here BEFORE responding is what makes the
+      // recovery durable: the row that reaches this branch either sent
+      // for the first time and collided, or already got a real 201 whose
+      // OWN `recordC2Result` write failed (the 502 branch above) and is
+      // now retrying into C2's own duplicate rejection — without this
+      // write that row shows unsent forever, across reload and across
+      // devices. The identity written is `lockedLink`'s (I4: the LOCKED
+      // re-read, never the route's earlier unlocked `store.getLink`),
+      // same as the 2xx branch above. If THIS write also fails, still
+      // return duplicate — the retry loop this branch itself came from
+      // remains the open recovery path, exactly as the 2xx branch's own
+      // `recorded` check does for its symmetric failure.
       await logs.recordC2Result(
         userId,
         logId,

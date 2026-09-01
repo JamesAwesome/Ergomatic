@@ -1060,11 +1060,10 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(link?.needsReauthAt).toBeNull();
   });
 
-  // James's ruling on #249 REVISE (blocker 2, RF25) OVERRIDES the spec's
-  // "a 409 leaves it null": the 409 body names the colliding numeric
-  // result id, so it durably records it with the LOCKED link's identity
-  // BEFORE returning the duplicate response — otherwise a row that hits
-  // this exact path (first send happens to collide) shows unsent forever
+  // RF25: the 409 body names the colliding numeric result id, so the
+  // route durably records it with the LOCKED link's identity BEFORE
+  // returning the duplicate response — otherwise a row that hits this
+  // exact path (first send happens to collide) would show unsent forever
   // after reload or on a second device.
   it("C2 duplicate on a FIRST send (no prior 201) -> 409 with c2ResultId, AND durably records it via the locked link's identity", async () => {
     const store = makeFakeConcept2Store();

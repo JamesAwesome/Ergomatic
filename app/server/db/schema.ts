@@ -333,12 +333,10 @@ export const sessionLogs = pgTable(
     // all four additive-optional, no default, no backfill — every
     // existing row reads them back null. c2ResultId: C2's own result id,
     // written when C2 acknowledges the row — a 2xx, or a 409 whose body
-    // names the colliding id (RF25's durable-recovery write; James's
-    // ruling on #249's REVISE overrides this comment's earlier "written
-    // ONLY after C2's 2xx (a 409 leaves it null)"). c2UserId: WHICH
-    // Concept2 account accepted it — the sent state renders only when
-    // this matches the live link's (anchor F8). Both server-written at
-    // upload, never client input.
+    // names the colliding id (RF25's durable-recovery write). c2UserId:
+    // WHICH Concept2 account accepted it — the sent state renders only
+    // when this matches the live link's (anchor F8). Both server-written
+    // at upload, never client input.
     c2ResultId: integer("c2_result_id"),
     c2UserId: integer("c2_user_id"),
     // completedAt: the client's MonitorRun.completedAt — C2's `date` is
@@ -469,10 +467,9 @@ export const weightClassEnum = pgEnum("weight_class", ["H", "L"]);
 // boundary every credential this app holds already lives behind (spec:
 // at-rest encryption with the key in the same process env is a lock taped
 // to its own key — attacked at the anchor; held). Tokens are never
-// serialized to any client response (routes/concept2.ts returns
-// {available, linked, weightClass, c2UserId, needsReauth} — `c2UserId`
-// added at James's #249 REVISE for PR2's sent-state/View-on-Concept2
-// needs, but still never a token).
+// serialized to any client response — `routes/concept2.ts` returns
+// {available, linked, weightClass, c2UserId, needsReauth}, the account's
+// numeric id but never a token (PR2's sent-state/View-on-Concept2 needs).
 export const concept2Links = pgTable("concept2_links", {
   userId: uuid("user_id")
     .primaryKey()

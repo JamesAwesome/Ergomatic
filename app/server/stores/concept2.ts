@@ -6,10 +6,10 @@ export type WeightClass = "H" | "L";
 
 // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD):
 // mirrors `db/schema.ts`'s `concept2Links` row shape exactly. Tokens are
-// never serialized to any client response (routes/concept2.ts owns that
-// projection down to `{linked, weightClass, c2UserId, needsReauth}` —
-// `c2UserId` added at James's #249 REVISE for PR2's sent-state/
-// View-on-Concept2 needs, but still never a token).
+// never serialized to any client response — routes/concept2.ts owns that
+// projection down to `{linked, weightClass, c2UserId, needsReauth}`, the
+// account's numeric id but never a token (PR2's sent-state/
+// View-on-Concept2 needs).
 export interface Concept2Link {
   userId: string;
   c2UserId: number;

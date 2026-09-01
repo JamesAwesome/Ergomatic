@@ -313,11 +313,10 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
     expect(capturedPayload).toStrictEqual(EXPECTED_PAYLOAD);
   });
 
-  // James's ruling on #249 REVISE (blocker 2, RF25) OVERRIDES this test's
-  // old title/assertion: a 409 whose body names the colliding id is now
-  // recorded durably (route's own comment on the duplicate branch), so a
-  // row that collides on its FIRST send shows "sent" on the next read
-  // rather than unsent forever.
+  // RF25: a 409 whose body names the colliding id is recorded durably
+  // (route's own comment on the duplicate branch), so a row that
+  // collides on its FIRST send shows "sent" on the next read rather than
+  // unsent forever.
   it("a 409 (duplicate) from Concept2 is durably recorded on the row (real Postgres)", async () => {
     fetchMock.mockImplementation(async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);
