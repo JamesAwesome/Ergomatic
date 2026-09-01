@@ -125,7 +125,7 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **D** | The toolbox                 | M    | Nothing                                     |
 | **B** | Backups and telemetry       | M    | Nothing                                     |
 | **C** | The submission surface      | L    | The most visible wave                       |
-| **E** | The Concept2 logbook        | M    | Only if it ships a send control             |
+| **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
 ## Phase JR — Just Row
 

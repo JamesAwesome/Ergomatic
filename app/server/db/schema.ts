@@ -468,9 +468,11 @@ export const weightClassEnum = pgEnum("weight_class", ["H", "L"]);
 // One row per linked user. Tokens are plain columns behind the same trust
 // boundary every credential this app holds already lives behind (spec:
 // at-rest encryption with the key in the same process env is a lock taped
-// to its own key — attacked at the anchor; held). Never serialized to any
-// client response (routes/concept2.ts returns only {linked, weightClass,
-// needsReauth}).
+// to its own key — attacked at the anchor; held). Tokens are never
+// serialized to any client response (routes/concept2.ts returns
+// {available, linked, weightClass, c2UserId, needsReauth} — `c2UserId`
+// added at James's #249 REVISE for PR2's sent-state/View-on-Concept2
+// needs, but still never a token).
 export const concept2Links = pgTable("concept2_links", {
   userId: uuid("user_id")
     .primaryKey()
