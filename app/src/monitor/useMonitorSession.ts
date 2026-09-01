@@ -229,15 +229,30 @@ const ANONYMOUS_RUN: RunIdentity = {
   logSeed: EMPTY_LOG_SEED,
 };
 
-/** What a run would be filed under if one could open before `program()`
- *  ever ran. None can — `live` is downstream of `ready`, which is
- *  downstream of the `armed` event, which only `program()` produces — so
- *  this initial value is never read. It exists so the identity ref has no
- *  null state to branch on. */
-const NO_IDENTITY: { program: WorkoutProgram } & RunIdentity = {
+/** What a run would be filed under if one could open before either arm ran.
+ *
+ *  **RECONCILED, Phase JR PR 2.** This used to read: "None can — `live` is
+ *  downstream of `ready`, which is downstream of the `armed` event, which
+ *  only `program()` produces." The last clause is no longer true.
+ *  `beginFreeRow()` is a SECOND producer of `ready`, reaching it with no
+ *  wire traffic at all, so `ready` now has two doors rather than one.
+ *
+ *  The conclusion survives the correction: this value is still never read,
+ *  because both doors seed `identityRef` before flipping the phase. It
+ *  exists so the ref has no null state to branch on. */
+const NO_IDENTITY: FreeRowIdentity = {
   program: { intervals: [] },
   ...ANONYMOUS_RUN,
 };
+
+/** The identity ref's own shape: a `RunIdentity` plus the program it was
+ *  armed with, plus Phase JR PR 2's `mode`. `mode` lives HERE rather than on
+ *  `RunIdentity` because `RunIdentity` is what a CALLER of `program()`
+ *  supplies, and a caller of `program()` is by definition not a free row. */
+type FreeRowIdentity = {
+  program: WorkoutProgram;
+  mode?: "justrow";
+} & RunIdentity;
 
 /**
  * Plan Task 3 review (M7): ownership tracking for `handoffStore`'s ONE
@@ -948,6 +963,12 @@ export interface MonitorSession {
    *  header). */
   connect(): Promise<void>;
   program(p: WorkoutProgram, identity: RunIdentity): Promise<void>;
+  /** Phase JR PR 2: arms for the machine's OWN free row — reaches `ready`
+   *  with no wire traffic and files the record under a Just Row identity
+   *  (`workoutId: null`, `mode: "justrow"`). `program()`'s counterpart, and
+   *  synchronous because nothing is sent. A no-op while a programmed
+   *  session is `programming`/`ready`/`live`. */
+  beginFreeRow(): void;
   /** The rower's End. Idempotent, and idempotent specifically against a
    *  terminal event racing it (spec §2). */
   endSession(): Promise<void>;
@@ -2410,6 +2431,10 @@ export function useMonitorSession(
               // `identity.program` (7C Task 1) — threaded straight through,
               // never re-derived here.
               logSeed: identity.logSeed,
+              // Phase JR PR 2: set by `beginFreeRow` and absent otherwise,
+              // so a programmed run's record is byte-identical to what it
+              // was before this phase.
+              mode: identity.mode,
             },
             nowDate(),
           );
@@ -3917,6 +3942,58 @@ export function useMonitorSession(
     }
   }, [fail, handleEvent, update]);
 
+  /**
+   * PHASE JR PR 2 — the free row's arm, and `program()`'s counterpart.
+   *
+   * Reaches `ready` with no wire traffic, because the row is already the
+   * machine's own: the rower is in the PM5's Just Row and there is nothing
+   * to send, arm or verify. Everything downstream is inherited unchanged —
+   * `handleFrame`'s own `"ready"` branch opens the record on the first
+   * rowing frame with distance, which IS the spec's "user intent plus
+   * motion" rule (the tap on Just Row was the intent).
+   *
+   * SYNCHRONOUS, unlike `program()`: there is no promise to await when
+   * nothing is sent. That also makes the phase flip and the identity seed
+   * one indivisible step, so no frame can arrive between them.
+   *
+   * **The guard is not defensive tidiness.** Without it, calling this
+   * during a programmed session silently rewrites `identityRef` to the Just
+   * Row identity, and the rower's actual workout is then filed as a free
+   * row with `workoutId: null` — a lost record, not a cosmetic slip.
+   */
+  const beginFreeRow = useCallback((): void => {
+    const phase = stateRef.current.phase;
+    if (phase === "programming" || phase === "ready" || phase === "live") {
+      return;
+    }
+    const driver = driverRef.current;
+    if (driver === null) {
+      fail({
+        reason: "transport-missing",
+        detail: "No monitor is connected.",
+      });
+      return;
+    }
+    // A fresh arm is a fresh streak, the same reason `program()` clears it.
+    rowingStreakRef.current = null;
+    identityRef.current = {
+      program: { intervals: [] },
+      workoutId: null,
+      // The record's display name, and the one the Today recovery row and
+      // the log door both read. Gate 0 copy.
+      title: "Just Row",
+      // Explicitly the EMPTY PAIR, never omitted: `buildMonitorLogSteps`
+      // reads `logSeed` first and throws `MonitorLogSeedError` on
+      // `undefined` before it ever compares lengths, and that throw is
+      // swallowed by the log door's condition-4 catch — which would
+      // silently disqualify every free row's record.
+      logSeed: EMPTY_LOG_SEED,
+      mode: "justrow",
+    };
+    driver.beginFreeRow();
+    update({ phase: "ready", error: null });
+  }, [fail, update]);
+
   const program = useCallback(
     async (p: WorkoutProgram, identity: RunIdentity): Promise<void> => {
       // THE DOUBLE-FIRE PIN (spec's I6 ruling: "DESIGNED, not asserted").
@@ -4288,6 +4365,7 @@ export function useMonitorSession(
     closeReason: state.closeReason,
     connect,
     program,
+    beginFreeRow,
     endSession,
     cancel,
     retryHandoffSave,

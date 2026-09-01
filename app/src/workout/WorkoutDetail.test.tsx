@@ -1892,6 +1892,7 @@ describe("RC-37 ([R5]): the nudge survives Menu-at-READY, the same way it surviv
         closeReason: null,
         connect: vi.fn().mockResolvedValue(undefined),
         program: vi.fn().mockResolvedValue(undefined),
+        beginFreeRow: vi.fn(),
         endSession: vi.fn().mockResolvedValue(undefined),
         cancel: vi.fn().mockResolvedValue(undefined),
         retryHandoffSave: vi.fn().mockResolvedValue(undefined),

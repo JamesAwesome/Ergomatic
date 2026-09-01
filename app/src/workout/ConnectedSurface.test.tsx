@@ -253,6 +253,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     closeReason: null,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
+    beginFreeRow: vi.fn(),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),

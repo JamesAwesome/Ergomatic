@@ -11337,3 +11337,173 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(flushTimer.calls[0]!.cancelled).toBe(true);
   }, 15000);
 });
+
+/**
+ * PHASE JR PR 2, TASK 1b — the hook's half of the free row.
+ *
+ * The driver's half (`driver.test.ts`'s own `beginFreeRow` block) opens the
+ * run. This half seeds the identity that run is recorded under and flips the
+ * phase, so the record-open branch this hook already has — first rowing
+ * frame with distance, `handleFrame`'s `"ready"` arm — starts working for a
+ * row nobody programmed.
+ *
+ * Nothing here is a new detection rule. The spec's is "user intent plus
+ * motion", and the hook's existing arm is that rule already: the rower
+ * tapping Just Row is the intent, and the arm supplies the motion.
+ */
+describe("beginFreeRow (the free row's own arm)", () => {
+  /** A free row's timeline: no program, the rower simply pulls. */
+  const FREE_ROW_EVENTS: FakeTimelineEvent[] = [
+    {
+      atMs: 1000,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 1,
+      distanceMeters: 4,
+      spm: 22,
+      currentSplit: 140,
+      heartRateBpm: null,
+      programIntervalIndex: 0,
+    },
+    {
+      atMs: 2000,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 2,
+      distanceMeters: 11,
+      spm: 23,
+      currentSplit: 139,
+      heartRateBpm: null,
+      programIntervalIndex: 0,
+    },
+    // The rower backs out on the erg. Only reached by a THIRD tick, so the
+    // tests above that tick twice never see it.
+    {
+      atMs: 3000,
+      kind: "status",
+      workoutState: WORKOUTSTATE_TERMINATE,
+      elapsedSeconds: 2,
+      distanceMeters: 11,
+      spm: 0,
+      currentSplit: 139,
+      heartRateBpm: null,
+      programIntervalIndex: 0,
+      rowingState: 0,
+    },
+  ];
+
+  /** The program the fake is CONSTRUCTED with is never sent in these tests —
+   *  a free row never calls `program()`, so the fake's byte-for-byte write
+   *  assertion has nothing to check. It is required by `FakeScript`, so it
+   *  is supplied and ignored. */
+  function freeRowScript(): FakeScript {
+    return { program: LIBRARY.program, events: FREE_ROW_EVENTS };
+  }
+
+  it("reaches ready without programming, under a Just Row identity", async () => {
+    const { result, fake } = harness(freeRowScript());
+    await connect(result);
+
+    act(() => {
+      result.current.beginFreeRow();
+    });
+
+    // `ready` is the phase the record-open branch waits in. Reaching it
+    // without `program()` is the whole arm: the machine is already in its
+    // own Just Row and we have sent it nothing.
+    expect(result.current.phase).toBe("ready");
+    // `null`, not 0: the fake reports what the MACHINE is holding, and it is
+    // holding nothing at all. Reaching `ready` with the machine still empty
+    // is the assertion — a programmed arm would have loaded intervals here.
+    expect(fake.loadedIntervals()).toBeNull();
+  });
+
+  it("opens a record carrying the free-row identity and mode on first motion", async () => {
+    const { result, fake } = harness(freeRowScript());
+    await connect(result);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+
+    tick(fake, 1000);
+    tick(fake, 1000);
+
+    const run = loadMonitorRun();
+    expect(run).not.toBeNull();
+    expect(run?.workoutId).toBeNull();
+    expect(run?.title).toBe("Just Row");
+    expect(run?.mode).toBe("justrow");
+    // An honest EMPTY observation program, not a fabricated structure —
+    // and the empty seed beside it, because `buildMonitorLogSteps` reads
+    // `logSeed` FIRST and throws on `undefined` rather than returning [].
+    expect(run?.program).toStrictEqual({ intervals: [] });
+    expect(run?.logSeed).toStrictEqual({ steps: [], paces: {} });
+  });
+
+  it("files the machine's own summary totals on a free row", async () => {
+    const { result, fake } = harness(freeRowScript());
+    await connect(result);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    tick(fake, 1000);
+    tick(fake, 1000);
+
+    // THE ROW ENDS ON THE ERG, and that is the finding rather than a test
+    // convenience. A 0x0039 only files inside the finish grace a MACHINE
+    // ending opens; the app-side Done opens none, and the spec says why —
+    // Done is an ending the PM5 does not have, so it keeps its own row
+    // running and sends no summary at all. The walk's 0x0039 came from a
+    // Menu press (CLOSED 4: 0x0039 + 0x003A + 0x003F, 0.4 s after the
+    // terminate), which is the ending driven here.
+    tick(fake, 1000);
+
+    // Without a driver run open, this is discarded outright ("nothing
+    // filed") — which is what would have cost every free row its MACHINE
+    // CONFIRMED block and its verification code.
+    await act(async () => {
+      fake.deliverSummary({ elapsedSeconds: 393.6, meters: 1396 });
+      fake.deliverVerification();
+      await flush();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.summaryTotals).toBeDefined();
+    expect(run?.verificationBytes).toBeDefined();
+  });
+
+  it("is a no-op while a programmed session is already under way", async () => {
+    const { result, fake } = harness({
+      program: LIBRARY.program,
+      events: FREE_ROW_EVENTS,
+    });
+    await connect(result);
+    await programAndArm(result, fake, LIBRARY.program, {
+      workoutId: LIBRARY.id,
+      title: LIBRARY.title,
+      logSeed: { steps: [], paces: {} },
+    });
+    expect(result.current.phase).toBe("ready");
+
+    act(() => {
+      result.current.beginFreeRow();
+    });
+
+    // Then the rower actually rows, so a record OPENS and can be inspected.
+    // Asserting on the phase alone would have proved nothing here (it reads
+    // "ready" either way), and an earlier version of this test guarded the
+    // record check behind `if (run !== null)` on a script with no motion in
+    // it at all — so it asserted nothing whatsoever.
+    tick(fake, 1000);
+    tick(fake, 1000);
+
+    // The identity must still be the WORKOUT's. Without the guard,
+    // `beginFreeRow` rewrites a programmed session's identity to Just Row,
+    // and the rower's actual workout is filed with `workoutId: null` as a
+    // free row: a lost record, not a cosmetic slip.
+    const run = loadMonitorRun();
+    expect(run?.title).toBe(LIBRARY.title);
+    expect(run?.workoutId).toBe(LIBRARY.id);
+    expect(run?.mode).toBeUndefined();
+  });
+});
