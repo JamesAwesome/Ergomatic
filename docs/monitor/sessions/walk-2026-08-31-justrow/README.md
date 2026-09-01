@@ -57,7 +57,7 @@ are **cumulative**. The two split times sum to 393.6 s and the two split
 distances to 1397 m, against a row of 393.58 s / 1396.6 m.
 
 **3. What does the clock do through a pause, and is there an idle
-auto-terminate? The clock HOLDS; there is NO auto-terminate while connected.**
+auto-terminate? The clock HOLDS; none arrived within 896.8 s.**
 
 Piece 1's deliberate stop froze elapsed at 185.81 s and distance at 656.7 m
 across ~50 s of wall time, with `workoutState = 1` and `rowingState = 0`
@@ -86,12 +86,19 @@ pass. Two of them correct over-claims made in the first draft of this file:**
    never governed this row — connected or not. Calling them "not supported
    while connected" framed a layer error as a connection difference.
 
-**What survives is stronger than the first draft claimed**, because it is now
-documented rather than merely observed: Appendix E p.173 gives a JustRow
-exactly one exit — *"`WaitToBegin->WorkoutRow->Terminate (user or command)->
-Rearm->WaitToBegin`"* — so 896.8 s of `WORKOUTROW` is expected behaviour, and
-PR 2 needs its own inactivity rule for a better reason than "we saw no
-timeout".
+**What survives, stated at the strength the evidence actually carries.**
+Appendix E p.173 documents where a JustRow goes *once terminated*
+(`Terminate → Rearm → WaitToBegin`), which matches piece 1's observed
+`1 → 11 → 0`. It is a CONDITIONAL — *"that is terminated prior to reaching
+its defined end"* — so it does not enumerate exits and says nothing about the
+physical power-off concept2.com documents after inactivity, Bluetooth
+unmentioned. **A draft of this file read it as "exactly one exit"; that was an
+over-read and is withdrawn.**
+
+So: no closer was observed within 896.8 s, and none is documented at any layer
+we can watch. That is enough for PR 2 to need its own inactivity rule — it
+cannot map a signal nobody has seen — and not enough to claim the machine
+never closes.
 
 SCREEN corroboration (operator report, CORRELATED not same-frame): the PM5's
 display showed those same frozen numbers throughout, matching the wire.
@@ -122,7 +129,8 @@ this closer.
 
 **7. Can a real Just Row reach the `finished`-mapped state 12? NOT on a Menu
 end.** Only states 0, 1 and 11 were observed across 1660 status frames. The
-idle closer could not be tested because the idle closer does not occur (see 3).
+idle closer could not be tested because no idle closer occurred within the
+896.8 s we watched (see 3) — untested, not proven absent.
 
 ## New findings the OPEN list did not anticipate
 
@@ -145,12 +153,14 @@ Recovery *by reconnecting* cannot happen while the row is still open — the
 rower must first end the row on the monitor. PR 2 either designs for that or
 says plainly that a dropped link ends the app's involvement in that row.
 
-**N2 — A free row nobody ends never closes on the wire.** Following from 3: if
-the rower walks away, the workout stays `workoutState = 1` indefinitely with
-the app connected and frames still arriving. PR 2 cannot rely on the machine to
-close the record and needs its own inactivity rule, or a Just Row session will
-stay open forever. The spec's proposed new `ended_by: "idle"` member describes
-an event this walk could not produce.
+**N2 — Nothing was observed closing a free row the rower walked away from.** Following from 3: if
+the rower walks away, the workout stayed `workoutState = 1` for the whole
+896.8 s we watched, with frames still arriving. **We did not observe it staying
+open forever — we observed it not closing within 896.8 s, and then we stopped
+looking.** That is still enough for the design conclusion: PR 2 cannot rely on
+a closer it has never seen, so it needs its own inactivity rule, and the
+proposed `ended_by: "idle"` member has no mapped signal to store. What it is
+NOT enough for is a claim that the machine never closes.
 
 **N3 — 0x003F was observed.** `domain/monitor/pm5/uuids.ts` records that this
 characteristic "has never been recorded — whether 0x003F can even exist on

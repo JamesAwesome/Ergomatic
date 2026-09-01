@@ -146,13 +146,17 @@ written up in the spec's own CLOSED section):
   connect mid-row and cannot reconnect after a mid-row link drop. The spec's
   "already mid-Just-Row at connect" path is struck; the Today recovery row can
   only mean "log what we have", never "resume".
-- **A free row nobody ends never closes on the wire** — the workout stayed
+- **Nothing was observed closing a free row the rower walked away from** — the workout stayed
   active for 896.8 s after the rower stopped, with frames still arriving and
-  no auto-terminate. **Now PRIMARY-backed, not just observed:** CSAFE rev
-  0.31 Appendix E p.173 names JustRow and gives it Terminate as its ONLY
-  exit, so a row that never closes is documented behaviour. The proposed
-  `ended_by: "idle"` member has no signal to map, and PR 2 needs its own
-  inactivity rule. (The old "6 s → 220 s → power off" chain turned out to be
+  no auto-terminate — a BOUNDED observation, since the operator ended the
+  capture rather than the monitor. Documentation neither confirms nor denies
+  a closer: CSAFE Appendix E's JustRow sentence is CONDITIONAL ("that is
+  terminated…") and describes the sequence AFTER a terminate, so it does not
+  enumerate exits, and Concept2's PM5 guide says the monitor powers down
+  after inactivity with no Bluetooth qualification. The proposed
+  `ended_by: "idle"` member still has no mapped signal, and PR 2 still needs
+  its own inactivity rule — but "the row never closes" is UNSETTLED, and the
+  physical-power/BLE question is the open half. (The old "6 s → 220 s → power off" chain turned out to be
   three different layers; the timeouts are CSAFE slave-state ones that never
   governed an unprogrammed row in either connection state.)
 

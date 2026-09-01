@@ -3507,10 +3507,15 @@ and its absence cost a spec claim.** It is the only Appendix E sequence that
 names JustRow, and the only exit it gives one. Phase JR's spec read our
 truncated version, correctly noticed no JustRow attribution here, and
 concluded "the link was our own gloss" — filing a PRIMARY fact as
-UNVERIFIED for a week. **Consequence worth carrying: a JustRow has no
-documented timed exit at all**, which is why the 2026-08-31 capture saw
-`WorkoutRow` hold for 896.8 s with the rower away (
-`docs/monitor/sessions/walk-2026-08-31-justrow/`) — expected, not anomalous.
+UNVERIFIED for a week. **Read the conditional, though** — *"that is terminated prior to reaching
+its defined end"*. It documents where a terminated JustRow GOES; it does not
+enumerate a JustRow's exits, and it is silent on the physical power-off
+concept2.com documents after inactivity. Phase JR briefly recorded it as
+"Terminate and nothing else"; that over-read is withdrawn. What it supports:
+the `1 → 11 → 0` sequence the 2026-08-31 capture saw on a Menu end
+(`docs/monitor/sessions/walk-2026-08-31-justrow/`). What stays open: whether
+anything closes a row nobody terminates — unobserved for 896.8 s there, and
+undocumented either way.
 
 **Related, and a standing trap:** `OBJ_WORKOUTSTATE_T` (rev 0.31 pp.102-103)
 enumerates 0-13 — WAITTOBEGIN, WORKOUTROW, COUNTDOWNPAUSE, INTERVALREST, …,

@@ -14,7 +14,7 @@ to the PM5 and watches the machine's own native Just Row mode — no program,
 no targets, no baseline required. When they finish (Done in the app, Menu on
 the erg, or walking away until the monitor powers itself off), the session
 closes with the machine's numbers and offers the log screen. (**The
-"walking away" closer did not survive the capture** — see the end-semantics
+"walking away" closer has never been observed** — see the end-semantics
 section; the rower and link-lost closers stand.) The row lands
 in history and the future 8B calendar marked as what it is: a free row, not
 a workout.
@@ -40,18 +40,23 @@ deliberately refuses to infer a run without a program — naming a
    copy stay untouched.
 5. **End = Done in the app OR backing out on the erg**, plus the
    machine's own idle power-off as the passive closer. The app never
-   invents an idle threshold.
-   **FALSIFIED PREMISE, NOT A REVERSED RULING (2026-08-31 capture).** This
-   ruling's passive closer assumed the monitor powers itself off and drops
-   the link. Connected, it does not: the walk held an active workout for
-   ~15 minutes after the rower stopped. The ruling's second sentence — the
-   app never invents an idle threshold — is therefore now in direct tension
-   with having any passive closer at all, since only an app-side threshold
-   could produce one. **This needs James's call, not an implementer's.** Named honestly: "Done" is an APP-side end
+   invents an idle threshold. Named honestly: "Done" is an APP-side end
    the machine does not have — the erg keeps its row open until Menu or
    timeout, so the PM's stored piece can be longer than ours (coast-down
    plus whatever precedes Menu). The exit walk states this instead of
    discovering it.
+
+   **PREMISE IN DOUBT, RULING NOT REVERSED (2026-08-31 capture).** The
+   passive closer assumes the monitor powers itself off and drops the link.
+   We watched for 896.8 s, connected, and it did not — but that is a
+   bounded observation, not a refutation: concept2.com documents the
+   power-off plainly and says nothing about Bluetooth either way, and no
+   vendor document relates a connection to it. **What IS settled is that we
+   have never observed the signal**, and a closer we cannot observe is one
+   PR 1 cannot store, which is why `ended_by: "idle"` is withdrawn below.
+   The tension this leaves is real and is yours to resolve: only an
+   app-side threshold could produce a passive closer now, and this ruling's
+   second sentence forbids one. **James's call, not an implementer's.**
 6. **Approach A** — a parallel observer path; `ConnectedSurface` and
    `useMonitorSession` are not modified. **Corrected claim:** this is
    parallel-*safer*, not parallel-safe — the observer still needs driver
@@ -92,25 +97,37 @@ captures and transcriptions. This section is the corrected record.
   idle (SECONDARY, `pm5-session4a-final.log.gz` decoded at the anchor
   pass). The field identifies nothing we need. It is not part of this
   design.
-- **"JustRow ends only via Terminate" is PRIMARY** (promoted 2026-08-31
-  from UNVERIFIED). Rev 2 said the repo's Appendix E transcription carried
-  no JustRow attribution and that "the link was our own gloss." That was
-  true of OUR TRANSCRIPTION and false of the SOURCE. The CSAFE
-  Communication Definition rev 0.31, Appendix E "PM State Transitions"
-  p.173, verbatim:
+- **Appendix E DOES name JustRow — but it does not say Terminate is the
+  only exit, and an earlier version of this bullet claimed it did.** Rev 2
+  said our Appendix E transcription carried no JustRow attribution and that
+  "the link was our own gloss": true of OUR TRANSCRIPTION, false of the
+  SOURCE. The CSAFE Communication Definition rev 0.31, Appendix E "PM State
+  Transitions" p.173, verbatim:
 
   > "For any fixed duration workout **or JustRow (no defined end)** that is
   > terminated prior to reaching its defined end:
   > `WaitToBegin->WorkoutRow->Terminate (user or command)->Rearm->WaitToBegin`"
 
-  It is the only Appendix E sequence naming JustRow and the only exit it
-  lists. `pm5-interface-notes.md:3496` quotes the fixed-duration block and
-  omits this one, which is how we came to call our own correct reading a
-  gloss. **Consequence: CLOSED 3's 897 seconds of `WORKOUTROW` is
-  DOCUMENTED behaviour, not an anomaly** — a JustRow has no timed exit to
-  wait for. The standing caution still applies (the keystone walk caught
-  Appendix E wrong about these ordinals, `parse.ts:410-416`), so this is
-  PRIMARY-and-corroborated-by-our-own-capture rather than PRIMARY alone.
+  **READ THE CONDITIONAL.** The sentence is *"…that **is terminated**
+  prior to reaching its defined end"* — it describes the state sequence
+  that FOLLOWS a terminate. It does not enumerate a JustRow's exits, and it
+  says nothing about physical power-off, which concept2.com separately
+  documents happening after inactivity with no Bluetooth qualification.
+  **A prior revision of this bullet read it as "Terminate and nothing else"
+  and tagged the result PRIMARY. That was an over-read** — a conditional
+  taken for an enumeration, recurring failure 16's second corollary,
+  committed in the same pass that was correcting a different instance of
+  it. Struck rather than softened.
+
+  What the line DOES establish, PRIMARY: a JustRow terminated early lands
+  on `Terminate → Rearm → WaitToBegin`, so our observed
+  `1 → 11 (two frames) → 0` on the Menu end is the documented sequence.
+  Everything about a row nobody terminates remains UNSETTLED at the
+  physical-power layer. `pm5-interface-notes.md:3496` had omitted this
+  sequence entirely, which is how we came to call our own correct reading a
+  gloss; it is restored there. The standing caution still applies (the
+  keystone walk caught Appendix E wrong about these ordinals,
+  `parse.ts:410-416`).
 - **Terminate IS observable at the frame seam**: `parse.ts:439` maps
   ordinal 11 → `state: "terminated"`, sole producer. SECONDARY, vetted.
 - **0x0039 HAS been captured** — the 2026-08-23 keystone walk recorded an
@@ -161,8 +178,11 @@ captures and transcriptions. This section is the corrected record.
 
   **What this changes for the design: nothing softens.** PR 2 still needs
   its own inactivity rule, and now for a stronger reason than "we saw no
-  timeout" — a JustRow has no documented timed exit at any layer we can
-  observe, and we are by definition never disconnected when we care.
+  timeout": no closer has ever been observed, and none is documented at any
+  layer we can watch. **That is an absence of evidence, not evidence of
+  absence** — see the CLOSED 3 caveat — and it is already sufficient, because
+  a rule cannot map a signal nobody has seen. We are also, by definition,
+  never disconnected when we care.
 - **Auto-start**: the PM turns on and Just Row begins when the rower
   pulls (PRIMARY, concept2.com). Pull-from-menu auto-entry with the app
   already connected: INFERENCE, capture question.
@@ -174,7 +194,8 @@ captures and transcriptions. This section is the corrected record.
 
 ### CLOSED — answered by PR 0b's capture, 2026-08-31
 
-**All seven are answered.** Evidence and full decodes:
+**Six are answered outright; OPEN 3 is answered only within a bound (see
+its own entry).** Evidence and full decodes:
 `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`. Scope, per that
 README: PM5 serial 432331249, firmware not captured, one session — these
 are findings for this device and these runs, not firmware-general truths.
@@ -203,11 +224,24 @@ are findings for this device and these runs, not firmware-general truths.
    day are not: the 220 s figure never governed an unprogrammed Just Row
    in the first place (it is a CSAFE slave-state timeout, and we send no
    CSAFE), and "no Paused transition" is unobservable — `OBJ_WORKOUTSTATE_T`
-   has no Paused member. What survives, and is now PRIMARY-backed rather
-   than merely observed, is that **a JustRow has no documented timed exit**:
-   Appendix E gives it Terminate and nothing else. See N2 — the `idle`
-   closer as specced has no signal to map, and that conclusion is
-   strengthened, not weakened, by the documentation.
+   has no Paused member.
+
+   **And one claim made in the correction ITSELF is withdrawn.** That pass
+   read Appendix E p.173 as giving a JustRow "Terminate and nothing else"
+   and called the result PRIMARY-backed. The sentence does not say that. It
+   is CONDITIONAL — *"…or JustRow (no defined end) **that is terminated**
+   prior to reaching its defined end"* — and describes the state sequence
+   that FOLLOWS a terminate. It enumerates no exits and says nothing about
+   physical power-off, which concept2.com separately documents happening
+   after inactivity with no Bluetooth qualification at all. Reading a
+   conditional as an enumeration is precisely recurring failure 16's second
+   corollary, committed in the act of correcting a different instance of it.
+
+   **What actually stands:** no closer was observed within 896.8 s, and none
+   is documented at any layer we can watch. That is enough to keep `idle`
+   out of PR 1 — a rule cannot map a signal nobody has seen — and not enough
+   to say the machine never closes. The physical-power/BLE layer is the open
+   half, and OPEN 3 is answered only within its bound until it is settled.
 4. **Does a Menu-end emit 0x0039? YES**, with 0x003A and a 0x003F, 0.4 s
    after the terminate. Its filed totals (393.60 s / 1396.0 m) agree with
    the live stream (393.58 s / 1396.6 m) to 0.6 m. **This retires rev 2's
@@ -217,7 +251,8 @@ are findings for this device and these runs, not firmware-general truths.
    NO.** The trace is `0 → 1 → 11 (two frames) → 0`. No rearm churn.
 7. **Can a real Just Row reach state 12? NOT on a Menu end** — only
    states 0, 1 and 11 appeared across 1660 status frames. The idle closer
-   could not be tested because it does not occur (see 3).
+   could not be tested because none occurred within the 896.8 s we watched
+   (see 3) — untested, not proven absent.
 
 #### Two findings the OPEN list did not anticipate — both bind PR 2
 
@@ -233,9 +268,11 @@ mid-row link drop leaves a recoverable run assumes the app can get back,
 and it cannot while the row is still open. PR 2 designs for that or states
 plainly that a dropped link ends the app's involvement in that row.
 
-**N2. A free row nobody ends never closes on the wire.** Following from 3:
-the workout stays open indefinitely with frames still arriving. PR 2 needs
-its own inactivity rule or a Just Row session stays open forever, and the
+**N2. Nothing was observed closing a free row the rower walked away from.**
+Following from 3:
+the workout stayed open for the whole 896.8 s we watched, with frames still
+arriving, and we then stopped looking. PR 2 needs its own inactivity rule
+because it cannot map a closer nobody has observed, and the
 proposed new `ended_by: "idle"` member describes an event this walk could
 not produce. **Both are re-opened design questions, not implementation
 details — they want a brainstorm before PR 1 tags its enum**, since `idle`
@@ -335,7 +372,8 @@ ever found — it is not an argument for shipping one now:
 > would label a normal free-row ending a failure.
 
 **What PR 2 needs instead is an inactivity rule of our own** (N2): with no
-machine-side closer, a row the rower walks away from stays open forever.
+observed machine-side closer, a row the rower walks away from has nothing
+known to close it.
 That rule is undesigned, it decides what a walked-away row stores, and it
 therefore wants a brainstorm and a fresh antagonist pass **before PR 1
 freezes any enum**. Until that lands, the closers are `rower` and
