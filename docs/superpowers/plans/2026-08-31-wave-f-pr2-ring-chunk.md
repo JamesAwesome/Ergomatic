@@ -174,7 +174,7 @@ export function listSessionLogs(): SessionLogHistoryEntry[];
   - `resume-stale-run` — recorded when the post-resume identical-freezeKey
     run ENDS (a differing frame arrives) or the session tears down first,
     detail: `frames=<count> endedBy=<changed|teardown>`
-  - `latch-count` — recorded by `stash()` once per teardown, detail:
+  - `latch-count` — recorded by `stash()` once per logical connection, detail:
     `latches=<n> resumes=<n>`
 
 - [x] **Step 1: failing parse test** — feed a captured 0x0031 payload whose

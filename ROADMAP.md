@@ -1001,14 +1001,16 @@ X" is a real disposition — most of these are single files.
   not the announcement — the row itself never says when to tap it. Ships in
   the v0.32.0 notes PR, tag on that (#231/#238 shape).
 - **The ring history's three-slot eviction has an incident-shaped failure
-  mode, filed with its trigger** (PM gate on #258): every connected teardown
-  pushes a slot, INCLUDING failed pairings and connect-then-cancel (spec
-  §0.3's own finding about the neighbouring key), so three fumbled
-  reconnects after an incident evict the incident — and fumbled reconnects
-  are what incidents produce. Ruled at the gate: ship three, no invented
-  size/rowing threshold on the teardown path. **Trigger: if a field read
-  ever finds the wanted session already evicted, raise the slot count in
-  that PR.** Evidence: `app/src/monitor/sessionLogHistory.ts`, spec §0.3.
+  mode, filed with its trigger** (PM gate on #258): the identity upsert
+  gives one slot per LOGICAL CONNECTION — a failed pairing or a
+  connect-then-cancel is still a fresh `connect()`, hence a fresh session id
+  and its own slot (spec §0.3's own finding about the neighbouring key) — so
+  three fumbled reconnects after an incident evict the incident, and
+  fumbled reconnects are what incidents produce. Ruled at the gate: ship
+  three, no invented size/rowing threshold on the teardown path. **Trigger:
+  if a field read ever finds the wanted session already evicted, raise the
+  slot count in that PR.** Evidence: `app/src/monitor/sessionLogHistory.ts`,
+  spec §0.3.
 - **RC-29 — the 2.5 s banner, UNMEASURED on the current build.** Returned here
   from Wave F on 2026-08-31, the same day it was folded in, because the number
   it carried was pre-fix: `decideResumeLatch` (v0.24.0) killed the nine-banner

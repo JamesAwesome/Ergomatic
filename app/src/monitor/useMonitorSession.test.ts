@@ -12482,7 +12482,7 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
 // block), which is the simplest reliable way to force the double-stash path.
 // ---------------------------------------------------------------------------
 
-describe("Wave F PR 2 Task 2, fix round 1 (finding 2): stash() records latch-count at most once per teardown", () => {
+describe("Wave F PR 2 Task 2, fix round 1 (finding 2), rescoped round 3 item 3: stash() records latch-count at most once per logical connection", () => {
   it("a burst-eligible teardown's SECOND stash (the linger drain) does not duplicate the first stash's latch-count line", async () => {
     sessionStorage.removeItem("ergomatic:last-monitor-log");
     const driverTimer = manualSchedule();

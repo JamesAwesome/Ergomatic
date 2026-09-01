@@ -3306,12 +3306,17 @@ export function useMonitorSession(
         // gets a fresh value.
         // §3: same per-run reset as `freezeRef`/`rowingStreakRef`/
         // `lastContinuityRef` immediately above, and for the identical
-        // reason — this exit does NOT route through `teardown()` (it
-        // inlines its own unsubscribe/disconnect, unchanged by this task),
-        // so it is the one exit `teardown()`'s own resume-stale-run
-        // closeout cannot reach; a resume measured before this drop must
-        // not be attributed to whatever the rower connects to next. Fix
-        // round 1: this used to be missing.
+        // reason — this exit inlines its own unsubscribe/disconnect
+        // SYNCHRONOUSLY rather than calling `teardown()` directly
+        // (unchanged by this task). `teardown()` itself still runs, later,
+        // via the unmount effect the `update()` call below fires (see
+        // `sessionIdRef`'s own comment a few lines up for that path in
+        // full) — but by the time it does, this ref is already null, so
+        // `teardown()`'s own resume-stale-run closeout has nothing left
+        // here to act on; that is why this exit records the entry itself,
+        // before the clear. A resume measured before this drop must not be
+        // attributed to whatever the rower connects to next. Fix round 1:
+        // this used to be missing.
         //
         // Final whole-branch review, item 5: an OPEN run gets its own
         // `resume-stale-run` entry here, `endedBy=reset`, before the clear
@@ -3737,13 +3742,16 @@ export function useMonitorSession(
         let exported: string | null = null;
         try {
           // §6 (RC-29 latch counter): BEFORE `exportLog()`, so this line
-          // rides every stashed copy this teardown produces — the
-          // three-slot history `upsertSessionLog` writes into below, and a
-          // second, later stash from the burst linger if one fires. Guarded
-          // to fire at most ONCE per teardown (`latchCountRecordedRef`,
-          // reset at the top of this function) — the counts are read-only
-          // from here on, so a second stash would otherwise duplicate the
-          // identical line.
+          // rides every stashed copy this LOGICAL CONNECTION produces — the
+          // three-slot history `upsertSessionLog` writes into below, however
+          // many `teardown()` calls or `stash()`es within one of those calls
+          // (the burst linger's second stash) that connection turns out to
+          // need. Guarded to fire at most ONCE PER CONNECTION
+          // (`latchCountRecordedRef`, reset at `connect()`'s own top,
+          // alongside `sessionIdRef`'s mint — that ref's own doc comment has
+          // the full account of why the reset lives there and not at the
+          // top of `teardown()`) — the counts are read-only from here on,
+          // so a second stash would otherwise duplicate the identical line.
           if (!latchCountRecordedRef.current) {
             latchCountRecordedRef.current = true;
             log.record(
