@@ -6914,15 +6914,14 @@ describe("useMonitorSession: cancel", () => {
     // ONE history entry, not two.
     const entries = listSessionLogs();
     expect(entries).toHaveLength(1);
-    // Review round 3, item 3: `latchCountRecordedRef` used to reset at the
-    // top of EVERY `teardown()` call, so this same double-`teardown()`
-    // interleaving that used to burn two ring slots (fixed above) also
-    // recorded `latch-count` twice into what is now correctly ONE entry —
-    // the guard reset itself between the unmount's stash and cancel()'s
-    // own later one. Moving the reset to `connect()` (the same
-    // per-connection lifetime `sessionIdRef` has) makes it span both
-    // `teardown()` calls, so the final entry's bytes carry exactly one
-    // `latch-count` line.
+    // Review round 3, item 3 (mechanism superseded at round 5): the
+    // latch-count guard used to reset at the top of EVERY `teardown()`
+    // call, so this same double-`teardown()` interleaving that used to
+    // burn two ring slots (fixed above) also recorded `latch-count` twice.
+    // Since round 5 the guard is a field of the `LogicalSession` value
+    // itself — it has NO reset site at all, so it spans every teardown of
+    // one session by construction, and the final entry's bytes carry
+    // exactly one `latch-count` line.
     const latchCountLines = (
       JSON.parse(entries[0]!.exported) as { kind: string; detail: string }[]
     ).filter((e) => e.kind === "latch-count");
@@ -9887,7 +9886,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
       recentEvents: [],
     };
     // Same construction-throw shape as the criterion-7 test above — fails
-    // AFTER `logRef.current = log` so the ring genuinely has something to
+    // AFTER `sessionRef.current = session` so the ring genuinely has something to
     // append into.
     const firstTransport: Transport & { snapshot(): unknown } = {
       scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
