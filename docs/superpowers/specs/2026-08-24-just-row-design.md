@@ -1,6 +1,10 @@
 # Just Row — observe the machine's own free row
 
-**Date:** 2026-08-24 · **Rev 3** (2026-08-26: `workout_type` is NULL for a
+**Date:** 2026-08-24 · **Rev 4** (2026-08-31: PR 1's full antagonist pass
+— the AVG SPLIT read-side fix, the `logSeed` conjunct rev 3 dropped, the
+plan-refusal predicate, and ruling 9's reachability correction; see the
+scope-corrections list under PR 1) ·
+**Rev 3** (2026-08-26: `workout_type` is NULL for a
 free row, not `"JustRow"` — James's ruling after an engineer pass; see
 "The stored type, decided") · **Rev 2** (all phase-open gate findings folded:
 antagonist anchor pass 12 findings, PM GO-WITH-CONDITIONS C1–C7) ·
@@ -109,16 +113,42 @@ deliberately refuses to infer a run without a program — naming a
    an idle threshold, and it does not wait for a machine closer either — it
    simply keeps observing until the link goes.
 
-   **It needs no new mechanism and no new enum value, because the existing
-   recovery path already IS this.** A link drop or app death leaves the
-   `MonitorRun` open; Today offers it; `completeInterruptedRun`
-   (`Today.tsx:778`) stamps `endedBy: "interrupted"` when the rower deals
-   with it. That value's documented meaning is *"closed later with no
-   evidence … a different shape of honesty than these four"*
+   **It needs no new ENUM VALUE. It DOES need a mechanism, and the claim
+   that it did not was wrong (PR 1 antagonist pass, F2 — CORRECTED
+   2026-09-01, same day it was written).** The value is right:
+   `"interrupted"` already exists and its documented meaning is *"closed
+   later with no evidence … a different shape of honesty than these four"*
    (`monitorRun.ts:34-37`), which is exactly and only what we know about a
-   row that ended while nobody was watching. **`ended_by: "idle"` is
-   withdrawn permanently — nothing needs it now, and PR 1's last blocking
-   design question is dissolved rather than answered.**
+   row that ended while nobody was watching. **`ended_by: "idle"` stays
+   withdrawn permanently.**
+
+   **What was false is the reachability.** This ruling cited
+   `completeInterruptedRun` at `Today.tsx:778` as proof the path exists. The
+   function is real and that is its only non-test caller — but the caller
+   sits inside `handleLogIt`, behind a button gated at `Today.tsx:810`:
+   `{run.workoutId !== null && (<button … onClick={handleLogIt}>Log it
+   </button>)}`. A Just Row has `workoutId: null`. **The button never
+   renders, and the only reachable action is discard — which destroys the
+   record.** The second branch is worse: if the link drop CLOSED the run,
+   Today renders nothing at all, because the row's own gate is
+   `monitorEntry.run.completedAt === null` (`Today.tsx:1454`), and
+   `/library/:id/log` needs a workout id (`LogSession.tsx:310-312`).
+
+   **So a walked-away Just Row is today either discard-only or invisible.
+   It is unloggable.** This spec names that latent itself, three sections
+   away — "Today's unlogged-run row currently renders discard-only for a
+   null-workout run" — while this ruling depended on the path being open.
+   The verification error is worth recording: the function was checked for
+   EXISTENCE and a caller, never for REACHABILITY, and reachability lives
+   at the button, not at the function.
+
+   **Consequence: this is PR 2 work, and it was always on PR 2's list.**
+   The spec's log-door section already assigns PR 2 "Today recovery
+   routing" and a workout-less log door. Ruling 9 does not add scope; it
+   removes the false claim that no scope was needed. **BOTH branches must
+   be handled** — the null-`workoutId` "Log it" gate AND the
+   `completedAt === null` row gate — or the closed-by-link-drop case stays
+   invisible.
 
    **The accepted cost, stated so it is not discovered later.** Storage is
    not the cost: the series buckets by the WORK clock, which freezes when
@@ -443,11 +473,16 @@ machine never closes a connected row.
 
 **The withdrawal is now PERMANENT, and needs no replacement** (ruling 9).
 There is no app-side close to name, so nothing has to assert anyone's
-agency. A row that ends while nobody is watching runs through the existing
-recovery path and stamps the `"interrupted"` value that already exists,
-whose documented meaning — "closed later with no evidence" — is precisely
-what we know. **PR 1 adds no `ended_by` member at all.** The closers it
-knows about are `rower`, `link-lost`, and `interrupted` via recovery.
+agency. A row that ends while nobody is watching stamps the
+`"interrupted"` value that already exists, whose documented meaning —
+"closed later with no evidence" — is precisely what we know. **PR 1 adds
+no `ended_by` member at all.**
+
+**But the PATH to that value does not exist yet for a workout-less run**
+(ruling 9's own correction, F2): Today's "Log it" is gated on a non-null
+`workoutId` and the row itself on `completedAt === null`. Building both is
+PR 2's, and until it lands, `"interrupted"` is a value PR 1 stores nothing
+into. The closers PR 1 can actually produce are `rower` and `link-lost`.
 
 Adding an enum value for an event we have
 never seen is exactly the "does the system HAVE the concept" failure this
@@ -505,7 +540,7 @@ One `session_logs` row:
 | `workout_type` | **`null`** | "No intensity was prescribed" — true of a free row, and true again of the targetless-workout follow-on. The column becomes NULLABLE in PR 1 (`DROP NOT NULL`, folded into the migration PR 1 already writes). It stays plain `text`, and stays OUR intensity axis only; Concept2's structural vocabulary never enters it. See "The stored type, decided". |
 | `steps` | `[]` | server branch: empty allowed **iff** `workoutType` is null. No fabricated steps — record, not projection. (Vetted: the only server consumer of steps is create-time validation; client renderers absorb `[]` — the summary self-gates on zero rows.) |
 | `time_seconds`, `distance_meters` | the observer's recorded totals | both headline numbers, matching the Logbook API's both-required rule. **ANSWERED (CLOSED 1): the counters do not reset at the auto-split, so the frame's own cumulative elapsed/distance ARE the row.** No longer a merge blocker. |
-| `avg_split_seconds` | **derived by us: `500 × time/distance`**, labelled ours | no live frame carries a piece average (the per-split field is split-scoped; the whole-row average lives only on unreliable 0x0039). This is a NEW derived number — named as such, tested, and covered by the TRIAD pass. |
+| `avg_split_seconds` | **derived by us: `500 × time/distance`**, labelled ours | no live frame carries a piece average (the per-split field is split-scoped; the whole-row average lives only on unreliable 0x0039). This is a NEW derived number — named as such, tested, and covered by the TRIAD pass. **Carries a READ-SIDE fix, see below — without it the two screens disagree.** |
 | `work_seconds/meters` | = the whole piece | rest does not exist for JustRow (Logbook-aligned) |
 | `rest_seconds/meters` | `null` | no rest concept to report |
 | `ended_by` | per the end-semantics table: `rower` or `link-lost` | **no migration — the `idle` member is WITHDRAWN** (see the end-semantics section) |
@@ -527,8 +562,62 @@ validator tolerates unknown keys — vetted; **no v3 bump**, priced at data
 loss by the record's own contract). `program` is REQUIRED and
 shallow-validated, so a Just Row record carries `program:
 { intervals: [] }` — an honest empty observation program, distinct from
-the rejected fabricated-steps case: it fabricates no rowing structure,
-and `buildMonitorLogSteps` returns `[]` on it (vetted, no throw).
+the rejected fabricated-steps case: it fabricates no rowing structure.
+
+**It ALSO carries `logSeed: { steps: [], paces: {} }`, and rev 3 dropping
+that was a real defect (PR 1 antagonist pass, F4).** Rev 3 said
+`buildMonitorLogSteps` "returns `[]` on it (vetted, no throw)". The anchor
+pass vetted a 0-length **seed/program PAIR**; this paragraph named only the
+program. `logDraft.ts:836-843` reads `run.logSeed` FIRST and throws
+`MonitorLogSeedError` on `undefined`, before it ever compares lengths — and
+`logSeed` is optional on `MonitorRun` (`monitorRun.ts:103`), so `undefined`
+is the natural value for a run with no workout, no draft and no paces. The
+throw surfaces at `summaryModel.ts:973` inside `buildMonitorModel` and is
+swallowed by `LogSession.tsx:387`'s condition-4 `catch`, silently
+disqualifying the record. Naming the empty seed explicitly restores the
+conjunction the vetting actually covered; `isMonitorRun`'s shallow check
+(`monitorRun.ts:462-465`) accepts it.
+
+### The AVG SPLIT disagreement, and the read-side fix that closes it (F1)
+
+**The stored-shape table above, taken literally, makes the history list and
+the detail screen show different things for the same row.** Found by the
+PR 1 antagonist pass; both halves verified by reading the deciding lines.
+
+- **History list** — `hasMachineTotals` is false (no `machine_*` on a Just
+  Row), so `heroAvgSplitSeconds` falls through to the stored column
+  (`LogRow.tsx:154`, `return log.avgSplitSeconds ?? undefined;`) and
+  renders `AVG 2:14.0 · 1,396 m`.
+- **Detail screen** — `hasWorkPair` is TRUE (both work fields are the whole
+  piece), so TIER B1 fires and derives the hero from `steps`
+  (`storedSummary.ts:671` → `tierBAvgSplitSeconds`). On `steps: []` that
+  loop never runs, `d` stays `0`, and `:519` returns `undefined` → **no AVG
+  SPLIT hero at all.**
+
+The rower sees an average split in history, taps the row, and it is gone.
+This is the defect RC-5 exists to kill, one screen over, and **no exit
+criterion catches it** — criterion 3 asks only that the steps WIDGET be
+absent. `LogRow.tsx:129-141` certifies the two screens agree because they
+"read the identical population by construction"; `steps: []` is precisely
+what falsifies that premise, since one population is the whole piece and
+the other is empty.
+
+**DECIDED: the stored column is the authority, and TIER B1 falls back to
+it when `steps` carries no PM5-sourced rows.** Rationale: `avg_split_
+seconds` is the phase's one genuinely new derived number and the reason
+this is a TRIAD PR — writing it and then not reading it on the screen that
+exists to show it is the worst of both. The alternative (have PR 2 post
+`machine_work_*` from 0x0039 so both screens take TIER A) is rejected
+because 0x0039's arrival is **not guaranteed** — this spec's own wire-facts
+section calls it "an opportunistic cross-check, never the record" — so it
+would make the hero present or absent depending on whether a frame landed.
+
+**This fix is READ-SIDE, so it belongs in PR 1 and ships before any
+writer** — the same R-A ordering criterion 2 already uses. **Exit criterion
+7 (new):** a stored row with `steps: []`, a work pair, and a non-null
+`avg_split_seconds` renders the SAME avg-split figure in the history list
+and on the detail screen, asserted on both, with a mutation that changes
+the stored column and must move both numbers together.
 
 **Version skew / release ordering (B10):** an absent or unknown
 `workout_type` in today's `TypeBadge` degrades to invisible text
@@ -585,10 +674,32 @@ distance and time with rest carried separately — RC-1's spine already did
 **Why null rather than a sentinel.** Identical code cost (the client union
 widens and the badge needs a fallback either way), but a sentinel puts a
 non-value in a column and makes every future `WHERE workout_type = …` a
-trap. Null says the true thing: no intensity was prescribed. It also
-retires `resolveWorkoutType`'s last-resort `?? "O2"`
-(`LogSession.tsx:309`), which the code's own comment already apologises
-for as not a meaningful guess.
+trap. Null says the true thing **for a free row**: no intensity was
+prescribed.
+
+**RETIRING `resolveWorkoutType`'s `?? "O2"` IS CUT FROM PR 1 (antagonist
+F3), and the sentence above is why.** Rev 3 paired the null decision with
+retiring that last-resort fallback (`LogSession.tsx:475` — rev 3's `:309`
+citation was stale, that line is mid-comment). The two cannot ship
+together. The fallback fires when the phone-timer door has no matched
+draft AND the workout has left the library (`LogSession.tsx:450-458` calls
+this "a corrupted/partial localStorage state" — rare, not impossible).
+Retire it and that session posts `workoutType: null`, which PR 1's new
+type-blind plan refusal then declines to advance
+(`server/stores/logs.ts:700`, `routes/data.ts:1534`): the rower taps "Log
+against plan", gets a `201`, and `SESSION n OF 84` does not move. Silently
+— no error surface exists for it.
+
+**The deeper point, and it is about the PREDICATE not the branch.** The
+refusal keys on "we do not know the type"; the fact it needs is "this was
+a free row". For an unmatched phone-timer session the sentence above is
+FALSE — an intensity was prescribed, the app merely lost the record of it.
+So: the `?? "O2"` fallback STAYS, and the refusal's predicate is scoped to
+what it actually means. **Whether the predicate becomes `workout_id IS
+NULL AND workout_type IS NULL`, or an explicit marker, is a PR 1
+implementation decision that the plan must state and test both ways** —
+the one thing it may not do is key on type alone while a second producer
+of null types exists.
 
 **Why it had to be decided before PR 1 tags.** CLAUDE.md's additive-only
 rule between tags: once PR 1 shipped a validator CLOSING the column to a
@@ -660,10 +771,33 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   states plainly that it changes nothing visible.
   **NO `idle` enum migration** — withdrawn by the 2026-08-31 capture (see
   end semantics), and **no new `ended_by` member of any kind** — rulings 8
-  and 9 settle that a walked-away row rides the existing recovery path and
-  stamps the `"interrupted"` value that already exists. **PR 1 is
-  UNBLOCKED** (it was held for an inactivity-rule design that ruling 9
-  declined to build).
+  and 9 settle that a walked-away row stamps the `"interrupted"` value that
+  already exists. **PR 1 is UNBLOCKED** (it was held for an inactivity-rule
+  design that ruling 9 declined to build).
+
+  **Scope corrections from the PR 1 antagonist pass (2026-08-31):**
+  - **ADD the TIER B1 read-side fallback** so the detail screen reads the
+    stored `avg_split_seconds` when `steps` carries no PM5 rows (F1). Read
+    side, so it ships here under the same R-A ordering as the badge.
+  - **ADD `logSeed: { steps: [], paces: {} }`** to the `MonitorRun` shape
+    (F4) — without it `buildMonitorLogSteps` throws rather than returning
+    `[]`.
+  - **CUT retiring `resolveWorkoutType`'s `?? "O2"`** (F3). It collides
+    with the type-blind plan refusal and silently stops advancing plans for
+    unmatched phone-timer rows. The refusal's predicate is scoped instead.
+  - **SERVER HALF ONLY for the plan refusal** (F5). The client half posts
+    `advancesPlan: false` from a log door PR 2 builds; nothing in PR 1 can
+    emit it. Say so rather than planning a caller that does not exist.
+  - **Type widening has a live drop path** (F5): `DROP NOT NULL` makes
+    Drizzle infer `string | null`, which widens `PlanLink.workoutType`
+    (`stores/logs.ts:356`) and makes `usePlanLinks.parseLink`'s
+    `if (typeof e.workoutType !== "string") return null;`
+    (`src/plan/usePlanLinks.ts:81`) discard a whole plan-link entry. It is
+    unreachable only while the plan refusal holds — so F3's predicate is
+    load-bearing twice, and both need the same test.
+  - **Generate the migration LAST** (F7). PRs #248 and #249 both already
+    mint drizzle index `0017` against a journal head of 16; PR 1 is a third
+    claimant. Regenerate off whatever lands, never off today's main.
 - **PR 2 — surface + session + log door (L, after RC's wave and after
   PR 0b's answers):** `/justrow` route, `JustRowSurface`,
   `useJustRowSession` (with the rebuilt-concerns list, the coexistence
@@ -685,22 +819,47 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
 ## Per-PR exit criteria (numbered, frozen at PR 1 open)
 
 1. `plan_state.done_n` is unchanged across a Just Row save (integration
-   test), and deleting a Just Row log leaves it unchanged too.
-2. A history list containing a null-`workoutType` row renders it with NO
-   badge (an absence, not an empty badge), and any unknown type string
-   renders a neutral badge at ≥4.5:1 contrast — asserted structurally, and
-   proven on a build that predates PR 2's writer (the R-A ordering).
+   test), and deleting a Just Row log leaves it unchanged too. **The
+   delete half is DEPENDENT, not a second gate (F5):** `delete()` returns
+   `unCounted: false` whenever `deletedRow.planKey === null`, which the
+   create-side refusal already forces (`stores/logs.ts:700-712`). It
+   asserts the create path twice. Keep it as a regression pin, and give
+   the create half the independent mutation — flip the refusal off and
+   watch `done_n` move.
+2. A history list containing a null-`workoutType` row renders **no
+   `.type-badge` element in the DOM at all** — asserted STRUCTURALLY, never
+   by contrast (F6). The two failures are different and only the
+   structural assertion convicts both: an unknown STRING renders invisible
+   text (recomputed: `--on-color` #fffdf7 on `--page` #f4f1e8 = 1.110:1,
+   and 1.000:1 on `--surface`), while `null` renders NOTHING inside a
+   `display: inline-block` span with `padding: 3px 7px` and no background
+   declaration (`index.css:509-516`) — an empty padded gap, which is
+   exactly the "empty badge" this criterion forbids. A contrast assertion
+   passes it. Separately, an unknown type string renders a neutral badge at
+   ≥4.5:1. **Proven on a build that predates PR 2's writer**: PR 1's own
+   relaxed `POST /api/logs` is the supported producer — an integration test
+   posts `workoutType: null` and asserts the `GET` round-trip, so no gate
+   seeds past it (RF24).
 3. A `session_logs` row with `steps: []` renders in from-the-log with no
    steps widget (absence, not empty widget).
-4. A mid-row link drop yields a recoverable run and Today offers "Log
-   it" routing to the Just Row log door.
-5. `ended_by` for a Just Row is one of `rower`/`link-lost`, or
-   `"interrupted"` when the run is closed later through Today's recovery
-   path (rulings 8/9 — the walked-away case). **NOT `idle`** — withdrawn
-   permanently, no observed closer and no app-side close to name
-   (CLOSED 3 / N2). **NOT `finished`** — CLOSED 7 saw only states 0, 1 and
-   11 across 1660 frames on a Menu end. This criterion is now FINAL; the
-   inactivity rule it once waited on will never land.
+4. **(PR 2, not PR 1 — F2.)** A mid-row link drop yields a recoverable
+   run and Today offers "Log it" routing to the Just Row log door. This
+   needs BOTH of Today's gates opened: the `run.workoutId !== null` gate on
+   the "Log it" button (`Today.tsx:810`) and the `completedAt === null`
+   gate on the row itself (`Today.tsx:1454`). Neither exists at PR 1, so
+   this criterion is unprovable there and is not frozen against it.
+5. `ended_by` for a Just Row is `rower` or `link-lost` **in PR 1**, and
+   `"interrupted"` once PR 2 opens the recovery path (rulings 8/9, as
+   corrected by F2 — the walked-away case has no producer before then).
+   **NOT `idle`** — withdrawn permanently, no observed closer and no
+   app-side close to name (CLOSED 3 / N2). **NOT `finished`** — CLOSED 7
+   saw only states 0, 1 and 11 across 1660 frames on a Menu end.
+   **Do not freeze this as an enumeration of the enum's MEMBERS (F7):**
+   PR #248 adds a sixth, `program-dropped`, across three hand-copied
+   mirrors (`schema.ts`, `stores/logs.ts:41`, `routes/data.ts:65-71`). A
+   Just Row cannot be `program-dropped` — it has no program — so the logic
+   survives, but any test or message text written against a five-value
+   union is stale the moment that PR merges.
 6. Opening a Just Row session with an unlogged timer `SessionRun` or
    `MonitorRun` present does not destroy it (coexistence guard test).
 

@@ -4476,3 +4476,96 @@ ruling ("Just go to log") resolved kill-shots 1 and 4 in one move.
   draft's "destination is the workout, not the log" assertion passed on the
   exact defect that stranded the record. When an assertion pins a REMOVAL,
   pair it with an assertion that the removed thing is replaced.
+
+## Phase JR, PR 1 full pass (TRIAD — stored shapes), 2026-08-31, main bb0b66cc
+
+- **"The client renderers absorb `steps: []`."** Half true, and the false half is a
+  NUMBER. `SummaryIntervalsBlock` really does self-gate (`PostWorkoutSummary.tsx:335`),
+  but `storedSummary.ts:671`'s TIER B1 derives AVG SPLIT from
+  `tierBAvgSplitSeconds(row.steps)`, which returns `undefined` on `[]` (`:519`, `d` never
+  leaves 0) — while the history list's `heroAvgSplitSeconds` falls through to the stored
+  column (`LogRow.tsx:154`). Same row, two screens, one number present and one absent —
+  the exact defect RC-5 was built to kill. `LogRow.tsx:129-141` certifies the two agree
+  because they "read the identical population by construction"; an empty `steps` is what
+  falsifies that premise.
+  **Technique: a stored-shape table is a set of SIMULTANEOUS values, and the bug lives in
+  the combination, not the row. Take the whole table at once, hand-execute every tier gate
+  that reads two or more of its cells, and check that every screen showing a number lands
+  in the same tier. A per-row "is this field tolerated?" sweep passes all of them.**
+
+- **"A walked-away row rides Today's existing recovery path and stamps `interrupted`."**
+  Unreachable in BOTH branches for a workout-less run. `completeInterruptedRun` has exactly
+  one non-test caller (`Today.tsx:778`), inside `handleLogIt`, behind a button gated
+  `run.workoutId !== null` (`Today.tsx:810`) — so a null-workout run is discard-only; and a
+  run the link-drop path CLOSED renders nothing at all, because the row's gate is
+  `completedAt === null` (`Today.tsx:1454`). The code documents the first half itself
+  (`Today.tsx:673-677`, "the null-`workoutId` latent"), and the spec cites that same latent
+  three sections away while a ruling one section later depends on the path being open.
+  **Technique: when a ruling says "no new mechanism, the existing path already does this",
+  walk the path BACKWARDS from the function it names to the render condition of the control
+  that calls it. The claim is about REACHABILITY, and reachability lives at the button,
+  never at the function. A ruling that cites a `file:line` for its mechanism has cited the
+  SUBJECT, not the falsifier.**
+
+- **A refusal keyed on "unknown" when it means "absent".** The spec's plan refusal fires on
+  `workoutType === null` while the fact it needs is "this was a free row". Those coincide
+  only while `resolveWorkoutType`'s `?? "O2"` last resort survives (`LogSession.tsx:475`) —
+  and the same spec, in its rationale for choosing null, proposed to retire it. Retiring it
+  makes an unmatched phone-timer session post a null type, which the new refusal then
+  silently declines to advance the plan for: a 201, and `SESSION n OF 84` does not move.
+  **Technique: when a spec justifies a stored value by what it MEANS ("no intensity was
+  prescribed"), grep every OTHER producer that could write that value and read the sentence
+  aloud for each one. A sentinel's meaning is only true of the producer the author had in
+  mind; a second producer turns the same cell into a lie, and any predicate keyed on it
+  inherits the lie.**
+
+- **"`buildMonitorLogSteps` returns `[]` on it (vetted, no throw)."** True of a 0-length
+  seed/program PAIR — which is what the anchor pass vetted — and false of the shape rev 3
+  actually specified, which named `program: { intervals: [] }` and never mentioned
+  `logSeed`. `logDraft.ts:836-843` throws on `seed === undefined` before it compares
+  lengths.
+  **Technique: when a later revision re-cites its own earlier vetted ground, diff the
+  WORDING. A vetted claim is scoped to the exact conjunction that was tested; a revision
+  that drops one conjunct keeps the "vetted" tag and loses the guarantee. The tell is a
+  citation to a prior pass that is SHORTER than what that pass wrote.**
+
+- **An "invisible badge" that is not text at all.** Rev 3 carried the anchor pass's 1.11:1
+  contrast finding forward to cover BOTH an unknown string and a null. Recomputed: 1.110:1
+  on `--page`, 1.000:1 on `--surface`. But `TypeBadge` renders `{type}`, and React renders
+  `null` as NOTHING — so the null case has no text to measure. What remains is a
+  `display:inline-block` span with `padding: 3px 7px` and (per `.type-badge`,
+  `index.css:509-516`) no background declaration at all: an empty padded gap, i.e. the
+  "empty badge" exit criterion 2 explicitly forbids. A contrast assertion would pass it.
+  **Technique: before reusing a contrast number as a fallback's justification, ask what the
+  MISSING VALUE renders as. `undefined`/`null` as a React child is an absence, not faint
+  text; a contrast ratio can only convict the case that still draws glyphs. Two different
+  failures need two different assertions, and the structural one (no element in the DOM) is
+  the only one that can convict both.**
+
+- **Attacked and NOT broken (Phase JR PR 1's vetted ground):** `steps: []` absorbed as an
+  ABSENCE end to end (`buildRows([])` → `SummaryIntervalsBlock`'s `rows.length === 0` gate
+  at `PostWorkoutSummary.tsx:335`, which takes the `caption` with it); the migration's
+  mechanics (`workout_type` is plain `text` with no index, CHECK or FK —
+  `drizzle/0001:36,44,78` — and `DROP NOT NULL` has precedent in `0009`; the repo has no
+  `down` migrations at all, so irreversibility is the standing convention, not a new risk);
+  `PATCH /api/logs/:id` never revalidating `workoutType`/`steps` (`data.ts:1180-1233`);
+  `GET /api/today` never reading a log's type; `postTestOffer` title-gating before anything
+  type-shaped (`postTestOffer.ts:52-54`); the delete un-count guard being structurally
+  unable to fire on a `planKey === null` row; and `MonitorRun`'s additive-key tolerance,
+  which now ALSO survives the hand-off store the rev-3 spec predates (`handoffStore.ts:520`
+  persists `JSON.stringify(run)` whole and re-admits via the same unknown-key-tolerant
+  `isMonitorRun`). `WorkoutProgram` is literally `{ intervals: ProgramInterval[] }`, so
+  `{ intervals: [] }` is complete.
+  **Corollary worth keeping: a spec written before a storage refactor lands must have its
+  storage claims re-run against the NEW writer, not the one it cited. This one survived;
+  the check took two greps and would have been the whole finding if it had not.**
+
+- **Operational, found by `gh pr list` rather than by reading:** TWO open PRs both mint
+  drizzle index `0017` (#249 `0017_magical_hobgoblin`, #248 `0017_fair_whizzer`) against a
+  journal head of 16, and #248 adds a SIXTH `ended_by` member (`program-dropped`) across
+  three hand-copied mirrors. Any spec that freezes an enum enumeration or plans a migration
+  index is stale the moment either merges.
+  **Technique: on any pass that touches a migration or an enum, run `gh pr list` and
+  `gh pr diff <n> --name-only | grep drizzle` FIRST. Two of this repo's named traps
+  (competing migration index, three unshared enum mirrors) are only visible from the
+  open-PR set, and no amount of reading main can see them.**
