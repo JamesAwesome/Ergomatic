@@ -247,7 +247,9 @@ captures and transcriptions. This section is the corrected record.
   **What this changes for the design.** No closer has ever been observed
   within 896.8 s, and none is documented at any layer we can watch — so
   under ruling 9 we stop waiting for one and stop inventing one, and a
-  walked-away row rides the existing recovery path instead. **That is an absence of evidence, not
+  walked-away row rides the existing recovery path instead.
+
+  **That is an absence of evidence, not
   evidence of absence** — see the CLOSED 3 caveat — and it is already
   sufficient, because a rule cannot map a signal nobody has seen. We are also, by definition,
   never disconnected when we care.
