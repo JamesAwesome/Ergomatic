@@ -786,10 +786,6 @@ export function createLogsStore(db: Db) {
       });
     },
 
-    // Most-recent log per workout, as whole days since that log — feeds the
-    // suggestion pool's "least recently done" ordering. Logs with no
-    // workoutId (workout since deleted, or ad-hoc) are excluded: there's
-    // nothing to attribute recency to.
     // Wave E PR1 Task 6 (task-6-brief.md): server-written only, after C2's
     // own 2xx (route's own comment) — never client input (LogInput's own
     // comment names why the two columns are absent from that interface).
@@ -854,6 +850,10 @@ export function createLogsStore(db: Db) {
       return current?.tz ?? tz;
     },
 
+    // Most-recent log per workout, as whole days since that log — feeds the
+    // suggestion pool's "least recently done" ordering. Logs with no
+    // workoutId (workout since deleted, or ad-hoc) are excluded: there's
+    // nothing to attribute recency to.
     async lastDonePerWorkout(userId: string): Promise<Record<string, number>> {
       const rows = await db
         .select({

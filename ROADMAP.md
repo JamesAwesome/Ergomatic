@@ -1137,6 +1137,7 @@ question, not a re-raised one.
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today only by `ALLOWED_EMAILS` (household allowlist). **Needs James's ruling before `C2_LINK_ENABLED=1` on prod.** | `2026-08-31-concept2-logbook-design.md` |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
@@ -1289,6 +1290,11 @@ new.
 - **`surfaceModel.ts:1573`'s `if (digits.startsWith("8")) return "AN";`** is the
   English article in "AN 800 M PIECE", not the workout type. A rename trap, not
   a task.
+- **Concept2 wire hardening (PR1 final review, M3)** — the C2 wire calls carry
+  no timeout, and the per-user token refresh holds a `FOR UPDATE` row lock plus
+  a pooled connection across the outbound refresh call (`client.ts`,
+  `stores/concept2.ts`). Follow-up hardening; household-scale acceptable today.
+  (`2026-08-31-concept2-logbook-design.md`)
 
 ## Owed captures and walk items
 

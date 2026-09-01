@@ -35,10 +35,10 @@ export interface Concept2RouterDeps {
 // Spec §Architecture 3: the browser hop carries no credential; a
 // single-use, 15-minute attempt nonce is the user binding. Expiry/GC is
 // the server's own job, never a cron (mint's own GC calls below).
-export const ATTEMPT_MAX_AGE_MS = 15 * 60 * 1000;
+const ATTEMPT_MAX_AGE_MS = 15 * 60 * 1000;
 // Plan deviation 4: refresh 60s ahead of the wire's own `expires_at`, so an
 // in-flight request never races a token that expires mid-call.
-export const TOKEN_REFRESH_SKEW_MS = 60 * 1000;
+const TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 
 const WEIGHT_CLASSES: readonly WeightClass[] = ["H", "L"];
 

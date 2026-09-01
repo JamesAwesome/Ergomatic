@@ -142,6 +142,14 @@ export function createC2Client(
       );
     },
 
+    // No committed transcript names a SUCCESS body for this endpoint (only
+    // the PROBE's 401 failure shape is a real capture — refresh-probe-
+    // 2026-08-31.md), so the `data.id` shape below is the documented
+    // contract's own minimum. Corroborated, not just assumed: PR0's live
+    // harness parsed this exact shape against the real sandbox
+    // (`scripts/c2-crossconnect.ts:255-258`), the results-201 body's own
+    // `user_id` was 2211, and the measured follow-up
+    // `GET /profile/2211/log/85557` returned 200.
     async fetchMe(
       accessToken: string,
     ): Promise<{ ok: true; c2UserId: number } | { ok: false }> {

@@ -276,7 +276,7 @@ function checkCompletedAt(
 // offsets ("+05:00") and legacy aliases, and C2's `timezone` feeds their
 // date_utc derivation, so only canonical zone names (plus "UTC", which the
 // client's resolvedOptions().timeZone can legitimately produce) pass.
-export const IANA_ZONES = new Set<string>([
+const IANA_ZONES = new Set<string>([
   ...Intl.supportedValuesOf("timeZone"),
   "UTC",
 ]);
