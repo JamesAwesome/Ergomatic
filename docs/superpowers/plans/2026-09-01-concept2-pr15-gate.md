@@ -61,7 +61,7 @@ ruling, asked for at the end.**
   own Help page (SECONDARY until account-verified — an optional walk
   step now checks it) and corrected the refresh-token durability claim:
   renewable WITH USE, not an indefinite idle capability.
-- **Fix round 10, this revision (F1):** (g) as round 9 wrote it is
+- **Fix round 10 (F1):** (g) as round 9 wrote it is
   REFUTED as unconditional, by the SAME logic that already downgraded
   (d): `concept2_auth_attempts` has no surface/redirect-kind column
   (`server/db/schema.ts:510-519`) and `consumeAttempt` returns only
@@ -70,13 +70,40 @@ ruling, asked for at the end.**
   EXISTING, unauthenticated `/api/concept2/callback`
   ("NO requireUser — the nonce binds," `server/routes/concept2.ts:171`)
   — (g)'s own check, living entirely in the NEW native exchange route,
-  is never reached. Restated: (g) is the only option that CAN bind the
+  is never reached. Restated (WRONGLY, see round 12): (g) is the only
+  option that CAN bind the
   principal, and only WITH a `surface` column enforced at BOTH routes
   as an explicit precondition, priced as a real migration cost this
   document did not originally charge it. §3(g), the taxonomy, §6, and
   the antagonist ledger's own round-3 correction block (finding 6's
   "prevents" language, which named the wrong defect — mislabeling, not
   bypassability) all corrected to match.
+- **Fix round 11:** swept the WHOLE document for every "(g)" mention
+  after finding round 10's own fix had missed two forward-references to
+  it sitting inside (d)'s write-up (the (d) heading, and the "what would
+  actually bind the principal" bullet) — both still asserted (g) binds
+  unconditionally. Fixed both to match round 10's conditional claim; no
+  other mention needed changing at the time.
+- **Fix round 12, this revision:** round 10's "restated" conclusion was
+  ITSELF wrong, found by the reviewer, not by another sweep: a `surface`
+  column stops a nonce from crossing SURFACES, but does NOTHING for the
+  web path used NORMALLY — `/api/concept2/callback` stays exactly as
+  unauthenticated as it always was, surface column or not. An attacker
+  can mint a WEB-surface attempt, forward it, and the victim's ordinary,
+  correctly-surfaced consent still links the account under the
+  attacker's id — no cross-surface trick needed at all. **A surface
+  column is route integrity, not principal authority — round 10
+  conflated the two.** The real fix needs BOTH completion routes
+  authenticated against the attempt's own user: native already gets
+  this from (g)'s own new exchange route; web needs the SAME check
+  retrofitted onto the EXISTING callback, using the `erg_session` cookie
+  that already exists and is already delivered there (SameSite=Lax, a
+  first-party top-level GET — the same mechanism §3(d)'s own `SameSite`
+  analysis, round 6, already established for a different cookie).
+  §3(g) (both its round-10 "REFUTED" paragraph, now followed by a
+  "FURTHER REFUTED" one, and its cost/honest-limit sections), the
+  taxonomy, §6, and both of round 11's forward-references all corrected
+  to require BOTH preconditions, not the surface column alone.
 
 ## 1. The residual, restated — with its own bounds
 
@@ -385,10 +412,13 @@ it); a second half, added below, reaches PHYSICALLY-CONFIRM, the SAME
 class as (c) — round 7 (finding 3) corrects fix round 5's own "TRUE
 prevention" label. Neither half of (d), nor any other BROWSER-side
 option in this document, achieves cryptographic principal binding —
-**(g), added round 9, does ONLY WITH attempt-surface binding added
-(round 10 correction) — without it, the SAME web-mint downgrade this
-option's own proof below describes applies to (g) too** — see the
-closing taxonomy note after (g).**
+**(g), added round 9, does ONLY in the fully-authenticated-both-paths
+form round 12 requires (both `/api/concept2/callback` and
+`/api/concept2/exchange` checking `attempt.userId === req.user.id`) PLUS
+the attempt-surface binding round 10 added — without EITHER, the SAME
+downgrade shapes this option's own proof below describes (web-mint
+bypass, cross-surface bypass) apply to (g) too** — see the closing
+taxonomy note after (g).**
 
 **The original (d) is not prevention, and here is the proof, not an
 assertion:** the attacker already holds a valid `state` (their own
@@ -463,11 +493,15 @@ continuation variant belongs in that same bucket, not in a separate
   Ergomatic session returning through an authenticated app/browser
   hand-off — which is exactly what §2's credential fact rules out
   reaching THIS BROWSER on native. No option INSIDE the browser does
-  this. **(g), added round 9, does — but ONLY WITH attempt-surface
-  binding added (round 10 correction) — it moves the check to the APP,
-  where a real credential (the Keychain bearer) already exists, PROVIDED
-  the completion is actually forced through that app-side check rather
-  than the existing web callback** — see the taxonomy note after (g).
+  this. **(g), added round 9, does — but ONLY once BOTH completion
+  routes are authenticated against the attempt's user (round 12
+  correction: authenticating native alone still leaves the EXISTING web
+  callback open, no cross-surface trick required) AND attempt-surface
+  binding is added (round 10 correction, for the cross-surface case) —
+  it moves the check to the APP on native and to the erg_session cookie
+  on web, where real credentials already exist, PROVIDED completion is
+  actually forced through one of those two checks rather than the
+  original, unauthenticated callback** — see the taxonomy note after (g).
 
 **Cost, honestly:** whether a cookie set by `/start` genuinely survives
 the FULL round trip — our origin, then C2's domain, then back to our
@@ -585,19 +619,65 @@ FORCES the native path), hands that URL to the victim, and the victim's
 consent completes through the OLD unauthenticated callback exactly as
 the original residual describes. `(g)`'s `attempt.userId === req.user.id`
 check lives entirely in the NEW `/api/concept2/exchange` route — a route
-this attack path never reaches. **Restated honestly: (g) is the only
+this attack path never reaches. **Restated, round 10: (g) is the only
 option that CAN bind the principal, and only WITH attempt-surface
 binding added as an explicit precondition** — a `surface` (or
 `redirectKind`) column on `concept2_auth_attempts`, set at mint time and
 enforced at BOTH routes (the https callback must refuse to consume a
 native-minted nonce; the new exchange route must refuse to consume a
-web-minted one). **Without it, the web-mint downgrade applies to (g)
-exactly as the raw-URL downgrade applies to (d) above** — same shape
-(a bypass the schema has no column to prevent), same fix class (add the
-missing check), same verdict until the column exists: NOT binding.
+web-minted one). Without it, the web-mint downgrade applies to (g)
+exactly as the raw-URL downgrade applies to (d) above — same shape (a
+bypass the schema has no column to prevent), same fix class.
 
-**Why this is genuinely stronger — WITH the precondition above, cited,
-not asserted:** RFC 8252 §7.1
+**FURTHER REFUTED, round 12 — the round 10 fix above is necessary but
+NOT sufficient, and the conclusion above overstated what a surface
+column buys:** a surface column only stops a nonce from crossing
+SURFACES (native-minted consumed on web, or vice versa). It does
+NOTHING about the web path's own, independent gap: `/api/concept2/callback`
+(`server/routes/concept2.ts:171-220`) is UNAUTHENTICATED by design and
+STAYS that way even with a correct surface check — round 10's fix, as
+specified, never proposed adding any identity check to this route, only
+a surface match. So: an attacker mints a WEB-surface attempt, forwards
+its authorize URL, the victim opens it and consents, the browser returns
+through the CORRECT web route with the CORRECT surface tag — the round
+10 check passes — and the callback links the account under
+`attempt.userId` (the attacker's) exactly as the ORIGINAL residual
+describes, with NO identity check on the completing browser ever run.
+**A surface field gives ROUTE INTEGRITY (this nonce reaches the route it
+was minted for), NOT PRINCIPAL AUTHORITY (that the party completing it
+is who the design intends)** — the round 10 restatement conflated the
+two. This needs no cross-surface trick at all; it is the web path,
+used exactly as designed, exactly as intended, still carrying the
+original residual.
+
+**The actual fix: BOTH completion paths must be authenticated AND
+require the attempt's user to match before exchange — not one check
+added to native alone.** Native already gets this from (g)'s own
+`/api/concept2/exchange` route (the Keychain bearer,
+`app/src/api.ts:14-17`). Web needs the SAME shape added to the EXISTING
+`/api/concept2/callback`: `erg_session` (`server/auth/cookies.ts:6,20-29`)
+already exists and is issued `sameSite: "lax"` — the exact attribute
+already established elsewhere in this document (§3(d)'s own `SameSite`
+analysis, round 6) as what a browser sends on a cross-site, TOP-LEVEL,
+safe-method (GET) navigation, which is precisely the shape of C2's
+redirect landing back on our own first-party `/callback` — so the
+cookie is available to check THERE without any new mechanism.
+`requireUser` (`server/auth/middleware.ts:46-66`) already reads exactly
+this cookie and already resolves it to a `SessionUser`; wiring it (or an
+equivalent check with the route's own `htmlPage` error shape, since
+`requireUser` today replies with a bare JSON 401, not this route's HTML
+error pages) onto `/api/concept2/callback`, then comparing
+`attempt.userId === req.user.id` before ever calling
+`store.upsertLink`, closes the web path the same way (g)'s own route
+closes native. **Restated, round 12: (g) achieves principal binding
+ONLY in this fully-authenticated-BOTH-paths form. The surface column
+from round 10 is still worth keeping (route integrity has real value —
+it stops a native-intended nonce from silently completing through a
+differently-shaped web flow) but it is NOT what makes (g) bind anything;
+the per-route identity check is.**
+
+**Why this is genuinely stronger — WITH the preconditions above (BOTH of
+them, round 10's AND round 12's), cited, not asserted:** RFC 8252 §7.1
 (PRIMARY, fetched this session) describes the general mechanism the
 spec's Branch B already names: "When the authorization server completes
 the request, it redirects to the client's redirection URI as it would
@@ -618,21 +698,24 @@ registration collisions with no user-visible arbitration); it says
 nothing about C2's own missing PKCE (below), which no client-side
 mechanism can retrofit.
 
-**Honest limit, named so James can weigh it against (c)/(d) — SECOND in
-line behind the surface-binding precondition above, round 10:** even
-WITH attempt-surface binding added, (g) binds the exchange to whichever
-APP INSTANCE's authenticated session actually receives the callback —
-not to a specific PERSON. On a device where the ATTACKER's own Ergomatic
+**Honest limit, named so James can weigh it against (c)/(d) — THIRD in
+line, behind round 12's both-paths-authenticated fix and round 10's
+surface-binding precondition, both above:** even WITH both of those
+built, (g) binds the exchange to whichever APP INSTANCE or BROWSER
+SESSION's authenticated identity actually receives the callback — not
+to a specific PERSON. On a device where the ATTACKER's own Ergomatic
 session is the one signed in and live (a shared device the attacker
 controls, or one they hand the victim mid-session), the callback still
 authenticates as the attacker, and the check passes trivially
 (`attempt.userId` and `req.user.id` are both the attacker's) — the
-injection outcome is unchanged. (g), fully built, closes the residual
-specifically for the common case §1's bound 4 already names as the
-surviving delivery channel — a forwarded link or QR code the victim
-opens on THEIR OWN signed-in device — which is the majority case this
-whole document is about; it does not close the shared-device case, the
-same case (c)/(d)'s physically-confirm bucket also cannot close.
+injection outcome is unchanged. (g), fully built (both routes
+authenticated, surface-bound), closes the residual specifically for the
+common case §1's bound 4 already names as the surviving delivery
+channel — a forwarded link or QR code the victim opens on THEIR OWN
+signed-in device or browser — which is the majority case this whole
+document is about; it does not close the shared-device/shared-session
+case, the same case (c)/(d)'s physically-confirm bucket also cannot
+close.
 
 **The interception risk, named plainly, per the spec's own anchor
 ground (PRIMARY, already in the repo): "PKCE: nothing found — no 'PKCE'
@@ -654,65 +737,89 @@ more direct fix for the interception vector ITSELF, since it prevents a
 second app from ever seeing the redirect URI in the first place,
 regardless of PKCE.
 
-**Cost, honestly, NOW INCLUDING the round 10 precondition:** URL-scheme
-registration in Info.plist, or the `ASWebAuthenticationSession`
-Capacitor plugin (none installed today — `@capacitor/browser`, already
-added this PR, is a DIFFERENT plugin with no callback-delivery mechanism
-of its own); Concept2's OWN approval of a NEW `redirect_uri` for that
-scheme (the dev credential's registered `redirect_uri` is the https
-callback only, per the spec's own "Operator steps" section — a new one
-needs registering with C2 before this could work at all); a new
-authenticated exchange route (`POST /api/concept2/exchange`) — notably,
-this does NOT need the by-id user lookup (b)/(c)/(d) all require, since
-the bearer itself already IS the identity, no email lookup needed; **a
-REAL stored-shape change this document did not originally charge (g)
-for: a `surface`/`redirectKind` column on `concept2_auth_attempts`
-(currently `nonce`/`userId`/`weightClass`/`createdAt` only,
+**Cost, honestly, NOW INCLUDING both the round 10 AND round 12
+preconditions:** URL-scheme registration in Info.plist, or the
+`ASWebAuthenticationSession` Capacitor plugin (none installed today —
+`@capacitor/browser`, already added this PR, is a DIFFERENT plugin with
+no callback-delivery mechanism of its own); Concept2's OWN approval of a
+NEW `redirect_uri` for that scheme (the dev credential's registered
+`redirect_uri` is the https callback only, per the spec's own "Operator
+steps" section — a new one needs registering with C2 before this could
+work at all); a new authenticated exchange route
+(`POST /api/concept2/exchange`) — notably, this does NOT need the by-id
+user lookup (b)/(c)/(d) all require, since the bearer itself already IS
+the identity, no email lookup needed; **a REAL stored-shape change this
+document did not originally charge (g) for: a `surface`/`redirectKind`
+column on `concept2_auth_attempts` (currently
+`nonce`/`userId`/`weightClass`/`createdAt` only,
 `server/db/schema.ts:510-519`), a migration, set at mint time, and
 enforced with a rejection at BOTH `/api/concept2/callback` and the new
-`/api/concept2/exchange`** — without this, (g) is not an option at all,
-per the correction above; and PER-SURFACE redirect selection at mint
-time (the spec's own Branch B line: "`redirect_uri` chosen per surface
-at mint time" — web keeps the https callback, since web already has
-cookie auth and Branch B was never proposed for it). **(g) is the ONLY
+`/api/concept2/exchange`** — this alone is route integrity, not
+authority, per the round 12 correction above; and, **the round 12
+addition, the one this document under-priced twice now: authenticating
+the EXISTING `/api/concept2/callback` route itself** — today it has NO
+`requireUser` call at all (`server/routes/concept2.ts:171-220`) — wiring
+`requireUser` (`server/auth/middleware.ts:46-66`, already reads the
+`erg_session` cookie, `server/auth/cookies.ts:6,20-29`) or an equivalent
+check preserving this route's existing `htmlPage` HTML error shape
+(`requireUser` itself replies bare JSON 401, a mismatch with every other
+branch in this route), PLUS the `attempt.userId === req.user.id`
+comparison before `store.upsertLink` runs — the SAME shape (g)'s own new
+native route already gets, just retrofitted onto an EXISTING route
+instead of a new one. PER-SURFACE redirect selection at mint time (the
+spec's own Branch B line: "`redirect_uri` chosen per surface at mint
+time") no longer means "web keeps the https callback [unauthenticated]"
+— it now means the SAME callback, newly authenticated. **(g) is the ONLY
 option in this document that changes PR1.5's own mint-time contract on
 native, not just the `openExternalUrl` argument the way (d) does** — a
 new redirect KIND, not just a different URL — **and, as of round 10, the
-only option besides (c) that needs a real migration.**
+only option besides (c) that needs a real migration — and, as of round
+12, the only option that requires retrofitting AUTHENTICATION onto an
+EXISTING route that has never needed it before.**
 
 Not chosen — it joins the taxonomy as a fourth bucket, below.
 
 **The taxonomy, corrected, round 7 (finding 3), extended round 9 to a
 FOURTH bucket, corrected round 10 (F1) on what that bucket actually
-requires — say this plainly so James rules on reality, not on a
-label:** every option above sorts into exactly one of four buckets —
-**accept** (a), **detect** (b, and (d)'s original interstitial half, at
-two different strengths — (b) after a completed consent, (d) before
-one), **physically-confirm** (c, and (d)'s browser-bound-continuation
-half, also at two strengths — (c) binds to "this exact page render,"
-(d)'s continuation binds to "this exact browser session"), or
+requires, corrected AGAIN round 12 on the SAME bucket (surface binding
+alone was never enough) — say this plainly so James rules on reality,
+not on a label:** every option above sorts into exactly one of four
+buckets — **accept** (a), **detect** (b, and (d)'s original interstitial
+half, at two different strengths — (b) after a completed consent, (d)
+before one), **physically-confirm** (c, and (d)'s browser-bound-
+continuation half, also at two strengths — (c) binds to "this exact page
+render," (d)'s continuation binds to "this exact browser session"), or
 **app-bind** (g) — the only bucket that CAN bind to an authenticated
 PERSON rather than merely a page render or a browser session, and the
 only one not confined to the browser. (e) and (f) are orthogonal
 dials/signals that compose with any bucket. **NO BROWSER-SIDE option in
 this document achieves cryptographic principal binding — proof that the
 SPECIFIC person the design intends is the one who consented — and (g)
-does not either, AS WRITTEN: without attempt-surface binding (the round
-10 precondition above), an attacker simply mints for the web surface and
-the whole app-bind mechanism is never reached, the same downgrade shape
-that already broke (d)'s original "prevention" claim.** WITH that
-precondition built, (g) achieves real binding subject only to its
-second, narrower limit (it binds the APP INSTANCE, not the physical
-person controlling it — the shared-device gap). "Prevention" was the
-wrong word for (a)-(f); every one of them either accepts the residual,
-makes it visible after the fact, or requires a deliberate action from
-whoever is physically present, without verifying WHO that person is.
-(g), once its precondition is built, is the one option that verifies
-something closer to that — a specific AUTHENTICATED IDENTITY — at the
-cost of the shared-device gap named above. **As presented in this
-document, unbuilt, (g) is not yet in a different bucket from (d): both
-are claims about what a NOT-YET-BUILT check WOULD do, and both have a
-concrete, cited bypass of the check as currently scoped.**
+does not either, AS WRITTEN: two independent gaps, not one.** Round 10:
+without attempt-surface binding, an attacker mints for the web surface
+and completes on native (or vice versa), and the whole app-bind
+mechanism is never reached. Round 12, found AFTER round 10's fix was
+believed sufficient: even WITH surface binding, the web path's own
+`/api/concept2/callback` has no identity check of its own — an attacker
+mints a WEB-surface attempt and the victim completes it NORMALLY, on
+the correct route, with no trick at all, and the account still links
+under the attacker's id. **Surface binding is route integrity; it was
+never principal authority, and this document said otherwise for two
+rounds.** WITH both the surface column AND a real
+`attempt.userId === req.user.id` check on BOTH routes built, (g)
+achieves real binding subject only to its third, narrower limit (it
+binds the APP INSTANCE or BROWSER SESSION, not the physical person
+controlling it — the shared-device gap). "Prevention" was the wrong word
+for (a)-(f); every one of them either accepts the residual, makes it
+visible after the fact, or requires a deliberate action from whoever is
+physically present, without verifying WHO that person is. (g), once
+BOTH preconditions are built, is the one option that verifies something
+closer to that — a specific AUTHENTICATED IDENTITY — at the cost of the
+shared-device gap named above. **As presented in this document, unbuilt,
+(g) is not yet in a different bucket from (d): both are claims about
+what a NOT-YET-BUILT check WOULD do, and both have had a concrete, cited
+bypass found in EVERY revision of the claim so far — twice for (g)
+alone.**
 
 ## 4. The device-check card
 
@@ -798,36 +905,45 @@ principal, matching what it actually proves.
 
 This is the evidence; it is not the decision. **James's ruling is owed
 here — corrected, round 7, finding 3, extended round 9, corrected again
-round 10 (F1): choose from ACCEPT / DETECT / PHYSICALLY-CONFIRM /
-APP-BIND, not "accept / detect / prevent"; no BROWSER-side option in
-this document prevents in the cryptographic-identity sense, and (g), AS
-WRITTEN, does not either — it needs attempt-surface binding built
-FIRST (§3's round 10 correction) before its own
-`attempt.userId === req.user.id` check can even be reached on the attack
-path this whole document is about.** Accept (a); add detection (b) or
-(d)'s original interstitial half (two strengths); add a physical-confirm
-requirement via (c) or (d)'s browser-bound-continuation half (also two
-strengths); add app-bind via (g) — the repo's own Branch B shape,
-requiring `attempt.userId === req.user.id` at an authenticated app-return
-exchange, PLUS the surface-binding column and dual-route enforcement §3
-now names as a precondition, not an optional extra; turn the (e) dial
-(alone or combined with anything else); add the (f) constraint; or some
-combination — and if `ALLOWED_EMAILS`'s current scope is itself part of
-the answer, say so. No PR1.5 code implements any of (a)-(g); PR1.5 is
-plumbing (and, as of fix round 2, a dev-only on-device probe) only.
-**Either half of (d), OR (g), if chosen, changes PR1.5's own contract
-with PR2** (§3) — say so explicitly in the ruling if that is the
-direction, since it is not a PR2-only change the way (b)/(c)/(f) are;
-(g) changes it more fundamentally still, since it changes what redirect
-KIND `openExternalUrl` is even handed, AND (round 10) needs a real
-migration to be a genuine option at all, not merely a route addition.
+round 10 (F1), corrected a SECOND time round 12 on the same option:
+choose from ACCEPT / DETECT / PHYSICALLY-CONFIRM / APP-BIND, not
+"accept / detect / prevent"; no BROWSER-side option in this document
+prevents in the cryptographic-identity sense, and (g), AS WRITTEN, does
+not either — it needs BOTH attempt-surface binding (round 10) AND a real
+identity check added to the EXISTING, currently-unauthenticated web
+callback (round 12) before its principal-binding claim holds on either
+completion path.** Accept (a); add detection (b) or (d)'s original
+interstitial half (two strengths); add a physical-confirm requirement
+via (c) or (d)'s browser-bound-continuation half (also two strengths);
+add app-bind via (g) — the repo's own Branch B shape, requiring
+`attempt.userId === req.user.id` at an authenticated app-return exchange
+on NATIVE, the SAME check newly required on the EXISTING web callback
+(round 12 — `erg_session` already exists and is already sent on the
+redirect back from C2; the callback simply never checks it today), PLUS
+the surface-binding column and dual-route enforcement §3 now names — all
+three are preconditions, not optional extras, and (g) binds nothing
+until every one of them exists; turn the (e) dial (alone or combined
+with anything else); add the (f) constraint; or some combination — and
+if `ALLOWED_EMAILS`'s current scope is itself part of the answer, say
+so. No PR1.5 code implements any of (a)-(g); PR1.5 is plumbing (and, as
+of fix round 2, a dev-only on-device probe) only. **Either half of (d),
+OR (g), if chosen, changes PR1.5's own contract with PR2** (§3) — say so
+explicitly in the ruling if that is the direction, since it is not a
+PR2-only change the way (b)/(c)/(f) are; (g) changes it more
+fundamentally still, since it changes what redirect KIND
+`openExternalUrl` is even handed, AND (round 10) needs a real migration
+to be a genuine option at all, not merely a route addition, AND (round
+12) needs the EXISTING web callback route — untouched by every option
+except (g) — retrofitted with authentication it has never needed before.
 **If the browser-bound-continuation half of (d) is chosen, it
 additionally needs the deliberate-action, anti-framing, and
 one-time/clearing requirements §3 now names, plus the device measurement
 in §4, before it can be trusted in production** — a design this session
 judged plausible, not one it verified, and — round 7 correction — one
 this session no longer calls "prevention." **If (g) is chosen, it needs
-C2's own approval of a new `redirect_uri`, AND the surface-binding
-migration and dual-route check (round 10), before any of it can be
-trusted to bind anything — a real external dependency AND a real
-stored-shape change the other options mostly do not have.**
+C2's own approval of a new `redirect_uri`, the surface-binding migration
+and dual-route check (round 10), AND an authenticated web callback
+(round 12), before any of it can be trusted to bind anything — a real
+external dependency AND a real stored-shape change AND a new
+authentication requirement on a route that has run without one since
+PR1, none of which the other options mostly have.**

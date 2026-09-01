@@ -4919,7 +4919,19 @@ pass did not:
   surface and completing through the existing, unauthenticated https
   callback, never reaching (g)'s own check. (g) needs an added
   precondition (a surface-binding column enforced at both routes) before
-  the "first and only option that does" claim holds.
+  the "first and only option that does" claim holds. **Round 12 found
+  round 10's OWN fix insufficient, on the SAME claim: a surface column
+  only stops a nonce crossing surfaces — it does nothing about the web
+  path used NORMALLY, since `/api/concept2/callback` stays
+  unauthenticated regardless of a correct surface tag. An attacker can
+  mint a WEB-surface attempt and the victim's ordinary, correctly-
+  surfaced consent still links the account under the attacker's id, no
+  cross-surface trick required. A surface column is ROUTE INTEGRITY, not
+  PRINCIPAL AUTHORITY — round 10 conflated the two, and this correction
+  block repeated that conflation. (g) needs BOTH the surface column AND
+  a real identity check on BOTH completion routes (native's own new
+  exchange route, plus the EXISTING web callback retrofitted with one)
+  before it binds anything.**
 - "Attacked and HELD... §2's credential fact (attacked via
   `WKHTTPCookieStore` — no rescue, because there is no Ergomatic cookie on
   native to share, `api.ts:14-17`)" HELD for the NATIVE APP's own

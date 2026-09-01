@@ -93,9 +93,13 @@ that the phone's browser cookie jar might carry a prior web session in;
 the native app's own credential, a Keychain bearer, is genuinely absent
 from the consent browser, full stop), §3 (SEVEN options a-g across FOUR
 buckets — accept, detect, physically-confirm, and, added round 9,
-app-bind via an authenticated app-return exchange, the only bucket
-achieving real principal binding; no browser-side option in the set
-does), §4 (the device-check card — round 7 dropped the on-device
+app-bind via an authenticated app-return exchange — the only bucket
+that CAN achieve real principal binding, but only once BOTH its
+preconditions exist (round 10: a surface-binding column; round 12: the
+existing, still-unauthenticated web callback also needs an identity
+check — a surface column alone is route integrity, not authority); no
+browser-side option in the set achieves it at all), §4 (the device-check
+card — round 7 dropped the on-device
 cookie-persistence probe entirely, since its premise, the shared-jar
 speculation, no longer exists), and §5 (the full antagonist verdict).
 Assembled from evidence, no invention; still ends by asking for James's
