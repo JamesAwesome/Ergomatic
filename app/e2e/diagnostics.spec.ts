@@ -33,7 +33,7 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // applied to a client mechanism instead of a wire one): `endSession()`
 // itself only flips `session.phase` to `"ended"` and returns —
 // `useMonitorSession.ts`'s own `useEffect(() => teardown, [teardown])` is
-// what actually calls `stash()`/`pushSessionLog`, and it fires off
+// what actually calls `stash()`/`upsertSessionLog`, and it fires off
 // `ConnectedInterstitial` unmounting (`handleConnectedEnded`'s
 // `setConnecting(null)`), which React schedules as a PASSIVE EFFECT — a
 // real, if usually sub-second, delay after the URL has already changed,
