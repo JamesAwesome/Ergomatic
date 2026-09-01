@@ -85,11 +85,24 @@ function writeSlot(key: string, value: StoredSlot): void {
 export function pushSessionLog(exported: string, savedAt: Date): void {
   // Read the shift sources BEFORE any write — h3's prior contents are about
   // to be overwritten by h2's, so both reads happen first, then both writes,
-  // oldest-shift-first so a mid-sequence denial never duplicates a slot.
+  // oldest-shift-first — this ordering alone is what keeps a mid-sequence
+  // WRITE denial (quota, privacy mode) from ever duplicating a slot; it says
+  // nothing about a corrupt READ, which the guard below handles separately.
   const priorH2 = readSlot(SLOT_KEYS[1]);
   const priorH1 = readSlot(SLOT_KEYS[0]);
-  if (priorH2 !== null) writeSlot(SLOT_KEYS[2], priorH2);
-  if (priorH1 !== null) writeSlot(SLOT_KEYS[1], priorH1);
+  // M-4 (final whole-branch review): gate BOTH the h2->h3 shift and the
+  // h1->h2 shift on `priorH1` alone, not on each source's own validity
+  // independently. A corrupt/unreadable h1 (`priorH1 === null`) means
+  // nothing is about to displace h2 — h2 keeps its current content
+  // unchanged — so writing `priorH2` into h3 in that case would leave h2
+  // and h3 byte-identical: a corrupt slot 1 duplicating slot 2 into slot 3.
+  // Skipping the whole shift when h1 is unreadable leaves h2 AND h3 exactly
+  // as they were, which is honest: a lost h1 loses only h1, not h2's own
+  // history.
+  if (priorH1 !== null) {
+    if (priorH2 !== null) writeSlot(SLOT_KEYS[2], priorH2);
+    writeSlot(SLOT_KEYS[1], priorH1);
+  }
   writeSlot(SLOT_KEYS[0], { savedAt: savedAt.toISOString(), exported });
 }
 

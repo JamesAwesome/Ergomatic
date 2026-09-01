@@ -84,6 +84,36 @@ describe("sessionLogHistory: byte-identity and corruption tolerance", () => {
       { slot: 3, savedAt: t0.toISOString(), exported: "EXPORT-1" },
     ]);
   });
+
+  it("M-4: a corrupt slot 1 does NOT duplicate slot 2 into slot 3 on the next push — h2/h3 are left exactly as they were, h1 alone takes the new export", () => {
+    pushSessionLog("EXPORT-1", t0);
+    pushSessionLog("EXPORT-2", t1);
+    pushSessionLog("EXPORT-3", t2);
+    // h1 holds EXPORT-3 at this point (see the rotation-order test above);
+    // corrupt it directly, the same way the sibling tests above corrupt h2.
+    localStorage.setItem("ergomatic:session-log-h1", "not json{{{");
+
+    pushSessionLog("EXPORT-4", t3);
+
+    const entries = listSessionLogs();
+    // The bug this guards: `pushSessionLog` used to write `priorH2`
+    // (EXPORT-2, h2's own CURRENT content) into h3 unconditionally,
+    // regardless of whether h1 was readable — so with h1 corrupt (nothing
+    // to shift into h2), h2 stayed EXPORT-2 AND h3 became EXPORT-2 too,
+    // the same export listed twice. Assert that never happens: every
+    // listed `exported` value is unique.
+    const exportedValues = entries.map((e) => e.exported);
+    expect(new Set(exportedValues).size).toBe(exportedValues.length);
+    // The new push lands in h1; h2 and h3 are untouched by the corrupt
+    // h1's own failed shift, so EXPORT-2/EXPORT-1 survive exactly where
+    // the pre-corruption rotation left them — only the corrupt h1's own
+    // (unreadable) content is lost, nothing else.
+    expect(entries).toStrictEqual([
+      { slot: 1, savedAt: t3.toISOString(), exported: "EXPORT-4" },
+      { slot: 2, savedAt: t1.toISOString(), exported: "EXPORT-2" },
+      { slot: 3, savedAt: t0.toISOString(), exported: "EXPORT-1" },
+    ]);
+  });
 });
 
 describe("sessionLogHistory: denied storage", () => {

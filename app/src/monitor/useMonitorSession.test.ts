@@ -5172,6 +5172,36 @@ describe("useMonitorSession: ending", () => {
     expect(entries[0]!.exported).toBe(currentStash);
   });
 
+  it("M-1 fix: a throwing legacy `ergomatic:last-monitor-log` write does not skip the three-slot history rotation — pushSessionLog runs even though an earlier setItem in the same stash denied", async () => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (
+      this: Storage,
+      key: string,
+      value: string,
+    ): void {
+      if (key === "ergomatic:last-monitor-log") {
+        throw new Error("simulated quota error (legacy sessionStorage key)");
+      }
+      original.call(this, key, value);
+    };
+    try {
+      const { teardown } = await arriveArmedWithoutRowing();
+      await teardown();
+
+      // The legacy key's own write was denied and swallowed by stash()'s
+      // try/catch — this is not asserting that succeeded, only that the
+      // denial did not also take pushSessionLog's rotation with it (the
+      // bug: `pushSessionLog` used to be the LAST statement inside that
+      // same try, so this throw skipped it before it ever ran).
+      const entries = listSessionLogs();
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.slot).toBe(1);
+      expect(entries[0]!.exported.length).toBeGreaterThan(0);
+    } finally {
+      Storage.prototype.setItem = original;
+    }
+  });
+
   it("Task 1 (lost-monitor design spec): endSession closing with no record open writes a close-no-record entry naming what was closed, not why nothing was there", async () => {
     const { teardown } = await arriveArmedWithoutRowing();
     await teardown();
@@ -11655,6 +11685,67 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
     );
     expect(staleRunEntries).toHaveLength(1);
     expect(staleRunEntries[0]!.detail).toBe("frames=1 endedBy=teardown");
+  });
+
+  it("leg (d), I-1 fix: a SECOND resume arriving while the first resume's identical-run tracker is still open closes it with resume-stale-run endedBy=resumed (not overwritten, not merged into the second run) — the second run then closes independently at teardown", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    vi.useFakeTimers();
+    const events: FakeTimelineEvent[] = [
+      frame(500, D0), // pre-background baseline (key K)
+      frame(1000, D0), // 1st resume's first frame — identical -> stale=true, run r1 opens (frames=1)
+      frame(1500, D0), // still identical -> r1 continues (frames=2)
+      // — second background/foreground pair happens here, while r1 is
+      // still open with frames=2 —
+      frame(2000, D0), // 2nd resume's first frame — BEFORE this consumes the
+      // new arm, r1 (frames=2) must close as endedBy=resumed. This frame
+      // is also identical to the pre-(2nd)-background key, so it opens a
+      // FRESH run r2 (frames=1) rather than being folded into r1's count.
+    ];
+    const { fake, lifecycleCb, unmount } =
+      await setupResumeInstrumentSession(events);
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    // r1 is now open at frames=2. Background/foreground again WITHOUT the
+    // run ever closing on its own — the second resume must interrupt it.
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    act(() => {
+      fake.tick(500);
+      vi.advanceTimersByTime(500);
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const staleRunEntries = entries.filter(
+      (e) => e.kind === "resume-stale-run",
+    );
+    expect(staleRunEntries).toHaveLength(2);
+    expect(staleRunEntries[0]!.detail).toBe("frames=2 endedBy=resumed");
+    expect(staleRunEntries[1]!.detail).toBe("frames=1 endedBy=teardown");
   });
 });
 

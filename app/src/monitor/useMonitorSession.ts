@@ -1667,12 +1667,17 @@ export function useMonitorSession(
    *  `lastContinuityRef` use — a fresh `program()`'s own reset and the
    *  RC-37 programDropped/ready exit both clear it too, so a run of
    *  identical frames from the PREVIOUS run/resume can never be attributed
-   *  to the next one. Closed with its own `resume-stale-run` entry the
-   *  instant a differing frame arrives, or `teardown` runs first (that
-   *  close happens once, at the top of `teardown`, since it is the single
-   *  choke point every exit path runs through — see its own comment; every
-   *  exit that reaches `teardown`, including `cancel()`, is covered there
-   *  and does not need its own separate clear). */
+   *  to the next one. Closed with its own `resume-stale-run` entry by
+   *  whichever of THREE things happens first: the first differing frame
+   *  (`endedBy=changed`), a SECOND resume arriving while this tracker is
+   *  still open (`endedBy=resumed` — closed at the top of the
+   *  `resumeEdgeArmedRef` arm-consumption branch, before the new arm is
+   *  consumed, so a second resume can neither overwrite the open run nor
+   *  silently merge into it), or `teardown` running first (`endedBy=teardown`,
+   *  that close happens once, at the top of `teardown`, since it is the
+   *  single choke point every exit path runs through — see its own comment;
+   *  every exit that reaches `teardown`, including `cancel()`, is covered
+   *  there and does not need its own separate clear). */
   const resumeStaleRunRef = useRef<{ key: string; frames: number } | null>(
     null,
   );
@@ -2373,10 +2378,25 @@ export function useMonitorSession(
       // only: a `resume-first-frame` entry fires at most once per resume,
       // never per frame, and the identical-run tracker it can open is
       // closed by the first differing frame (`resume-stale-run
-      // endedBy=changed`) or by `teardown` (`endedBy=teardown`, this
-      // file's own single choke point for every exit path), never by a
-      // second `resume-first-frame`.
+      // endedBy=changed`), by a SECOND resume arriving while the tracker is
+      // still open (`resume-stale-run endedBy=resumed`, below — a second
+      // resume must not overwrite or silently merge into the first), or by
+      // `teardown` (`endedBy=teardown`, this file's own single choke point
+      // for every exit path).
       if (resumeEdgeArmedRef.current !== null) {
+        // Close any still-open stale-run tracker from a PRIOR resume before
+        // consuming this new arm — without this, a second resume while a
+        // run is open either overwrote the tracker (losing the first run's
+        // count with no log entry) or, since this branch and the
+        // `resumeStaleRunRef` branch below used to be `if`/`else if`
+        // exclusive, merged two distinct resumes' frames into one count.
+        if (resumeStaleRunRef.current !== null) {
+          logRef.current?.record(
+            "resume-stale-run",
+            `frames=${resumeStaleRunRef.current.frames} endedBy=resumed`,
+          );
+          resumeStaleRunRef.current = null;
+        }
         const arm = resumeEdgeArmedRef.current;
         resumeEdgeArmedRef.current = null;
         const key = freezeKey(frame);
@@ -3529,6 +3549,7 @@ export function useMonitorSession(
         if (depsRef.current.requestDiagnosticStash === false) return;
         const log = logRef.current;
         if (log === null) return;
+        let exported: string | null = null;
         try {
           // §6 (RC-29 latch counter): BEFORE `exportLog()`, so this line
           // rides every stashed copy this teardown produces — the
@@ -3545,7 +3566,7 @@ export function useMonitorSession(
               `latches=${resumeLatchCountRef.current} resumes=${resumeCountRef.current}`,
             );
           }
-          const exported = log.exportLog();
+          exported = log.exportLog();
           sessionStorage.setItem("ergomatic:last-monitor-log", exported);
           // A later attempt that never rowed (a failed pairing, a
           // connect-then-cancel) overwrites the key above — which is the
@@ -3557,6 +3578,28 @@ export function useMonitorSession(
             sessionStorage.setItem("ergomatic:last-rowed-log", exported);
           }
           localStorage.setItem("ergomatic:last-session-log", exported);
+        } catch {
+          // Quota or privacy mode: diagnostics never break a teardown.
+        }
+        // M-1: OUTSIDE the try/catch above, not its last statement. That
+        // try/catch exists only to swallow the LEGACY keys' own quota/
+        // privacy denials; `pushSessionLog` is a different module with its
+        // own "best-effort IO that never throws" contract
+        // (`sessionLogHistory.ts`'s header) — it needs no wrapper, and
+        // sitting inside someone else's try meant an earlier `setItem`
+        // throw (e.g. `ergomatic:last-monitor-log` over quota) skipped this
+        // call entirely, losing the three-slot history's rotation to a
+        // denial on a DIFFERENT key. `exported` is still produced even when
+        // a later `setItem` throws, since `exportLog()` runs before any of
+        // the writes that can deny. The `exported !== null` guard is
+        // DEFENSIVE and its `false` branch is currently unreachable from
+        // this hook's own test suite — `exportLog()` (`eventLog.ts`) is a
+        // plain `JSON.stringify` over an array of `{kind, detail}` string
+        // pairs this file only ever constructs itself, nothing that could
+        // throw — kept for the same "degrade honestly, don't assume" reason
+        // `resolveHandoffCondition`'s own `completedAt === null` guard above
+        // is kept, not a path any test exercises today.
+        if (exported !== null) {
           // Lifecycle design spec §2: the single key above is perishable —
           // one slot, overwritten by the very next teardown — which is
           // exactly what destroyed the pocketed-phone ring (§0.1). Rotate
@@ -3564,8 +3607,6 @@ export function useMonitorSession(
           // last three teardowns all survive at once, readable through
           // Task 3's ungated door.
           pushSessionLog(exported, nowDate());
-        } catch {
-          // Quota or privacy mode: diagnostics never break a teardown.
         }
       };
 
