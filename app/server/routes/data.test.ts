@@ -2016,8 +2016,8 @@ describe("GET/POST /api/logs", () => {
     expect(got.body.completedAt).toBeNull();
   });
 
-  // Coordinator re-review, M1: `Date.UTC`/the `Date` constructor apply the
-  // legacy ECMA-262 two-digit-year special case (years 0-99 map to
+  // `Date.UTC`/the `Date` constructor apply the legacy ECMA-262
+  // two-digit-year special case (years 0-99 map to
   // 1900-1999) — but ONLY on those two entry points, never on
   // `setUTCFullYear`. The strict calendar check must build its rebuilt
   // instant with `setUTCFullYear` for exactly this reason: a real (if

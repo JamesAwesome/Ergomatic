@@ -336,17 +336,17 @@ export function createConcept2Router({
     // that later request happened to carry — the dedup-stability
     // property C2's second-granular dedup key needs.
     //
-    // Fix round 1, I1: `effectiveTz` MUST be resolved before the row used
-    // to build the payload is constructed. The original code built
-    // `mappingRow` first and only wrote `tz` afterward, so `mappingRow.tz`
-    // stayed `null` even on a row whose `completedAt` was already set —
-    // `buildC2Payload`'s paired branch (`completedAt !== null && tz !==
-    // null`) never fired on attempt 1 (fell to `loggedAt` + the request's
-    // own zone) but DID fire on a retry once `row.tz` was no longer null
-    // read fresh — two different dates for the same row. M1: `recordTz`
-    // now returns the zone that actually landed (a concurrent writer may
-    // have beaten this request to it), so `effectiveTz` is never this
-    // request's own guess when someone else already decided it.
+    // `effectiveTz` MUST be resolved before the row used to build the
+    // payload is constructed — building `mappingRow` first and only
+    // writing `tz` afterward leaves `mappingRow.tz` `null` even on a row
+    // whose `completedAt` is already set, so `buildC2Payload`'s paired
+    // branch (`completedAt !== null && tz !== null`) never fires on
+    // attempt 1 (falls to `loggedAt` + the request's own zone) but DOES
+    // fire on a retry once `row.tz` is no longer null read fresh — two
+    // different dates for the same row. `recordTz` returns the zone that
+    // actually landed (a concurrent writer may have beaten this request
+    // to it), so `effectiveTz` is never this request's own guess when
+    // someone else already decided it.
     const effectiveTz =
       row.tz === null ? await logs.recordTz(userId, logId, tz) : row.tz;
 
@@ -509,8 +509,8 @@ export function createConcept2Router({
       // invalid, not merely stale-by-timing. Flag it identically (never
       // delete) rather than falling through to a generic c2_error.
       //
-      // Fix round 2, N1: the flag must be bound to the SAME link that
-      // actually produced this 401 — a fresh, unconditional
+      // The flag must be bound to the SAME link that actually produced
+      // this 401 — a fresh, unconditional
       // `withLinkLock` call here would flag whatever link exists AT THAT
       // MOMENT, not the one whose token was just rejected. A callback
       // relink landing between the retry's `postResult` call and this

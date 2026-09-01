@@ -816,8 +816,8 @@ export function createLogsStore(db: Db) {
     // SAME date string) depends on this write being idempotent-after-first,
     // never a plain unconditional SET.
     //
-    // Fix round 1, M1: returns the EFFECTIVE stored zone, never `void` —
-    // when the guard blocks this call's own write (a concurrent writer got
+    // Returns the EFFECTIVE stored zone, never `void` — when the guard
+    // blocks this call's own write (a concurrent writer got
     // there first), the caller must build its payload from whatever zone
     // actually landed, not silently keep using its own `tz` argument as if
     // it had won. `RETURNING` on the guarded UPDATE reports the winning

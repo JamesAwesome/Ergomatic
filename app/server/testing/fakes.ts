@@ -750,9 +750,9 @@ function makeFakeLogsStore(
     // Wave E PR1 Task 6, plan deviation 2: mirrors the real store's
     // `tz IS NULL` guard (stores/logs.ts's own comment) — a row that
     // already carries a tz is left untouched, never overwritten.
-    // Fix round 1, M1: mirrors the real store's return-the-effective-zone
-    // contract (stores/logs.ts's own comment) — a blocked write reports
-    // whatever's actually stored, never `void`.
+    // Mirrors the real store's return-the-effective-zone contract
+    // (stores/logs.ts's own comment) — a blocked write reports whatever's
+    // actually stored, never `void`.
     async recordTz(userId: string, id: string, tz: string): Promise<string> {
       const rows = byUser.get(userId) ?? [];
       const idx = rows.findIndex((r) => r.id === id);

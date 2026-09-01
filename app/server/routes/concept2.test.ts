@@ -262,9 +262,9 @@ describe("logs fake: recordTz only writes when the column is null", () => {
 
     const first = await logs.recordTz(userA.id, id, "America/Los_Angeles");
     expect(first).toBe("America/Los_Angeles");
-    // Fix round 1, M1: `recordTz` returns the EFFECTIVE stored zone, never
-    // `void` — the second call must report the zone that actually won
-    // (the first one), never echo its own "UTC" argument.
+    // `recordTz` returns the EFFECTIVE stored zone, never `void` — the
+    // second call must report the zone that actually won (the first
+    // one), never echo its own "UTC" argument.
     const second = await logs.recordTz(userA.id, id, "UTC");
     expect(second).toBe("America/Los_Angeles");
 
@@ -368,10 +368,10 @@ describe("mint (POST /api/concept2/connect)", () => {
     expect(client.authorizeUrl).toHaveBeenCalledTimes(1);
   });
 
-  // Fix round 1, I3: nothing previously asserted the nonce's actual shape
-  // or that two mints produce different ones — `randomBytes(32).toString
-  // ("hex")` could be replaced with a constant or a shorter/predictable
-  // value and every existing test would still pass.
+  // Nothing else asserts the nonce's actual shape or that two mints
+  // produce different ones — `randomBytes(32).toString("hex")` could be
+  // replaced with a constant or a shorter/predictable value and every
+  // other test would still pass.
   it("the minted nonce is 64 hex characters (randomBytes(32).toString('hex'))", async () => {
     const { app } = buildApp();
     const state = await mintAndGetState(app);
@@ -404,10 +404,10 @@ describe("mint (POST /api/concept2/connect)", () => {
     expect(res.body.field).toBe("weightClass");
   });
 
-  // Fix round 1, I3: pinned with the INDEPENDENT literal 900_000 (15
-  // minutes in ms), not the imported `ATTEMPT_MAX_AGE_MS` — retuning the
-  // production constant used to retune this assertion right along with it
-  // (RF21), so the test could never catch a wrong value.
+  // Pinned with the INDEPENDENT literal 900_000 (15 minutes in ms), not
+  // the imported `ATTEMPT_MAX_AGE_MS` — retuning the production constant
+  // would otherwise retune this assertion right along with it (RF21), so
+  // the test could never catch a wrong value.
   it("garbage-collects expired/own attempts before creating a new one (no cron)", async () => {
     const store = makeFakeConcept2Store();
     const gcExpired = vi.spyOn(store, "deleteExpiredAttempts");
@@ -484,10 +484,10 @@ describe("callback (GET /api/concept2/callback)", () => {
     expect(client.exchangeCode).toHaveBeenCalledTimes(1);
   });
 
-  // Fix round 1, I3: pinned with INDEPENDENT literal ms values (14:59 =
-  // 899_000, 15:01 = 901_000), never the imported `ATTEMPT_MAX_AGE_MS` —
-  // the same RF21 reasoning as the GC test above, applied to the boundary
-  // itself rather than just "eventually expires".
+  // Pinned with INDEPENDENT literal ms values (14:59 = 899_000, 15:01 =
+  // 901_000), never the imported `ATTEMPT_MAX_AGE_MS` — the same RF21
+  // reasoning as the GC test above, applied to the boundary itself
+  // rather than just "eventually expires".
   it("an attempt 14:59 old is still fresh (literal ms)", async () => {
     let t = 0;
     const clock = () => new Date(t);
@@ -602,10 +602,10 @@ describe("callback (GET /api/concept2/callback)", () => {
     expect((await store.getLink(userA.id))?.needsReauthAt).toBeNull();
   });
 
-  // Fix round 1, M4: a two-line gate against future reflection — today's
-  // callback pages are STATIC constants (`page()`'s own comment) that
-  // never interpolate `state`/`code`, so this passes trivially now, but it
-  // reddens the moment anyone starts building a page from request input.
+  // A two-line gate against future reflection — today's callback pages
+  // are STATIC constants (`page()`'s own comment) that never interpolate
+  // `state`/`code`, so this passes trivially now, but it reddens the
+  // moment anyone starts building a page from request input.
   it("never reflects state/code into the HTML response (static pages only)", async () => {
     const { app } = buildApp();
     const res = await request(app).get(
@@ -856,14 +856,14 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(posted[1].timezone).toBe("America/Los_Angeles");
   });
 
-  // Fix round 1, I1: the missing matrix cell — `completedAt` SET but `tz`
-  // null (distinct from the fully-legacy row above, which has BOTH null
-  // and so never reaches `buildC2Payload`'s "paired" branch at all). The
-  // bug this closes: the route used to snapshot the mapping row BEFORE
-  // `recordTz` wrote the resolved zone, so `mappingRow.tz` stayed `null`
-  // on attempt 1 (falling to `loggedAt` + the request's own zone) while a
-  // later attempt read `row.tz` fresh, non-null, and the PAIRED branch
-  // fired instead (`completedAt` + the now-stored zone) — two different
+  // The missing matrix cell — `completedAt` SET but `tz` null (distinct
+  // from the fully-legacy row above, which has BOTH null and so never
+  // reaches `buildC2Payload`'s "paired" branch at all). This pins the
+  // route's ordering: snapshotting the mapping row BEFORE `recordTz`
+  // writes the resolved zone would leave `mappingRow.tz` `null` on
+  // attempt 1 (falling to `loggedAt` + the request's own zone) while a
+  // later attempt reads `row.tz` fresh, non-null, and the PAIRED branch
+  // fires instead (`completedAt` + the now-stored zone) — two different
   // dates for the same row, breaking the exact dedup-stability property
   // this persist-on-first-use design exists for.
   it("a row with completedAt SET but tz null posts the SAME completedAt-based date on a first attempt and a retry", async () => {
@@ -943,10 +943,10 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(link?.expiresAt).toStrictEqual(newExpiry);
   });
 
-  // Fix round 1, I3: nothing previously landed a case INSIDE the 60s skew
-  // window — pinned with INDEPENDENT literal offsets (30s inside, 90s
-  // outside), never the imported `TOKEN_REFRESH_SKEW_MS`, so retuning the
-  // production constant can't retune these assertions along with it.
+  // Nothing else lands a case INSIDE the 60s skew window — pinned with
+  // INDEPENDENT literal offsets (30s inside, 90s outside), never the
+  // imported `TOKEN_REFRESH_SKEW_MS`, so retuning the production
+  // constant can't retune these assertions along with it.
   it("TOKEN_REFRESH_SKEW_MS boundary: a token expiring in 30s (inside the 60s skew) is refreshed", async () => {
     const fixedNow = new Date("2026-01-01T00:00:00.000Z");
     const store = makeFakeConcept2Store();
@@ -1145,8 +1145,8 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(afterSecond?.c2UserId).toBe(4477);
     expect(recordSpy).toHaveBeenCalledTimes(2);
 
-    // Coordinator re-review, F3: the duplicate-recovery write is a NEW
-    // producer of the "already sent" state (row.c2ResultId !== null &&
+    // The duplicate-recovery write is a NEW producer of the "already
+    // sent" state (row.c2ResultId !== null &&
     // row.c2UserId === link.c2UserId), and nothing upstream of it had
     // ever reached that predicate — the pre-existing short-circuit test
     // seeds `recordC2Result` directly, downstream of both producers. A
@@ -1187,13 +1187,10 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(res.body).toStrictEqual({ error: "c2_error" });
   });
 
-  // Fix round 1, I2: the ORIGINAL version of this test left `refreshTokens`
-  // unstubbed (it would throw) and still passed — the retry logic just
-  // re-checked freshness, saw the SAME unexpired `expiresAt`, and handed
-  // back the SAME token that had just been rejected, never calling
-  // `refreshTokens` at all. Now the retry FORCES a genuine refresh, so
-  // this asserts the two `postResult` calls actually used DIFFERENT
-  // tokens — the thing the title always claimed.
+  // The retry FORCES a genuine refresh (never merely re-checking
+  // freshness against the SAME unexpired `expiresAt` and handing back
+  // the SAME rejected token), so this asserts the two `postResult` calls
+  // actually used DIFFERENT tokens — the thing the title claims.
   it("an auth failure on postResult forces a genuine refresh and retries ONCE with the NEW token", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(
@@ -1265,11 +1262,9 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(calls[1][0]).toBe("concurrently-rotated-at");
   });
 
-  // Fix round 1, I2: a REPEAT 401 immediately after a GENUINE refresh is
-  // the same signal `refreshTokens`'s own `grantDead` gives — the grant
-  // itself is invalid, not merely stale-by-timing. The ORIGINAL version of
-  // this test asserted a plain 502 with `refreshTokens` unstubbed (never
-  // actually exercising a refresh); now it asserts the flag + 409.
+  // A REPEAT 401 immediately after a GENUINE refresh is the same signal
+  // `refreshTokens`'s own `grantDead` gives — the grant itself is
+  // invalid, not merely stale-by-timing — so this asserts the flag + 409.
   it("a repeat 401 after a genuine refresh flags needs_reauth (never a third attempt)", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
@@ -1302,8 +1297,8 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(link?.needsReauthAt).not.toBeNull();
   });
 
-  // Fix round 2, N1: the repeat-401 flag must be bound to the SAME link
-  // that produced the 401 (same authority-split class as I4). A relink
+  // The repeat-401 flag must be bound to the SAME link that produced the
+  // 401 (same authority-split class as I4). A relink
   // landing between the retry's own 401 and the flag lock must NOT get
   // flagged on the OLD grant's failure — the NEW grant was never tried at
   // all, so the honest response is a retryable c2_error, not needs_reauth.
@@ -1417,7 +1412,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(stored?.c2UserId).toBe(222);
   });
 
-  // Fix round 1, I4: `weightClass`/`c2UserId` for the payload AND for
+  // `weightClass`/`c2UserId` for the payload AND for
   // `recordC2Result` must come from the LOCKED re-read inside
   // `withLinkLock`, never the earlier UNLOCKED `store.getLink` read — a
   // relink landing in between would otherwise pair the OLD account's
@@ -1529,8 +1524,8 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(client.postResult).not.toHaveBeenCalled();
   });
 
-  // Fix round 1, M2: a link flagged mid-flight (by a DIFFERENT concurrent
-  // request, between this route's own earlier unlocked needs_reauth check
+  // A link flagged mid-flight (by a DIFFERENT concurrent request, between
+  // this route's own earlier unlocked needs_reauth check
   // and the locked re-read) must not reach the wire with a token this
   // route already knows is dead-or-flagged.
   it("a link flagged needs_reauth between the unlocked check and the lock -> 409, never reaches the wire", async () => {

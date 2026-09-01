@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Configuration gate for compose.yml's Concept2 env passthrough (Wave E PR1,
-# James's round-3 REVISE blocker 1): server/index.ts reads
+# Configuration gate for compose.yml's Concept2 env passthrough (Wave E
+# PR1): server/index.ts reads
 # C2_BASE_URL/C2_CLIENT_ID/C2_CLIENT_SECRET/C2_LINK_ENABLED, and the
 # documented env-only prod cutover is impossible if compose.yml never
 # forwards them into the api service's environment. This test runs the

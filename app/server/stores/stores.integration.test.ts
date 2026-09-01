@@ -814,8 +814,8 @@ describe("domain stores against real Postgres", () => {
         });
         const { id } = await logs.create(fresh.id, logInput());
 
-        // Fix round 1, M1: `recordTz` returns the EFFECTIVE stored zone,
-        // never `void` — asserted here, not just via a follow-up `get()`.
+        // `recordTz` returns the EFFECTIVE stored zone, never `void` —
+        // asserted here, not just via a follow-up `get()`.
         const returned = await logs.recordTz(
           fresh.id,
           id,
@@ -838,8 +838,8 @@ describe("domain stores against real Postgres", () => {
 
         const first = await logs.recordTz(fresh.id, id, "America/Los_Angeles");
         expect(first).toBe("America/Los_Angeles");
-        // Fix round 1, M1: the SECOND call's own return value must report
-        // the zone that actually won (the first one), never echo back its
+        // The SECOND call's own return value must report the zone that
+        // actually won (the first one), never echo back its
         // own "UTC" argument as if it had written it — this is the exact
         // property a concurrent writer needs to build the SAME payload.
         const second = await logs.recordTz(fresh.id, id, "UTC");
