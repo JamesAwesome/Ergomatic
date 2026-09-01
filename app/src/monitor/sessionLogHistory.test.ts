@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listSessionLogs, pushSessionLog } from "./sessionLogHistory";
+import {
+  listSessionLogs,
+  pushSessionLog,
+  updateNewestSessionLog,
+} from "./sessionLogHistory";
+
+const HISTORY_KEY = "ergomatic:session-log-history";
 
 const t0 = new Date("2026-08-31T09:00:00.000Z");
 const t1 = new Date("2026-08-31T09:10:00.000Z");
@@ -22,7 +28,7 @@ describe("sessionLogHistory: rotation order", () => {
     ]);
   });
 
-  it("three pushes: h1 newest, in push order, newest first", () => {
+  it("three pushes: newest first", () => {
     pushSessionLog("EXPORT-1", t0);
     pushSessionLog("EXPORT-2", t1);
     pushSessionLog("EXPORT-3", t2);
@@ -56,69 +62,126 @@ describe("sessionLogHistory: byte-identity and corruption tolerance", () => {
     expect(listSessionLogs()[0]!.exported).toBe(exported);
   });
 
-  it("a corrupt slot is skipped, not fatal — surviving slots still list", () => {
+  it("a corrupt ARRAY ELEMENT is skipped, not fatal — surviving entries still list", () => {
     pushSessionLog("EXPORT-1", t0);
     pushSessionLog("EXPORT-2", t1);
     pushSessionLog("EXPORT-3", t2);
-    // h2 holds EXPORT-2 at this point (see the rotation-order test above);
-    // plant garbage directly over it.
-    localStorage.setItem("ergomatic:session-log-h2", "not json{{{");
-    expect(listSessionLogs()).toStrictEqual([
-      { slot: 1, savedAt: t2.toISOString(), exported: "EXPORT-3" },
-      { slot: 3, savedAt: t0.toISOString(), exported: "EXPORT-1" },
-    ]);
-  });
-
-  it("a slot holding valid JSON of the WRONG shape (not malformed, just not a StoredSlot) is skipped too", () => {
-    pushSessionLog("EXPORT-1", t0);
-    pushSessionLog("EXPORT-2", t1);
-    pushSessionLog("EXPORT-3", t2);
-    // h2 holds EXPORT-2 (see the rotation-order test above); overwrite it
-    // with well-formed JSON that simply isn't a `{savedAt, exported}` pair.
+    // The array is [EXPORT-3, EXPORT-2, EXPORT-1] at this point (see the
+    // rotation-order test above); corrupt the middle element directly by
+    // overwriting the whole stored array with one bad entry mixed in.
     localStorage.setItem(
-      "ergomatic:session-log-h2",
-      JSON.stringify({ unrelated: true }),
+      HISTORY_KEY,
+      JSON.stringify([
+        { savedAt: t2.toISOString(), exported: "EXPORT-3" },
+        { unrelated: true },
+        { savedAt: t0.toISOString(), exported: "EXPORT-1" },
+      ]),
     );
     expect(listSessionLogs()).toStrictEqual([
       { slot: 1, savedAt: t2.toISOString(), exported: "EXPORT-3" },
-      { slot: 3, savedAt: t0.toISOString(), exported: "EXPORT-1" },
+      { slot: 2, savedAt: t0.toISOString(), exported: "EXPORT-1" },
     ]);
   });
 
-  it("M-4: a corrupt slot 1 does NOT duplicate slot 2 into slot 3 on the next push — h2/h3 are left exactly as they were, h1 alone takes the new export", () => {
+  it("malformed JSON under the history key reads as an empty list, never throws", () => {
+    localStorage.setItem(HISTORY_KEY, "not json{{{");
+    expect(() => listSessionLogs()).not.toThrow();
+    expect(listSessionLogs()).toStrictEqual([]);
+  });
+
+  it("well-formed JSON that isn't an array reads as an empty list", () => {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify({ not: "an array" }));
+    expect(listSessionLogs()).toStrictEqual([]);
+  });
+});
+
+describe("sessionLogHistory: M-7 — savedAt validation", () => {
+  it("an entry whose savedAt does not parse to a valid date is skipped, never rendered", () => {
+    localStorage.setItem(
+      HISTORY_KEY,
+      JSON.stringify([
+        { savedAt: "not-a-date", exported: "EXPORT-BAD" },
+        { savedAt: t0.toISOString(), exported: "EXPORT-GOOD" },
+      ]),
+    );
+    const entries = listSessionLogs();
+    expect(entries).toStrictEqual([
+      { slot: 1, savedAt: t0.toISOString(), exported: "EXPORT-GOOD" },
+    ]);
+    // Never surfaces "Invalid Date" text anywhere a reader could render it.
+    expect(JSON.stringify(entries)).not.toContain("EXPORT-BAD");
+  });
+
+  it("an empty-string savedAt is also invalid (Date.parse('') is NaN)", () => {
+    localStorage.setItem(
+      HISTORY_KEY,
+      JSON.stringify([{ savedAt: "", exported: "EXPORT-BAD" }]),
+    );
+    expect(listSessionLogs()).toStrictEqual([]);
+  });
+});
+
+describe("sessionLogHistory: M-6 — atomic history storage", () => {
+  it("pushSessionLog issues exactly ONE setItem call — the whole array, atomically", () => {
+    pushSessionLog("EXPORT-1", t0);
+    const spy = vi.spyOn(Storage.prototype, "setItem");
+    pushSessionLog("EXPORT-2", t1);
+    const historyWrites = spy.mock.calls.filter(([key]) => key === HISTORY_KEY);
+    expect(historyWrites).toHaveLength(1);
+  });
+
+  it("a FAILED write loses only the newest push — the prior list survives intact", () => {
     pushSessionLog("EXPORT-1", t0);
     pushSessionLog("EXPORT-2", t1);
-    pushSessionLog("EXPORT-3", t2);
-    // h1 holds EXPORT-3 at this point (see the rotation-order test above);
-    // corrupt it directly, the same way the sibling tests above corrupt h2.
-    localStorage.setItem("ergomatic:session-log-h1", "not json{{{");
+    const before = listSessionLogs();
 
-    pushSessionLog("EXPORT-4", t3);
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("storage is denied", "SecurityError");
+      });
+    try {
+      expect(() => pushSessionLog("EXPORT-3", t2)).not.toThrow();
+    } finally {
+      spy.mockRestore();
+    }
 
-    const entries = listSessionLogs();
-    // The bug this guards: `pushSessionLog` used to write `priorH2`
-    // (EXPORT-2, h2's own CURRENT content) into h3 unconditionally,
-    // regardless of whether h1 was readable — so with h1 corrupt (nothing
-    // to shift into h2), h2 stayed EXPORT-2 AND h3 became EXPORT-2 too,
-    // the same export listed twice. Assert that never happens: every
-    // listed `exported` value is unique.
-    const exportedValues = entries.map((e) => e.exported);
-    expect(new Set(exportedValues).size).toBe(exportedValues.length);
-    // The new push lands in h1; h2 and h3 are untouched by the corrupt
-    // h1's own failed shift, so EXPORT-2/EXPORT-1 survive exactly where
-    // the pre-corruption rotation left them — only the corrupt h1's own
-    // (unreadable) content is lost, nothing else.
-    expect(entries).toStrictEqual([
-      { slot: 1, savedAt: t3.toISOString(), exported: "EXPORT-4" },
-      { slot: 2, savedAt: t1.toISOString(), exported: "EXPORT-2" },
-      { slot: 3, savedAt: t0.toISOString(), exported: "EXPORT-1" },
+    // The old three-key rotation could duplicate or lose an entry on a
+    // mid-sequence write failure because it took multiple `setItem` calls to
+    // land one push; the single-key shape either writes the whole new array
+    // or leaves the old one exactly as it was — never a partial result.
+    expect(listSessionLogs()).toStrictEqual(before);
+  });
+
+  it("updateNewestSessionLog replaces the newest entry in place — no rotation, list length unchanged", () => {
+    pushSessionLog("EXPORT-1", t0);
+    pushSessionLog("EXPORT-2", t1);
+    updateNewestSessionLog("EXPORT-2-FRESHER", t2);
+    expect(listSessionLogs()).toStrictEqual([
+      { slot: 1, savedAt: t2.toISOString(), exported: "EXPORT-2-FRESHER" },
+      { slot: 2, savedAt: t0.toISOString(), exported: "EXPORT-1" },
+    ]);
+  });
+
+  it("updateNewestSessionLog issues exactly ONE setItem call too", () => {
+    pushSessionLog("EXPORT-1", t0);
+    const spy = vi.spyOn(Storage.prototype, "setItem");
+    updateNewestSessionLog("EXPORT-1-FRESHER", t1);
+    const historyWrites = spy.mock.calls.filter(([key]) => key === HISTORY_KEY);
+    expect(historyWrites).toHaveLength(1);
+  });
+
+  it("updateNewestSessionLog against an empty history falls back to inserting one entry", () => {
+    updateNewestSessionLog("EXPORT-1", t0);
+    expect(listSessionLogs()).toStrictEqual([
+      { slot: 1, savedAt: t0.toISOString(), exported: "EXPORT-1" },
     ]);
   });
 });
 
 describe("sessionLogHistory: denied storage", () => {
   it("a denied GETTER reads as an empty list, never throws", () => {
-    localStorage.setItem("ergomatic:session-log-h1", "whatever");
+    localStorage.setItem(HISTORY_KEY, "whatever");
     const spy = vi
       .spyOn(Storage.prototype, "getItem")
       .mockImplementation(() => {

@@ -1880,12 +1880,13 @@ test("you-derive-offer-6k", async ({ page }) => {
 
 // Task 3 (Gate 0 rev 3, docs/superpowers/specs/2026-08-31-ring-door-gate.
 // html): the diagnostics door — the menu screen and the monitor-logs list
-// behind it. Storage keys ("ergomatic:session-log-h1"/"h2") are
-// `sessionLogHistory.ts`'s own `SLOT_KEYS`, not exported for this file's
-// use — seeded directly (same lightweight idiom `today-interrupted`'s own
-// `MONITOR_RUN_KEY` seed uses) rather than driving a real connected
-// session through teardown, which the monitor e2e/design specs already
-// exercise at the transport layer.
+// behind it. M-6 (final whole-branch review, atomic history storage): the
+// storage key ("ergomatic:session-log-history") is `sessionLogHistory.ts`'s
+// own `HISTORY_KEY`, not exported for this file's use — seeded directly
+// (same lightweight idiom `today-interrupted`'s own `MONITOR_RUN_KEY` seed
+// uses) as a single JSON array, newest first, rather than driving a real
+// connected session through teardown, which the monitor e2e/design specs
+// already exercise at the transport layer.
 function sessionLogRing(n: number): string {
   // A plausible mix of the driver's own real `log.record` kinds
   // (driver.ts: "connect", "notify-first", "notify", "status", "write",
@@ -1906,14 +1907,14 @@ function sessionLogRing(n: number): string {
 
 async function seedSessionLogHistory(
   page: Page,
-  entries: { key: string; savedAt: string; exported: string }[],
+  entries: { savedAt: string; exported: string }[],
 ): Promise<void> {
-  for (const { key, savedAt, exported } of entries) {
-    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
-      key,
-      value: JSON.stringify({ savedAt, exported }),
-    });
-  }
+  // Newest first, matching `sessionLogHistory.ts`'s own `pushSessionLog`
+  // ordering — the caller passes entries in that order already.
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: "ergomatic:session-log-history",
+    value: JSON.stringify(entries),
+  });
 }
 
 test("diagnostics", async ({ page }) => {
@@ -1937,12 +1938,10 @@ test("diagnostics-monitor-logs", async ({ page }) => {
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   await seedSessionLogHistory(page, [
     {
-      key: "ergomatic:session-log-h1",
       savedAt: now.toISOString(),
       exported: sessionLogRing(37),
     },
     {
-      key: "ergomatic:session-log-h2",
       savedAt: yesterday.toISOString(),
       exported: sessionLogRing(9),
     },

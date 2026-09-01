@@ -132,26 +132,31 @@ test.describe("Wave F PR 2 Task 4: the ring's composition leg — teardown write
     await page.getByRole("button", { name: "Tap again to end" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
 
-    // THE WRITE. Waits for `sessionLogHistory.ts`'s own slot-1 key
+    // THE WRITE. Waits for `sessionLogHistory.ts`'s own history key
     // directly — the thing this leg's first half is actually proving —
     // rather than inferring it from an incidental page state a later step
-    // happens to also need.
+    // happens to also need. M-6 (final whole-branch review, atomic history
+    // storage): ONE key now, `ergomatic:session-log-history`, holding a
+    // JSON array (newest first) rather than three independently-addressed
+    // `h1`/`h2`/`h3` slots — the newest push is index 0.
     await expect
       .poll(
         () =>
-          page.evaluate(() => localStorage.getItem("ergomatic:session-log-h1")),
+          page.evaluate(() =>
+            localStorage.getItem("ergomatic:session-log-history"),
+          ),
         { timeout: 10_000 },
       )
       .not.toBeNull();
-    const storedSlot1 = await page.evaluate(() =>
-      localStorage.getItem("ergomatic:session-log-h1"),
+    const storedHistory = await page.evaluate(() =>
+      localStorage.getItem("ergomatic:session-log-history"),
     );
     const storedExported = (
-      JSON.parse(storedSlot1 ?? "null") as { exported: string } | null
-    )?.exported;
+      JSON.parse(storedHistory ?? "null") as { exported: string }[] | null
+    )?.[0]?.exported;
     expect(
       storedExported,
-      "slot 1 carries the ring's own exported JSON",
+      "the newest history entry carries the ring's own exported JSON",
     ).not.toBeUndefined();
 
     // THE DOOR READS. A fresh Playwright test gets a fresh browser
