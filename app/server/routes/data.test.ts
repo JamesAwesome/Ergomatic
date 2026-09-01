@@ -1941,6 +1941,15 @@ describe("GET/POST /api/logs", () => {
     ["not-a-date", "not-a-date"],
     ["a non-ISO human date string", "March 5, 2020"],
     ["a number, not a string", 12345],
+    // James's REVISE on #249, blocker 3: Node's Date.parse NORMALIZES an
+    // impossible calendar date instead of rejecting it — "2026-02-31" (no
+    // such day; February has 28) silently becomes 2026-03-03, and
+    // "2026-04-31" (April has 30 days) silently becomes 2026-05-01. Both
+    // are a CLIENT BUG, loud, same 400 as any other malformed string —
+    // distinct from the out-of-band wrong-clock coercion below, which
+    // stays a well-formed, merely implausible instant.
+    ["an impossible calendar day (Feb 31)", "2026-02-31T12:00:00.000Z"],
+    ["an impossible calendar day (Apr 31)", "2026-04-31T12:00:00.000Z"],
   ])(
     "rejects a malformed completedAt (%s) with 400, field named",
     async (_label, value) => {
@@ -1957,6 +1966,39 @@ describe("GET/POST /api/logs", () => {
       );
     },
   );
+
+  // Regression pins for the same fix: real calendar dates that sit
+  // adjacent to the invalid ones above must keep working exactly as
+  // before — the strict check must never reject a genuinely valid date.
+  it("accepts 2026-02-28 (last real day of a non-leap February) with 201", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        completedAt: "2026-02-28T12:00:00.000Z",
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts 2024-02-29 (a real leap day) with 201", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        completedAt: "2024-02-29T12:00:00.000Z",
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts a valid calendar date carrying a non-Z offset (+05:30) with 201", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        completedAt: "2026-06-15T12:00:00.000+05:30",
+      },
+    );
+    expect(res.status).toBe(201);
+  });
 
   // RF25's shape (a wrong device clock must never cost the rower the
   // save): a PARSEABLE stamp outside the plausible band is coerced to

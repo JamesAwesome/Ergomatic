@@ -244,8 +244,14 @@ function notesError(value: unknown): string | null {
 // column is nullable and the upload mapping already has a loggedAt
 // fallback). This band is a save-time sanity bound only; C2's own
 // future-date bound applies at UPLOAD time to a different instant.
+// Capturing groups on the wall-clock fields (year/month/day/hour/min/sec) —
+// James's REVISE on #249, blocker 3: the regex alone only shapes the
+// string; a value like "2026-02-31T12:00:00.000Z" matches it and parses
+// (`Date.parse` NORMALIZES an impossible calendar day into the next month
+// rather than rejecting it), so a strict calendar check runs on these
+// captures below, separate from mere format shape.
 const COMPLETED_AT_RE =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const COMPLETED_AT_MIN_MS = Date.parse("2020-01-01T00:00:00Z");
 const COMPLETED_AT_FUTURE_SKEW_MS = 48 * 3600 * 1000;
 type CompletedAtCheck =
@@ -255,17 +261,46 @@ function checkCompletedAt(
   now: () => number = Date.now,
 ): CompletedAtCheck {
   if (value === undefined || value === null) return { ok: true, value: null };
+  const match = typeof value === "string" ? COMPLETED_AT_RE.exec(value) : null;
+  if (match === null || Number.isNaN(Date.parse(value as string))) {
+    return {
+      ok: false,
+      message: "completedAt must be an ISO 8601 timestamp string or null",
+    };
+  }
+  // Strict calendar validation: an offset (or "Z") only shifts a wall-clock
+  // instant to UTC — it never changes whether the WALL-CLOCK fields
+  // themselves form a real calendar date, so building the naive UTC
+  // timestamp straight from the literal typed digits (ignoring the offset)
+  // and reading its calendar fields back is offset-agnostic by
+  // construction. `Date.UTC` silently rolls an impossible date/time
+  // forward (Feb 31 -> Mar 3, hour 24 -> next day's 00) instead of
+  // rejecting it; re-reading the constructed instant's own UTC fields and
+  // comparing them field-by-field against what was actually typed is what
+  // exposes that roll-over, because the fields come back changed.
+  const [, yearStr, monthStr, dayStr, hourStr, minStr, secStr] = match;
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  const hour = Number(hourStr);
+  const minute = Number(minStr);
+  const second = Number(secStr);
+  const naiveUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  const rebuilt = new Date(naiveUtcMs);
   if (
-    typeof value !== "string" ||
-    !COMPLETED_AT_RE.test(value) ||
-    Number.isNaN(Date.parse(value))
+    rebuilt.getUTCFullYear() !== year ||
+    rebuilt.getUTCMonth() !== month - 1 ||
+    rebuilt.getUTCDate() !== day ||
+    rebuilt.getUTCHours() !== hour ||
+    rebuilt.getUTCMinutes() !== minute ||
+    rebuilt.getUTCSeconds() !== second
   ) {
     return {
       ok: false,
       message: "completedAt must be an ISO 8601 timestamp string or null",
     };
   }
-  const ms = Date.parse(value);
+  const ms = Date.parse(value as string);
   if (ms < COMPLETED_AT_MIN_MS || ms > now() + COMPLETED_AT_FUTURE_SKEW_MS) {
     return { ok: true, value: null }; // wrong clock: drop the stamp, keep the save
   }
