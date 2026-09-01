@@ -1906,6 +1906,46 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     });
   });
 
+  // THE FREE-ROW SHAPE (Phase JR PR 1 Task 3; spec rev 4's F4).
+  //
+  // A Just Row observes an unprogrammed row, so it carries
+  // `program: { intervals: [] }` — an honest empty observation program,
+  // fabricating no rowing structure — and MUST carry
+  // `logSeed: { steps: [], paces: {} }` alongside it.
+  //
+  // Rev 3 named only the program half and claimed this "returns [] (vetted,
+  // no throw)". The anchor pass had vetted a 0-length seed/program PAIR;
+  // dropping the seed half keeps the vetted tag and loses the guarantee,
+  // because the check below reads `run.logSeed` FIRST and throws on
+  // `undefined` before it ever compares lengths. The throw would surface at
+  // `summaryModel.ts`'s `buildMonitorModel` and be swallowed by
+  // `LogSession.tsx`'s condition-4 catch, silently disqualifying the record.
+  it("a free row (empty program AND empty seed) returns [] rather than throwing", () => {
+    const freeRow: MonitorRun = {
+      ...WALK4_RUN,
+      program: { intervals: [] },
+      logSeed: { steps: [], paces: {} },
+      actuals: [],
+    };
+
+    expect(buildMonitorLogSteps(freeRow)).toStrictEqual([]);
+  });
+
+  // The conjunction, stated as a test rather than as a comment: an empty
+  // program is NOT on its own enough. This is the shape rev 3 specified.
+  it("an empty program WITHOUT a seed still throws — the two halves are one contract", () => {
+    const programOnly: MonitorRun = {
+      ...WALK4_RUN,
+      program: { intervals: [] },
+      logSeed: undefined,
+      actuals: [],
+    };
+
+    expect(() => buildMonitorLogSteps(programOnly)).toThrow(
+      MonitorLogSeedError,
+    );
+  });
+
   it("a missing or misaligned logSeed throws MonitorLogSeedError (the screen catches it as mode disqualification)", () => {
     const missingSeed: MonitorRun = { ...WALK4_RUN, logSeed: undefined };
     expect(() => buildMonitorLogSteps(missingSeed)).toThrow(

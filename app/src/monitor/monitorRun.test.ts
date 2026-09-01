@@ -161,6 +161,37 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
     expect(loadMonitorRun()).toStrictEqual(viaJson(run));
   });
 
+  // THE FREE-ROW RECORD (Phase JR PR 1 Task 3, spec rev 4's stored shape).
+  // `mode` is additive on an existing v2 record with NO `v` bump, which is
+  // only safe because `isMonitorRun` is a positive conjunction carrying no
+  // unknown-key check. This round-trip is the gate on that: it starts at
+  // `saveMonitorRun` and asserts after `loadMonitorRun`, so it spans the
+  // writer and the reader rather than seeding past either (RF24).
+  it("round-trips a FREE ROW: mode, an empty program and an empty seed all survive", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      mode: "justrow",
+      workoutId: null,
+      program: { intervals: [] },
+      logSeed: { steps: [], paces: {} },
+      actuals: [],
+    };
+    saveMonitorRun(run);
+
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded?.mode).toBe("justrow");
+  });
+
+  // The other direction of the same additive contract: a record written
+  // WITHOUT `mode` — every record that exists today — still loads, and
+  // reads as a programmed run by the absence.
+  it("round-trips a record with no mode at all, which is what every existing record is", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+    expect(loadMonitorRun()?.mode).toBeUndefined();
+  });
+
   it("round-trips a run with recorded interval actuals and a terminated finish", () => {
     const run: MonitorRun = {
       ...freshMonitorRun(),
