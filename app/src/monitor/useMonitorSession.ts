@@ -1033,9 +1033,11 @@ export interface MonitorSessionDeps {
   /** Mints `sessionIdRef`'s value at `connect()` — the LOGICAL connected
    *  session's own opaque identity, `sessionLogHistory.ts`'s
    *  `upsertSessionLog` key (review round 3, item 1). Defaults to
-   *  `crypto.randomUUID()`. Injected so a test can supply predictable ids
-   *  instead of asserting against whatever the platform's own UUID
-   *  generator happens to produce. */
+   *  `defaultSessionId` (round 4, item 1 — `crypto.randomUUID()` when it
+   *  exists, a hand-rolled UUIDv4 from `crypto.getRandomValues()` when it
+   *  doesn't). Injected so a test can supply predictable ids instead of
+   *  asserting against whatever the platform's own UUID generator happens
+   *  to produce. */
   createSessionId?: () => string;
   /** The ended hand-off's backstop timers — BOTH owed conditions'
    *  (`FINISH_HANDOFF_HOLD_MS` for the split condition,
@@ -1574,6 +1576,38 @@ function mapRadioFailure(err: unknown): ConnectedError {
   };
 }
 
+/** The default for `MonitorSessionDeps.createSessionId` — see
+ *  `mintSessionId`'s own doc comment (below, inside the hook) for what this
+ *  id is for. `crypto.randomUUID()` when it exists; otherwise a UUIDv4
+ *  built by hand from `crypto.getRandomValues()` (RFC 4122 §4.4: set the
+ *  version nibble to `4` and the variant bits to `10`).
+ *
+ *  Round 4, item 1 (P1, PR #258 review): the native floor is
+ *  `IPHONEOS_DEPLOYMENT_TARGET = 15.0` (`ios/App/App.xcodeproj/
+ *  project.pbxproj`, four build settings), but `crypto.randomUUID()` landed
+ *  in WKWebView only at iOS 15.4 (MDN's Browser compatibility table for
+ *  `Crypto.randomUUID()`, PRIMARY). On 15.0-15.3 the old unconditional
+ *  `crypto.randomUUID()` call threw SYNCHRONOUSLY, inside `connect()` but
+ *  before its own `try` — after `connectingRef.current = true` was already
+ *  set, and before the `finally` that is the only place a successful
+ *  attempt clears it — so the throw rejected `connect()`'s promise
+ *  uncaught and left Connect permanently dead on exactly the OS versions
+ *  this app's own deployment target admits. `crypto.getRandomValues()` has
+ *  no such gap: same MDN table, supported since iOS 11. */
+function defaultSessionId(): string {
+  const c = globalThis.crypto;
+  if (typeof c?.randomUUID === "function") return c.randomUUID();
+  const bytes = c.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
+  return (
+    `${hex[0]}${hex[1]}${hex[2]}${hex[3]}-${hex[4]}${hex[5]}-` +
+    `${hex[6]}${hex[7]}-${hex[8]}${hex[9]}-` +
+    `${hex[10]}${hex[11]}${hex[12]}${hex[13]}${hex[14]}${hex[15]}`
+  );
+}
+
 export function useMonitorSession(
   deps: MonitorSessionDeps = {},
 ): MonitorSession {
@@ -1783,9 +1817,11 @@ export function useMonitorSession(
    *  (below, the `nowDate`/`depsRef.current.now` idiom) fixes this the same
    *  way that idiom already keeps `MonitorSessionDeps` free of anything
    *  session-position-based: `MonitorSessionDeps.createSessionId`,
-   *  defaulting to `crypto.randomUUID()` — collision-resistant PER
-   *  RELAUNCH, not just per hook instance within one document, and still no
-   *  module state (`crypto.randomUUID()` carries none of its own). `null`
+   *  defaulting to `defaultSessionId` (round 4, item 1 —
+   *  `crypto.randomUUID()` when available, else a `getRandomValues()`
+   *  UUIDv4) — collision-resistant PER RELAUNCH, not just per hook instance
+   *  within one document, and still no module state (neither mint carries
+   *  any of its own). `null`
    *  before the first `connect()` ever runs this hook instance —
    *  `stash()`'s own guard treats that as unreachable (see its comment)
    *  rather than inventing a fallback id. */
@@ -2101,18 +2137,17 @@ export function useMonitorSession(
   /** Review round 3, item 1: `sessionIdRef`'s own mint, read at call time
    *  from `depsRef` (never captured) for the identical reason `nowDate`
    *  immediately above is — `deps` is a fresh object literal on every
-   *  render for the default `useMonitorSession()` call. Defaults to
-   *  `crypto.randomUUID()`, collision-resistant per relaunch (see
-   *  `sessionIdRef`'s own doc comment for why the round-2 `useId()` mint
-   *  was not). Every browser/WKWebView build this app targets carries
-   *  `crypto.randomUUID()` (Web Crypto API, universally supported in a
-   *  secure context since ~2022 — Capacitor's `capacitor://` origin is one)
-   *  — nothing in this repo polyfills or forbids it. Tests inject a
-   *  deterministic `createSessionId` where the id needs to be predictable;
-   *  where they don't, `crypto.randomUUID()` is present in the vitest
-   *  jsdom environment under Node 26 too (verified directly, not assumed). */
+   *  render for the default `useMonitorSession()` call. Collision-resistant
+   *  per relaunch (see `sessionIdRef`'s own doc comment for why the round-2
+   *  `useId()` mint was not). Defaults to `defaultSessionId` (above,
+   *  module-level) rather than a bare `crypto.randomUUID()` call — round 4,
+   *  item 1's own doc comment on that function has the iOS 15.0-15.3 gap
+   *  this closes. Tests inject a deterministic `createSessionId` where the
+   *  id needs to be predictable; where they don't, the real default mints
+   *  fine in the vitest jsdom environment under Node 26 too (verified
+   *  directly, not assumed). */
   const mintSessionId = useCallback(
-    (): string => depsRef.current.createSessionId?.() ?? crypto.randomUUID(),
+    (): string => depsRef.current.createSessionId?.() ?? defaultSessionId(),
     [],
   );
 

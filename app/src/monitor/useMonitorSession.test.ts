@@ -7004,6 +7004,78 @@ describe("Review round 3, item 1: sessionId is collision-resistant across a full
   });
 });
 
+// ---------------------------------------------------------------------------
+// Round 4, item 1 (P1): `IPHONEOS_DEPLOYMENT_TARGET = 15.0`
+// (`ios/App/App.xcodeproj/project.pbxproj`), but `crypto.randomUUID()`
+// arrived in WKWebView only at iOS 15.4 — MDN's Browser compatibility table
+// for `Crypto.randomUUID()` (PRIMARY). On 15.0-15.3 the old unconditional
+// `crypto.randomUUID()` default threw SYNCHRONOUSLY inside `connect()`,
+// before its own `try` (this file's own `mintSessionId` call site, above),
+// which rejected the returned promise having already set `connectingRef.
+// current = true` two lines earlier — nothing downstream of the throw ever
+// ran, including the `finally` that is the ONLY place a successful attempt
+// clears that ref, so Connect went permanently dead. The fixed default
+// capability-checks `crypto.randomUUID` and falls back to a UUIDv4 built
+// from `crypto.getRandomValues()`, which iOS has carried since 15.0 (same
+// MDN table). These two legs stub exactly that gap: `crypto.randomUUID`
+// deleted, `crypto.getRandomValues` left real.
+// ---------------------------------------------------------------------------
+
+describe("Round 4, item 1: the default sessionId factory survives no crypto.randomUUID (iOS 15.0-15.3)", () => {
+  const realCrypto = globalThis.crypto;
+
+  beforeEach(() => {
+    // Deliberately omits `randomUUID` from the stub object — this is the
+    // WKWebView 15.0-15.3 shape, not a fully absent Web Crypto API.
+    vi.stubGlobal("crypto", {
+      getRandomValues: realCrypto.getRandomValues.bind(realCrypto),
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("mints a well-formed UUIDv4 via the getRandomValues fallback, and two mints differ", async () => {
+    const first = harness({ program: ONE_INTERVAL });
+    await connect(first.result);
+    act(() => {
+      first.unmount();
+    });
+
+    const second = harness({ program: ONE_INTERVAL });
+    await connect(second.result);
+    act(() => {
+      second.unmount();
+    });
+
+    const entries = listSessionLogs();
+    expect(entries).toHaveLength(2);
+    const uuidV4 =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    for (const entry of entries) {
+      expect(entry.sessionId).toMatch(uuidV4);
+    }
+    expect(entries[0]!.sessionId).not.toBe(entries[1]!.sessionId);
+  });
+
+  it("connect() still reaches its normal flow — scan, then pairing — with no latched connectingRef", async () => {
+    const { result, transport } = harness({ program: TWO_INTERVALS });
+
+    await connect(result);
+
+    // Reaching `"pairing"` with no error is only possible having run PAST
+    // the mint (it precedes `update({ phase: "picking" })`, this file's own
+    // brief-cited call site) and THROUGH the try/finally that is the only
+    // place a successful attempt clears `connectingRef`. The old
+    // unconditional-throw default left `phase` stuck at its pre-connect
+    // value forever, with `connect()`'s own promise rejected uncaught.
+    expect(result.current.phase).toBe("pairing");
+    expect(result.current.error).toBeNull();
+    expect(transport.scans).toBe(1);
+  });
+});
+
 describe("useMonitorSession: the seams and their defaults", () => {
   it("an explicitly anonymous identity and no injected clock: the record still opens, stamped now", async () => {
     const fake = createFakeTransport({
