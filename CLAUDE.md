@@ -253,8 +253,17 @@ requirements).
     body against `gh pr diff --name-only` (or the equivalent current
     base-to-head range). Replace stale claims about file scope, captures,
     gates, tests, and finding disposition; never append a correction beneath a
-    contradiction. A push is scope-changing when it adds or removes files,
-    changes behavior, risk class, or test surface, or changes a finding's
+    contradiction. **A PARTIAL RECONCILIATION READS AS A DONE ONE, and PR
+    #246 needed two extra review rounds proving it:** both times the headline
+    claim was corrected while the same absolute stood in five other places
+    (a ROADMAP status line, an owed-work register, an end-semantics section,
+    a code comment, an interface note). **After withdrawing a claim, grep its
+    PHRASING across every file that repeated it** — the withdrawn words
+    themselves ("never", "only", "indefinitely", "all seven") — and reconcile
+    each hit or state why it stands. Correcting where the claim was ARGUED
+    and leaving it where it was USED is the failure.
+    A push is scope-changing when it adds or removes files, changes
+    behavior, risk class, or test surface, or changes a finding's
     disposition. Copy-only corrections do not trigger another census.
   - **Name the authority and lifetime of every predicate input.** When a
     classification combines a saved snapshot with a linked or freshly fetched
@@ -547,6 +556,22 @@ often they recur.
     die to this on sight: quoting the API's field row shows
     `Required: No`, and quoting a capture claim means opening the capture
     directory, where the newer walk is sitting.
+    **Third corollary, 2026-08-31 (PR #246): READING A CONDITIONAL AS AN
+    ENUMERATION.** The quoted line was real, current, and correctly
+    transcribed. It said: _"For any fixed duration workout **or JustRow (no
+    defined end)** that **is terminated** prior to reaching its defined end:
+    `WaitToBegin->WorkoutRow->Terminate->Rearm->WaitToBegin`"_. It was written
+    up as "Appendix E gives a JustRow only a Terminate exit", tagged PRIMARY,
+    and propagated to four files — when the sentence documents where a
+    TERMINATED row goes and enumerates nothing. **The tell is writing "the
+    only X it lists" about a sentence containing a conditional clause**
+    (`that is…`, `when…`, `if…`): such a sentence describes a case, and a
+    case is not a set. Ask what the sentence would still permit if the
+    condition were false. **And the reason this one is promoted rather than
+    left in a ledger: it was committed INSIDE the pass that was correcting a
+    different instance of this very rule.** Being alert to a failure mode in
+    someone else's work is no protection at all against committing it in your
+    own; the check has to be mechanical, not attentional.
     **Two checks, promoted here from the antagonist's ledger because a
     ledger only one agent reads cannot prevent anything:** for any
     "we have never observed X" claim, list the capture directory BY DATE
@@ -585,6 +610,19 @@ often they recur.
     WebView that WebKit throttles on rules that never read a plist key. A
     correct citation answering the wrong layer reads exactly like
     evidence.
+    **A COMMENT THAT NAMES ITS OWN PRECONDITION IS A TRIPWIRE, AND THIS ONE
+    WAS STEPPED OVER (PR #246, 2026-08-31).** `useMonitorSession.ts`'s
+    connect guard read: _"Unreachable today only because `onExit()` unmounts
+    the interstitial synchronously — nothing can press Connect mid-cancel. If
+    cancel ever stops unmounting, this guard needs a `cancellingRef`."_ A new
+    screen was added that stays mounted through a cancel and offers Connect
+    again — exactly the caller the comment described — and the comment was
+    never read. The abandoned attempt then installed a driver and ten
+    subscriptions behind a screen reading "Not connected". **Before adding a
+    caller to a shared hook, grep its source for "unreachable", "only
+    because", "as long as", and "today":** those phrases mark invariants held
+    up by the current call graph, and a new caller is exactly what changes
+    it.
 19. **Trusting a verification stack that stops at the wire.** Our
     instruments all sit at or below the transport seam, so a defect whose
     trigger enters ABOVE it — platform lifecycle, permissions,
@@ -659,6 +697,17 @@ often they recur.
     client tests and all six connected e2e walks, because every gate
     entered the pipe below the prop. When a fix's value crosses a
     component seam, one mutation forges the value AT the seam.
+    **A THIRD smell, from PR #246: a probe can fail to bite because the test
+    sits at the wrong LAYER, not because it is written badly.** A guard
+    stopping a superseded connect attempt from releasing a newer attempt's
+    single-flight claim was first tested at the component, where it passed
+    with the guard deleted — no screen offers Connect while an attempt is
+    live, so the claim is unobservable from there. Moved to the hook, the
+    same mutation failed immediately ("expected 3 to be 2"). **If a guard
+    protects an invariant no user-facing path can reach, the test belongs at
+    the layer that can reach it** — and a green assertion you could not make
+    fail is decoration, so delete it or move it rather than keeping it for
+    the coverage.
 
 22. **`git checkout -- <file>` to revert a mutation probe, on a file that
     also holds uncommitted work.** Queued as a lesson by James on
