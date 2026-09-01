@@ -164,9 +164,15 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
   // THE FREE-ROW RECORD (Phase JR PR 1 Task 3, spec rev 4's stored shape).
   // `mode` is additive on an existing v2 record with NO `v` bump, which is
   // only safe because `isMonitorRun` is a positive conjunction carrying no
-  // unknown-key check. This round-trip is the gate on that: it starts at
-  // `saveMonitorRun` and asserts after `loadMonitorRun`, so it spans the
-  // writer and the reader rather than seeding past either (RF24).
+  // unknown-key check.
+  //
+  // **NARROWED CLAIM (re-review of 83438df4, finding 3).** This asserts the
+  // SERIALISER round-trips the shape, and nothing more. It does NOT span
+  // the production writer: `saveMonitorRun` has no production callers — see
+  // its own doc comment — and every production write goes through
+  // `handoffStore.commit`. The writer-to-reader gate lives in
+  // `handoffStore.test.ts`'s own free-row case; an earlier version of this
+  // comment claimed that role for this test, which was wrong.
   it("round-trips a FREE ROW: mode, an empty program and an empty seed all survive", () => {
     const run: MonitorRun = {
       ...freshMonitorRun(),

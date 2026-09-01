@@ -538,7 +538,7 @@ One `session_logs` row:
 | `workout_id` | `null` | already nullable end-to-end |
 | `workout_title` | `"Just Row"` | display name; NOT NULL column |
 | `workout_type` | **`null`** | "No intensity was prescribed" — true of a free row, and true again of the targetless-workout follow-on. The column becomes NULLABLE in PR 1 (`DROP NOT NULL`, folded into the migration PR 1 already writes). It stays plain `text`, and stays OUR intensity axis only; Concept2's structural vocabulary never enters it. See "The stored type, decided". |
-| `steps` | `[]` | server branch: empty allowed **iff** `workoutType` is null. No fabricated steps — record, not projection. (Vetted: the only server consumer of steps is create-time validation; client renderers absorb `[]` — the summary self-gates on zero rows.) |
+| `steps` | `[]` | server branch: empty allowed **iff the row is a FREE ROW — `workout_id` AND `workout_type` both null**, keyed on the same `isFreeRow` predicate as the plan refusal (`domain/types.ts`). NOT "iff `workoutType` is null", which is what this cell said until the F3 correction below: a row that names a workout but omits its type is not free and still owes steps. No fabricated steps — record, not projection. (Vetted: the only server consumer of steps is create-time validation; client renderers absorb `[]` — the summary self-gates on zero rows.) |
 | `time_seconds`, `distance_meters` | the observer's recorded totals | both headline numbers, matching the Logbook API's both-required rule. **ANSWERED (CLOSED 1): the counters do not reset at the auto-split, so the frame's own cumulative elapsed/distance ARE the row.** No longer a merge blocker. |
 | `avg_split_seconds` | **derived by us: `500 × time/distance`**, labelled ours | no live frame carries a piece average (the per-split field is split-scoped; the whole-row average lives only on unreliable 0x0039). This is a NEW derived number — named as such, tested, and covered by the TRIAD pass. **Carries a READ-SIDE fix, see below — without it the two screens disagree.** |
 | `work_seconds/meters` | = the whole piece | rest does not exist for JustRow (Logbook-aligned) |
@@ -548,13 +548,27 @@ One `session_logs` row:
 | `plan_key`/`plan_index` | `null` | see plan refusal below |
 | `baseline_k2/k6` | as at save (may be null) | unchanged |
 
-**Plan refusal, both halves (B6/C5):** the server's `advancesPlan`
-defaults to TRUE and nothing is type-aware — as-is, a free row would tick
-"SESSION n OF 84" and deleting it would un-count a plan day. PR 1 ships
-both: the client posts `advancesPlan: false`, AND the server refuses to
-advance when `workoutType` is null regardless of the flag. Pinned
-by an integration test asserting **`plan_state.done_n` is unchanged
-across a Just Row save** (the non-tautological form).
+**Plan refusal — SERVER HALF ONLY in PR 1 (B6/C5, corrected twice).** The
+server's `advancesPlan` defaults to TRUE and nothing was type-aware, so a
+free row would tick "SESSION n OF 84" and deleting it would un-count a plan
+day.
+
+Two corrections to what this paragraph used to say, both from PR 1:
+
+1. **It is not "both halves".** The client half — a log door posting
+   `advancesPlan: false` — is PR 2's; nothing in PR 1 can emit it. The
+   server refusal is therefore the ONLY enforcement that exists, which is
+   why it is unconditional.
+2. **The predicate is NOT "when `workoutType` is null".** It is
+   `isFreeRow` — `workout_id` AND `workout_type` both null (James's
+   sign-off, 2026-09-01). Keying on the type alone would stall the plan for
+   the deleted-workout retry (`LogSession.tsx:780-790`), which posts a null
+   id and a resolved type for a legitimate prescribed session.
+
+Pinned at BOTH layers: the shared store contract's truth table, and a route
+test that selects a plan and reads `GET /api/plan`'s `doneN` after the POST
+(the first version asserted a field `POST /api/logs` does not return, and so
+could not fail).
 
 **MonitorRun (stored localStorage shape — TRIAD, lives in PR 1):** the
 existing v2 record gains an additive `mode: "justrow"` field (the
@@ -765,7 +779,8 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   lands in `docs/monitor/sessions/`; findings amend this spec.
 - **PR 1 — every stored shape (TRIAD, tagged alone before PR 2):**
   the `session_logs` validation branch + `DROP NOT NULL` on
-  `workout_type`, the plan refusal (both halves), the
+  `workout_type`, the plan refusal (SERVER HALF ONLY — the client half is
+  PR 2's; see the end-semantics correction), the
   unknown-type badge fallback + client type widening, the MonitorRun
   `mode` field. Full antagonist pass + PM final-PR gate. Its PR body
   states plainly that it changes nothing visible.
@@ -792,11 +807,19 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
     Drizzle infer `string | null`, which widens `PlanLink.workoutType`
     (`stores/logs.ts:356`) and makes `usePlanLinks.parseLink`'s
     `if (typeof e.workoutType !== "string") return null;`
-    (`src/plan/usePlanLinks.ts:81`) discard a whole plan-link entry. It is
-    unreachable only while the plan refusal holds — so F3's predicate is
-    load-bearing twice, and both need the same test.
-  - **Generate the migration LAST** (F7). PRs #248 and #249 both already
-    mint drizzle index `0017` against a journal head of 16; PR 1 is a third
+    (`src/plan/usePlanLinks.ts:81`) discard a whole plan-link entry.
+    **CORRECTED at the PM re-review:** an earlier version of this bullet
+    said that was "unreachable only while the plan refusal holds." It is
+    reachable NOW — the truth table deliberately ADVANCES a row that names a
+    workout and omits its type, and such a row becomes a plan link carrying
+    a null `workoutType`. The guard is load-bearing in its own right, not a
+    backstop for the refusal, and `usePlanLinks.test.ts` pins it directly.
+  - **Generate the migration EARLY, regenerate before every push, and
+    check `gh pr list` at merge** (F7, REPLACING "generate it last" — that
+    instruction was unworkable: a null cannot be inserted while the column
+    is `NOT NULL`, so the branch is untestable without it). PRs #248 and
+    #249 both minted drizzle index `0017` against a journal head of 16; PR 1
+    was a third
     claimant. Regenerate off whatever lands, never off today's main.
 - **PR 2 — surface + session + log door (L, after RC's wave and after
   PR 0b's answers):** `/justrow` route, `JustRowSurface`,

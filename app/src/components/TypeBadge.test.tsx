@@ -11,7 +11,9 @@ import TypeBadge from "./TypeBadge";
  *
  *  - an unknown STRING renders invisible text: `--on-color` #fffdf7 on
  *    `--page` #f4f1e8 is 1.110:1, and 1.000:1 on `--surface`, because
- *    `var(--type-JustRow)` is not a declared property and the whole
+ *    `var(undefined)` — the lookup is keyed by the four literals, so
+ *    indexing it with anything else yields `undefined` — is not a declared
+ *    property and the whole
  *    `background` declaration is dropped at parse time;
  *  - `null` renders NOTHING as a React child, so there is no text to
  *    measure at all. What remained was a `display: inline-block` span with

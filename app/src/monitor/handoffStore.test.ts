@@ -134,6 +134,52 @@ describe("setReceiptChannel", () => {
   });
 });
 
+// THE FREE-ROW SHAPE, THROUGH THE PRODUCTION WRITER (Phase JR PR 1 Task 3;
+// re-review of 83438df4, finding 3).
+//
+// An earlier version of this gate lived in `monitorRun.test.ts` and wrote
+// through `saveMonitorRun`, claiming to span the writer and the reader. It
+// did not: that function's own doc comment says it has **NO PRODUCTION
+// CALLERS** — every production write of `MONITOR_RUN_KEY` goes through this
+// store's `commit`/`retryDurable`, and `saveMonitorRun` survives only as a
+// fixture seeder. Testing a shape through a writer nothing uses proves the
+// shape is storable, not that the path that stores it keeps it.
+//
+// So it lives here, against the real committer, and asserts BOTH tiers: the
+// store's own read and the durable localStorage record that a cold start
+// hydrates from.
+describe("commit — the free-row shape (Phase JR)", () => {
+  it("round-trips mode, an empty program and an empty seed through commit and durable hydration", () => {
+    const run = freshRun(t0.toISOString(), {
+      mode: "justrow",
+      workoutId: null,
+      title: "Just Row",
+      program: { intervals: [] },
+      logSeed: { steps: [], paces: {} },
+      actuals: [],
+    });
+
+    const result = store.commit(run.startedAt, null, run);
+    expect(result).toStrictEqual({
+      accepted: true,
+      revision: 0,
+      verdict: "saved",
+    });
+
+    // Tier 1: the store's own read.
+    expect(store.read(run.startedAt)?.run).toStrictEqual(run);
+
+    // Tier 2: the DURABLE record — what a cold start actually reads back,
+    // and where an unknown-key-intolerant validator would drop `mode`.
+    const durable = JSON.parse(
+      localStorage.getItem(MONITOR_RUN_KEY)!,
+    ) as MonitorRun;
+    expect(durable.mode).toBe("justrow");
+    expect(durable.program.intervals).toStrictEqual([]);
+    expect(durable.logSeed).toStrictEqual({ steps: [], paces: {} });
+  });
+});
+
 describe("commit — create (expectedRevision: null)", () => {
   it("accepts a create against an empty store at revision 0, verdict saved, and persists durably", () => {
     const run = freshRun(t0.toISOString());
