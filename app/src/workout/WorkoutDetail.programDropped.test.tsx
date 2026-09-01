@@ -422,6 +422,18 @@ describe("WorkoutDetail -> real live program drop -> LogSession (Wave F PR 1 Tas
         Node.DOCUMENT_POSITION_PRECEDING,
     ).toBeTruthy();
 
+    // Item 1a/3 (round-2 fix wave): the completion-eyebrow suppression
+    // recommended at PR #248's round-1 review, over the composed real
+    // route — not the unit-level `buildSummaryModel`/render-obeys-flag
+    // pins `summaryModel.test.ts`/`PostWorkoutSummary.test.tsx` already
+    // carry. This is a NEGATIVE async assertion, so it is anchored AFTER
+    // the strip assertions immediately above — an observable owned by the
+    // same screen's own readiness (the log door has rendered its dropped-
+    // arrival content) — rather than floating unanchored against a screen
+    // that might not have finished settling yet (RF: "a negative async
+    // assertion waits for positive readiness").
+    expect(screen.queryByText("WORKOUT COMPLETE")).not.toBeInTheDocument();
+
     // The hand-off's durable half: the record persisted for real (no
     // storage denial in this test), so the memory-tier record and durable
     // storage agree — matching `WorkoutDetail.connectedRecovery.test.tsx`'s
