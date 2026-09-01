@@ -76,9 +76,9 @@ deliberately refuses to infer a run without a program — naming a
    answered. If a closer is ever observed in the wild it is a bonus, never
    something the design waits on.
 
-   **What it settles.** There is no machine-side passive closer. PR 2 owns
-   the inactivity rule outright, and OPEN 3's remaining half stops blocking
-   anything.
+   **What it settles.** There is no machine-side passive closer, and
+   OPEN 3's remaining half stops blocking anything. Ruling 9 then declines
+   to build an app-side one, so PR 2 owns no inactivity rule either.
 
    **What it reverses.** Ruling 5's second sentence ("the app never invents
    an idle threshold"). Under ruling 8 an app-side threshold is the only
@@ -244,10 +244,12 @@ captures and transcriptions. This section is the corrected record.
      could not be read verbatim — SECONDARY, and weak. BLE-side effect of
      a power-off (link drop) remains INFERENCE, untested.
 
-  **What this changes for the design: nothing softens.** PR 2 still needs
-  its own inactivity rule, and now for a stronger reason than "we saw no
-  timeout": no closer has ever been observed within 896.8 s, and none is
-  documented at any layer we can watch. **That is an absence of evidence, not
+  **What this changes for the design.** No closer has ever been observed
+  within 896.8 s, and none is documented at any layer we can watch — so
+  under ruling 9 we stop waiting for one and stop inventing one, and a
+  walked-away row rides the existing recovery path instead.
+
+  **That is an absence of evidence, not
   evidence of absence** — see the CLOSED 3 caveat — and it is already
   sufficient, because a rule cannot map a signal nobody has seen. We are also, by definition,
   never disconnected when we care.
@@ -343,8 +345,9 @@ plainly that a dropped link ends the app's involvement in that row.
 **N2. Nothing was observed closing a free row the rower walked away from.**
 Following from 3:
 the workout stayed open for the whole 896.8 s we watched, with frames still
-arriving, and we then stopped looking. PR 2 needs its own inactivity rule
-because it cannot map a closer nobody has observed, and the
+arriving, and we then stopped looking. Ruling 9 answers this by declining to
+close it at all — the link dying by other means is the closer, and the
+existing recovery path already handles that. The
 proposed new `ended_by: "idle"` member describes an event this walk could
 not produce. **Both are re-opened design questions, not implementation
 details — they want a brainstorm before PR 1 tags its enum**, since `idle`
@@ -656,9 +659,11 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
   `mode` field. Full antagonist pass + PM final-PR gate. Its PR body
   states plainly that it changes nothing visible.
   **NO `idle` enum migration** — withdrawn by the 2026-08-31 capture (see
-  end semantics). **PR 1 is BLOCKED until the inactivity rule N2 asks for
-  is designed and approved**, because that design decides whether any new
-  `ended_by` value is needed at all.
+  end semantics), and **no new `ended_by` member of any kind** — rulings 8
+  and 9 settle that a walked-away row rides the existing recovery path and
+  stamps the `"interrupted"` value that already exists. **PR 1 is
+  UNBLOCKED** (it was held for an inactivity-rule design that ruling 9
+  declined to build).
 - **PR 2 — surface + session + log door (L, after RC's wave and after
   PR 0b's answers):** `/justrow` route, `JustRowSurface`,
   `useJustRowSession` (with the rebuilt-concerns list, the coexistence
@@ -689,11 +694,13 @@ numbers, `advancesPlan: false`). Today's recovery row routes there for
    steps widget (absence, not empty widget).
 4. A mid-row link drop yields a recoverable run and Today offers "Log
    it" routing to the Just Row log door.
-5. `ended_by` for a Just Row is one of `rower`/`link-lost` per the
-   end-semantics table. **NOT `idle`** — withdrawn, no observed closer
-   (CLOSED 3 / N2). **NOT `finished`** — CLOSED 7 saw only states 0, 1
-   and 11 across 1660 frames on a Menu end. This criterion is REPLACED,
-   not extended, once the inactivity rule lands.
+5. `ended_by` for a Just Row is one of `rower`/`link-lost`, or
+   `"interrupted"` when the run is closed later through Today's recovery
+   path (rulings 8/9 — the walked-away case). **NOT `idle`** — withdrawn
+   permanently, no observed closer and no app-side close to name
+   (CLOSED 3 / N2). **NOT `finished`** — CLOSED 7 saw only states 0, 1 and
+   11 across 1660 frames on a Menu end. This criterion is now FINAL; the
+   inactivity rule it once waited on will never land.
 6. Opening a Just Row session with an unlogged timer `SessionRun` or
    `MonitorRun` present does not destroy it (coexistence guard test).
 
