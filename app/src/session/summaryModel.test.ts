@@ -2518,16 +2518,18 @@ describe("the measured-anything rule, one rule across three shapes", () => {
 });
 
 // ---------------------------------------------------------------------
-// PR #248 review (James, RULED — "My recommendation is to suppress the
-// completion eyebrow", scoped across dropped, link-lost, AND interrupted
-// arrivals — never a drop-only fork). `SummaryModel.suppressCompletionEyebrow`
+// PR #248's round-1 review recommended this ("My recommendation is to
+// suppress the completion eyebrow", scoped across dropped, link-lost, AND
+// interrupted arrivals — never a drop-only fork); implemented pending
+// James's Gate-0 approval, not yet a ruling.
+// `SummaryModel.suppressCompletionEyebrow`
 // is set ONLY here, in `buildMonitorModel`, from the real `MonitorRun.endedBy`
 // — a real fixture through the real door, not a hand-set model field, so
 // this proves the DERIVATION, not just that the render component obeys a
 // flag someone else already set (RF24: seeding past the producer proves
 // nothing about the producer).
 // ---------------------------------------------------------------------
-describe("buildSummaryModel — the completion eyebrow suppression (PR #248 review, RULED)", () => {
+describe("buildSummaryModel — the completion eyebrow suppression (PR #248 round-1 review)", () => {
   it("program-dropped: suppressCompletionEyebrow is true", () => {
     const run = monitorRun({
       program: { intervals: [] },
@@ -2574,7 +2576,7 @@ describe("buildSummaryModel — the completion eyebrow suppression (PR #248 revi
   // Two more non-suppressed reasons, so the allowlist isn't proven only at
   // its two ends (RC-1's "incomplete by construction" set is FIVE close
   // reasons; only three of them suppress).
-  it("rower and program-failed: suppressCompletionEyebrow is absent (a rower End or a P3b program-failure is not one of the three RULED arrival types)", () => {
+  it("rower and program-failed: suppressCompletionEyebrow is absent (a rower End or a P3b program-failure is not one of the three recommended arrival types)", () => {
     const rowerRun = monitorRun({
       program: { intervals: [] },
       actuals: [],

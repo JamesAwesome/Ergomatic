@@ -289,20 +289,22 @@ export interface SummaryModel {
    *  row carries a measurement (R-E, verbatim: "appears only when NO row
    *  carries a measurement"). */
   caption?: string;
-  /** PR #248's final review (James, RULED — "My recommendation is to
-   *  suppress the completion eyebrow"): `PostWorkoutSummary`'s own
-   *  `WORKOUT COMPLETE` eyebrow lies on an arrival that did not complete.
-   *  Present-means-flag, same idiom as `MonitorRun.seriesDropped`/
-   *  `MeasuredRow.onTarget` — absent (every timer/manual-door model, and
-   *  every monitor model whose `run.endedBy` is `"finished"`, `"rower"`,
-   *  `"program-failed"`, or absent) renders the eyebrow exactly as always.
-   *  Set `true` ONLY by `buildMonitorModel` below, for the three arrival
-   *  types James scoped at the PM gate — `"program-dropped"`,
-   *  `"link-lost"`, `"interrupted"` — never a drop-only fork. Derived
-   *  here, from the SAME `run.endedBy` this function's own `meta.dateLabel`
-   *  branch already reads, rather than threaded through as a second,
-   *  caller-computed prop — `PostWorkoutSummary` has no channel to the
-   *  underlying `MonitorRun` except this model. */
+  /** PR #248's round-1 review recommended suppression ("My recommendation
+   *  is to suppress the completion eyebrow"), and the rendered change is
+   *  IMPLEMENTED here pending James's Gate-0 approval — not yet a ruling.
+   *  `PostWorkoutSummary`'s own `WORKOUT COMPLETE` eyebrow lies on an
+   *  arrival that did not complete. Present-means-flag, same idiom as
+   *  `MonitorRun.seriesDropped`/`MeasuredRow.onTarget` — absent (every
+   *  timer/manual-door model, and every monitor model whose `run.endedBy`
+   *  is `"finished"`, `"rower"`, `"program-failed"`, or absent) renders the
+   *  eyebrow exactly as always. Set `true` ONLY by `buildMonitorModel`
+   *  below, for the three arrival types scoped at the PM gate —
+   *  `"program-dropped"`, `"link-lost"`, `"interrupted"` — never a
+   *  drop-only fork. Derived here, from the SAME `run.endedBy` this
+   *  function's own `meta.dateLabel` branch already reads, rather than
+   *  threaded through as a second, caller-computed prop —
+   *  `PostWorkoutSummary` has no channel to the underlying `MonitorRun`
+   *  except this model. */
   suppressCompletionEyebrow?: true;
 }
 
@@ -1040,9 +1042,9 @@ function buildMonitorModel(run: MonitorRun): SummaryModel {
     sourceLabel: run.deviceName,
   };
 
-  // PR #248 review (RULED, `SummaryModel.suppressCompletionEyebrow`'s own
-  // doc comment): the three arrival types that did not complete, never a
-  // drop-only fork.
+  // PR #248's round-1 review recommendation, implemented pending Gate-0
+  // approval (`SummaryModel.suppressCompletionEyebrow`'s own doc comment):
+  // the three arrival types that did not complete, never a drop-only fork.
   const suppressCompletionEyebrow =
     run.endedBy === "program-dropped" ||
     run.endedBy === "link-lost" ||

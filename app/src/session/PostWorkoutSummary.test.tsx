@@ -203,13 +203,14 @@ describe("PostWorkoutSummary — title block (§2A)", () => {
   });
 });
 
-// PR #248 review (James, RULED — "My recommendation is to suppress the
-// completion eyebrow"): this component's own half of the contract —
+// PR #248's round-1 review recommended this ("My recommendation is to
+// suppress the completion eyebrow"); implemented pending James's Gate-0
+// approval — not yet a ruling. This component's own half of the contract —
 // `summaryModel.ts`'s `buildMonitorModel` is what DERIVES the flag from a
 // real `MonitorRun.endedBy` (see `summaryModel.test.ts`'s own describe
 // block of the same name); this file's job is only "does the screen obey
 // the flag it's handed", the render half of the split RF24 asks for.
-describe("PostWorkoutSummary — the completion eyebrow suppression (PR #248 review, RULED)", () => {
+describe("PostWorkoutSummary — the completion eyebrow suppression (PR #248 round-1 review)", () => {
   it("suppressCompletionEyebrow: true hides the eyebrow, and nothing replaces it", () => {
     renderSummary({
       model: monitorModel({ suppressCompletionEyebrow: true }),
@@ -234,7 +235,7 @@ describe("PostWorkoutSummary — the completion eyebrow suppression (PR #248 rev
   // The timer door has no PM5 and so no `endedBy` at all — `buildTimerModel`
   // never sets `suppressCompletionEyebrow`, and this pins that a
   // timer-shaped model (not just an un-overridden monitor one) still shows
-  // the eyebrow: the suppression is scoped to the three RULED monitor
+  // the eyebrow: the suppression is scoped to the three recommended monitor
   // arrivals, never a blanket "connected-looking model" rule.
   it("pin: a timer-door-shaped model (no PM5, TIMER source, no series) still shows the eyebrow", () => {
     renderSummary({

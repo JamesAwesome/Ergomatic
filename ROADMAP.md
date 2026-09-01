@@ -999,17 +999,26 @@ X" is a real disposition — most of these are single files.
   already REJECTS leading rest, so only the consecutive case is live. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`
   (§AUD-006, §V4).
-- **RESOLVED (James, PR #248 review, 2026-08-31): "My recommendation is to
-  suppress the completion eyebrow"** — the dropped-arrival log screen no
-  longer reads `WORKOUT COMPLETE` two lines above `THE ERG DROPPED THE
-  WORKOUT.` Scoped across all THREE arrival types that did not complete,
-  never a drop-only fork: `.summary-eyebrow` now suppresses on
+- **IMPLEMENTED, PENDING GATE 0 (recommended at PR #248's round-1 review,
+  2026-08-31): "My recommendation is to suppress the completion eyebrow"**
+  — the dropped-arrival log screen no longer reads `WORKOUT COMPLETE` two
+  lines above `THE ERG DROPPED THE WORKOUT.` This is a rendered-surface
+  change under the standing design gate: it is built and captured, but
+  James has not yet approved the rendered result, and this row is not a
+  ruling until he does. Scoped across all THREE arrival types that did not
+  complete, never a drop-only fork: `.summary-eyebrow` now suppresses on
   `endedBy === "program-dropped" | "link-lost" | "interrupted"`
   (`SummaryModel.suppressCompletionEyebrow`, derived in `buildMonitorModel`
   from the same `run.endedBy` the door already reads), and renders exactly
   as before everywhere else — `"finished"`, `"rower"`, `"program-failed"`,
   absent, and every timer/manual-door summary. Implemented in the same PR's
-  fix round; `log-monitor-dropped.png` regenerated.
+  fix round; `log-monitor-dropped.png` and `log-monitor-dropped-landscape.png`
+  regenerated for the Gate-0 review. **Controller's ruling, pending the same
+  approval:** the composed-route evidence (portrait + landscape captures,
+  real LogSession → PostWorkoutSummary composition) covers the dropped
+  arrival only; link-lost and interrupted share the identical derivation
+  (the same unit-tested `buildMonitorModel` legs) and the same renderer, so
+  no routed captures are owed for those two unless James asks for them.
 - **The server's `EndedBy` mirror can be derived, not hand-copied.**
   `server/stores/logs.ts` already imports `../db/schema.js`, so
   `export type EndedBy = (typeof endedByEnum.enumValues)[number]` plus
