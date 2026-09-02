@@ -3125,7 +3125,7 @@ export function useMonitorSession(
         // own non-rowing clear) is DEFENSIVE, belt-and-braces: it is not
         // load-bearing for the guarantee above, which holds on the append
         // count alone. Verified by mutation — deleting the reset (always
-        // appending, never clearing) left all 169 client test files / 4410
+        // appending, never clearing) left all 169 client test files / 4411
         // tests green, so no committed test can currently make this branch
         // bite.
         if (frame.state !== "rowing" || frame.distanceMeters <= 0) {

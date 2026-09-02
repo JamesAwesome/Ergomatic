@@ -23,10 +23,14 @@ mechanisms only after the data.
 
 - I1 — A genuine pause still declares: every committed capture that fired
   `pause-declared` before this change still fires it after. (A corpus
-  regression asserting `pause-declared` count and positions is TO BE
-  BUILT with §4 — no committed suite asserts that string today; what
-  exists is the RC-25 edge leg and the pure-predicate `isPausedRun`
-  position replay, named under Gates.)
+  regression asserting the `pause-declared` RING STRING is TO BE BUILT
+  with §4 — no committed suite asserts that string today. The nine-
+  recording corpus already pins pause ONSET FRAMES through the pure
+  predicate: `useMonitorSession.test.ts` ~:8329's Phase LL minor 3
+  `it.each` over `LL_RECORDED_MID_INTERVAL_STOPS`, which is what the
+  hook's own "corpus regression over all nine committed recordings"
+  comment refers to. Named under Gates with the RC-25 edge leg and the
+  pure-predicate `isPausedRun` position replay.)
 - I2 — A resume-edge staleness episode never declares a pause by itself:
   frames that repeat the pre-background freezeKey (per §3's `stale=true`
   evidence) do not count toward `PAUSED_FRAME_HOLD` — or whatever narrower
@@ -223,12 +227,12 @@ Instrument-only; no predicate change; measure, assert no cause.
 | State | Mint (set) | Clear | Survives teardown/relaunch/re-arm |
 | --- | --- | --- | --- |
 | `frameArrivalsRef: number[]` (last `PAUSED_FRAME_HOLD` rowing-frame `atMs`) | each rowing frame | non-rowing frame; per-run resets (program/beginFreeRow/RC-37); connect; teardown | no / no / no |
-| `lastResumeAtMsRef: number \| null` | foreground edge (beside `resume-first-frame`) | per-run resets; connect; teardown | no / no / no |
+| `lastResumeAtMsRef: number \| null` | foreground edge (beside `resumeEdgeArmedRef`) | per-run resets; connect; teardown | no / no / no |
 | `postResumeArrivalsRef: number[] \| null` (collecting the first HOLD post-resume gaps) | foreground edge (empty array) | when it reaches HOLD-1 gaps (recorded, then null); a second foreground edge while open (recorded `superseded frames=<n>`, then re-minted empty); per-run resets; connect; teardown (recorded `truncated` if non-null) | no / no / no |
 
 **Invariants:** the predicate's behaviour is byte-identical (I3 — `nextFreezeRun`/`isPausedRun` untouched; every existing pause leg still passes with the same declarations); the only change is what the two ring entries SAY; time comes from the hook's injected `now`, never `Date.now()` (the existing idiom). Edge-only recording (one entry per pause / per resume).
 
-**Gates:** unit legs with an injected clock — (a) a bunched stall (gaps `[40,40,40]`) after a resume records `gapsMs=[40,40,40] sinceResumeMs≈<n>`; (b) a cadence stall (`[450,450,450]`) with no resume records `sinceResumeMs=none`; (c) `nextGapsMs` recorded exactly once per resume after the fourth frame, `truncated` on early teardown, `superseded frames=<n>` when a second resume lands before the fourth frame; five new legs, plus three unmodified regressions that stayed green: the RC-25 `pause-declared` edge leg (`useMonitorSession.test.ts` ~:8541-8552), the pure-predicate `isPausedRun` position replay (~:7872-7905), and `lifecycleReplay.test.ts`'s hook-driven replay of a committed recording. Mutations (RF21): swap gaps to record the wrong frames (off-by-one) → leg (a) red; drop the `sinceResumeMs` write → leg (a) red on `none`; record `nextGapsMs` per frame → leg (c) red on count; drop the `superseded` record → leg (c)-supersession red (`expected [...] to have a length of 2 but got 1`); drop the `truncated` record in `teardown()` → leg (c)-truncation red on the same length assertion.
+**Gates:** unit legs with an injected clock — (a) a bunched stall (gaps `[40,40,40]`) after a resume records `gapsMs=[40,40,40] sinceResumeMs≈<n>`; (b) a cadence stall (`[450,450,450]`) with no resume records `sinceResumeMs=none`; (c) `nextGapsMs` recorded exactly once per resume after the fourth frame, `truncated` on early teardown, `superseded frames=<n>` when a second resume lands before the fourth frame; five new legs, plus four unmodified regressions that stayed green: the RC-25 `pause-declared` edge leg (`useMonitorSession.test.ts` ~:8541-8552), the pure-predicate `isPausedRun` position replay (~:7872-7905), the nine-recording onset-frame corpus replay (~:8329, `LL_RECORDED_MID_INTERVAL_STOPS`), and `lifecycleReplay.test.ts`'s hook-driven replay of a committed recording. Mutations (RF21): swap gaps to record the wrong frames (off-by-one) → leg (a) red; drop the `sinceResumeMs` write → leg (a) red on `none`; record `nextGapsMs` per frame → leg (c) red on count; drop the `superseded` record → leg (c)-supersession red (`expected [...] to have a length of 2 but got 1`); drop the `truncated` record in `teardown()` → leg (c)-truncation red on the same length assertion.
 
 **Antagonist skip, SPOKEN:** this addendum IS the instrument the antagonist's own verdict demanded ("the plan needs the ONE thing it does not have — the arrival-timing profile"); it invents no discriminator and changes no behaviour a rower sees. The pass resumes on §4's mechanism once the field numbers exist.
 
