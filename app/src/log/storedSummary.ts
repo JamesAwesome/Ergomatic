@@ -887,8 +887,14 @@ export function partialCloseReason(
   // Clause 2: a connected Just Row stores `steps: []` (`JustRowLog.tsx:209`)
   // and has no plan to be partial against. REDUNDANT given clause 3
   // (`[].some(...)` is false); kept as an explicit statement of the rule,
-  // not as the thing that enforces it. The mutation that bites the Just
-  // Row leg is clause 3 -> `.every`, never deleting this line.
+  // not as the thing that enforces it. MEASURED, not asserted: deleting
+  // this line alone leaves the whole suite green (170/170 files,
+  // 4591/4591 tests, mutation M3.1b), which is the evidence for the word
+  // "redundant". Deleting it is therefore NOT a probe of the Just Row
+  // leg — only clause 3 flipped to `.every` (so `[].every()` is `true`
+  // and the empty case falls through) WITH this line gone makes that leg
+  // red ("expected 'rower' to be undefined", M3.1c); `.every` on its own
+  // leaves it green, because this line still catches it.
   if (row.steps.length === 0) return undefined;
   // Clause 3: an interval never reached carries no `actualSource` at all
   // (`logDraft.ts:913-917`, "Unambiguous against the row-local
