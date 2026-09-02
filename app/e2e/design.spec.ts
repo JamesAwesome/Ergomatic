@@ -139,6 +139,9 @@ async function seedLogs(page: Page, count: number): Promise<void> {
               actualSource: "stopwatch",
             },
           ],
+          // Required since the v0.35.0 sunset: the member the server
+          // derived for a stopwatch step with no device.
+          source: "timer",
         }),
       });
       if (!res.ok) {
@@ -186,6 +189,11 @@ async function postFromLogFixture(page: Page): Promise<string> {
             },
           ],
           advancesPlan: false,
+          // Required since the v0.35.0 sunset: no `deviceName` on this
+          // fixture, so the server derived `manual` for it (device name
+          // wins, else a stopwatch step, else by hand) and the row read
+          // LOGGED BY HAND — the same provenance it keeps here.
+          source: "manual",
         }),
       });
       return { ok: res.ok, status: res.status, body: await res.text() };
@@ -224,6 +232,7 @@ async function postJudgmentMixLog(page: Page): Promise<string> {
         workoutTitle: "Sea Fret",
         workoutType: "O2",
         deviceName: "PM5 432331249",
+        source: "pm5",
         held: "under",
         pain: 3,
         thumbs: "up",
@@ -372,6 +381,7 @@ async function postTraceLogFixture(
           workoutTitle: workout.title,
           workoutType: workout.type,
           deviceName: "PM5 432331249",
+          source: "pm5",
           held: "held",
           pain: 2,
           notes: null,
@@ -2528,6 +2538,7 @@ test.describe("plan screen (a plan active)", () => {
             pain: null,
             notes: null,
             steps: [{ label: "Work" }],
+            source: "manual",
           }),
         });
         return { ok: res.ok, status: res.status };

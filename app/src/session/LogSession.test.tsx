@@ -3906,10 +3906,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const body = parsedBodies(apiFn)[0]!;
     expect("deviceName" in body).toBe(false);
     // Just Row unconnected spec (2026-09-02): `pm5` without a `deviceName`
-    // is a contradiction the server 400s (`server/logSource.ts`), so the
-    // guard that drops the name drops the door claim with it and lets the
-    // server derive (and ring-log) the member — the save still goes through.
-    expect("source" in body).toBe(false);
+    // is a contradiction the server 400s (`server/logSource.ts`), and since
+    // the v0.35.0 sunset an ABSENT `source` is a 400 too — so the guard that
+    // drops the name restates the door as `manual` (the member the server
+    // used to derive for this body) and the save still goes through.
+    expect(body.source).toBe("manual");
   });
 
   // Series capture spec (2026-08-19), §3: the POST body attaches `series`

@@ -74,16 +74,29 @@ async function postLog(
     distanceMeters?: number | null;
     timeSeconds?: number | null;
     notes?: string | null;
-    steps?: { label: string }[];
+    steps?: { label: string; actualSource?: string }[];
     advancesPlan?: boolean;
     // The workout this log LINKS TO. Defaults to null below, which is
     // what every caller in this file used before the plan row started
     // asking what a logged session actually WAS — the identity-seam
     // describe at the end of this file passes real workout ids.
     workoutId?: string | null;
+    deviceName?: string | null;
+    // Required on the wire since the v0.35.0 sunset (`source`
+    // derive-when-absent). A caller that names its door keeps it; every
+    // other seed gets the member the server used to derive for it, so
+    // no fixture's provenance moved at the sunset.
+    source?: "pm5" | "timer" | "manual";
   },
 ): Promise<{ id: string }> {
   const result = await page.evaluate(async (b) => {
+    const source =
+      b.source ??
+      (b.deviceName
+        ? "pm5"
+        : (b.steps ?? []).some((s) => s.actualSource === "stopwatch")
+          ? "timer"
+          : "manual");
     const res = await fetch("/api/logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -95,6 +108,7 @@ async function postLog(
         steps: [{ label: "Work" }],
         advancesPlan: false,
         ...b,
+        source,
       }),
     });
     return { ok: res.ok, status: res.status, body: await res.text() };
@@ -130,6 +144,10 @@ async function postV0110Log(page: Page, title: string): Promise<void> {
           },
         ],
         advancesPlan: false,
+        // The one departure from the v0.11.0 shape: required since the
+        // v0.35.0 sunset, and the member the server derived for a
+        // stopwatch step with no device.
+        source: "timer",
       }),
     });
     return { ok: res.ok, status: res.status, body: await res.text() };

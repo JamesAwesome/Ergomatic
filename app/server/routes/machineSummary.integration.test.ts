@@ -85,6 +85,10 @@ describe("POST/GET /api/logs: the machine's summary round-trips through real Pos
     pain: null,
     notes: null,
     steps: [{ label: "2000 m" }],
+    // Required since the v0.35.0 sunset; no deviceName here (this suite is
+    // about the machine totals, not the door), so `manual` is the member
+    // the server derived for it while builds <=811 could still omit it.
+    source: "manual",
   });
 
   // The terminate capture's own machineSummary shape (task-6-brief §Step
@@ -303,6 +307,9 @@ describe("POST/GET /api/logs: the machine's summary round-trips through real Pos
         pain: null,
         notes: null,
         steps: [{ label: "2000 m" }],
+        // Required since the v0.35.0 sunset; orthogonal to the machine_*
+        // absence this test is about.
+        source: "manual",
       });
     expect(created.status).toBe(201);
 

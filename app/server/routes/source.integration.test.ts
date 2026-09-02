@@ -64,7 +64,7 @@ function makeStores(db: Db): Stores {
   };
 }
 
-describe("POST/GET /api/logs: source is derived when absent, refused when it contradicts the body (criterion 3b)", () => {
+describe("POST/GET /api/logs: source is required (v0.35.0 sunset), refused when it contradicts the body (criterion 3b)", () => {
   let container: StartedPostgreSqlContainer;
   let pool: pg.Pool;
   let db: Db;
@@ -130,31 +130,47 @@ describe("POST/GET /api/logs: source is derived when absent, refused when it con
     return got.body as { source: string };
   }
 
-  // The old-build path: no `source` on the wire, three bodies, one per
-  // member — the GET says what the server derived.
-  it("absent source, a deviceName: stored as pm5", async () => {
+  // The v0.35.0 SUNSET (ROADMAP: "`source` derive-when-absent SUNSET"):
+  // a body with no `source` was DERIVED for builds <=811 (three cases
+  // stood here, one per member); at the tag after the column shipped it
+  // became a 400 naming the field, with nothing persisted — the same
+  // refusal shape as the contradiction cases below. The derivation rule
+  // itself survives only as migration 0020's backfill (criterion 3c).
+  it("absent source: 400 naming the field, and nothing persisted", async () => {
     const bearer = await bearerToken();
-    const row = await postThenGet(
-      bearer,
-      body({ deviceName: "PM5 432331249 Row", steps: [PM5_STEP] }),
-    );
-    expect(row.source).toBe("pm5");
-  });
-
-  it("absent source, no device, a stopwatch step: stored as timer", async () => {
-    const bearer = await bearerToken();
-    const row = await postThenGet(bearer, body({ steps: [STOPWATCH_STEP] }));
-    expect(row.source).toBe("timer");
-  });
-
-  it("absent source, no device, no stopwatch step: stored as manual", async () => {
-    const bearer = await bearerToken();
-    const row = await postThenGet(bearer, body());
-    expect(row.source).toBe("manual");
+    const before = await request(app)
+      .get("/api/logs?limit=100")
+      .set("Authorization", bearer);
+    const res = await request(app)
+      .post("/api/logs")
+      .set("Authorization", bearer)
+      .send(body({ deviceName: "PM5 432331249 Row", steps: [PM5_STEP] }));
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({
+      error: "source is required",
+      field: "source",
+    });
+    const after = await request(app)
+      .get("/api/logs?limit=100")
+      .set("Authorization", bearer);
+    expect(after.body).toStrictEqual(before.body);
   });
 
   it("the list projection carries source too (projection parity; no list consumer reads it yet)", async () => {
     const bearer = await bearerToken();
+    // One row per member, each stated by the client (the only way a row
+    // gets a `source` since the sunset).
+    for (const sent of [
+      body({
+        source: "pm5",
+        deviceName: "PM5 432331249 Row",
+        steps: [PM5_STEP],
+      }),
+      body({ source: "timer", steps: [STOPWATCH_STEP] }),
+      body({ source: "manual" }),
+    ]) {
+      await postThenGet(bearer, sent);
+    }
     const list = await request(app)
       .get("/api/logs?limit=100")
       .set("Authorization", bearer);
@@ -228,8 +244,8 @@ describe("POST/GET /api/logs: source is derived when absent, refused when it con
   // `actualSource: "assumed"` (`src/session/logDraft.ts`), so a time-only
   // workout closed on the Timer posts `timer` with no stopwatch step at all.
   // The spec's draft steps clause 400'd this (Task 4's e2e caught it);
-  // the fact stands as posted, while the SAME body with `source` absent
-  // still derives `manual` (the case above) — the inference does not move.
+  // the fact stands as posted — the SAME body backfilled `manual` under
+  // migration 0020's rule, which is why the column exists.
   it("posted timer with all-assumed steps and no device is stored as timer (the ordinary Timer-door save)", async () => {
     const bearer = await bearerToken();
     const row = await postThenGet(

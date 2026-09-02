@@ -93,6 +93,8 @@ describe("POST/GET /api/logs: a FREE ROW round-trips, and advances the plan only
       notes: null,
       steps: [],
       advancesPlan: true,
+      // Required since the v0.35.0 sunset; an override names its own door.
+      source: "manual",
       ...overrides,
     };
   }

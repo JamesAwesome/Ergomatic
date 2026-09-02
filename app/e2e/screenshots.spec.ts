@@ -308,6 +308,9 @@ async function seedLogs(page: Page, count: number): Promise<void> {
               actualSource: "stopwatch",
             },
           ],
+          // Required since the v0.35.0 sunset: the member the server
+          // derived for a stopwatch step with no device.
+          source: "timer",
         }),
       });
       if (!res.ok) {
@@ -2559,9 +2562,11 @@ async function postLog(
     // session must set this explicitly.
     deviceName?: string | null;
     // Just Row unconnected spec (2026-09-02), stored shape (c): the row's
-    // own door, `pm5 | timer | manual`. Optional on the wire (the server
-    // derives it when absent — a sunset item, ROADMAP), and a seeded row
-    // that names its door is the honest shape, so captures set it.
+    // own door, `pm5 | timer | manual`. REQUIRED on the wire since the
+    // v0.35.0 sunset (the server derived it when absent until then). A
+    // capture that names its door is the honest shape; one that does not
+    // gets the member the server used to derive for it (below), so no
+    // seeded row's provenance moved at the sunset.
     source?: "pm5" | "timer" | "manual";
     // Task 5's own "log-detail" capture: real measured/judged rows and,
     // via `advancesPlan` below, genuine plan linkage — both need fields
@@ -2636,6 +2641,13 @@ async function postLog(
   },
 ): Promise<void> {
   const result = await page.evaluate(async (b) => {
+    const source =
+      b.source ??
+      (b.deviceName
+        ? "pm5"
+        : (b.steps ?? []).some((s) => s.actualSource === "stopwatch")
+          ? "timer"
+          : "manual");
     const res = await fetch("/api/logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2647,6 +2659,7 @@ async function postLog(
         steps: [{ label: "Work" }],
         advancesPlan: false,
         ...b,
+        source,
       }),
     });
     return { ok: res.ok, status: res.status, body: await res.text() };
@@ -2776,6 +2789,10 @@ async function postV0110Log(page: Page, title: string): Promise<void> {
           },
         ],
         advancesPlan: false,
+        // The one departure from the v0.11.0 shape: required since the
+        // v0.35.0 sunset, and the member the server derived for a
+        // stopwatch step with no device.
+        source: "timer",
       }),
     });
     return { ok: res.ok, status: res.status, body: await res.text() };

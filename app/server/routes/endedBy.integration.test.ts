@@ -89,6 +89,7 @@ describe("POST/GET /api/logs: endedBy round-trips through real Postgres, rejects
         pain: null,
         notes: null,
         steps: [{ label: "2000 m" }],
+        source: "manual",
         endedBy,
       });
   }
@@ -192,6 +193,10 @@ describe("POST/GET /api/logs: endedBy round-trips through real Postgres, rejects
         pain: null,
         notes: null,
         steps: [{ label: "2000 m" }],
+        // `source` is the one post-v0.13 key this body carries: required
+        // since the v0.35.0 sunset, and orthogonal to the `endedBy`
+        // absence this test is about.
+        source: "manual",
       });
     expect(created.status).toBe(201);
 

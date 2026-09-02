@@ -8,6 +8,12 @@ import type { LogStep } from "./stores/logs.js";
 // about it — additive-only between tags means an installed build that
 // predates the column posts no `source` at all.
 //
+// SUNSET, v0.35.0: `POST /api/logs` no longer calls `deriveLogSource` —
+// `source` is required on the wire and an absent one is a 400 naming the
+// field (`routes/data.ts`). The function stays because it documents
+// migration 0020's backfill rule in TS, and
+// `source.integration.test.ts` still proves the SQL CASE agrees with it.
+//
 // `deriveLogSource` is that window's inference, and it is BY DESIGN the
 // same rule migration 0020's backfill CASE applies to every pre-existing
 // row (`drizzle/0020_*.sql`): a row written by an old build today and a

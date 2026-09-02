@@ -107,6 +107,7 @@ describe("POST/GET /api/logs: optional targetSplit and paired actuals round-trip
         pain: 3,
         notes: null,
         steps,
+        source: "timer",
       });
     expect(created.status).toBe(201);
 
