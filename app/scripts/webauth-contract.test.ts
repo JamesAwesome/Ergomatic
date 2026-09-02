@@ -23,6 +23,7 @@ const swift = read("ios/App/App/WebAuthPlugin.swift");
 const webAuth = read("src/native/webAuth.ts");
 const linkFlow = read("src/adapters/linkFlow.ts");
 const routes = read("server/routes/concept2.ts");
+const probe = read("src/monitor/Concept2LinkProbe.tsx");
 const plist = read("ios/App/App/Info.plist");
 const js = webAuth + linkFlow;
 
@@ -69,6 +70,29 @@ function handledCodes(source: string): string[] {
         .filter((code) => code !== ""),
     ]),
   ].sort();
+}
+
+/** Every key `GET /api/concept2/link`'s handler can emit, unioned over its
+ *  three `res.json({…})` exits (flag-off, unlinked, linked). Comments are
+ *  stripped FIRST and the reason is concrete: that handler's own comment
+ *  contains `{c2_user_id}` and `{result_id}`, so a brace-counting or
+ *  `[^{}]`-bounded read of the literal without stripping stops in the middle of
+ *  a sentence. */
+function linkResponseKeys(routesSource: string): string[] {
+  const start = routesSource.indexOf('router.get(\n    "/api/concept2/link"');
+  const end = routesSource.indexOf("router.delete(", start);
+  const handler = routesSource.slice(start, end).replace(/\/\/[^\n]*/g, "");
+  const keys = [...handler.matchAll(/res\.json\(\{([^{}]*)\}\)/g)].flatMap(
+    (m) => matchAll(m[1]!, /(?:^|[{,])\s*([A-Za-z_$][\w$]*)\s*:/gm),
+  );
+  return [...new Set(keys)].sort();
+}
+
+/** The keys `Concept2LinkProbe.tsx`'s `LinkStatus` DECLARES, optional marker
+ *  and all. */
+function linkStatusKeys(probeSource: string): string[] {
+  const body = /interface LinkStatus \{([^}]*)\}/.exec(probeSource)?.[1] ?? "";
+  return [...new Set(matchAll(body, /([A-Za-z_$][\w$]*)\??:/g))].sort();
 }
 
 describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
@@ -151,6 +175,31 @@ describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
     const server = /NATIVE_LINK_CLIENT = "([^"]+)"/.exec(routes)?.[1];
     expect(client).toBe("webauth-1");
     expect(server).toBe(client);
+  });
+
+  it("the probe's LinkStatus interface names exactly the keys GET /api/concept2/link emits", () => {
+    // `LinkStatus` is a hand copy of a response shape, in a different file from
+    // the handler that produces it, and TypeScript compares the two never: the
+    // probe casts `res.json()`'s `unknown` straight to the interface. A server
+    // key renamed or added therefore reaches the walk as a silently `undefined`
+    // field -- `linked (C2 user undefined, undefined)` -- with every suite
+    // green. This is the only gate that reads both files.
+    //
+    // Reading `server/routes/concept2.ts` here is a READ, not a change: the
+    // PR's scope gate is "zero files CHANGED under app/server/" (design §0),
+    // and checking a copy against anything but its ORIGINAL is a mirror.
+    const emitted = linkResponseKeys(routes);
+    // Pinned as an INDEPENDENT literal list as well as compared, the same shape
+    // as the reject-codes test above: without it, deleting a key from BOTH
+    // files at once would keep the set equality green.
+    expect(emitted).toStrictEqual([
+      "available",
+      "c2UserId",
+      "linked",
+      "needsReauth",
+      "weightClass",
+    ]);
+    expect(linkStatusKeys(probe)).toStrictEqual(emitted);
   });
 
   it("the callback scheme is one registration spelled in three places", () => {

@@ -64,17 +64,46 @@ interface LinkStatus {
   needsReauth?: boolean;
 }
 
-/** `n/a` for the outcomes that never parsed a callback (a plugin rejection, a
- *  refused mint, the web arm's navigation hand-off). Whether Concept2 echoes
- *  `state` on a private-use-scheme redirect is UNMEASURED and nothing depends
- *  on it -- this readout is how the walk measures it. */
+/** `n/a` for the outcomes that never parsed a callback at all (a plugin
+ *  rejection, a refused mint, the web arm's navigation hand-off). Whether
+ *  Concept2 echoes `state` on a private-use-scheme redirect is UNMEASURED and
+ *  nothing depends on it -- this readout is how the walk measures it.
+ *
+ *  `stateMismatch` is the one parsed-callback outcome carrying no `stateEchoed`
+ *  field, and it still answers `yes`: that member is only reachable when a
+ *  state WAS echoed (an absent one cannot mismatch), so the flag would be a
+ *  constant `true` on the TYPE and is a fact about the member here. Reading
+ *  `n/a` for it would tell the walk "no callback was parsed" about the one
+ *  outcome that proves a callback was parsed AND carried a state. */
 function stateEchoLabel(outcome: LinkOutcome | null): string {
   if (outcome === null) return "n/a";
+  if (outcome.kind === "stateMismatch") return "yes";
   return "stateEchoed" in outcome
     ? outcome.stateEchoed
       ? "yes"
       : "no"
     : "n/a";
+}
+
+/**
+ * The payload beside the kind. `Last outcome: pluginError` on its own is the
+ * walk's worst line: a plugin rejection is raised inside the Swift, BEFORE any
+ * request leaves the phone, so its `code`/`message` reach no server log, no
+ * `auth_via` line and no network capture -- this readout is their only channel.
+ * The same reasoning gives the server-hop members their status and error text
+ * (`serverError` carries a status but no error string, `mintFailed`'s may be
+ * `null`; both render as the bare status) and `networkError` its message.
+ * Outcomes that are wholly described by their kind add nothing.
+ */
+function outcomeDetail(o: LinkOutcome): string {
+  if ("code" in o) return ` (${o.code}: ${o.message})`;
+  // `"error" in o` as well as the null check: `serverError` has a `status` and
+  // no `error` FIELD at all, so `o.error` alone does not compile against this
+  // union. The two guards together mean the same thing at runtime.
+  if ("status" in o)
+    return ` (${String(o.status)}${"error" in o && o.error !== null ? `: ${o.error}` : ""})`;
+  if ("message" in o) return ` (${o.message})`;
+  return "";
 }
 
 function describeStatus(
@@ -90,7 +119,12 @@ function describeStatus(
   // so a flag-off server would otherwise read exactly like an unlinked one.
   if (!status.available) return "not available (C2_LINK_ENABLED is off)";
   if (!status.linked) return "not linked";
-  return `linked (C2 user ${String(status.c2UserId)}, ${String(status.weightClass)})`;
+  // `needsReauth` is the row's `needs_reauth_at` (routes/concept2.ts:537). A
+  // link that needs re-auth is still a link -- the row exists, the account id
+  // is real -- so it renders as a qualifier rather than a fourth state; a walk
+  // that reads plain `linked` over a stale-token row records the wrong thing.
+  const reauth = status.needsReauth === true ? ", needs re-auth" : "";
+  return `linked (C2 user ${String(status.c2UserId)}, ${String(status.weightClass)}${reauth})`;
 }
 
 export default function Concept2LinkProbe() {
@@ -160,11 +194,12 @@ export default function Concept2LinkProbe() {
       >
         {busy ? "Linking..." : "Start real link (log-dev)"}
       </button>
-      <p>{`Last outcome: ${outcome === null ? "none yet" : outcome.kind}`}</p>
+      <p>{`Last outcome: ${outcome === null ? "none yet" : `${outcome.kind}${outcomeDetail(outcome)}`}`}</p>
       <p>{`Callback carried state: ${stateEchoLabel(outcome)}`}</p>
       <button
         type="button"
         className="button-outline"
+        disabled={busy}
         onClick={() => void readStatus()}
       >
         Re-read link status
