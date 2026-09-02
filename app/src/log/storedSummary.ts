@@ -279,12 +279,16 @@ export interface StoredSummaryView {
    *  `planIndex` non-null — `create()`'s own invariant, `stores/logs.ts`,
    *  keeps them null together). */
   planFooter?: string;
-  /** Cohort-unlock spec (2026-08-23), §2: the exact marked line, present
-   *  only when `row.endedBy === "link-lost"` — every other `endedBy`
-   *  value (including every other real one and absent/null) renders
-   *  nothing here; this spec is the lost-link surface, not an `endedBy`
-   *  taxonomy display (spec's own line). */
-  linkLostLine?: string;
+  /** Door spec (2026-09-02) §1.2: the close-reason line, on TWO triggers
+   *  and no others. (1) `row.endedBy === "link-lost"` ALONE, steps-
+   *  independent, exactly as the cohort-unlock spec (2026-08-23) §2 shipped
+   *  it — a release-noted promise (`news/content/releaseNotes.ts:366`).
+   *  (2) a row `partialCloseReason` marks PARTIAL, which renders that
+   *  reason's own sentence plus `· N of M intervals measured`; for
+   *  `link-lost` the two triggers compose into one line. Every other
+   *  `endedBy` value — including `finished` and absent/null — renders
+   *  nothing here: this is not an `endedBy` taxonomy display. */
+  closeLine?: string;
 }
 
 // Just Row unconnected spec (2026-09-02), §Mechanism 6: the word comes from
@@ -841,6 +845,63 @@ function measuredElapsedSeconds(step: StoredLogStep): number | undefined {
   return undefined;
 }
 
+/** The five close reasons that name WHO ended a session. The server enum
+ *  (`schema.ts`'s `endedByEnum`) minus `finished`. A value-equality
+ *  ALLOWLIST, never `!== "finished"`: `null` is NOT a member and DOES
+ *  occur on `pm5` rows (a legacy v1/v2 `MonitorRun` logged from Today —
+ *  `monitorRun.ts:228-233`, `routes/data.ts:1738` stores `?? null`), and
+ *  a negation would mark every one of them partial. */
+export const PARTIAL_CLOSE_REASONS = [
+  "rower",
+  "link-lost",
+  "program-dropped",
+  "program-failed",
+  "interrupted",
+] as const;
+export type PartialCloseReason = (typeof PARTIAL_CLOSE_REASONS)[number];
+
+/** The close reason when the row is genuinely PARTIAL, else `undefined` —
+ *  door spec (2026-09-02) §1.1's four clauses, in the order they are
+ *  cheapest to refute. Pure and framework-free on purpose: the server's
+ *  list projection derives the same boolean, and the two surfaces must
+ *  agree by construction rather than by two hand-kept copies of the rule
+ *  (the divergence class that burned at `HistoryList.test.tsx:459`).
+ *
+ *  DETERMINISTIC: every input is a stored fact the machine or the rower
+ *  produced; there is no threshold. `endedBy` owns HOW THE SESSION ENDED,
+ *  `steps` owns WHAT WAS MEASURED, neither derives from the other, and
+ *  they can legally disagree — a short step on a `finished` row is
+ *  MEASUREMENT LOSS, not a stopped piece, and clause 4 excludes it. */
+export function partialCloseReason(
+  row: Pick<StoredLog, "source" | "steps" | "endedBy">,
+): PartialCloseReason | undefined {
+  // Clause 1 (spec §1.1): only the connected door stores planned-vs-
+  // measured steps. `buildMonitorLogSteps` is the ONLY writer of
+  // `actualMeters`/`actualSeconds` (`logDraft.ts:910-911`); a timer step
+  // never rowed emits `actualSplit = targetSplit`, `actualSource:
+  // "assumed"` — byte-identical to one rowed to plan. A timer row cannot
+  // be partial in stored data at all: `/session/log` is reached only from
+  // `isComplete(run)` (`Timer.tsx:477-483`) and the abandon path saves
+  // nothing.
+  if (row.source !== "pm5") return undefined;
+  // Clause 2: a connected Just Row stores `steps: []` (`JustRowLog.tsx:209`)
+  // and has no plan to be partial against. REDUNDANT given clause 3
+  // (`[].some(...)` is false); kept as an explicit statement of the rule,
+  // not as the thing that enforces it. The mutation that bites the Just
+  // Row leg is clause 3 -> `.every`, never deleting this line.
+  if (row.steps.length === 0) return undefined;
+  // Clause 3: an interval never reached carries no `actualSource` at all
+  // (`logDraft.ts:913-917`, "Unambiguous against the row-local
+  // discriminant"). `undefined` is the only absence the wire can produce —
+  // `routes/data.ts:472-479` 400s an explicit null. This clause is also
+  // what guarantees PARTIAL => N < M, so the rendered suffix can never
+  // read `5 of 5`.
+  if (!row.steps.some((s) => s.actualSource === undefined)) return undefined;
+  // Clause 4: an ALLOWLIST of five, never `!== "finished"`.
+  const endedBy = row.endedBy ?? null;
+  return PARTIAL_CLOSE_REASONS.find((r) => r === endedBy);
+}
+
 // §5C, re-baselined (Phase LT spec 1, §4): fed by stored `steps`, spec
 // 1's §1 rendering/judgment rule verbatim — `rowJudgment`/`buildSpmCell`
 // (Task 2, `summaryModel.ts`) are the ONE place either rule is decided;
@@ -975,15 +1036,104 @@ function buildPlanFooter(row: StoredLog): string | undefined {
 // copy). Named as its own constant so the exact string is pinned once,
 // not re-typed at both this builder and the FromTheLog test that asserts
 // it renders.
-const LINK_LOST_LINE = "LINK LOST · the app lost the monitor before the end";
+//
+// SHORTENED at Gate 0-A (door spec 2026-09-02, James APPROVED): it read
+// "LINK LOST · the app lost the monitor before the end" from the
+// cohort-unlock spec until now; the trailing clause goes so the combined
+// PARTIAL line fits the header. The release note's promise
+// (`news/content/releaseNotes.ts:366`, "LINK LOST appears on the session
+// detail") is unchanged — the words `LINK LOST` and the trigger are what
+// it promised.
+// DECLARED FIRST: `CLOSE_REASON_WORDS` reads it in its initialiser, and a
+// `const` below would be a TDZ ReferenceError at module load.
+const LINK_LOST_LINE = "LINK LOST · the app lost the monitor";
 
-// §2: "no other endedBy values render anything." A plain equality check
-// against the one value this spec owns — never a negation of every
-// other close reason (which would silently start rendering the line for
-// any future value the union might grow, exactly the taxonomy-display
-// this spec explicitly declines to be).
-function buildLinkLostLine(row: StoredLog): string | undefined {
-  return row.endedBy === "link-lost" ? LINK_LOST_LINE : undefined;
+// Gate 0-A (`docs/superpowers/specs/2026-09-02-door-gate-a.html`,
+// decisions (a) and (e), APPROVED by James 2026-09-02): one row per close
+// reason, the full sentence for the detail screen and a short form for the
+// list row (`THE MONITOR DROPPED THE PROGRAM` is ~240px on a 332px row).
+// Keyed by VALUE, so a future sixth close reason renders NOTHING rather
+// than a wrong word.
+const CLOSE_REASON_WORDS: Record<
+  PartialCloseReason,
+  { line: string; chip: string }
+> = {
+  rower: { line: "STOPPED EARLY", chip: "STOPPED EARLY" },
+  "link-lost": { line: LINK_LOST_LINE, chip: "LINK LOST" },
+  "program-dropped": {
+    line: "THE MONITOR DROPPED THE PROGRAM",
+    chip: "PROGRAM DROPPED",
+  },
+  "program-failed": {
+    line: "THE PROGRAM DID NOT LOAD",
+    chip: "PROGRAM NOT LOADED",
+  },
+  interrupted: { line: "LEFT UNFINISHED", chip: "UNFINISHED" },
+};
+
+// Door spec §1.2: `link-lost` keeps its OWN ungated, steps-independent
+// trigger exactly as it has since the cohort-unlock spec — it is a
+// release-noted promise and it renders on rows the PARTIAL predicate
+// EXCLUDES (a link-lost Just Row; a link-lost row with every step
+// measured), which is why the non-partial branch below is not simply
+// "render nothing". The other four words render ONLY when all four
+// clauses hold: a steps-independent `STOPPED EARLY` would print on every
+// connected Just Row (`useMonitorSession.ts:5010`) and on every planned
+// row Ended after its last interval. Both branches are value equalities,
+// never negations, so a future sixth close reason renders nothing.
+function buildCloseLine(row: StoredLog): string | undefined {
+  const reason = partialCloseReason(row);
+  if (reason === undefined) {
+    return row.endedBy === "link-lost" ? LINK_LOST_LINE : undefined;
+  }
+  const measured = row.steps.filter(
+    (s) => measuredElapsedSeconds(s) !== undefined,
+  ).length;
+  // "measured", never "progress" (Gate 0-A decision (b), approved on the
+  // rendered frame): after a lost boundary (`logDraft.ts:804-806`) a rower
+  // who did two and a bit reads `1 of 5`, true of what the machine
+  // reported and silent about what was rowed. `N` calls
+  // `measuredElapsedSeconds` — the stored door's own generalisation of the
+  // live surface's `isMonitorRowMeasurable`/`timerMeasurableElapsedSeconds`
+  // (see its doc comment above) and the same quantity the connected
+  // surface's lost banner counts. There is no fourth definition.
+  // PARTIAL => measured < steps.length by clause 3, so this can never read
+  // `5 of 5`.
+  return `${CLOSE_REASON_WORDS[reason].line} · ${measured} of ${row.steps.length} intervals measured`;
+}
+
+/** The short word the History chip carries for a close reason, or
+ *  `undefined` for a value outside the allowlist. Shared with the detail
+ *  line (one `CLOSE_REASON_WORDS` row per reason) so the two surfaces
+ *  cannot name one close two ways. */
+export function partialChipWord(
+  endedBy: (CloseReason | "interrupted") | null | undefined,
+): string | undefined {
+  const reason = PARTIAL_CLOSE_REASONS.find((r) => r === endedBy);
+  return reason === undefined ? undefined : CLOSE_REASON_WORDS[reason].chip;
+}
+
+/** THE LIST'S WHOLE RULE, in one place, so the two surfaces cannot
+ *  disagree about the WORD. `link-lost` is UNGATED here exactly as it is
+ *  in `buildCloseLine`: a link-lost row the PARTIAL predicate EXCLUDES —
+ *  a link-lost Just Row, or one with every step measured — still reads
+ *  `LINK LOST · the app lost the monitor` on the detail screen, so a chip
+ *  gated on `partial` alone would leave History silent about the one row
+ *  the detail screen shouts about. The other four words render only when
+ *  the row is partial. Both branches are value equalities, never
+ *  negations.
+ *
+ *  `partial` is the caller's own evaluation of `partialCloseReason` — the
+ *  list row cannot compute it itself (`LOG_LIST_COLUMNS` carries `source`
+ *  and `endedBy` but not `steps`), so the server derives it over the same
+ *  four clauses and the list passes it in. */
+export function historyChipWord(row: {
+  partial: boolean;
+  endedBy: (CloseReason | "interrupted") | null;
+}): string | undefined {
+  if (row.endedBy === "link-lost") return CLOSE_REASON_WORDS["link-lost"].chip;
+  if (!row.partial) return undefined;
+  return partialChipWord(row.endedBy);
 }
 
 /** The from-the-log view's own pure model — §5's property table,
@@ -998,7 +1148,7 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const rows = buildRows(row.steps);
   const caption = targetsOnlyCaption(rows);
   const readBack = buildReadBack(row);
-  const linkLostLine = buildLinkLostLine(row);
+  const closeLine = buildCloseLine(row);
   const planFooter = buildPlanFooter(row);
-  return { meta, heroes, rows, caption, readBack, planFooter, linkLostLine };
+  return { meta, heroes, rows, caption, readBack, planFooter, closeLine };
 }

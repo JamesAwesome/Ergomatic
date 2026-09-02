@@ -1191,7 +1191,8 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
  *  reading behind them. It is NOT a close reason and must never become
  *  one: `endedBy` answers how a session closed, and the two agree only on
  *  the zero-measured case (spec's own line, and `storedSummary.ts`'s
- *  `LINK_LOST_LINE` is where a close reason renders).
+ *  `buildCloseLine` is where a close reason renders — as of the door spec
+ *  2026-09-02 that is five reasons, not just `LINK_LOST_LINE`'s one).
  *
  *  WHAT IT DOES NOT SAY: why. Three producers of the silence are
  *  undistinguished, so this names only what we can see from here — that we
