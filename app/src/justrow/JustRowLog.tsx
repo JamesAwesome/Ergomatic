@@ -90,6 +90,10 @@ export default function JustRowLog() {
         workoutType: null,
         steps: [],
         deviceName: run.deviceName,
+        // Just Row unconnected spec (2026-09-02), exit criterion 3b: the
+        // monitor entry names its door. (The timer entry, `source:
+        // "timer"` with no `deviceName`, lands with the door in Task 7.)
+        source: "pm5",
         timeSeconds: totals.seconds,
         // ROUNDED at the payload boundary (review #1, finding 3): 0x0039's
         // distance is tenths-precision and can legitimately end on a

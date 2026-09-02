@@ -19,6 +19,7 @@ import type {
   Baselines,
   PaceBase,
   Step,
+  LogSource,
   WorkoutType,
 } from "../../domain/types.js";
 import { clearDraft, loadDraft, type SessionDraft } from "./draft";
@@ -416,8 +417,9 @@ export function monitorModeRun(
  *  record) proves we hold nothing: a record that is merely unfinished, for
  *  another workout, or one whose `logSeed` no longer aligns can carry real
  *  PM5 readings we simply cannot render here. Saying "no reading" over
- *  those would be a claim we have not earned, so they keep the
- *  door-ambiguous `LOGGED BY HAND` they render today.
+ *  those would be a claim we have not earned, so they keep the `manual`
+ *  door (`LOGGED BY HAND`) they render today — stored as such since the
+ *  Just Row unconnected spec (2026-09-02) made the door a column.
  *
  *  **Hand-off store design spec (rev 4), plan Task 4: reads via the store's
  *  `read()`, never `loadMonitorRun()` and never a state var** — the same
@@ -596,6 +598,20 @@ export interface LogFormFields {
    *  concrete type; the free-row door is the one caller of the null. */
   workoutType: WorkoutType | null;
   steps: LogStep[];
+  /** Just Row unconnected spec (2026-09-02), §Mechanism stored shape (c):
+   *  which door this row is being saved through — `session_logs.source`,
+   *  a stored fact from this PR on, never inferred client-side again.
+   *  REQUIRED here (not optional like every other addition below) on
+   *  purpose: the type system is what makes "every door posts its member"
+   *  (exit criterion 3b) a compile-time property rather than a per-door
+   *  promise. The session door closing a `SessionRun` says `timer`; the
+   *  monitor-mode branch says `pm5` (beside the `deviceName` the server's
+   *  contradiction check requires for it); the Log-it-after door says
+   *  `manual` — including the no-reading arrival (`connectedNoRecord`),
+   *  whose own word is Phase LM's call. The server derives the member only
+   *  for a body that omits it (an installed build predating the column —
+   *  `server/logSource.ts`), a path with a sunset. */
+  source: LogSource;
   // 7C spec §6: the monitor mode's ONLY addition to the shared body shape —
   // `run.deviceName`, spread straight onto the wire body below (`{
   // ...fields }`) the same way every other `LogFormFields` key already is.
@@ -768,6 +784,15 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
       (body.deviceName.length === 0 || body.deviceName.length > 64)
     ) {
       delete body.deviceName;
+      // Just Row unconnected spec (2026-09-02): the monitor door's `pm5`
+      // is a contradiction without a `deviceName` (`server/logSource.ts`
+      // 400s it, which would block the WHOLE save this guard exists to
+      // let through), so the door claim goes with the name and the server
+      // derives the member for this one body — logged there as
+      // `source=derived`, so the row is visible in diagnostics rather
+      // than silently mis-doored. It renders `LOGGED BY HAND`, which is
+      // what the same row rendered before the column existed.
+      if (body.source === "pm5") delete body.source;
     }
     try {
       // Fix round (MED-1): every retry below rebuilds from `currentBody`
@@ -1444,6 +1469,7 @@ function SessionDoorLog() {
         workoutTitle: activeRun.title,
         workoutType,
         steps: logSteps,
+        source: "timer",
         avgSplitSeconds: model.heroes.avgSplitSeconds,
         timeSeconds: model.heroes.timeSeconds,
         distanceMeters: model.heroes.distanceMeters,
@@ -1892,6 +1918,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           workoutType: activeWorkout.type,
           steps: logSteps,
           deviceName: monitorRun.deviceName,
+          source: "pm5",
           avgSplitSeconds: model.heroes.avgSplitSeconds,
           timeSeconds: model.heroes.timeSeconds,
           distanceMeters: model.heroes.distanceMeters,
@@ -2139,6 +2166,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         workoutTitle: activeWorkout.title,
         workoutType: activeWorkout.type,
         steps: logSteps,
+        source: "manual",
       },
       opts,
     );

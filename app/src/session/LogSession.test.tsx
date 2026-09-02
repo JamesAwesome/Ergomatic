@@ -1512,6 +1512,9 @@ describe("LogSession: save", () => {
       held: "held",
       pain: 2,
       notes: "Felt strong.",
+      // Just Row unconnected spec (2026-09-02), exit criterion 3b: this
+      // door closes a `SessionRun`, so its row's stored door is `timer`.
+      source: "timer",
     });
     expect(Array.isArray(body.steps)).toBe(true);
     expect((body.steps as unknown[]).length).toBe(2);
@@ -2249,6 +2252,9 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect("avgSplitSeconds" in body).toBe(false);
     expect("timeSeconds" in body).toBe(false);
     expect("distanceMeters" in body).toBe(false);
+    // Just Row unconnected spec (2026-09-02), exit criterion 3b: the
+    // Log-it-after door posts `manual`, never derived server-side.
+    expect(body.source).toBe("manual");
   });
 
   it("a browser BACK press after a successful save lands on the prior screen, not a re-submittable form (replace-navigation)", async () => {
@@ -3523,6 +3529,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const body = parsedBodies(apiFn)[0]!;
     expect(body.workoutId).toBe(MONITOR_WORKOUT_ID);
     expect(body.deviceName).toBe("PM5 432331249 Row");
+    // Just Row unconnected spec (2026-09-02), exit criterion 3b: a
+    // monitor-mode save names its door — `pm5`, beside the device name the
+    // server's contradiction check requires for it.
+    expect(body.source).toBe("pm5");
     const steps = body.steps as Record<string, unknown>[];
     // 3, not 2: Phase WU made the opener an ordinary logged step rather
     // than a warm-up seed step `buildMonitorLogSteps` skipped.
@@ -3895,6 +3905,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     const body = parsedBodies(apiFn)[0]!;
     expect("deviceName" in body).toBe(false);
+    // Just Row unconnected spec (2026-09-02): `pm5` without a `deviceName`
+    // is a contradiction the server 400s (`server/logSource.ts`), so the
+    // guard that drops the name drops the door claim with it and lets the
+    // server derive (and ring-log) the member — the save still goes through.
+    expect("source" in body).toBe(false);
   });
 
   // Series capture spec (2026-08-19), §3: the POST body attaches `series`

@@ -34,42 +34,56 @@
 // average, still what `buildHeroes` below renders, ruling 4 — only the
 // per-row comparison changed).
 //
-// SOURCE INFERENCE (§5A, antagonist B7): a stored row has no explicit
-// "which door" column — `deviceName` names a monitor row, and a stopwatch-
-// sourced step is the timer door's own fingerprint (`buildLogSteps` is the
-// ONLY producer of `actualSource: "stopwatch"`); a row with neither is
-// door-ambiguous only in the sense that it's exactly the "assumed
-// everything" shape both the manual door and a not-actually-timed timer
-// session produce. James's copy ruling (fix round, 2026-08-18): the third
-// bucket reads `LOGGED BY HAND` — matching spec 1's live manual door
-// (`summaryModel.ts`'s `buildManualModel`) and the handoff, not §5A's own
-// shorter table literal — so the identical fact never reads as two
-// different words depending on whether a rower is looking at a session
-// live or from the log.
+// SOURCE — A COLUMN, NOT AN INFERENCE (Just Row unconnected spec,
+// 2026-09-02, §Mechanism stored shape (c) and §Mechanism 6). `sourceLabel`
+// below reads `session_logs.source` (`pm5` / `timer` / `manual`, NOT NULL,
+// written by every log door and backfilled for every earlier row by
+// migration 0020) and NOTHING else — exit criterion 3d pins that the door
+// is never again inferred from a step's `actualSource` here. (The per-step
+// `measuredElapsedSeconds` below still reads that field, legitimately: it
+// decides whether ONE ROW's elapsed can be reconstructed, which is a fact
+// about the step, not about which door saved the row.)
 //
-// ONE KNOWN, ACCEPTED EXCEPTION TO THAT AGREEMENT (Phase LM PR 1 Task 4,
+// HISTORY, kept because the copy rulings it carries still stand. From
+// Phase PW spec 2 (§5A, antagonist B7) until 2026-09-02 a stored row had
+// no "which door" column, so this module GUESSED: `deviceName` named a
+// monitor row, a stopwatch-sourced step was the timer door's fingerprint
+// (`buildLogSteps` being that member's only producer), and a row with
+// neither read as the "assumed everything" shape both the manual door and
+// a not-actually-timed timer session produce. James's copy ruling (fix
+// round, 2026-08-18) fixed the third bucket's word at `LOGGED BY HAND` —
+// matching spec 1's live manual door (`summaryModel.ts`'s
+// `buildManualModel`) and the handoff, not §5A's own shorter table
+// literal — so the identical fact never reads as two different words
+// depending on whether a rower is looking at a session live or from the
+// log. That ruling is unchanged; only where the fact comes FROM changed.
+//
+// The guess was knowingly wrong about one row (Phase LM PR 1 Task 4,
 // option 2 — stated in the PR, not discovered later): a connected session
 // the app never heard a pull from opens no record at all, so its save
 // falls through the manual door and posts neither `deviceName` nor
-// `endedBy`. The LIVE screen now names that arrival honestly
-// (`summaryModel.ts`'s `NO_MONITOR_READING_SOURCE`); the STORED row cannot,
-// because the columns below carry no signal separating it from a genuine
-// by-hand entry — `deviceName` null, `endedBy` null, every step `assumed`.
-// The row is not wrong about its NUMBERS (it renders `TARGETS ONLY ·
-// NOTHING MEASURED`, which is exactly true); it is wrong about the DOOR,
-// and unbackfillably so — for this row and every earlier one. Fixing it
-// needs a new stored field plus a migration, and both fields that already
-// exist were examined and rejected: `endedBy` would assert a close reason
-// for a record that never existed, and `deviceName` — which IS reachable via
-// `loadLastDevice()`, contrary to an earlier claim here — is a best-effort
-// LAST-USED name, so posting it would have the row assert that a named erg
-// supplied numbers that came off nothing. Queued with that analysis at
-// ROADMAP `## Phase LM`.
+// `endedBy`. The LIVE screen names that arrival honestly
+// (`summaryModel.ts`'s `NO_MONITOR_READING_SOURCE`); the STORED row could
+// not, because the columns carried no signal separating it from a genuine
+// by-hand entry. Both fields that already existed were examined and
+// rejected as carriers (`endedBy` would assert a close reason for a record
+// that never existed; `deviceName` — reachable via `loadLastDevice()` — is
+// a best-effort LAST-USED name, so posting it would have the row assert
+// that a named erg supplied numbers that came off nothing), and the
+// conclusion was "a new stored field plus a migration", queued at ROADMAP
+// `## Phase LM`. THAT FIELD IS THIS COLUMN. What the no-reading row does
+// NOW: it posts `manual` (it goes through the manual door's `handleSave`,
+// `LogSession.tsx`) and migration 0020 backfilled its earlier instances to
+// `manual` — so it renders `LOGGED BY HAND`, exactly what it rendered
+// before, and the divergence from the live screen's word remains. The
+// column gives it somewhere to be honest; WHICH word it should carry (a
+// fourth member, or `manual` as the truthful "no reading was stored")
+// is Phase LM's call, not this spec's — see ROADMAP `## Phase LM`.
 
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import { PLANS } from "../../domain/plans.js";
-import type { WorkoutType } from "../../domain/types.js";
+import type { LogSource, WorkoutType } from "../../domain/types.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import type { CloseReason } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
@@ -135,6 +149,13 @@ export interface StoredLog {
   notes: string | null;
   thumbs: Thumbs | null;
   deviceName: string | null;
+  /** Just Row unconnected spec (2026-09-02), stored shape (c): the door
+   *  this row came through, as a stored fact — `session_logs.source`,
+   *  NOT NULL in the column (every earlier row backfilled by migration
+   *  0020), so typed non-null here: a row without it cannot be
+   *  constructed in the client at all (exit criterion 3d). `sourceLabel`
+   *  below reads this and nothing else. */
+  source: LogSource;
   steps: StoredLogStep[];
   avgSplitSeconds: number | null;
   timeSeconds: number | null;
@@ -264,15 +285,26 @@ export interface StoredSummaryView {
   linkLostLine?: string;
 }
 
-// §5A: `deviceName` when stored; else `TIMER` when any stored step carries
-// `actualSource: "stopwatch"`; else `LOGGED BY HAND`. James's copy ruling
-// (fix round, 2026-08-18) supersedes §5A's own shorter table literal
-// ("BY HAND") with the live door's exact string — see the module header's
-// SOURCE INFERENCE paragraph for why the two screens must agree.
+// Just Row unconnected spec (2026-09-02), §Mechanism 6: the word comes from
+// the COLUMN — `pm5` ⇒ the device's own name, `timer` ⇒ `TIMER`, `manual`
+// ⇒ `LOGGED BY HAND` (James's copy ruling, fix round 2026-08-18, supersedes
+// §5A's own shorter table literal "BY HAND" with the live door's exact
+// string — see the module header for why the two screens must agree).
+// `steps` are never consulted: a time-only Just Row is `timer` with NO
+// steps, which the old fingerprint could only ever have called by-hand.
+// The `?? "PM5"` arm is the type's, not the wire's: the server refuses
+// `pm5` without a `deviceName` (`server/logSource.ts`), so a stored `pm5`
+// row always carries a name; the fallback only keeps the function total
+// over `deviceName: string | null`.
 function sourceLabel(row: StoredLog): string {
-  if (row.deviceName !== null) return row.deviceName;
-  if (row.steps.some((s) => s.actualSource === "stopwatch")) return "TIMER";
-  return "LOGGED BY HAND";
+  switch (row.source) {
+    case "pm5":
+      return row.deviceName ?? "PM5";
+    case "timer":
+      return "TIMER";
+    case "manual":
+      return "LOGGED BY HAND";
+  }
 }
 
 // §5A: "Spec 1's 2A rendering" — that rendering omits `timeLabel`
@@ -284,13 +316,16 @@ function sourceLabel(row: StoredLog): string {
 // save — but showing a wall-clock reading next to "LOGGED BY HAND" would
 // fill in a moment the original screen never claimed to know, the exact
 // fabrication §2B's own absence idiom forbids elsewhere. Gated on the
-// SAME inferred-source bucket, not a separate flag: `sourceLabel(row) ===
-// "LOGGED BY HAND"` is precisely the door-ambiguous case this module's
-// own header describes (manual door, or a not-actually-timed session) —
-// symmetric with the two doors that DO get a timeLabel live, and BYTE-
-// IDENTICAL to what `buildManualModel` itself does (no `timeLabel` field
-// at all) — fix round's own 5A resolution: consistency with the live
-// door's manual-summary meta wins over table-literalism.
+// SAME resolved word, not a separate flag: `sourceLabel(row) ===
+// "LOGGED BY HAND"` is precisely the `manual` column value (the by-hand
+// door, and — until Phase LM rules on its own word — the no-reading row
+// the module header describes) — symmetric with the two doors that DO
+// get a timeLabel live, and BYTE-IDENTICAL to what `buildManualModel`
+// itself does (no `timeLabel` field at all) — fix round's own 5A
+// resolution: consistency with the live door's manual-summary meta wins
+// over table-literalism. A `timer` row therefore shows its clock time,
+// including the time-only Just Row (the handoff board's `SEP · hh:mm ·
+// TIMER` line — Just Row unconnected spec, exit criterion 3).
 function buildMeta(row: StoredLog): SummaryMeta {
   const source = sourceLabel(row);
   const meta: SummaryMeta = {

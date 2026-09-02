@@ -92,6 +92,7 @@ function baseStoredRow(overrides: Partial<StoredLog> = {}): StoredLog {
     notes: null,
     thumbs: null,
     deviceName: "PM5 432331249",
+    source: "pm5",
     steps: [],
     avgSplitSeconds: null,
     timeSeconds: null,

@@ -141,6 +141,9 @@ describe("JustRowLog (the workout-less log door)", () => {
       expect(body.workoutType).toBeNull();
       expect(body.workoutTitle).toBe("Just Row");
       expect(body.steps).toStrictEqual([]);
+      // Just Row unconnected spec (2026-09-02), exit criterion 3b: the
+      // monitor entry names its door — `pm5`.
+      expect(body.source).toBe("pm5");
       expect(body.timeSeconds).toBe(620);
       expect(body.distanceMeters).toBe(2480);
       // The stored derivation, against its own literal — never against the
