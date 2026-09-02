@@ -4095,3 +4095,36 @@ does not match these numbers._
   silent on native-client-versus-SERVER — the axis that structurally exists (a
   TestFlight build outlives any deploy) and the one that bit when main's
   deploy job sat red for eleven hours. RF28 now.
+
+## TRIAD final-PR gate, 2026-09-02 (JR follow-on items 3+4, #268)
+
+- **A deprecation trigger written as "the next tag" is ambiguous between
+  the tag that SHIPS the change and the one after — and the wrong reading
+  closes the compatibility window at birth.** #268 added
+  `session_logs.source` derive-when-absent purely so build-811 clients keep
+  saving, then filed its sunset as "the first tag cut AFTER the PR merges"
+  (= the tag carrying it) while the spec said "the first tag after this
+  ships" (= one later). Firing the ROADMAP's version 400s every installed
+  build on the release that introduces the field. **A sunset row names a
+  VERSION, not a relative clause, and the gate checks it against the tag
+  the PR will ride.** (Fixed at the gate: v0.35.0, named in both.)
+- **A PR stacked on an unmerged PR presents a diff that is not its own.**
+  #268's base is `main` but #265's head is its ancestor, so `gh pr diff`
+  showed 85 files / 8278 additions for 79 files / 7860 of its own work —
+  and the whole-branch review reviewed both. **Check
+  `git merge-base --is-ancestor <other-open-head> HEAD` at every final
+  gate; if it holds, the merge order and the re-merge are conditions.**
+- **RF14, eighth: "ROADMAP carries it" is a claim to grep, not to read.**
+  The body said the ROADMAP carried the obligation to acknowledge
+  v0.32.0's two reversals; it carried neither. Cost of the check: one
+  grep. The reversals are permanent News-tab text a tester can re-read.
+  (Row filed at the gate.)
+- **A checkbox item appended to a slate can splice into the previous
+  bullet's sentence.** #268's sunset row landed mid-clause, leaving item 3
+  reading `**XS** \`Step\`'s { k: "test" } member yields…`. Cheap, invisible
+  in rendered markdown diffs, and it corrupts the register the next gate
+  quotes. **After adding a ROADMAP row, read the two bullets around it.**
+- Fold-word series: #228 ~270, #230 266, #239 148, #248 274, #249 225,
+  #258 134, **#268 186 → trimmed to budget at the gate**. The regression
+  was a 53-word arrow-diagram bullet ("door → Start Timer → ▶ → Finish →
+  door"). **A route is not an outcome.**

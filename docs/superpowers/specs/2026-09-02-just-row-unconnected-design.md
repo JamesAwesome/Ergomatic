@@ -127,8 +127,10 @@ today renders the same word tomorrow, from a column instead of a guess.
 **On the wire it is optional for one reason only — additive-only between
 tags: an old TestFlight build posts no `source`.** When absent the SERVER
 derives it by that same rule, once, at write time — **and that derivation
-has a sunset: at the first tag after this ships, `source` becomes
-REQUIRED on POST (a 400 when absent) and the derive path is deleted.**
+has a sunset: at v0.35.0 — the tag AFTER the one that ships this
+(expected v0.34.0), never the shipping tag itself, which would 400 every
+installed build — `source` becomes REQUIRED on POST (a 400 when absent)
+and the derive path is deleted.**
 That is a breaking API change and so waits for a tag boundary per
 `docs/RELEASING.md`'s additive-only rule; it is filed in ROADMAP with
 that tag as its trigger, not left as "someday". Until then the derived

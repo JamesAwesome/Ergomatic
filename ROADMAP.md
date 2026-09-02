@@ -167,7 +167,9 @@ row is accepted on James's operator report).
 
 **Follow-on slate — shaped at the close (2026-09-01), James's build order:
 item 3 first, then item 2 if still wanted once the ready fix is in hand,
-then items 4+5 as one TRIAD PR.** The PM's counsel that Wave F's
+then items 4+5 as one TRIAD PR — AMENDED at Gate 0 (James, 2026-09-02:
+"it's just missing the JR chip"): item 4 shipped WITH item 3 in #268, so
+item 5 ships alone.** The PM's counsel that Wave F's
 pocketed-phone row outranks this slate against the north star is on the
 record (this would be a second household exception); James chose the
 slate.
@@ -204,24 +206,14 @@ slate.
   and `session_logs.source` (pm5 | timer | manual, NOT NULL, backfilled
   by migration 0020 — every log door now writes which door the row came
   in by; the client's provenance inference is deleted).** The close found
-  most of it built:
-- [ ] **`source` derive-when-absent SUNSET — trigger: the first tag cut
-      AFTER the unconnected-JR PR merges.** The server derives `source`
-      for a POST that omits it only so build 811-era TestFlight clients
-      keep saving (additive-only between tags). At that tag: `source`
-      becomes REQUIRED on `POST /api/logs` (400 when absent), the route's
-      `deriveLogSource` call and its `source=derived` log line are
-      deleted, and `docs/RELEASING.md`'s API note records the break. The
-      0020 BACKFILL rule stays (it is history, not a live inference).
-      Filed here per RF14 and the spec's exit criterion 8b. **XS** `Step`'s `{ k: "test" }` member yields a phase with no seconds
+  most of it built: `Step`'s `{ k: "test" }` member yields a phase with no seconds
   and no metres, `Timer.tsx` counts UP for exactly that case
   (`Timer.test.tsx` pins it), and `SessionRun` with `workoutId: null`
   stores it with no `v` bump — **no new stored shape**; PR 1's server row
-  takes it as-is. So: a producer, a route, a door. Needs Gate 0 and ONE
-  ruling that is James's: an unconnected row has a phone clock and NO
-  distance, and `JustRowLog` refuses to save without machine numbers —
-  does the rower type the distance off the monitor, or is a time-only
-  row savable? The only item with an outside voice; first to build. **S/M**
+  takes it as-is. So: a producer, a route, a door. The one ruling that was
+  James's — type the distance off the monitor, or time only? — is RULED:
+  **time only** (2026-09-02); no distance is typed or invented. The only
+  item with an outside voice; built first. **S/M**
 - **"JR" badge on Just Row sessions**, in the manner of the other type
   chips (James, 2026-09-01 — supersedes the shipped "no type chip on
   purpose" stance). **DESIGNED 2026-09-02 on the unconnected board
@@ -233,9 +225,10 @@ slate.
   server's plan refusal, its empty-`steps` allowance, the absent badge),
   so `"JR"` can never live in `workout_type`. Visual precedent exists —
   `.workout-row-custom`, the ink-outline metadata chip — since
-  `TypeBadge.tsx` refuses to mint a fifth intensity colour. Ships with
-  item 5 (a plan-linked free row lands in `Plan.tsx`'s linked-row list
-  with a null type, which is exactly this item's hole). **S**
+  `TypeBadge.tsx` refuses to mint a fifth intensity colour. SHIPPED in
+  #268 with item 3 (hollow `.free-row-chip` on the door and every free
+  row in History/Today), so item 5's plan-linked free row will already
+  carry it. **S**
 - **Logging a Just Row against a plan — as SUBSTITUTION** (James,
   2026-09-01: "advances the record, records the stand-in"): the rower
   may say "this free row stands in for session N"; it advances the plan
@@ -246,13 +239,31 @@ slate.
   (`logs.ts`'s `!isFreeRow(...)`), so the substitution must be an
   explicit stored fact the server checks, not a client promise; and the
   reversing release note must acknowledge v0.32.0's "A Just Row never
-  advances your plan" or the News tab contradicts itself. One PR with
-  the badge. **S code / L ruling**
+  advances your plan" or the News tab contradicts itself. Ships ALONE
+  (the badge went with item 3 in #268). **S code / L ruling**
 - **Fidelity note, from the walk:** the app ROUNDS 93.7 s to `1:34` where
   the PM5 truncates to `1:33` — one quantity, four renderings across the
   two screens. For a phase whose promise is "the machine's own numbers
   land in your log", showing a figure the erg never displays deserves a
   line at the next design pass. **XS**
+- [ ] **`source` derive-when-absent SUNSET — trigger: v0.35.0, the tag
+      AFTER the one that ships #268 (expected v0.34.0). NOT v0.34.0:
+      firing it on the tag that introduces the field 400s every save from
+      every build still installed.** The server derives `source`
+      for a POST that omits it only so build 811-era TestFlight clients
+      keep saving (additive-only between tags). At that tag: `source`
+      becomes REQUIRED on `POST /api/logs` (400 when absent), the route's
+      `deriveLogSource` call and its `source=derived` log line are
+      deleted, and `docs/RELEASING.md`'s API note records the break. The
+      0020 BACKFILL rule stays (it is history, not a live inference).
+      Filed here per RF14 and the spec's exit criterion 8b. **XS**
+- [ ] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
+      told testers — trigger: the v0.34.0 notes PR.** v0.32.0 said "connect
+      to the erg" (there is now a Start Timer with no erg) and "no targets
+      and no type chip, on purpose" (free rows now carry the JR chip). One
+      sentence each, in the notes' own voice, or the News tab contradicts
+      itself two entries apart. Filed at #268's PM gate (RF14, and the PR
+      body had claimed this row already existed). **XS**
 
 **Owed within PR 2's own scope, recorded here so phase close can quote
 it:** a free row recovered with a `truncated` series trace (>4 h of rowing,
