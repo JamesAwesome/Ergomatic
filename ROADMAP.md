@@ -1015,8 +1015,10 @@ X" is a real disposition — most of these are single files.
   `kept === 0` renders the title alone (no body); `kept >= 1` keeps
   "N intervals kept." Copy-only, one file, cosmetic failure mode —
   FAST-PATH eligible, but a rendered **Gate 0** first (it changes what a
-  rower reads). Rides the next lost-monitor-surface touch (§4 / RC-29) or
-  its own fast-path. Evidence: `ConnectedSurface.tsx:848`.
+  rower reads). **Rides PR 4 (§5 partial metres) — James, 2026-09-02**: the
+  same PR that makes a part-rowed interval count toward "kept" owns what the
+  zero-kept banner says, one Gate 0 for the whole kept vocabulary. Evidence:
+  `ConnectedSurface.tsx:848`.
 
 
 - **v0.32.0's notes owe the DIAGNOSTICS door its affordance sentence** (PM
