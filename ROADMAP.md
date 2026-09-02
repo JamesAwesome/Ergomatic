@@ -558,6 +558,26 @@ rower's work silently.
         `source` SUNSET is NO LONGER PART OF PR A** — it shipped on its own
         as #273 / v0.35.0 on 2026-09-02 (its own row above is reconciled).
         **Gate 0-A** on the rendered saved row + list chip.
+        **SHIPPED as door PR A (2026-09-02), every clause above:** the
+        four-clause PARTIAL predicate with its five-word marker table
+        (`storedSummary.ts`'s `partialCloseReason`/`buildCloseLine`);
+        `STOPPED EARLY · N of M intervals measured` on the session detail,
+        above the heroes, and a `.log-partial-chip` on the History row,
+        both words from one table so the two surfaces cannot disagree;
+        `LINK LOST` keeping its own ungated, steps-independent trigger and
+        shortened to `LINK LOST · the app lost the monitor` so the combined
+        line fits; the list's boolean derived in SQL from the same four
+        clauses (no new column) with an agreement test holding the two
+        copies equal; `log_source` gaining `no-reading` (migration 0022, no
+        backfill, no device name) so a connected arrival that measured
+        nothing reads `NO MONITOR READING` with its wall-clock time rather
+        than `LOGGED BY HAND` with none; `timeLabel` re-derived as a
+        positive three-member allowlist; RC-18's fallback becoming the
+        literal `MONITOR` at all seven sites, with the deviceName-band
+        guard now keeping the `pm5` door for a nameless erg instead of
+        storing the session as by-hand. All three riders below are ticked.
+        Gate 0-A was APPROVED by James on 2026-09-02 before any task ran.
+        **PR B (the stored NUMBER) is still open.**
       - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
         in-flight interval's metres in NEW step keys (`partialMeters`/
         `partialSeconds`), never `actualMeters` — an older server drops

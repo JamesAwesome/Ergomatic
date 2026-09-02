@@ -242,7 +242,7 @@ transcription, and two merges have moved these lines since).
 | Dead `## Phase LM` pointers | `app/src/log/storedSummary.ts:74` and `:81` | both repoint at this spec |
 | Warm-up Σ-gap comment | `app/src/log/storedSummary.ts:424-436` | spec said `:427-433`; verified by subject |
 | `measuredElapsedSeconds` | `app/src/log/storedSummary.ts:801`, doc `:782-800` | floor `MIN_MEASURABLE_ELAPSED_SECONDS = 1` (`summaryModel.ts:577`) |
-| `LINK_LOST_LINE` (shipped literal) | `app/src/log/storedSummary.ts:953` | `"LINK LOST · the app lost the monitor before the end"` |
+| `LINK_LOST_LINE` (**CORRECTED 2026-09-02, Task 7**: this row named the PRE-PR-A literal and a line number two edits stale. The constant now lives at `app/src/log/storedSummary.ts:1077` and reads `"LINK LOST · the app lost the monitor"` — Gate 0-A's own shortening, shipped in `1ea9e17a`. The long form quoted below was the literal AT PLANNING TIME and is preserved here only as the before-half of that change.) | `app/src/log/storedSummary.ts:1077` (was `:953`) | before: `"LINK LOST · the app lost the monitor before the end"`; after: `"LINK LOST · the app lost the monitor"` |
 | `buildLinkLostLine` | `app/src/log/storedSummary.ts:960-962` | `endedBy === "link-lost"` ALONE |
 | `buildStoredSummary` return | `app/src/log/storedSummary.ts:970-978` | `linkLostLine` is the field to rename |
 | `StoredLog.endedBy` | `app/src/log/storedSummary.ts:191` | `(CloseReason \| "interrupted") \| null`, optional |
@@ -914,9 +914,15 @@ ready-for-merge comment carries the tester-floor reminder.
       // Just Row: a free row has no plan to be partial against. Every
       // connected JR closes `rower` (useMonitorSession.ts:5010), so this is
       // the leg that would go red if the rule ever stopped excluding it.
-      // NOTE (DELTA verdict B1): clause 2 is NOT what excludes it — clause 3
-      // already does, because `[].some(...)` is false. The mutation that
-      // bites here is clause 3 → `.every` (M3.1), never deleting clause 2.
+      // NOTE (CORRECTED 2026-09-02, Task 7 — the DELTA verdict B1 wording
+      // this replaced said "clause 2 is NOT what excludes it … the mutation
+      // that bites here is clause 3 → `.every`, never deleting clause 2",
+      // and Task 3 MEASURED the opposite). Clause 2 (`steps.length === 0`)
+      // returns FIRST, so it IS what excludes this row today; clause 3 would
+      // also do it, which is why clause 2 is redundant — but redundant is
+      // not inert. The probe that bites THIS leg is clause 2 deleted AND
+      // clause 3 flipped to `.every` (M3.1c). Either mutation alone leaves
+      // it green. See M3.1 below for the three measured runs.
       expect(partialCloseReason({ source: "pm5", steps: [], endedBy: "rower" }))
         .toBeUndefined();
 
@@ -1004,7 +1010,10 @@ ready-for-merge comment carries the tester-floor reminder.
       // "LINK LOST · the app lost the monitor before the end" since the
       // cohort-unlock spec; the trailing clause goes so the combined
       // partial line fits. The release note's promise
-      // (releaseNotes.ts:351) is that LINK LOST appears on the detail —
+      // (releaseNotes.ts:366 — CORRECTED 2026-09-02, Task 7; the plan
+      // said :351, which is v0.20.0's own note, and the shipped
+      // comment already cites :366) is that LINK LOST appears on the
+      // detail —
       // unchanged.
       // DECLARED FIRST: `CLOSE_REASON_WORDS` reads it in its initialiser,
       // and a `const` below would be a TDZ ReferenceError at module load.
@@ -1073,7 +1082,12 @@ ready-for-merge comment carries the tester-floor reminder.
       ```
       At `fcf2d4f9` this returns **9** hits: **4** code/test (updated here —
       `storedSummary.ts:953`, `storedSummary.test.ts:1330`,
-      `FromTheLog.test.tsx:391` and `:406`), 1 in `docs/history/phase-ll.md`,
+      `FromTheLog.test.tsx:391` and `:406`
+      — **CORRECTED 2026-09-02, Task 7:** all four line numbers were against
+      `fcf2d4f9`; at the actual base `f33ff007` they read `:978`, `:1395`,
+      `:390`, `:404`, and the constant now sits at `storedSummary.ts:1077`
+      after Task 3's edit. The COUNT held at 9; only the lines moved),
+      1 in `docs/history/phase-ll.md`,
       2 in `docs/superpowers/plans/2026-08-23-cohort-unlock.md` (`:17`, `:70`)
       — **both of those are RECORDS of what shipped then and must NOT be
       edited** — and 2 in THIS plan (the citations table and Task 3's own
@@ -1085,20 +1099,38 @@ ready-for-merge comment carries the tester-floor reminder.
 - [ ] **Step 8: Commit:**
       `feat: a stopped connected row says so, with N of M intervals measured`
 - [ ] **Step 9: Mutations.**
-      - **M3.1** (rewritten by the DELTA pass — the old version could not
-        bite). **Do NOT delete clause 2**: `[].some(...)` is false, so clause
-        3 already returns `undefined` for a Just Row and every test stays
-        green. Mutate **clause 3** instead, to the form that makes the empty
-        case TRUE:
-        ```ts
-        if (!row.steps.every((s) => s.actualSource === undefined)) return undefined;
-        ```
-        `[].every()` is `true`, so the Just Row now falls through to clause 4
-        and comes back `rower`. The **Just Row leg must go red** with
-        `expected 'rower' to be undefined`, and the render leg reads
-        `STOPPED EARLY · 0 of 0 intervals measured`. Record the exact text.
-        (Run the old mutation too, once, and record that it stays GREEN —
-        that green is the evidence for clause 2's comment.)
+      - **M3.1 — CORRECTED 2026-09-02 (Task 7), against what Task 3
+        MEASURED.** This step used to say: _"Do NOT delete clause 2 …
+        Mutate clause 3 instead … `[].every()` is `true`, so the Just Row now
+        falls through to clause 4 and comes back `rower`. The Just Row leg
+        must go red."_ **It does not.** Clause 2
+        (`if (row.steps.length === 0) return undefined;`) is still in place
+        and returns FIRST, so `.every` alone never reaches the empty case.
+        **Neither single mutation bites the Just Row leg; only both together
+        do.** The three runs Task 3 measured, at `8b8a07f3`:
+        - **M3.1** — clause 3 `.some` → `.every`, clause 2 intact: **RED, 2
+          files / 21 tests**, `AssertionError: expected undefined to be
+          'rower'` (and `'link-lost'`, `'program-dropped'`,
+          `'program-failed'`, `'interrupted'`) on the ten partial
+          cross-product legs, plus `Unable to find an element with the text:
+          STOPPED EARLY · 2 of 5 intervals measured` in `FromTheLog`. **The
+          Just Row leg stayed GREEN** — a strong probe, but on a different
+          invariant than this step claimed.
+        - **M3.1b** — delete clause 2 ALONE: **GREEN**,
+          `Test Files 170 passed (170)` / `Tests 4591 passed (4591)`. That
+          green is the evidence for the word "redundant" in clause 2's
+          comment.
+        - **M3.1c** — delete clause 2 **AND** flip clause 3 to `.every`:
+          **RED, 2 files / 31 tests**, `AssertionError: expected 'rower' to
+          be undefined` on "a connected Just Row is never partial, however it
+          closed" — the failure text this step predicted, reached only by the
+          combined mutant. Render side:
+          `"STOPPED EARLY · 0 of 0 intervals measured"`,
+          `"LINK LOST · the app lost the monitor · 0 of 0 intervals measured"`,
+          `"LEFT UNFINISHED · 0 of 0 intervals measured"`.
+        **Run M3.1c for the Just Row leg.** Run M3.1 and M3.1b too and record
+        both, since together they are what establishes that clause 2 is
+        redundant without being inert.
       - **M3.2** Delete clause 4 (return the raw `endedBy`, unfiltered): the
         `finished` + short-step leg must go red — the row now renders a
         marker where the spec says the copy stays what it is today. Record.
@@ -1340,22 +1372,27 @@ reading a new list response ignores an unknown key.
 - [ ] **Step 9: Commit:**
       `feat: History rows wear a short chip when a session stopped early`
 - [ ] **Step 10: Mutations.**
-      - **M4.1** (rewritten by the DELTA pass — the old version could not
-        bite). **Dropping `jsonb_array_length(...) > 0` changes nothing**:
-        `exists (select 1 from jsonb_array_elements('[]'::jsonb) …)` is
-        already false, exactly as `[].some(...)` is in TS. Mutate the EXISTS
-        to its negation instead:
-        ```sql
-        and not exists (
-          select 1 from jsonb_array_elements(${sessionLogs.steps}) as s
-          where not (s ? 'actualSource')
-        )
-        ```
-        The **Just Row list row flips to `true` while its detail row says
-        `false`** — the agreement test must go red with
-        `expected true to be false` on the "just row" name. This is the
-        list/detail divergence gate; record its exact message. (Run the old
-        mutation once and record that it stays GREEN.)
+      - **M4.1 — CORRECTED 2026-09-02 (Task 7), against what Task 4
+        MEASURED.** The half this step got right: dropping
+        `jsonb_array_length(...) > 0` alone changes nothing (**M4.1a: GREEN,
+        9 passed**) — `exists (select 1 from jsonb_array_elements('[]'::jsonb) …)`
+        is already false, exactly as `[].some(...)` is in TS. The half it got
+        wrong: flipping `exists` → `not exists` on its own does **not** flip
+        the **Just Row** row, because that same length clause short-circuits
+        `[]` first — the identical shape as M3.1's clause 2 above. Measured:
+        - **M4.1 (A)** — `exists` → `not exists`, length clause PRESENT:
+          **RED, 3 tests**, but the bite lands on the **PARTIAL** row, not
+          the Just Row: `"name": "partial"`, `"partial": true → false`,
+          `"speaks": true → false`, plus both value-contract cases. The Just
+          Row is untouched.
+        - **M4.1 (B)** — `not exists` **AND** the length clause removed:
+          **RED, 3 tests**, and now `"just row"` flips `false → true` with
+          `"speaks"` following it, `"link-lost just row"` flips too, and
+          `"partial"` still flips the other way.
+        **Run M4.1 (B) for the Just Row leg**, and record (A) and M4.1a
+        alongside it: (A) is what proves the EXISTS is load-bearing, M4.1a is
+        what proves the length clause is redundant, and only (B) reaches the
+        list/detail divergence on the empty-steps row.
       - **M4.2** Remove `coalesce(..., false)`: the "legacy null close" leg
         must go red on `expected 'object' to be 'boolean'` (SQL NULL arrives
         as `null`). If it does not, the coalesce is not load-bearing and that
@@ -1764,12 +1801,12 @@ migration, per the spec. Its rationale is written there.)
 | The posted body says `no-reading` | `LogSession.test.tsx` | post `"manual"` unconditionally |
 | `buildStoredTotalLine` keys on `source` | `storedSummary.test.ts` | restore `row.deviceName === null` (needs the `timer`-with-a-name discriminator row) |
 | C2 eligibility keys on `source` | `mapping.test.ts` | restore `row.deviceName === null` (same discriminator row) |
-| Just Row is NOT partial | `storedSummary.test.ts` | clause 3 → `.every` (`[].every()` is true) → reads `STOPPED EARLY`. **Deleting clause 2 does NOT bite** — see M3.1 |
+| Just Row is NOT partial | `storedSummary.test.ts` | clause 2 deleted **AND** clause 3 → `.every` (M3.1c) → `expected 'rower' to be undefined`. **CORRECTED 2026-09-02 (Task 7): neither mutation alone bites this leg** — clause 2 alone is all-green (M3.1b), `.every` alone reddens 21 other tests but leaves this leg green (M3.1). See M3.1 |
 | `finished` + short step is NOT partial | `storedSummary.test.ts` | drop clause 4 → renders a marker |
 | `N` counts MEASURED, not `actualSource` presence | `storedSummary.test.ts` | count `actualSource !== undefined` → the lost-boundary row's count changes |
 | `link-lost` keeps its ungated line | `storedSummary.test.ts` | delete the non-partial `link-lost` branch |
 | Only `link-lost` is ungated | `storedSummary.test.ts` | widen the ungated branch to all five → `rower` Just Row reads `STOPPED EARLY` |
-| **List `partial` == detail predicate** | integration | `exists` → `not exists` → Just Row list `true`, detail `false`. **Dropping `jsonb_array_length > 0` does NOT bite** — see M4.1 |
+| **List `partial` == detail predicate** | integration | `exists` → `not exists` **AND** `jsonb_array_length > 0` dropped (M4.1 B) → Just Row list `true`, detail `false`. **CORRECTED 2026-09-02 (Task 7): dropping the length clause alone is all-green (M4.1a), and `not exists` alone bites the PARTIAL row, not the Just Row (M4.1 A)** — see M4.1 |
 | List `partial` is a boolean, never null | integration | remove `coalesce(…, false)` |
 | The chip renders only on partial hero rows | `HistoryList.test.tsx` | gate on `true` instead of `log.partial` |
 | **List and detail agree on the WORD, not just the boolean** | integration | gate the chip on `partial` alone → the `link-lost just row` row says `LINK LOST` on the detail and nothing in History (M-3) |

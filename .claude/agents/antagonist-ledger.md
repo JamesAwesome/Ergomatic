@@ -5812,6 +5812,26 @@ same way.
   earlier pass's reasoning rather than the current code's.** The biting
   mutation is the one that makes the empty case TRUE (`.every()` for `.some()`,
   `not exists` for `exists`), never the one that deletes a redundant guard.
+  - **CORRECTION, 2026-09-02 (door PR A, Tasks 3/4 measured it; landed at Task
+    7).** The falsification above is right and its technique holds; its LAST
+    sentence is wrong. Making the empty case true is not sufficient either,
+    because the redundant guard still returns FIRST. **Neither mutation alone
+    bites the Just Row leg; only both together do.** Measured, TS side (Task
+    3, at `8b8a07f3`): `.every` alone = **RED on 21 other tests but the Just
+    Row leg GREEN**; clause 2 deleted alone = **all green**, `Test Files 170
+    passed (170)` / `Tests 4591 passed (4591)`; both together = **RED, 31
+    tests**, `AssertionError: expected 'rower' to be undefined`. SQL side
+    (Task 4): dropping `jsonb_array_length > 0` alone = **green, 9 passed**;
+    `not exists` alone = **red on 3 tests but on the PARTIAL row**
+    (`"partial": true → false`), the Just Row untouched; both together = the
+    Just Row flips `false → true` alongside `link-lost just row`. TECHNIQUE
+    the correction adds: **a redundant guard and the clause that subsumes it
+    are one gate with two doors — a probe of the subsuming clause is blind
+    while the guard stands, so the mutation that proves the RULE has to close
+    both doors at once.** And the failure is instructive twice over: this
+    ledger's own bullet, written to catch a plan reasoning about a predicate
+    as ARGUED rather than as WRITTEN, then reasoned about the MUTATED
+    predicate the same way. Evaluate the mutant, not the mutation.
 - **A SUNSET'S BLAST RADIUS IS COUNTED IN CALL SITES AND MISSES THE FIXTURES
   THAT EXIST TO BE OLD.** The plan's per-file table counted
   `grep -c 'post("/api/logs")'` and reported "via helpers" for five e2e files.
