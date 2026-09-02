@@ -1351,9 +1351,11 @@ describe("FromTheLog — a free row's MACHINE CONFIRMED block", () => {
 
     expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
     expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
-    // The phase's own absences hold alongside the block: no type chip and
-    // no steps widget (exit criteria 2 and 3), never an empty version.
-    expect(container.querySelector(".type-badge")).toBeNull();
+    // Exit criterion 3's absence holds alongside the block: no steps
+    // widget, never an empty one. (A `.type-badge` null check used to sit
+    // here too — vacuous, since this screen never renders `TypeBadge` for
+    // ANY row; criterion 2 is pinned where a badge can exist:
+    // `TypeBadge.test.tsx` and the history list in `e2e/justrow.spec.ts`.)
     expect(container.querySelector(".summary-intervals")).toBeNull();
   });
 });

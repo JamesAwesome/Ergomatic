@@ -284,7 +284,7 @@ export default function JustRow() {
             : "Wake the monitor if its screen is dark."}
         </p>
         {ready && (
-          <p className="connected-ready-warning">KEEP YOUR PHONE SCREEN ON</p>
+          <p className="connected-keep-on">KEEP YOUR PHONE SCREEN ON</p>
         )}
       </div>
       <div className="action-stack connected-interstitial-actions">

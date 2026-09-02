@@ -142,8 +142,14 @@ test.describe("Just Row: the whole flow", () => {
 
     await page.getByRole("button", { name: "Save this row" }).click();
 
-    // History, with the free row named and unbadged.
+    // History, with the free row named and unbadged. The badge absence is
+    // exit criterion 2's LITERAL subject — a history list holding the
+    // null-type row renders no `.type-badge` at all — and this is the one
+    // place a null-type row from the supported producer reaches a list.
+    // A fresh backdoor user's history holds only this row, so a badge on
+    // it is the only badge there could be: the probe bites.
     await expect(page).toHaveURL(/\/today\/log$/);
     await expect(page.getByText("Just Row").first()).toBeVisible();
+    await expect(page.locator(".type-badge")).toHaveCount(0);
   });
 });

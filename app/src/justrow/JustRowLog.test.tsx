@@ -117,8 +117,11 @@ describe("JustRowLog (the workout-less log door)", () => {
     expect(screen.getByText("10:20")).toBeInTheDocument();
     expect(screen.getByText("2,480 m")).toBeInTheDocument();
     expect(screen.getByText("2:05.0")).toBeInTheDocument();
-    // Absences, not empty widgets (exit criteria 2 and 3's shape).
-    expect(document.querySelector(".type-badge")).toBeNull();
+    // Absence, not an empty widget (exit criterion 3's shape). The
+    // `.type-badge` null check that used to sit beside it was vacuous —
+    // this door never renders `TypeBadge` for any row — and is pinned
+    // where a badge can exist instead (`TypeBadge.test.tsx`, the history
+    // list in `e2e/justrow.spec.ts`).
     expect(screen.queryByText(/INTERVALS/)).not.toBeInTheDocument();
   });
 
