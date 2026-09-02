@@ -2046,15 +2046,25 @@ describe("index.css: one END and no dead band, both ways up (timer-mode spec 202
     );
     // Symmetric: the right edge takes the same inset, so RUNNING and the
     // arrows clear the other corner (and the housing, whichever side).
+    // Desk walk 2: the FRAME pads no bottom inset — the gutter's background
+    // reaches the glass, and each column keeps its controls above the
+    // home-indicator zone with its own bottom inset (asserted below).
     expect(flat).toContain(
-      "padding: env(safe-area-inset-top, 0px) var(--edge-inset) env(safe-area-inset-bottom, 0px) 0",
+      "padding: env(safe-area-inset-top, 0px) var(--edge-inset) 0 0",
     );
     const gutter = rules.find((r) =>
       r.selectors.includes(".timer-screen .timer-header .timer-gutter"),
     );
     expect(gutter, "landscape gutter rule").toBeDefined();
     expect(gutter!.body.replace(/\s+/g, " ")).toContain(
-      "padding: 12px 0 12px var(--edge-inset)",
+      "padding: 12px 0 env(safe-area-inset-bottom, 0px) var(--edge-inset)",
+    );
+    const controls = rules.find((r) =>
+      r.selectors.includes(".timer-screen .timer-controls"),
+    );
+    expect(controls, "landscape controls rule").toBeDefined();
+    expect(controls!.body.replace(/\s+/g, " ")).toContain(
+      "margin-bottom: env(safe-area-inset-bottom, 0px)",
     );
   });
 

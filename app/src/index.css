@@ -4955,8 +4955,15 @@ button.back-link:disabled,
        connected surface broke out of the cap first. */
     max-width: none;
     margin: 0;
-    padding: env(safe-area-inset-top, 0px) var(--edge-inset)
-      env(safe-area-inset-bottom, 0px) 0;
+    /* Desk walk 2 (James, 2026-09-02, build 835): "still a gap above the
+       bottom edge." The frame no longer pads the bottom inset itself: the
+       GUTTER's sunken background runs to the physical bottom edge (HIG,
+       Layout: "extend content to fill the screen… backgrounds extend to
+       the edges of the display") while each column keeps its CONTROLS
+       above the home-indicator zone with its own bottom inset — the
+       gutter's END and the content column's ◀ ▶ both sit on the safe-area
+       floor, nothing of ours stacked on top of it. */
+    padding: env(safe-area-inset-top, 0px) var(--edge-inset) 0 0;
   }
 
   /* THE GUTTER (revision §5) — this screen's own; the connected surface's
@@ -4973,8 +4980,11 @@ button.back-link:disabled,
     justify-content: space-between;
     grid-column: 1;
     grid-row: 1 / -1;
-    /* Controls inside the inset; background to the edge (desk walk fix). */
-    padding: 12px 0 12px var(--edge-inset);
+    /* Controls inside the inset; background to the edge (desk walk 1).
+       Bottom: the home-indicator inset ONLY (desk walk 2) — END's foot is
+       the safe-area floor, and the sunken background continues beneath
+       it to the glass. */
+    padding: 12px 0 env(safe-area-inset-bottom, 0px) var(--edge-inset);
     background: var(--surface-sunken);
     border-right: 1px solid var(--rule);
   }
@@ -5231,7 +5241,10 @@ button.back-link:disabled,
     grid-column: 3;
     grid-row: 6;
     margin-top: 0;
-    margin-bottom: 12px;
+    /* Desk walk 2: the board's own 12px inset stacked on top of the
+       home-indicator inset and read as a gap on the phone. The arrows now
+       sit on the safe-area floor, level with END's foot. */
+    margin-bottom: env(safe-area-inset-bottom, 0px);
     /* 0, not the base rule's 8 (measured budget finding, see
        `.timer-name`'s own comment above for the full accounting): this
        row's own trailing padding was part of the 66px overflow. */
