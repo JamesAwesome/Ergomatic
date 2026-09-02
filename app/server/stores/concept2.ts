@@ -332,50 +332,6 @@ export function createConcept2Store(db: Db) {
           sql`${concept2AuthAttempts.createdAt} < now() - make_interval(secs => ${maxAgeMs / 1000})`,
         );
     },
-
-    // TEMPORARY SHIM — retired by Task 6 (routes rewrite); design §2 says
-    // these go. Do not add callers. Fix round 1 controller ruling A: kept
-    // ONLY so `routes/concept2.ts` (Task 6's file, untouched here beyond
-    // the one `surface` field the new `NewConcept2Attempt` type forces)
-    // still typechecks and its own tests still run, without landing a
-    // route-logic change that belongs to Task 6. Same unconditional,
-    // single-statement delete-and-check-fresh-in-JS shape `consumeAttempt`
-    // always had; `surface` is returned alongside the original
-    // `{userId, weightClass}` pair since the column now exists, but no
-    // caller reads it yet.
-    async consumeAttempt(
-      nonce: string,
-      maxAgeMs: number,
-    ): Promise<{
-      userId: string;
-      weightClass: WeightClass;
-      surface: LinkSurface;
-    } | null> {
-      const rows = await db
-        .delete(concept2AuthAttempts)
-        .where(eq(concept2AuthAttempts.nonce, nonce))
-        .returning({
-          userId: concept2AuthAttempts.userId,
-          weightClass: concept2AuthAttempts.weightClass,
-          surface: concept2AuthAttempts.surface,
-          fresh: sql<boolean>`${concept2AuthAttempts.createdAt} >= now() - make_interval(secs => ${maxAgeMs / 1000})`,
-        });
-      const row = rows[0];
-      if (!row || !row.fresh) return null;
-      return {
-        userId: row.userId,
-        weightClass: row.weightClass,
-        surface: row.surface,
-      };
-    },
-
-    // TEMPORARY SHIM — retired by Task 6 (routes rewrite); design §2 says
-    // these go. Do not add callers.
-    async deleteAttemptsFor(userId: string): Promise<void> {
-      await db
-        .delete(concept2AuthAttempts)
-        .where(eq(concept2AuthAttempts.userId, userId));
-    },
   };
 }
 

@@ -39,10 +39,9 @@ export interface AppDeps {
     available: () => boolean;
     store: Concept2Store;
     client: C2Client;
-    // Task 6 rewires this: Wave E PR1 Task 4 removed `redirectUri` from
-    // C2ClientConfig (both calls now take it as an argument, per-surface);
-    // this is the web value threaded through until Task 6 adds the
-    // per-surface derivation.
+    // PR1.75a: the WEB surface's redirect (the native one is a constant in
+    // routes/concept2.ts). Was `C2ClientConfig.redirectUri` — both client
+    // calls now take the surface's redirect as an argument.
     webRedirectUri: string;
   } | null;
 }
@@ -98,14 +97,13 @@ export function createApp(deps: AppDeps) {
   // Controller ruling R1 (task-7-brief.md): mounted BESIDE `createAuthRouter`
   // (above), BEFORE the `if (deps.stores)` data-router block below —
   // `routes/data.ts`'s own `router.use("/api", requireUser)` 401s every
-  // /api/* request that enters the data router first, and the concept2
-  // callback route is deliberately unauthenticated today (the nonce only
-  // correlates the return; it does not bind a principal, and there is no
-  // session check here either — `routes/concept2.ts`'s own comment).
-  // Mounting here, after this file's own `originCheck` above but ahead of
-  // the data router, keeps the authed POST/DELETE concept2 routes under
-  // CSRF cover while the callback never reaches a gate meant for the rest
-  // of the API. Requires BOTH
+  // /api/* request that enters the data router first (bare JSON), and the
+  // concept2 web callback authenticates ITSELF with a route-local cookie
+  // resolver so it can answer HTML 401/403 pages in its pinned ladder
+  // order (PR1.75a, routes/concept2.ts). Mounting here, after this file's
+  // own `originCheck` above but ahead of the data router, keeps the authed
+  // POST/DELETE concept2 routes under CSRF cover while the callback never
+  // reaches a gate meant for the rest of the API. Requires BOTH
   // `deps.concept2` and `deps.stores` (the router needs `stores.logs`) —
   // `deps.concept2 ?? null` per the AppDeps field's own comment.
   const concept2Deps = deps.concept2 ?? null;
@@ -117,6 +115,7 @@ export function createApp(deps: AppDeps) {
         logs: deps.stores.logs,
         client: concept2Deps.client,
         requireUser: requireUser(deps.sessions),
+        sessions: deps.sessions,
         webRedirectUri: concept2Deps.webRedirectUri,
       }),
     );

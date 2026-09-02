@@ -1045,33 +1045,6 @@ export function makeFakeConcept2Store(
         }
       }
     },
-
-    // TEMPORARY SHIM — retired by Task 6 (routes rewrite); design §2 says
-    // these go. Do not add callers. Fix round 1 controller ruling A: kept
-    // ONLY so `routes/concept2.ts`/`routes/concept2.test.ts` (Task 6's
-    // files) still run against this fake. Mirrors the real store's shim:
-    // unconditional single delete-and-check-fresh, `surface` returned
-    // alongside `{userId, weightClass}` though nothing reads it yet.
-    async consumeAttempt(nonce: string, maxAgeMs: number) {
-      const row = attempts.get(nonce);
-      attempts.delete(nonce);
-      if (!row) return null;
-      const ageMs = clock().getTime() - row.createdAt.getTime();
-      if (ageMs > maxAgeMs) return null;
-      return {
-        userId: row.userId,
-        weightClass: row.weightClass,
-        surface: row.surface,
-      };
-    },
-
-    // TEMPORARY SHIM — retired by Task 6 (routes rewrite); design §2 says
-    // these go. Do not add callers.
-    async deleteAttemptsFor(userId: string) {
-      for (const [nonce, row] of attempts) {
-        if (row.userId === userId) attempts.delete(nonce);
-      }
-    },
   };
 }
 
