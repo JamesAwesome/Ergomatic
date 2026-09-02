@@ -27,9 +27,19 @@ import type { LogStep } from "./stores/logs.js";
 // `logSourceContradiction` is the other half: when a client DOES post a
 // `source`, the body must not contradict it. Not "must equal the derived
 // member" — the whole point of storing the fact is that the inference is
-// wrong for some rows (a time-only Just Row is `timer` with `steps: []`,
-// which the guess would call `manual`) — but a member the body makes
-// impossible is a client bug and gets a 400 naming the field.
+// wrong for some rows — but a member the body makes impossible is a client
+// bug and gets a 400 naming the field. The ONLY evidence that can make a
+// member impossible is `deviceName`: `pm5` needs one, `timer` and `manual`
+// need none. Steps are deliberately NOT consulted: the spec's draft rule
+// ("`timer` requires a stopwatch step or empty steps") 400'd every
+// ordinary timer save, because the Timer door logs `actualSource:
+// "assumed"` for every TIME phase (`src/session/logDraft.ts`'s
+// `nextDistance` never touches a time phase), so a time-only workout closed
+// on the Timer posts `timer` with zero stopwatch steps — caught by Task 4's
+// e2e (`session.spec`, `today.spec`, `retest.spec` red on "Save stays on
+// /session/log") and curl. That same row DERIVES/backfills `manual` above,
+// which is the word the read side rendered for it before this PR — so the
+// inference is left exactly as it was and only the refusal is narrowed.
 
 export interface LogSourceEvidence {
   deviceName: string | null;
@@ -56,12 +66,9 @@ export function logSourceContradiction(
         ? "source pm5 requires a deviceName"
         : null;
     case "timer":
-      if (evidence.deviceName !== null) {
-        return "source timer requires deviceName to be absent";
-      }
-      return evidence.steps.length === 0 || hasStopwatchStep(evidence.steps)
-        ? null
-        : "source timer requires a stopwatch step or empty steps";
+      return evidence.deviceName !== null
+        ? "source timer requires deviceName to be absent"
+        : null;
     case "manual":
       return evidence.deviceName !== null
         ? "source manual requires deviceName to be absent"

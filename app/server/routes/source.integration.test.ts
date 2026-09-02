@@ -204,11 +204,6 @@ describe("POST/GET /api/logs: source is derived when absent, refused when it con
       { source: "manual", deviceName: "PM5 432331249 Row" },
       "source manual requires deviceName to be absent",
     ],
-    [
-      "timer with non-empty, non-stopwatch steps",
-      { source: "timer", steps: [ASSUMED_STEP] },
-      "source timer requires a stopwatch step or empty steps",
-    ],
   ])(
     "refuses a contradiction — %s — with a 400 naming the field, and persists nothing",
     async (_name, overrides, message) => {
@@ -228,6 +223,21 @@ describe("POST/GET /api/logs: source is derived when absent, refused when it con
       expect(after.body).toHaveLength(before.body.length);
     },
   );
+
+  // Every ordinary timer save: the Timer door logs a TIME phase as
+  // `actualSource: "assumed"` (`src/session/logDraft.ts`), so a time-only
+  // workout closed on the Timer posts `timer` with no stopwatch step at all.
+  // The spec's draft steps clause 400'd this (Task 4's e2e caught it);
+  // the fact stands as posted, while the SAME body with `source` absent
+  // still derives `manual` (the case above) — the inference does not move.
+  it("posted timer with all-assumed steps and no device is stored as timer (the ordinary Timer-door save)", async () => {
+    const bearer = await bearerToken();
+    const row = await postThenGet(
+      bearer,
+      body({ source: "timer", steps: [ASSUMED_STEP], timeSeconds: 1200 }),
+    );
+    expect(row.source).toBe("timer");
+  });
 
   it.each([["bogus"], [null], [""], [1]])(
     "refuses a non-member source (%j) with a 400 naming the field",

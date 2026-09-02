@@ -83,10 +83,10 @@ describe("logSourceContradiction: a posted source must agree with the body", () 
     ).toBe("source manual requires deviceName to be absent");
   });
 
-  it("timer with non-empty, non-stopwatch steps is refused", () => {
+  it("timer with all-assumed steps PASSES — the Timer door logs every time phase as assumed (logDraft.ts), so this is every ordinary timer save", () => {
     expect(
       logSourceContradiction("timer", { deviceName: null, steps: [ASSUMED] }),
-    ).toBe("source timer requires a stopwatch step or empty steps");
+    ).toBeNull();
   });
 
   it("every consistent pairing passes: pm5+device, timer+stopwatch, timer+empty (the free row), manual+no device", () => {
