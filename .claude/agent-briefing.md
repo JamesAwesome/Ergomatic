@@ -215,3 +215,26 @@ tests fail with `localStorage.clear()` errors that look like a real
 regression. Always `pnpm test` / `pnpm test:coverage` (their scripts set
 `NODE_OPTIONS=--no-experimental-webstorage`), or export that flag
 yourself if you must invoke vitest directly.
+
+## Session-scoped state (RF27 — binding for plans and implementers)
+
+Any change introducing state tied to a connection, session, attempt, or
+document lifetime carries a LIFETIME TABLE in its plan/brief: each ref,
+guard, and counter; its mint site; its clear sites; what survives teardown,
+relaunch, and re-arm. Specs and plans state INVARIANTS ("one entry per
+logical session"), never mechanisms ("push a slot on teardown"). Any new
+Web/OS API names its availability floor against
+`IPHONEOS_DEPLOYMENT_TARGET` (currently 15.0) with a citation.
+
+## Before any ready-for-re-review signal (controller checklist)
+
+1. `git merge origin/main` on the branch; resolve; gates green on the
+   merged tree.
+2. A CI run EXISTS for the exact head AND is green (an empty check rollup
+   is not green — the #258 premature-comment lesson).
+3. The PR body names the current head with exact commit/test counts; a
+   grep for every superseded figure and retired phrasing comes back empty.
+4. When a reviewer states a rule, adopt its wording VERBATIM and sweep all
+   sibling phrasings in the same round.
+5. Then, and only then: the PR comment explaining the round + the chat
+   sentence, both explicit.
