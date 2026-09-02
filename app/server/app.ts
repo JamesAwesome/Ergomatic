@@ -39,6 +39,11 @@ export interface AppDeps {
     available: () => boolean;
     store: Concept2Store;
     client: C2Client;
+    // Task 6 rewires this: Wave E PR1 Task 4 removed `redirectUri` from
+    // C2ClientConfig (both calls now take it as an argument, per-surface);
+    // this is the web value threaded through until Task 6 adds the
+    // per-surface derivation.
+    webRedirectUri: string;
   } | null;
 }
 
@@ -112,6 +117,7 @@ export function createApp(deps: AppDeps) {
         logs: deps.stores.logs,
         client: concept2Deps.client,
         requireUser: requireUser(deps.sessions),
+        webRedirectUri: concept2Deps.webRedirectUri,
       }),
     );
   }

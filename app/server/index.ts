@@ -140,8 +140,11 @@ const concept2 = {
     baseUrl: c2BaseUrl,
     clientId: c2ClientId,
     clientSecret: c2ClientSecret,
-    redirectUri: c2RedirectUri,
   }),
+  // Task 6 rewires this: Wave E PR1 Task 4 moved `redirectUri` off the
+  // client config onto each call, per-surface — this is the web value
+  // until Task 6 adds the native one.
+  webRedirectUri: c2RedirectUri,
 };
 
 const port = Number(process.env.PORT ?? 8080);

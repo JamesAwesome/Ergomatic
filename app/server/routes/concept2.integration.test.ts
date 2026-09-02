@@ -186,7 +186,6 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
         baseUrl: "https://log-dev.concept2.test",
         clientId: "seam-client-id",
         clientSecret: "seam-client-secret",
-        redirectUri: "https://ergomatic.example/api/concept2/callback",
       },
       fetchMock,
     );
@@ -214,6 +213,9 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
           available: () => true,
           store: createConcept2Store(db),
           client,
+          // Task 6 rewires this: same web value the removed cfg.redirectUri
+          // carried.
+          webRedirectUri: "https://ergomatic.example/api/concept2/callback",
         },
       }),
     );

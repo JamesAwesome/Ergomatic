@@ -97,6 +97,8 @@ function buildApp(
     client,
     requireUser: requireUser(fakeSessionStore()),
     now: overrides.now,
+    // Task 6 rewires this: per-surface redirect derivation lands there.
+    webRedirectUri: "https://app.test/api/concept2/callback",
   };
   const app = express();
   app.use(express.json());
@@ -434,7 +436,12 @@ describe("callback (GET /api/concept2/callback)", () => {
         expiresAt: new Date(Date.now() + 3600_000),
       },
     });
-    vi.mocked(client.fetchMe).mockResolvedValue({ ok: true, c2UserId: 2211 });
+    // Task 6 rewires this: fetchMe's result now carries username (Task 4).
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: null,
+    });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
 
@@ -469,7 +476,12 @@ describe("callback (GET /api/concept2/callback)", () => {
         expiresAt: new Date(Date.now() + 3600_000),
       },
     });
-    vi.mocked(client.fetchMe).mockResolvedValue({ ok: true, c2UserId: 2211 });
+    // Task 6 rewires this: fetchMe's result now carries username (Task 4).
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: null,
+    });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
 
@@ -502,7 +514,12 @@ describe("callback (GET /api/concept2/callback)", () => {
         expiresAt: new Date(Date.now() + 3600_000),
       },
     });
-    vi.mocked(client.fetchMe).mockResolvedValue({ ok: true, c2UserId: 2211 });
+    // Task 6 rewires this: fetchMe's result now carries username (Task 4).
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: null,
+    });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
 
@@ -589,9 +606,11 @@ describe("callback (GET /api/concept2/callback)", () => {
         expiresAt: new Date(Date.now() + 3600_000),
       },
     });
+    // Task 6 rewires this: fetchMe's result now carries username (Task 4).
     vi.mocked(client.fetchMe).mockResolvedValue({
       ok: true,
       c2UserId: LINK_INPUT.c2UserId,
+      username: null,
     });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);

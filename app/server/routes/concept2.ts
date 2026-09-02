@@ -28,6 +28,10 @@ export interface Concept2RouterDeps {
   logs: LogsStore;
   client: C2Client;
   requireUser: RequestHandler;
+  // Task 6 rewires this: today the only surface is the web callback, so
+  // every call site below uses this one value. Task 6 replaces it with a
+  // per-surface derivation (native gets its own scheme).
+  webRedirectUri: string;
   // Injectable clock for token-freshness expiry tests — mirrors the
   // concept2 store's own `clock` injection seam (testing/fakes.ts).
   now?: () => Date;
@@ -133,6 +137,7 @@ export function createConcept2Router({
   logs,
   client,
   requireUser,
+  webRedirectUri,
   now = () => new Date(),
 }: Concept2RouterDeps): Router {
   const router = Router();
@@ -180,7 +185,9 @@ export function createConcept2Router({
       weightClass: weightClass as WeightClass,
       surface: "web",
     });
-    res.json({ authorizeUrl: client.authorizeUrl(nonce) });
+    // Task 6 rewires this: web-only for now, per-surface derivation lands
+    // with the native bind.
+    res.json({ authorizeUrl: client.authorizeUrl(nonce, webRedirectUri) });
   });
 
   // -- callback (NO requireUser — the nonce correlates, not binds) -------
@@ -213,7 +220,10 @@ export function createConcept2Router({
       htmlPage(res, 400, INVALID_STATE_HTML);
       return;
     }
-    const tokenResult = await client.exchangeCode(code);
+    // Task 6 rewires this: must match the redirect_uri the mint call used
+    // (Concept2 requires the pair to agree) — web-only until the native
+    // surface exists.
+    const tokenResult = await client.exchangeCode(code, webRedirectUri);
     if (!tokenResult.ok) {
       htmlPage(res, 502, EXCHANGE_FAILED_HTML);
       return;

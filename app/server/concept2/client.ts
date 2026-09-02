@@ -14,7 +14,6 @@ export interface C2ClientConfig {
   baseUrl: string;
   clientId: string;
   clientSecret: string;
-  redirectUri: string;
 }
 
 export interface C2TokenSet {
@@ -104,25 +103,30 @@ export function createC2Client(
 
   return {
     // /oauth/authorize shape precedent: scripts/c2-crossconnect.ts's
-    // buildAuthorizeUrl (PR0, live-run-proven).
-    authorizeUrl(state: string): string {
+    // buildAuthorizeUrl (PR0, live-run-proven). PR1.75a §3: `redirectUri`
+    // is the SURFACE's (web: the https callback; native:
+    // `haus.waffle.ergomatic://oauth/callback`), chosen by the route at
+    // mint — Concept2 requires the exchange's redirect_uri to match the
+    // authorize call's ("This must match the value sent in the call to
+    // oauth/authorize"), so both calls take it as an argument.
+    authorizeUrl(state: string, redirectUri: string): string {
       const u = new URL("/oauth/authorize", cfg.baseUrl);
       u.searchParams.set("client_id", cfg.clientId);
       u.searchParams.set("scope", SCOPE);
       u.searchParams.set("response_type", "code");
-      u.searchParams.set("redirect_uri", cfg.redirectUri);
+      u.searchParams.set("redirect_uri", redirectUri);
       u.searchParams.set("state", state);
       return u.toString();
     },
 
-    exchangeCode(code: string): Promise<C2TokenResult> {
+    exchangeCode(code: string, redirectUri: string): Promise<C2TokenResult> {
       return requestTokens(
         new URLSearchParams({
           client_id: cfg.clientId,
           client_secret: cfg.clientSecret,
           grant_type: "authorization_code",
           code,
-          redirect_uri: cfg.redirectUri,
+          redirect_uri: redirectUri,
           scope: SCOPE,
         }),
       );
@@ -150,9 +154,14 @@ export function createC2Client(
     // (`scripts/c2-crossconnect.ts:255-258`), the results-201 body's own
     // `user_id` was 2211, and the measured follow-up
     // `GET /profile/2211/log/85557` returned 200.
+    // username: MEASURED present (string) on log-dev GET /api/users/me,
+    // 2026-09-02, live response; read as optional so a missing field can
+    // never render "undefined" (the route falls back to #<id>).
     async fetchMe(
       accessToken: string,
-    ): Promise<{ ok: true; c2UserId: number } | { ok: false }> {
+    ): Promise<
+      { ok: true; c2UserId: number; username: string | null } | { ok: false }
+    > {
       let res: Response;
       try {
         res = await fetchImpl(new URL("/api/users/me", cfg.baseUrl), {
@@ -163,9 +172,14 @@ export function createC2Client(
       }
       if (!res.ok) return { ok: false };
       const parsed = await safeJson(res);
-      const id = (parsed as { data?: { id?: unknown } } | undefined)?.data?.id;
+      const data = (
+        parsed as { data?: { id?: unknown; username?: unknown } } | undefined
+      )?.data;
+      const id = data?.id;
       if (typeof id !== "number") return { ok: false };
-      return { ok: true, c2UserId: id };
+      const username =
+        typeof data?.username === "string" ? data.username : null;
+      return { ok: true, c2UserId: id, username };
     },
 
     async postResult(
