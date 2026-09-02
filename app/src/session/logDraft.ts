@@ -850,8 +850,28 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
     // here, explicitly: if one is logged after this ships it gains a
     // phantom warm-up row in the saved steps (and therefore in `M`).
     // Nothing produces the value any more (`buildLogSeed` above cannot),
-    // and no reader re-runs `buildMonitorLogSteps` over STORED rows, so
-    // saved data is untouched.
+    // and no reader re-runs `buildMonitorLogSteps` over ALREADY-STORED
+    // rows — "saved data is untouched" is true only of rows saved BEFORE
+    // this ships, never of the residual population below once IT saves.
+    //
+    // CONTROLLER RULING (fix round 1, Important 1) — the divergence this
+    // acceptance actually produces, named explicitly rather than left
+    // implicit in "gains a phantom warm-up row": for the narrow residual
+    // population (an unlogged `MonitorRun` authored before warm-up removal
+    // — PR #150, v0.16.0, 2026-08-22 — and logged AFTER door PR A ships),
+    // the read-back AVG SPLIT DIVERGES between doors on that SAME row.
+    // `summaryModel.ts`'s `warmupIndex` still detects the in-memory
+    // `kind: "warmup"` step and keeps the LIVE post-session summary's AVG
+    // SPLIT frozen at the OLD fused figure (2:20.0 in the case that
+    // surfaced this). Once saved, the Log door's own `storedSummary.ts`
+    // (tier B1 `:781-782`, tier B2 `:803`) recomputes AVG SPLIT from
+    // `row.steps` in PREFERENCE to the stored column — and `row.steps` now
+    // carries the former warm-up position as a real, measured pm5 step
+    // (this removal's whole point), so the Log door's own number moves to
+    // 2:29.4 on that SAME row. `warmupIndex` stays exactly as it is: this
+    // divergence is bounded to the one population above, ACCEPTED here,
+    // and surfaced to James in the PR body as the one number door PR A can
+    // move.
     const step: LogStep = { label: seedStep.label };
     if (interval.targetSplit !== null) step.targetSplit = interval.targetSplit;
     if (interval.kind === "time") {

@@ -451,7 +451,18 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  spec §4 rider 2: the legacy warm-up leg of this claim is GONE — rider 2
 //  removed `buildMonitorLogSteps`'s own `kind === "warmup"` skip, so a
 //  legacy warm-up seed step now produces a stored step like any other, and
-//  parity on THAT leg now holds):**
+//  parity on THAT leg now holds for what THIS function computes):**
+//  **Caveat (fix round 1, Minor 4):** "parity" above means Σ steps no
+//  longer UNDER-counts relative to what a fresh run's own tier-B work-only
+//  sum would give — it does NOT mean this STORED number now matches the
+//  LIVE door's own number for a legacy wu run. The live door never even
+//  calls `tierBWorkDistanceMeters`/`tierBWorkTimeSeconds` for one:
+//  `isLegacyWarmupRun` (`summaryModel.ts:762`) routes it to
+//  `monitorDistanceMeters`/`monitorTimeSeconds` instead (the OLD fused
+//  formulas) specifically so the LIVE summary's own number stays frozen.
+//  See `logDraft.ts`'s guard-removal comment for the resulting divergence
+//  this creates between the live and stored numbers on that one
+//  population, which this rider accepts.
 //    - Sub-threshold parity HOLDS: like the live door, this sum applies
 //      no sub-threshold exclusion (a mis-tap's own tiny reading still
 //      counts toward DISTANCE/TIME here, exactly as `tierBWorkDistanceMeters`

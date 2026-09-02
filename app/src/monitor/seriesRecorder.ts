@@ -227,10 +227,15 @@ export interface Sample {
    *  winning frame's own `state` was `"resting"` — ABSENT means work, the
    *  same absent-not-false idiom `hr` above already uses, so a work
    *  sample costs zero extra bytes. The renderer cannot recover this
-   *  later (a stored log's steps never carry a warm-up row, so anything
-   *  positional derived from steps lands displaced); the recorder is the
-   *  only place that ever saw the wire's own state byte, so it must mark
-   *  the sample at construction. */
+   *  later (a stored log's steps carry no reliable warm-up marker to key a
+   *  positional derivation off — nothing FLAGS a step as one; before door
+   *  PR A they were never present at all, and PR A's own accepted residual
+   *  means the narrow legacy population it names can even carry one,
+   *  unmarked, once re-logged — `logDraft.ts`'s guard-removal comment has
+   *  the full account — so any positional derivation from steps was
+   *  always liable to land displaced); the recorder is the only place
+   *  that ever saw the wire's own state byte, so it must mark the sample
+   *  at construction. */
   readonly r?: true;
 }
 

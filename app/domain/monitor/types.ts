@@ -634,9 +634,11 @@ export interface Transport {
    *  **RC-12 (`docs/history/phase-rc.md:2054-2056`):** this comment used
    *  to also name "the phone's Bluetooth stack resetting" and "iOS
    *  backgrounding" among the causes of an unexpected `onDisconnect` — the
-   *  walks established it covers NEITHER. No capture or walk has ever shown
-   *  this callback firing for a Bluetooth-stack reset; that claim was
-   *  unsourced. For backgrounding specifically: `Info.plist` declares no
+   *  walks established it covers NEITHER. This codebase records no capture
+   *  or walk showing this callback firing for a Bluetooth-stack reset
+   *  (`grep -rli "bluetooth stack\|stack reset" docs/monitor/sessions/` is
+   *  empty); that claim was unsourced. For backgrounding specifically:
+   *  `Info.plist` declares no
    *  `UIBackgroundModes`, so the app's whole JS runtime simply SUSPENDS
    *  while backgrounded; nothing in this codebase observes CoreBluetooth
    *  actually tearing the link down for that reason, and whether

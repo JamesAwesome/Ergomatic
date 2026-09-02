@@ -672,7 +672,23 @@ export function measuredIntervalCount(
  *  interval into its AVG SPLIT — moving a number on a record already shown
  *  to the rower. Also -1 when there is no `logSeed` at all (a v1
  *  `MonitorRun` predating the field, `MonitorRun.logSeed`'s own doc
- *  comment). */
+ *  comment).
+ *
+ *  CONTROLLER RULING (fix round 1, Important 1) — why this function stays
+ *  even though `buildMonitorLogSteps` no longer needs it: for the narrow
+ *  residual population (an unlogged `MonitorRun` authored before warm-up
+ *  removal — PR #150, v0.16.0, 2026-08-22 — and logged AFTER door PR A
+ *  ships), this function is what keeps the LIVE post-session summary's AVG
+ *  SPLIT frozen at the OLD fused figure (2:20.0 in the case that surfaced
+ *  this) while the SAME row, once saved, reads back a DIFFERENT number
+ *  through the Log door — `storedSummary.ts` (tier B1 `:781-782`, tier B2
+ *  `:803`) recomputes AVG SPLIT from `row.steps` in PREFERENCE to the
+ *  stored column, and `row.steps` now carries the former warm-up position
+ *  as a real, measured pm5 step (`logDraft.ts`'s own guard-removal comment
+ *  has the full account), so the Log door's number moves to 2:29.4 on that
+ *  SAME row. This divergence is bounded to the one population above,
+ *  ACCEPTED here, and surfaced to James in the PR body as the one number
+ *  door PR A can move. `warmupIndex` stays. */
 function warmupIndex(run: MonitorRun): number {
   return (
     run.logSeed?.steps.findIndex((s) => (s.kind as string) === "warmup") ?? -1
