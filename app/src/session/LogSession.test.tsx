@@ -3971,6 +3971,71 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(body.deviceName).toBe(NAMELESS_MONITOR_CAPTION);
   });
 
+  // The `pm5` narrowing's own gate (RC-18 mutation M5.5): the guard above
+  // substitutes `NAMELESS_MONITOR_CAPTION` ONLY when `body.source === "pm5"`
+  // — a REAL, reachable timer save never has a `deviceName` key to begin
+  // with (`handleSave`'s own `submit()` call never sets one), so this test
+  // does not fake an unreachable state; it pins what the timer door's own
+  // real body already looks like. Mutating the narrowing away (substitute
+  // unconditionally, on every door) makes this leg the one that catches
+  // it: the timer body would gain a `deviceName` the biconditional forbids
+  // (`server/logSource.ts`), and no other client test notices, since none
+  // asserts this door's body lacks the key.
+  it("the timer door's save never attaches a deviceName (the pm5 narrowing's own gate)", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-timer-no-devicename" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    // `mockBaselines()` mocks the `useBaselines` hook so this door's own
+    // save POST is the only recorded call (unrelated pre-existing quirk:
+    // without it, an isolated run of this door's OTHER save test also
+    // picks up a stray `/api/baselines` GET — order-dependent, nothing to
+    // do with RC-18, not touched here).
+    const logsCall = apiFn.mock.calls.find(([path]) => path === "/api/logs")!;
+    const body = JSON.parse(
+      (logsCall[1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body.source).toBe("timer");
+    expect("deviceName" in body).toBe(false);
+  });
+
+  // Same gate, the manual door's own real body (`handleManualSave`'s
+  // `submit()` call, `:2144`, never sets `deviceName` either).
+  it("the manual door's save never attaches a deviceName (the pm5 narrowing's own gate)", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-no-devicename" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.source).toBe("manual");
+    expect("deviceName" in body).toBe(false);
+  });
+
   // Series capture spec (2026-08-19), §3: the POST body attaches `series`
   // straight from the loaded run when present.
   it("omits series from the POST body when the run has none", async () => {
