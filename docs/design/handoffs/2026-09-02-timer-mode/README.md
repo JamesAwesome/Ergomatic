@@ -3,17 +3,7 @@
 **Origin:** James's phone findings on build 823 (2026-09-02, "Timer mode is
 really fucked up": END differs between orientations; a giant gap at the
 bottom) and the three copy notes batched at #268's and #272's PM gates.
-**Status: IMPLEMENTED (2026-09-02) — Gate 0 PASSED on rev 1c ("Approved",
-James). Captures re-taken in `docs/screenshots/`: `timer`,
-`timer-landscape`, `justrow-timer`, `justrow-timer-landscape`,
-`justrow-door`, `justrow-log-timer`, `justrow-history-chip`; each opened
-and compared to its board (the PR's Record block has the by-eye notes).
-One departure from the boards' own prose, not from the boards: the
-landscape band was never the rows failing to grow (row 4 was already
-`1fr`) — it was the grid's `min-height` stopping 70 px short of the frame
-plus the shell's reserved tab-bar strip, so the fix is the frame, and the
-grid keeps its seven rows with a third, 200 px control column so ◀ ▶ sit
-under Pause beside TOTAL LEFT as `ProgrammedLandscape.dc.html` draws.**
+**Status: GATE 0 PASSED (rev 1c) and DESK WALK PASSED — James, 2026-09-02, on build 839 after three phone rounds: "design looks good".**
 
 ## Mechanical ground
 
