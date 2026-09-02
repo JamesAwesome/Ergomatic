@@ -5875,3 +5875,53 @@ same way.
   shortened-literal grep returns exactly the 6 hits claimed; no `.summary-meta`
   e2e locator can see a second element; and PR A introduces no session-scoped
   state, so RF27 owes nothing.
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 1)
+
+- **A vendor lifecycle hook named in a design without checking that it fires in the case
+  it was chosen for.** Design §2 cleared the in-flight link claim via the Capacitor plugin's
+  `load()` "on a fresh document over a live session". `load()` runs ONCE, from
+  `registerPluginInstance` at view-controller construction; a WebView reload runs
+  `bridge.reset()` (storedCalls + listeners only) and never re-runs it, so the literal design
+  leaks the claim forever. Caught by the plan writer, not the design pass.
+  **Technique: for any vendor hook a design depends on, find its CALL SITES in the vendored
+  source — not its declaration — and check the call site is reachable in the failure case.**
+  RF16's second corollary aimed at a MECHANISM instead of a document: the API was real, the
+  argument needed an attribute of it (when it fires) that nobody checked.
+- **"Single resolution by construction" that is actually single resolution by ordering.**
+  The substituted `shouldOverrideLoad` teardown clears `activeCall` before cancelling, and the
+  completion handler guards on `activeCall != nil` — which asks "is there ANY call", not "is
+  this MY session's call". A superseded session's late completion can resolve the NEXT
+  session's call. Unreachable in practice (the window is a full page load), so hardening debt,
+  not a defect — but the comment claimed the strong version.
+  **Technique: for every "by construction" claim about single resolution, name the VALUE that
+  makes the two instances distinguishable. If the guard reads a shared slot rather than an
+  identity, the guarantee is ordering luck. A per-attempt token turns it deterministic.**
+- **A typed union that names every failure the AUTHOR thought of, and not the transport.**
+  `LinkOutcome` mapped nine plugin rejections and two server hops and had no member for a
+  thrown `fetch`/`JSON.parse`/`new URL` — on a walk conducted over a cloudflared quick tunnel.
+  Symptom: the operator taps and nothing happens, with no readout.
+  **Technique: for any union claiming to name "every way X can end", walk the function line by
+  line and list every expression that can THROW. Every throw with no catch is a missing member.**
+- **A comment-leader normaliser that strips `//` and leaves the third slash.** The phrase
+  census's `sed -E 's@^[[:space:]]*(\*|//|--|>)[[:space:]]?@@'` finds a JSDoc-wrapped phrase and
+  MISSES a Swift `///`-wrapped one — in the same PR that adds a `///`-commented Swift file to
+  the census corpus. Proven both ways with a two-line fixture.
+  **Technique: run a normaliser against a fixture in EVERY comment syntax its own `find` will
+  reach, not just the syntax that motivated it. `(\*+/?|/\*+|/{2,}|-{2,}|>|#)` is the fixed form.**
+- **A test-file insertion point identified from a string inside a heredoc.** The plan pointed
+  at "the trailing `case "$1" in` dispatch at :212" of `ios-release.test.sh`; that `case` is
+  inside a `cat > … <<'STUB'` block building a pnpm stub, and the file has no trailing dispatch.
+  **Technique: before citing a shell construct's line number as a structural anchor, check
+  whether it sits inside a heredoc — `grep -n "<<'" file` first.**
+- **Walk-card blocks written in bash for a fish shell.** `set -a; . .env; set +a` and `export`
+  are bash-only; the operator's default shell is fish, so the card's FIRST block fails.
+  **Technique: RF13's "run it or read the code" extends to the SHELL — check the operator's
+  `$SHELL` against the syntax, and say "run this in bash" when they differ.**
+- **HELD under attack, and worth recording as vetted:** all fifteen `ASWebAuthenticationSession.h`
+  quotes verbatim and line-exact; all `project.pbxproj` anchors exact (`objectVersion = 60`, no
+  synchronized groups, so manual refs are required not optional); `cap update ios` writes
+  `Package.swift`/Podfile and never `project.pbxproj`/`Main.storyboard`/`Info.plist`; the whole
+  retirement census reproduced exactly (`browserFinished` = 52 under `src`, to the occurrence);
+  the Info.plist scheme registration does NOT reopen RFC 8252 because zero `appUrlOpen`
+  listeners exist — an absence that is now a permanent census row, since a future listener
+  would silently reopen it.
