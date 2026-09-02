@@ -530,6 +530,34 @@ button:disabled {
   padding: 2px 6px;
 }
 
+/* The JR chip: a free row's (Just Row's) one badge, on the door's badge row
+   and on History/Today's rows (Just Row unconnected spec 2026-09-02,
+   §Mechanism 7; handoff README "The JR chip", rev 2e). Derived from
+   `isFreeRow(workoutId, workoutType)` by `FreeRowChip.tsx`, never stored.
+   HOLLOW, on purpose: `.workout-row-custom`'s metadata treatment above
+   (transparent, 1px --rule-3, --ink-3 text) in `.type-badge`'s box — every
+   FILLED chip on these screens is an intensity, and `--type-tr` is
+   literally `var(--ink)`, so a filled grey chip read as TR's neighbour twice
+   (rev 2c, rev 2d) before the fill was dropped. Geometry: `.type-badge` is
+   `padding: 3px 7px` with no border; the 1px border here is compensated in
+   padding (2px 6px), `.plan-row-badge-unknown`'s own arithmetic, so the
+   outer box is identical. Contrast computed, not eyeballed (RF6): --ink-3
+   #57544c on --page #f4f1e8 = 6.69:1, on --surface #fffdf7 = 7.43:1.
+   ONE rule, pinned by FreeRowChip.test.tsx; never composed with
+   `.type-badge` (exit criterion 2's count-zero pin stays true). */
+.free-row-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  padding: 2px 6px;
+}
+
 .pain-bar {
   display: flex;
   gap: 2px;

@@ -5038,3 +5038,95 @@ same way.
   a quantity that genuinely moves, after its predecessor was caught unable to
   fail); and the 4-hour truncation cap (`SERIES_SAMPLE_CAP = 14_400` at ~1
   sample/s while rowing).
+
+### 2026-09-02 — Phase JR follow-on, "Just Row without the monitor": delta pass (TRIAD, stored field)
+
+- **CLAIM:** "The Just Row timer mints only a `SessionRun` — no synthetic
+  `SessionDraft`, since `SessionDraft.type` is required." FALSE as a shippable
+  mechanism. `Timer.tsx:456` early-returns `<Navigate to="/today">` when
+  `draft === null`, and `:478` reads the on-screen name from `draft.title`, not
+  the run's own. A draft-less run cannot render the screen it exists for.
+  **Technique:** for any record a screen loads, read the screen's OWN null
+  guard and its field reads before believing the record is sufficient — grep
+  the component for every `loadX()` in its lazy initializers, not just the one
+  the spec names. The spec cited the record it was adding; the falsifying line
+  was about the record it wasn't.
+- **CLAIM (spec + Gate-0 handoff, twice): "storing `timeSeconds` makes the
+  detail's provenance predicate say `TIMER`."** FALSE, and it invalidated an
+  approved board. The predicate is `storedSummary.ts:272-276` —
+  `row.steps.some((s) => s.actualSource === "stopwatch")` — which never reads
+  `timeSeconds`; with `steps: []` it returns `LOGGED BY HAND`, and
+  `buildMeta:300` then also suppresses the time-of-day segment, so the approved
+  `SEP 2 · 21:57 · TIMER` renders `SEP 2 · LOGGED BY HAND`: three tokens wrong
+  out of three. The spec named `summaryModel.ts` instead, whose timer model
+  hardcodes `"TIMER"` (`:1177`) and is not what the detail reads.
+  **Technique:** grep the STRING the board displays, not the module the spec
+  names, and follow the screen's import chain to the function that produces it.
+  A board approved on a screen nobody traced is a Gate 0 that approved fiction.
+- **CLAIM: "`applyDistanceActual` returns early with no metres, which is why
+  the test row read LOGGED BY HAND (`Timer.tsx:575-578`)."** Right conclusion,
+  wrong mechanism, wrong lines — repeated verbatim into the design handoff.
+  `isDistance = phase.meters !== undefined` (`Timer.tsx:481`) and a `test`
+  phase has no `meters` (`domain/expand.ts:149`), so `applyDistanceActual` is
+  unreachable on that path; `handleConfirmFinish`'s `else` branch (`:566`)
+  records nothing. `575-578` is a doc comment; the early return is `:587`.
+  **Technique:** when a spec explains a symptom by a function's early return,
+  check the CALLER's guard first — an unreachable early return explains nothing,
+  and the real fix site is a different branch. A cited line range landing inside
+  a comment is the tell.
+- **CLAIM: "loose `isSessionRun`, expand-only"** — reintroduced, on the twin
+  record, the exact defect Phase JR PR 1's own review had already fixed:
+  `monitorRun.ts:483-489` carries a comment saying declaring `mode?: "justrow"`
+  and never checking it let `mode: "corrupt"` load as valid.
+  **Technique:** when a spec adds a field to record A "the same word record B
+  already uses", open B's validator and its review comments. A sibling record
+  that already survived a review of this exact field is a free checklist, and
+  RF18's tripwire phrasing applies to code comments that record a FIX, not only
+  ones that record a precondition.
+- **CLAIM: the posted free-row body.** Omitted `workoutTitle`, required
+  non-empty at `data.ts:1369-1372`; every existing free-row body carries it
+  (`JustRowLog.tsx:89`, `freeRow.integration.test.ts:89`). **Technique:** don't
+  read the validator for the fields the spec lists — diff the spec's body
+  against the nearest SHIPPING body for the same endpoint. The missing key is
+  never one the spec thought about.
+- **CLAIM: the RF27 lifetime table is complete.** It named two clear sites and
+  missed six. The live one: `useStartWorkout.ts:149` stages a replace-confirm
+  only for a COMPLETED `SessionRun`; a live run is protected solely by the
+  started-draft check at `:166`, which a draft-less Just Row does not trip — so
+  Start on any workout reaches `confirmReplace()`'s unguarded `clearRun()`
+  (`:114`) mid-row. **Technique:** build the lifetime table by grepping
+  `clearX|saveX|buildX` across `src/` and forcing a row per hit, rather than by
+  enumerating the flows you can picture. Then, for each guard you find, read the
+  CONDITION — a guard that exists is not a guard that fires.
+- **CLAIM: "`freeRowTotals` widens its `meters` to `number | null`."** The
+  function is typed `(run: MonitorRun)` (`totals.ts:35`) and cannot accept the
+  new `SessionRun` at all. **Technique:** when a spec proposes widening a
+  helper's RETURN type for a new caller, check the PARAMETER type first — a
+  helper that cannot accept the new input is the wrong helper, and widening it
+  hides that.
+- **Brittleness axis (§1b):** the proposed provenance rule ("`steps: []` + no
+  `deviceName` ⇒ TIMER") is a HEURISTIC — provenance inferred from an absence.
+  Safe today (`MonitorRun.deviceName: string` non-null, `monitorRun.ts:167`;
+  one free-row producer in `src/`). False positive named: follow-on item 5's
+  plan-visible free row, or any manual free-row door, reads TIMER silently.
+  This is verbatim the objection the same spec used to REJECT `workoutId ===
+  null` as its mode marker. **Technique:** when a spec rejects marker A for
+  being "free today, silent tomorrow", check whether it then adopts marker A's
+  logic somewhere downstream. Specs are internally inconsistent about their own
+  best arguments. **Controller's disposition:** rev 2 adopted it as a
+  closed-world rule with the false positive named; James read that and said
+  "Harden it" — rev 3 stores provenance as a nullable `session_logs.source`
+  enum written by every door, which is the field `storedSummary.ts:36-66` had
+  already queued under Phase LM. The finding stands as written: the fix was
+  the column, not a better comment.
+- **HELD under attack:** `mode` survives every engine transition (all eight
+  spread `...run` — `engine.ts:170/179/192/203/220/229/243/278`; no field-by-
+  field reconstruction exists). Connect IS guarded for a live Just Row
+  (`connectGuardStage`, `monitorRun.ts:1544-1550`, stages for any `SessionRun`).
+  The server accepts `timeSeconds` with `distanceMeters` absent
+  (`data.ts:1512-1514`; `freeRow.integration.test.ts:86-106` posts neither and
+  gets 201). Exit criterion 2's `.type-badge` pin is class-scoped
+  (`e2e/justrow.spec.ts:153`) and a `.free-row-chip` cannot break it; no
+  child-count assertion on `.today-log-row` exists in any of the six e2e specs.
+  The wall-clock claim is deterministic and correct (`engine.ts:104-110`,
+  `Timer.tsx:420-423`).

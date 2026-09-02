@@ -1,4 +1,5 @@
 import TypeBadge from "../components/TypeBadge";
+import FreeRowChip from "../workout/FreeRowChip";
 import { fmtSplit } from "../../domain/format.js";
 import type { RecentLog } from "../api/useRecentLogs";
 
@@ -208,6 +209,11 @@ export function LogRow({
   return (
     <>
       <TypeBadge type={log.workoutType} />
+      {/* The JR chip, in the SAME slot: `TypeBadge` returns null for a null
+          type and the chip returns null unless the PAIR is null, so exactly
+          one of the two renders — a free row wears JR, a deleted-workout
+          retry row (null id, surviving type) keeps its type badge. */}
+      <FreeRowChip workoutId={log.workoutId} workoutType={log.workoutType} />
       <span className="today-log-title">{log.workoutTitle}</span>
       <span className="today-log-meta">
         {/* R-A: held/pain are nullable ahead of the write side that can

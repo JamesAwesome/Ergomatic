@@ -124,6 +124,33 @@ describe("POST/GET /api/logs: a FREE ROW round-trips, and never advances the pla
   // Fixed by observing the thing that actually moves: select a plan first,
   // then read `GET /api/plan`'s `doneN` after the POST. Removing the
   // refusal takes that from 0 to 1.
+  // Just Row unconnected spec (2026-09-02), exit criterion 2: the TIME-ONLY
+  // free row rides this same shape — `source: "timer"`, a `timeSeconds`,
+  // no distance key at all — and reads back with no distance to render.
+  it("a time-only free row (source timer, steps [], no distanceMeters key) round-trips with distance null", async () => {
+    const bearer = await bearerToken();
+    const sent = freeRowBody({
+      advancesPlan: false,
+      source: "timer",
+      timeSeconds: 754,
+    });
+    expect("distanceMeters" in sent).toBe(false);
+    const created = await request(app)
+      .post("/api/logs")
+      .set("Authorization", bearer)
+      .send(sent);
+    expect(created.status).toBe(201);
+    const log = await request(app)
+      .get(`/api/logs/${created.body.id}`)
+      .set("Authorization", bearer);
+    expect(log.status).toBe(200);
+    expect(log.body.source).toBe("timer");
+    expect(log.body.timeSeconds).toBe(754);
+    expect(log.body.distanceMeters).toBeNull();
+    expect(log.body.avgSplitSeconds).toBeNull();
+    expect(log.body.steps).toStrictEqual([]);
+  });
+
   it("refuses to advance the plan even when the body asks to (criterion 1)", async () => {
     const bearer = await bearerToken();
     const chosen = await request(app)

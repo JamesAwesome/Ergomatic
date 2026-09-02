@@ -457,6 +457,7 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
         pain: null,
         thumbs: null,
         steps: [],
+        source: "manual",
       })
       .returning();
 
@@ -616,6 +617,7 @@ describe("migration 0010: hero numbers and plan linkage", () => {
         pain: null,
         thumbs: null,
         steps: [],
+        source: "manual",
         avgSplitSeconds: 2.7182818284,
         distanceMeters: 5000,
         timeSeconds: 1234.5678,
@@ -767,6 +769,7 @@ describe("migration 0011: the series column", () => {
         held: null,
         pain: null,
         steps: [],
+        source: "manual",
         series,
       })
       .returning();
@@ -916,6 +919,7 @@ describe("migration 0012: the ended_by column", () => {
           held: null,
           pain: null,
           steps: [],
+          source: "manual",
           endedBy,
         })
         .returning();
@@ -1245,6 +1249,7 @@ describe("migration 0016: the machine summary columns", () => {
         held: null,
         pain: null,
         steps: [],
+        source: "manual",
         machineWorkSeconds: 24.3,
         machineWorkMeters: 76,
         machineSummary,
@@ -1456,6 +1461,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
         held: null,
         pain: null,
         steps: [],
+        source: "manual",
         c2ResultId: 4242,
         c2UserId: 918273,
         completedAt,

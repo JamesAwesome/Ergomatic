@@ -2447,7 +2447,9 @@ async function postLog(
   page: Page,
   body: {
     workoutTitle: string;
-    workoutType: string;
+    // Null with `workoutId: null` (the helper's default) is a FREE ROW —
+    // `justrow-history-chip` seeds one that came through the monitor.
+    workoutType: string | null;
     held?: "held" | "under" | "over" | null;
     pain?: number | null;
     thumbs?: "up" | "down" | null;
@@ -2461,6 +2463,11 @@ async function postLog(
     // as a monitor row, so a capture wanting a genuinely pm5-attributed
     // session must set this explicitly.
     deviceName?: string | null;
+    // Just Row unconnected spec (2026-09-02), stored shape (c): the row's
+    // own door, `pm5 | timer | manual`. Optional on the wire (the server
+    // derives it when absent — a sunset item, ROADMAP), and a seeded row
+    // that names its door is the honest shape, so captures set it.
+    source?: "pm5" | "timer" | "manual";
     // Task 5's own "log-detail" capture: real measured/judged rows and,
     // via `advancesPlan` below, genuine plan linkage — both need fields
     // this helper's original narrower signature (§5G's own hero-snippet
@@ -4766,5 +4773,111 @@ test("justrow-log", async ({ page }) => {
   await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "justrow-log.png"),
+  });
+});
+
+// Just Row WITHOUT the monitor (spec 2026-09-02; handoff
+// `docs/design/handoffs/2026-09-02-just-row-unconnected/`): the phone's own
+// clock times the row. No fake is injected — nothing here touches the
+// monitor seam — and the clock is REAL time, so each capture stands on the
+// screen long enough for the count-up to read a few seconds, never `0:00`.
+
+/** The door → Start Timer → the shipped Timer wearing the free-row words
+ *  (`Clock.dc.html`: STEP slot `JUST ROW`, both target slots `Free`, UP
+ *  NEXT `FINISH`), a few seconds in. */
+async function openJustRowTimer(page: Page, email: string): Promise<void> {
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await page.goto("/justrow");
+  await page.getByRole("button", { name: "Start Timer" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.getByText("JUST ROW", { exact: true })).toBeVisible();
+  // Four seconds of wall clock: the capture shows a clock that has moved,
+  // and a reviewer can see the count-up is a count-UP (0:04, not 4:00).
+  await expect(page.getByText("0:04").first()).toBeVisible({
+    timeout: 10_000,
+  });
+}
+
+test("justrow-timer", async ({ page }) => {
+  await openJustRowTimer(page, "screenshots-justrow-timer@e2e.test");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-timer.png"),
+  });
+});
+
+test("justrow-timer-landscape", async ({ page }) => {
+  await openJustRowTimer(page, "screenshots-justrow-timer-landscape@e2e.test");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(page.getByText("JUST ROW", { exact: true })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-timer-landscape.png"),
+  });
+});
+
+/** ▶ → `Finish this session?` → `Finish session` → the time-only log door
+ *  (`LogDoor.dc.html`): `Just Row`, `<date> · TIMER`, TIME alone. */
+async function finishJustRowTimer(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Next phase" }).click();
+  await expect(page.getByText("Finish this session?")).toBeVisible();
+  await page.getByRole("button", { name: "Finish session" }).click();
+  await expect(page).toHaveURL(/\/justrow\/log$/);
+  await expect(page.getByText("TIME", { exact: true })).toBeVisible();
+}
+
+test("justrow-log-timer", async ({ page }) => {
+  await openJustRowTimer(page, "screenshots-justrow-log-timer@e2e.test");
+  await finishJustRowTimer(page);
+  await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-log-timer.png"),
+  });
+});
+
+// History with BOTH free rows (`History.dc.html`): the phone-timed row
+// (walked through the real door above, so it is the supported producer's
+// own row — title and date, no second line, the JR chip) above a CONNECTED
+// free row seeded through the API the way every other history capture
+// seeds rows — `deviceName` + `source: "pm5"`, a hero pair — so the chip
+// sits beside an `AVG · m` second line (the wrap case the antagonist pass
+// flagged: the chip must not push the snippet off its own line). A typed
+// row beneath both shows the chip against a filled type badge.
+test("justrow-history-chip", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-justrow-history-chip@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    held: "held",
+    pain: 2,
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+  await postLog(page, {
+    workoutTitle: "Just Row",
+    workoutType: null,
+    steps: [],
+    avgSplitSeconds: 147.4,
+    distanceMeters: 311,
+    timeSeconds: 91.7,
+    deviceName: "PM5 432331249",
+    source: "pm5",
+  });
+  // The phone-timed row LAST, so it sits at the top: the same flow
+  // `justrow-log-timer` captures, then Save.
+  await page.goto("/justrow");
+  await page.getByRole("button", { name: "Start Timer" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.getByText("0:03").first()).toBeVisible({
+    timeout: 10_000,
+  });
+  await finishJustRowTimer(page);
+  await page.getByRole("button", { name: "Save this row" }).click();
+  await expect(page).toHaveURL(/\/today\/log$/);
+  await expect(page.locator(".today-log-row")).toHaveCount(3);
+  await expect(page.locator(".free-row-chip")).toHaveCount(2);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-history-chip.png"),
   });
 });

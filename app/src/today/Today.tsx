@@ -619,8 +619,18 @@ function UnloggedRow({ run }: { run: SessionRun }) {
           </p>
           <div className="today-unlogged-actions">
             {/* The run record is the source LogSession.tsx itself reads, so
-                this link carries no state/params of its own. */}
-            <Link to="/session/log" className="today-unlogged-link">
+                this link carries no state/params of its own.
+
+                THIS ROW HOLDS A `SessionRun` — the phone-timer record —
+                never the `MonitorRun` `UnloggedMonitorRow`'s own justrow
+                branch routes. A free-row timer run (`mode: "justrow"`,
+                Just Row without the monitor, spec 2026-09-02 §Mechanism
+                piece 5) goes to its own door: `/session/log` reads the
+                workout DRAFT a free row never had, and would bounce. */}
+            <Link
+              to={run.mode === "justrow" ? "/justrow/log" : "/session/log"}
+              className="today-unlogged-link"
+            >
               Log it
             </Link>
             <button

@@ -163,3 +163,4 @@ not a redeploy.
 | Floor | Why |
 | ----- | --- |
 | v0.16.0 (PR #156) | First version whose seed renames global rows in place (`First 6k`/`First 2k` → `6K Test`/`2K Test` via `LEGACY_TITLE_RENAMES`). Rolling the API back past it against a post-rename DB is unrecoverable log-link loss. |
+| the tag carrying migration 0020 (`session_logs.source`, unconnected-JR PR) | 0020 adds `source` NOT NULL with a backfill. A server older than it does not write the column, so rolling the API back past it makes every new save fail the NOT NULL constraint (no row is written, the app shows its save failure and holds the record). Not data loss, but a total write outage until rolled forward. |

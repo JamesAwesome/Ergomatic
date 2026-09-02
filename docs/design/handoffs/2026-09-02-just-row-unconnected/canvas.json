@@ -1,0 +1,16 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "1 · /justrow door" },
+    { "file": "Clock.dc.html", "x": 520, "y": 0, "w": 390, "h": 844, "title": "2 · the clock" },
+    { "file": "ClockFinish.dc.html", "x": 1040, "y": 0, "w": 390, "h": 844, "title": "3 · ▶ then Finish this session?" },
+    { "file": "LogDoor.dc.html", "x": 1560, "y": 0, "w": 390, "h": 844, "title": "4 · /justrow/log" },
+    { "file": "History.dc.html", "x": 2080, "y": 0, "w": 390, "h": 844, "title": "5 · History" },
+    { "file": "Detail.dc.html", "x": 2600, "y": 0, "w": 390, "h": 844, "title": "6 · from the log" },
+    { "file": "ClockLandscape.dc.html", "x": 0, "y": 1000, "w": 844, "h": 390, "title": "2 · the clock, landscape" }
+  ],
+  "annotations": [
+    { "id": "mech", "x": 0, "y": -220, "w": 1430, "text": "EVERY LABEL IS LIFTED FROM A SHIPPED SCREEN. On 2026-09-02 the real app was driven through a one-step test workout (import, Start Timer, SKIP, ▶, Finish session, Save, History, detail) and each board is that capture with the fewest words changed:\n\n· Door: the workout detail's own second action, Start Timer, in its shipped place under Connect. Meta line loses the clause that is no longer true.\n· Clock: the shipped Timer. Two words change — the STEP slot reads JUST ROW (the approved connected surface's word) and TARGET SPLIT reads Free (RATE already does). ELAPSED, UP NEXT · FINISH, Pause, ◀ ▶ and END are untouched. Finishing is the shipped ▶ then Finish this session?.\n· Log door: the approved Just Row door, TIME only; provenance word TIMER from summaryModel's own PM5 / TIMER / LOGGED BY HAND set.\n· History: a row with no avg and no distance has no second line in the shipped list. So: title and date.\n· Detail: the shipped timer-row detail, verbatim, with INTERVALS absent because steps is []." },
+    { "id": "contrast", "x": 1560, "y": -220, "w": 1430, "text": "CONTRAST, computed (AA floor 4.5:1): ink/page 15.41 · ink-2/page 9.74 · ink-3/page 6.69 · ink-2/sunken 9.16 · ink-3/sunken 6.30 · on-color/accent (Save, Finish session) 5.94 · on-color/teal Connect 6.65 · accent/page (END, Delete) 5.35 · ink-4 placeholder/surface 5.29 (lowest; the shipped notes placeholder). Tap targets: buttons 52–56 px, arrows 52 px, pain cells 44 px." }
+  ],
+  "launch": { "view": "canvas" }
+}

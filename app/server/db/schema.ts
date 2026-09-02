@@ -142,6 +142,15 @@ export const workouts = pgTable(
   ],
 );
 
+// Just Row unconnected spec (2026-09-02, §Mechanism stored shape (c),
+// TRIAD — a stored shape): WHICH DOOR a session log came through. A real
+// Postgres pgEnum TYPE, so widening it is an `ALTER TYPE ... ADD VALUE`
+// migration, never a type-level edit (the `endedByEnum` lesson above).
+// Three mirrors of this value set move together: this array,
+// `domain/types.ts`'s `LOG_SOURCES` (what `routes/data.ts` validates the
+// wire against), and the backfill CASE in `drizzle/0020_*.sql`.
+export const logSourceEnum = pgEnum("log_source", ["pm5", "timer", "manual"]);
+
 export const sessionLogs = pgTable(
   "session_logs",
   {
@@ -193,6 +202,20 @@ export const sessionLogs = pgTable(
     // level string has nowhere to live inside a per-step array, so a real
     // migration is unavoidable.
     deviceName: text("device_name"),
+    // Just Row unconnected spec (2026-09-02, §Mechanism stored shape (c),
+    // TRIAD): the door this row came through — `pm5` (connected), `timer`
+    // (the phone's clock: a Timer-closed SessionRun, or the time-only Just
+    // Row), `manual` (`Log it after`). NOT NULL, no default: every writer
+    // states it, and the one writer that cannot — an installed build that
+    // predates the column — has the ROUTE derive it (`server/logSource.ts`,
+    // a dated sunset). Migration 0020 adds it nullable, BACKFILLS every
+    // existing row with the read side's old inference (`deviceName` ⇒ pm5,
+    // else any stopwatch step ⇒ timer, else manual), then sets NOT NULL —
+    // so a row that rendered PM5 / TIMER / LOGGED BY HAND before reads the
+    // same word from a column instead of a guess. Its own column, not a
+    // `steps` key, for the same reason `deviceName` above is: a row-level
+    // fact has nowhere honest to live inside a per-step array.
+    source: logSourceEnum("source").notNull(),
     // Post-workout-summary spec (2026-08-17), §3: nullable column, additive.
     // Absent/skipped reflection stores null; nothing consumes this yet
     // (generation's own thumbs consumption is explicitly OUT this phase).

@@ -86,3 +86,17 @@ export interface WorkoutInput {
   pain: number;
   steps: Step[];
 }
+/** Which DOOR a session log came through — `session_logs.source`, NOT NULL
+ *  (Just Row unconnected spec, 2026-09-02, §Mechanism stored shape (c)).
+ *  `pm5` = the connected door, the monitor's own numbers; `timer` = the
+ *  phone's clock (a `SessionRun` closed on the Timer, or the time-only Just
+ *  Row); `manual` = typed in after the fact (`Log it after`). Stored as a
+ *  fact at write time, never inferred by a reader: the old read-side guess
+ *  (`deviceName`, else any stopwatch step, else by hand) was already wrong
+ *  about a connected session saved through the manual door. Migration 0020
+ *  backfills every pre-existing row with that same guess, once, so nothing
+ *  a rower already sees changes word. Three mirrors move together:
+ *  `server/db/schema.ts`'s `logSourceEnum`, and this tuple, which
+ *  `server/routes/data.ts` validates the wire against. */
+export type LogSource = "pm5" | "timer" | "manual";
+export const LOG_SOURCES: readonly LogSource[] = ["pm5", "timer", "manual"];

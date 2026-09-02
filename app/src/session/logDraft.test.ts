@@ -782,6 +782,63 @@ describe("buildLogSteps", () => {
   });
 });
 
+// Just Row without the monitor (spec 2026-09-02, stored shape (b)): the
+// `"stopwatch-elapsed"` member of `PhaseActual` carries NO split, and
+// `buildLogSteps` writes `actualSplit`/`actualSource` only from the
+// `"stopwatch"` member. The realistic carrier is a free-row timer run: one
+// open-ended `test` phase, `mode: "justrow"`, its finish recorded as elapsed
+// seconds only.
+describe("buildLogSteps: a 'stopwatch-elapsed' actual never logs a split", () => {
+  it("a completed free-row timer run (one test phase, elapsed-only actual) logs a bare label and no actualSplit/actualSource", () => {
+    const run: SessionRun = {
+      v: 1,
+      mode: "justrow",
+      workoutId: null,
+      title: "Just Row",
+      phases: [
+        { type: "test", label: "Just Row", set: undefined, originalIndex: 0 },
+      ],
+      index: 1,
+      phaseStartedAt: NOW.toISOString(),
+      pausedAt: null,
+      pausedTotalMs: 0,
+      actuals: {
+        0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 754 },
+      },
+      startedAt: NOW.toISOString(),
+      completedAt: new Date(NOW.getTime() + 754 * 1000).toISOString(),
+    };
+    const steps = buildLogSteps(run, null);
+    expect(steps).toStrictEqual([{ label: "Just Row" }]);
+    expect("actualSplit" in steps[0]!).toBe(false);
+    expect("actualSource" in steps[0]!).toBe(false);
+  });
+
+  it("on a WORK phase (a shape no writer produces) an elapsed-only actual still logs no split rather than a fabricated one", () => {
+    // Filling Low's first 2000m work phase, with the union's metre-less
+    // member forced into its actuals slot: the `"stopwatch"` branch must
+    // not fire, and the assumed branch must not either (a distance phase
+    // has no `seconds`).
+    const { draft, run: built } = runFor("Filling Low", {
+      completedAt: new Date(NOW.getTime() + 35 * 60 * 1000).toISOString(),
+      actuals: {},
+    });
+    const run: SessionRun = {
+      ...built,
+      actuals: {
+        0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 850 },
+      },
+    };
+    const steps = buildLogSteps(run, draft);
+    expect(steps[0]).toStrictEqual({
+      label: "2000 m @ 6k +4",
+      targetSplit: 124,
+      spm: 22,
+      meters: 2000,
+    });
+  });
+});
+
 describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", () => {
   it("accepts NULL baselines for an effort-only workout (6I rebase seam): seed carries the step, paces stay empty", () => {
     // The PRE-2026-08-23 6K Test seed shape (live seed is now effort max; min kept because this test exercises the ref-indifferent null-baseline path) — ONE effort distance step, no lead-in

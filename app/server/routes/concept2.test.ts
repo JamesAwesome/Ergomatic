@@ -129,6 +129,7 @@ const FINISHED_LOG_INPUT: LogInput = {
   steps: [],
   advancesPlan: false,
   deviceName: "PM5 432331249 Row",
+  source: "pm5",
   thumbs: null,
   avgSplitSeconds: null,
   timeSeconds: null,

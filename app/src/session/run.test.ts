@@ -234,6 +234,114 @@ describe("saveRun / loadRun / clearRun", () => {
   });
 });
 
+// Just Row without the monitor (spec 2026-09-02, stored shapes (a) and
+// (b)): `mode` is REQUIRED on the type; absence is accepted ONLY as the
+// legacy shape and upgraded once at load. `PhaseActual` is a discriminated
+// union and `isSessionRun` validates both members at the boundary.
+describe("SessionRun.mode and the PhaseActual union (stored shapes a/b)", () => {
+  beforeEach(() => localStorage.clear());
+
+  // A BYTE-LITERAL of the shape every build before this one wrote — not a
+  // record built from the new type with `mode` deleted (RF3: the fixture
+  // is what is actually sitting in a tester's localStorage today).
+  const LEGACY_BYTES =
+    '{"v":1,"workoutId":"w1","title":"T","phases":[],"index":0,"phaseStartedAt":"2026-09-02T00:00:00.000Z","pausedAt":null,"pausedTotalMs":0,"actuals":{},"startedAt":"2026-09-02T00:00:00.000Z","completedAt":null}';
+
+  it("a LEGACY run with no mode (byte-literal of today's shape) loads with mode 'workout' and re-saves with it", () => {
+    localStorage.setItem(RUN_KEY, LEGACY_BYTES);
+    expect(JSON.parse(LEGACY_BYTES)).not.toHaveProperty("mode");
+    const run = loadRun();
+    expect(run?.mode).toBe("workout");
+    saveRun(run!);
+    expect(JSON.parse(localStorage.getItem(RUN_KEY)!).mode).toBe("workout");
+  });
+
+  it("a run saved with mode 'justrow' round-trips it (never upgraded, never dropped)", () => {
+    const run: SessionRun = { ...freshRun(), mode: "justrow", workoutId: null };
+    expect(saveRun(run)).toBe(true);
+    expect(loadRun()?.mode).toBe("justrow");
+  });
+
+  it("rejects mode 'corrupt' (the twin record's PR 1 lesson): null + key cleared", () => {
+    localStorage.setItem(
+      RUN_KEY,
+      JSON.stringify({ ...JSON.parse(LEGACY_BYTES), mode: "corrupt" }),
+    );
+    expect(loadRun()).toBeNull();
+    expect(localStorage.getItem(RUN_KEY)).toBeNull();
+  });
+
+  describe("PhaseActual union at the boundary", () => {
+    function withActual(actual: unknown): string {
+      return JSON.stringify({
+        ...freshRun(),
+        mode: "workout",
+        actuals: { 0: actual },
+      });
+    }
+
+    it("rejects a 'stopwatch' actual with NO splitSeconds", () => {
+      localStorage.setItem(
+        RUN_KEY,
+        withActual({ actualSource: "stopwatch", elapsedSeconds: 452 }),
+      );
+      expect(loadRun()).toBeNull();
+      expect(localStorage.getItem(RUN_KEY)).toBeNull();
+    });
+
+    it("rejects a 'stopwatch-elapsed' actual that CARRIES a splitSeconds (a metre-less phase has no split)", () => {
+      localStorage.setItem(
+        RUN_KEY,
+        withActual({
+          actualSource: "stopwatch-elapsed",
+          elapsedSeconds: 754,
+          splitSeconds: 113,
+        }),
+      );
+      expect(loadRun()).toBeNull();
+      expect(localStorage.getItem(RUN_KEY)).toBeNull();
+    });
+
+    it("rejects a 'stopwatch' actual whose splitSeconds serialised as null (NaN round-trips as null, F5)", () => {
+      localStorage.setItem(
+        RUN_KEY,
+        withActual({
+          actualSource: "stopwatch",
+          elapsedSeconds: 452,
+          splitSeconds: null,
+        }),
+      );
+      expect(loadRun()).toBeNull();
+    });
+
+    it("rejects an actual with an unknown actualSource", () => {
+      localStorage.setItem(
+        RUN_KEY,
+        withActual({ actualSource: "pm5", elapsedSeconds: 452 }),
+      );
+      expect(loadRun()).toBeNull();
+    });
+
+    it("a well-formed 'stopwatch-elapsed' actual round-trips", () => {
+      const run: SessionRun = {
+        ...freshRun(),
+        mode: "justrow",
+        workoutId: null,
+        actuals: {
+          0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 754 },
+        },
+      };
+      expect(saveRun(run)).toBe(true);
+      const loaded = loadRun();
+      expect(loaded).toStrictEqual(viaJson(run));
+      expect(loaded!.actuals[0]).toStrictEqual({
+        actualSource: "stopwatch-elapsed",
+        elapsedSeconds: 754,
+      });
+    });
+  });
+});
+
 describe("RUN_KEY / DRAFT_KEY", () => {
   it("are distinct storage keys — the run and the draft never collide", () => {
     expect(RUN_KEY).not.toBe(DRAFT_KEY);

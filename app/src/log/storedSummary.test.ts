@@ -46,6 +46,13 @@ function baseRow(overrides: Partial<StoredLog> = {}): StoredLog {
     notes: null,
     thumbs: null,
     deviceName: null,
+    // Just Row unconnected spec (2026-09-02), stored shape (c): the door
+    // is a COLUMN now, non-null. The base fixture is the all-assumed shape
+    // (no device, no stopwatch step), so its realistic member is `manual`;
+    // every device fixture below says `pm5` beside its `deviceName`, and
+    // the timer-door fixtures say `timer` (RF3: fixtures look like rows
+    // the migration's backfill would actually produce).
+    source: "manual",
     steps: [],
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -113,6 +120,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: EXIT7_STEPS,
         machineWorkSeconds: 123.8,
         machineWorkMeters: 499,
@@ -140,6 +148,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: EXIT7_STEPS,
         machineWorkSeconds: 124.0,
         machineWorkMeters: 500,
@@ -169,6 +178,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: [
           {
             label: "250m @ 2:07.0",
@@ -207,6 +217,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         // endedBy "finished" here is what PROVES (fix round 2) this row
         // predates RC-1 — a post-RC-1 "finished" row with these same
         // steps would have the work pair instead and land in TIER B1.
@@ -237,6 +248,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         endedBy: "finished",
         steps: EXIT7_STEPS,
         machineWorkSeconds: null,
@@ -272,6 +284,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: legacySteps,
         avgSplitSeconds: 130,
         timeSeconds: 1550,
@@ -293,6 +306,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: null,
+        source: "timer",
         steps: [
           {
             label: "6:00 @ 6k",
@@ -328,6 +342,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         endedBy: "finished",
         steps,
         machineWorkSeconds: null,
@@ -356,6 +371,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         endedBy: "finished",
         steps,
         machineWorkSeconds: null,
@@ -372,6 +388,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         endedBy: "finished",
         steps: [
           { label: "distance only", actualSource: "pm5", actualMeters: 500 },
@@ -393,6 +410,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         endedBy: "finished",
         steps: EXIT7_STEPS,
         machineWorkSeconds: null,
@@ -425,6 +443,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: EXIT7_STEPS,
         machineWorkSeconds: null,
         machineWorkMeters: null,
@@ -466,6 +485,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: [],
         workSeconds: 393.58,
         workMeters: 1396.6,
@@ -489,6 +509,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: EXIT7_STEPS,
         workSeconds: 150.0,
         workMeters: 560,
@@ -503,6 +524,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: EXIT7_STEPS,
         machineWorkSeconds: null,
         machineWorkMeters: null,
@@ -531,6 +553,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: [],
         machineWorkSeconds: null,
         machineWorkMeters: null,
@@ -571,6 +594,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         endedBy: "finished",
         steps: EXIT7_STEPS,
         machineWorkSeconds: null,
@@ -608,6 +632,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
       const view = buildStoredSummary(
         baseRow({
           deviceName: "PM5 432331249",
+          source: "pm5",
           endedBy,
           steps: EXIT7_STEPS,
           machineWorkSeconds: null,
@@ -639,6 +664,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         endedBy: "link-lost",
         steps: EXIT7_STEPS,
         machineWorkSeconds: null,
@@ -675,6 +701,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         endedBy: "auto-terminated" as unknown as StoredLog["endedBy"],
         steps: EXIT7_STEPS,
         machineWorkSeconds: null,
@@ -699,6 +726,7 @@ describe("buildStoredSummary — §5A source derivation", () => {
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: [
           {
             label: "6:00 @ 6k",
@@ -712,10 +740,11 @@ describe("buildStoredSummary — §5A source derivation", () => {
     expect(view.meta.sourceLabel).toBe("PM5 432331249");
   });
 
-  it("falls back to TIMER when no deviceName but a step carries actualSource stopwatch", () => {
+  it("reads TIMER from the column — a stopwatch-step row saved through the timer door", () => {
     const view = buildStoredSummary(
       baseRow({
         deviceName: null,
+        source: "timer",
         steps: [
           {
             label: "6:00 @ 6k",
@@ -729,10 +758,11 @@ describe("buildStoredSummary — §5A source derivation", () => {
     expect(view.meta.sourceLabel).toBe("TIMER");
   });
 
-  it("falls back to LOGGED BY HAND when neither a deviceName nor any stopwatch-sourced step exists (James's copy ruling, fix round: matches the live door's own manual-door string)", () => {
+  it("reads LOGGED BY HAND from the column (James's copy ruling, fix round: matches the live door's own manual-door string)", () => {
     const view = buildStoredSummary(
       baseRow({
         deviceName: null,
+        source: "manual",
         steps: [
           {
             label: "10:00 @ 6k +8",
@@ -747,9 +777,44 @@ describe("buildStoredSummary — §5A source derivation", () => {
     expect(view.meta.sourceLabel).toBe("LOGGED BY HAND");
   });
 
-  it("shows a time-of-day segment for a device/timer source but omits it for LOGGED BY HAND (mirrors spec 1's manual-door omission byte-for-byte)", () => {
-    const withDevice = buildStoredSummary(baseRow({ deviceName: "PM5 1" }));
+  // Just Row unconnected spec (2026-09-02), exit criterion 3d: the client
+  // never infers the door from `steps` any more. These two fixtures are
+  // exactly the rows the DELETED inference got wrong — a time-only Just
+  // Row (`timer` with `steps: []`, which the guess called by-hand) and a
+  // by-hand row that happens to carry a stopwatch step (which the guess
+  // called TIMER). The column decides; the steps are not consulted.
+  it("a `timer` row with EMPTY steps (the time-only Just Row) reads TIMER — the column, not a step fingerprint", () => {
+    const view = buildStoredSummary(
+      baseRow({ deviceName: null, source: "timer", steps: [] }),
+    );
+    expect(view.meta.sourceLabel).toBe("TIMER");
+  });
+
+  it("a `manual` row carrying a stopwatch step still reads LOGGED BY HAND — the steps are never consulted", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: null,
+        source: "manual",
+        steps: [
+          {
+            label: "6:00 @ 6k",
+            actualSplit: 125,
+            actualSource: "stopwatch",
+            meters: 1500,
+          },
+        ],
+      }),
+    );
+    expect(view.meta.sourceLabel).toBe("LOGGED BY HAND");
+  });
+
+  it("shows a time-of-day segment for a pm5 or timer source but omits it for LOGGED BY HAND (mirrors spec 1's manual-door omission byte-for-byte)", () => {
+    const withDevice = buildStoredSummary(
+      baseRow({ source: "pm5", deviceName: "PM5 1" }),
+    );
     expect(withDevice.meta.timeLabel).toBeDefined();
+    const timer = buildStoredSummary(baseRow({ source: "timer", steps: [] }));
+    expect(timer.meta.timeLabel).toBeDefined();
     const byHand = buildStoredSummary(baseRow());
     expect(byHand.meta.timeLabel).toBeUndefined();
   });
@@ -1247,6 +1312,7 @@ describe("buildStoredSummary — cohort-unlock §2 link-lost line", () => {
       baseRow({
         endedBy: "link-lost",
         deviceName: "PM5 432331249",
+        source: "pm5",
         steps: [
           {
             label: "6:00 @ 6k",
