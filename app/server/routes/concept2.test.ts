@@ -1517,9 +1517,13 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     }));
     const client = makeStubClient();
     const { app, logs } = buildApp({ store, client });
-    // Deliberately INELIGIBLE (deviceName null): needs_reauth must win
-    // before eligibility per the pinned check order.
-    const id = await seedEligibleLog(logs, userA.id, { deviceName: null });
+    // Deliberately INELIGIBLE (source: "manual", not "pm5" —
+    // eligibilityFailure's gate since Door PR A §2.2): needs_reauth must
+    // win before eligibility per the pinned check order.
+    const id = await seedEligibleLog(logs, userA.id, {
+      deviceName: null,
+      source: "manual",
+    });
     const res = await asA(
       request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
     );
