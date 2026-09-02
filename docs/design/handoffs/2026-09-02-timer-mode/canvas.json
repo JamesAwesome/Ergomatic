@@ -1,0 +1,16 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 393, "h": 852, "title": "1 · programmed, portrait" },
+    { "file": "FreeRowPortrait.dc.html", "x": 520, "y": 0, "w": 393, "h": 852, "title": "2 · free row, portrait" },
+    { "file": "ProgrammedLandscape.dc.html", "x": 1040, "y": 0, "w": 852, "h": 393, "title": "1 · programmed, landscape" },
+    { "file": "FreeRowLandscape.dc.html", "x": 1040, "y": 520, "w": 852, "h": 393, "title": "2 · free row, landscape" },
+    { "file": "Door.dc.html", "x": 0, "y": 1000, "w": 393, "h": 852, "title": "3 · door copy" },
+    { "file": "History.dc.html", "x": 520, "y": 1000, "w": 393, "h": 852, "title": "4 · time-only History row" },
+    { "file": "LogDoorNoPlan.dc.html", "x": 1040, "y": 1000, "w": 393, "h": 852, "title": "5 · no plan: Save" }
+  ],
+  "annotations": [
+    { "id": "timer", "x": 0, "y": -220, "w": 1890, "text": "TIMER MODE, at the phone's own size (393×852 / 852×393; captures in mechanical-reference/). Two changes, both orientations, programmed and free row alike:\n\n1. ONE END. Portrait adopts the accent-outlined 44×44 box landscape already draws (index.css's landscape .timer-end — the connected surface's own End). Plain header text goes.\n2. NO DEAD BAND. Portrait: the ◀ ▶ row leaves the bottom edge and sits under Pause as one control group. Landscape: the middle row grows to fill (auto 1fr auto) and the controls row sits on the bottom edge; the face centres in the room it gains.\n\nEverything else is the shipped screen, string for string." },
+    { "id": "copy", "x": 0, "y": 1900, "w": 1430, "text": "THREE COPY NOTES, batched (PM gates #268 and #272):\n3 · the door's band names both buttons (the only invented sentence here — approve or rewrite).\n4 · a time-only History row shows TIME 12:34 under its name, using the detail's own label; rows with an average or a distance are untouched.\n5 · with no plan the lone save button reads Save, on both log doors; \"Save without logging\" survives only beneath \"Log against plan\".\n\nCONTRAST (AA 4.5:1): accent on page (END box) 5.35 · ink on surface (Pause, arrows) 17.11 · ink-3 on page (labels, TIME line) 6.69 · on-color on accent (Save) 5.94 · ink-2 on sunken (band) 9.16. Targets: END 44, Pause 56, arrows 52, buttons 52–56." }
+  ],
+  "launch": { "view": "canvas" }
+}
