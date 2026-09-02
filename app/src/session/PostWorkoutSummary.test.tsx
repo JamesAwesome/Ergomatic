@@ -999,13 +999,25 @@ describe("PostWorkoutSummary — save stack (§2F)", () => {
     ).toContain("summary-save-lead");
   });
 
-  it("with no active plan, Log against plan is hidden (not disabled) and Save without logging leads alone", () => {
-    renderSummary({ plan: null });
+  // Timer-mode spec (2026-09-02, ruling 5): with no plan there is nothing
+  // to log against, so "without logging" describes a choice the rower
+  // never had — the lone button reads `Save`. The words `Save without
+  // logging` survive only beneath `Log against plan` (the tests above).
+  it("with no active plan, Log against plan is hidden (not disabled) and the lone button reads Save — never 'Save without logging'", async () => {
+    const user = userEvent.setup();
+    const onSaveWithoutLogging = vi.fn();
+    renderSummary({ plan: null, onSaveWithoutLogging });
     expect(
       screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
-    const lead = screen.getByRole("button", { name: "Save without logging" });
+    expect(
+      screen.queryByRole("button", { name: "Save without logging" }),
+    ).not.toBeInTheDocument();
+    const lead = screen.getByRole("button", { name: "Save" });
     expect(lead.className).toContain("summary-save-lead");
+    // Same handler, same slot — only the words changed.
+    await user.click(lead);
+    expect(onSaveWithoutLogging).toHaveBeenCalledTimes(1);
   });
 
   it("disables both save buttons while saving, and renders the save error", () => {

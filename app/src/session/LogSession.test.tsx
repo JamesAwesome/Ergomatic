@@ -581,11 +581,13 @@ async function chooseHeldAndPain() {
 }
 
 // The default (no active plan) save button — §2F: "No plan: Log against
-// plan hidden (not disabled); Save without logging leads." Every save/
-// discard-mechanics test in this file runs under the default `mockPlan()`
-// (no active plan) unless it explicitly calls `mockPlan(readyPlanState(...))`
-// itself, so this is the button those tests click.
-const SAVE_BUTTON = "Save without logging";
+// plan hidden (not disabled)"; the lone button reads `Save` (timer-mode
+// spec 2026-09-02, ruling 5 — `Save without logging` survives only
+// beneath `Log against plan`). Every save/discard-mechanics test in this
+// file runs under the default `mockPlan()` (no active plan) unless it
+// explicitly calls `mockPlan(readyPlanState(...))` itself, so this is the
+// button those tests click.
+const SAVE_BUTTON = "Save";
 
 describe("LogSession: deep-link/reload guards", () => {
   it("redirects to /today when there is no run record at all", async () => {
@@ -5070,7 +5072,7 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
 // PLAN"/"OUTSIDE THE PLAN") is gone — the choice between advancing and not
 // advancing the plan is now made by WHICH save button the rower taps.
 describe("LogSession: the save stack's plan position (§2F, replaces the outside-plan toggle)", () => {
-  it("renders only Save without logging (as the lead) when there's no active plan", async () => {
+  it("renders only Save (as the lead) when there's no active plan — never 'Save without logging'", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
@@ -5079,11 +5081,14 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     expect(
       screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
-    const lead = screen.getByRole("button", { name: "Save without logging" });
+    expect(
+      screen.queryByRole("button", { name: "Save without logging" }),
+    ).not.toBeInTheDocument();
+    const lead = screen.getByRole("button", { name: "Save" });
     expect(lead.className).toContain("summary-save-lead");
   });
 
-  it("manual door: renders only Save without logging when there's no active plan", async () => {
+  it("manual door: renders only Save when there's no active plan", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
@@ -5093,6 +5098,12 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     expect(
       screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save without logging" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" }).className).toContain(
+      "summary-save-lead",
+    );
   });
 
   it("session door: renders the form immediately while the plan is still loading, with no Log against plan button, and Save OMITS the advancesPlan key (review finding C2)", async () => {
@@ -5442,9 +5453,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
       screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
     await chooseHeldAndPain();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByText("TODAY SCREEN");
 
     const body = parsedBodies(apiFn)[0]!;

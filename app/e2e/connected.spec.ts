@@ -801,10 +801,10 @@ async function walkSurfaceToLog(
 
   // Fill idiom from `session.spec.ts`'s own manual door coverage: HELD,
   // then a mid-scale pain rating (deliberately not the extremes). No plan
-  // is active in this walk, so Save without logging is the lead button.
+  // is active in this walk, so the lone `Save` is the lead button.
   await page.getByRole("button", { name: "HELD" }).click();
   await page.getByRole("button", { name: "Pain 3" }).click();
-  await page.getByRole("button", { name: "Save without logging" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/today$/);
 
   // THE STORED LOG — the save posted for real; read it back off the same

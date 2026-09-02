@@ -40,9 +40,11 @@ import { freeRowTotals } from "./totals";
  * store requires of a free row (`logs.ts` resolves `advancesPlan ??
  * !isFreeRow(...)`, so an omitted key means "does not count" here, the
  * opposite of a workout row's default) — and `Save without logging` sits
- * under it posting `false`. With no plan, `Save without logging` leads
- * alone: the same no-plan rule `PostWorkoutSummary` applies, hidden
- * outright rather than disabled. The label formula, the classes
+ * under it posting `false`. With no plan the lone button reads `Save`
+ * (timer-mode spec 2026-09-02, ruling 5 — the qualifier survives only
+ * beneath `Log against plan`) and still posts `false`: the same no-plan
+ * rule `PostWorkoutSummary` applies, hidden outright rather than
+ * disabled. The label formula, the classes
  * (`summary-save-lead` / `summary-save-secondary`) and the order are
  * borrowed verbatim from that component, not restyled. The onboarding
  * demotion rule there does not apply — a free row carries no onboarding
@@ -435,7 +437,7 @@ function SaveStack({
         disabled={disabled}
         onClick={() => onSave(false)}
       >
-        Save without logging
+        {plan === null ? "Save" : "Save without logging"}
       </button>
     </div>
   );

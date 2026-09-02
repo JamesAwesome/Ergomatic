@@ -5105,17 +5105,23 @@ test.describe("post-workout summary (session door, just finished)", () => {
     await expect(discard).toBeEnabled();
   });
 
-  // §2F: no active plan in this fixture — Save without logging leads alone
-  // at its own 54px (the accent slot), Discard sits last.
-  test("Save without logging renders at the specced 54px height, not the browser's default button chrome", async ({
+  // §2F: no active plan in this fixture — the lone save leads alone at
+  // its own 54px (the accent slot), Discard sits last. It reads `Save`,
+  // not `Save without logging` (timer-mode spec 2026-09-02, ruling 5:
+  // with no plan there is nothing to log against, so the qualifier
+  // survives only beneath `Log against plan` — the plan describes below).
+  test("Save (no plan) renders at the specced 54px height, not the browser's default button chrome, and never says 'without logging'", async ({
     page,
   }) => {
-    const lead = page.getByRole("button", { name: "Save without logging" });
+    const lead = page.getByRole("button", { name: "Save" });
     await expect(lead).toHaveClass(/summary-save-lead/);
     const height = await lead.evaluate((el) => getComputedStyle(el).height);
     expect(height).toBe("54px");
     await expect(
       page.getByRole("button", { name: /Log against plan/ }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Save without logging" }),
     ).toHaveCount(0);
   });
 

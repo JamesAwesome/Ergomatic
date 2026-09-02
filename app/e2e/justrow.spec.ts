@@ -141,14 +141,14 @@ test.describe("Just Row: the whole flow", () => {
     await expect(page.getByText(/DID YOU HOLD THE TARGETS/)).toHaveCount(0);
 
     // A fresh backdoor user has no plan, so the door's save stack is the
-    // no-plan rule's one button — `Save without logging` leading alone
+    // no-plan rule's one button — `Save` leading alone (timer-mode spec 2026-09-02, ruling 5)
     // (substitution spec 2026-09-02 §Mechanism 2; the plan-active pair is
     // its own flow below). Asserted as the ONLY save control so a pair
     // rendered against a plan the user never chose would be caught here.
     await expect(
       page.getByRole("button", { name: /Log against plan/ }),
     ).toHaveCount(0);
-    await page.getByRole("button", { name: "Save without logging" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
 
     // History, with the free row named and wearing the JR chip in the
     // badge slot — and NO type badge. The `.type-badge` absence is exit
@@ -232,14 +232,14 @@ test.describe("Just Row: without the monitor", () => {
     await expect(page.getByText("—")).toHaveCount(0);
 
     // A fresh backdoor user has no plan, so the door's save stack is the
-    // no-plan rule's one button — `Save without logging` leading alone
+    // no-plan rule's one button — `Save` leading alone (timer-mode spec 2026-09-02, ruling 5)
     // (substitution spec 2026-09-02 §Mechanism 2; the plan-active pair is
     // its own flow below). Asserted as the ONLY save control so a pair
     // rendered against a plan the user never chose would be caught here.
     await expect(
       page.getByRole("button", { name: /Log against plan/ }),
     ).toHaveCount(0);
-    await page.getByRole("button", { name: "Save without logging" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
 
     // History (handoff `History.dc.html`, criterion 4): the row wears the
     // JR chip on its own class, no `.type-badge`, and NO second line — a

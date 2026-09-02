@@ -79,8 +79,8 @@ test.describe("Phase BL: the You re-test shortcut", () => {
     await page.getByRole("button", { name: "Finish session" }).click();
     await expect(page).toHaveURL(/\/session\/log$/);
 
-    // Fresh account, no plan chosen: Save without logging leads alone.
-    await page.getByRole("button", { name: "Save without logging" }).click();
+    // Fresh account, no plan chosen: the lone `Save` leads alone.
+    await page.getByRole("button", { name: "Save" }).click();
 
     // THE POST-SAVE PROMPT (spec M6: after the save, never above the
     // save stack) — the measured split offered as the 2k baseline.
@@ -134,7 +134,7 @@ test.describe("Phase BL: the You re-test shortcut", () => {
     await page.clock.fastForward("08:00");
     await page.getByRole("button", { name: "NEXT →" }).click();
     await page.getByRole("button", { name: "Finish session" }).click();
-    await page.getByRole("button", { name: "Save without logging" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
     await expect(
       page.getByRole("heading", { name: "Set your 2k baseline?" }),
     ).toBeVisible();

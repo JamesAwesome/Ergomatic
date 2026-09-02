@@ -598,7 +598,12 @@ export default function PostWorkoutSummary({
       : "Log against plan";
 
   // §2F: no plan hides `Log against plan` outright (not disabled) and
-  // `Save without logging` leads alone. Phase 8A (James's ruling 5,
+  // the lone save leads alone — reading `Save`, not `Save without
+  // logging` (timer-mode spec 2026-09-02, ruling 5: with no plan there is
+  // nothing to log against, so the qualifier names a choice the rower
+  // never had; it survives only beneath `Log against plan`, where it IS
+  // the choice). Same handler, same class, only the words — the wire
+  // still carries `advancesPlan: false`. Phase 8A (James's ruling 5,
   // 2026-08-22) narrows 6I's demotion to its actual case: an
   // onboarding-titled workout swaps which button leads ONLY while the
   // account's baselines are null — that no-baseline population is who "a
@@ -626,7 +631,7 @@ export default function PostWorkoutSummary({
       onClick={onSaveWithoutLogging}
       disabled={saving}
     >
-      Save without logging
+      {plan === null ? "Save" : "Save without logging"}
     </button>
   );
   const logAgainstPlanButton =
