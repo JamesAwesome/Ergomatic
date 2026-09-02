@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**REV 2** — 2026-09-02: **antagonist DELTA pass 1 folded.** Seven findings applied in the tasks where the code lives: a per-attempt `UUID` token so a superseded session's completion cannot resolve the next session's call (T1, and the design's §2 table); the `assertionFailure` anchor fallback removed because the walk build is Debug and it would TRAP (T1); the `shouldOverrideLoad` comment corrected — Capacitor can CANCEL a main-frame decision, and a WebContent crash is a second producer (T1); a `networkError` union member for the throws nobody designed (T2); a committed Swift↔TS↔plist literal census (T2 step 6); two deterministic pbxproj gates — per-file `SwiftCompile` counts and a `cap sync` no-op diff (T1 step 9); the census normaliser fixed for Swift `///`, and its two judgement-call pass conditions turned into diffed counts (T8). Plus the walk card in bash, the `ios-release.test.sh` heredoc anchor, and the expected-warning list. Pass ledger: `.claude/agents/antagonist-ledger.md`, entry `2026-09-02 — Wave E PR1.75b native plan (DELTA pass 1)`.
+**REV 3** — 2026-09-02: **antagonist DELTA pass 2 folded** (a verification pass over REV 2's own fixes, and it broke four of them). Two gates could not have gone red: the `SwiftCompile` log grep asserted a count of `1` that a real build never prints (4 cold, 0 warm) and is replaced by `App.SwiftFileList`, the compiler's own Sources-phase input list (T1 step 9); the `webauth-contract` reject-code regex stopped at the backslash of a Swift `\(interpolation)`, saw 12 of 14 lines, and stayed green through a deliberate typo — fixed form plus a length assertion so a skipped line fails instead of shrinking the expectation (T2 step 6). Two more could not be run as written: `xcodebuild` ran before the `cap sync` that generates its gitignored inputs, so it failed `The file "public" couldn't be opened` (order reversed, and gate (b)'s expected output corrected to EMPTY); and the census's "diff against an expected file" had no mechanically buildable expected file, so it is now a BASE-vs-HEAD diff of the same script (T8 step 3b). Plus: the lifetime table's clear-sites clause corrected (the four pre-claim returns must NOT clear) and a per-process caveat added for `UIApplicationSceneManifest`; the crash-recovery producer retagged INFERENCE; `mockApi` made factory-based so a `Response` body is never read twice; a `readStatus` failure path on the probe (`unreadable`, not a stale line); `pnpm e2e` labelled required-but-BLIND with what actually proves each arm (RF26); and the PR fold counted down to 119 words. Pass ledger: `.claude/agents/antagonist-ledger.md`, entry `2026-09-02 — Wave E PR1.75b native plan (DELTA pass 2, verifying pass 1's fixes)`.
+
+**REV 2** — 2026-09-02: **antagonist DELTA pass 1 folded.** Seven findings applied in the tasks where the code lives: a per-attempt `UUID` token so a superseded session's completion cannot resolve the next session's call (T1, and the design's §2 table); the `assertionFailure` anchor fallback removed because the walk build is Debug and it would TRAP (T1); the `shouldOverrideLoad` comment corrected — Capacitor can CANCEL a main-frame decision, and a WebContent crash is a second producer (T1) — **the crash half retagged INFERENCE at REV 3**; a `networkError` union member for the throws nobody designed (T2); a committed Swift↔TS↔plist literal census (T2 step 6); two deterministic pbxproj gates — **both replaced at REV 3**: the `SwiftCompile` count could never print its own pass value, and the `cap sync` diff's expected output was wrong (T1 step 9); the census normaliser fixed for Swift `///`, and its two judgement-call pass conditions turned into diffed counts — **the diff's other operand replaced at REV 3**, because a hand-transcribed expected file is not an artifact (T8). Plus the walk card in bash, the `ios-release.test.sh` heredoc anchor, and the expected-warning list. Pass ledger: `.claude/agents/antagonist-ledger.md`, entry `2026-09-02 — Wave E PR1.75b native plan (DELTA pass 1)`.
 
 **REV 1** — written 2026-09-02 against design rev 5.1 at worktree head `94b83c84` (branch `wave-e-pr175b-native`, base main `138dbe8c`, PR1.75a #269 merged in). Every `file:line` below was read in **this** worktree at that head. Implements ONLY **PR1.75b** as scoped in design §0; nothing here touches `app/server/` or `app/drizzle/`.
 
@@ -58,7 +60,7 @@ Design §2's table, extended for the three values 1.75b introduces. Invariants, 
 
 | state | mint site | clear sites | survives WebView reload? | survives relaunch / kill? |
 | --- | --- | --- | --- | --- |
-| **the in-flight link claim** — INVARIANT: at most ONE link session per app PROCESS, and its authority is NATIVE. A second `start()` rejects `busy` in Swift, so the claim outlives every JS value | `WebAuthPlugin.startOnMain(_:)`, at the moment `activeSession`/`activeCall`/`activeAnchor` are assigned (before `start()`) | (a) the session's completion handler, whatever the outcome; (b) `shouldOverrideLoad` on a main-frame navigation — rejects the pending call `abandoned` and cancels the session, so no orphaned sheet outlives its receiver (observation 1: this is the hook that fires, not `load()`); (c) every early-return in `startOnMain` clears before rejecting | **NO** — a reload clears it, on purpose, and that is the invariant's whole point | NO (process-scoped) |
+| **the in-flight link claim** — INVARIANT: at most ONE link session per app PROCESS, and its authority is NATIVE. A second `start()` rejects `busy` in Swift, so the claim outlives every JS value | `WebAuthPlugin.startOnMain(_:)`, at the moment `activeSession`/`activeCall`/`activeAnchor` are assigned (before `start()`) | (a) the session's completion handler, whatever the outcome; (b) `shouldOverrideLoad` on a main-frame navigation — rejects the pending call `abandoned` and cancels the session, so no orphaned sheet outlives its receiver (observation 1: this is the hook that fires, not `load()`); (c) the two post-claim early returns in `startOnMain` (`canStart` false, `start()` false) — the four pre-claim returns (`busy`, `badRequest` ×2, `noWindow`) reject without clearing, on purpose: they hold no claim, and `busy` clearing would strand the live session it just refused | **NO** — a reload clears it, on purpose, and that is the invariant's whole point | NO (process-scoped) |
 | `activeCall` (the pending `CAPPluginCall`) | same site as the claim | same three sites; **cleared BEFORE `session.cancel()` is called**, so a completion handler that fires after a cancel finds no call and is a no-op | NO | NO |
 | `activeToken` (a per-attempt `UUID`) — INVARIANT: a completion handler resolves ONLY the call its own session was started for. `finish(token:…)` guards `activeToken == token`, so a superseded session's late completion is discarded by IDENTITY rather than by assuming it drains before the next `start()` — `cancel()`'s effect on a pending completion handler is undocumented (SDK header:101-104) | `startOnMain`, minted immediately before the `ASWebAuthenticationSession` initializer and captured by that session's completion closure | same three sites (`clearActive()` nils it) | NO | NO |
 | `activeAnchor` (the `ASPresentationAnchor` the context provider returns) | same site, from `bridge?.viewController?.view.window`, **guarded**: nil → reject `noWindow`, never a synthesised `ASPresentationAnchor()` at claim time | same three sites | NO | NO |
@@ -67,6 +69,8 @@ Design §2's table, extended for the three values 1.75b introduces. Invariants, 
 | `state` (the mint's correlation value) | returned by `POST /connect` beside `authorizeUrl` (`routes/concept2.ts:270-275`) | completion of `startLink`, every branch — it lives only in that function's scope | NO — nothing persists it; a reload re-mints | NO |
 
 **Invariants restated:** at most one link session per app PROCESS; a pending call is resolved or rejected exactly once; no client-side state outlives the promise that holds it; nothing about a link is written to `localStorage`, the Keychain, or any store — a killed app re-mints from scratch. **Web has no in-flight guard** (design §2, unchanged): a second tab or a second tap re-mints and the first tab's callback lands on the Expired page.
+
+**Why "per PROCESS" is true, and what would make it false.** The claim lives in one `WebAuthPlugin` instance, and there is exactly one because there is exactly one bridge view controller: `Info.plist` declares **no `UIApplicationSceneManifest`** (`grep -c UIApplicationSceneManifest app/ios/App/App/Info.plist` → `0`, run 2026-09-02), so the app is single-scene and `MyViewController.capacitorDidLoad()` runs once. **Adding multi-scene support would demote this invariant to one claim per bridge view controller** — two scenes would each register their own plugin instance, each holding its own `activeSession`, and "one link session per app process" would become false without a line of this PR's code changing. Named here so a later scene-manifest change meets the argument rather than an unexplained guarantee.
 
 ## What this builds against (PR1.75a's contract — READ ONLY, do not change)
 
@@ -308,6 +312,15 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         // One session per app PROCESS. Rejecting here rather than queueing is
         // deliberate: a second sheet would present over the first and there is
         // no correct answer for which call receives the callback.
+        //
+        // THIS RETURN AND THE THREE BELOW IT MUST NOT CALL `clearActive()`.
+        // They run BEFORE the claim is taken, so they hold nothing to clear --
+        // and here specifically, clearing would strand the LIVE session this
+        // very call was just refused in favour of: the sheet would still be up
+        // with its own completion handler pending, but the plugin would have
+        // forgotten the call to resolve. Only the two POST-claim returns
+        // (`canStart`, `start()`) clear. See the plan's RF27 lifetime table,
+        // clear-site (c).
         if activeSession != nil {
             call.reject("A link session is already in flight", "busy")
             return
@@ -384,9 +397,10 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         // (SDK header:50-53), since there is nothing to share.
         session.prefersEphemeralWebBrowserSession = call.getBool("ephemeral", false)
 
-        // Claim BEFORE starting: `canStart`/`start()` can both fail, and each
-        // failure path below clears the claim again, so no path can leave a
-        // claim without a session.
+        // Claim BEFORE starting: `canStart`/`start()` can both fail, and those
+        // two failure paths -- the ONLY two below this line, and the only two
+        // in this function that clear -- release the claim again, so no path
+        // can leave a claim without a session.
         activeAnchor = window
         activeSession = session
         activeCall = call
@@ -479,9 +493,16 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin {
     /// The other producer, beyond a Safari-inspector reload: a WebContent
     /// process crash. `webViewWebContentProcessDidTerminate`
     /// (`WebViewDelegationHandler.swift:158-162`) does `bridge?.reset()` then
-    /// `webView.reload()`, and that reload goes through this same policy
-    /// decision -- so a crash mid-session also releases the claim rather than
-    /// stranding it.
+    /// `webView.reload()` -- that much is PRIMARY, read in the vendored
+    /// source. **That the reload then re-enters `decidePolicyFor` with a
+    /// MAIN-FRAME `targetFrame` is INFERENCE, not measured:** after a
+    /// WebContent termination the frame tree has been destroyed, and nothing
+    /// in WebKit's documentation says what `targetFrame` carries on the
+    /// recovery load (a `nil` target frame fails this guard's
+    /// `?.isMainFrame == true` and the claim would NOT be released). So the
+    /// crash path is a PLAUSIBLE second producer, not a proven one; the
+    /// reload path is the one that gates. Walk case (d)'s optional variant
+    /// exists to measure it.
     ///
     /// ORDERING CAVEAT: `bridge.plugins` is an unordered `[String:
     /// CapacitorPlugin]` Dictionary, iterated at
@@ -635,7 +656,24 @@ with
 				E2A1B0022C5D4F0100AA1102 /* WebAuthPlugin.swift in Sources */,
 ```
 
-- [ ] **Step 9: Verify the project file still parses, then that it compiles.** From `app/ios/App`:
+- [ ] **Step 9: `cap sync` FIRST, then parse, then compile — the order is load-bearing.**
+
+  **(i) `npx cap sync ios`, from `app/`, BEFORE any `xcodebuild` command.** This is gate (b) below, but it also has to run first for a mechanical reason measured on a cold build 2026-09-02: `xcodebuild` fails with `error: The file "public" couldn't be opened` in a fresh worktree, because `app/ios/App/App/public/` and `app/ios/App/App/config.xml` are **gitignored** (`app/ios/.gitignore:4,13`) and are GENERATED by `cap sync`. They are inputs the App target's Resources phase requires and a clean checkout does not have. Reading the `xcodebuild` command reveals none of this; only running it in a worktree that has never synced does.
+
+```
+cd /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr175b/app
+npx cap sync ios
+```
+
+  **Gate (b) — `cap sync` does not fight the manual pbxproj edit.** The Capacitor CLI is the other writer of this directory, and the claim that it leaves our four entries alone is currently a READING of `@capacitor/cli/dist/ios/update.js` (it writes `Package.swift`, `capacitor.config.json` and the web assets; it never writes `project.pbxproj`, `Main.storyboard` or `Info.plist`). Turn it into a measured fact for THIS repo, immediately after the sync:
+
+```
+git -C /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr175b diff --stat -- app/ios
+```
+
+  → **expected output: EMPTY.** Not "only `capacitor.config.json` and `public/`" — those two cannot appear in a `git diff` at all, because both are gitignored (`app/ios/.gitignore:4,12,13`) and untracked. Every path `git diff` can print here is a TRACKED iOS file, and the only tracked ones `cap sync` could reach are the four this step edits by hand. **Any output at all means the CLI rewrote something we wrote: STOP and re-plan rather than committing.** Paste the (empty) output either way.
+
+  **(ii) The project file still parses.** From `app/ios/App`:
 
 ```
 timeout 600 xcodebuild -list -project App.xcodeproj
@@ -643,31 +681,26 @@ timeout 600 xcodebuild -list -project App.xcodeproj
 
   → must still print `Targets: App` and a `Schemes:` block containing `App` (measured shape at `94b83c84`, 2026-09-02: one target, schemes `App` plus the SPM package schemes). A malformed pbxproj fails here with a parse error rather than silently.
 
-  Then the real compile gate, from `app/ios/App`, keeping the log:
+  **(iii) The real compile gate**, from `app/ios/App`, into a named derived-data directory (gate (a) reads an artifact inside it, so it must not go to the shared default):
 
 ```
-timeout 1800 xcodebuild -scheme App -configuration Debug -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO 2>&1 | tee /tmp/pr175b-build.log | tail -15
+DD=/tmp/pr175b-dd
+timeout 1800 xcodebuild -scheme App -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath "$DD" build CODE_SIGNING_ALLOWED=NO 2>&1 | tee /tmp/pr175b-build.log | tail -15
 ```
 
   → `** BUILD SUCCEEDED **`. Simulator destination on purpose: it needs no provisioning profile, and `AuthenticationServices` is present there. Paste the last 15 lines into the task report. **If the build reports an actor-isolation diagnostic on `presentationAnchor(for:)`, apply observation 13's remedy (annotate the METHOD `@MainActor`, never the class) and say so in the report.**
 
-  **Gate (a) — TARGET MEMBERSHIP, not just compilation.** `BUILD SUCCEEDED` does not prove either file is in the App target's Sources phase: omit `MyViewController.swift` from step 8(d) and the project still builds fine, ships a storyboard naming a class that is not in the binary, and the app opens to a blank screen on the phone. The deterministic check is that the compiler actually saw each file:
+  **Gate (a) — TARGET MEMBERSHIP, not just compilation.** `BUILD SUCCEEDED` does not prove either file is in the App target's Sources phase: omit `MyViewController.swift` from step 8(d) and the project still builds fine, ships a storyboard naming a class that is not in the binary, and the app opens to a blank screen on the phone. The deterministic check reads the compiler's own input list:
 
 ```
-grep -c 'SwiftCompile.*WebAuthPlugin\.swift' /tmp/pr175b-build.log
-grep -c 'SwiftCompile.*MyViewController\.swift' /tmp/pr175b-build.log
+FL="$DD/Build/Intermediates.noindex/App.build/Debug-iphonesimulator/App.build/Objects-normal/arm64/App.SwiftFileList"
+grep -c 'App/WebAuthPlugin\.swift$' "$FL"
+grep -c 'App/MyViewController\.swift$' "$FL"
 ```
 
-  → each must print exactly `1`. `0` means the file is not in the Sources phase (step 8(a)/(d) is wrong or missing); more than `1` means a duplicate build-file entry (step 8(a) pasted twice). Paste both numbers.
+  → each must print exactly `1`. `App.SwiftFileList` is the compiler's own input list for the App target's Sources phase, written by `WriteAuxiliaryFile`. `0` = not in the Sources phase (step 8(a)/(d) wrong or missing); `2` = a duplicate build-file entry. Paste both numbers.
 
-  **Gate (b) — `cap sync` does not fight the manual pbxproj edit.** The Capacitor CLI is the other writer of this directory, and the claim that it leaves our four entries alone is currently a READING of `@capacitor/cli/dist/ios/update.js` (it writes `Package.swift`, `capacitor.config.json` and the web assets; it never writes `project.pbxproj`, `Main.storyboard` or `Info.plist`). Turn it into a measured fact for THIS repo, immediately after the step-8 edit, from `app/`:
-
-```
-npx cap sync ios
-git -C /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr175b diff --stat -- app/ios
-```
-
-  → the only paths listed may be `app/ios/App/App/capacitor.config.json` and things under `app/ios/App/App/public/`. **Any hit on `project.pbxproj`, `Main.storyboard` or `Info.plist` means the CLI rewrites what step 8 just wrote by hand, and the manual-reference approach is unsafe: STOP and re-plan rather than committing.** Paste the `--stat` output either way.
+  **Deliberately NOT a `SwiftCompile` log grep** (which is what REV 1 and REV 2 of this plan specified): measured 2026-09-02 on a cold build, a genuine member counts **4** there — two log line forms × two architectures, because `generic/platform=iOS Simulator` builds arm64 AND x86_64 — and **0** on any warm re-run, so `= 1` can never be right. A gate whose pass value is a count of build-log lines is a heuristic wearing a number; the file list reflects the pbxproj rather than the build's incremental state, which is the thing this gate is actually asserting about.
 
 - [ ] **Step 10: Mutation probes (after commit).** Commit first (`git rev-parse --show-toplevel` check, then Step 11), then run each and restore with an explicit `git status` check (RF22):
   - Replace the whole body of `ios-google-client-id.sh`'s `grep -o` with the old index-0 PlistBuddy form → the "Concept2 URL type is first" case FAILS. Record the exact line.
@@ -732,15 +765,26 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-/** Mints successfully, then answers `exchange` with `exchangeRes`. */
-function mockApi(mint: Response, exchange?: Response) {
+/**
+ * Mints, then answers `exchange`. **Both are FACTORIES, invoked per request,
+ * and that is load-bearing rather than stylistic.** A `Response` body can be
+ * read exactly once; the busy test below deliberately mints TWICE, so handing
+ * one `Response` object to two `/connect` calls makes the second
+ * `res.json()` throw `Body is unusable`. `startLink` catches that and returns
+ * `{kind:"networkError"}` — so the third-call assertion would fail for a
+ * reason that has nothing to do with the guard it exists to test, and the
+ * `linkInFlight` mutation it is supposed to kill would look like a false
+ * alarm. A fresh `Response` per request is what makes the assertion mean what
+ * its title says.
+ */
+function mockApi(mint: () => Response, exchange?: () => Response) {
   const calls: { path: string; init?: RequestInit }[] = [];
   const api = vi.fn(async (path: string, init?: RequestInit) => {
     calls.push({ path, init });
-    if (path === "/api/concept2/connect") return mint;
+    if (path === "/api/concept2/connect") return mint();
     if (path === "/api/concept2/exchange") {
       if (!exchange) throw new Error("exchange called but no response was staged");
-      return exchange;
+      return exchange();
     }
     throw new Error(`unexpected api path ${path}`);
   });
@@ -761,8 +805,7 @@ const MINT_OK = () =>
 describe("startLink on native", () => {
   it("mints with linkClient webauth-1, opens an EPHEMERAL session on the bare scheme, exchanges {code, state}, and reports the link", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    const { calls } = mockApi(
-      MINT_OK(),
+    const { calls } = mockApi(MINT_OK, () =>
       jsonResponse(200, { linked: true, c2UserId: 2211, weightClass: "H" }),
     );
     const start = vi.fn(async () => ({
@@ -798,8 +841,7 @@ describe("startLink on native", () => {
 
   it("exchanges the MINT's state, not the callback's, when the callback omits state (the echo-independence case)", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    const { calls } = mockApi(
-      MINT_OK(),
+    const { calls } = mockApi(MINT_OK, () =>
       jsonResponse(200, { linked: true, c2UserId: 2211, weightClass: "L" }),
     );
     mockPlugin(
@@ -826,7 +868,7 @@ describe("startLink on native", () => {
 
   it("refuses to exchange when the callback carries a DIFFERENT state, and says nothing about the two values", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    const { api } = mockApi(MINT_OK());
+    const { api } = mockApi(MINT_OK);
     mockPlugin(
       vi.fn(async () => ({
         callbackUrl: "haus.waffle.ergomatic://oauth/callback?code=CODE3&state=NOTABC",
@@ -851,7 +893,7 @@ describe("startLink on native", () => {
 
   it("reports `declined` and never exchanges when Concept2 returns error=access_denied", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    const { api } = mockApi(MINT_OK());
+    const { api } = mockApi(MINT_OK);
     mockPlugin(
       vi.fn(async () => ({
         callbackUrl: "haus.waffle.ergomatic://oauth/callback?error=access_denied&state=abc",
@@ -869,7 +911,7 @@ describe("startLink on native", () => {
 
   it("reports `malformed` (never `cancelled`) for a callback with neither a code nor a recognised error", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    mockApi(MINT_OK());
+    mockApi(MINT_OK);
     mockPlugin(
       vi.fn(async () => ({
         callbackUrl: "haus.waffle.ergomatic://oauth/callback?error=server_error",
@@ -893,7 +935,7 @@ describe("startLink on native", () => {
     ["contextInvalid", "contextInvalid"],
   ])("maps the plugin's `%s` rejection onto the same typed outcome", async (code, kind) => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    mockApi(MINT_OK());
+    mockApi(MINT_OK);
     mockPlugin(
       vi.fn(async () => {
         const err = new Error("rejected") as Error & { code: string };
@@ -909,7 +951,7 @@ describe("startLink on native", () => {
 
   it("does NOT fold an unrecognised plugin rejection into `cancelled`", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    mockApi(MINT_OK());
+    mockApi(MINT_OK);
     mockPlugin(
       vi.fn(async () => {
         const err = new Error("the system will not start one") as Error & { code: string };
@@ -929,7 +971,7 @@ describe("startLink on native", () => {
 
   it("reports `updateRequired` on the mint's 409 and never opens a session", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    mockApi(jsonResponse(409, { error: "update_required" }));
+    mockApi(() => jsonResponse(409, { error: "update_required" }));
     const start = vi.fn();
     mockPlugin(start);
     vi.resetModules();
@@ -941,7 +983,7 @@ describe("startLink on native", () => {
 
   it("passes the exchange's typed error through so a caller can key on body.error", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    mockApi(MINT_OK(), jsonResponse(403, { error: "principal_mismatch" }));
+    mockApi(MINT_OK, () => jsonResponse(403, { error: "principal_mismatch" }));
     mockPlugin(
       vi.fn(async () => ({
         callbackUrl: "haus.waffle.ergomatic://oauth/callback?code=CODE4&state=abc",
@@ -961,11 +1003,12 @@ describe("startLink on native", () => {
   it("reports `serverError` for a non-2xx whose body is not {error} JSON (an old image's Express 404 HTML mid-deploy)", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
     mockApi(
-      MINT_OK(),
-      new Response("<!DOCTYPE html><p>Cannot POST /api/concept2/exchange</p>", {
-        status: 404,
-        headers: { "Content-Type": "text/html" },
-      }),
+      MINT_OK,
+      () =>
+        new Response("<!DOCTYPE html><p>Cannot POST /api/concept2/exchange</p>", {
+          status: 404,
+          headers: { "Content-Type": "text/html" },
+        }),
     );
     mockPlugin(
       vi.fn(async () => ({
@@ -1021,8 +1064,7 @@ describe("startLink on native", () => {
 
   it("refuses a SECOND concurrent call with `busy` without minting again (the UX guard; the plugin is the authority)", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
-    const { api } = mockApi(
-      MINT_OK(),
+    const { api } = mockApi(MINT_OK, () =>
       jsonResponse(200, { linked: true, c2UserId: 1, weightClass: "H" }),
     );
     let release: (r: { callbackUrl: string }) => void = () => undefined;
@@ -1055,7 +1097,7 @@ describe("startLink on native", () => {
 describe("startLink on web", () => {
   it("mints WITHOUT a linkClient declaration and hands off to a full-page navigation", async () => {
     vi.doMock("../platform", () => ({ isNative: () => false }));
-    const { calls } = mockApi(MINT_OK());
+    const { calls } = mockApi(MINT_OK);
     const openExternalUrl = vi.fn();
     vi.doMock("./externalBrowser", () => ({ openExternalUrl }));
     const start = vi.fn();
@@ -1075,7 +1117,7 @@ describe("startLink on web", () => {
 
   it("reports a failed mint with its status and typed error, and navigates nowhere", async () => {
     vi.doMock("../platform", () => ({ isNative: () => false }));
-    mockApi(jsonResponse(403, { error: "unavailable" }));
+    mockApi(() => jsonResponse(403, { error: "unavailable" }));
     const openExternalUrl = vi.fn();
     vi.doMock("./externalBrowser", () => ({ openExternalUrl }));
     vi.resetModules();
@@ -1285,6 +1327,11 @@ async function completeNative(
     return pluginRejection(err);
   }
 
+  // `searchParams` decodes `+` as a SPACE (WHATWG application/x-www-form-
+  // urlencoded), so if Concept2 ever emits an unencoded `+` inside a `code`
+  // the exchange fails as `502 c2_error` -> `exchangeFailed` rather than
+  // silently linking the wrong thing -- symmetric with Express's own query
+  // parser on the web callback, and the walk would surface it.
   const params = new URL(callbackUrl).searchParams;
   const code = params.get("code");
   const returnedState = params.get("state");
@@ -1432,13 +1479,20 @@ function matchAll(source: string, re: RegExp): string[] {
 
 /** Every `call.reject(message, "code")` code, taken as the LAST quoted string
  *  on a line containing `.reject(` -- messages carry `\(interpolation)` and
- *  backticks, so a single whole-call regex is not robust. */
+ *  backticks, so a single whole-call regex is not robust.
+ *
+ *  The `\\.` alternative in the string body is what makes it robust: a Swift
+ *  `\(interpolation)` contains a backslash, and the naive `[^"\\]*` form stops
+ *  dead at it, so the whole quoted string is invisible and the LINE yields
+ *  nothing. Measured 2026-09-02: that form saw 12 of the 14 `.reject(` lines,
+ *  and the two it could not see were exactly the two the comment above names
+ *  as its reason for existing. */
 function rejectCodes(source: string): string[] {
   return source
     .split("\n")
     .filter((line) => line.includes(".reject("))
     .map((line) => {
-      const quoted = matchAll(line, /"([^"\\]*)"/g);
+      const quoted = matchAll(line, /"((?:[^"\\]|\\.)*)"/g);
       return quoted[quoted.length - 1] ?? "";
     })
     .filter((code) => /^[A-Za-z][A-Za-z0-9]*$/.test(code));
@@ -1458,6 +1512,13 @@ describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
 
   it("every rejection code the Swift can emit is named on the JS side", () => {
     const codes = rejectCodes(swift);
+    // Every `.reject(` line must have yielded a code. Without this, a regex
+    // that silently skips a line shrinks the set instead of failing (measured
+    // 2026-09-02: the `[^"\\]*` form saw 12 of 14 lines and stayed green
+    // through a deliberate typo on an interpolated one).
+    expect(codes).toHaveLength(
+      swift.split("\n").filter((l) => l.includes(".reject(")).length,
+    );
     // The nine of design §4 + plan observation 2. Pinned as an INDEPENDENT
     // literal list, not derived from the file, so deleting a reject arm in
     // Swift fails here instead of quietly shrinking the expectation.
@@ -1495,7 +1556,11 @@ describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
 });
 ```
 
-  Run it: `cd .../app && NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit scripts/webauth-contract.test.ts` → 4 passed. **Red proof (RF21), against the committed tree:** rename `noWindow` → `noWindowX` in `WebAuthPlugin.swift`'s `call.reject(...)` only → the codes test fails on the sorted-array comparison AND the `jsName`/scheme tests still pass (so the failure is specific, not a blanket break). Restore after `git status`. Record the exact failure text.
+  Run it: `cd .../app && NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit scripts/webauth-contract.test.ts` → 4 passed. **Red proof (RF21), against the committed tree — TWO probes, because this test now makes two claims:**
+  - **The census sees an INTERPOLATED line.** Rename the `@unknown default` arm's code — the `call.reject("Authentication session failed with an unknown code \(ns.code)", "pluginError")` line, chosen precisely because its message carries a Swift interpolation — to `"typoCode"`. The codes test must fail on the sorted-array comparison, and the `jsName`/scheme tests must still pass (so the failure is specific, not a blanket break). **This is the probe REV 2's red proof could not run:** with the old `/"([^"\\]*)"/g` the regex stopped at the interpolation's backslash, this line yielded nothing, the set silently shrank by one entry it already contained, and the assertion stayed GREEN through the typo (measured 2026-09-02).
+  - **The length assertion bites.** With the code restored, revert the regex alone to `/"([^"\\]*)"/g` → `expect(codes).toHaveLength(...)` fails `12 !== 14`, naming the two lines the regex cannot see. Restore.
+
+  Restore after `git status` each time (RF22). Record both exact failure texts.
 
 - [ ] **Step 7: Per-file coverage (RF2).** `pnpm test:coverage`, then read `app/coverage/`'s HTML row for `src/adapters/linkFlow.ts`; state the number and the source you read. `src/native/webAuth.ts` is excluded by `vitest.config.ts:48`.
 - [ ] **Step 8: Mutation probes (after Task 4's commit — this file and the probe commit together, see the commit-shape note in Self-review).** Each run against the committed tree, restored with an explicit `git status` first (RF22):
@@ -1512,7 +1577,7 @@ describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
 | drop `linkClient` from the native mint body | "mints with linkClient webauth-1…" |
 | ADD `linkClient` to the web mint body | "mints WITHOUT a linkClient declaration…" |
 | delete the `linkInFlight` guard | "refuses a SECOND concurrent call with `busy`…" |
-| move `linkInFlight = false` out of `finally` into the success path | the same test's third-call assertion (`toHaveLength(2)`) AND `networkError`'s second-tap assertion |
+| **delete the `finally` block entirely** (no other change — not "move the assignment", which is the variant that reads as equivalent and is not: moving it into the success path leaves an assignment the compiler and the reader can both still see, and a probe should remove the invariant, not relocate it) | BOTH of these, and BOTH are recorded: the busy test's third-call `toHaveLength(2)` assertion AND the `networkError` test's second-tap assertion. Two independent tests dying on one deleted block is what proves the guard releases on the THROWING exit as well as the settling one — one victim alone would leave the other path ungated |
 | remove the `catch` that returns `networkError` (leave `try`/`finally`) | "reports `networkError` when the mint request itself throws…" — the test THROWS instead of failing an assertion (`Load failed` escapes `startLink`); record that exact text, it is the whole point of the member |
 
   Record each mutation and the exact failure text.
@@ -1674,7 +1739,25 @@ describe("Concept2LinkProbe", () => {
     expect(screen.getByText(/2211/)).toBeInTheDocument();
   });
 
-  it("tapping Start real link calls startLink with the selected weight class", async () => {
+  it("says the status is UNREADABLE when the read itself throws, rather than leaving a stale or perpetual line", async () => {
+    // The walk runs over a cloudflared quick tunnel; a dropped request is a
+    // normal event there, and the failure mode this guards is an operator
+    // reading a status line that describes a moment before the request that
+    // never answered.
+    const api = vi.fn(() => Promise.reject(new Error("Load failed")));
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    vi.resetModules();
+    const { default: Concept2LinkProbe } = await import("./Concept2LinkProbe");
+    render(<Concept2LinkProbe />);
+
+    expect(
+      await screen.findByText(/Link status: unreadable \(the request failed\)/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/reading\.\.\./i)).not.toBeInTheDocument();
+  });
+
+  it("tapping Start real link calls startLink with weight class H (the card offers no selector)", async () => {
     const startLink = vi.fn(async () => ({ kind: "cancelled" }) as const);
     mockLink({ available: true, linked: false }, startLink);
     vi.resetModules();
@@ -1817,7 +1900,10 @@ import { startLink, type LinkOutcome } from "../adapters/linkFlow";
  * `Link status` also distinguishes a FLAG-OFF server from an unlinked
  * account: `GET /api/concept2/link` answers `{available:false}` with HTTP 200
  * (`routes/concept2.ts:518-523`), so `describeStatus` names that case
- * explicitly rather than letting it read as "not linked".
+ * explicitly rather than letting it read as "not linked". It names a THIRD
+ * case for the same reason: when the read itself throws, the line says
+ * `unreadable`, because a walk over a quick tunnel drops requests and a stale
+ * status line is how an operator records a server state nobody observed.
  *
  * Build-time flag gated (`VITE_ENABLE_C2_LINK_PROBE`), same shape as
  * `AppRoutes.tsx`'s `VITE_ENABLE_FAKE_MONITOR` seam: mounted behind a dynamic
@@ -1844,7 +1930,11 @@ function stateEchoLabel(outcome: LinkOutcome | null): string {
   return "stateEchoed" in outcome ? (outcome.stateEchoed ? "yes" : "no") : "n/a";
 }
 
-function describeStatus(status: LinkStatus | null): string {
+function describeStatus(status: LinkStatus | null, statusError: boolean): string {
+  // Checked BEFORE the null case: a failed read leaves `status` null, and
+  // `reading...` on a request that already failed is a line that never
+  // resolves and never says why.
+  if (statusError) return "unreadable (the request failed)";
   if (status === null) return "reading...";
   // `{available:false}` comes back with HTTP 200 (routes/concept2.ts:518-523),
   // so a flag-off server would otherwise read exactly like an unlinked one.
@@ -1855,12 +1945,25 @@ function describeStatus(status: LinkStatus | null): string {
 
 export default function Concept2LinkProbe() {
   const [status, setStatus] = useState<LinkStatus | null>(null);
+  const [statusError, setStatusError] = useState(false);
   const [outcome, setOutcome] = useState<LinkOutcome | null>(null);
   const [busy, setBusy] = useState(false);
 
   const readStatus = useCallback(async () => {
-    const res = await api("/api/concept2/link");
-    setStatus((await res.json()) as LinkStatus);
+    // Same reason `linkFlow` has a `networkError` member: on a walk over a
+    // cloudflared quick tunnel a dropped request is normal, and a silently
+    // stale status line is how an operator misreads the whole check. Without
+    // this catch the throw escapes, the card keeps whatever `Link status:`
+    // text it already had -- `not linked` from before a link that DID
+    // succeed, or `reading...` forever on the mount read -- and the operator
+    // records a server state nobody observed.
+    try {
+      const res = await api("/api/concept2/link");
+      setStatus((await res.json()) as LinkStatus);
+      setStatusError(false);
+    } catch {
+      setStatusError(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -1887,7 +1990,7 @@ export default function Concept2LinkProbe() {
       data-c2-link-probe="C2 link probe (dev harness)"
     >
       <h2 className="section-heading">C2 LINK PROBE (DEV HARNESS)</h2>
-      <p>{`Link status: ${describeStatus(status)}`}</p>
+      <p>{`Link status: ${describeStatus(status, statusError)}`}</p>
       <button
         type="button"
         className="button-outline"
@@ -1920,7 +2023,9 @@ export default function Concept2LinkProbe() {
 | `stateEchoLabel`'s `stateEchoed ? "yes" : "no"` → inverted | both echo tests |
 | delete the second `readStatus()` in `onStart` | "re-reads the link status after a successful link" |
 | `disabled={busy}` → `disabled={false}` | "disables the button while a link is in flight" |
-| `weightClass: "H"` → `"L"` | "tapping Start real link calls startLink with the selected weight class" |
+| `weightClass: "H"` → `"L"` | "tapping Start real link calls startLink with weight class H (the card offers no selector)" |
+| delete `readStatus`'s `catch` block (leave the `try`) | "says the status is UNREADABLE when the read itself throws…" — and it dies by THROWING, not by failing an assertion: `Load failed` escapes into the effect as an unhandled rejection. Record that exact text; it is the whole point of the branch |
+| `describeStatus`'s `statusError` check moved BELOW the `status === null` check | the same test — the line reads `reading...` forever instead of naming the failure. This is the ordering mutation, and it is separate from the one above because deleting the catch and mis-ordering the checks are two different defects with one symptom |
 
 ### Task 5: Pre-walk gates
 
@@ -1929,9 +2034,9 @@ Everything CI will run, run BEFORE the walk, so the walk is performed against a 
 - [ ] `pnpm lint && pnpm format:check && pnpm typecheck` → green.
 - [ ] `pnpm test` (all three projects; Docker up for `integration`) → green. **Read BOTH summary lines** and record the file/test counts before and after this PR (the client project loses `useReturnToApp.test.tsx`).
 - [ ] `pnpm test:coverage` → read the PER-FILE rows (RF2, TESTING.md §10) for `src/adapters/linkFlow.ts`, `src/adapters/externalBrowser.ts` and `src/monitor/Concept2LinkProbe.tsx`; the HTML report under `app/coverage/` is authoritative — say which source you read. `src/native/webAuth.ts` and the Swift are excluded/unreachable and that is stated, not glossed.
-- [ ] **`pnpm e2e` — REQUIRED** (RF1: this diff touches `app/src/`). Note that it rebuilds the per-worktree compose stack unconditionally and leaves it up; the teardown at phase close is `docker compose -p <this worktree's ergomatic-NNNNN name> down -v`.
+- [ ] **`pnpm e2e` — REQUIRED, and REQUIRED-BUT-BLIND, which is stated rather than glossed.** Required as a regression gate on the `useReturnToApp` deletion, NOT as coverage of this PR's new code: `grep -rn -i concept2 app/e2e` finds nothing, the probe is the only consumer of `linkFlow`, and it is compiled out of the stack's bundle. What proves the web arm is `linkFlow.test.ts`'s `describe("startLink on web")` cases; what proves the native arm is the walk. Say this in the PR body rather than letting a green e2e badge carry a claim it cannot support (RF26). Note also that it rebuilds the per-worktree compose stack unconditionally and leaves it up; the teardown at phase close is `docker compose -p <this worktree's ergomatic-NNNNN name> down -v`.
 - [ ] `pnpm build && pnpm dist:grep` (Task 4 step 6 already did this with its red proof; re-run clean here).
-- [ ] **Xcode compile gate** (Task 1 step 9's command), re-run at this head — including **gate (a)**, the two `grep -c 'SwiftCompile…'` counts that must each read `1` (compilation alone does not prove target membership; a missing `MyViewController.swift` builds fine and boots to a blank screen), and **gate (b)**, `npx cap sync ios` followed by `git diff --stat -- app/ios` touching nothing but `capacitor.config.json`/`public`.
+- [ ] **Xcode compile gate** (Task 1 step 9's commands), re-run at this head **in the same order — `npx cap sync ios` first**, because `public/` and `config.xml` are gitignored generated inputs without which `xcodebuild` fails `error: The file "public" couldn't be opened`. Then: **gate (b)**, `git diff --stat -- app/ios` → **EMPTY** (the two generated paths are untracked and cannot appear; any output means a tracked iOS file moved → STOP); then the build into `-derivedDataPath /tmp/pr175b-dd`; then **gate (a)**, the two `grep -c` counts against `…/App.build/Objects-normal/arm64/App.SwiftFileList`, each of which must read `1` (compilation alone does not prove target membership; a missing `MyViewController.swift` builds fine and boots to a blank screen). **Not the `SwiftCompile` log grep** — measured 2026-09-02, a genuine member counts 4 there on a cold build and 0 on a warm one, so `= 1` is unreachable, and this re-run is warm by construction.
 - [ ] **Scope gate:** `git diff main...HEAD --stat -- app/server app/drizzle` prints nothing.
 - [ ] **`pnpm screenshots` — argued, not run.** The committed screenshots capture rower-facing screens; the only visual change in this PR is inside `Concept2LinkProbe`, which is gated behind `VITE_ENABLE_C2_LINK_PROBE` and `import.meta.env.DEV` (`You.tsx:19-20`) and is therefore absent from the compose stack's production bundle that `screenshots.sh` captures. **No screen a rower can reach changes layout, so no capture is owed** (memory: no-screenshots-for-copy). Verify the claim rather than asserting it: after `pnpm e2e`, `git status docs/screenshots` shows no diff. State this in the PR body with the verification.
 
@@ -2091,6 +2196,11 @@ build did not carry the flag -- stop and re-check step 4.
 - `Last outcome: networkError` means the request never reached the server at
   all -- almost always the cloudflared tunnel. Restart the tunnel, rebuild
   with the new `<TUNNEL>` host, and start the check again.
+- **`Link status: unreadable (the request failed)` means the STATUS read
+  itself failed** -- the card is telling you it does not know, rather than
+  showing you a line from before the request that never answered. Same cause
+  as `networkError`, same fix: the tunnel. **Never record a status while this
+  is on screen**; tap **Re-read link status** until it says something else.
 
 **(a) A real link.** The card should read `Link status: not linked`. Tap
 **Start real link (log-dev)**.
@@ -2150,15 +2260,20 @@ be inspected at all** and this check is impossible on one
 - **STOP condition:** the sheet lingers with no receiver, or every later tap
   does nothing / the card shows `Last outcome: busy`. That is the claim
   leaking — the `abandoned` path failing — and it is Task 7's named STOP.
-- **Optional second producer, if you want the crash path covered too:** the
-  same teardown is driven by a WebContent process termination, which
-  Capacitor answers with `bridge?.reset()` + `webView.reload()`
-  (`WebViewDelegationHandler.swift:158-162`) — the reload goes through the
-  same policy decision. Force one from Safari's inspector (Develop -> the web
-  view -> the process/Timelines menu, or just leave a heavy page thrashing
-  until iOS kills it) with the sheet open, and record the same pass criterion.
-  Skip it if it does not reproduce in a couple of minutes; the reload case is
-  the one that gates.
+- **Optional second producer, and it MEASURES AN INFERENCE:** a WebContent
+  process termination makes Capacitor call `bridge?.reset()` +
+  `webView.reload()` (`WebViewDelegationHandler.swift:158-162`, read in the
+  source). Whether that recovery reload re-enters the policy decision with a
+  MAIN-FRAME target frame — which is what the plugin's guard needs to release
+  the claim — is UNVERIFIED. This variant is the only thing that can settle
+  it. Force a termination from Safari's inspector (Develop -> the web view ->
+  the process/Timelines menu, or just leave a heavy page thrashing until iOS
+  kills it) with the sheet open, and record the same pass criterion: does a
+  fresh `Start real link` work afterwards, or does the card read `busy`?
+  **`busy` here is NOT a walk failure** — it falsifies an inference the plan
+  already labelled as one, and belongs in the report as a finding. Skip it if
+  it does not reproduce in a couple of minutes; the reload case is the one
+  that gates.
 
 **(e) The credential readings.** In the server terminal, copy EVERY
 `{"event":"auth_via",...}` line produced during the whole walk into the
@@ -2256,7 +2371,7 @@ done
 - [ ] **Step 2: Prove the census can go red (RF21).** The whole point of this script over 1.75a's is the comment-leader strip, so that is what gets probed:
   - Run it at HEAD BEFORE Task 4's probe rewrite is applied (i.e. `git stash`-free: run it against `git show <pre-Task-4 sha>` in a temp checkout, or simply record the measurement already taken — at `94b83c84`, before any 1.75b code, the script reports `1 app/src/monitor/Concept2LinkProbe.tsx` for both `never a real link` AND `posts nothing and carries no client id`).
   - Delete the `sed -E` leader-strip from `norm()` and re-run: the `posts nothing and carries no client id` hit in `Concept2LinkProbe.tsx` DISAPPEARS while the file still contains the phrase. **That is the red proof** — the weaker script passes a file it should have flagged. Restore, record both outputs.
-  - **Second red proof, in Swift, because this PR is what puts a `///`-commented Swift file into the census corpus.** The corpus's `find` already matches `-name '*.swift'`, and `WebAuthPlugin.swift` is 200-odd lines of `///` doc comments. Run `norm()` against a two-line fixture in each syntax and record the four numbers:
+  - **Second red proof, in Swift, because this PR is what puts a `///`-commented Swift file into the census corpus.** The corpus's `find` already matches `-name '*.swift'`, and `WebAuthPlugin.swift` is 200-odd lines of `///` doc comments. **`norm` lives INSIDE `census.sh` and is not on your `PATH` — and this machine's default shell is fish, which rejects `norm() { ...; }` outright. So before the block below: type `bash`, then paste the `norm()` definition from step 1 into that shell, then paste the block.** Run `norm()` against a two-line fixture in each syntax and record the four numbers:
 
 ```bash
 printf '/// posts nothing and\n/// carries no client id\n' > /tmp/fixture.swift
@@ -2280,26 +2395,47 @@ done
 | `sequential-replace guarantee` | 0 under `app/` | design ×1, 1.75a plan ×3 |
 | `best-effort and RACEABLE` | 0 under `app/` | design ×1, 1.75a plan ×3 |
 | `delete/delete/insert` | 0 under `app/` | design ×1, 1.75a plan ×4 |
-| `one live attempt per user` | unchanged by this PR (server-side) | `schema.ts` ×1, `schema.integration.test.ts` ×1, `routes/concept2.integration.test.ts` ×2, design ×3, parent spec ×1, gate doc ×4, PR1.5 plan ×1, 1.75a plan ×12, ROADMAP ×3 — **pass condition is the COUNTS, per file, diffed to zero** (see step 3b); a judgement call nobody can re-run is not a gate |
+| `one live attempt per user` | unchanged by this PR (server-side) | `schema.ts` ×1, `schema.integration.test.ts` ×1, `routes/concept2.integration.test.ts` ×2, design ×3, parent spec ×1, gate doc ×4, PR1.5 plan ×1, 1.75a plan ×12, ROADMAP ×3 — **pass condition is the base-vs-head census DIFF carrying no line for this phrase** (step 3b); a judgement call nobody can re-run is not a gate |
 | `none built yet` | 0 under `app/` | design ×1, 1.75a plan ×3 |
 | `no migration exists yet` | 0 under `app/` | design ×1, 1.75a plan ×3 |
-| `appUrlOpen` | **0 under `app/src` and `app/ios` — a PERMANENT row, not a one-off gate for this PR** | design ×2 ("Why this over…"), parent spec ×8 (the Branch-B contingency the design keeps on record), gate doc ×5 (under the marker), PR1.5 plan ×1, 1.75a plan ×7, ROADMAP ×2. **Why it stays forever:** zero `appUrlOpen` listeners is what keeps RFC 8252 §7.1 CLOSED for the OUT-of-session leg now that `haus.waffle.ergomatic` is registered in `Info.plist` (Task 1 step 4). In-session, Apple's calling-app guarantee does the work; out-of-session, nothing listening is the whole control. A future listener silently reopens it, so this row is the tripwire. Pass condition is the COUNTS (step 3b) |
-| `browserFinished` | **0 under `app/src`** (was 52: `native/externalBrowser.ts` ×3, `adapters/externalBrowser.ts` ×1 + test ×1, `useReturnToApp.ts` ×14 + test ×33) | design ×2, parent spec ×4, gate doc ×2, PR1.5 plan ×3, PR1.5 walk ×7, 1.75a plan ×3, ROADMAP ×1 — all historical narration of PR1.5, each named in the PR Record; **pass condition is the COUNTS, per file, diffed to zero** (step 3b), which step 4's ROADMAP edit and step 5's PR1.5-plan marker are what MAKE hold |
+| `appUrlOpen` | **0 under `app/src` and `app/ios` — a PERMANENT row, not a one-off gate for this PR** | design ×2 ("Why this over…"), parent spec ×8 (the Branch-B contingency the design keeps on record), gate doc ×5 (under the marker), PR1.5 plan ×1, 1.75a plan ×7, ROADMAP ×2. **Why it stays forever:** zero `appUrlOpen` listeners is what keeps RFC 8252 §7.1 CLOSED for the OUT-of-session leg now that `haus.waffle.ergomatic` is registered in `Info.plist` (Task 1 step 4). In-session, Apple's calling-app guarantee does the work; out-of-session, nothing listening is the whole control. A future listener silently reopens it, so this row is the tripwire. Pass condition is the base-vs-head census diff carrying no line for this phrase (step 3b) |
+| `browserFinished` | **0 under `app/src`** (was 52: `native/externalBrowser.ts` ×3, `adapters/externalBrowser.ts` ×1 + test ×1, `useReturnToApp.ts` ×14 + test ×33) | design ×2, parent spec ×4, gate doc ×2, PR1.5 plan ×3, PR1.5 walk ×7, 1.75a plan ×3, ROADMAP ×1 — all historical narration of PR1.5, each named in the PR Record; **pass condition is the base-vs-head census diff carrying only the intended `app/src` removals** (step 3b), which step 4's ROADMAP edit and step 5's PR1.5-plan marker are what MAKE hold |
 | `never a real link` | **0 under `app/src`** (was 1: `Concept2LinkProbe.tsx:6`) | design ×1, 1.75a plan ×3 |
 | `posts nothing and carries no client id` | **0 under `app/src`** (was 1: `Concept2LinkProbe.tsx:8-9`, wrapped — see step 2) | design ×1, 1.75a plan ×2, PM ledger (out of scope) |
 
   Any hit not in this table is a defect in this task: fix it, or add it with its reason before the PR opens.
 
-- [ ] **Step 3b: The pass condition is a DIFF, not a reading.** Two of the rows above used to say "no hit pairs the phrase with best-effort/raceable" and "no hit describes it as a LIVE mechanism". Those are judgement calls: nobody can re-run them, two readers can disagree, and a green they produce is decoration (RF21). Replace them with counts, mechanically:
+- [ ] **Step 3b: The pass condition is a BASE-vs-HEAD DIFF, not a reading and not a hand-built expectation.** Two of the rows above used to say "no hit pairs the phrase with best-effort/raceable" and "no hit describes it as a LIVE mechanism". Those are judgement calls: nobody can re-run them, two readers can disagree, and a green they produce is decoration (RF21).
+
+  **And the fix REV 2 reached for — "diff against an expected file built from the table" — is not a fix.** The table's residual cells name document NICKNAMES ("gate doc ×2", "1.75a plan ×4"), not paths, so no expected file can be built mechanically from it; transcribing one by hand puts the judgement straight back in, one typo away from a green. **A prose table is not an artifact.** Diff two runs of the SAME script instead — one at the pre-1.75b baseline, one at the PR head — so the only thing being compared is machine output:
 
 ```bash
-# from the worktree root
-census() { bash /path/to/census.sh "$PWD" > "$1"; }   # the step-1 script
-git stash list   # MUST be empty of your work -- never `git stash` (briefing)
-census /tmp/census-head.txt
+# 1. The baseline: a detached worktree at the pre-1.75b head, NOT a stash and
+#    NOT a checkout of this branch (both would move the tree you are working
+#    in). `94b83c84` is where this plan's own measurements were taken.
+git -C /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr175b \
+  worktree add --detach /tmp/pr175b-base 94b83c84
+bash /path/to/census.sh /tmp/pr175b-base > /tmp/census-base.txt
+
+# 2. The PR head, same script, same phrase list.
+bash /path/to/census.sh /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr175b > /tmp/census-head.txt
+
+# 3. The gate. Paths are relative to each root, so the two files are directly
+#    comparable.
+diff /tmp/census-base.txt /tmp/census-head.txt
+
+git -C /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr175b \
+  worktree remove /tmp/pr175b-base   # this one IS ours to remove: we made it
 ```
 
-  The script already prints `<count>  <file>` per hit. **The gate is `diff` against the expected file, and it must be EMPTY.** Build the expected file once from the table above (`<count>  <path>` lines, in the script's own order), commit it nowhere — it is the PR Record's artifact — and paste both the diff command and its empty output. A count that moved is a fact; "does this sentence describe a live mechanism?" is an opinion, and the two are not interchangeable.
+  **The gate is that diff, and the ONLY lines permitted in it are:**
+  - the removals this PR intends — `browserFinished`, `never a real link`, and `posts nothing and carries no client id` losing their hits under `app/src`;
+  - new hits in **this plan's own file** (`docs/superpowers/plans/2026-09-02-concept2-pr175b-native.md`) and **the walk card** (`…-pr175b-walk.md`), which quote the phrases by construction;
+  - and nothing else. **Any other moved count is a defect in this task**: fix it, or add it to the table with its reason before the PR opens.
+
+  Paste the diff itself into the PR Record. A count that moved is a fact; "does this sentence describe a live mechanism?" is an opinion, and the two are not interchangeable.
+
+  (`git stash list` before you start — it MUST be empty of your work; never `git stash`, the stack is shared with other sessions, per the briefing.)
 
   **Plus exactly ONE recorded human read, and it is recorded as a read.** The counts cannot tell whether a surviving `browserFinished` sentence narrates history or asserts a live mechanism. So: read the surviving `browserFinished` and `one live attempt per user` hits once, and write into the PR Record a single line naming the files read, the date, and the verdict — e.g. *"Read 2026-09-0X: all 19 surviving `browserFinished` hits are past-tense narration of PR1.5; the ROADMAP hit was made past-tense by step 4."* That line is a human judgement with a name and a date on it, which is honest; a table row claiming it as a pass condition was not.
 
@@ -2316,18 +2452,20 @@ census /tmp/census-head.txt
 ### Task 9: The PR
 
 - [ ] **SDLC checks, in order:** `git rev-parse --show-toplevel` prints the worktree; `git status` on the MAIN checkout (`/Users/james/projects/github/jamesawesome/Ergomatic`) shows no stray writes from this work — **three things were already there before this plan began and are NOT ours: modified `app/ios/App/App.xcodeproj/project.pbxproj` and `app/ios/App/App/Info.plist` (version stamps), and an untracked `.pnpm-store/` directory. Report all three as pre-existing; touch none of them.** Anything else in that output is a stray write and gets fixed while this branch still exists (CLAUDE.md phase teardown); `git merge origin/main` on the branch (agent-briefing pre-ready checklist), gates green on the merged tree; push; open the PR; wait for a CI run to EXIST and go green (an empty check rollup is not green).
-- [x] **Antagonist DELTA pass — RUN 2026-09-02, BEFORE implementation, and folded at REV 2.** Seven findings, all applied in the task owning the code; ledger entry landed in `.claude/agents/antagonist-ledger.md`. Its HELD list is this plan's vetted ground: all fifteen `ASWebAuthenticationSession.h` quotes verbatim and line-exact, every `project.pbxproj` anchor exact (`objectVersion = 60`, no synchronized groups — manual refs are required, not optional), `cap update ios` never writing `project.pbxproj`/`Main.storyboard`/`Info.plist`, and the whole retirement census reproduced to the occurrence (`browserFinished` = 52 under `src`). **What the pass attacked, recorded because a skip must be spoken:** (1) the Swift plugin's lifetimes — three fields, one clear path, and a hook (`shouldOverrideLoad`) this plan SUBSTITUTED for the design's own (`load()`), which is a mechanism the anchor pass never saw; (2) the WebView-reload path itself, which is a new failure mode with no automated instrument; (3) the tunnel-based walk as an evidence-producing procedure (does it actually measure the `state` echo and the escape question, or only appear to?); (4) the census tool — whether comment-leader normalisation is sufficient, and whether the expected-count table's "pass conditions" are checkable rather than judgement calls. **Not in scope for the delta:** the server contract, the identity ladders, the stored shape — all attacked at the TRIAD pass and unchanged here.
+- [x] **Antagonist DELTA passes — TWO, both RUN 2026-09-02, BEFORE implementation, folded at REV 2 and REV 3.** Pass 1: seven findings, all applied in the task owning the code. **Pass 2 was a VERIFICATION pass over pass 1's own fixes, and it broke four of them** — two gates that could not go red (the `SwiftCompile` count, the reject-code regex) and two that could not be run as written (`xcodebuild` ordered before the `cap sync` that generates its inputs; a census diff with no mechanically buildable expected file). **The lesson to carry: a fix is not evidence that the defect is gone — pass 1's fixes were themselves unmeasured, and that is exactly what pass 2 measured.** Both ledger entries landed in `.claude/agents/antagonist-ledger.md`. Its HELD list is this plan's vetted ground: all fifteen `ASWebAuthenticationSession.h` quotes verbatim and line-exact, every `project.pbxproj` anchor exact (`objectVersion = 60`, no synchronized groups — manual refs are required, not optional), `cap update ios` never writing `project.pbxproj`/`Main.storyboard`/`Info.plist`, and the whole retirement census reproduced to the occurrence (`browserFinished` = 52 under `src`). **What the pass attacked, recorded because a skip must be spoken:** (1) the Swift plugin's lifetimes — three fields, one clear path, and a hook (`shouldOverrideLoad`) this plan SUBSTITUTED for the design's own (`load()`), which is a mechanism the anchor pass never saw; (2) the WebView-reload path itself, which is a new failure mode with no automated instrument; (3) the tunnel-based walk as an evidence-producing procedure (does it actually measure the `state` echo and the escape question, or only appear to?); (4) the census tool — whether comment-leader normalisation is sufficient, and whether the expected-count table's "pass conditions" are checkable rather than judgement calls. **Not in scope for the delta:** the server contract, the identity ladders, the stored shape — all attacked at the TRIAD pass and unchanged here.
 - [ ] **Scope gate (mechanical):** `gh pr view <n> --json files --jq '.files[].path' | grep -E "^app/(server|drizzle)/"` → empty; paste the empty result in the Record.
 - [ ] **PR body.** Above the fold: the PM's fold VERBATIM if the scoped gate has produced one; otherwise this draft, which is written to the countable form (≤ ~120 words above the fold, ≤ ~25 per bullet — count, do not feel):
 
 > This PR gives the phone a way to finish a Concept2 link.
 >
-> - A small Swift plugin opens Concept2's consent page in a session only this app can receive the answer from, and hands it back in a promise.
-> - The rower always sees which Concept2 account they are linking: the session is ephemeral, so it never silently reuses Safari's login.
-> - Cancel, decline, and a mid-flight reload each produce their own named outcome instead of one vague failure.
-> - PR1.5's return-to-app detection is gone: with the answer arriving in a promise, a second return mechanism had nothing left to notice.
+> - A small Swift plugin opens Concept2's consent page in a session only this app can receive the answer from, handed back in a promise.
+> - The rower always sees which Concept2 account they are linking: the session is ephemeral, never reusing Safari's login.
+> - Cancel, decline, and a mid-flight reload each produce their own named outcome, not one vague failure.
+> - PR1.5's return-to-app detection is gone: with the answer in a promise, a second return mechanism has nothing to notice.
 > - Tester impact: none. Everything stays dark behind `C2_LINK_ENABLED`, and the only way in is a dev-only card.
-> - Verified on a real phone against log-dev, because nothing in CI can reach Swift.
+> - Verified on a real phone against log-dev, because nothing in CI reaches Swift.
+
+  **Counted, not felt (CLAUDE.md's countable form): 119 words above the fold, longest bullet 24.** Re-count if you change a word — the fold is a gate the PM checks with `wc`, and REV 2's draft was 125.
 
 Then the collapsed block:
 
@@ -2336,9 +2474,10 @@ Then the collapsed block:
 
 - **Head:** `<sha>` (reconciled against `gh pr diff --name-only` at this head; every claim below describes this head).
 - **Scope gate:** `gh pr view <n> --json files --jq '.files[].path' | grep -E "^app/(server|drizzle)/"` → (empty). `pnpm e2e` WAS run (RF1: this diff touches `app/src/`); `pnpm screenshots` was NOT, with the reason and its `git status docs/screenshots` verification.
-- **Risk class:** not TRIAD. Antagonist: DELTA pass on the plan, run <date> — the four new-ground items and their verdicts. PM: scoped gate (census empty, walk record complete, fold count). **Walk ran BEFORE this PR opened**, per design §0.
+- **Risk class:** not TRIAD. Antagonist: TWO DELTA passes on the plan, both run 2026-09-02 — pass 1's four new-ground items and their verdicts, and pass 2's verification of pass 1's fixes (four of which did not hold; see REV 3). PM: scoped gate (census empty, walk record complete, fold count). **Walk ran BEFORE this PR opened**, per design §0.
 - **Device walk:** `docs/monitor/sessions/walk-2026-09-0X-c2-native/` — the five checks, the two mandated measurements (`state` echoed y/n, Info.plist needed y/n), the OS-modal observation, and every `auth_via` line with its `authVia`/`bearerPresent`/`cookiePresent`.
-- **Instrument honesty (RF19):** there is no XCTest target, `src/native/**` is `v8 ignore`d, and e2e runs on web — so `WebAuthPlugin.swift` is proven ONLY by the walk, and this PR says so rather than implying CI covered it. The `xcodebuild` gate proves it compiles, nothing more.
+- **Instrument honesty (RF19):** there is no XCTest target, `src/native/**` is `v8 ignore`d, and e2e runs on web — so `WebAuthPlugin.swift` is proven ONLY by the walk, and this PR says so rather than implying CI covered it. The `xcodebuild` gate proves it compiles and that both files are in the App target's Sources phase (`App.SwiftFileList`), nothing more.
+- **`pnpm e2e` is required-but-blind (RF26):** required as a regression gate on the `useReturnToApp` deletion, NOT as coverage of this PR's new code: `grep -rn -i concept2 app/e2e` finds nothing, the probe is the only consumer of `linkFlow`, and it is compiled out of the stack's bundle. What proves the web arm is `linkFlow.test.ts`'s `describe("startLink on web")` cases; what proves the native arm is the walk. Said here rather than letting a green e2e badge carry a claim it cannot support.
 - **Retirement census (Task 3):** the grep, its production-consumer table with each symbol's fate, the one sentence on why PR2's link-out needs no return signal, and the two deliberate KEEPs (`@capacitor/browser`, `registerWebAppLifecycleListener`) with their reasons.
 - **Phrase census (Task 8):** the script, its red proof (dropping the comment-leader strip hides a real hit), the full output, and the per-phrase table with every residual named and owned.
 - **Mutation log** (every probe run against the committed tree; RF21/RF22): one row per probe in Tasks 1/2/4 — `file | mutation | test that died | exact failure text | restored (git status clean)` — including the two recorded NON-bites in Task 1 step 10, which are listed as non-bites rather than dressed up.
