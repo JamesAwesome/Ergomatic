@@ -102,9 +102,11 @@ function notFoundJson(res: Parameters<RequestHandler>[1]): void {
 }
 
 // The callback URL carries `code` and `state`, so every response from that
-// route — HTML page or the one JSON refusal — sets `Referrer-Policy:
-// no-referrer` (design §5; RFC 9700 §4.2). Kept as its own helper so the
-// JSON arm cannot drift from the page arm.
+// route — HTML page, the one JSON refusal, and the 500 Express itself
+// writes when a store call rejects — sets `Referrer-Policy: no-referrer`
+// (design §5; RFC 9700 §4.2). The single setter that achieves this is the
+// callback handler's own step 0; this helper exists so a caller cannot
+// spell the header differently.
 function noReferrer(res: Parameters<RequestHandler>[1]): void {
   res.setHeader("Referrer-Policy", "no-referrer");
 }
@@ -112,6 +114,14 @@ function noReferrer(res: Parameters<RequestHandler>[1]): void {
 // Callback responses are a browser navigation, never JSON. The template
 // itself carries no subresource and no outbound link
 // (concept2/callbackPage.ts).
+//
+// HONEST NOTE on the `noReferrer(res)` below: today it is UNBITTEN. All
+// eleven `sendPage` call sites live inside the callback handler, which
+// already set the header at step 0, so removing this line alone leaves the
+// whole suite green (probe I5b, fix round 1). It is retained on the
+// reviewer's explicit instruction ("keep it in `sendPage`") as
+// defence-in-depth for a FUTURE caller outside that handler — it is not a
+// gated invariant, and no test should be read as proving it.
 function sendPage(
   res: Parameters<RequestHandler>[1],
   page: { status: number; html: string },
@@ -280,11 +290,13 @@ export function createConcept2Router({
     //    line of this function writes: a rejected `peekAttempt` /
     //    `consumeAttemptFor`, or a non-conflict `upsertLink` error
     //    re-thrown, all land on Express's default error handler. Setting
-    //    it here covers those; `sendPage` keeps its own call so a page
-    //    rendered from anywhere else in this file still carries the header.
-    //    (Verified against the real handler: `finalhandler` removes only
-    //    the Content-* headers before writing its 500, so a header set
-    //    here survives — see the throw test in concept2.test.ts.)
+    //    it here is what covers EVERY exit — the pages, the JSON refusal
+    //    and the 500 alike (`sendPage`'s own call is now defence-in-depth
+    //    for a future caller; see its comment). Verified against the real
+    //    handler rather than assumed: `finalhandler` removes only the
+    //    Content-* headers before writing its 500, so a header set here
+    //    survives — the rejected-`peekAttempt` test in concept2.test.ts
+    //    asserts exactly that, and goes red if this line is removed.
     noReferrer(res);
     // 1. availability — consumes NOTHING. PR1's flag-off consume was the
     //    route's last unauthenticated write, an attempt-destruction
