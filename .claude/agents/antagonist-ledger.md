@@ -5077,3 +5077,45 @@ same way.
   file against the plan's "four new legs" (five), and named mutations
   against new record sites (four vs five). All three are counts, all three
   are one command each, and all three were review rounds waiting to happen.
+
+## 2026-09-02 — Wave F PR 3 §3 timing addendum (PR #267), pre-review pass 3
+
+- **No defect in the code, third pass running: the structural guarantee the
+  fix wave substituted for the old numeric one is TRUE and deterministic.**
+  `pulled` cannot flip mid-run because `nextRowingStreak` returns
+  `{frames: 1}` for any rowing frame that does not STRICTLY beat the previous
+  distance, and every frame of a freeze run shares `freezeKey`'s distance —
+  so the `pulled` disjunct can only be satisfied on the run's FIRST frame.
+  Technique: **attack a claim about a derived flag by reading the SIBLING
+  pure function it delegates to** (`nextRowingStreak`), not the function that
+  states the claim (`nextFreezeRun`) — the reset-to-one rule that settles it
+  lives entirely in the callee.
+- **A WITHDRAWAL CAN OVER-WITHDRAW, and the over-withdrawal reads as a
+  contradiction with production source.** Pass 1 correctly killed "corpus
+  regression asserting `pause-declared` count and positions" (no suite
+  asserts that string). The corrected plan then said such a regression is
+  "TO BE BUILT" — while `useMonitorSession.test.ts:8329` already replays
+  ALL NINE committed recordings through the pure predicate and pins pause
+  ONSET FRAMES (`expect(onsets).toStrictEqual(...)`), which is what the
+  hook's own comment at `:3143` means by "corpus regression over all nine
+  committed recordings". Technique, the mirror of pass 2's: **after
+  withdrawing a claim, grep the withdrawn phrase for a TRUE instance, not
+  only for un-fixed copies** — if production source still asserts it and is
+  right, the correction is what needs the qualifier ("that STRING", not
+  "that regression").
+- **Re-run a comment's own claimed mutation to check its NUMBER, not just
+  its conclusion.** `useMonitorSession.ts:3128` credited "169 client test
+  files / 4410 tests green" with the defensive reset deleted. Re-running the
+  same mutation at head reproduced the conclusion (still fully green) and
+  falsified the count: 169 files / **4411** tests — the figure predated the
+  fifth leg added two commits later. A stale count in a production comment
+  is the cheapest possible review round, and only re-running finds it.
+- **Attacked and HELD:** the 7-append lower bound (traced from the ready→live
+  seed, which is never appended); five clear sites enumerated by grep rather
+  than read from the comment; `lastResumeAtMsRef` armed at EVERY foreground
+  edge (only `event !== "foreground"` returns before the write);
+  `postResumeArrivalsRef`'s "every later frame appends" (no `return` between
+  `handleFrame`'s entry and the append); predicate byte-identity by hunk
+  position; the `nowDate` dep-array addition is identity-safe
+  (`useCallback(..., [])`); no consumer of either ring kind exists outside
+  the hook and its test.
