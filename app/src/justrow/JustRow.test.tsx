@@ -437,6 +437,15 @@ describe("JustRow: Lost → Try again through the real hook", () => {
     expect(
       await screen.findByRole("heading", { name: "Ready when you pull" }),
     ).toBeInTheDocument();
+    // The keep-on strip wears the SHIPPED interstitial's own class. The
+    // approved Ready artboard is "the shipped interstitial, one word
+    // changed"; the phase shipped `connected-ready-warning`, a class with
+    // zero CSS rules, and James found the bare paragraph at the erg
+    // (walk-2026-09-01-jr-exit, finding 3). Structural, so a rename on
+    // either side goes red here rather than on a phone.
+    expect(screen.getByText("KEEP YOUR PHONE SCREEN ON")).toHaveClass(
+      "connected-keep-on",
+    );
 
     // The link dies before any motion: pre-run, so the Lost frame.
     act(() => {

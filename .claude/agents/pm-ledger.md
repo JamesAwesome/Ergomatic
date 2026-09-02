@@ -3997,3 +3997,101 @@ does not match these numbers._
   rebuilds, not inherits" — superseded by James's share-the-hook ruling, never
   reconciled. **When a spec already demonstrates a supersession convention,
   the gate checks whether the newest ruling used it.**
+
+## Phase-close gate, 2026-09-01 (Phase JR — closed; plus its follow-on slate)
+
+- **A criterion can be pinned three times and proven once.** Exit criterion 2
+  ("no `.type-badge` element in the DOM at all") had three assertions.
+  `TypeBadge.test.tsx:25` is real; `FromTheLog.test.tsx:1356` and
+  `JustRowLog.test.tsx:121` were VACUOUS — neither screen imports `TypeBadge`
+  or emits `.type-badge`, so both passed for a TYPED row too. Both carried
+  comments naming the criterion, which is what made them read as evidence.
+  Meanwhile the criterion's actual subject — a HISTORY LIST holding a
+  null-type row — had no fixture anywhere (now pinned in `e2e/justrow.spec.ts`;
+  the two vacuous lines are deleted). **At a close gate, for every "renders no
+  X" criterion, check that the asserting screen can render X at all.** RF21,
+  committed twice in the round that closed the phase.
+- **The evidence FORMAT can foreclose a written criterion before the walk
+  starts.** The spec said "both screens in one photograph." The walk shipped
+  a PNG app SCREENSHOT beside a JPEG PM5 PHOTO — same-frame was impossible by
+  construction, and nobody noticed because both artifacts are "captures."
+  Accepted here (the spec's own B11 makes this a TRANSCRIPTION check, and
+  digit-identity across independent captures carries that). **Generalise: when
+  a criterion says one frame, say which artifact type each side is, or write
+  "correlated, with named correlators" from the start.**
+- **The capture set covered 4 of 10 approved artboards, and the defect landed
+  in the uncovered six.** Gate 0 approved Main/JustRowDoor/Connecting/Ready/
+  Live/LiveLandscape/Ended/Lost/TodayRecovery/LogDoor; `pnpm screenshots`
+  committed `justrow-door`, `-live`, `-live-landscape`, `-log`. The Ready
+  screen shipped with `className="connected-ready-warning"` — a class with
+  ZERO rules in `index.css`, while every other class on that screen resolves —
+  so the approved `.warn` treatment rendered as a bare sans paragraph. James
+  found it at the erg. **A Gate-0 artboard with no committed capture of the
+  BUILT screen is an unchecked approval: at the close gate, count artboards
+  against captures and name the gap.** Sibling of the #258 chrome-diff lesson —
+  there the artifact was wrong, here there was nothing to diff against.
+- **A phase's exit walk is scoped to the BUILD it ran on, and this one aged
+  in hours.** The walk passed on build 811 (v0.32.0); #258 then landed +753
+  lines in `useMonitorSession.ts` — the hook a free row SHARES — inside
+  v0.33.0 the same day. Not a blocker (#258 had its own TRIAD gate), but a
+  phase may not claim "walked on current main" without saying so. **Name the
+  build in the close verdict, and diff the shared files since.**
+- **"Research owed" in a ROADMAP entry is a claim, and this one was false.**
+  The JR follow-on slate said driving the PM5 into a Just Row "gets the
+  research pass and antagonist treatment before any mechanism is invented."
+  Concept2's own doc p.80 is transcribed in-repo at
+  `docs/monitor/pm5-interface-notes.md:204` —
+  `F1 76 07 01 01 01 13 02 01 01 61 F2` = `SET_WORKOUTTYPE(0x01)` +
+  `SET_SCREENSTATE(WORKOUT, PREPARETOROWWORKOUT)` — with its ack at `:249`
+  and a cross-check at `:966`; `SET_SCREENSTATE` is already emitted by
+  `buildProgrammingSequence`. The residual gap is two bytes (`0x01`'s enum
+  row, which IS the already-scheduled RC-38) plus one walk. **Before endorsing
+  a research pass, grep `docs/monitor/pm5-interface-notes.md` — the CSAFE
+  corpus does NOT live under `docs/superpowers/research/`, which is where
+  RF18's remedy sends you.**
+- **A walk finding can be a REASSURANCE complaint wearing a capability
+  complaint's clothes.** "Connect leaves the PM5 on its main menu" reads as a
+  missing mechanism; the 08-31 walk had already answered OPEN 5 — pulling from
+  the menu auto-enters Just Row, observed by James at the erg. The erg WORKS;
+  it just does not acknowledge the link before the first stroke. **Ask what
+  the rower could not DO before spending a walk on what they could not SEE** —
+  the cheaper fix is usually the screen already in front of them.
+- **Two of five "follow-on items" reversed claims the app had already told
+  testers, in shipped release notes, days earlier** (v0.32.0 items 2 and 3:
+  "A Just Row never advances your plan" and "no targets and no type chip, on
+  purpose"). Fine to reverse; not free. **A reversing note acknowledges the
+  earlier one, or the News tab contradicts itself.** Price this at the slate
+  gate, not at the notes PR.
+- **`isFreeRow(workoutId, workoutType)` is load-bearing THREE times** — the
+  server plan refusal, the empty-`steps` allowance, and (by its null) the
+  absent type badge. Any future "JR badge" is a DERIVED display concern;
+  `"JR"` can never be stored in `workout_type`. Precedent for the chip already
+  exists: `.workout-row-custom`, the ink-outline metadata chip, since
+  `TypeBadge.tsx:11-30` refuses to mint a fifth intensity colour.
+- **"Let a Just Row count toward the plan" — RULED: SUBSTITUTION** (James,
+  2026-09-01: "advances the record, records the stand-in"). The gate had
+  offered a second reading, "volume" (count the metres, never touch `done_n`),
+  and James rejected it on sight as something the app does not even support.
+  **Lesson for the PM, not for the product: do not manufacture an alternative
+  the product has no concept of in order to make a question look open.** What
+  stands from the analysis: `plan_index` is a position in a FIXED PRESCRIBED
+  sequence, so a stand-in must be an explicit stored fact the server checks
+  (deleting `!isFreeRow(...)` at `logs.ts:763` removes the only server-side
+  enforcement there is), and the change amends frozen exit criterion 1 with
+  its own TRIAD gate.
+- **Second household exception, counted.** JR was sanctioned as "a deliberate
+  household exception to the stranger-first ordering" (James, 2026-08-31). Its
+  five-item follow-on slate is a second one, with 40 unchecked items outside
+  JR across six waves and Wave F's headline row — the only defect in the file
+  that destroys a rower's work silently — still unchecked. Said at the gate;
+  James chose the slate. **Filing-as-deferral's mirror image: not filing
+  instead of doing, but doing instead of doing the ranked thing. Count the
+  queue before endorsing a second exception to the same ordering — then let
+  the owner rule.**
+- **Release: v0.32.0 MINOR was RIGHT** (three merges accounted, R-A relaxation
+  vindicated — the exit walk needed PR 2 on a device). The ready-screen fix
+  rides the next tag; it does not earn one. **But the R-A analysis named the
+  wrong skew axis:** it argued client-bundle-versus-client-bundle and was
+  silent on native-client-versus-SERVER — the axis that structurally exists (a
+  TestFlight build outlives any deploy) and the one that bit when main's
+  deploy job sat red for eleven hours. RF28 now.

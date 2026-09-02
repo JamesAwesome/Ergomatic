@@ -4720,6 +4720,28 @@ test("justrow-door", async ({ page }) => {
   });
 });
 
+// The one Gate-0 artboard whose BUILT screen shipped with a defect nobody
+// could see: of ten approved boards only four had committed captures, and
+// the Ready screen's keep-on strip rendered as a bare paragraph until
+// James found it at the erg (walk-2026-09-01-jr-exit). No motion is sent:
+// the fake's story starts at JR_STORY_START_MS, and the shot lands first.
+test("justrow-ready", async ({ page }) => {
+  await injectJustRowShotFake(page);
+  await signInViaBackdoor(page, {
+    email: "screenshots-justrow-ready@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/justrow");
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Ready when you pull" }),
+  ).toBeVisible();
+  await expect(page.getByText("KEEP YOUR PHONE SCREEN ON")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-ready.png"),
+  });
+});
+
 test("justrow-live", async ({ page }) => {
   await openJustRowLive(page, "screenshots-justrow-live@e2e.test");
   await page.screenshot({

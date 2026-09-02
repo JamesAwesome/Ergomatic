@@ -129,17 +129,30 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 ## Phase JR — Just Row
 
-**Status: RELEASED v0.32.0 (build 811) + exit walk PASSED — phase close
-owed.** PR 0a instrument + PR 0b capture DONE 2026-08-31 (#246); PR 1
+**Status: CLOSED 2026-09-01 — released v0.32.0 (build 811), exit walk
+PASSED, both close gates run; the follow-on slate below is the live
+work.** PR 0a instrument + PR 0b capture DONE 2026-08-31 (#246); PR 1
 MERGED as #255; PR 2 MERGED as #259 (2026-09-01, 3-round review loop,
 accepted with no findings); James relaxed R-A so v0.32.0 tags both PRs
 together; notes #260, release-capture reup #261, TestFlight upload
 0.32.0 (811) all landed 2026-09-01. The exit walk ran the same evening
 on build 811 against prod and PASSED — record at
-`docs/monitor/sessions/walk-2026-09-01-jr-exit/` (its first save failed
-because prod was FROZEN at v0.31.0 behind a dirty deploy-host checkout;
-cleaned, redeployed, retry saved — the hold-and-retry path proved itself
-live). Remaining: the antagonist exit pass + PM close gate.
+`docs/monitor/sessions/walk-2026-09-01-jr-exit/`. Its first save failed
+because prod was FROZEN at v0.31.0: main's `deploy` job had been red for
+eleven hours across six merges (a dirty deploy-host checkout — four
+empty shell-redirect droppings), and nobody read main's CI; cleaned,
+redeployed, the retry saved. The app held the record and retried
+correctly; what it could not do is tell a permanent 400 from a transient
+one. Both close gates (antagonist exit pass, PM close) said CLOSE, with
+the evidence gaps landed in the close-out PR: the ready screen's keep-on
+strip wore a class with zero CSS rules (James found it at the erg — of
+ten approved Gate 0 artboards only four had captures of the BUILT
+screen; `justrow-ready` is now captured), exit criterion 5 (`ended_by`)
+is now asserted on PRODUCED free-row values, criterion 2 on an actual
+history list, criterion 7 from one stored row, and two vacuous
+`.type-badge` assertions are gone. Still ungated: the app-End arm of
+criterion 8 (the replay capture is a Menu end; the walk's Done-ended
+row is accepted on James's operator report).
 
 - [x] PR 0a — the observe-only instrument (#246)
 - [x] PR 0b — the capture walk (walk-2026-08-31-justrow)
@@ -147,30 +160,75 @@ live). Remaining: the antagonist exit pass + PM close gate.
 - [x] PR 2 — surface + session + log door (#259, released v0.32.0)
 - [x] Exit walk — PASSED 2026-09-01 (both endings; Menu-ended row
       digit-identical with the machine-confirmed stamp on a free row)
-- [ ] Phase close — antagonist exit pass + PM close gate, carrying the
-      follow-on slate below
+- [x] Phase close — antagonist exit pass + PM close gate (2026-09-01);
+      close-out PR carries the evidence fixes and this slate's shaping
+- [x] Ready screen defect — `connected-keep-on` restored, `justrow-ready`
+      captured (close-out PR)
 
-**Follow-on slate (2026-09-01 — two exit-walk findings, a tester
-request, and two James directives; queued for the close to shape):**
+**Follow-on slate — shaped at the close (2026-09-01), James's build order:
+item 3 first, then item 2 if still wanted once the ready fix is in hand,
+then items 4+5 as one TRIAD PR.** The PM's counsel that Wave F's
+pocketed-phone row outranks this slate against the north star is on the
+record (this would be a second household exception); James chose the
+slate.
 
-- **The Just Row ready screen should BE the programmed ready view** (or
-  match it identically) — walk finding; today it is its own layout.
-- **Connect should put the erg into a Just Row session** — today the app
-  connects and the PM5 stays on its main menu, so to the rower the
-  connection did nothing. Wire-semantics work: whether a central can
-  drive the PM5 onto its Just Row screen (ErgData appears to) gets the
-  research pass and antagonist treatment before any mechanism is
-  invented.
-- **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, just
-  an infinite timer and the ability to log what you did.
+- **Ready screen should BE the programmed ready view** — walk finding,
+  resolved as a DEFECT: the built screen wore `connected-ready-warning`,
+  a class with zero CSS rules, where the approved artboard was "the
+  shipped interstitial, one word changed". Fixed in the close-out PR by
+  using the shipped `connected-keep-on` class. The remaining delta
+  between the two ready screens is four lines of copy; look again once
+  James has the fix on a phone before unifying components.
+- **Connect should put the erg into a Just Row session** — walk finding,
+  reframed by the close: an ACKNOWLEDGMENT gap, not a capability gap.
+  The 08-31 walk already observed that pulling from the main menu with
+  the app connected auto-enters Just Row (OPEN 5, James at the erg).
+  The wire frame to drive the screen is Concept2 p.80, transcribed at
+  `docs/monitor/pm5-interface-notes.md:204` (`SET_WORKOUTTYPE(0x01)` +
+  `SET_SCREENSTATE(PREPARETOROWWORKOUT)`), and `SET_SCREENSTATE` is
+  already built and emitted. **No research pass — the earlier line here
+  saying one was owed was wrong (RF18).** Cost if built: `beginFreeRow()`
+  stops being "sends no bytes" and gains a reject path and an ack gate;
+  carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
+  `OBJ_WORKOUTTYPE_T` entry). One driver change plus one walk leg. **M**
+- **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
+  infinite timer and the ability to log. The close found most of it
+  built: `Step`'s `{ k: "test" }` member yields a phase with no seconds
+  and no metres, `Timer.tsx` counts UP for exactly that case
+  (`Timer.test.tsx` pins it), and `SessionRun` with `workoutId: null`
+  stores it with no `v` bump — **no new stored shape**; PR 1's server row
+  takes it as-is. So: a producer, a route, a door. Needs Gate 0 and ONE
+  ruling that is James's: an unconnected row has a phone clock and NO
+  distance, and `JustRowLog` refuses to save without machine numbers —
+  does the rower type the distance off the monitor, or is a time-only
+  row savable? The only item with an outside voice; first to build. **S/M**
 - **"JR" badge on Just Row sessions**, in the manner of the other type
   chips (James, 2026-09-01 — supersedes the shipped "no type chip on
-  purpose" stance; v0.32.0's notes describe that release, not this
-  direction).
-- **Optional logging against plans** — a Just Row should be loggable
-  against a plan when the rower so wishes (James, 2026-09-01 —
-  supersedes "never advances your plan" as the ONLY mode; the default
-  stays off-plan, the option is the new work).
+  purpose" stance). **A DERIVED display concern, never stored:**
+  `isFreeRow(workoutId, workoutType)` is load-bearing three times (the
+  server's plan refusal, its empty-`steps` allowance, the absent badge),
+  so `"JR"` can never live in `workout_type`. Visual precedent exists —
+  `.workout-row-custom`, the ink-outline metadata chip — since
+  `TypeBadge.tsx` refuses to mint a fifth intensity colour. Ships with
+  item 5 (a plan-linked free row lands in `Plan.tsx`'s linked-row list
+  with a null type, which is exactly this item's hole). **S**
+- **Logging a Just Row against a plan — as SUBSTITUTION** (James,
+  2026-09-01: "advances the record, records the stand-in"): the rower
+  may say "this free row stands in for session N"; it advances the plan
+  AND the row records that it stood in. Default stays off-plan. **TRIAD**
+  — it changes what SESSION n OF 84 means and amends frozen exit
+  criterion 1 (`done_n` unchanged across a Just Row save) with its own
+  gate; it removes the server's ONLY free-row plan enforcement
+  (`logs.ts`'s `!isFreeRow(...)`), so the substitution must be an
+  explicit stored fact the server checks, not a client promise; and the
+  reversing release note must acknowledge v0.32.0's "A Just Row never
+  advances your plan" or the News tab contradicts itself. One PR with
+  the badge. **S code / L ruling**
+- **Fidelity note, from the walk:** the app ROUNDS 93.7 s to `1:34` where
+  the PM5 truncates to `1:33` — one quantity, four renderings across the
+  two screens. For a phase whose promise is "the machine's own numbers
+  land in your log", showing a figure the erg never displays deserves a
+  line at the next design pass. **XS**
 
 **Owed within PR 2's own scope, recorded here so phase close can quote
 it:** a free row recovered with a `truncated` series trace (>4 h of rowing,

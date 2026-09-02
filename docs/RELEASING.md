@@ -91,6 +91,13 @@ Regenerating anywhere else produces a 90-file diff that means nothing.
 
 ## Cutting a release (~10 min, on the build Mac, fully CLI)
 
+0. **`gh run list --branch main --limit 5` — main's last run, INCLUDING its
+   `deploy` job, is green.** A PR's checks are not this run. On 2026-09-01
+   six consecutive merges deployed nothing for eleven hours (the host
+   checkout was dirty and `deploy.sh` refused), v0.32.0 went to TestFlight
+   against a server still on v0.31.0, and the tag's own feature failed to
+   save at the erg. Prod's `/api/health` version is the cheap cross-check:
+   `curl -s https://ergomatic.waffle.haus/api/health`.
 1. `git checkout main && git pull`
 2. **Account for every commit since the last tag** before writing the notes —
    `git log $(git tag --list --sort=-v:refname | head -1)..main --oneline` —

@@ -858,6 +858,20 @@ often they recur.
     a "CI green" claim requires the run to EXIST first — an empty check
     rollup reads as green to a wait loop that only greps for "pending".
 
+28. **Main's post-merge CI was red for eleven hours across six merges,
+    and nobody read it — a hardware walk found it.** Every PR check was
+    green; every push to main then failed its `deploy` job (`deploy:
+    refusing — host checkout is dirty`, four empty shell-redirect
+    droppings on the production host — RF20's class, one machine over).
+    #255, #259, #260, #258, #261 and #263 all merged through it; v0.32.0
+    was tagged, uploaded to TestFlight and walked at the erg against a
+    server frozen at v0.31.0 that could not accept its own headline
+    feature. The first save James tried failed. **A PR's green checks say
+    nothing about the run its MERGE produces.** `gh run list --branch
+    main --limit 5` is part of every release gate (RELEASING.md step 0)
+    and every phase-close gate, and the post-merge ritual says which
+    conclusion main's run reached, not just that the PR's did.
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;
