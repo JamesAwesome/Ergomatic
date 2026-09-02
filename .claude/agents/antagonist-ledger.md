@@ -5119,3 +5119,37 @@ same way.
   position; the `nowDate` dep-array addition is identity-safe
   (`useCallback(..., [])`); no consumer of either ring kind exists outside
   the hook and its test.
+
+## 2026-09-02 — Wave F PR 3 §3 timing addendum (PR #267), pre-review pass 4
+
+- **Fourth pass, first pass with no code finding at all — and the one
+  remaining defect was a body that contradicted ITSELF.** The PR's top fold
+  said `resume-first-frame` "records the first four post-resume GAPS"; its
+  own Record block, five lines down, said "the first four post-resume
+  ARRIVALS". `PAUSED_FRAME_HOLD = 4` arrivals yield THREE gaps
+  (`useMonitorSession.ts:2720`, and the leg asserts `nextGapsMs=[70,70,70]`
+  literally at `useMonitorSession.test.ts:12596`). Technique, cheaper than
+  reading either half: **grep the PR body for the SAME noun phrase twice**
+  (`gh pr view --json body -q .body | grep -o "four post-resume [a-z]*"`
+  returned `gaps` and `arrivals`) — a body that states one fact in the fold
+  and again in the Record can disagree with itself, and the fold is the half
+  James reads.
+- **A count-vs-collection off-by-one hides behind a constant's name.** Seven
+  places state this fact; five say frames/arrivals and two say gaps, and the
+  two are the ones that wrote `HOLD` instead of `HOLD-1`. **When a window of
+  N samples produces N-1 intervals, grep the constant's name and check every
+  sentence that uses it for which of the two it means** — the plan's own
+  lifetime-table row got it wrong in the parenthetical and right in the clear
+  column, in a single line.
+- **Attacked and HELD (the vetted ground is now closed):** the corrected I1
+  paragraph (`:8395`'s `toStrictEqual` over all nine files, and `:3143` is
+  genuinely the comment it names); every body number reproduced rather than
+  cited — 15 commits, 5 files, 223/6090|1, e2e 8m6s from check-run
+  timestamps, and the production comment's 169/4411 reproduced exactly by
+  re-running the client suite; the append/record ordering (no `return`
+  between `:3137` and `:3156`) and guard identity (`:1340` == `:3131`)
+  proving `gapsMs` is the declaring run's own frames; all five
+  `lastResumeAtMsRef` clear sites named by enclosing function; ring capacity
+  500 vs one added entry per resume; the ROADMAP register row's
+  `ConnectedSurface.tsx:848` citation; `merge-tree` clean and a CI run
+  present at head.

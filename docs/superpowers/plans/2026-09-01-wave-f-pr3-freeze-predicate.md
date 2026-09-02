@@ -228,7 +228,7 @@ Instrument-only; no predicate change; measure, assert no cause.
 | --- | --- | --- | --- |
 | `frameArrivalsRef: number[]` (last `PAUSED_FRAME_HOLD` rowing-frame `atMs`) | each rowing frame | non-rowing frame; per-run resets (program/beginFreeRow/RC-37); connect; teardown | no / no / no |
 | `lastResumeAtMsRef: number \| null` | foreground edge (beside `resumeEdgeArmedRef`) | per-run resets; connect; teardown | no / no / no |
-| `postResumeArrivalsRef: number[] \| null` (collecting the first HOLD post-resume gaps) | foreground edge (empty array) | when it reaches HOLD-1 gaps (recorded, then null); a second foreground edge while open (recorded `superseded frames=<n>`, then re-minted empty); per-run resets; connect; teardown (recorded `truncated` if non-null) | no / no / no |
+| `postResumeArrivalsRef: number[] \| null` (collecting the first HOLD post-resume arrivals) | foreground edge (empty array) | when it reaches HOLD-1 gaps (recorded, then null); a second foreground edge while open (recorded `superseded frames=<n>`, then re-minted empty); per-run resets; connect; teardown (recorded `truncated` if non-null) | no / no / no |
 
 **Invariants:** the predicate's behaviour is byte-identical (I3 — `nextFreezeRun`/`isPausedRun` untouched; every existing pause leg still passes with the same declarations); the only change is what the two ring entries SAY; time comes from the hook's injected `now`, never `Date.now()` (the existing idiom). Edge-only recording (one entry per pause / per resume).
 
