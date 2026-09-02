@@ -19,7 +19,7 @@ time-only row. Every board is one of those with the fewest changes.
 | `FreeRowPortrait.dc.html` | `3-justrow-timer-portrait.png` | Same two changes. |
 | `ProgrammedLandscape.dc.html` | `1-programmed-timer-landscape.png` | Middle row grows to fill (`auto 1fr auto`), controls row on the bottom edge, face centred in the room it gains. END unchanged (it is the treatment portrait adopts). |
 | `FreeRowLandscape.dc.html` | `3-justrow-timer-landscape.png` | Same fill rule. |
-| `Door.dc.html` | `2-justrow-door-portrait.png` | Band copy names both buttons — the only invented sentence: "Connect and the monitor keeps the time; the numbers appear here when you pull. Or start the timer and the phone keeps it." |
+| `Door.dc.html` | `2-justrow-door-portrait.png` | Band copy names both buttons — the only invented sentence: "Connect: the monitor keeps time. Start Timer: the phone does." |
 | `History.dc.html` | `6-history-timeonly-portrait.png` | A row with neither an average nor a distance gets `TIME 12:34` under its name (the detail's own label); every other row unchanged. |
 | `LogDoorNoPlan.dc.html` | `5-justrow-log-noplan-portrait.png` | With no plan the lone button reads `Save` — on this door AND the programmed summary door; `Save without logging` survives only beneath `Log against plan`. |
 
