@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { api } from "../api";
+import type { PlanData } from "../api/usePlan";
 import { createMonitorRun, type MonitorRun } from "../monitor/monitorRun";
 import { advance, buildFreeRowRun } from "../session/engine";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
@@ -11,13 +12,37 @@ import {
   resetForTests as resetHandoffStoreForTests,
 } from "../monitor/handoffStore";
 
+/** The plan the door reads through `usePlan()` (substitution spec
+ *  2026-09-02, §Mechanism 2). `NO_PLAN` is the server's own no-plan body;
+ *  `ACTIVE_PLAN` mirrors `LogSession.test.tsx`'s `activePlan()` — doneN 3
+ *  of a real-length 84 sequence, so the lead label's arithmetic
+ *  (`SESSION 4 OF 84`) is checked against independent literals. */
+const NO_PLAN: PlanData = { planKey: null, doneN: 0, sequence: [] };
+const ACTIVE_PLAN: PlanData = {
+  planKey: "sprint",
+  doneN: 3,
+  sequence: Array.from({ length: 84 }, (_, i) => ({
+    index: i,
+    code: "O2",
+    status: i < 3 ? "done" : i === 3 ? "today" : "upcoming",
+  })),
+};
+
 // The same `vi.doMock` + dynamic-import idiom LogSession.test.tsx uses — a
 // real `Response`, so `.ok`/`.status`/`.json()` behave like the fetch this
-// replaces.
+// replaces. `GET /api/plan` is answered HERE, at the wire, rather than by
+// mocking `usePlan` at the hook: the door reads the plan through the same
+// `api` seam it posts through, so one mock covers both and no test can
+// render a pair against a plan the wire never carried.
 function mockApi(
   handler: (path: string, init?: RequestInit) => Response | Promise<Response>,
+  plan: PlanData = NO_PLAN,
 ) {
-  const fn = vi.fn<typeof api>(async (path, init) => handler(path, init));
+  const fn = vi.fn<typeof api>(async (path, init) =>
+    path === "/api/plan"
+      ? new Response(JSON.stringify(plan))
+      : handler(path, init),
+  );
   vi.doMock("../api", () => ({ api: fn }));
   return fn;
 }
@@ -148,13 +173,13 @@ describe("JustRowLog (the workout-less log door)", () => {
     expect(screen.queryByText(/INTERVALS/)).not.toBeInTheDocument();
   });
 
-  it("saves a free row: advancesPlan false, both ids null, steps empty, AVG derived", async () => {
+  it("saves a free row without a plan: advancesPlan false, both ids null, steps empty, AVG derived", async () => {
     const fn = mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
     commitHandoff(closedFreeRow().startedAt, null, closedFreeRow());
     await renderDoor();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Save this row" }),
+      screen.getByRole("button", { name: "Save without logging" }),
     );
 
     await waitFor(() => {
@@ -204,7 +229,7 @@ describe("JustRowLog (the workout-less log door)", () => {
     await renderDoor();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Save this row" }),
+      screen.getByRole("button", { name: "Save without logging" }),
     );
 
     await waitFor(() => {
@@ -224,6 +249,124 @@ describe("JustRowLog (the workout-less log door)", () => {
 
     // Landed elsewhere, not a broken form over nothing.
     expect(await screen.findByText("ELSEWHERE")).toBeInTheDocument();
+  });
+});
+
+// Substitution spec (2026-09-02) §Mechanism 2, exit criterion 2: the door
+// borrows `PostWorkoutSummary`'s pair and its no-plan rule verbatim. With a
+// plan, `Log against plan · SESSION n OF N` leads (`.summary-save-lead`)
+// and posts `advancesPlan: true` — the opt-in the store now honours for a
+// free row — while `Save without logging` sits under it
+// (`.summary-save-secondary`) and posts `false`. With no plan, `Save
+// without logging` leads alone. "Save this row" is retired: it existed
+// because a free row could never count. Both entry kinds, both plan
+// states — the MONITOR entry and the TIMER entry render the same stack.
+describe("JustRowLog: the plan pair (a Just Row stands in for a session)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+  afterEach(() => {
+    vi.doUnmock("../api");
+    vi.resetModules();
+  });
+
+  const entries = [
+    {
+      kind: "monitor",
+      seed: () =>
+        commitHandoff(closedFreeRow().startedAt, null, closedFreeRow()),
+    },
+    { kind: "timer", seed: () => saveRun(completedTimerRun()) },
+  ] as const;
+
+  describe.each(entries)("$kind entry", ({ seed }) => {
+    it("with a plan: the shipped pair, exact label and classes, lead first", async () => {
+      mockApi(() => new Response(JSON.stringify({ id: "log-1" })), ACTIVE_PLAN);
+      seed();
+      await renderDoor();
+
+      // The label is the shipped formula against independent literals:
+      // doneN 3 + 1, of 84.
+      const lead = await screen.findByRole("button", {
+        name: "Log against plan · SESSION 4 OF 84",
+      });
+      const secondary = screen.getByRole("button", {
+        name: "Save without logging",
+      });
+      expect(lead).toHaveClass("summary-save-lead");
+      expect(secondary).toHaveClass("summary-save-secondary");
+      // Lead ABOVE secondary in document order — the pair's own order.
+      expect(
+        lead.compareDocumentPosition(secondary) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.queryByText("Save this row")).toBeNull();
+    });
+
+    it("with a plan: Log against plan posts advancesPlan: true", async () => {
+      const fn = mockApi(
+        () => new Response(JSON.stringify({ id: "log-1" })),
+        ACTIVE_PLAN,
+      );
+      seed();
+      await renderDoor();
+
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: "Log against plan · SESSION 4 OF 84",
+        }),
+      );
+
+      await waitFor(() => {
+        const body = savedBody(fn);
+        expect(body.advancesPlan).toBe(true);
+        expect(body.workoutId).toBeNull();
+        expect(body.workoutType).toBeNull();
+        expect(body.workoutTitle).toBe("Just Row");
+      });
+    });
+
+    it("with a plan: Save without logging posts advancesPlan: false", async () => {
+      const fn = mockApi(
+        () => new Response(JSON.stringify({ id: "log-1" })),
+        ACTIVE_PLAN,
+      );
+      seed();
+      await renderDoor();
+
+      // Wait for the pair to resolve first, so the click below is on the
+      // secondary of a rendered pair, not on a no-plan lead that happens
+      // to share the label.
+      await screen.findByRole("button", {
+        name: "Log against plan · SESSION 4 OF 84",
+      });
+      await userEvent.click(
+        screen.getByRole("button", { name: "Save without logging" }),
+      );
+
+      await waitFor(() => {
+        expect(savedBody(fn).advancesPlan).toBe(false);
+      });
+    });
+
+    it("with no plan: Save without logging leads alone; no Log against plan, no Save this row", async () => {
+      mockApi(() => new Response(JSON.stringify({ id: "log-1" })), NO_PLAN);
+      seed();
+      await renderDoor();
+
+      const only = await screen.findByRole("button", {
+        name: "Save without logging",
+      });
+      expect(only).toHaveClass("summary-save-lead");
+      expect(screen.queryByText(/Log against plan/)).toBeNull();
+      expect(screen.queryByText("Save this row")).toBeNull();
+      expect(
+        screen
+          .getAllByRole("button")
+          .filter((b) => /Save|Log/.test(b.textContent ?? "")),
+      ).toHaveLength(1);
+    });
   });
 });
 
@@ -257,7 +400,7 @@ describe("JustRowLog with no numbers", () => {
     // stored shape PR 1 froze, and the honest state until then is a
     // disabled button over a line that says why.
     expect(
-      screen.getByRole("button", { name: "Save this row" }),
+      screen.getByRole("button", { name: "Save without logging" }),
     ).toBeDisabled();
   });
 });
@@ -292,7 +435,7 @@ describe("JustRowLog reflection", () => {
     await userEvent.type(screen.getByLabelText("NOTES"), "Steady pull.");
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Save this row" }),
+      screen.getByRole("button", { name: "Save without logging" }),
     );
 
     await waitFor(() => {
@@ -337,7 +480,9 @@ describe("JustRowLog: the timer entry", () => {
     expect(screen.queryByText("—")).not.toBeInTheDocument();
     expect(screen.queryByText(/\d m$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/INTERVALS/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save this row" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Save without logging" }),
+    ).toBeEnabled();
   });
 
   it("Save posts the time-only body with source timer and NO distance, split, device or machine keys; success clears the run", async () => {
@@ -347,7 +492,7 @@ describe("JustRowLog: the timer entry", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
     await userEvent.click(
-      screen.getByRole("button", { name: "Save this row" }),
+      screen.getByRole("button", { name: "Save without logging" }),
     );
 
     await waitFor(() => {
@@ -385,7 +530,7 @@ describe("JustRowLog: the timer entry", () => {
     await renderDoor();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Save this row" }),
+      screen.getByRole("button", { name: "Save without logging" }),
     );
 
     expect(await screen.findByText(/Couldn't save/i)).toBeInTheDocument();
@@ -402,7 +547,7 @@ describe("JustRowLog: the timer entry", () => {
 
     expect(screen.getByText("SEP 2 · TIMER")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Save this row" }),
+      screen.getByRole("button", { name: "Save without logging" }),
     ).toBeDisabled();
     expect(screen.queryByText("12:34")).not.toBeInTheDocument();
   });

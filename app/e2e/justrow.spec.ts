@@ -4,8 +4,8 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // PHASE JR PR 2 — the free row's own e2e walk, fake-driven, in a real
 // browser: Today → JUST ROW → Connect → the ready frame → the standard
 // connected surface wearing the free-row treatment → a Menu end on the
-// erg → the ended hand-off → the workout-less log door → Save this row →
-// the row in history. The one flow a rower actually walks, entered at the
+// erg → the ended hand-off → the workout-less log door → Save without
+// logging (no plan on a fresh user) → the row in history. The one flow a rower actually walks, entered at the
 // top, so nothing here seeds a record past any producer (recurring
 // failure 24's rule at this layer too).
 //
@@ -140,7 +140,15 @@ test.describe("Just Row: the whole flow", () => {
     await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
     await expect(page.getByText(/DID YOU HOLD THE TARGETS/)).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Save this row" }).click();
+    // A fresh backdoor user has no plan, so the door's save stack is the
+    // no-plan rule's one button — `Save without logging` leading alone
+    // (substitution spec 2026-09-02 §Mechanism 2; the plan-active pair is
+    // its own flow below). Asserted as the ONLY save control so a pair
+    // rendered against a plan the user never chose would be caught here.
+    await expect(
+      page.getByRole("button", { name: /Log against plan/ }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Save without logging" }).click();
 
     // History, with the free row named and wearing the JR chip in the
     // badge slot — and NO type badge. The `.type-badge` absence is exit
@@ -223,7 +231,15 @@ test.describe("Just Row: without the monitor", () => {
     await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
     await expect(page.getByText("—")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Save this row" }).click();
+    // A fresh backdoor user has no plan, so the door's save stack is the
+    // no-plan rule's one button — `Save without logging` leading alone
+    // (substitution spec 2026-09-02 §Mechanism 2; the plan-active pair is
+    // its own flow below). Asserted as the ONLY save control so a pair
+    // rendered against a plan the user never chose would be caught here.
+    await expect(
+      page.getByRole("button", { name: /Log against plan/ }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Save without logging" }).click();
 
     // History (handoff `History.dc.html`, criterion 4): the row wears the
     // JR chip on its own class, no `.type-badge`, and NO second line — a

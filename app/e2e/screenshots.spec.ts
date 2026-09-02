@@ -4873,7 +4873,7 @@ test("justrow-history-chip", async ({ page }) => {
     timeout: 10_000,
   });
   await finishJustRowTimer(page);
-  await page.getByRole("button", { name: "Save this row" }).click();
+  await page.getByRole("button", { name: "Save without logging" }).click();
   await expect(page).toHaveURL(/\/today\/log$/);
   await expect(page.locator(".today-log-row")).toHaveCount(3);
   await expect(page.locator(".free-row-chip")).toHaveCount(2);

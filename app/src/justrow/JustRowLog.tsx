@@ -7,6 +7,7 @@ import {
   retire as retireHandoff,
   type HandoffEntry,
 } from "../monitor/handoffStore";
+import { usePlan, type PlanData } from "../api/usePlan";
 import { useLogForm } from "../session/LogSession";
 import { recordLogDoorEntry } from "../session/logDoorDiagnostics";
 import { clearRun, loadRun, type SessionRun } from "../session/run";
@@ -32,11 +33,21 @@ import { freeRowTotals } from "./totals";
  * ACTUAL PAIN — the word ACTUAL exists to contrast with the workout's own
  * EXPECTED figure beside it, which a free row does not have.
  *
- * **"Save this row" is one action with no plan choice to name.** The
- * shipped door's pair (`Log against plan` / `Save without logging`) decides
- * whether the session counts toward the plan; a free row can never count
- * (the server's own `isFreeRow` refusal is the enforcement), so this door
- * posts `advancesPlan: false` unconditionally and says so with one button.
+ * **The save stack is the shipped door's own pair** (substitution spec,
+ * 2026-09-02, §Mechanism 2 — James's ruling: a Just Row on a plan day can
+ * STAND IN for that session). With a plan, `Log against plan · SESSION n
+ * OF N` leads and posts `advancesPlan: true` — the explicit opt-in the
+ * store requires of a free row (`logs.ts` resolves `advancesPlan ??
+ * !isFreeRow(...)`, so an omitted key means "does not count" here, the
+ * opposite of a workout row's default) — and `Save without logging` sits
+ * under it posting `false`. With no plan, `Save without logging` leads
+ * alone: the same no-plan rule `PostWorkoutSummary` applies, hidden
+ * outright rather than disabled. The label formula, the classes
+ * (`summary-save-lead` / `summary-save-secondary`) and the order are
+ * borrowed verbatim from that component, not restyled. The onboarding
+ * demotion rule there does not apply — a free row carries no onboarding
+ * title. The one-button "Save this row" this door shipped with is
+ * retired: it existed because a free row could never count.
  *
  * **Two entry kinds, one door** (Just Row without the monitor, spec
  * 2026-09-02, §Mechanism piece 4). The MONITOR entry is a closed free-row
@@ -134,6 +145,17 @@ export default function JustRowLog() {
   // render would make a mid-save retire yank the form out from under the
   // rower.
   const [door] = useState(doorEntry);
+  // The pair's one input beyond the record: `LogSession`'s own rule for
+  // which plan the stack may name — a RESOLVED fetch with an active key.
+  // Loading and errored both read as "no plan" here, exactly as they do
+  // on the programmed doors; a rower whose plan fetch failed can still
+  // save the row, without the option to count it against a plan this
+  // screen could not confirm.
+  const planState = usePlan();
+  const plan: PlanData | null =
+    planState.state === "ready" && planState.plan.planKey !== null
+      ? planState.plan
+      : null;
   const { held, pain, setPain, notes, setNotes, saving, saveError, submit } =
     useLogForm(() => {
       // Each kind clears ITS OWN record and only that one (the lifetime
@@ -163,13 +185,14 @@ export default function JustRowLog() {
     return (
       <TimerDoor
         run={door.run}
+        plan={plan}
         pain={pain}
         setPain={setPain}
         notes={notes}
         setNotes={setNotes}
         saving={saving}
         saveError={saveError}
-        onSave={(elapsed) =>
+        onSave={(elapsed, advancesPlan) =>
           void submit(
             {
               workoutId: null,
@@ -184,7 +207,7 @@ export default function JustRowLog() {
               source: "timer",
               timeSeconds: elapsed,
             },
-            { advancesPlan: false },
+            { advancesPlan },
           )
         }
       />
@@ -198,7 +221,7 @@ export default function JustRowLog() {
       ? (500 * totals.seconds) / totals.meters
       : null;
 
-  function handleSave() {
+  function handleSave(advancesPlan: boolean) {
     if (totals === null) return;
     const { run } = entry;
     void submit(
@@ -243,7 +266,7 @@ export default function JustRowLog() {
         ...(run.series !== undefined ? { series: run.series } : {}),
         ...(run.endedBy !== undefined ? { endedBy: run.endedBy } : {}),
       },
-      { advancesPlan: false },
+      { advancesPlan },
     );
   }
 
@@ -304,16 +327,11 @@ export default function JustRowLog() {
       />
 
       {saveError !== null && <p className="form-error">{saveError}</p>}
-      <div className="action-stack">
-        <button
-          type="button"
-          className="button-l1"
-          disabled={saving || totals === null}
-          onClick={handleSave}
-        >
-          Save this row
-        </button>
-      </div>
+      <SaveStack
+        plan={plan}
+        disabled={saving || totals === null}
+        onSave={handleSave}
+      />
     </main>
   );
 }
@@ -325,6 +343,7 @@ export default function JustRowLog() {
  *  either. Save is disabled only when the run carries no actual. */
 function TimerDoor({
   run,
+  plan,
   pain,
   setPain,
   notes,
@@ -334,13 +353,14 @@ function TimerDoor({
   onSave,
 }: {
   run: SessionRun;
+  plan: PlanData | null;
   pain: number | null;
   setPain: (pain: number | null) => void;
   notes: string;
   setNotes: (notes: string) => void;
   saving: boolean;
   saveError: string | null;
-  onSave: (elapsedSeconds: number) => void;
+  onSave: (elapsedSeconds: number, advancesPlan: boolean) => void;
 }) {
   const elapsed = timerElapsedSeconds(run);
   return (
@@ -371,19 +391,53 @@ function TimerDoor({
       />
 
       {saveError !== null && <p className="form-error">{saveError}</p>}
-      <div className="action-stack">
+      <SaveStack
+        plan={plan}
+        disabled={saving || elapsed === null}
+        onSave={(advancesPlan) => {
+          if (elapsed !== null) onSave(elapsed, advancesPlan);
+        }}
+      />
+    </main>
+  );
+}
+
+/** The save stack, shared by both kinds: `PostWorkoutSummary`'s pair with
+ *  its own label formula, classes and no-plan rule (see the header). The
+ *  boolean each button hands back is the WHOLE decision — it goes on the
+ *  wire as `advancesPlan`, and the store does the rest. */
+function SaveStack({
+  plan,
+  disabled,
+  onSave,
+}: {
+  plan: PlanData | null;
+  disabled: boolean;
+  onSave: (advancesPlan: boolean) => void;
+}) {
+  return (
+    <div className="action-stack summary-save-stack">
+      {plan !== null && (
         <button
           type="button"
-          className="button-l1"
-          disabled={saving || elapsed === null}
-          onClick={() => {
-            if (elapsed !== null) onSave(elapsed);
-          }}
+          className="summary-save-lead"
+          disabled={disabled}
+          onClick={() => onSave(true)}
         >
-          Save this row
+          {`Log against plan · SESSION ${plan.doneN + 1} OF ${plan.sequence.length}`}
         </button>
-      </div>
-    </main>
+      )}
+      <button
+        type="button"
+        className={
+          plan === null ? "summary-save-lead" : "summary-save-secondary"
+        }
+        disabled={disabled}
+        onClick={() => onSave(false)}
+      >
+        Save without logging
+      </button>
+    </div>
   );
 }
 
