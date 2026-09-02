@@ -781,9 +781,20 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       expect(await store.getLink(b.userId)).toBeNull();
     });
 
-    // Exit criterion 3 at the ROUTE layer (the store-level proof, including
-    // the deterministic blocking case, is
-    // stores/concept2.integration.test.ts's concurrent pair).
+    // Exit criterion 3 at the ROUTE layer. What this pair proves and what
+    // it does NOT (RF26 — the strongest claim these two may carry): the
+    // ROUTE mints through the store's ONE atomic statement, so one user's
+    // concurrent and sequential mints leave exactly one row and the
+    // survivor is a nonce the route actually issued. The biting mutation
+    // recorded for both is `createAttempt`'s ON CONFLICT target
+    // (`userId` -> `nonce`), which turns every re-mint into a 500. The
+    // STATEMENT-level mutation the design names (upsert -> delete +
+    // insert) does NOT reliably lose this `Promise.all` race on fast local
+    // Postgres — measured, three consecutive green runs — so the
+    // deterministic proof of that invariant lives where it can be forced:
+    // stores/concept2.integration.test.ts's "createAttempt genuinely
+    // BLOCKS on an uncommitted conflicting row" (its own comment records
+    // the same measurement).
     it("two CONCURRENT mints through the real route leave exactly one live attempt, and it is one of the two nonces actually issued", async () => {
       const { bearer, userId } = await signIn("seam-concurrent");
       const [r1, r2] = await Promise.all([
