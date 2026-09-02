@@ -81,7 +81,12 @@ Row stood in for session `plan_index`". No column, no migration.
 3. **Plan tab (`Plan.tsx`):** `rowedType` stays as is; the badge slot
    renders `FreeRowChip` when `isFreeRow(link.workoutId, link.workoutType)`
    (the PAIR; the unknown-type box remains for a linked row whose type is
-   a string the build does not know); `swapMark` treats a free row as
+   a string the build does not know) — **centred in the badge column at
+   `TypeBadge`'s width** (James, Gate 0: "make sure to still center the
+   chips"): `.free-row-chip` takes `min-width` equal to `.type-badge`'s
+   rendered box and `justify-self: center` in the plan row's grid, and the
+   same rule applies in `LogRow`'s slot, so a column of mixed chips shares
+   one axis; `swapMark` treats a free row as
    "rowed something else": the mark is the prescription's title on a
    checkpoint day, else the planned type — the same two branches it has,
    with the free pair entering the "not as prescribed" arm. `PlanLink`

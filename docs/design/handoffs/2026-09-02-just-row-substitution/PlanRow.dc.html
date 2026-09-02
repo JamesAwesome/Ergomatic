@@ -33,15 +33,19 @@
     .row { display: grid; grid-template-columns: 34px 30px 1fr 24px; align-items: center; column-gap: 12px; min-height: 44px; border-bottom: 1px solid var(--rule); padding: 0 8px 0 0; }
     .row-today { background: var(--surface-sunken); border-left: 3px solid var(--accent); }
     .num { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); text-align: right; }
-    .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 7px; border-radius: 2px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--on-color); }
-    .jr { display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 2px; border: 1px solid var(--rule-3); background: transparent; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-3); }
+    .badge { display: inline-flex; justify-self: center; min-width: 30px; box-sizing: border-box; align-items: center; justify-content: center; padding: 3px 7px; border-radius: 2px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--on-color); }
+    .jr { display: inline-flex; align-items: center; justify-content: center; justify-self: center; min-width: 30px; box-sizing: border-box; padding: 2px 6px; border-radius: 2px; border: 1px solid var(--rule-3); background: transparent; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-3); }
     .name { font-family: var(--font-sans); font-size: 14px; color: var(--ink); }
     .swap { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--ink-3); grid-column: 3; margin-top: -6px; padding-bottom: 6px; }
     .check { color: var(--accent); font-size: 16px; text-align: center; }
     .play { color: var(--accent); font-size: 14px; text-align: center; }
   </style>
 </helmet>
-<!-- MECHANICAL: plan-linked.png with two rows changed. Row 4 is the
+<!-- James (Gate 0, 2026-09-02): "make sure to still center the chips" —
+     the JR chip sits centred in the badge column at TypeBadge's own width
+     (min-width 30 px, justify-self: center), so a column of JR / O2 / AT
+     chips lines up on one axis. Same rule for the History row's slot.
+     MECHANICAL: plan-linked.png with two rows changed. Row 4 is the
      shipped swap (Slack Tide INSTEAD OF TR). Row 5 is a Just Row that stood
      in for an AT day: the JR chip in the badge slot (today a free row would
      render the "type unknown" box, plan-badge-unknown.png), the name Just

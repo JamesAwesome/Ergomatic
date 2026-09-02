@@ -264,6 +264,21 @@ slate.
       sentence each, in the notes' own voice, or the News tab contradicts
       itself two entries apart. Filed at #268's PM gate (RF14, and the PR
       body had claimed this row already existed). **XS**
+- [ ] **Timer mode, on the phone (James, 2026-09-02, build 823, on a
+      Just Row): "really fucked up".** Two defects, both the SHIPPED
+      Timer's own — the free row copied it mechanically and made them
+      visible on a one-phase screen. (1) **END does not match between
+      orientations:** portrait prints `END →` as plain header text (ink-4,
+      no box); landscape prints it as an accent-outlined 44 px box in the
+      gutter — two treatments of one control. (2) **A giant gap:** in
+      portrait the ◀ ▶ arrows are pinned to the bottom with the middle
+      third empty; in landscape the whole layout stops at ~70 % of the
+      height and the rest is blank (the landscape rules were written for a
+      390 px-tall viewport and the phone is taller). Captures:
+      `docs/design/findings/2026-09-02-timer-mode-{portrait,landscape}.png`.
+      A design pass with a Gate 0 (both orientations, the programmed and
+      the free-row timer side by side, since the fix is for both), then a
+      fast-path or small PR. **S**
 
 **Owed within PR 2's own scope, recorded here so phase close can quote
 it:** a free row recovered with a `truncated` series trace (>4 h of rowing,
