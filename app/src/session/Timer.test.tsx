@@ -1942,7 +1942,11 @@ describe("index.css: the landscape leak is closed (spec §7, adversarial finding
     //   30 -> 29 (James's erg walk, 2026-08-13). The gutter's decorative
     //     camera-housing spacer is deleted, and `.timer-screen
     //     .timer-header .timer-gutter-housing` went with it.
-    expect(rules).toHaveLength(28);
+    //   29 -> 28 (timer-mode spec, 2026-09-02): the landscape END override
+    //     deleted — its box rule became the base rule for both orientations.
+    //   28 -> 27 (desk walk 2, 2026-09-02): the decorative ← glyph deleted,
+    //     and `.timer-screen .timer-header .timer-gutter-back` went with it.
+    expect(rules).toHaveLength(27);
     for (const rule of rules) {
       expect(rule.selectors.length).toBeGreaterThan(0);
       for (const selector of rule.selectors) {
