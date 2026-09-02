@@ -4,8 +4,12 @@
 pass (verdict REVISE); rev 3 replaces the Apple-platform lines rev 2 carried on the
 antagonist's initial (later WITHDRAWN as unsourced) claims with facts fetched from
 Apple's documentation this session, each tagged. Superseded claims are gone, not
-annotated. Awaiting James's
-approval BEFORE any implementation (the PR1.5 lesson). **Wave:** E · **Risk
+annotated. **APPROVED — James, 2026-09-02** ("Designs approved": the Gate 0 render —
+rendered pages, the shared styled callback template, and the design calls listed
+there: identity-before-consume, bearer-wins, ephemeral:true, atomic upsert +
+migration 0020). Two hardening passes (attacker-lens antagonist, PM shape) were
+in flight at approval; any material change they force is presented to James as a
+delta before implementation, per the PR1.5 lesson. **Wave:** E · **Risk
 class:** TRIAD — AUTH (the principal-binding routes) + a STORED SHAPE (`surface`
 column, `UNIQUE(user_id)`, **migration 0020** — 0019 is Phase JR's on main).
 **Parent:** `2026-08-31-concept2-logbook-design.md` §Architecture 1-3 and
@@ -321,20 +325,29 @@ the victim's browser here dies at step 6.
 
 Steps 4-5 refuse BEFORE any wire call and BEFORE consuming, on both routes.
 
-### 7. Rower-visible copy introduced (Gate 0 — rendered for James at approval)
+### 7. Rower-visible pages — one shared styled template, all six pages (Gate 0 APPROVED)
 
-Two HTML pages the web callback can now show, and they are user-visible copy, so
-they are presented rendered, not described:
+The callback pages shipped in PR1 as unstyled placeholder HTML (browser-default
+Times on white). Now that the authenticated callback makes them reachable by a
+rower, PR1.75 replaces `page()` with ONE server template — inline CSS, system
+fonts, zero network — used by all six pages. Mechanical layout: a mono status
+label (`CONCEPT2 LINK · <LABEL> · HTTP <n>`), one bold statement, one action line;
+app ground `#f6f3ec`, ink `#1c1a17` (15.9:1), label `#5f5a50` (5.8:1), accent rule
+`#b5341f`. Approved rendered (both orientations, beside the current placeholders)
+at the Gate 0 artifact, 2026-09-02. The copy, verbatim:
 
-- 401: **"Sign in to Ergomatic in this browser first, then start the Concept2
-  link again from the app."**
-- 403: **"This Concept2 link was started from a different Ergomatic account.
-  Sign in as that account in this browser, or start a new link from the account
-  you're using."**
+| status | label | statement | action |
+| --- | --- | --- | --- |
+| 200 | Linked | Concept2 account linked. | Return to the app. |
+| 400 | Expired | This link has expired or was already used. | Return to the app and start again. |
+| 400 | Incomplete | This link is missing required parameters. | Return to the app and start again. |
+| 401 | Not signed in | No Ergomatic session in this browser. | Sign in to Ergomatic here, then start the link again from the app. |
+| 403 | Wrong account | This link was started by a different Ergomatic account. | Sign in as that account here, or start a new link from the account you're using. |
+| 403 | Unavailable | Concept2 linking is not available right now. | Return to the app. |
+| 502 | Failed | Concept2 could not complete the connection. | Return to the app and try again. |
 
-Both use the existing callback page styling; no other copy changes. The probe
-card gains a "real link" button behind its existing build flag (dev-only, not
-rower-visible in any release build).
+The probe card gains a "real link" button behind its existing build flag
+(dev-only, never in a release build).
 
 ### 8. What does NOT change
 
