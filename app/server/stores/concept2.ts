@@ -1,7 +1,18 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { concept2AuthAttempts, concept2Links } from "../db/schema.js";
-import { isUniqueViolation } from "./errors.js";
+import { isUniqueViolation, pgConstraint } from "./errors.js";
+
+// Fix round 2 (task-2-report.md): the real constraint names, read from the
+// migrations that created them (not guessed) — `app/drizzle/0020_fearless_
+// shape.sql:27-28` names both UNIQUE additions explicitly; the nonce PK's
+// name (`app/drizzle/0018_natural_chronomancer.sql:2-3`, an inline
+// `PRIMARY KEY` with no explicit CONSTRAINT clause) is Postgres's own
+// default `<table>_pkey` naming, confirmed empirically against a migrated
+// test database (`select conname from pg_constraint where conrelid =
+// 'concept2_auth_attempts'::regclass` — see task-2-report.md fix round 2).
+const ATTEMPTS_NONCE_PK = "concept2_auth_attempts_pkey";
+const LINKS_C2_USER_ID_UNIQUE = "concept2_links_c2_user_id_unique";
 
 export type WeightClass = "H" | "L";
 // Wave E PR1.75a (2026-09-02-concept2-pr175-app-bind-design.md §1): which
@@ -102,11 +113,18 @@ export function createConcept2Store(db: Db) {
     // definition. `updatedAt` is bumped via `now()` on the conflict path
     // only — the insert path already gets its column default.
     //
-    // PR1.75a D1: after the ON CONFLICT (user_id) arm, the only unique
-    // violation still reachable is `concept2_links_c2_user_id_unique` — the
+    // PR1.75a D1: after the ON CONFLICT (user_id) arm, the unique violation
+    // this is meant to catch is `concept2_links_c2_user_id_unique` — the
     // Concept2 account is held by ANOTHER user (the same user relinking the
     // same account updates in place). Mapped to a typed error so the route
     // can answer 409 without inspecting driver internals.
+    //
+    // Fix round 2: mapped by CONSTRAINT NAME, not merely by SQLSTATE
+    // 23505 — a 23505 on this statement that is NOT this constraint (there
+    // is none reachable today past the ON CONFLICT arm, but the check makes
+    // that true by construction rather than by an invariant a future edit
+    // could silently break) rethrows unchanged instead of being misreported
+    // as a link conflict.
     async upsertLink(
       userId: string,
       link: {
@@ -141,7 +159,12 @@ export function createConcept2Store(db: Db) {
             },
           });
       } catch (err) {
-        if (isUniqueViolation(err)) throw new Concept2LinkConflictError();
+        if (
+          isUniqueViolation(err) &&
+          pgConstraint(err) === LINKS_C2_USER_ID_UNIQUE
+        ) {
+          throw new Concept2LinkConflictError();
+        }
         throw err;
       }
     },
@@ -212,8 +235,17 @@ export function createConcept2Store(db: Db) {
     // on `concept2_auth_attempts_user_id_unique` and exactly one row
     // survives (PROVEN on real Postgres — the integration test's concurrent
     // case; the old delete-then-insert yielded two). After that arm the
-    // only unique violation left is the PRIMARY KEY: the new nonce collided
-    // with another row's (32 random bytes — the route retries once).
+    // unique violation this is meant to catch is the PRIMARY KEY
+    // (`concept2_auth_attempts_pkey`): the new nonce collided with another
+    // row's (32 random bytes — the route retries once).
+    //
+    // Fix round 2: mapped by CONSTRAINT NAME, not merely by SQLSTATE 23505.
+    // A 23505 on THIS statement can also be `concept2_auth_attempts_
+    // user_id_unique` — for example a statement-level regression that
+    // stopped using ON CONFLICT (Task 2's own mutation-testing found
+    // exactly this: a delete-then-insert rewrite still passed the old
+    // bare-SQLSTATE check and was misreported as a nonce collision). That
+    // case rethrows unchanged instead.
     async createAttempt(a: NewConcept2Attempt): Promise<void> {
       try {
         await db
@@ -234,7 +266,9 @@ export function createConcept2Store(db: Db) {
             },
           });
       } catch (err) {
-        if (isUniqueViolation(err)) throw new AttemptNonceCollisionError();
+        if (isUniqueViolation(err) && pgConstraint(err) === ATTEMPTS_NONCE_PK) {
+          throw new AttemptNonceCollisionError();
+        }
         throw err;
       }
     },
