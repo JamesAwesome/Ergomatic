@@ -40,6 +40,39 @@ arrows) 17.11 · ink-3 on page (labels, the TIME line) 6.69 · on-color on
 accent (Save) 5.94 · ink-2 on sunken (band) 9.16. Targets: END 44 px,
 Pause 56, arrows 52, buttons 52–56.
 
+## Desk walk 1 (James, 2026-09-02, build 834) and the research it demanded
+
+Two photos (`Photo on 9-2-26 at 5.41 PM` / `5.42 PM`, on James's desktop):
+in landscape the END box sat under the display's rounded corner on both
+sides and under the sensor housing on the notch side — "the end button is
+partially obscured, and the notch is in the way." Cause: the landscape
+`.timer-screen` padded top/right/bottom with the safe-area insets and the
+LEFT with a hard 0 so the gutter could "reach the physical edge"; the
+gutter's controls went with it.
+
+**Research (RF18 first: `docs/history/phase-cr2.md` already carried it):**
+
+- PRIMARY — Apple HIG, Layout: *"Safe areas are essential for avoiding a
+  device's interactive and display features, like Dynamic Island on iPhone"*
+  and *"…accommodating the corner radius, sensor housing, and features like
+  Dynamic Island."*
+- PRIMARY — WebKit, "Designing Websites for iPhone X" (webkit.org/blog/7929):
+  *"In landscape, when `env(safe-area-inset-left)` is larger due to the
+  sensor housing, the `max()` function will resolve to that size instead."*
+- SECONDARY (this repo's transcription of Apple Tech Talk 801, Phase CR2):
+  *"Apple states the landscape side inset protects the sensor housing AND
+  the display's rounded corners, and says to inset controls to avoid both."*
+  Corollary measured there: the inset ≈ the corner radius, so the corner,
+  not the camera, sets the floor — on BOTH sides.
+
+**Fix (the connected surface's own rule, mirrored):** the landscape frame
+defines `--edge-inset: max(env(safe-area-inset-left), env(safe-area-inset-right))`,
+the gutter column is `calc(44px + var(--edge-inset))` with its controls
+padded inside the inset (background still to the edge), and the right
+padding takes the same inset. Structural test pins all three declarations;
+Chromium reports zero insets, so the geometry proof is the desk walk, not
+an e2e.
+
 ## Not changed
 
 Every other string and slot on the timer; the connected surface; the
