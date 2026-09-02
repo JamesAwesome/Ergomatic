@@ -114,3 +114,45 @@ normally, log copied. A `pause-declared` in that window with the rower
 never stopping = §4's defect observed under instruments; none, with
 `stale=false` again = the predicate may already be sound and §4 narrows
 to (at most) the resume-adjacent guard.
+
+### Reading 2 — the DISCRIMINATING capture, 2026-09-02 (build 814)
+
+**The confound is removed and §4's defect is observed under instruments.**
+Locked at `armed` (before the first pull — spec's flagship case), rowed
+through a 35 s lock (`app-lifecycle resume gap=34785ms`, seq 26); first
+resumed frame already `state=rowing elapsed=33.01 distance=110.8
+rowingActive=true` (seq 29). Then **seq 33, ~2.2 s after the resume:**
+`pause-declared frames=4 hold=4 pulled=true d=115.3 split=142.73 spm=28`
+— WHILE distance was advancing (110.8→115.3→117.8→193.9, ~2 m/s
+throughout) at spm 28. The rower never stopped; the predicate declared a
+pause. This is the false positive §4 exists to fix, with the hand-lock
+confound gone (distance advancing proves continuous rowing). `latches=1
+resumes=1` (seq 67) — one resume, one latch, consistent.
+
+**Mechanism, and it falsifies §3's `stale` flag's assumption:**
+`resume-first-frame stale=false` (seq 30) is CORRECT — the first
+post-resume frame (distance jumped 0→110.8 across the lock) does not
+repeat the pre-background triple. But the defect is FOUR identical frames
+AFTER resume: the resumed BLE stream stalled on `115.3|142.73|28` for
+`PAUSED_FRAME_HOLD` frames while the flywheel kept turning, and
+`freezeKey` read the stall as a stop. **`stale` checks the wrong window
+(pre-vs-first-post); the defect is a post-resume repeat-stall.** §4 cannot
+hinge on `stale` as defined. Two candidate shapes:
+  (a) suppress `isPausedRun` for a short window after a resume edge (the
+      edge is already timestamped — `resumeEdgeArmedRef`);
+  (b) require the paused run's identical frames to NOT be the immediate
+      tail of a resume (i.e. the stall must survive a fresh frame first).
+Both are "gate the predicate near a resume", differing in how the window
+closes. The antagonist pass weighs them against I1 (a genuine post-resume
+stop must still declare) once one confirmation lands.
+
+**Also present (not §4, noted):** 33 s late record-open (record opened at
+seq 31 on the first seen rowing frame — the pocketed-phone late-open
+shape); `divergence 1 of 4 programmed` + `registers=1 of 4`, actuals 0
+(terminated mid-work — the in-flight-metres / pocketed-phone items, not
+this one). TWD 0-dips again (seq 34), the known F2a shape.
+
+**Status: §4 is characterized.** One confirming capture (same protocol:
+lock, row through, unlock, keep rowing) showing another resume-adjacent
+`pause-declared` with distance advancing closes the data phase; then the
+task sections + antagonist pass (no skip).
