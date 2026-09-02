@@ -73,6 +73,20 @@ padding takes the same inset. Structural test pins all three declarations;
 Chromium reports zero insets, so the geometry proof is the desk walk, not
 an e2e.
 
+## Desk walk 2 (James, 2026-09-02, build 835)
+
+Two photos (`Photo on 9-2-26 at 7.21 PM`, `#2`): corners and housing
+clear; "still a gap above the bottom edge." Measured off the photos:
+~25–30 pt between END's foot and the glass — Apple's home-indicator inset
+(≈21 pt in landscape) plus our own 12 px gutter padding and 12 px
+controls margin stacked on top of it. Ruling applied: controls stay OUT of
+the home-indicator zone (the safe area's whole purpose); everything of
+ours above it goes, and the gutter's sunken background runs to the glass
+so the inset reads as chrome (HIG, Layout: *"Extend content to fill the
+screen"* — backgrounds to the edges; controls inset). Mechanism: the
+landscape frame pads no bottom inset; the gutter and the controls row
+each carry `env(safe-area-inset-bottom)` themselves. Build 837.
+
 ## Not changed
 
 Every other string and slot on the timer; the connected surface; the
