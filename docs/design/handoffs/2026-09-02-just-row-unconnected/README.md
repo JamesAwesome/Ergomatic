@@ -6,7 +6,7 @@ with TIME ONLY. James's rulings (2026-09-02): time only, distance never
 typed or fabricated; the door's action is `Start Timer`; **every label is
 lifted from a shipped screen, mechanically.**
 
-**Status: REV 2e PRESENTED for Gate 0, 2026-09-02.** Not yet approved.
+**Status: GATE 0 PASSED — James, 2026-09-02, on rev 2e ("Approved").** Board final.
 Rev 1 invented three labels (`Done`, `PHONE CLOCK`, `Time it without the
 monitor`); James: "Match the prose to the other screens. Again make it
 all mechanical." Rev 2 replaces every invented word with the shipped one.
