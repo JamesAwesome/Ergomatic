@@ -8,15 +8,16 @@ sentence for whoever ended it) on the detail screen and wears a short chip in
 History. A connected session that measured nothing reads `NO MONITOR READING`
 with its clock time instead of `LOGGED BY HAND`. A nameless erg stores
 `MONITOR`, not an invented model number. Plus the three stale server riders
-and the now-due `source` sunset, which ride this migration by James's ruling.
+that ride this migration by James's ruling. **The `source` sunset is NOT in
+this plan any more** — it shipped on its own in #273 / v0.35.0 on 2026-09-02
+(see "What #273 already landed" below).
 
 **Architecture:** One new `log_source` enum member (`no-reading`) through ten
 mirrors and a Postgres `ALTER TYPE`; one new pure predicate over the stored
 row (`partialCloseReason`) that the detail screen renders directly and the
 History list reaches through an equivalent SQL boolean in the list
 projection; a literal swap at seven `?? "PM5"` sites; a `DROP COLUMN`, two
-comment reconciliations and one legacy-guard removal; and `source` becoming
-REQUIRED on `POST /api/logs`.
+comment reconciliations and one legacy-guard removal.
 
 **Tech Stack:** React 19 client; Express 5 server; Drizzle/Postgres migration
 0022; Vitest (unit / client / integration projects); Playwright (e2e +
@@ -39,7 +40,7 @@ These are the spec's binding lines. They are constraints, not suggestions;
 each one already cost somebody a round somewhere.
 
 - **Worktree:** `/Users/james/projects/github/jamesawesome/Ergomatic-wt-door`
-  (branch `wave-f-door`, base head `03352ea2`). Run
+  (branch `wave-f-door`, base head `fcf2d4f9`). Run
   `git rev-parse --show-toplevel` before EVERY commit and confirm it prints
   that path. **Every shell write uses an absolute worktree path or a `cd` in
   the SAME command** (RF20 — five stray main-checkout writes so far).
@@ -83,30 +84,46 @@ each one already cost somebody a round somewhere.
   case). A backfill would corrupt correct data to fix a rare one.
 - **`LogSeed.steps[].kind` stays the literal union** `"warmup" | "work"` →
   `"work"`, never widened to `string` (Phase WU's binding sub-ruling).
-- **`deriveLogSource` SURVIVES the sunset** as migration 0020's parity oracle
-  (`server/routes/source.integration.test.ts:447`, and 0020's own header cites
-  that test by name). Only the ROUTE's call to it goes. Its comment is
-  rewritten to say it is the backfill's oracle with no production caller.
-- **The ten mirrors, by name** (§2.4; three are NOT compile-enforced):
+- **`deriveLogSource` SURVIVED the sunset** as migration 0020's parity oracle
+  (`server/routes/source.integration.test.ts:463`, _"the migration's own CASE
+  and deriveLogSource agree on every row"_; 0020's own header cites that test
+  by name). #273 already deleted the route's call and added the SUNSET
+  paragraph at `server/logSource.ts:11-16`. **One residual is still owed and
+  Task 1 carries it:** `logSource.ts:28` still ends the older paragraph with
+  _"at the first tag after this ships, `source` becomes required on POST and
+  this function is deleted"_ — the sunset fired and the function was kept, so
+  that sentence is now false. Task 1 already edits this file (the four-case
+  switch); the reconciliation rides there.
+- **The ELEVEN mirrors, by name** (§2.4). Only mirrors 4, 5 and 7 error on
+  their own if you forget them; every other one is a string, an array, a
+  helper union that fails only at a seeding site, or SQL. Each line
+  re-verified at `fcf2d4f9`; mirror 11 is NEW — #273 created it:
   1. `server/db/schema.ts:152` — the pgEnum array.
   2. `app/domain/types.ts:101-102` — `LogSource` + `LOG_SOURCES`.
-  3. `server/routes/data.ts:1678` — the user-facing 400 message literal.
-  4. `server/logSource.ts:63-76` — `logSourceContradiction`'s switch
+  3. `server/routes/data.ts:1676` — the user-facing membership 400 message
+     literal (`"source must be one of pm5, timer, manual"`). **Not `:1672`**,
+     which is #273's separate `"source is required"` refusal and lists no
+     members.
+  4. `server/logSource.ts:65-82` — `logSourceContradiction`'s switch
      (compile-enforced: total, no `default`).
   5. `src/log/storedSummary.ts:299-308` — `sourceLabel`'s switch
      (compile-enforced: total, no `default`).
-  6. `app/e2e/screenshots.spec.ts:2470` — the `postLog` helper's `source?` type.
+  6. `app/e2e/screenshots.spec.ts:2570` — the `postLog` helper's `source?` type.
   7. `src/session/summaryModel.ts:1210` — `NO_MONITOR_READING_SOURCE`, the
      live word the new stored arm must equal (import it; do not retype it).
-  8. `server/routes/source.integration.test.ts:164` — the list-projection
+  8. `server/routes/source.integration.test.ts:180` — the list-projection
      `arrayContaining` (NOT self-red: `arrayContaining` passes with a short
      array; extend it deliberately).
-  9. `server/routes/source.integration.test.ts:252` — pins the exact 400
-     message; goes red on day one.
+  9. `server/routes/source.integration.test.ts:268` — pins the exact
+     membership 400 message; goes red on day one.
   10. `drizzle/0022_*.sql` — the migration itself.
+  11. `app/e2e/log.spec.ts:89` — `postLog`'s own `source?` type, added by
+     #273. Compile-enforced (a leg seeding `no-reading` through this helper
+     will not typecheck against a short union), so it goes red on use, not on
+     omission — widen it only if a Task 7 leg seeds `no-reading` here.
   **The dangerous one:** `LOG_SOURCES` is `readonly LogSource[]`
   (`domain/types.ts:102`), NOT a tuple — a short array compiles clean, and
-  `routes/data.ts:1677` validates the wire against it, so omitting
+  `routes/data.ts:1675` validates the wire against it, so omitting
   `no-reading` there 400s every save of the new member with nothing red. The
   POST seam test (Task 1) is what makes that omission red.
   **Census command that actually finds them** (the spec's prescribed
@@ -114,19 +131,22 @@ each one already cost somebody a round somewhere.
   ```
   grep -rEn 'pm5.{0,4}timer.{0,4}manual' app | grep -v node_modules
   ```
-  It returned 9 hits at `f6a16963`, and the DELTA pass classified every one:
+  It returns 9 hits at `fcf2d4f9` (re-run after #272 and #273; same count,
+  different lines), and every one is classified:
   `schema.ts:152` (mirror 1), `domain/types.ts:102` (mirror 2's TUPLE only),
-  `data.ts:1678` (mirror 3), `screenshots.spec.ts:2467` (a comment beside
-  mirror 6), `source.integration.test.ts:164` (mirror 8), `:252` (mirror 9),
-  `:431` (a genuinely stale TITLE), `drizzle/0020_*.sql:33` (the enum's
+  `data.ts:1676` (mirror 3), `screenshots.spec.ts:2565` (a comment beside
+  mirror 6), `source.integration.test.ts:180` (mirror 8), `:268` (mirror 9),
+  `:447` (a genuinely stale TITLE), `drizzle/0020_*.sql:33` (the enum's
   creation, not mirror 10 — 0022 does not exist yet), and
-  `source.integration.test.ts:411`, which is **NOT stale**: it names what
+  `source.integration.test.ts:427`, which is **NOT stale**: it names what
   0020's backfill produced for pre-0020 rows, an outcome list rather than the
   enum's membership. Do not touch it.
-  **The census MISSES three mirrors — say so rather than trusting it alone.**
+  **The census MISSES four mirrors — say so rather than trusting it alone.**
   `domain/types.ts:101`'s type alias escapes the window (`" | "` between the
-  members is 5 characters, over `.{0,4}`), and mirrors 4, 5 and 7 put their
-  members on separate `case` lines. Those are the compile-enforced ones, which
+  members is 5 characters, over `.{0,4}`), mirrors 4, 5 and 7 put their
+  members on separate `case` lines, and mirror 11
+  (`e2e/log.spec.ts:89`) is a `" | "`-separated union like the alias. Those
+  are the compile-enforced ones, which
   is why the omission is survivable — but a census that silently drops the
   UNION beside the tuple it does find is the RF11 shape, and the tuple is the
   half that compiles clean when short.
@@ -135,10 +155,10 @@ each one already cost somebody a round somewhere.
   `gh pr list --state open --json number,title` and check every open PR for a
   competing `drizzle/` file. Record the check in the migration header, the way
   `drizzle/0021_crazy_gamma_corps.sql:26-27` does.
-- **The additive matrix is stated per task where it bites** (Tasks 1, 2, 7).
+- **The additive matrix is stated per task where it bites** (Tasks 1, 2).
   A fourth ENUM MEMBER is NOT additive the way its COLUMN was: an old server
   ignores an unknown body KEY but 400s an unknown enum MEMBER at
-  `data.ts:1677` with no client retry (the client's only retry strips
+  `data.ts:1675` with no client retry (the client's only retry strips
   `workoutId`).
 - **Every new assertion gets a NAMED mutation with the failure text it must
   produce** (RF21), recorded in the task report. **Commit the real change
@@ -160,20 +180,62 @@ each one already cost somebody a round somewhere.
 
 ---
 
-## Reachability and citations verified at `03352ea2`
+## What #273 already landed (re-scope, 2026-09-02)
 
-Every file:line this plan uses, verified by reading the file at this head (not
-transcribed from the spec or the ROADMAP — the last three antagonist passes
-each caught a stale transcription).
+This plan was written at `03352ea2`, before two merges landed on main. It is
+re-scoped here against `fcf2d4f9`.
+
+- **#273 / v0.35.0 shipped the `source` sunset on its own.** `POST /api/logs`
+  already requires `source`: absent is `400 {error: "source is required",
+  field: "source"}` (`server/routes/data.ts:1671-1674`), the `deriveLogSource`
+  call and the `source=derived` console line are gone, every server and e2e
+  fixture already names its door, `docs/RELEASING.md:45-49` records the API
+  break, and the v0.35.0 release note states the floor. **Old Task 7 is
+  DELETED**; what did not ship rides Task 5 (below). The ROADMAP's own sunset
+  row was reconciled by #273 and is not touched again here.
+- **#273 did NOT do three things old Task 7 planned, and two of them were
+  deliberate reversals of this plan's DELTA verdicts.** (a) The three frozen
+  `V0_*_LOG_BODY` fixtures were NOT inverted into 400 legs (verdict B3) —
+  they each GAINED `source` with a comment naming it the one deliberate
+  departure from the frozen wire shape (`data.test.ts:1143`, `:2997`,
+  `:3327`, inside the bodies at `:1123`, `:2974`, `:3310`), and the sunset's
+  own gate is the single 400 leg at `source.integration.test.ts:139`.
+  (b) Both e2e `postLog` helpers got a blanket derive-emulating default
+  (`log.spec.ts:93-99`, `screenshots.spec.ts:2644-2650`), which verdict M-4
+  and old Task 7's step 5 both
+  forbade as a hand-copy of `deriveLogSource`. Both are SHIPPED and are not
+  this PR's to relitigate — recorded so a reviewer is not surprised to find
+  the plan's ruling and main's code disagreeing.
+  (c) `logSource.ts:28` still promises the function will be deleted; Task 1
+  reconciles it.
+- **#272 (a Just Row stands in for a plan session) changed nothing this plan
+  depends on.** `LogInput.advancesPlan` became optional and `PlanLink` gained
+  `workoutId` (`stores/logs.ts`), but `source`, `endedBy`, `deviceName` and
+  the `LOG_LIST_COLUMNS` projection are untouched — `source` is still
+  `logs.ts:306` and `endedBy` still `:316` inside the same projection object,
+  now `:288-359`. Both Just Row doors still post `steps: []`
+  (`JustRowLog.tsx:201`, `:232`), so Task 3's clause-2 argument and Task 4's
+  `jsonb_array_length > 0` leg stand unchanged. #272 DID add four more
+  `.free-row-chip` assertions (seven now, listed below), which widens the
+  blast radius of reusing that class and strengthens Task 4's own-class
+  decision.
+
+---
+
+## Reachability and citations verified at `fcf2d4f9`
+
+Every file:line this plan uses, verified by reading the file at THIS head
+(not transcribed from the spec, the ROADMAP, or this plan's own previous
+revision — the last three antagonist passes each caught a stale
+transcription, and two merges have moved these lines since).
 
 | Subject | Verified location | Note |
 | --- | --- | --- |
 | pgEnum `log_source` | `app/server/db/schema.ts:152` | "Three mirrors" comment at `:144-151` |
 | `LogSource` / `LOG_SOURCES` | `app/domain/types.ts:101` / `:102` | "Three mirrors" comment at `:98-100` |
-| 400 message literal | `app/server/routes/data.ts:1678` | inside the `else` arm at `:1676-1689` |
-| `deriveLogSource` call + `source=derived` log | `app/server/routes/data.ts:1670` / `:1675` | the sunset deletes both |
-| `logSourceContradiction` switch | `app/server/logSource.ts:63-76` | three cases; total, no `default` |
-| `deriveLogSource` | `app/server/logSource.ts:53-57` | SURVIVES; comment at `:11-25` rewritten |
+| Membership 400 message literal | `app/server/routes/data.ts:1676` | the membership refusal at `:1675-1678`. #273's separate absent-`source` 400 (`"source is required"`) is `:1671-1674` and names no members |
+| `logSourceContradiction` switch | `app/server/logSource.ts:65-82` | three cases; total, no `default` |
+| `deriveLogSource` | `app/server/logSource.ts:59-63` | SURVIVED #273; its SUNSET paragraph is `:11-16`. `:28`'s _"this function is deleted"_ is the residual Task 1 reconciles |
 | `sourceLabel` switch | `app/src/log/storedSummary.ts:299-308` | `?? "PM5"` at `:302`, its comment at `:295-298` |
 | `buildMeta` negation gate | `app/src/log/storedSummary.ts:329-338` | `if (source !== "LOGGED BY HAND")` at `:335` |
 | `buildStoredTotalLine` null check | `app/src/log/storedSummary.ts:648` | its comment at `:630-642`, the false sentence at `:638-640` |
@@ -189,82 +251,62 @@ each caught a stale transcription).
 | Detail render slot | `app/src/log/FromTheLog.tsx:450-452` | `<p className="summary-meta">`, ABOVE `SummaryHeroesBlock` (`:453`) |
 | `MachineConfirmedBlock` | `app/src/log/FromTheLog.tsx:65-66`, rendered `:535` | untouched; marker is a sibling ABOVE it |
 | The three old-literal pins | `storedSummary.test.ts:1330`, `FromTheLog.test.tsx:391`, `:406` | exactly three; `FromTheLog.test.tsx:408` is a `/^LINK LOST/` regex and survives |
-| Release-noted promise | `app/src/news/content/releaseNotes.ts:351` | says "LINK LOST appears on the session detail" — shortening the sentence does not falsify it |
+| Release-noted promise | `app/src/news/content/releaseNotes.ts:366` | says "LINK LOST appears on the session detail" — shortening the sentence does not falsify it |
 | `NO_MONITOR_READING_SOURCE` | `app/src/session/summaryModel.ts:1210` | exported const |
 | Live no-reading meta (no timeLabel) | `app/src/session/summaryModel.ts:1234-1245` | its comment claims the stored screen gates on the same bucket — **PR A makes that FALSE** (Task 2) |
 | `connectedArrivalWithNoRecord` | `app/src/session/LogSession.tsx:387-389` | `from=monitor` AND `readHandoff() === null` |
-| `connectedNoRecord` state | `app/src/session/LogSession.tsx:1574-1576` | mount-time `useState`, read at `:2088`/`:2192` |
-| Manual door `handleSave` | `app/src/session/LogSession.tsx:2105-2122` | posts `source: "manual"`, NO `deviceName` |
-| Monitor door post | `app/src/session/LogSession.tsx:1869-1870` | `deviceName` + `source: "pm5"` |
-| **The deviceName-band guard** | `app/src/session/LogSession.tsx:730-745` | deletes `body.source` when `pm5` — **collides with the sunset** (Task 7) |
-| `useLogForm` (shared submit) | `app/src/session/LogSession.tsx:691` onward | all three doors post through it |
-| JR door posts | `app/src/justrow/JustRowLog.tsx:178-184` (timer), `:209-214` (pm5), `:244` (endedBy spread) | |
-| `LOG_LIST_COLUMNS` | `app/server/stores/logs.ts:280-331` | `source` at `:299`, `endedBy` at `:308` |
-| jsonb-scalar SQL idiom | `app/server/stores/logs.ts:341-343` | the SCALAR path cast — the wrong idiom for a set predicate |
+| `connectedNoRecord` state | `app/src/session/LogSession.tsx:1582-1584` | mount-time `useState`, read at `:2096`/`:2200` |
+| Manual door `handleSave` | `app/src/session/LogSession.tsx:2113-2130` | posts `source: "manual"` (`:2126`), NO `deviceName` |
+| Monitor door post | `app/src/session/LogSession.tsx:1877-1878` | `deviceName` + `source: "pm5"` |
+| **The deviceName-band guard** | `app/src/session/LogSession.tsx:736-752` | #273 changed it from `delete body.source` to `body.source = "manual"` (`:751`); the connected door is still LOST — **Task 5 substitutes `MONITOR` and keeps `pm5`** |
+| `useLogForm` (shared submit) | `app/src/session/LogSession.tsx:695` onward | all three doors post through it |
+| JR door posts | `app/src/justrow/JustRowLog.tsx:201-207` (timer), `:232-237` (pm5), `:267` (endedBy spread) | both post `steps: []`; #272 moved the lines and changed nothing else |
+| `LOG_LIST_COLUMNS` | `app/server/stores/logs.ts:288-359` | `source` at `:306`, `endedBy` at `:316` |
+| jsonb-scalar SQL idiom | `app/server/stores/logs.ts:348-350` | the SCALAR path cast — the wrong idiom for a set predicate |
 | `EXISTS` set-predicate precedent | `app/drizzle/0020_wooden_millenium_guard.sql:36-39` | `EXISTS (SELECT 1 FROM jsonb_array_elements("steps") AS s WHERE …)` |
 | `RecentLog` | `app/src/api/useRecentLogs.ts:19-77` | **carries no `endedBy` today** although the projection selects it |
 | `LogRow` render | `app/src/log/LogRow.tsx:201-232` | hero span gated `snippet !== ""` at `:230`; `heroSnippet` at `:179-188` can return `""` |
 | `LogRow` consumers | `HistoryList.tsx:195` (`hero`), `Today.tsx:1690` (no `hero`) | Today's last three get no chip — the approved cost |
-| `.free-row-chip` rule | `app/src/index.css:548-559` | **`FreeRowChip.test.tsx:64-70` pins `rule.selectors` to exactly `[".free-row-chip"]`** — the partial chip needs its OWN class (Task 4) |
-| `.free-row-chip` counters | `e2e/justrow.spec.ts:157`, `:236` (`toHaveText("JR")`), `e2e/screenshots.spec.ts:4879` (`toHaveCount(2)`) | reusing the class breaks all three |
-| `.today-log-hero` | `app/src/index.css:2433-2439` | `flex: 1 0 100%` — Gate slot B adds flex row + 8px gap |
+| `.free-row-chip` rule | `app/src/index.css:548-572` | #272 added the badge-column centring block, so the rule is longer than the plan first read it. **`FreeRowChip.test.tsx:64-70` still pins `rule.selectors` to exactly `[".free-row-chip"]`** — the partial chip needs its OWN class (Task 4) |
+| `.free-row-chip` counters | **SEVEN** at this head: `e2e/justrow.spec.ts:165`, `:252`, `:416`; `e2e/screenshots.spec.ts:1251`, `:1260`, `:1265` (`toHaveCount(2)`), `:5044` (`toHaveCount(2)`) | #272 added four (the Plan tab's chip); reusing the class breaks all seven |
+| `.today-log-hero` | `app/src/index.css:2446-2452` | `flex: 1 0 100%` — Gate slot B adds flex row + 8px gap |
 | RC-18 sites (six + read side) | `driver.ts:1035`, `capacitorBle.ts:465`, `capacitorBle.ts:494`, `webBluetooth.ts:296`, `JustRow.tsx:301`, `surfaceModel.ts:1890`, `storedSummary.ts:302` | census exact |
 | `namePrefix: "PM5"` scan filters | `webBluetooth.ts:288`, `capacitorBle.ts:480` | discovery, not copy — DO NOT change |
 | "no screen ever renders" claim | `app/src/monitor/useMonitorSession.ts:1100` | contradicted by `surfaceModel.ts:1890` |
 | `session.deviceName` provenance | `useMonitorSession.ts:4528`, `:4746` (`update({ deviceName: device.name })`); `INITIAL_STATE` `deviceName: null` at `:1489` | so `surfaceModel.ts:1890`'s null input IS reachable |
 | `JustRow.tsx` arm gate | `app/src/justrow/JustRow.tsx:114` (`session.deviceName !== null` before `beginFreeRow`) | `ready` at `:296` requires `armed`, which requires that call — the `:301` fallback is likely dead |
 | RC-18 comment sweep sites | `LogSession.tsx:723`, `storedSummary.ts:295-298` | |
-| Warm-up guard / union | `app/src/session/logDraft.ts:864` / `:607` | ROADMAP `:702-707` already carries the corrected numbers |
-| `preferences.warmup` column | `app/server/db/schema.ts:425` | **ROADMAP says `:369` — stale**; PUT already 400s the field at `data.ts:1860-1861` |
+| Warm-up guard / union | `app/src/session/logDraft.ts:864` / `:607` | ROADMAP `:754-758` already carries the corrected numbers |
+| `preferences.warmup` column | `app/server/db/schema.ts:425` | **ROADMAP says `:369` — stale**; PUT already 400s the field at `data.ts:1862-1863` |
 | RC-12 comment | `app/domain/monitor/types.ts:630-631`, strike block `:635-646` | one site only; `schema.ts:237-251` already carries the other CORRECTED block |
 | RC-12's finding | `docs/history/phase-rc.md:2054-2056` | _"it covers neither (Phase LM's lifecycle work is the evidence)"_ |
-| Rollback table | `docs/RELEASING.md:163-166` | gains a row |
-| Additive-only API note | `docs/RELEASING.md:45-46` | gains the sunset break |
-| Deploy-lag evidence | `docs/RELEASING.md:95-97` | six merges, eleven hours, 2026-09-01 |
+| Rollback table | `docs/RELEASING.md:168-171` | gains a row (0022's `ALTER TYPE` + `DROP COLUMN`) |
+| Additive-only API note | `docs/RELEASING.md:45-49` | #273 already added the v0.35.0 break line; **PR A adds nothing here** |
+| Deploy-lag evidence | `docs/RELEASING.md:99-103` | six merges, eleven hours, 2026-09-01 |
 | `M` is work intervals | `app/src/session/logDraft.ts:856` | `run.program.intervals.forEach` — no rest rows |
 | Lost-boundary producer | `app/src/session/logDraft.ts:804-806` | |
 | Zero-frame producer | `app/domain/monitor/types.ts:62-63` | |
 | Unmatched-interval discriminator | `app/src/session/logDraft.ts:913-917` | no `actualSource` at all |
 | `actualMeters`/`actualSeconds` writers | `app/src/session/logDraft.ts:910-911` | inside `buildMonitorLogSteps` only |
-| Route 400s explicit `actualSource: null` | `app/server/routes/data.ts:472-479` | so SQL `NOT (s ? 'actualSource')` ≡ TS `undefined` |
+| Route 400s explicit `actualSource: null` | `app/server/routes/data.ts:472-480` | so SQL `NOT (s ? 'actualSource')` ≡ TS `undefined` |
 | `eligibilityFailure` | `app/server/concept2/mapping.ts:43-55`, null check at `:49` | `SessionLogRow` at `:19-30`; `toMappingRow` at `routes/concept2.ts:136-157`; caller at `:627` |
 | Latest migration | `app/drizzle/0021_crazy_gamma_corps.sql` | next index is **0022** |
-| Screenshot precedents | `screenshots.spec.ts:2768` (`log-detail`), `:2698` (`log-history`), `:4844` (`justrow-history-chip`), `:968`/`:1031` (portrait+landscape pair) | |
-| e2e `postLog` helpers | `screenshots.spec.ts:2446-2500`, `log.spec.ts:66-105` | **neither posts `endedBy`; `log.spec.ts`'s posts no `source`** |
-| e2e frozen old-client helpers | `log.spec.ts:112` and `screenshots.spec.ts:2663` (both `postV0110Log`) | deliberately v0.11.0-shaped; the sunset breaks both — see Task 7's B3 ruling |
+| Screenshot precedents | `screenshots.spec.ts:2880` (`log-detail`), `:2810` (`log-history`), `:5009` (`justrow-history-chip`), `:971`/`:1034` (`log-monitor-dropped` portrait+landscape pair) | |
+| e2e `postLog` helpers | `screenshots.spec.ts:2544-2670`, `log.spec.ts:66-119` | **neither posts `endedBy`** — that is what Task 7 step 1 extends. Both now post `source`, via #273's derive-emulating default |
+| e2e frozen old-client helpers | `log.spec.ts:126` and `screenshots.spec.ts:2771` (both `postV0110Log`) | both already carry `source: "timer"` with #273's own comment; **nothing owed here** |
 
-**Sunset blast radius, re-counted at `f6a16963`** (DELTA verdict B2 — the
-previous table was wrong twice over: it counted `grep -c 'post("/api/logs")'`
-per server file and then wrote "via helpers" for five e2e files, two of which
-use no helper at all, while its per-file numbers came from a different head).
-Two commands, both re-runnable, and their output is the table:
+**The sunset blast-radius table is GONE.** It existed to size old Task 7's
+fixture sweep across 15 files; #273 performed that sweep. Every POST site
+under `app/server` and `app/e2e` already states its `source`, verified by
+re-running the table's own two commands at `fcf2d4f9`:
 
 ```
 grep -rn 'fetch("/api/logs"' app/e2e
 grep -rn 'post("/api/logs")' app/server
 ```
 
-| File | POSTs at this head | The `source` each site must state |
-| --- | --- | --- |
-| `server/routes/data.test.ts` | 164 | both `validLogBody` factories (`:394`, `:1090`; `grep -c validLogBody` → **164**) default `manual`; every site carrying a `deviceName` states `pm5`. **The three frozen bodies are EXEMPT — see B3 below** |
-| `server/routes/machineSummary.integration.test.ts` | **11** | per body shape |
-| `server/routes/freeRow.integration.test.ts` | 7 | per body shape |
-| `server/routes/completedAt.integration.test.ts` | **5** | per body shape |
-| `server/routes/isolation.integration.test.ts` | **4** | per body shape |
-| `server/routes/concept2.integration.test.ts` | 3 | `:147`'s `deviceName` → `pm5`. **`:92`'s `source: "James Morelli"` is the C2 API's own field, NOT `LogSource`** — do not sweep it |
-| `server/routes/source.integration.test.ts` | 3 | all three are the derive legs at `:135`/`:144`/`:150`; Task 7 step 1 INVERTS them — **and see B4: they are also the only seeders for `:156`** |
-| `server/routes/endedBy.integration.test.ts` | **2** | per body shape |
-| `server/app.test.ts`, `logAmendment.integration.test.ts`, `seriesCapture.integration.test.ts` (**1**), `testHistoryDecouple.integration.test.ts` | 1 each | per body shape |
-| `e2e/design.spec.ts` | **5, NO helper** — `:124`, `:166`, `:219`, `:367`, `:2519` | `:219` and `:367` post `deviceName: "PM5 432331249"` → `source: "pm5"`; the other three per shape |
-| `e2e/today.spec.ts` | **4, NO helper** — `:194`, `:243`, `:283`, `:1144` | per body shape |
-| `e2e/screenshots.spec.ts` | `postLog` (`:2446`, 9 call sites) **plus two POSTs outside it**: `:293` (`seedLogs`'s own loop) and `:2665` (`postV0110Log`) | `postLog` gets NO blanket default (**M-4**); `:293` per shape; `:2665` is a frozen old-client shape (**B3**) |
-| `e2e/log.spec.ts` | `postLog` (`:66`, its fetch at `:87`) and `postV0110Log` (`:112`, fetch at `:114`) | `postLog` defaults `manual`; `postV0110Log` is frozen (**B3**) |
-| `e2e/connected.spec.ts` | **0** | `:817` is a GET; the old table's "via helpers" row was wrong about this file |
-
-Most SERVER sites route through a per-file body helper, so that half is
-mechanical. The e2e half is not: nine call sites in two files have no helper
-to edit, and four fixtures across three files exist *because* they are
-old-shaped. Task 7 is sized for both halves.
+The only sweep this PR still owes is the FOURTH member's own seeding, which
+is Task 1's job and lives there.
 
 ---
 
@@ -272,26 +314,30 @@ old-shaped. Task 7 is sized for both halves.
 
 Stated up front so a reviewer is not surprised.
 
-1. **§8.1's task (5) is SPLIT into Task 6 (riders 1–3) and Task 7 (the
-   sunset).** A reviewer could accept a `DROP COLUMN` with no reader and
-   reject a change that makes every pre-v0.34.0 install unable to save; and
-   the sunset alone touches ~15 test files. Splitting is the brief's own
-   criterion ("only where a reviewer could reject one and approve its
-   neighbour").
+1. **§8.1's task (5) is now RIDERS ONLY (Task 6); its sunset half SHIPPED
+   SEPARATELY** as #273 / v0.35.0 on 2026-09-02, before this plan ran. The
+   plan originally split task (5) into Task 6 (riders 1–3) and Task 7 (the
+   sunset), on the criterion that a reviewer could accept a `DROP COLUMN`
+   with no reader and reject a change that makes every pre-v0.34.0 install
+   unable to save. That split held; the sunset simply went first and alone.
+   **Old Task 7 is deleted and old Task 8 is now Task 7** — this plan has
+   SEVEN tasks.
 2. **Three defects the spec did not name are carried here**, each with its own
    step and gate. They are findings, not scope creep:
-   - **The deviceName-band guard defeats the sunset** (Task 7, step 4).
-     `LogSession.tsx:730-745` deletes `body.source` when the door claim is
-     `pm5` and the advertised name is `""` or >64 chars, so the server can
-     derive. After the sunset that body 400s — losing the exact save the
-     guard exists to let through. The fix belongs in this PR because this PR
-     both lands the sunset AND introduces the neutral literal the guard should
-     substitute instead of deleting.
+   - **The deviceName-band guard throws away the connected door** (now
+     Task 5, step 6). `LogSession.tsx:736-752` fires when the advertised name
+     is `""` or >64 chars. It used to `delete body.source`; #273 changed that
+     to `body.source = "manual"` (`:751`) so the sunset would not 400 the
+     save. Either way the row LIES about its door: a genuinely connected
+     session is stored as by-hand. PR A is where the fix belongs, because PR A
+     introduces the neutral literal the guard can substitute for the unusable
+     name — keeping `source: "pm5"` and its required `deviceName` together.
    - **The partial chip cannot reuse `.free-row-chip`** (Task 4, step 3).
      `FreeRowChip.test.tsx:64-70` asserts exactly one rule whose selectors are
-     exactly `[".free-row-chip"]`, and three e2e assertions count or read the
-     text of that class. The chip gets its OWN class with the same
-     declarations, plus a structural test pinning the two rules equal.
+     exactly `[".free-row-chip"]`, and **seven** e2e assertions count or read
+     the text of that class (#272 added four). The chip gets its OWN class
+     with the same declarations, plus a structural test pinning the two rules
+     equal.
    - **The SQL boolean returns NULL, not `false`, on a legacy row** (Task 4,
      step 3). `endedBy` is nullable; `true AND NULL` is NULL in SQL, so a
      `pm5` row with a null close reason would reach the client as
@@ -308,25 +354,27 @@ Stated up front so a reviewer is not surprised.
    unchanged; only the model field name and its three test references move.
 5. **`RecentLog` gains `endedBy` as well as `partial`** (Task 4).
    `LOG_LIST_COLUMNS` has selected `endedBy` since Phase LL Task 4
-   (`stores/logs.ts:308`) but `RecentLog` never declared it. Declaring it lets
+   (`stores/logs.ts:316`) but `RecentLog` never declared it. Declaring it lets
    the chip's word come from the ONE client allowlist the detail line uses,
    instead of a second copy of the word table in SQL.
 
 ---
 
-### Task 1: Migration 0022, the ten mirrors, and the four-case contradiction
+### Task 1: Migration 0022, the eleven mirrors, and the four-case contradiction
 
 **Files:**
 - Create: `app/drizzle/0022_<generated-name>.sql`
 - Modify: `app/server/db/schema.ts:144-152` (pgEnum + the "three mirrors"
   comment), `app/domain/types.ts:98-102` (union, tuple, comment),
-  `app/server/routes/data.ts:1678` (400 message),
-  `app/server/logSource.ts:27-42` (comment) and `:63-76` (switch),
+  `app/server/routes/data.ts:1676` (membership 400 message),
+  `app/server/logSource.ts:17-31` (the stale "this function is deleted"
+  sentence at `:28`) and `:65-82` (switch),
   `app/src/log/storedSummary.ts:288-308` (`sourceLabel` + its comment),
-  `app/e2e/screenshots.spec.ts:2467-2470` (comment + type),
-  `docs/RELEASING.md:163-166` (rollback floor row)
-- Test: `app/server/routes/source.integration.test.ts` (extend `:164`, `:252`,
-  the stale titles at `:411`/`:431`, and add the new POST seam legs)
+  `app/e2e/screenshots.spec.ts:2565-2570` (comment + type),
+  `docs/RELEASING.md:168-171` (rollback floor row)
+- Test: `app/server/routes/source.integration.test.ts` (extend `:180`'s array
+  and its seeding loop, `:268`'s message, the stale title at `:447`, and add
+  the new POST seam legs)
 
 **Interfaces:**
 - Produces: `LogSource = "pm5" | "timer" | "manual" | "no-reading"` — every
@@ -335,7 +383,8 @@ Stated up front so a reviewer is not surprised.
   — four cases, `pm5` requires a name, the other three forbid one.
 
 **Additive matrix, restated because it bites HERE** (§2.4): old client → new
-server is unaffected (posts `manual` as today, derived path until Task 7).
+server is already settled — since #273 an old client that posts no `source`
+is a 400 whatever this PR does, and one that posts `manual` is unaffected.
 **New client → old server 400s `no-reading` on field `source` and the save is
 LOST** — the client's only retry strips `workoutId`. The window is the deploy
 lag alone (server deploys on merge; the client reaches phones by TestFlight
@@ -349,17 +398,18 @@ build's behaviour no arm in this PR can change, stated in the release note.
       ```
       grep -rEn 'pm5.{0,4}timer.{0,4}manual' app | grep -v node_modules
       ```
-      Nine hits at `f6a16963`, each already classified in Global Constraints
+      Nine hits at `fcf2d4f9`, each already classified in Global Constraints
       above — confirm the output still matches that classification exactly.
-      Sweep-only: `:431`'s title and `screenshots.spec.ts:2467`'s comment.
-      **Leave `source.integration.test.ts:411` alone** (it describes 0020's
+      Sweep-only: `:447`'s title and `screenshots.spec.ts:2565`'s comment.
+      **Leave `source.integration.test.ts:427` alone** (it describes 0020's
       backfill outcome, not the enum). **And do not treat the census as
-      complete**: it misses `domain/types.ts:101` and mirrors 4, 5, 7 — the
-      ten-item list is the authority, the census is a cross-check. A hit you
-      cannot classify is a finding — report it.
+      complete**: it misses `domain/types.ts:101`, mirrors 4, 5, 7 and mirror
+      11 (`e2e/log.spec.ts:89`) — the eleven-item list is the authority, the
+      census is a cross-check. A hit you cannot classify is a finding —
+      report it.
 - [ ] **Step 2: Write the failing POST seam legs** in
       `server/routes/source.integration.test.ts`, modelled verbatim on its
-      existing per-value legs (read `:172-232` first and copy the
+      existing per-value legs (read `:186-273` first and copy the
       `postThenGet` shape):
 
       ```ts
@@ -390,7 +440,7 @@ build's behaviour no arm in this PR can change, stated in the release note.
 - [ ] **Step 3: Run them; verify they fail.** Docker up.
       `pnpm test --project integration -t "no-reading"`. Expect the 201 leg to
       fail with `expected 400 to be 201` (the `LOG_SOURCES.includes` check at
-      `data.ts:1677` rejects the unknown member) and the 400 leg to fail on the
+      `data.ts:1675` rejects the unknown member) and the 400 leg to fail on the
       message (`"source must be one of pm5, timer, manual"` ≠ the
       contradiction string). **Quote both failures in the report.**
 - [ ] **Step 4: Widen the two compile-enforced switches first** — they are the
@@ -447,31 +497,45 @@ build's behaviour no arm in this PR can change, stated in the release note.
       ```
       `storedSummary.ts` already imports from `../session/summaryModel`
       (`:91-102`) — add to that import, do not open a second one.
-- [ ] **Step 6: Widen the three non-enforced mirrors and the enum.**
-      `domain/types.ts:101-102`; `schema.ts:152`; `data.ts:1678` becomes
+- [ ] **Step 6: Widen the non-enforced mirrors and the enum, and reconcile
+      `logSource.ts:28`.**
+      `domain/types.ts:101-102`; `schema.ts:152`; `data.ts:1676` becomes
       `"source must be one of pm5, timer, manual, no-reading"`;
-      `e2e/screenshots.spec.ts:2470` becomes
+      `e2e/screenshots.spec.ts:2570` becomes
       `source?: "pm5" | "timer" | "manual" | "no-reading";`.
+      **Mirror 11 (`e2e/log.spec.ts:89`) is widened ONLY IF a Task 7 e2e leg
+      seeds `no-reading` through that helper** — it is compile-enforced, so
+      leaving it short can only fail loudly at the seeding site, never
+      silently. Say which way you went.
       **Correct BOTH "three mirrors" comments** (`schema.ts:148-151`,
-      `domain/types.ts:98-100`) to say TEN and to name which are
+      `domain/types.ts:98-100`) to say ELEVEN and to name which are
       compile-enforced and which are not — quoting the `LOG_SOURCES`-is-not-a-
       tuple hazard by name.
+      **Reconcile `logSource.ts:28` in the same edit** — this task already
+      opens that file for step 4's switch. Its older paragraph still ends
+      _"at the first tag after this ships, `source` becomes required on POST
+      and this function is deleted"_. The sunset fired at v0.35.0 (#273) and
+      the function was KEPT as migration 0020's oracle; #273 added that fact
+      as a new paragraph at `:11-16` but left the old promise standing
+      beneath it. Replace the false clause in place — do not append a third
+      paragraph correcting the second.
 - [ ] **Step 7: Update mirrors 8 and 9 and the ONE stale test title.**
-      **`source.integration.test.ts:164`'s `arrayContaining` GAINS
-      `"no-reading"` — and this step is COUPLED to Task 7 step 1** (DELTA
-      verdict B4). The array may only list a member the fixtures actually
-      seed, and today nothing seeds one; Task 7 step 1 adds an explicit-
-      `source` seeding leg per member (including `no-reading`) BEFORE the
-      list-projection test at `:156`, which is what makes this extension a
-      real gate rather than decoration. **If Task 7 is not landing in the same
-      PR, do not extend the array** — say so instead. Task 7 step 1 carries
-      the mirrored note.
-      `:252`'s expected message becomes the new literal.
-      **`:431`'s title only** gets the fourth member ("the column is the
+      **`source.integration.test.ts:180`'s `arrayContaining` GAINS
+      `"no-reading"`, and its seeding loop gains the matching row.** #273
+      already put an explicit-`source` seeding loop inside that same test
+      (`:162-175`: one `postThenGet` per member — `pm5` with a `deviceName`,
+      `timer` with a stopwatch step, `manual` with neither), which discharged
+      the old B4 coupling to the deleted sunset task. **Add a fourth entry —
+      `body({ source: "no-reading" })`, no `deviceName` — to that loop, in the
+      same commit as the array extension.** Extending the array without
+      seeding the row is decoration: `arrayContaining` passes against a short
+      array and cannot go red.
+      `:268`'s expected message becomes the new literal.
+      **`:447`'s title only** gets the fourth member ("the column is the
       enum: Postgres refuses a value outside pm5 | timer | manual"); its body
       still posts `'bogus'` and still expects `22P02`, unchanged.
-      **`:411` is NOT stale and must NOT be touched** (found by reading it at
-      `f6a16963`): "rows inserted BEFORE 0020 read back pm5 / pm5 / timer /
+      **`:427` is NOT stale and must NOT be touched** (found by reading it at
+      `fcf2d4f9`): "rows inserted BEFORE 0020 read back pm5 / pm5 / timer /
       manual / manual after it" describes what 0020's BACKFILL produced for
       pre-0020 rows — an outcome list, not the enum's membership. Rows that
       predate 0020 cannot read back a member added in 0022. The census hit
@@ -521,7 +585,7 @@ build's behaviour no arm in this PR can change, stated in the release note.
       --    strips `workoutId` — the save is LOST, not degraded.
       --
       -- 2. `preferences.warmup` is DROPPED (spec §4 rider 1). No reader in
-      --    either direction: `routes/data.ts:1860-1861` already 400s the
+      --    either direction: `routes/data.ts:1862-1863` already 400s the
       --    field on PUT ("warmup is no longer a preference"), and the only
       --    other hit in the tree is `schema.ts` itself. ONE-WAY DDL: rolling
       --    the image back past this tag against a post-drop DB gives a
@@ -538,7 +602,7 @@ build's behaviour no arm in this PR can change, stated in the release note.
       -- timestamp ordering.
       ```
 - [ ] **Step 9: Add the rollback-floor row** to `docs/RELEASING.md`'s table
-      (after `:166`), naming the tag that ships PR A, and say both halves: the
+      (after `:171`), naming the tag that ships PR A, and say both halves: the
       `no-reading` 400 and the one-way `DROP COLUMN`. **Root markdown is never
       Prettier-formatted — wrap by hand to match the surrounding rows.**
 - [ ] **Step 10: Run** `pnpm test --project integration -t "source"` and
@@ -572,8 +636,9 @@ build's behaviour no arm in this PR can change, stated in the release note.
 ### Task 2: The client `no-reading` write, the positive `timeLabel` gate, and the two biconditional readers
 
 **Files:**
-- Modify: `app/src/session/LogSession.tsx:2105-2122` (manual door's
-  `handleSave`), `:557-563` (the `LogFormFields.source` doc comment)
+- Modify: `app/src/session/LogSession.tsx:2113-2130` (manual door's
+  `handleSave`, `source: "manual"` at `:2126`), `:557-563` (the
+  `LogFormFields.source` doc comment)
 - Modify: `app/src/log/storedSummary.ts:310-338` (`buildMeta`'s gate + its
   comment), `:630-648` (`buildStoredTotalLine` + its comment), `:74` and `:81`
   (dead `## Phase LM` pointers)
@@ -664,8 +729,12 @@ ready-for-merge comment carries the tester-floor reminder.
       // `storedSummary.ts:66-73`).
       source: connectedNoRecord ? "no-reading" : "manual",
       ```
-      Reconcile `LogSession.tsx:557-563`'s doc comment, which currently says
-      the manual branch says `manual` "including the no-reading arrival".
+      Reconcile `LogSession.tsx:557-563`'s doc comment. It is stale TWICE
+      over: it says the manual branch says `manual` "including the no-reading
+      arrival" (which this step falsifies), and its last sentence — _"The
+      server derives the member only for a body that omits it … a path with a
+      sunset"_ — describes a path #273 deleted at v0.35.0. Rewrite both
+      clauses; `source` is required on the wire and nothing derives it.
 - [ ] **Step 4: `buildMeta`'s positive gate.** Replace the resolved-word
       negation at `storedSummary.ts:335` with an allowlist over the COLUMN:
 
@@ -996,10 +1065,15 @@ ready-for-merge comment carries the tester-floor reminder.
       ```
       grep -rn "lost the monitor before the end" app docs ROADMAP.md | grep -v node_modules
       ```
-      At `03352ea2` this returns 6 hits: 3 code/test (updated here), and 3 in
-      `docs/history/phase-ll.md` and `docs/superpowers/plans/2026-08-23-cohort-unlock.md`
-      — **both are RECORDS of what shipped then and must NOT be edited.** Say
-      so in the report.
+      At `fcf2d4f9` this returns **9** hits: **4** code/test (updated here —
+      `storedSummary.ts:953`, `storedSummary.test.ts:1330`,
+      `FromTheLog.test.tsx:391` and `:406`), 1 in `docs/history/phase-ll.md`,
+      2 in `docs/superpowers/plans/2026-08-23-cohort-unlock.md` (`:17`, `:70`)
+      — **both of those are RECORDS of what shipped then and must NOT be
+      edited** — and 2 in THIS plan (the citations table and Task 3's own
+      snippet), which move with the change. The plan previously said "6 hits:
+      3 code/test"; that was wrong on both halves and is corrected here. Say
+      the recount in the report.
 - [ ] **Step 7: Run** `pnpm exec vitest run --project client -t "partial"` and
       the full client + unit projects. Green, both summary lines read.
 - [ ] **Step 8: Commit:**
@@ -1045,18 +1119,18 @@ ready-for-merge comment carries the tester-floor reminder.
 ### Task 4: The History list — SQL-derived `partial` and the chip
 
 **Files:**
-- Modify: `app/server/stores/logs.ts:280-331` (`LOG_LIST_COLUMNS`)
+- Modify: `app/server/stores/logs.ts:288-359` (`LOG_LIST_COLUMNS`)
 - Modify: `app/src/api/useRecentLogs.ts:19-77` (`RecentLog` gains `partial`
   and `endedBy`)
 - Modify (fixtures — `RecentLog.partial` is REQUIRED, so every existing
   builder stops compiling): `app/src/log/HistoryList.test.tsx:24` (`makeLog`),
   `app/src/log/useLogHistory.test.ts:18` (`makeLog`),
   `app/src/today/Today.test.tsx:178` (`const LOGS: RecentLog[]`). Verified by
-  grepping `RecentLog` across `src/` at `f6a16963` — these three plus
+  grepping `RecentLog` across `src/` at `fcf2d4f9` — these three plus
   `useRecentLogs.ts` itself are every declaration site.
 - Modify: `app/src/log/LogRow.tsx:201-232`
-- Modify: `app/src/index.css` (a new chip rule beside `.free-row-chip:548`,
-  and the `.today-log-hero:2433` modifier)
+- Modify: `app/src/index.css` (a new chip rule beside `.free-row-chip`,
+  `:548-572`, and the `.today-log-hero` modifier, `:2446-2452`)
 - Test: `app/server/routes/source.integration.test.ts` or a new
   `app/server/routes/partial.integration.test.ts` (list/detail agreement),
   `app/src/log/HistoryList.test.tsx`, `app/src/log/LogRow` coverage via
@@ -1190,18 +1264,22 @@ reading a new list response ignores an unknown key.
 - [ ] **Step 5: The chip's own CSS class.** It CANNOT reuse `.free-row-chip`:
       `FreeRowChip.test.tsx:64-70` asserts exactly one rule whose selectors
       are exactly `[".free-row-chip"]` (so a grouped selector fails), and
-      `e2e/justrow.spec.ts:157`/`:236` assert `toHaveText("JR")` on that class
-      while `e2e/screenshots.spec.ts:4879` counts it. Add a sibling rule:
+      **SEVEN** e2e assertions read or count that class at `fcf2d4f9` (#272
+      added four): `e2e/justrow.spec.ts:165`, `:252`, `:416`
+      (`toHaveText("JR")`) and `e2e/screenshots.spec.ts:1251`, `:1260`
+      (`toHaveText("JR")`), `:1265`, `:5044` (`toHaveCount(2)`). Add a sibling
+      rule:
 
       ```css
       /* Door spec (2026-09-02) §1.3, Gate 0-A (e): the History list's
-         partial chip. Its declarations are `.free-row-chip`'s (index.css:548)
+         partial chip. Its declarations are `.free-row-chip`'s
+         (index.css:548-572, including #272's badge-column centring block)
          VERBATIM — same 12px mono, --ink-3 on --page at 6.69:1 (floor 4.5:1,
          PASS), same 1px --rule-3 hollow border at 1.56:1, inherited
          unchanged and decorative (the chip's meaning is entirely its text;
          flagged and accepted at Gate 0-A rather than silently decided).
          A SEPARATE RULE, not a grouped selector: FreeRowChip.test.tsx:64-70
-         pins `.free-row-chip`'s rule to exactly one selector, and three e2e
+         pins `.free-row-chip`'s rule to exactly one selector, and SEVEN e2e
          assertions count or read the text of that class. `LogRow.partialChip.test`
          pins the two rules' declarations equal so they cannot drift. */
       .log-partial-chip { /* … same declarations … */ }
@@ -1301,7 +1379,7 @@ reading a new list response ignores an unknown key.
 
 ---
 
-### Task 5: RC-18 — `MONITOR` where `PM5` was invented
+### Task 5: RC-18 — `MONITOR` where `PM5` was invented, and the nameless-erg save
 
 **Files:**
 - Modify: `app/src/monitor/driver.ts:1035`,
@@ -1310,19 +1388,25 @@ reading a new list response ignores an unknown key.
   `app/src/justrow/JustRow.tsx:301`,
   `app/src/workout/connected/surfaceModel.ts:1890`,
   `app/src/log/storedSummary.ts:302` (read side)
+- Modify: `app/src/session/LogSession.tsx:736-752` (**the deviceName-band
+  guard — step 6; moved here from the deleted sunset task**)
 - Modify (comments): `app/src/monitor/useMonitorSession.ts:1099-1101`,
-  `app/src/session/LogSession.tsx:721-729`,
+  `app/src/session/LogSession.tsx:727-736` (the band rationale) and
+  `:741-750` (#273's `manual` rationale, rewritten by step 6),
   `app/src/log/storedSummary.ts:295-298`
 - Test: `app/src/monitor/transports/capacitorBle.test.ts`,
   `app/src/monitor/transports/webBluetooth.test.ts`,
-  `app/src/workout/connected/surfaceModel.test.ts`
+  `app/src/workout/connected/surfaceModel.test.ts`,
+  `app/src/session/LogSession.test.tsx` (the existing guard leg — step 6)
 
 **Interfaces:** no signature changes. The literal `"PM5"` becomes `"MONITOR"`
-at seven sites. **`namePrefix: "PM5"` at `webBluetooth.ts:288` and
-`capacitorBle.ts:480` is DISCOVERY, not copy — do not touch it.**
+at seven sites, exported once as `NAMELESS_MONITOR_CAPTION` so step 6 can
+reuse it rather than typing it an eighth time. **`namePrefix: "PM5"` at
+`webBluetooth.ts:288` and `capacitorBle.ts:480` is DISCOVERY, not copy — do
+not touch it.**
 
 - [ ] **Step 1: Two of the three gates ALREADY EXIST — edit them, do not
-      claim new ones** (L3). Read each at `f6a16963` first:
+      claim new ones** (L3). Read each at `fcf2d4f9` first:
       - **`capacitorBle.test.ts:433`** — the test at `:425`, "a held device
         with no advertised name falls back to 'PM5', same as the picker
         path", already drives `getConnectedDevices` with
@@ -1374,7 +1458,15 @@ at seven sites. **`namePrefix: "PM5"` at `webBluetooth.ts:288` and
 - [ ] **Step 3: Run; verify red.**
       `pnpm exec vitest run --project client -t "MONITOR"`. Expect
       `expected 'PM5' to be 'MONITOR'` at each gated site. Quote them.
-- [ ] **Step 4: Implement.** Replace the seven literals. At the read side
+- [ ] **Step 4: Implement.** Replace the seven literals, **exporting the word
+      ONCE as `NAMELESS_MONITOR_CAPTION`** (put it beside the driver or in
+      `src/monitor/transports/`, and say where) rather than typing it seven
+      times — step 6 is its eighth consumer. **The name is
+      `NAMELESS_MONITOR_CAPTION`, NOT `MONITOR_DEVICE_NAME`** (L6):
+      `e2e/design.spec.ts:2146` already binds `MONITOR_DEVICE_NAME` to
+      `"PM5 432331249 Row"`, a REAL advertised name used at `:2190` and
+      `:5486`, so that identifier already means the opposite thing in this
+      tree. At the read side
       (`storedSummary.ts:302`) rewrite the comment at `:295-298`: it currently
       explains why the `?? "PM5"` arm exists at all (the server refuses `pm5`
       without a name, so the fallback only keeps the function total). That
@@ -1387,10 +1479,12 @@ at seven sites. **`namePrefix: "PM5"` at `webBluetooth.ts:288` and
         placeholder"_ is contradicted by `surfaceModel.ts:1890`. Rewrite it
         against whatever Step 2 established — state the reachable site by
         name and that the literal is now `MONITOR`.
-      - `LogSession.tsx:723` and `storedSummary.ts:295-298` both describe the
-        old fallback.
+      - `LogSession.tsx:727-736` (the band-guard rationale, which cites
+        `device.name ?? "PM5"`) and `storedSummary.ts:295-298` both describe
+        the old fallback. `LogSession.tsx:741-750` is step 6's, not this
+        step's — leave it until then.
       - **Three more the plan's first pass missed** (L8, all found by
-        `grep -rn '"PM5"' app/src` at `f6a16963`): `driver.ts:647` and
+        `grep -rn '"PM5"' app/src` at `fcf2d4f9`): `driver.ts:647` and
         `driver.ts:1013` both name _"the literal `"PM5"` placeholder"_ in
         `DriverOptions.deviceName`'s doc and beside `capabilities`, and
         `useMonitorSession.ts:2826` says the stored name is _"never the
@@ -1401,15 +1495,94 @@ at seven sites. **`namePrefix: "PM5"` at `webBluetooth.ts:288` and
       - Then sweep: `grep -rn '"PM5"' app/src | grep -v node_modules` and
         classify every remaining hit as discovery-filter, test fixture, or
         stale prose.
-- [ ] **Step 6: Run** the client + unit projects. Green.
-- [ ] **Step 7: Commit:**
-      `feat: a nameless erg stores MONITOR, not an invented model number`
-- [ ] **Step 8: Mutations.** Restore `"PM5"` at each of the three GATED sites
-      one at a time; each covering test must go red with
-      `expected 'PM5' to be 'MONITOR'`. Record all three. **State explicitly
-      that `capacitorBle.ts:494` and (if Step 2 confirms) `JustRow.tsx:301`
-      carry no gate and why** — an ungated change is honest; a green test on
-      an unreachable fallback is decoration.
+- [ ] **Step 6: The nameless-erg save — keep `pm5`, substitute the caption**
+      (`LogSession.tsx:736-752`). **Moved here from the deleted sunset task**;
+      #273 already did the half that stops the save 400ing, and this is the
+      half only PR A can do.
+      **What is there now:** the guard fires when the advertised name is `""`
+      or >64 chars. It deletes `body.deviceName`, then — since #273 — sets
+      `body.source = "manual"` (`:751`) because `pm5` without a `deviceName`
+      is a contradiction the server 400s. So a genuinely CONNECTED session is
+      stored as by-hand, and the log says `LOGGED BY HAND` about a row the
+      monitor produced. #273 could not fix that: `MONITOR` did not exist yet.
+      **What it becomes:** keep the true door and give it a usable name.
+
+      ```ts
+      if (
+        typeof body.deviceName === "string" &&
+        (body.deviceName.length === 0 || body.deviceName.length > 64)
+      ) {
+        // Door PR A (spec §3 + §4): the advertised name is unusable, but the
+        // DOOR is still the connected one, and `pm5` REQUIRES a name (the
+        // biconditional, `server/logSource.ts`). Before the v0.35.0 sunset
+        // this branch deleted the door claim and let the server derive;
+        // #273 changed that to stating `manual`, because an absent `source`
+        // is now its own 400. Both stored a connected session as by-hand.
+        // RC-18's neutral literal is what the row actually needs: the door
+        // stays `pm5` and the device-name column reads as the caption it is.
+        //
+        // THE `pm5` NARROWING IS KEPT (L5): the biconditional forbids a name
+        // on `timer`, `manual` and `no-reading`, so substituting one on a
+        // non-pm5 body would manufacture the very contradiction the server
+        // 400s. Only the connected door gets a substituted caption; every
+        // other door drops the field, exactly as today.
+        //
+        // THE TRADE, STATED (L7): a name longer than 64 characters is real
+        // and gets REPLACED by a caption, so its tail is not stored. That is
+        // the same posture the empty-name case has always had (nothing was
+        // stored at all), and it is preferred to losing the door. Both arms
+        // are UNOBSERVED HARDENING — no capture in `docs/monitor/sessions/`
+        // has ever shown a PM5 advertising an empty or 65+-character name —
+        // not a defect being fixed.
+        if (body.source === "pm5") {
+          body.deviceName = NAMELESS_MONITOR_CAPTION;
+        } else {
+          delete body.deviceName;
+        }
+      }
+      ```
+      **The existing test leg FLIPS; it is not added.** It is
+      `LogSession.test.tsx:3887`, _"an empty or >64-char deviceName is omitted
+      from the POST body — the save still succeeds (branch review Minor)"_,
+      and it asserts `"deviceName" in body === false` (`:3907`) plus
+      `body.source === "manual"` (`:3913`; #273 changed that line from
+      `expect("source" in body).toBe(false)`). Both expectations invert: the
+      posted body carries `source: "pm5"` and `deviceName` equal to
+      `NAMELESS_MONITOR_CAPTION`, and the save still succeeds. **The TITLE
+      inverts too** — "omitted from the POST body" becomes false, and a title
+      naming the old behaviour is a stale rationale, a defect here.
+      Rewrite the `:3908-3912` comment with it; the one there now argues for
+      `manual`.
+      **Verified at `fcf2d4f9`: that leg drives only the EMPTY-name case**
+      (`buildMonitorFixture({ deviceName: "" })` at `:3888`) although its
+      title claims both. Add the >64-char leg — it is the arm that discards
+      real characters, and the step's own comment claims the trade is
+      accepted, so it needs a gate rather than a sentence.
+      **Reconcile `LogSession.tsx:741-750`'s comment in full** (it is the
+      block the snippet above replaces) and re-check `:727-736`, which step 5
+      already touched.
+- [ ] **Step 7: Run** the client + unit projects. Green.
+- [ ] **Step 8: Commit:**
+      `feat: a nameless erg stores MONITOR, and its save keeps the pm5 door`
+- [ ] **Step 9: Mutations.**
+      - **M5.1-M5.3** Restore `"PM5"` at each of the three GATED sites one at
+        a time; each covering test must go red with
+        `expected 'PM5' to be 'MONITOR'`. Record all three. **State explicitly
+        that `capacitorBle.ts:494` and (if Step 2 confirms) `JustRow.tsx:301`
+        carry no gate and why** — an ungated change is honest; a green test on
+        an unreachable fallback is decoration.
+      - **M5.4** Restore `body.source = "manual"` in the guard (step 6): the
+        flipped `LogSession.test.tsx` leg must go red on the DOOR
+        (`expected 'manual' to be 'pm5'`), and the save must still succeed —
+        if the leg instead goes red on the save failing, the guard's
+        `else` arm is dropping `deviceName` on a `pm5` body and the server is
+        400ing it, which is a real defect, not a probe artefact. Record which
+        happened.
+      - **M5.5** Point the substitution at the `else` arm (substitute on every
+        door, drop the narrowing): the server's contradiction check must 400
+        a `timer`/`manual` body carrying a name. If nothing goes red, the
+        `pm5` narrowing is ungated — say so and add the leg rather than
+        leaving the claim in a comment alone.
 
 ---
 
@@ -1420,7 +1593,7 @@ at seven sites. **`namePrefix: "PM5"` at `webBluetooth.ts:288` and
   comment), `:593-601` (the `LogSeed` interface's own comment)
 - Modify: `app/src/log/storedSummary.ts:424-436` (the Σ-gap comment)
 - Modify: `app/domain/monitor/types.ts:630-646` (RC-12)
-- Modify: `ROADMAP.md:699-713` (tick the three rider rows)
+- Modify: `ROADMAP.md:749-763` (tick the three rider rows; lines re-verified at `fcf2d4f9`)
 - Test: `app/src/session/logDraft.test.ts`
 
 (The `DROP COLUMN` statement itself lands in Task 1's migration file — one
@@ -1479,8 +1652,8 @@ migration, per the spec. Its rationale is written there.)
       at `schema.ts:237-251`); `docs/history/phase-rc.md:2056-2058` is the
       stale record, and `docs/history/` is a RECORD — do not edit it, and do
       not "fix" a site that is already right.
-- [ ] **Step 6: ROADMAP.** Tick the three rider rows at `ROADMAP.md:699-713`
-      with the PR number. **Correct `:701`'s `server/db/schema.ts:369`** — the
+- [ ] **Step 6: ROADMAP.** Tick the three rider rows at `ROADMAP.md:749-763`
+      with the PR number. **Correct `:751`'s `server/db/schema.ts:369`** — the
       `warmup` column is at `:425`. Wrap by hand; root markdown is never
       Prettier-formatted, and `prettier --write` on it reflows ~100 lines and
       buries the edit.
@@ -1494,205 +1667,7 @@ migration, per the spec. Its rationale is written there.)
 
 ---
 
-### Task 7: The `source` sunset
-
-**Files:**
-- Modify: `app/server/routes/data.ts:1666-1689` (the derive branch goes;
-  absence becomes a 400), `app/server/logSource.ts:11-25` (the comment)
-- Modify: `app/src/session/LogSession.tsx:730-745` (**the guard that defeats
-  the sunset — see Deviations 2**)
-- Modify: `docs/RELEASING.md:45-46` (the API note),
-  `app/src/news/content/releaseNotes.ts` (a new note stating the v0.34.0 floor)
-- Modify (fixture sweep): the 15 files in the blast-radius table above
-- Test: `app/server/routes/source.integration.test.ts`,
-  `app/src/session/LogSession.test.tsx`
-
-**Interfaces:**
-- Produces: `POST /api/logs` REQUIRES `source`. Absent → 400 naming the field.
-- `deriveLogSource` SURVIVES, exported, with one caller:
-  `source.integration.test.ts:447`, the parity oracle for migration 0020's
-  backfill CASE (which 0020's own header cites by name).
-
-**Additive matrix, restated because it bites HARDEST here:** this is the one
-BREAKING change in PR A. **Every install older than v0.34.0 loses the ability
-to save ANY log**, not just the derive path — the blast radius the ROADMAP row
-understated. James (2026-09-02): _"i can make sure they are by merge. remind me
-before we do."_ The ready-for-merge comment carries that reminder verbatim.
-
-- [ ] **Step 1: Failing tests — and the seeding legs the inversion
-      REMOVES** (DELTA verdict B4).
-      - `source.integration.test.ts`: a POST with no `source` at all is a 400
-        naming the field. Expected body:
-        `{ error: "source is required", field: "source" }` — pick the literal
-        and pin it here, since it is user-facing.
-      - **FIRST, before `:156`: add explicit-`source` seeding legs, one per
-        member including `no-reading`.** `:135`, `:144` and `:150` are the
-        ONLY POSTs in this file ahead of the list-projection parity test at
-        `:156`, whose `arrayContaining` at `:164` is mirror 8 — vitest runs
-        `it`s in file order, so converting those three to 400 legs leaves
-        `:164` reading an empty collection and the mirror-8 extension gating
-        nothing. The new legs post `source` explicitly (`pm5` with a
-        `deviceName`, `timer`, `manual`, `no-reading` with none) through
-        `postThenGet`, and `:164`'s array becomes
-        `["pm5", "timer", "manual", "no-reading"]`. **Task 1 step 7 carries
-        the other half of this coupling.**
-      - `source.integration.test.ts`: the three existing "absent source,
-        …derived…" legs (`:135`, `:144`, `:150`) now assert the 400 instead of
-        the derived member. **Do not delete them** — they become the sunset's
-        own gate, and their titles change to say so.
-      - **THE FROZEN OLD-CLIENT FIXTURES INVERT; THEY DO NOT GET A `source`**
-        (DELTA verdict B3). `data.test.ts` carries three `Object.freeze`d
-        bodies that exist precisely to prove an old client's wire shape still
-        works — `V0_11_0_LOG_BODY` (`:1116`, asserted at `:1353`),
-        `V0_12_0_LOG_BODY` (`:2931`, asserted at `:2955`) and
-        `V0_14_0_LOG_BODY` (`:3258`, asserted at `:3278`). Adding `source` to
-        them destroys the exact fixtures that encode the contract this sunset
-        breaks. **Each one's assertion INVERTS**: the POST now returns 400 on
-        field `source`, and the test title says the floor
-        ("…is REFUSED after the v0.34.0 sunset — an old client cannot save").
-        They become the sunset's own backward-compatibility gate.
-        **Mutation:** restore the `deriveLogSource` call in the route → those
-        legs 201 wrongly → red. (This is M7.1's twin at the fake-store layer;
-        record both.)
-      - **The two e2e `postV0110Log` helpers are the observed EXCEPTION to
-        that ruling, and the plan states it rather than discovering it in
-        review.** `e2e/log.spec.ts:112` seeds a row whose RENDERING is the
-        assertion (`:186`, exit criterion 2: a v0.11.0 row renders no hero
-        snippet), and `e2e/screenshots.spec.ts:2663` seeds one for a capture.
-        A 400 there empties the assertion and blanks the capture — it does not
-        invert into anything. Both helpers therefore gain
-        `source: "timer"` — the member `deriveLogSource` produced for their
-        body (a `stopwatch` step, no device; pinned by
-        `source.integration.test.ts:144`) — with a comment saying the body is
-        no longer verbatim-v0.11.0 and that the wire-shape contract now lives
-        in `data.test.ts`'s three inverted legs. **Say which fixture is a
-        CONTRACT and which is a SEED in each comment**; that distinction is
-        the whole of this ruling.
-      - `LogSession.test.tsx`: a monitor-door save whose advertised device name
-        is `""` (or 65+ chars) still saves — asserting the posted body carries
-        `source: "pm5"` and a `deviceName` of `"MONITOR"`, not a body with
-        `source` deleted.
-- [ ] **Step 2: Run; verify red.** Quote all four.
-- [ ] **Step 3: The route.** Delete the `if (body.source === undefined)` arm at
-      `data.ts:1669-1676` (both the `deriveLogSource` call and the
-      `source=derived` console line) and replace it with the 400. Rewrite the
-      block comment at `:1654-1665`, which explains at length WHY the field is
-      optional — that whole rationale is now history. State the new contract
-      and the floor (v0.34.0) in its place.
-      Rewrite `logSource.ts:11-25`: `deriveLogSource` has **no production
-      caller**; it is migration 0020's parity oracle and exists so the SQL
-      CASE and the TS rule cannot drift while the backfilled rows exist. Do
-      not delete it — 0020's header cites the test by name, and deleting it
-      retires the only executable check on a shipped backfill.
-- [ ] **Step 4: Fix the guard the sunset would break** (`LogSession.tsx:730-745`).
-      Today it deletes an out-of-band `deviceName` and then, when the door
-      claim is `pm5`, deletes `body.source` so the server can derive. After
-      Step 3 that body 400s — losing the exact save the guard exists to let
-      through. Substitute the neutral literal instead of deleting the claim:
-
-      ```ts
-      if (
-        typeof body.deviceName === "string" &&
-        (body.deviceName.length === 0 || body.deviceName.length > 64)
-      ) {
-        // Door PR A (spec §3 + §4): the name is unusable, but the DOOR is
-        // still the connected one, and `pm5` REQUIRES a name (the
-        // biconditional, `server/logSource.ts`). Before the `source` sunset
-        // this branch deleted the door claim and let the server derive; the
-        // sunset makes `source` required, so deleting it would 400 the whole
-        // save — the exact loss this guard exists to prevent. It substitutes
-        // RC-18's neutral literal instead: the row keeps its true door and
-        // its device-name column reads as the caption it is.
-        //
-        // THE `pm5` NARROWING IS KEPT (L5): the biconditional forbids a name
-        // on `timer`, `manual` and `no-reading`, so substituting one on a
-        // non-pm5 body would manufacture the very contradiction the server
-        // 400s. Only the connected door gets a substituted caption; every
-        // other door drops the field, exactly as today.
-        //
-        // THE TRADE, STATED (L7): a name longer than 64 characters is real
-        // and gets REPLACED by a caption, so its tail is not stored. That is
-        // the same posture the empty-name case has always had (nothing was
-        // stored at all), and it is preferred to losing the save. Both arms
-        // are UNOBSERVED HARDENING — no capture in `docs/monitor/sessions/`
-        // has ever shown a PM5 advertising an empty or 65+-character name —
-        // not a defect being fixed.
-        if (body.source === "pm5") {
-          body.deviceName = NAMELESS_MONITOR_CAPTION;
-        } else {
-          delete body.deviceName;
-        }
-      }
-      ```
-      **`NAMELESS_MONITOR_CAPTION` is the same literal Task 5 introduced** —
-      export it once (from `src/monitor/transports/` or a shared constant
-      beside the driver) rather than typing `"MONITOR"` an eighth time, and
-      say where you put it. **The name is `NAMELESS_MONITOR_CAPTION`, NOT
-      `MONITOR_DEVICE_NAME`** (L6): `e2e/design.spec.ts:2136` already defines
-      `const MONITOR_DEVICE_NAME = "PM5 432331249 Row"` — a REAL advertised
-      name, used at `:2180` and `:5381` — so that identifier already means the
-      opposite thing in this tree. Reconcile the guard's comment at `:721-729`
-      in full.
-- [ ] **Step 5: The fixture sweep.** Work file by file down the blast-radius
-      table, adding `source` to each file's shared body helper (or to each
-      call site where there is none):
-      - `server/routes/data.test.ts` — BOTH `validLogBody` factories (`:394`,
-        `:1090`), **164** references between them
-        (`grep -c validLogBody server/routes/data.test.ts` at `f6a16963` —
-        the plan's earlier "175" was from another head). Default
-        `source: "manual"`; every site carrying a `deviceName` passes
-        `source: "pm5"` explicitly. **The three frozen bodies are exempt —
-        step 1's B3 ruling.**
-      - `e2e/log.spec.ts:66-106`'s `postLog` — add `source: "manual"` to the
-        defaults object (its callers post no `deviceName`).
-      - **`e2e/screenshots.spec.ts`'s `postLog` gets NO blanket default**
-        (DELTA verdict M-4). A default silently re-derives one door for every
-        capture; each of the 9 call sites states its own `source` as a
-        per-fixture literal reproducing what the server previously derived
-        for that body. Of the file's 13 `deviceName:` occurrences only two
-        ride a `postLog` body — `:2781` (`log-detail`, → `source: "pm5"`) and
-        `:4864` (already states `source: "pm5"`); the other eleven are
-        monitor-run/fake fixtures, not log posts, and are not swept. Every
-        other seed takes the member its own shape implies (a `stopwatch` step
-        and no device → `timer`; neither → `manual`). Also sweep the two
-        POSTs OUTSIDE the helper: `:293` (`seedLogs`) and `:2665`
-        (`postV0110Log` — B3's exception).
-        **A capture diff is expected to be EMPTY**: `source` changes no
-        pixel, and `pnpm screenshots` in Task 8 is what proves it. A non-empty
-        diff means a fixture's door moved — investigate, do not commit it.
-      - The remaining server test files, each with `source` matching what the
-        body already implies. **Never derive it in test code** — that would be
-        a hand-copy of `deriveLogSource` (RF11's mirror shape). Each fixture
-        STATES its own door, which is the whole point of the column.
-      Run `pnpm test --project unit` and `--project integration` repeatedly
-      through this step; the count of failures going to zero IS the sweep's
-      progress meter. **Record the before/after failure counts.**
-- [ ] **Step 6: `RELEASING.md` and the release note.** `:45-46`'s
-      "additive-only between tags" bullet gains the recorded exception: this
-      tag BREAKS it deliberately, the floor is v0.34.0, and the tester
-      confirmation happens at merge. Add the release-note line stating that
-      the app must be on v0.34.0 or later to save (see Task 8 for where notes
-      live and why a notes change still runs the full CI gate).
-- [ ] **Step 7: Run everything** — `pnpm lint && pnpm typecheck && pnpm format:check`,
-      `pnpm test` (all projects, Docker up). Both summary lines.
-- [ ] **Step 8: Commit:**
-      `feat!: source is required on POST /api/logs (the derive-when-absent sunset)`
-- [ ] **Step 9: Mutations.**
-      - **M7.1** Restore the `deriveLogSource` call in the route: the "absent
-        source is a 400" leg must go red with `expected 201 to be 400`.
-      - **M7.2** Delete `deriveLogSource` entirely: the parity oracle at
-        `source.integration.test.ts:447` must fail to compile / go red. This
-        is the probe that proves the function's survival is load-bearing, not
-        sentimental. Record the error and restore.
-      - **M7.3** Restore `delete body.source` in the LogSession guard: the
-        Step-1 long-name leg must go red on the save failing (a 400), not on
-        the body's shape. **If it goes red on the shape instead, the test is
-        asserting the mechanism rather than the outcome** — rewrite it to
-        assert the save succeeds.
-
----
-
-### Task 8: e2e, screenshots, and the whole-branch gates
+### Task 7: e2e, screenshots, and the whole-branch gates
 
 **Files:**
 - Modify: `app/e2e/log.spec.ts` (detail marker + the shortened LINK LOST),
@@ -1704,7 +1679,10 @@ before we do."_ The ready-for-merge comment carries that reminder verbatim.
 
 - [ ] **Step 1: e2e legs through the real stack.** Both `postLog` helpers need
       `endedBy` and `steps[].actualSource` support to seed a partial row —
-      extend their signatures (`log.spec.ts:66`, `screenshots.spec.ts:2455`).
+      extend their signatures (`log.spec.ts:66-90`,
+      `screenshots.spec.ts:2544-2643`). **If a leg seeds `no-reading` through
+      either helper, widen that helper's `source?` union too** — mirror 6
+      (`screenshots.spec.ts:2570`) and mirror 11 (`log.spec.ts:89`).
       Legs:
       - Detail: a seeded `pm5` row, `endedBy: "rower"`, five steps of which two
         carry `actualSource: "pm5"` with real `actualSeconds`, renders
@@ -1714,21 +1692,23 @@ before we do."_ The ready-for-merge comment carries that reminder verbatim.
       - List: the same partial row's History entry carries a
         `.log-partial-chip` reading `STOPPED EARLY`, and a complete row
         carries none.
-      - Just Row: an existing `justrow.spec.ts` history leg still passes with
-        exactly the `.free-row-chip` counts it asserts today — this is the
-        regression the separate chip class exists to avoid.
+      - Just Row: the existing `.free-row-chip` assertions still pass with
+        exactly the counts they assert today — **all SEVEN of them**
+        (`justrow.spec.ts:165`, `:252`, `:416`; `screenshots.spec.ts:1251`,
+        `:1260`, `:1265`, `:5044`; #272 added four, including the Plan tab's).
+        This is the regression the separate chip class exists to avoid.
       - **THE `no-reading` SEAM, START TO FINISH (DELTA verdict M-5, RF24).**
         Every other gate on `no-reading` in this plan enters the pipe
         downstream of the thing that decides it: `LogSession.test.tsx` reads
         an intercepted body, `storedSummary.test.ts` builds a row by hand,
         the integration legs POST an explicit `source`. **Nothing starts
         upstream of the producer**, which is `connectedNoRecord` — a
-        MOUNT-TIME `useState` at `LogSession.tsx:1574-1576` reading
+        MOUNT-TIME `useState` at `LogSession.tsx:1582-1584` reading
         `connectedArrivalWithNoRecord(searchParams)` (`:387-389`). A snapshot
         taken once at mount is precisely the shape RF24's measured defect
         had. The leg: sign in, `page.goto('/library/<id>/log?from=monitor')`
         with an EMPTY handoff store (the deep-link idiom is already used at
-        `design.spec.ts:5361` and `session.spec.ts:1549` — the latter arrives
+        `design.spec.ts:5466` and `session.spec.ts:1549` — the latter arrives
         at the plain manual form for exactly this reason), fill and Save, then
         open the row from History and assert the detail screen reads
         `NO MONITOR READING` **with a wall-clock time beside it** (§2.3's
@@ -1737,11 +1717,11 @@ before we do."_ The ready-for-merge comment carries that reminder verbatim.
 - [ ] **Step 2: `pnpm e2e`** (RF1 — this diff touches `app/src/`). Green, all
       specs, not just the new ones.
 - [ ] **Step 3: Screenshots.** Add two captures modelled on
-      `screenshots.spec.ts:2768` (`log-detail`) and `:4844`
+      `screenshots.spec.ts:2880` (`log-detail`) and `:5009`
       (`justrow-history-chip`):
       - `log-detail-partial` **and `log-detail-partial-landscape`** (the
-        portrait/landscape pair idiom `log-monitor-dropped` uses at `:968`/
-        `:1031`) — seeded so the marker renders ABOVE a
+        portrait/landscape pair idiom `log-monitor-dropped` uses at `:971`/
+        `:1034`) — seeded so the marker renders ABOVE a
         `MACHINE CONFIRMED · WORK ONLY` block (Gate 0-A shows that pairing;
         seed `machineWorkSeconds`), and seeded so the hero numbers are real
         (RF7: no fallback dashes).
@@ -1792,9 +1772,13 @@ before we do."_ The ready-for-merge comment carries that reminder verbatim.
 | `MONITOR` at the two reachable transport sites | transport tests | restore `"PM5"` at each |
 | `MONITOR` in the connected caption | `surfaceModel.test.ts` | restore `"PM5"` |
 | The warm-up guard is gone | `logDraft.test.ts` | restore the guard |
-| `source` is required on POST | `source.integration.test.ts` | restore the `deriveLogSource` call → 201 |
-| `deriveLogSource` survives as 0020's oracle | `source.integration.test.ts:447` | delete the function |
-| An unusable device name still saves | `LogSession.test.tsx` | restore `delete body.source` |
+| An unusable device name still saves, AS A CONNECTED ROW | `LogSession.test.tsx` | restore `body.source = "manual"` → `expected 'manual' to be 'pm5'` (M5.4) |
+| The caption is substituted ONLY on `pm5` | `LogSession.test.tsx` / integration | substitute on every door → a `timer` body with a name 400s (M5.5) |
+
+(The two sunset gates this table used to carry — "`source` is required on
+POST" and "`deriveLogSource` survives as 0020's oracle" — SHIPPED in #273 and
+live on main at `source.integration.test.ts:139` and `:463`. They are not
+this PR's to claim.)
 
 **Ungated by design, each stated in a comment beside the code:**
 `capacitorBle.ts:494` (dead behind `namePrefix: "PM5"`), `JustRow.tsx:301`
@@ -1814,13 +1798,9 @@ This PR makes a saved row say what happened to it.
   intervals measured` on its detail screen, and a short chip in History.
 - A connected session that measured nothing reads `NO MONITOR READING` with
   its clock time, not `LOGGED BY HAND`, the word the live screen already uses.
-- A nameless erg stores `MONITOR`, not an invented model number.
-- **Breaking:** `source` is now required when saving. Every tester must be on
-  v0.34.0 or later.
+- A nameless erg stores `MONITOR`, not an invented model number — and a save
+  from one is finally stored as connected, not as logged by hand.
 - Try it: stop a connected piece mid-workout and open it from the log.
-
-**REMINDER before merge: the `source` sunset rides this PR — confirm every
-tester is on v0.34.0 or later (James, 2026-09-02).**
 
 <details><summary>Record (for agents and audits)</summary>
 
@@ -1836,14 +1816,16 @@ tester is on v0.34.0 or later (James, 2026-09-02).**
   marker line and the chip text; the chip's `--rule-3` border is **1.56:1**,
   inherited unchanged from the shipped JR chip and decorative — flagged at
   Gate 0-A rather than silently decided.
-- The additive matrix, both directions, per §2.4, plus the sunset's blast
-  radius (every pre-v0.34.0 install loses ALL saving).
+- The additive matrix, both directions, per §2.4. **The `source` sunset is NOT
+  in this PR** — it shipped alone as #273 / v0.35.0 on 2026-09-02, and this
+  plan was re-scoped against `fcf2d4f9` afterwards.
 - Rollback floor: `docs/RELEASING.md` gains a row for this tag — one-way
   `DROP COLUMN` plus a 400 on every `no-reading` save below it.
 - Three defects found while planning and fixed here: the deviceName-band guard
-  that the sunset would have turned into a lost save; the chip class collision
-  with three shipped `.free-row-chip` assertions; the SQL `NULL` that would
-  have reached the client as `partial: null`.
+  that stored a connected session as by-hand (#273's `manual` substitution
+  kept the save and lost the door); the chip class collision with seven
+  shipped `.free-row-chip` assertions; the SQL `NULL` that would have reached
+  the client as `partial: null`.
 - Risk note (what I'd have asked a reviewer to probe): the SQL predicate and
   the TS predicate are two copies of one rule — the list/detail agreement test
   is the only thing holding them together, and its biting mutation is
@@ -1872,26 +1854,29 @@ tester is on v0.34.0 or later (James, 2026-09-02).**
 | §2.1 | `no-reading` posted from `connectedArrivalWithNoRecord`; the live word | 1 (label), 2 (write) |
 | §2.2 | No device name; the biconditional; both readers rewritten to `source` | 1 (switch), 2 (readers) |
 | §2.3 | `timeLabel` re-derived as a positive allowlist | 2 |
-| §2.4 | Migration 0022, no backfill, PG18 sentence, the ten mirrors, rollback floor | 1 |
-| §3 | Seven `?? "PM5"` sites → `MONITOR`; reachability per site; comment sweep | 5 |
+| §2.4 | Migration 0022, no backfill, PG18 sentence, the eleven mirrors, rollback floor | 1 |
+| §3 | Seven `?? "PM5"` sites → `MONITOR`; reachability per site; comment sweep; the nameless-erg save keeps its `pm5` door | 5 |
 | §4 rider 1 | `DROP COLUMN preferences.warmup` | 1 (statement), 6 (ROADMAP) |
 | §4 rider 2 | Warm-up guard + union; residual accepted; Σ-gap comment | 6 |
 | §4 rider 3 | RC-12's `onDisconnect` comment | 6 |
-| §4 sunset | `source` required; `deriveLogSource` survives; RELEASING + note | 7 |
+| §4 sunset | **SHIPPED SEPARATELY** as #273 / v0.35.0, 2026-09-02 — not in this PR. Its one residual, the guard that stored a connected save as `manual`, is Task 5 step 6 | — |
 | §6 | Gate 0-A is APPROVED; its copy is quoted verbatim in Task 3 | — |
 | §8.1 | Every named gate has a named mutation | gates table |
 | §10 | The two dead `## Phase LM` pointers | 2 |
 
 **Placeholder scan:** no `TBD`, no "add validation", no "similar to task N".
-Two deliberate fill-ins, both marked and both requiring a real command's
-output rather than a guess: the migration header's PR-census line (Task 1
-step 8) and the sunset's 400 message literal (Task 7 step 1).
+ONE deliberate fill-in, marked, and it requires a real command's output rather
+than a guess: the migration header's PR-census line (Task 1 step 8). The
+second fill-in this section used to list — the sunset's 400 message literal —
+is settled: #273 shipped it as
+`{ error: "source is required", field: "source" }` (`data.ts:1672`).
 
 **Type consistency across tasks:** `LogSource` (Task 1) is imported by Tasks
-2, 4 and 7 — never re-declared. `PartialCloseReason` (Task 3) is the ONE
+2 and 4 — never re-declared. `PartialCloseReason` (Task 3) is the ONE
 allowlist; the SQL in Task 4 encodes the same five values and the agreement
 test is what proves they have not drifted. `RecentLog.endedBy` (Task 4) is
 typed `(CloseReason | "interrupted") | null`, matching `StoredLog.endedBy`'s
-union at `storedSummary.ts:191`. `NAMELESS_MONITOR_CAPTION` (Tasks 5 and 7) is one
-exported constant, not two literals — and NOT `MONITOR_DEVICE_NAME`, which
-`e2e/design.spec.ts:2136` already binds to a real advertised name.
+union at `storedSummary.ts:191`. `NAMELESS_MONITOR_CAPTION` (Task 5, used by both its
+literal swap and its step 6) is one exported constant, not two literals — and
+NOT `MONITOR_DEVICE_NAME`, which `e2e/design.spec.ts:2146` already binds to a
+real advertised name.

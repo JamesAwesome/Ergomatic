@@ -552,8 +552,12 @@ rower's work silently.
         `NO MONITOR READING` in the log as on the live screen, with the
         `timeLabel` gate re-derived as an allowlist. RC-18's fallback
         becomes the literal `MONITOR` (nothing uppercases that line),
-        fix-forward only. Carries the three riders below and the `source`
-        SUNSET. **Gate 0-A** on the rendered saved row + list chip.
+        fix-forward only — and with it, the deviceName-band guard stops
+        storing a nameless erg's session as `manual`: it keeps `pm5` and
+        substitutes the caption. Carries the three riders below. **The
+        `source` SUNSET is NO LONGER PART OF PR A** — it shipped on its own
+        as #273 / v0.35.0 on 2026-09-02 (its own row above is reconciled).
+        **Gate 0-A** on the rendered saved row + list chip.
       - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
         in-flight interval's metres in NEW step keys (`partialMeters`/
         `partialSeconds`), never `actualMeters` — an older server drops

@@ -6,7 +6,10 @@ with one copy change — the `LINK LOST` line shortens to `LINK LOST · the app
 lost the monitor`, a change to the shipped literal that PR A carries; chip in
 the numbers-line slot; chip border left as the shipped Just Row chip's); anchor pass RUN 2026-09-02 and a spec pass RUN the same day on the
 written text (five blockers, all applied below; both ledger entries landed
-with this spec) · **Gate 0:** two, one per PR, rendered before any implementation task.
+with this spec) · **Gate 0:** two, one per PR, rendered before any implementation task
+· **RE-SCOPED 2026-09-02, after approval:** §4's fourth item (the `source`
+derive-when-absent sunset) SHIPPED SEPARATELY as #273 / v0.35.0 on the same
+day and is no longer part of PR A. Nothing else moved.
 
 ## What and why
 
@@ -18,7 +21,8 @@ also settles two words the log has been getting wrong — a connected session
 that measured nothing reads `LOGGED BY HAND` in the log but `NO MONITOR
 READING` on the live screen, and an erg that advertises no name is stored as
 `PM5`, a model number we do not know — and it ships the three stale server
-riders James ruled ride this migration, plus the now-due `source` sunset.
+riders James ruled ride this migration. (The `source` sunset §4 carried when
+this was written shipped on its own as #273 / v0.35.0, 2026-09-02.)
 
 The ROADMAP item this replaces was called "the `door` column". **The column
 already shipped**: `session_logs.source` (`pm5 | timer | manual`) landed in
@@ -29,7 +33,7 @@ NUMBER means.** A reviewer never holds both at once.
 
 - **PR A — the stored word.** A fourth `log_source` member `no-reading`; the
   PARTIAL read and its copy; RC-18's neutral fallback; the positive
-  `timeLabel` gate; the three riders and the sunset. Gate 0-A.
+  `timeLabel` gate; the three riders. Gate 0-A.
 - **PR B — the stored number.** Lifecycle spec §5: the in-flight interval's
   metres survive a mid-row close as OUR number, never the machine's, in new
   step keys, and the "N intervals kept" vocabulary including the lost banner.
@@ -243,30 +247,34 @@ was additive and the member's is NOT:**
 
 | direction | outcome | mitigation |
 |---|---|---|
-| old client → new server | posts `manual` as today; derived path until the sunset | none needed |
-| **new client → old server** (deploy lag; `RELEASING.md:95-97` records six merges deploying nothing for eleven hours on 2026-09-01) | `LOG_SOURCES.includes` 400s `no-reading` on field `source`; the client retries only `workoutId` → **save lost** | server deploys on merge and the client reaches phones by TestFlight later, so the window is the deploy lag only; the rollback floor row (below) forbids rolling the API back past this tag |
+| old client → new server | posts `manual` as today. **Since #273 / v0.35.0 an old client that posts NO `source` is already a 400**, whatever PR A does | none needed |
+| **new client → old server** (deploy lag; `RELEASING.md:99-103` records six merges deploying nothing for eleven hours on 2026-09-01) | `LOG_SOURCES.includes` 400s `no-reading` on field `source`; the client retries only `workoutId` → **save lost** | server deploys on merge and the client reaches phones by TestFlight later, so the window is the deploy lag only; the rollback floor row (below) forbids rolling the API back past this tag |
 | old client reads new row | `sourceLabel`'s switch has no `default` → blank source word, plus a `timeLabel` | cosmetic; stated in the release note |
 | new client reads old row | unchanged | — |
 
-**Rollback floor:** `docs/RELEASING.md`'s rollback table (`:164-166`) gains a row for the tag that
+**Rollback floor:** `docs/RELEASING.md`'s rollback table (`:168-171`) gains a row for the tag that
 ships PR A: rolling the API back past it 400s every `no-reading` save.
 
-**Mirror census (the schema comment says three; the real set is ten, and
-three are not compile-enforced):** the pgEnum (`schema.ts:152`),
-`domain/types.ts:101-102` `LOG_SOURCES`, the 400 message literal
-(`data.ts:1678`, user-facing), `logSource.ts`'s switch, `storedSummary.ts:299`'s
-switch, `e2e/screenshots.spec.ts:2470`'s type, `summaryModel.ts`'s live word,
-`routes/source.integration.test.ts:164` and `:252` (the latter pins the exact
-400 message and goes red on day one), and the migration. All move in one
+**Mirror census (the schema comment says three; the real set is ELEVEN, and
+four are not compile-enforced — lines re-verified at `fcf2d4f9`, after #272
+and #273):** the pgEnum (`schema.ts:152`),
+`domain/types.ts:101-102` `LOG_SOURCES`, the membership 400 message literal
+(`data.ts:1676`, user-facing), `logSource.ts`'s switch, `storedSummary.ts:299`'s
+switch, `e2e/screenshots.spec.ts:2570`'s type, `summaryModel.ts`'s live word,
+`routes/source.integration.test.ts:180` and `:268` (the latter pins the exact
+400 message and goes red on day one), the migration, and — added by #273 —
+`e2e/log.spec.ts:89`'s own `postLog` `source?` type. All move in one
 commit; BOTH "three mirrors" comments (`schema.ts:149-151`,
 `domain/types.ts:98-100`) are corrected to count them. No single grep finds
 the set (`grep -rn '"pm5", "timer", "manual"' app` returns only the three
-array/literal forms), so the plan enumerates the ten by name. Which are
+array/literal forms), so the plan enumerates the eleven by name. Which are
 compile-enforced: the two `switch`es (total over `LogSource`, no `default`,
-so a fourth member errors on its own — no `assertNever` mechanism needed).
+so a fourth member errors on its own — no `assertNever` mechanism needed) and
+the live-word import. The two e2e helper `source?` unions fail only where a
+test SEEDS the new member, never on omission.
 Which are NOT, and the dangerous one by name: **`LOG_SOURCES` is
 `readonly LogSource[]` (`domain/types.ts:102`), not a tuple — a short array
-compiles clean, and `routes/data.ts:1677` validates the wire against it, so
+compiles clean, and `routes/data.ts:1675` validates the wire against it, so
 omitting `no-reading` there 400s every save of the new member with nothing
 red.** The POST seam test (§8.1) is what makes that omission red.
 
@@ -316,7 +324,7 @@ copy, and do not change.
 
 ---
 
-## §4 — The riders and the sunset (PR A)
+## §4 — The riders (PR A) and the sunset (SHIPPED, #273)
 
 James's ruling (2026-08-31): the three stale riders ride the door migration.
 PR A is that migration.
@@ -339,8 +347,9 @@ PR A is that migration.
    `MonitorRun` still on a phone. That population is accepted in writing here
    (ten tags old, the Today door names such rows as stale). No reader re-runs
    `buildMonitorLogSteps` over STORED rows, so saved data is untouched.
-   `storedSummary.ts:427-433` cites the warm-up skip as a live cause of a
-   Σ-steps gap; that comment is reconciled in the same commit.
+   `storedSummary.ts:424-436` cites the warm-up skip as a live cause of a
+   Σ-steps gap (verified by subject at `fcf2d4f9`; this spec first said
+   `:427-433`); that comment is reconciled in the same commit.
 3. **RC-12's last unreconciled comment** — `onDisconnect`'s doc block at
    `domain/monitor/types.ts:630-631` (_"the phone's Bluetooth stack
    resetting"_ beside a `CORRECTED (Phase LL Task 2)` strike of the iOS
@@ -349,22 +358,32 @@ PR A is that migration.
    verifies by subject, not line. Reconciliation: the sentence states what the
    walks established (RC-12's finding), and the strike block is folded into
    it rather than left as a contradiction beneath it.
-4. **The `source` derive-when-absent SUNSET — DUE.** `v0.34.0` is tagged at
-   `138dbe8c` and contains #268, so the sunset's trigger ("the tag after the
-   one that ships #268") is the tag that ships PR A. `source` becomes REQUIRED
-   on `POST /api/logs`; the ROUTE stops calling `deriveLogSource` and its
-   `source=derived` log line goes. **`deriveLogSource` itself SURVIVES** as
-   migration 0020's parity oracle: `routes/source.integration.test.ts:447`
-   (_"the migration's own CASE and deriveLogSource agree on every row"_) is
-   the only executable check on that backfill and 0020's header cites it by
-   name; the function's comment is rewritten to say it is the backfill's
-   oracle and has no production caller. `RELEASING.md`'s API note records the
-   break. **Blast radius,
-   larger than the ROADMAP row said:** every install older than v0.34.0 loses
-   the ability to save ANY log, not just the derive path. **James (2026-09-02):
-   "i can make sure they are by merge. remind me before we do."** PR A's
-   ready-for-merge comment carries that reminder verbatim, and the release
-   note says the floor is v0.34.0.
+4. **The `source` derive-when-absent SUNSET — SHIPPED SEPARATELY, NOT IN
+   PR A.** It landed as **#273 / v0.35.0 on 2026-09-02**, the same day this
+   spec was approved and before PR A's plan ran. Everything this item asked
+   for is on main: `POST /api/logs` requires `source` and answers an absent
+   one with `400 {error: "source is required", field: "source"}`
+   (`routes/data.ts:1671-1674`); the route no longer calls `deriveLogSource`
+   and the `source=derived` log line is gone; **`deriveLogSource` SURVIVED**
+   as migration 0020's parity oracle
+   (`routes/source.integration.test.ts:463`, _"the migration's own CASE and
+   deriveLogSource agree on every row"_ — the only executable check on that
+   backfill, cited by name in 0020's header); `RELEASING.md:45-49` records the
+   API break; and the v0.35.0 note tells testers the floor. James's
+   _"i can make sure they are by merge. remind me before we do."_ was
+   discharged at #273's merge, not PR A's.
+
+   **What PR A still owes from this item — one thing.** The client's
+   deviceName-band guard (`LogSession.tsx:736-752`) fires when the advertised
+   name is empty or over 64 characters. #273 had to make it state `manual`
+   (`:751`) so the new 400 would not swallow the save, because the neutral
+   caption did not exist yet. That stores a genuinely CONNECTED session as
+   by-hand. §3's `MONITOR` is what the row actually needs: PR A keeps
+   `source: "pm5"` and substitutes `NAMELESS_MONITOR_CAPTION` for the unusable
+   name, so the door and its required `deviceName` stay together. The `pm5`
+   narrowing is kept — the biconditional forbids a name on the other three
+   members, so substituting one there would manufacture the contradiction the
+   server 400s.
 
 ---
 
@@ -497,13 +516,14 @@ saved row together, one vocabulary.
 
 ### 8.1 PR A — the stored word (TRIAD: word meaning; antagonist DELTA on the plan; PM final gate)
 
-Tasks: (1) migration 0022 + the eight mirrors + `logSource.ts` four-case
+Tasks: (1) migration 0022 + the eleven mirrors + `logSource.ts` four-case
 contradiction + rollback-floor row; (2) `no-reading` posted from
 `connectedArrivalWithNoRecord` + `sourceLabel`/`buildMeta` positive gate +
 `mapping.ts:49` on `source`; (3) the PARTIAL predicate as one pure function
 over `StoredLog` + the SQL-derived list boolean + the allowlist marker, both
-surfaces; (4) RC-18's seven sites + the reconciled comment; (5) riders 1–3 +
-the sunset + release-note lines; (6) e2e + screenshots.
+surfaces; (4) RC-18's seven sites + the reconciled comment + the
+deviceName-band guard's `pm5`-preserving substitution; (5) riders 1–3;
+(6) e2e + screenshots. **The sunset's own task is gone — #273 shipped it.**
 
 Gates that must go red under a named mutation (RF21, recorded per task):
 `POST /api/logs` seam test driving a `no-reading` body to 201 and a
@@ -515,8 +535,11 @@ partial row read through BOTH `LOG_LIST_COLUMNS` and the detail fetch (mutate
 the SQL boolean); `timeLabel` absent for `manual`, present for the other three
 (mutate the allowlist); the reachable RC-18 sites through their real producers
 (a nameless `getConnectedDevices` entry; a service-matched Web Bluetooth
-device with `name: undefined`); the sunset: a POST without `source` → 400
-(mutate by restoring the derive call).
+device with `name: undefined`); the nameless-erg save posting
+`source: "pm5"` with the substituted caption (mutate by restoring
+`body.source = "manual"` → `expected 'manual' to be 'pm5'`). **The sunset's
+gates are NOT PR A's to claim** — they shipped with #273 and live at
+`source.integration.test.ts:139` and `:463`.
 
 ### 8.2 PR B — the stored number (TRIAD: number meaning; antagonist FULL pass on its plan — a new stored shape; PM final gate)
 
@@ -566,7 +589,9 @@ evidence (the predicate requires an empty store).
 
 - ROADMAP register: **a connected Just Row closed by End/TERMINATE cannot be
   sent to Concept2** (`mapping.ts:50`); the `finished` path is unsettled.
-- ROADMAP sunset row: blast radius corrected (all saving, not the derive
-  path); rides PR A; James confirms the tester floor at merge.
+- ROADMAP sunset row: **DONE** — the blast-radius correction (all saving, not
+  the derive path) and the tester-floor confirmation both landed with
+  #273 / v0.35.0 on 2026-09-02, which reconciled that row itself. Nothing
+  owed here.
 - `storedSummary.ts:74` and `:81` both point at a `## Phase LM` ROADMAP heading
   that no longer exists; PR A repoints both at this spec.
