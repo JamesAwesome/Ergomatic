@@ -6374,3 +6374,52 @@ pass's own token list against the sources it never re-measured.
   §0/§2/§4/§Testing/exit-4/6(a)/8 requirement mapped to a task (including §0's
   "one sentence" and its STOP branch, and all six §Testing `linkFlow`
   assertions), and all three scope-creep items carry a named rule.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 11, the whole-plan consistency lens)
+
+Eleventh consecutive pass. Three REVISE, two of them the same class, and the class
+survived ten passes because every one of them checked the plan's blocks with the
+plan's own tools and never with the REPO's.
+
+- **CLAIM: prescribed source blocks are paste-ready because a pass ran `prettier
+  --check` over them.** FALSE for two of the three gates that actually run. Placed
+  all six prescribed TS/TSX blocks at their real paths: `pnpm typecheck` dies with
+  `TS2493` (the probe test's `mockLink` declares `vi.fn(async () => …)`, zero
+  parameters, and a test three screens down does `api.mock.calls.filter(c => c[0]
+  === …)`), and `pnpm lint` dies with `react-hooks/set-state-in-effect` on the
+  probe component's `useEffect(() => { void readStatus(); })`, where `readStatus`
+  is a `useCallback(async …)` that sets state. The plan's own sibling test file got
+  the mock arity right twice; the repo's own established mount-fetch idiom
+  (`WorkoutDetail.tsx:52`, `void f().then(cb)`) passes the lint rule where the
+  `async`/`await` shape does not — isolated with a two-file A/B probe.
+  **Technique: a plan that prescribes source blocks is making a claim about the
+  repo's gates, not about its own prose. Extract every block to its REAL path and
+  run `pnpm typecheck` and `pnpm lint`, not only `prettier --check` — formatting is
+  the one gate that cannot fail on semantics. Then run the prescribed TESTS against
+  the prescribed IMPLEMENTATION: 19/19, 11/11 and 4/4 green here, which is what
+  makes the two red gates a paste-readiness defect rather than a design defect.**
+  Corollary: when a lint fix changes a function's SHAPE (async/try -> then/catch),
+  sweep the plan's mutation table — a row whose rationale is "`try {}` alone is a
+  SyntaxError" is about the old shape.
+- **CLAIM (pass 6's fix): the census's `appUrlOpen` expectation is correct.** TRUE
+  where it is USED (the table, step 3b's permitted list, step 6b), FALSE where it
+  is ARGUED — Task 1 step 4's rationale paragraph still reads "expected 0 under
+  `app/src` and `app/ios`" while the plan's own prescribed Swift carries the hit.
+  `git log -L` shows the line untouched since REV 2, five passes before the row was
+  corrected. **Technique: CLAUDE.md's sweep rule runs in BOTH directions. Passes 8
+  and 9 caught argued-fixed/used-stale; this is used-fixed/argued-stale, and the
+  same `git log -L <line>,<line>` on the surviving sentence dates it instantly.**
+- **Attacked and HELD:** all five of pass 10's folds (the RF5 five re-derived from
+  the fences AND from every deletion range in the real tree; both token guards; zero
+  bare plan-internal citations in Task 9, the five in the REV block being the quoted
+  defect itself; RF19's three sub-claims — `vitest.config.ts:48`, one
+  `PBXNativeTarget`, e2e-on-web; TEN / REV 2–11). Six recounts exact: prettier 4-of-6
+  and precisely the four named; `browserFinished` = 52 split 3/1/1/14/33; 14 reject
+  lines -> 14 fixed / 12 naive; fold 120/24; `fails=5` with the vacuous check green;
+  RF5 = 5. **Every cell of the census table verified against a live run** — all
+  twelve rows, all residual counts, no drift. The leader-strip red proof re-run
+  corpus-wide: diff is exactly one line and `never a real link` survives. And
+  CLAUDE.md's own `pnpm exec vitest run --project client <file>` footgun is STALE
+  against vitest 4's `projects` config — jsdom loads, 4/4 pass — so the plan's three
+  uses of that form are correct. **Nit: step 3b's example read-line says "all 19
+  surviving `browserFinished` hits"; the table sums to 25.**
