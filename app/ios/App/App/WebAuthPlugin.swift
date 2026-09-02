@@ -276,6 +276,9 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin {
     /// crash path is a PLAUSIBLE second producer, not a proven one; the
     /// reload path is the one that gates. Walk case (d)'s optional variant
     /// exists to measure it.
+    /// Walk 2026-09-02: the WebContent-termination variant could not be
+    /// reproduced (memory thrash did not kill the process); the reload variant
+    /// PASSED.
     ///
     /// ORDERING CAVEAT: `bridge.plugins` is an unordered `[String:
     /// CapacitorPlugin]` Dictionary, iterated at

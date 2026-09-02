@@ -55,9 +55,12 @@ export type WeightClass = "H" | "L";
  * dropped request is a normal event.
  *
  * `stateEchoed` rides every outcome derived from a parsed callback because it
- * is a MEASUREMENT the walk owes (design exit criterion 4): whether Concept2
- * echoes `state` on a private-use-scheme redirect is UNMEASURED, and nothing
- * here depends on it -- the exchange always sends the MINT's `state`.
+ * is a MEASUREMENT the walk owed (design exit criterion 4). **MEASURED on
+ * device, 2026-09-02** (`docs/monitor/sessions/walk-2026-09-02-c2-native/`):
+ * on the private-use-scheme redirect Concept2 echoes `state` when the rower
+ * APPROVES and omits it when the rower DENIES -- so the flag is a constant in
+ * neither direction and stays on the union. Nothing here depends on it: the
+ * exchange always sends the MINT's `state`.
  * **`stateMismatch` is the one parsed-callback outcome that does NOT carry it,
  * and deliberately: that member is only reachable when a state WAS echoed (an
  * absent one cannot mismatch), so the flag would be a constant `true` there
@@ -225,11 +228,15 @@ async function completeNative(
     return { kind: "malformed", stateEchoed };
   }
 
-  // Defence in depth, not a control (design §4). `state` is undocumented as a
-  // pass-through at Concept2 and UNMEASURED on a private-use redirect, so when
-  // it is absent this check is a deliberate no-op. The log records THAT a
-  // mismatch happened; printing either value would put a live correlation
-  // secret in the console.
+  // Defence in depth, not a guarantee (design §4). MEASURED on device,
+  // 2026-09-02 (`docs/monitor/sessions/walk-2026-09-02-c2-native/`): the
+  // private-use callback CARRIES `state` on the approve leg and carries NONE on
+  // the deny leg. So this refusal does bite on the only leg that can reach an
+  // exchange -- but the deny leg proves the echo is not universal, Concept2
+  // documents no pass-through at all, and the exchange never depends on one, so
+  // an absent state stays a deliberate no-op rather than a refusal. The log
+  // records THAT a mismatch happened; printing either value would put a live
+  // correlation secret in the console.
   if (returnedState !== null && returnedState !== state) {
     console.error(
       "[linkFlow] the callback carried a state that does not match this attempt's; refusing to exchange",
