@@ -286,9 +286,17 @@ export interface LogPatch {
  *
  *  The client's twin is `src/log/storedSummary.ts`'s
  *  `PARTIAL_CLOSE_REASONS` (server code never imports from `src/` — see
- *  `LogSeriesSample`'s own comment above); the two are held equal by
- *  `server/routes/partial.integration.test.ts`, which runs the CLIENT
- *  predicate as the oracle over rows this projection classified. */
+ *  `LogSeriesSample`'s own comment above). What holds the two arrays equal
+ *  is ONE assertion — `partial.integration.test.ts`'s
+ *  `expect([...PARTIAL_ENDED_BY]).toStrictEqual([...PARTIAL_CLOSE_REASONS])`,
+ *  the only place both trees are imported. NOT that file's row-by-row
+ *  agreement cases, which reach only the close reasons they SEED
+ *  (`rower`, `link-lost`, `finished`, `null`): dropping `program-dropped`,
+ *  `program-failed` or `interrupted` from this array left every gate in the
+ *  repo green while History went silent on a row whose detail screen read
+ *  `LEFT UNFINISHED · N of M intervals measured` (review round 1). The row
+ *  cases hold the RULE equal; the array assertion holds its DOMAIN equal,
+ *  and only the second one covers all five members. */
 export const PARTIAL_ENDED_BY = [
   "rower",
   "link-lost",

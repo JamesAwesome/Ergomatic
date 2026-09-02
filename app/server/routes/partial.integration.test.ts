@@ -13,7 +13,11 @@ import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
 import { createArticleReadsStore } from "../stores/articleReads.js";
 import { createBaselinesStore } from "../stores/baselines.js";
-import { createLogsStore, type LogStep } from "../stores/logs.js";
+import {
+  createLogsStore,
+  PARTIAL_ENDED_BY,
+  type LogStep,
+} from "../stores/logs.js";
 import { createPlanStateStore } from "../stores/planState.js";
 import { createPreferencesStore } from "../stores/preferences.js";
 import { createTestHistoryStore } from "../stores/testHistory.js";
@@ -21,6 +25,7 @@ import { createWorkoutsStore } from "../stores/workouts.js";
 import {
   buildStoredSummary,
   historyChipWord,
+  PARTIAL_CLOSE_REASONS,
   partialCloseReason,
   type StoredLog,
 } from "../../src/log/storedSummary.js";
@@ -157,6 +162,22 @@ describe("GET /api/logs: the list's SQL `partial` and the detail screen's predic
       steps: [],
       ...overrides,
     });
+
+  // Review round 1, Important: the row-by-row agreement below reaches only
+  // the close reasons it SEEDS — `rower`, `link-lost`, `finished` and
+  // `null`. Dropping `program-dropped`, `program-failed` or `interrupted`
+  // from the server's `PARTIAL_ENDED_BY` therefore left every gate in the
+  // repo green while History went silent on a row whose detail screen
+  // reads `LEFT UNFINISHED · N of M intervals measured`. Seeding three
+  // more rows would only push the hole to the next member added.
+  //
+  // This is the whole-array equality instead: the two trees' allowlists,
+  // compared as ordered lists, in the one test file that imports both. It
+  // is what actually holds them equal — the row cases hold the RULE equal,
+  // this holds its DOMAIN equal.
+  it("the server's PARTIAL_ENDED_BY and the client's PARTIAL_CLOSE_REASONS are the same five values, in the same order", () => {
+    expect([...PARTIAL_ENDED_BY]).toStrictEqual([...PARTIAL_CLOSE_REASONS]);
+  });
 
   it("the list's SQL `partial` equals the client predicate over the detail row, for every seeded shape", async () => {
     const bearer = await bearerToken();
