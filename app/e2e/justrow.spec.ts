@@ -266,3 +266,159 @@ test.describe("Just Row: without the monitor", () => {
     await expect(page.getByText("INTERVALS")).toHaveCount(0);
   });
 });
+
+/** Sets baselines so Today renders its plan line rather than the
+ *  onboarding doors (`Today.tsx`'s `needsDoors = baselines === null` hides
+ *  the whole plan apparatus) — duplicated from `today.spec.ts`'s own helper,
+ *  this repo's precedent for small per-file e2e helpers. */
+async function setBaselines(
+  page: Page,
+  baselines: { k2Seconds: number; k6Seconds: number },
+): Promise<void> {
+  const result = await page.evaluate(async (patch) => {
+    const res = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, baselines);
+  if (!result.ok) {
+    throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Activates a preset plan via the real `PUT /api/plan` route — copied
+ *  from `log.spec.ts`'s own `choosePlan`. */
+async function choosePlan(
+  page: Page,
+  planKey: "sprint" | "head",
+): Promise<void> {
+  const result = await page.evaluate(async (key) => {
+    const res = await fetch("/api/plan", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planKey: key }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, planKey);
+  if (!result.ok) {
+    throw new Error(`plan setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Zeroes `doneN` via `PUT /api/plan {reset:true}` — copied from
+ *  `log.spec.ts`'s own `resetPlanProgress`. A fresh backdoor user starts at
+ *  zero anyway; the reset makes the starting position an assertion of this
+ *  test rather than an accident of the user being new. */
+async function resetPlanProgress(page: Page): Promise<void> {
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/plan", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reset: true }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(`plan reset failed: ${result.status} ${result.body}`);
+  }
+}
+
+// A Just Row STANDS IN for a plan session (substitution spec 2026-09-02,
+// exit criterion 4 — the RF24 seam test): the one e2e that starts at the
+// Just Row door with a plan active and walks the whole producer → reader
+// chain for real. The door posts `advancesPlan: true` (the free row's
+// explicit opt-in — the store's default for a free row is "does not
+// count"), the store bumps `done_n` AND writes the link in the same
+// transaction, Today's plan line re-reads `SESSION n OF N` from
+// `GET /api/plan`, and the Plan tab reads the link back through
+// `GET /api/logs?plan=sprint` and prints the stand-in: the JR chip in the
+// badge slot (the pair `workoutId` null + `workoutType` null — never the
+// unknown-type box, which the same null type would otherwise claim), the
+// name `Just Row`, and the shipped swap mark naming what the day asked
+// for. Sprint index 0 is an O2 day (`domain/plans.ts` `SPRINT_WEEKS[0][0]`),
+// so the mark reads `INSTEAD OF O2`.
+//
+// Every number here is READ, not seeded: `resetPlanProgress` puts the
+// plan at zero, and the only thing that moves it is the button under
+// test. Red-proof (RF21): asserting `SESSION 1 OF 84` on Today after the
+// save fails with the line reading `SESSION 2 OF 84` — the count moved
+// because the door's lead moved it.
+test.describe("Just Row: standing in for a plan session", () => {
+  test("plan at SESSION 1 → Start Timer → Finish → Log against plan · SESSION 1 OF 84 → Today reads SESSION 2 OF 84 → Plan row 1 is the JR stand-in INSTEAD OF O2", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: `justrow-standin-${RUN_ID}@e2e.test`,
+      name: "Just Row Stand-in Walker",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+
+    // The starting position, read off Today's own plan line — the number
+    // whose meaning this feature changes (TRIAD).
+    await page.goto("/today");
+    await expect(page.locator(".today-plan-line")).toContainText(
+      "SESSION 1 OF 84",
+    );
+
+    // The phone-timed door, three real seconds on the clock, then ▶ →
+    // Finish — the same walk `Just Row: without the monitor` takes.
+    await page.getByRole("link", { name: "JUST ROW" }).click();
+    await page.getByRole("button", { name: "Start Timer" }).click();
+    await expect(page).toHaveURL(/\/session\/run$/);
+    await expect(page.getByText("0:03").first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.getByRole("button", { name: "Next phase" }).click();
+    await page.getByRole("button", { name: "Finish session" }).click();
+    await expect(page).toHaveURL(/\/justrow\/log$/);
+
+    // The door wears the shipped pair (handoff `Main.dc.html`): the lead
+    // carries the plan position it will consume, and `Save without
+    // logging` sits under it. Both asserted so a door showing only one
+    // cannot pass.
+    const lead = page.getByRole("button", {
+      name: "Log against plan · SESSION 1 OF 84",
+    });
+    await expect(lead).toBeVisible();
+    await expect(lead).toHaveClass(/summary-save-lead/);
+    const secondary = page.getByRole("button", {
+      name: "Save without logging",
+    });
+    await expect(secondary).toBeVisible();
+    await expect(secondary).toHaveClass(/summary-save-secondary/);
+    await lead.click();
+    await expect(page).toHaveURL(/\/today\/log$/);
+
+    // Today: the plan moved by exactly one, because a free row that opted
+    // in counts (unconnected criterion 2, amended by the substitution
+    // spec: "unless the body opted in").
+    await page.goto("/today");
+    await expect(page.locator(".today-plan-line")).toContainText(
+      "SESSION 2 OF 84",
+    );
+
+    // Plan tab (handoff `PlanRow.dc.html`, row 5's treatment on row 1):
+    // the done row is a LINK to the stored log, wears the JR chip on its
+    // own class in the badge slot — no `.type-badge`, no unknown box — is
+    // named `Just Row`, and carries the mark naming the O2 day it stood
+    // in for.
+    await page.goto("/plan");
+    await page.locator(".plan-sequence").waitFor();
+    await expect(page.locator(".plan-row")).toHaveCount(84);
+    const row = page.locator(".plan-row").nth(0);
+    await expect(row).toHaveClass(/plan-row-done/);
+    await expect(row).toHaveClass(/plan-row-swapped/);
+    await expect(row).toHaveAttribute("href", /\/today\/log\/.+/);
+    await expect(row.locator(".free-row-chip")).toHaveText("JR");
+    await expect(row.locator(".type-badge")).toHaveCount(0);
+    await expect(row.locator(".plan-row-badge-unknown")).toHaveCount(0);
+    await expect(row.locator(".plan-row-name")).toHaveText("Just Row");
+    await expect(row.locator(".plan-row-swap")).toHaveText("INSTEAD OF O2");
+    // Exactly one done row: the stand-in is the ONLY thing that advanced.
+    await expect(page.locator("a.plan-row-done")).toHaveCount(1);
+  });
+});

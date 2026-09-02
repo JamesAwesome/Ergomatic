@@ -1154,7 +1154,11 @@ test("plan-linked", async ({ page }) => {
     "INSTEAD OF TR",
   );
   // The badge follows what was ROWED, not what the plan asked: row 4 is a
-  // TR day showing an O2 badge beside an O2 workout's name.
+  // TR day showing an O2 badge beside an O2 workout's name. Since the
+  // substitution spec (2026-09-02, Gate 0: "still center the chips") that
+  // badge centres against the name + mark PAIR, not the name line — this
+  // capture was re-taken for exactly that move (`design.spec.ts` measures
+  // it; `plan-standin` below shows the JR chip in the same slot).
   await expect(linkedRows.nth(3).locator(".type-badge")).toHaveText("O2");
 
   // The upcoming checkpoint (sprint index 6, row 7) names its prescribed
@@ -1168,6 +1172,97 @@ test("plan-linked", async ({ page }) => {
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "plan-linked.png"),
+  });
+});
+
+// Substitution spec (2026-09-02), exit criterion 3's capture (handoff
+// `PlanRow.dc.html`, rows 5 and 7): the Plan tab with a Just Row STANDING
+// IN on a type day AND on a checkpoint day. The board's first four rows
+// are `plan-linked`'s own (indices 0..3, the fourth a swap), then a free
+// row opted in with `advancesPlan: true` lands on index 4 — sprint's AT
+// day — wearing the JR chip, the name `Just Row`, and `INSTEAD OF AT`; a
+// plain O2 on index 5; and a second stand-in on index 6, the sprint
+// checkpoint, marked `INSTEAD OF 2K Test` — the prescription's title in
+// ITS case, as the shipped mark prints it. Seeded through the real POST
+// with the free pair (`workoutId` null + `workoutType` null) and `steps:
+// []`, the body the Just Row door itself sends; the header reads
+// `SESSION 8 OF 84` because every one of the seven counted.
+test("plan-standin", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-plan-standin@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  const rowed: { title: string; type: "O2" | "AT" | "TR" | "AN" | null }[] = [
+    { title: "Sea Fret", type: "O2" }, // index 0, an O2 day
+    { title: "Occluded Front", type: "AT" }, // index 1, an AT day
+    { title: "Horse Latitudes", type: "O2" }, // index 2, an O2 day
+    { title: "Slack Tide", type: "O2" }, // index 3 is a TR day — SWAPPED
+    { title: "Just Row", type: null }, // index 4 is an AT day — STAND-IN
+    { title: "Sea Fret", type: "O2" }, // index 5, an O2 day
+    { title: "Just Row", type: null }, // index 6, the 2K Test checkpoint
+  ];
+  for (const { title, type } of rowed) {
+    if (type === null) {
+      await postLog(page, {
+        workoutTitle: title,
+        workoutType: null,
+        steps: [],
+        timeSeconds: 600,
+        source: "timer",
+        advancesPlan: true,
+      });
+    } else {
+      await postLog(page, {
+        workoutTitle: title,
+        workoutType: type,
+        held: "held",
+        pain: 2,
+        avgSplitSeconds: 130,
+        timeSeconds: 780,
+        distanceMeters: 3000,
+        advancesPlan: true,
+        steps: [
+          {
+            label: "6:00 @ 6k",
+            targetSplit: 130,
+            actualSplit: 130,
+            actualSource: "stopwatch",
+            meters: 3000,
+          },
+        ],
+      });
+    }
+  }
+
+  await page.goto("/plan");
+  await page.locator(".plan-sequence").waitFor();
+  await expect(page.locator(".plan-row")).toHaveCount(84);
+  await expect(page.locator("a.plan-row-done")).toHaveCount(7);
+  await expect(page.getByText("SESSION 8 OF 84")).toBeVisible();
+
+  // Row 5 (index 4): the stand-in on a type day — the chip on its OWN
+  // class, no type badge, no unknown box, the mark naming the AT day.
+  const typeDay = page.locator(".plan-row").nth(4);
+  await expect(typeDay.locator(".free-row-chip")).toHaveText("JR");
+  await expect(typeDay.locator(".type-badge")).toHaveCount(0);
+  await expect(typeDay.locator(".plan-row-badge-unknown")).toHaveCount(0);
+  await expect(typeDay.locator(".plan-row-name")).toHaveText("Just Row");
+  await expect(typeDay.locator(".plan-row-swap")).toHaveText("INSTEAD OF AT");
+
+  // Row 7 (index 6): the stand-in on the checkpoint — the mark names the
+  // prescribed workout by its own title, in its own case.
+  const checkpoint = page.locator(".plan-row").nth(6);
+  await expect(checkpoint.locator(".free-row-chip")).toHaveText("JR");
+  await expect(checkpoint.locator(".plan-row-name")).toHaveText("Just Row");
+  await expect(checkpoint.locator(".plan-row-swap")).toHaveText(
+    "INSTEAD OF 2K Test",
+  );
+  await expect(page.locator(".free-row-chip")).toHaveCount(2);
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "plan-standin.png"),
   });
 });
 
@@ -4830,6 +4925,59 @@ test("justrow-log-timer", async ({ page }) => {
   await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "justrow-log-timer.png"),
+  });
+});
+
+// The Just Row log door WITH a plan (substitution spec 2026-09-02,
+// exit criterion 2; handoff `Main.dc.html`): the shipped pair replaces the
+// single "Save this row" — `Log against plan · SESSION n OF N` leads on
+// `.summary-save-lead`, `Save without logging` sits under it on
+// `.summary-save-secondary`. Four counted rows are seeded first so the
+// lead reads the board's own `SESSION 5 OF 84` rather than the fresh
+// account's `1`; the row itself is walked through the real timer door,
+// the same flow `justrow-log-timer` captures.
+test("justrow-log-plan", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-justrow-log-plan@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  for (const { title, type } of [
+    { title: "Sea Fret", type: "O2" },
+    { title: "Occluded Front", type: "AT" },
+    { title: "Horse Latitudes", type: "O2" },
+    { title: "Slack Tide", type: "O2" },
+  ]) {
+    await postLog(page, {
+      workoutTitle: title,
+      workoutType: type,
+      held: "held",
+      pain: 2,
+      avgSplitSeconds: 130,
+      timeSeconds: 780,
+      distanceMeters: 3000,
+      advancesPlan: true,
+    });
+  }
+  await page.goto("/justrow");
+  await page.getByRole("button", { name: "Start Timer" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.getByText("JUST ROW", { exact: true })).toBeVisible();
+  await expect(page.getByText("0:04").first()).toBeVisible({
+    timeout: 10_000,
+  });
+  await finishJustRowTimer(page);
+  await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+  const lead = page.getByRole("button", {
+    name: "Log against plan · SESSION 5 OF 84",
+  });
+  await expect(lead).toHaveClass(/summary-save-lead/);
+  await expect(
+    page.getByRole("button", { name: "Save without logging" }),
+  ).toHaveClass(/summary-save-secondary/);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "justrow-log-plan.png"),
   });
 });
 

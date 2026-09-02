@@ -2,8 +2,14 @@
 
 **Origin:** Gate 0 for Phase JR follow-on item 5 (James, 2026-09-01:
 "advances the record, records the stand-in"; 2026-09-02: checkpoint days
-included). **Status: GATE 0 PASSED — James, 2026-09-02, on rev 1d ("design approved").
-Board final; chips centred on both axes, the checkpoint mark cased as shipped.**
+included). **Status: IMPLEMENTED on branch jr-substitution (Gate 0 PASSED — James,
+2026-09-02, on rev 1d, "design approved"; board final; chips centred on
+both axes, the checkpoint mark cased as shipped). Captures:
+`docs/screenshots/justrow-log-plan.png` (Main.dc.html — the door with the
+pair), `docs/screenshots/plan-linked.png` re-taken (the shipped O2 swap
+row's badge moved), `docs/screenshots/plan-standin.png` (PlanRow.dc.html
+rows 5 and 7 — the JR stand-in on an AT day and on the 2K Test
+checkpoint).**
 
 ## Boards, and where each label comes from
 
