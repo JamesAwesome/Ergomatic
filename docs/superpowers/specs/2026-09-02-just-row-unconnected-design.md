@@ -1,11 +1,14 @@
 # Just Row without the monitor (time only) — design
 
-**Status: Gate 0 PASSED (rev 2e, James, 2026-09-02). Spec REV 3.** Rev 2
+**Status: Gate 0 PASSED (rev 2e, James, 2026-09-02). Spec REV 4.** Rev 2
 folded the antagonist's delta pass (BLOCK on rev 1's mechanism — eleven
-findings, marked ⟨F#⟩). Rev 3 answers James's "Harden it" (2026-09-02) on
-rev 2's one heuristic: provenance is now a STORED FACT on every log row,
-not an inference from an absence. The product shape has not changed since
-Gate 0. Phase JR follow-on items 3 (unconnected
+findings, marked ⟨F#⟩). Rev 3 answered James's first "Harden it" by
+storing provenance as a nullable column. Rev 4 answers his second: **the
+column is NOT NULL, the server is the single place provenance is ever
+inferred (once, at write time, for old clients; and once, in the
+migration, for old rows), the read side never infers, and a body whose
+`source` contradicts its own fields is refused.** The product shape has
+not changed since Gate 0. Phase JR follow-on items 3 (unconnected
 mode) and 4 (the JR chip), built together as one PR.
 Handoff: `docs/design/handoffs/2026-09-02-just-row-unconnected/` (boards,
 the mechanical reference captures, contrast table).
@@ -98,17 +101,29 @@ becomes OPTIONAL: a metre-less phase has no split, `NaN` is not a legal
 value (it serialises to `null` and round-trips as a typed `number`), and
 omitting it must be representable ⟨F5⟩. Every reader of `splitSeconds`
 (`logDraft.ts:466` writes `actualSplit` from it) skips when undefined.
-(c) **`session_logs.source`**: a nullable `pgEnum("log_source",
-["pm5", "timer", "manual"])`, additive (old rows read back `null`),
-validated on POST as optional-but-one-of-three, returned on every GET.
-**Every log door writes it from now on**: the connected Just Row door
-posts `pm5`, this timer door posts `timer`, `LogSession` posts `timer`
-when it is closing a `SessionRun` and `manual` from `Log it after`. This
-is the "which door" fact the file header above says the schema lacks;
-it hardens provenance for EVERY row, not only free ones, and gives Phase
-LM's queued no-reading row a column to be honest in (that row's exact
-value is LM's call, not this spec's — it posts `manual` today and keeps
-doing so until LM rules). Alternatives rejected: `workoutId === null` as
+(c) **`session_logs.source`**: `pgEnum("log_source", ["pm5", "timer",
+"manual"])`, **NOT NULL**. Migration 0020 adds it nullable, BACKFILLS
+every existing row with the one inference the read side uses today
+(`device_name IS NOT NULL` ⇒ `pm5`; else any step with
+`actualSource = "stopwatch"` ⇒ `timer`; else `manual`), then sets
+NOT NULL — so every row that renders `PM5 …` / `TIMER` / `LOGGED BY HAND`
+today renders the same word tomorrow, from a column instead of a guess.
+**On the wire it is optional for one reason only — additive-only between
+tags: an old TestFlight build posts no `source`.** When absent the SERVER
+derives it by that same rule, once, at write time; when present the
+server checks it against the body and refuses a contradiction with a 400
+naming the field: `pm5` requires a non-null `deviceName`; `timer` and
+`manual` require `deviceName` null; `timer` additionally requires either
+a stopwatch step or an empty `steps` (the free-row shape). **Every log
+door writes it from now on**: the connected Just Row door posts `pm5`,
+this timer door posts `timer`, `LogSession` posts `timer` when it is
+closing a `SessionRun` and `manual` from `Log it after`. The client's
+read-side inference is DELETED, not kept as a fallback — `sourceLabel`
+reads the column and nothing else. This is the "which door" fact the
+file header above says the schema lacks; it hardens provenance for EVERY
+row, and gives Phase LM's queued no-reading row a column to be honest in
+(that row backfills and keeps posting `manual`, which is what it renders
+today, until LM rules on its own word). Alternatives rejected: `workoutId === null` as
 the marker (free today, silent tomorrow — nothing prevents a future
 producer); a `title === "Just Row"` check (a rower can name a workout
 that); inferring `TIMER` from `steps: [] && deviceName === null` (rev 2's
@@ -204,19 +219,19 @@ which record each branch holds). Every reader below branches on
 6. **Reading it back.** History: `LogRow.heroSnippet` already returns `""`
    with no avg and no distance — title and date only, by construction.
    Detail: `SummaryHeroesBlock` already renders TIME alone when only
-   `time` is defined. **Provenance** ⟨F3, F11, hardened rev 3⟩:
-   `sourceLabel` reads the stored column FIRST — `pm5` ⇒ `deviceName`
-   (falling back to the literal `PM5` if a `pm5` row somehow has none),
-   `timer` ⇒ `TIMER`, `manual` ⇒ `LOGGED BY HAND` — and only a `null`
-   source (every row saved before this ships) falls through to today's
-   inference, unchanged byte-for-byte. `buildMeta`'s time-of-day rule
-   keys on the same resolved word, so a `timer` row shows its clock time
-   as the board does. No absence is ever read as a fact: a free row with
-   `source: "timer"` reads `TIMER` because it SAYS so. Pinned RF24-style
-   across the seam: the test starts at the door, POSTs through the real
-   validator, GETs the row back, and asserts `SEP · hh:mm · TIMER` at the
-   detail; a second test pins a `source: null` fixture rendering exactly
-   as before.
+   `time` is defined. **Provenance** ⟨F3, F11, hardened rev 3 → 4⟩:
+   `sourceLabel` reads the column and NOTHING else — `pm5` ⇒ `deviceName`
+   (non-null by the server's own consistency check), `timer` ⇒ `TIMER`,
+   `manual` ⇒ `LOGGED BY HAND`. The client-side inference is deleted;
+   `StoredLog.source` is typed as the non-null enum, so a row without it
+   cannot be constructed in the client at all. `buildMeta`'s time-of-day
+   rule keys on the same resolved word, so a `timer` row shows its clock
+   time as the board does. Pinned RF24-style across the seam: the test
+   starts at the door, POSTs through the real validator, GETs the row
+   back, and asserts `SEP · hh:mm · TIMER` at the detail. The migration's
+   backfill is pinned on real Postgres: three rows seeded BEFORE the
+   migration (a device row, a stopwatch-step row, an all-assumed row)
+   read back `pm5` / `timer` / `manual` after it.
 7. **The JR chip** — a new `FreeRowChip` component with its own class
    (`free-row-chip`), NEVER `.type-badge` (exit criterion 2's structural
    pin stays true: no `.type-badge` for a free row). Rendered where
@@ -227,10 +242,14 @@ which record each branch holds). Every reader below branches on
 
 ## What does NOT change
 
-- **Additive server change only:** migration 0020 adds the nullable
-  `source` column and enum; the validator accepts it as optional; the
-  API stays additive-only between tags (an old TestFlight build posts no
-  `source` and its rows read back exactly as today). The connected Just
+- **Additive server change:** migration 0020 adds the enum and column,
+  backfills, and sets NOT NULL; the API stays additive-only between tags
+  (an old TestFlight build posts no `source`; the server derives it and
+  the row reads back exactly as today). Rollback floor note for
+  `docs/RELEASING.md`: a server older than 0020 does not write `source`,
+  so rolling the API back past it leaves new rows NULL under a NOT NULL
+  column — the migration is a one-way floor, recorded in the same table
+  as v0.16.0's. The connected Just
   Row's behaviour is untouched except that it now posts `source: "pm5"`;
   its files are touched (`JustRow.tsx` gains the second action,
   `JustRowLog.tsx` the second entry kind and the `source` field).
@@ -254,14 +273,21 @@ which record each branch holds). Every reader below branches on
    and renders TIME alone — no AVG SPLIT, no DISTANCE, no INTERVALS, no
    machine block — asserted on a row that went through the real POST
    validator and came back from GET (the producer → consumer seam, RF24).
-3b. `source`: the validator rejects a value outside `pm5 | timer | manual`
-   with a 400 naming the field, and accepts its absence; every door's
-   posted body carries the right member (JustRowLog monitor entry `pm5`,
-   timer entry `timer`; LogSession run-close `timer`, Log-it-after
-   `manual`) — one assertion per door on the posted body; and a stored
-   row with `source: null` renders its meta line byte-identically to
-   today (fixtures: a `deviceName` row, a stopwatch-step row, an
-   all-assumed row).
+3b. `source`, at the authority: the validator rejects a value outside
+   `pm5 | timer | manual` and each of the three contradictions (`pm5`
+   without a device, `timer`/`manual` with one, `timer` with non-stopwatch
+   steps) with a 400 naming the field; a body with `source` ABSENT is
+   stored with the derived member (three integration cases, one per
+   member, asserting the GET); every door's posted body carries its
+   member (JustRowLog monitor entry `pm5`, timer entry `timer`; LogSession
+   run-close `timer`, Log-it-after `manual`) — one assertion per door.
+3c. The migration, on real Postgres: three rows inserted before 0020 read
+   back `pm5` / `timer` / `manual` after it, and the column is NOT NULL
+   (an insert without `source` is refused by the database, not only by
+   the route).
+3d. The client never infers: `grep -n "actualSource === \"stopwatch\"" src/log/storedSummary.ts`
+   returns nothing after this PR, and `StoredLog.source` is the non-null
+   enum.
 4. History renders the row with no second line and a `.free-row-chip`,
    and no `.type-badge` (criterion 2 of the parent spec, still true).
 5. Backgrounding: a run whose `phaseStartedAt` is 10 minutes in the past
@@ -281,8 +307,13 @@ which record each branch holds). Every reader below branches on
 
 ## PR shape
 
-One PR, TRIAD (two `SessionRun` stored-shape changes plus the additive
-`session_logs.source` migration). The antagonist's
+One PR, TRIAD (two `SessionRun` stored-shape changes plus the
+`session_logs.source` migration with its backfill and NOT NULL). The
+migration's backfill runs the same inference the client is deleting —
+the plan lifts it into one server-side function used by BOTH the
+migration's SQL (as its documented equivalent) and the route's
+derive-when-absent path, with one test proving the two agree on the
+three fixture rows. The antagonist's
 delta pass ran on rev 1 (BLOCK; every finding folded here — the ledger
 entry rides this branch); the plan follows James's read of rev 2, then
 implementation, then the PM final-PR gate. Fast path does not apply
