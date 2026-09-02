@@ -6117,3 +6117,42 @@ same way.
   `App.SwiftFileList` (`grep -c 'App/AppDelegate\.swift$'` → `1`), so the number that replaced
   the unmeasurable `SwiftCompile` count is itself measured. ~40 `file:line` citations re-read
   at this head, one drifted (`eslint.config.js:86-89` excludes `src/adapters/**` at `:90`).
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 6, verifying pass 5's fixes)
+
+- **A phrase-census gate whose expected ZEROS are falsified by the same plan's own new
+  source.** The retirement row said `browserFinished` = 0 under `app/src`, and the plan's
+  prescribed `src/adapters/linkFlow.ts` header contains the literal (plan `:1227`); the
+  PERMANENT `appUrlOpen` row said 0 under `app/src` AND `app/ios`, and the plan's own
+  `WebAuthPlugin.swift` doc comment contains it (`:263`). Both counts were measured against
+  the CURRENT tree, where the new files do not exist yet, so the table was true when written
+  and false the moment the plan is executed. **Technique: for any census/grep gate, run the
+  phrase list against the CODE THE PLAN PRESCRIBES — the file-content code blocks, not the
+  plan's prose — before believing an expected count. A gate's expected value is a claim about
+  the post-change tree, and a pre-change measurement cannot support it.**
+- **A gate ordered before the edits it will judge.** The base-vs-head census diff sat at step
+  3b while steps 4-6 each add a `browserFinished` sentence to ROADMAP.md (1→2) and the two
+  PR1.5 documents (3→4, 7→8) — so the diff either describes a tree the PR does not ship or
+  reports the plan's own prescribed edits as defects. **Technique: for a diff-shaped gate,
+  ask which later steps in the SAME task still change the corpus, and either move the gate
+  behind them or enumerate their deltas in the permitted list with exact before→after counts.**
+- **A mutation that breaks the TOOL is observationally identical to the mutation biting.**
+  "Delete the `sed -E` leader-strip from `norm()`" leaves `norm() { | tr … }` — bash syntax
+  error, exit 2, zero output — so every hit "disappears" and the red proof reads as passing.
+  Pass 3's `try {}` entry covers invalid mutation syntax; this is its corollary.
+  **Technique: a probe that removes part of a tool must state the tool-still-runs form AND a
+  SURVIVOR — here, `never a real link` must still report 1 while `posts nothing and carries
+  no client id` goes to 0. A red proof with no survivor cannot tell a bite from a crash.**
+- **Attacked and HELD:** all six of pass 5's folds (pass counts consistent at both sites; the
+  baseline-tree probe run end to end and biting, `never a real link` surviving;
+  `eslint.config.js:89-90`; `You.tsx:19-20`'s `DEV ||` OR; observation 10's grep list exact);
+  ~30 fresh citations across `concept2.ts`, `middleware.ts`, `index.ts`, `auth/routes.ts`,
+  `project.pbxproj` (all four anchors + thirteen settings lines), `Main.storyboard:14`,
+  `dist-grep.sh`, `ios-release.sh/.test.sh`, `ci.yml`, `phase-lt.md`, the gate doc's three
+  markers, `ROADMAP.md:1086-1095`; the Swift's two compile-blocking signatures verified in the
+  vendored sources (`CAPPlugin.h:40` is `NSNumber* _Nullable`, so the `-> NSNumber?` override
+  is legal; `JSTypes.swift:34` gives a NON-optional `getBool(key, default)`); `compose.yml:61-64`
+  never exporting `VITE_ENABLE_C2_LINK_PROBE`, so the e2e/screenshots blindness claim holds; and
+  the "only the calling app's session" guarantee traced to design §Research `:73` (PRIMARY,
+  developer.apple.com) rather than the SDK header, which does not contain it — the Swift comment
+  attributes it correctly.
