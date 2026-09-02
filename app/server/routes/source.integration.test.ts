@@ -270,8 +270,12 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
     appliedBefore: -1,
     appliedAfter: -1,
   };
-  const ids: Record<"device" | "stopwatch" | "assumed" | "free", string> = {
+  const ids: Record<
+    "device" | "deviceWithStopwatch" | "stopwatch" | "assumed" | "free",
+    string
+  > = {
     device: "",
+    deviceWithStopwatch: "",
     stopwatch: "",
     assumed: "",
     free: "",
@@ -322,6 +326,14 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
       return r.rows[0].id;
     }
     ids.device = await insert("PM5 432331249 Row", [PM5_STEP]);
+    // The ORDER of the CASE arms is only observable on a row that carries
+    // BOTH a device and a stopwatch step — the connected session saved
+    // through the manual door, the spec's own "knowingly wrong" row. The
+    // device arm must win, as the read-side guess did; a probe that swaps
+    // the arms goes red here and nowhere else.
+    ids.deviceWithStopwatch = await insert("PM5 432331249 Row", [
+      STOPWATCH_STEP,
+    ]);
     ids.stopwatch = await insert(null, [STOPWATCH_STEP]);
     ids.assumed = await insert(null, [ASSUMED_STEP]);
     // The one shape production already holds from v0.32.0: PR 1's free
@@ -373,8 +385,9 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
     expect(r.rows[0].data_type).toBe("jsonb");
   });
 
-  it("rows inserted BEFORE 0020 read back pm5 / timer / manual / manual after it", async () => {
+  it("rows inserted BEFORE 0020 read back pm5 / pm5 / timer / manual / manual after it", async () => {
     expect(await sourceOf(ids.device)).toBe("pm5");
+    expect(await sourceOf(ids.deviceWithStopwatch)).toBe("pm5");
     expect(await sourceOf(ids.stopwatch)).toBe("timer");
     expect(await sourceOf(ids.assumed)).toBe("manual");
     expect(await sourceOf(ids.free)).toBe("manual");
@@ -403,9 +416,11 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
 
   // The TS rule and the SQL rule are two copies of one inference, and
   // they must not drift while both exist. This runs the migration FILE's
-  // own CASE text (not a transcription) as a SELECT over the four rows
-  // and checks it against `deriveLogSource` on the same evidence — and
-  // against what 0020 actually stored.
+  // own CASE text (not a transcription) as a SELECT over the five staged
+  // rows (by id, so a row leaked by a failing sibling cannot turn a
+  // disagreement into a count mismatch) and checks it against
+  // `deriveLogSource` on the same evidence — and against what 0020
+  // actually stored.
   it("the migration's own CASE and deriveLogSource agree on every row", async () => {
     const file = fs
       .readdirSync("drizzle")
@@ -423,10 +438,14 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
       derived: string;
     }>(
       sql.raw(
-        `select id, device_name, steps, source, (${caseExpr}) as derived from session_logs where user_id = '${userId}'`,
+        `select id, device_name, steps, source, (${caseExpr}) as derived from session_logs where id in (${Object.values(
+          ids,
+        )
+          .map((id) => `'${id}'`)
+          .join(", ")})`,
       ),
     );
-    expect(rows.rows).toHaveLength(4);
+    expect(rows.rows).toHaveLength(5);
     for (const row of rows.rows) {
       const ts = deriveLogSource({
         deviceName: row.device_name,
