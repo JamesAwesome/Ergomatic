@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import { createApp } from "../app.js";
 import { SESSION_COOKIE } from "../auth/cookies.js";
 import { requireUser } from "../auth/middleware.js";
+import { baseDeps } from "../testDeps.js";
 import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import { makeFakeConcept2Store, makeFakeStores } from "../testing/fakes.js";
 import type { LogInput, LogsStore } from "../stores/logs.js";
@@ -306,9 +308,64 @@ describe("concept2 router: auth guard", () => {
       );
       expect(res.status).toBe(400);
       expect(res.body).toStrictEqual({ error: "ambiguous_auth" });
+      // The JSON arm carries the same header the pages do — this response
+      // is still a reply to a URL holding `code` and `state` (design §5).
+      expect(res.headers["referrer-policy"]).toBe("no-referrer");
       expect(await store.peekAttempt(state)).not.toBeNull();
       expect(client.exchangeCode).not.toHaveBeenCalled();
     });
+
+    // The refusal is required on ALL FIVE JSON routes, and the three tests
+    // above only reach two of them plus the callback: deleting
+    // `refuseAmbiguousAuth` from `GET /link`, `DELETE /link` or
+    // `POST /results/:logId` left every other assertion in this file green.
+    // Every route here is driven with one body carrying each route's own
+    // required fields, so a route that WRONGLY proceeds gets far enough to
+    // write something — which is what the write assertions below catch.
+    const jsonRoutes: Array<[string, string]> = [
+      ["post", "/api/concept2/connect"],
+      ["post", "/api/concept2/exchange"],
+      ["get", "/api/concept2/link"],
+      ["delete", "/api/concept2/link"],
+      ["post", `/api/concept2/results/${NON_EXISTENT_UUID}`],
+    ];
+
+    it.each(jsonRoutes)(
+      "%s %s -> 400 ambiguous_auth, and nothing is written",
+      async (method, path) => {
+        const store = makeFakeConcept2Store();
+        await store.upsertLink(userA.id, freshLink());
+        const { app, logs } = buildApp({ store });
+        const deleteSpy = vi.spyOn(store, "deleteLink");
+        const upsertSpy = vi.spyOn(store, "upsertLink");
+        const createSpy = vi.spyOn(store, "createAttempt");
+        const recordSpy = vi.spyOn(logs, "recordC2Result");
+        const agent = request(app) as unknown as Record<
+          string,
+          (p: string) => request.Test
+        >;
+        const res = await ambiguous(
+          agent[method](path).send({
+            weightClass: "H",
+            linkClient: "webauth-1",
+            code: "c",
+            state: "s",
+            tz: "America/New_York",
+          }),
+        );
+        expect(res.status).toBe(400);
+        expect(res.body).toStrictEqual({ error: "ambiguous_auth" });
+        expect(createSpy).not.toHaveBeenCalled();
+        expect(deleteSpy).not.toHaveBeenCalled();
+        expect(upsertSpy).not.toHaveBeenCalled();
+        expect(recordSpy).not.toHaveBeenCalled();
+        // userA's link is exactly as it was seeded — the DELETE route in
+        // particular must not have reached `deleteLink`.
+        expect((await store.getLink(userA.id))?.c2UserId).toBe(
+          LINK_INPUT.c2UserId,
+        );
+      },
+    );
 
     it("bearer A + cookie A (same user) is NOT ambiguous: mint succeeds as native", async () => {
       const { app } = buildApp();
@@ -691,6 +748,30 @@ describe("callback (GET /api/concept2/callback) — the web ladder, design §5",
     expect(client.exchangeCode).not.toHaveBeenCalled();
   });
 
+  // Design §5 step 3: the web callback's principal is the erg_session
+  // COOKIE, never a bearer — a bearer on a top-level GET can only come from
+  // a non-browser caller, and accepting it would hand the browser-hop
+  // completion to whoever can set a header. Falling back to the bearer
+  // (`resolveCookieSession(req) ?? resolveBearerSession(req)`) passed every
+  // other test in this file, including the wrong-account one, because no
+  // other case presents a bearer alone.
+  it("the MINTING user's own bearer, with no cookie -> 401 Not signed in, attempt still present, exchange never called", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+
+    const res = await asA(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(401);
+    expect(res.text).toContain("CONCEPT2 LINK · NOT SIGNED IN · HTTP 401");
+    expect(await store.peekAttempt(state)).not.toBeNull();
+    expect(client.exchangeCode).toHaveBeenCalledTimes(0);
+    expect(await store.getLink(userA.id)).toBeNull();
+  });
+
   it("an EMPTY-valued cookie is no session: 401, not consumed", async () => {
     const store = makeFakeConcept2Store();
     const { app } = buildApp({ store });
@@ -978,6 +1059,25 @@ describe("callback (GET /api/concept2/callback) — the web ladder, design §5",
     }
   });
 
+  // The header must also survive the exits this handler does not write: a
+  // store method that REJECTS unwinds past every `sendPage` call and lands
+  // on Express's default error handler, which writes its own 500 body.
+  // `finalhandler` removes only the Content-* headers before doing so, so a
+  // header set at the top of the handler survives — asserted, not assumed.
+  it("a rejected store call -> 500 from Express's own handler, still Referrer-Policy: no-referrer", async () => {
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ store });
+    const state = await mintAndGetState(app);
+    vi.spyOn(store, "peekAttempt").mockRejectedValueOnce(
+      new Error("peek exploded"),
+    );
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(500);
+    expect(res.headers["referrer-policy"]).toBe("no-referrer");
+  });
+
   it("never reflects state/code into the HTML response", async () => {
     const { app } = buildApp();
     const res = await asACookie(
@@ -1221,6 +1321,53 @@ describe("exchange (POST /api/concept2/exchange) — the native ladder, design �
     expect(res.status).toBe(409);
     expect(res.body).toStrictEqual({ error: "already_linked_elsewhere" });
     expect(await store.getLink(userA.id)).toBeNull();
+  });
+});
+
+// RF24: every other test in this file constructs the router DIRECTLY, so
+// nothing here starts upstream of `app.ts`'s own wiring — and the web
+// ladder's identity check reads a dep (`sessions`) that only `app.ts`
+// supplies. `baseDeps`'s default `sessions` is literally
+// `{ resolveSession: async () => null }`, i.e. the exact mutation, so a
+// wiring line that stopped passing `deps.sessions` would leave every
+// assertion above green while no rower could ever complete a link. This
+// describe enters through `createApp` instead. (Task 7's integration rows
+// cover the same seam against real Postgres; this is the cheap unit-layer
+// half, and it also pins the mount order — the concept2 router must be
+// reached before `routes/data.ts`'s app-wide `requireUser`, which would
+// answer the cookie callback with a bare JSON 401.)
+describe("createApp wiring (RF24: the seam the router-level tests skip)", () => {
+  it("a cookie mint and cookie callback complete end-to-end through createApp", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const app = createApp(
+      baseDeps({
+        sessions: fakeSessionStore(),
+        stores: makeFakeStores(),
+        concept2: {
+          available: () => true,
+          store,
+          client,
+          webRedirectUri: WEB_REDIRECT_URI,
+        },
+      }),
+    );
+
+    const state = await mintAndGetState(app);
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(200);
+    // `text/html`, not JSON: proof the request never fell through to the
+    // data router's own gate.
+    expect(res.type).toBe("text/html");
+    expect(res.text).toContain("CONCEPT2 LINK · LINKED · HTTP 200");
+    expect(client.exchangeCode).toHaveBeenCalledWith(
+      "abc123",
+      WEB_REDIRECT_URI,
+    );
+    expect((await store.getLink(userA.id))?.c2UserId).toBe(2211);
   });
 });
 

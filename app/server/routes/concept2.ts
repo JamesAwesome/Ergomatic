@@ -274,6 +274,18 @@ export function createConcept2Router({
   // -- web callback (design §5 — the ladder, in this exact order) --------
 
   router.get("/api/concept2/callback", async (req, res) => {
+    // 0. `Referrer-Policy` BEFORE the ladder, not only inside `sendPage`.
+    //    The URL carries `code` and `state` (RFC 9700 §4.2) and must not
+    //    leak them on ANY exit from this handler — including the ones no
+    //    line of this function writes: a rejected `peekAttempt` /
+    //    `consumeAttemptFor`, or a non-conflict `upsertLink` error
+    //    re-thrown, all land on Express's default error handler. Setting
+    //    it here covers those; `sendPage` keeps its own call so a page
+    //    rendered from anywhere else in this file still carries the header.
+    //    (Verified against the real handler: `finalhandler` removes only
+    //    the Content-* headers before writing its 500, so a header set
+    //    here survives — see the throw test in concept2.test.ts.)
+    noReferrer(res);
     // 1. availability — consumes NOTHING. PR1's flag-off consume was the
     //    route's last unauthenticated write, an attempt-destruction
     //    primitive that bought nothing; deleted at PR1.75a.
