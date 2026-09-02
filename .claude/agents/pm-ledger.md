@@ -4248,3 +4248,42 @@ does not match these numbers._
 - **Release: not needed.** Zero `app/src` files, flag dark, nothing a rower can
   reach. The wave's next tag belongs to PR2 or to #268, re-checked at its own
   merge.
+
+## TRIAD final-PR gate, 2026-09-02 (JR follow-on item 5 — substitution, #272)
+
+- **A tag can be pre-committed to a BREAK before a feature asks to ride it.**
+  `ROADMAP.md` named v0.35.0 as the `source` derive-when-absent sunset
+  (400 on absent). #272 is the first work to want v0.35.0 for a feature, and
+  nothing in its spec, plan or body noticed it would share a tag with an API
+  break that rejects every build ≤811. **Before recommending a version, grep
+  the ROADMAP for that version string** — sunset and deprecation rows name
+  versions now (the #268 lesson), which makes them greppable and makes this
+  check free. (Disposition: deliberate co-tag, stated in the sunset row; the
+  sunset lands as its own XS PR before the tag.)
+- **RF14, ninth: a finding filed in a PR must also be NAMED by it.** James's
+  erg finding (Timer mode, build 823) was correctly filed as a ROADMAP row
+  plus two committed captures in this branch — and mentioned nowhere in the
+  body, above or below the fold. Filing is the rule working; an unnamed row
+  in the diff is a reconciliation failure the next gate has to discover.
+  **At every final gate, diff the ROADMAP and confirm each added row appears
+  in the body.**
+- **"Shipped at merge" is not an owner.** The body said ROADMAP item 5 goes
+  in progress → shipped at merge; the ROADMAP still read IN PROGRESS and no
+  one held the flip. This repo has already carried an unticked JR PR-2 row.
+  A status line changes in the PR that changes the status, or the gate names
+  the follow-up PR. (Flipped in the PR.)
+- **The delete ruling held on inspection and needed no copy work** —
+  `FromTheLog.tsx:567` keys the un-tick warning purely on `row.planKey`, so
+  a stood-in free row inherits it the moment it gains a link. Precedent:
+  when a change makes an existing row-class eligible for a shipped
+  conditional, check whether the condition is keyed on the FACT (planKey) or
+  on the row's TYPE — keyed on the fact, the copy follows for free.
+- **New design note, batched:** with no plan the Just Row door's only button
+  now reads `Save without logging` (was `Save this row`). It matches shipped
+  `PostWorkoutSummary`, so the app got more consistent and a stranger got a
+  button describing what it does not do — now on two screens. With #268's
+  two notes this is the third free-row copy note; they are now ONE ROADMAP
+  row riding the Timer-mode design pass, not one per gate.
+- Fold-word series: #239 148, #248 274, #249 225, #258 134, #268 186,
+  **#272 153 → trimmed at the gate.** The arrow-route bullet recurred
+  ("Just Row → Start Timer → finish"), one gate after it was named.

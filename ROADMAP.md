@@ -193,6 +193,11 @@ slate.
   stops being "sends no bytes" and gains a reject path and an ack gate;
   carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
   `OBJ_WORKOUTTYPE_T` entry). One driver change plus one walk leg. **M**
+  **RE-CONFIRMED by James, 2026-09-02 ("i do want item 2"), after using the
+  ready fix: build it. Its own PR (wire semantics + a walk leg), after the
+  Timer-mode design pass. Ground already in the repo: the 08-31 walk's
+  OPEN 5, the p.80 JustRow frame at `docs/monitor/pm5-interface-notes.md:204`,
+  RC-38 rides with it.**
 - **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
   infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
   James ruled TIME ONLY; Gate 0 PASSED on rev 2e
@@ -222,20 +227,33 @@ slate.
   ink-3 "still a bit close"; rides the unconnected PR.** **A DERIVED
   display concern, never stored:**
   `isFreeRow(workoutId, workoutType)` is load-bearing three times (the
-  server's plan refusal, its empty-`steps` allowance, the absent badge),
+  server's plan opt-in default — once a refusal, until item 5 — its
+  empty-`steps` allowance, the absent badge),
   so `"JR"` can never live in `workout_type`. Visual precedent exists —
   `.workout-row-custom`, the ink-outline metadata chip — since
   `TypeBadge.tsx` refuses to mint a fifth intensity colour. SHIPPED in
   #268 with item 3 (hollow `.free-row-chip` on the door and every free
   row in History/Today), so item 5's plan-linked free row will already
   carry it. **S**
-- **Logging a Just Row against a plan — as SUBSTITUTION** (James,
+- **Logging a Just Row against a plan — as SUBSTITUTION** — **SHIPPED in
+  #272 (2026-09-02):** Gate 0 PASSED rev 1d
+  (`docs/design/handoffs/2026-09-02-just-row-substitution/`), spec rev 3
+  after two antagonist passes
+  (`docs/superpowers/specs/2026-09-02-just-row-substitution-design.md`),
+  PM TRIAD gate SHIP-WITH-CONDITIONS (all landed in the PR). No new
+  stored shape: the link is the stand-in record; the store resolves
+  `advancesPlan ?? !isFreeRow`. Deleting a stood-in Just Row un-ticks the
+  session (stated, not overruled; the shipped delete copy already warns,
+  keyed on `planKey`). The original row follows:
+- **(original)** Logging a Just Row against a plan — as SUBSTITUTION (James,
   2026-09-01: "advances the record, records the stand-in"): the rower
   may say "this free row stands in for session N"; it advances the plan
   AND the row records that it stood in. Default stays off-plan. **TRIAD**
-  — it changes what SESSION n OF 84 means and amends frozen exit
-  criterion 1 (`done_n` unchanged across a Just Row save) with its own
-  gate; it removes the server's ONLY free-row plan enforcement
+  — it changes what SESSION n OF 84 means and amends the unconnected
+  spec's frozen exit criterion 2 (`done_n` unchanged across a Just Row
+  save) with its own gate, retiring its criterion 1's `Save this row`
+  pin; the Gate 0 centring rule also moves every swapped plan row's
+  badge (stated in the handoff README); it removes the server's ONLY free-row plan enforcement
   (`logs.ts`'s `!isFreeRow(...)`), so the substitution must be an
   explicit stored fact the server checks, not a client promise; and the
   reversing release note must acknowledge v0.32.0's "A Just Row never
@@ -246,10 +264,15 @@ slate.
   two screens. For a phase whose promise is "the machine's own numbers
   land in your log", showing a figure the erg never displays deserves a
   line at the next design pass. **XS**
-- [ ] **`source` derive-when-absent SUNSET — trigger: v0.35.0, the tag
-      AFTER the one that ships #268 (expected v0.34.0). NOT v0.34.0:
-      firing it on the tag that introduces the field 400s every save from
-      every build still installed.** The server derives `source`
+- [x] **`source` derive-when-absent SUNSET — DONE in the v0.35.0 PR
+      (2026-09-02); trigger was v0.35.0, the tag
+      AFTER the one that ships #268 (v0.34.0, shipped 2026-09-02). NOT
+      v0.34.0: firing it on the tag that introduces the field 400s every
+      save from every build still installed. DELIBERATE CO-TAG (#272's PM
+      gate): v0.35.0 also carries the substitution feature (#272); the
+      sunset lands as its own XS PR BEFORE the v0.35.0 tag is cut, so the
+      tag carries both on purpose — builds ≤811 (v0.32.0) lose saves at
+      that tag, build 823+ already posts `source`.** The server derives `source`
       for a POST that omits it only so build 811-era TestFlight clients
       keep saving (additive-only between tags). At that tag: `source`
       becomes REQUIRED on `POST /api/logs` (400 when absent), the route's
@@ -257,13 +280,11 @@ slate.
       deleted, and `docs/RELEASING.md`'s API note records the break. The
       0020 BACKFILL rule stays (it is history, not a live inference).
       Filed here per RF14 and the spec's exit criterion 8b. **XS**
-      **DUE as of 2026-09-02: `v0.34.0` is tagged (`138dbe8c`) with #268 in
-      it, so the trigger is the next tag. RIDES door PR A
-      (`2026-09-02-door-partial-design.md` §4). Blast radius corrected at the
-      anchor pass: `source` REQUIRED on POST means every install older than
-      v0.34.0 loses the ability to save ANY log, not just the derive path.
-      James, 2026-09-02: "i can make sure they are by merge. remind me
-      before we do" — the PR A ready comment carries that reminder.**
+- [ ] **v0.35.0's release notes must RETIRE "A Just Row never advances
+      your plan" (v0.32.0) — trigger: the v0.35.0 notes PR, once the
+      substitution PR ships.** One sentence in the notes' own voice: a Just
+      Row can now stand in for a plan session, and the Plan tab says so.
+      Filed at the substitution spec (RF14). **XS**
 - [ ] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
       told testers — trigger: the v0.34.0 notes PR.** v0.32.0 said
       "connect to the erg" (there is now a Start Timer with no erg) and
@@ -271,6 +292,30 @@ slate.
       sentence each, in the notes' own voice, or the News tab contradicts
       itself two entries apart. Filed at #268's PM gate (RF14, and the PR
       body had claimed this row already existed). **XS**
+- [ ] **Timer mode, on the phone (James, 2026-09-02, build 823, on a
+      Just Row): "really fucked up".** Two defects, both the SHIPPED
+      Timer's own — the free row copied it mechanically and made them
+      visible on a one-phase screen. (1) **END does not match between
+      orientations:** portrait prints `END →` as plain header text (ink-4,
+      no box); landscape prints it as an accent-outlined 44 px box in the
+      gutter — two treatments of one control. (2) **A giant gap:** in
+      portrait the ◀ ▶ arrows are pinned to the bottom with the middle
+      third empty; in landscape the whole layout stops at ~70 % of the
+      height and the rest is blank (the landscape rules were written for a
+      390 px-tall viewport and the phone is taller). Captures:
+      `docs/design/findings/2026-09-02-timer-mode-{portrait,landscape}.png`.
+      A design pass with a Gate 0 (both orientations, the programmed and
+      the free-row timer side by side, since the fix is for both), then a
+      fast-path or small PR. **S**
+- [ ] **Free-row copy, three notes for ONE design pass (batched, not one
+      per gate — #268's and #272's PM gates):** (1) the Just Row door's
+      paragraph ("The monitor keeps its own time…") now captions two
+      buttons and describes one; (2) a time-only row's History line shows
+      no number until opened; (3) with no plan the Just Row log door's only
+      button reads `Save without logging` (was `Save this row`) — consistent
+      with the shipped summary door, and a stranger meets a button that
+      names what it does NOT do, now on two screens. Rides the Timer-mode
+      design pass above. **XS–S**
 
 **Owed within PR 2's own scope, recorded here so phase close can quote
 it:** a free row recovered with a `truncated` series trace (>4 h of rowing,

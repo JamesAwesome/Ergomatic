@@ -306,9 +306,17 @@ which record each branch holds). Every reader below branches on
    literal; a 30 s gap between ▶ and Finish under fake timers does NOT
    move it ⟨F10⟩), `workoutTitle: "Just Row"`, `steps: []`, both ids null,
    `advancesPlan: false`, and NO `distanceMeters` key — one test starting
-   at the door (RF24).
+   at the door (RF24). **AMENDED by the substitution spec (2026-09-02):**
+   the button `Save this row` is retired; the door carries the shipped
+   pair, and this criterion now pins BOTH bodies — `Save without logging`
+   posts `advancesPlan: false`, `Log against plan` posts `true` — with
+   the rest of the body unchanged.
 2. `plan_state.done_n` unchanged across that save (rides the existing
-   integration test's shape with a time-only body).
+   integration test's shape with a time-only body). **AMENDED by the
+   substitution spec (2026-09-02):** unchanged across a Just Row save
+   whose body does NOT say `advancesPlan: true`; a body that does advances
+   it by one. The absent-key case stays unchanged — the store resolves a
+   free row's absent flag to `false`.
 3. The saved row's detail reads `SEP · hh:mm · TIMER` in its meta line
    and renders TIME alone — no AVG SPLIT, no DISTANCE, no INTERVALS, no
    machine block — asserted on a row that went through the real POST

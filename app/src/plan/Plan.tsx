@@ -2,9 +2,14 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { PLANS } from "../../domain/plans.js";
 import { canonicalTitle } from "../../domain/onboarding.js";
-import { isWorkoutType, type WorkoutType } from "../../domain/types.js";
+import {
+  isFreeRow,
+  isWorkoutType,
+  type WorkoutType,
+} from "../../domain/types.js";
 import type { Prescription } from "../../domain/prescription.js";
 import TypeBadge from "../components/TypeBadge";
+import FreeRowChip from "../workout/FreeRowChip";
 import { usePlan } from "../api/usePlan";
 import type { PlanData, PlanKey, PlanSequenceItem } from "../api/usePlan";
 import { usePlanLinks, type PlanLink } from "./usePlanLinks";
@@ -47,6 +52,24 @@ function rowedType(link: PlanLink | undefined): WorkoutType | undefined {
   return link !== undefined && isWorkoutType(link.workoutType)
     ? link.workoutType
     : undefined;
+}
+
+/** A linked FREE row — a Just Row that stood in for this session
+ *  (substitution spec, 2026-09-02, §Mechanism). The stand-in record is the
+ *  link itself plus the row's own free PAIR (`workout_id` null,
+ *  `workout_type` null), tested through `isFreeRow` so the id alone can
+ *  never claim it: a row whose workout was deleted keeps its type and is
+ *  not a free row. The id must be PRESENT — an older server omits the key
+ *  (`usePlanLinks`'s tri-state), and null is a positive claim it never
+ *  made, so a new build ahead of the deploy shows no chips rather than
+ *  guessing. Both the badge slot and `swapMark` read this one predicate,
+ *  so the chip and the mark can never disagree about what the row is. */
+function linkedFreeRow(link: PlanLink | undefined): boolean {
+  return (
+    link !== undefined &&
+    link.workoutId !== undefined &&
+    isFreeRow(link.workoutId, link.workoutType)
+  );
 }
 
 /** What this done row replaced, or `undefined` when it was rowed as
@@ -140,6 +163,11 @@ function swapMark(
     // TEST reads as a label" problem this round removed from the row.
     return asPrescribed ? undefined : ref.title;
   }
+  // A Just Row that stood in on a type day is marked with the plan's own
+  // type — the same line a swapped workout gets. ONE clause, in the type
+  // branch only ⟨F3⟩: the checkpoint branch above already marks a free
+  // row, because its snapshot title `Just Row` is not the prescription's.
+  if (linkedFreeRow(link)) return plannedType;
   const rowed = rowedType(link);
   return rowed !== undefined && rowed !== plannedType ? plannedType : undefined;
 }
@@ -417,7 +445,18 @@ function PlanView({
                   in-test 3:1 ratio, and sub-pixel outer geometry against
                   a real badge. An UNLINKED row has no stored type at
                   all; its badge is the plan's own claim and stays. */}
-              {link !== undefined && rowedType(link) === undefined ? (
+              {/* The free PAIR is tested FIRST (substitution spec ⟨F5⟩):
+                  a Just Row that stood in has a null type too, so the
+                  unknown-box test below would claim it. Order is
+                  load-bearing and both cases are pinned as distinct in
+                  Plan.test.tsx. The chip is `FreeRowChip`'s own class,
+                  never `.type-badge`. */}
+              {link !== undefined && linkedFreeRow(link) ? (
+                <FreeRowChip
+                  workoutId={link.workoutId ?? null}
+                  workoutType={link.workoutType}
+                />
+              ) : link !== undefined && rowedType(link) === undefined ? (
                 // James's review (P1): the box is the SOLE carrier of
                 // "stored type unreadable", so it cannot be aria-hidden —
                 // AT hears "type unknown" via the house visually-hidden

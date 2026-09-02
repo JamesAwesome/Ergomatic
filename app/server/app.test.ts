@@ -128,6 +128,7 @@ describe("POST /api/logs body limit (Phase LT spec 2, §3)", () => {
       workoutType: "AT",
       notes: null,
       steps: [{ label: "Work" }],
+      source: "manual",
       series: { samples },
     });
     // Over 100KB (body-parser's own default), proven directly rather

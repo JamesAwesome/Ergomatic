@@ -3906,10 +3906,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const body = parsedBodies(apiFn)[0]!;
     expect("deviceName" in body).toBe(false);
     // Just Row unconnected spec (2026-09-02): `pm5` without a `deviceName`
-    // is a contradiction the server 400s (`server/logSource.ts`), so the
-    // guard that drops the name drops the door claim with it and lets the
-    // server derive (and ring-log) the member — the save still goes through.
-    expect("source" in body).toBe(false);
+    // is a contradiction the server 400s (`server/logSource.ts`), and since
+    // the v0.35.0 sunset an ABSENT `source` is a 400 too — so the guard that
+    // drops the name restates the door as `manual` (the member the server
+    // used to derive for this body) and the save still goes through.
+    expect(body.source).toBe("manual");
   });
 
   // Series capture spec (2026-08-19), §3: the POST body attaches `series`
@@ -4571,7 +4572,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(screen.getByText("PACES OFF 2K 1:40.0")).toBeInTheDocument();
   });
 
-  it("with an active plan, Log against plan posts advancesPlan absent (default true) — Save without logging posts advancesPlan:false", async () => {
+  it("with an active plan, Log against plan posts NO advancesPlan key (the store's own `?? !isFreeRow` default, true for a workout row) — Save without logging posts advancesPlan:false", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
@@ -5122,7 +5123,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     // an active plan exists to opt out of — sending `advancesPlan:false`
     // here would silently drop `doneN` advancement for a plan the UI simply
     // hadn't learned about yet. Omitting the key lets the server's own
-    // `?? true` default (`data.ts`) run, the same behavior the old,
+    // `?? !isFreeRow` default (`stores/logs.ts`) run, the same behavior the old,
     // now-retired toggle had (its key was never sent until the plan
     // resolved either).
     expect(body).not.toHaveProperty("advancesPlan");
@@ -5228,7 +5229,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     ).toContain("summary-save-lead");
   });
 
-  it("wire shape: Log against plan posts NO advancesPlan key at all (the server's own ?? true default)", async () => {
+  it("wire shape: Log against plan posts NO advancesPlan key at all (the store's own `?? !isFreeRow` default — true for a workout row)", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
@@ -5274,6 +5275,54 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
 
     const body = parsedBodies(apiFn)[0]!;
     expect(body.advancesPlan).toBe(false);
+  });
+
+  // Substitution spec (2026-09-02) §Mechanism 2 ⟨F2⟩: `useLogForm`'s body
+  // builder used to write the key ONLY when false, so `true` had never
+  // crossed the wire — and the store's default is now `?? !isFreeRow`,
+  // which resolves FALSE for a free row. The Just Row door's
+  // `Log against plan` needs an explicit `true` on the wire, so the hook
+  // is driven directly here with that option: the one caller in the tree
+  // that passes it is `JustRowLog.tsx`, and pinning the hook rather than
+  // the door keeps the wire contract testable at the layer that owns it.
+  it("useLogForm: submit with { advancesPlan: true } puts advancesPlan: true on the wire (the free row's opt-in)", async () => {
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-opt-in" }), { status: 201 }),
+      ),
+    );
+    const { useLogForm } = await import("./LogSession");
+    function Harness() {
+      const { submit } = useLogForm(() => {});
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            void submit(
+              {
+                workoutId: null,
+                workoutTitle: "Just Row",
+                workoutType: null,
+                steps: [],
+                source: "timer",
+                timeSeconds: 600,
+              },
+              { advancesPlan: true },
+            )
+          }
+        >
+          OPT IN
+        </button>
+      );
+    }
+    render(<Harness />, { wrapper: MemoryRouter });
+    await userEvent.click(screen.getByRole("button", { name: "OPT IN" }));
+
+    await vi.waitFor(() => expect(apiFn).toHaveBeenCalled());
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.advancesPlan).toBe(true);
+    expect(body.workoutId).toBeNull();
+    expect(body.workoutType).toBeNull();
   });
 
   // Fix round 2 (whole-branch review, L3, retained under the new button

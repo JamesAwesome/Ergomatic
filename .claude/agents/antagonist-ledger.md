@@ -5503,6 +5503,82 @@ same way.
   push, expect a skip" is only true of a bare `push` event, and expecting a
   skip will make a reviewer read a legitimately-running gate as stuck.
 
+### 2026-09-02 — Just Row substitution spec (TRIAD anchor)
+
+- **"Enforced at the store" was enforced at the route.** The spec moved a
+  free row's `advancesPlan` DEFAULT to `data.ts` while claiming the store
+  kept the check. Caught by reading `LogInput`'s type: `advancesPlan:
+  boolean` (required) makes `=== true` identical to the bare flag, so the
+  store's "rule" was a no-op. **Technique: for any "the server checks it"
+  claim, read the INPUT TYPE — an already-defaulted field cannot carry a
+  default, and the layer that defaults is the layer that enforces.**
+- **A door "already posts the flag" posted only one arm of it.**
+  `useLogForm` writes `advancesPlan` ONLY when false (`LogSession.tsx:720`);
+  `true` has never crossed the wire, by design and by comment. **Technique:
+  for "the client already sends X", grep the SETTER, not the option — the
+  call site passing `{x: true}` proves nothing about the body builder.**
+- **A "renders wrong / no mark" premise was half true.** `swapMark`'s
+  checkpoint branch already marks a free row (null identity pair falls back
+  to the snapshot title, which differs). **Technique: trace BOTH branches of
+  a two-branch predicate for the new input; a spec that says "it returns
+  undefined" usually traced the branch it was thinking about.**
+- **A design board asserted a string the app cannot produce.**
+  `INSTEAD OF 2K TEST` vs shipped `INSTEAD OF 2K Test` — the mark returns
+  `ref.title` uncased and the class has no `text-transform`. **Technique: a
+  board claiming "exactly as it reads today" is a testable claim; grep the
+  existing test that pins the live string before believing it.**
+- **"What does NOT change" is where the number change hides.** Making a free
+  row linkable silently enabled the plan footer on the log detail, the
+  un-tick delete copy, and `done_n` DECREMENT on deleting a Just Row —
+  none in scope. **Technique: for any spec that makes a row newly eligible
+  for an existing field, grep every READER of that field and diff the
+  behaviour, including the DELETE path.** (Disposition: all three adopted
+  as intended behaviour in rev 2, the decrement stated as a ruling for
+  James to overrule at Gate 0.)
+
+### 2026-09-02 — Just Row substitution spec REV 2 (second pass: attack the fixes)
+
+- **A "within 1 px" layout assertion placed in a jsdom test.** Rev 2's
+  centring fix arrived with a gate that measures `getBoundingClientRect()`
+  in `Plan.test.tsx`. Ran jsdom directly: every rect is
+  `{w:0,h:0,top:0,left:0}`, so `|0−0| ≤ 1` passes against any layout.
+  **Technique: before believing a geometry gate, count the file's existing
+  geometry assertions — `Plan.test.tsx` had 0, `design.spec.ts` had 61
+  `boundingBox` calls. The suite already tells you which layer can see
+  layout.**
+- **A CSS fix aimed at a property the layout mode ignores.** The spec
+  prescribed `justify-self: center` for slots in `.plan-row` and
+  `.today-log-row`, both `display:flex` — `justify-self` is inert there.
+  Its premise ("today the row top-aligns its badge") was also false:
+  `.plan-row-swapped` is already `display:grid; align-items:center`.
+  **Technique: read the CONTAINER's `display` before accepting any
+  alignment fix, and read the rule the fix claims to change — RF21's flex
+  smell recurs with `justify-self` as well as `min-width`.**
+- **A tolerant parser told to become strict.** "`parseLink` accepts
+  `string | null`" would drop every entry when an OLD server omits the new
+  key — the exact failure the same function's `workoutIsGlobal` comment
+  already documents ("a MISSING key is … what an older server sends").
+  **Technique: when adding a field to a wire shape, read the neighbouring
+  field's guard — a parser that survived one additive change has already
+  written down the rule the new one must follow.**
+- **A Gate-0 artifact that denies the change its spec makes.** The handoff
+  README said "Nothing else changes" while the spec moved every swapped
+  row's badge; James approved the board on the README. **Technique: diff
+  the handoff's "what changes" column against the spec's mechanism section
+  line by line — the approval attaches to the README, not the spec.**
+- **An amendment aimed at the wrong criterion number.** Spec and ROADMAP
+  both amended "frozen exit criterion 1 (`done_n` unchanged)"; criterion 1
+  pins the POST body and the retired button, criterion 2 is `done_n`.
+  **Technique: open the frozen criteria and read the numbered line, never
+  the paraphrase that has been copied between two documents.**
+- **Held under attack (vetted ground for the implementation):** the store-
+  side `?? !isFreeRow(...)` default is behaviour-identical on all four
+  arms; `stores.logs.create` has exactly one production caller
+  (`data.ts:1718`); the delete decrement keys on the stored LINK, not on
+  `advancesPlan`, and link fields are written inside the same `if` as the
+  advance, so a non-opted-in free row cannot decrement; `advancesPlan:
+  true` is accepted unchanged by an old server.
+
 ## 2026-09-02 — Wave F `door` re-scope, phase-open anchor pass (D1-D4 pre-spec)
 
 - **CLAIM (D1): "PARTIAL is derivable — `endedBy` says I stopped, `steps[].meters`

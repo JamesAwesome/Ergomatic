@@ -143,15 +143,23 @@ export interface LogInput {
   // Post-workout-summary spec (2026-08-17), §3: optional/nullable, same
   // shape as `deviceName` below — absent or explicit null both store null.
   thumbs?: Thumbs | null;
-  // Task 3 (outside-plan logging): true (the default the route falls back
-  // to when the client omits the field — routes/data.ts) means this log
-  // counts toward the active plan's progress, exactly like every log
-  // before this field existed. false is an off-app/free row the rower
-  // explicitly doesn't want counted (e.g. a make-up row logged twice in
-  // one day, or a workout done outside the plan entirely) — `create`
-  // below skips the plan_state upsert for it, but the log row itself is
-  // always inserted either way.
-  advancesPlan: boolean;
+  // Task 3 (outside-plan logging): true means this log counts toward the
+  // active plan's progress, exactly like every log before this field
+  // existed. false is an off-app row the rower explicitly doesn't want
+  // counted (e.g. a make-up row logged twice in one day, or a workout done
+  // outside the plan entirely) — `create` below skips the plan_state
+  // upsert for it, but the log row itself is always inserted either way.
+  //
+  // Substitution spec (2026-09-02, §Mechanism 1, TRIAD): OPTIONAL, and the
+  // default lives HERE, once — not at the route, which passes the field
+  // through untouched (`routes/data.ts`). Absent resolves to
+  // `!isFreeRow(workoutId, workoutType)`: a workout row advances unless
+  // its body says `false`; a free row (Just Row) advances only when its
+  // body says `true` — it then stands in for the session and receives the
+  // plan link like any other advancing save. The layer that defaults is
+  // the layer that enforces (antagonist, 2026-09-02): a required boolean
+  // here made every store-side "rule" identical to the bare flag.
+  advancesPlan?: boolean;
   // Phase 7C Task 3 (spec §5/§6): session-scoped provenance, optional —
   // absent means null (a phone-timer log has no device to name). Not part
   // of `steps`: see `db/schema.ts`'s `sessionLogs.deviceName` doc comment
@@ -404,7 +412,8 @@ const LOG_LIST_COLUMNS = {
  *  `usePlanLinks.parseLink` discards a whole entry when this is not a
  *  string (`src/plan/usePlanLinks.ts:81`) — so it now accepts null as
  *  ABSENT rather than malformed. **That path is reachable in its own
- *  right, not a backstop for the plan refusal:** the shared store contract
+ *  right, not a backstop for the plan opt-in rule (once "the plan
+ *  refusal", retired by the substitution spec, 2026-09-02):** the shared store contract
  *  deliberately ADVANCES a row that names a workout and omits its type, and
  *  such a row becomes a plan link carrying a null `workoutType`. (An
  *  earlier version of this comment said it was "unreachable only while the
@@ -412,12 +421,25 @@ const LOG_LIST_COLUMNS = {
  *  (schema.ts — deliberately NOT `workoutTypeEnum`, which is
  *  the `workouts` table's column). New writes are validated against the
  *  union at the route, but rows stored before that check exist, so every
- *  consumer still has to narrow it for itself. */
+ *  consumer still has to narrow it for itself.
+ *
+ *  `workoutId` (substitution spec, 2026-09-02, §Mechanism 1b) is the id
+ *  the log row LINKS BY — `session_logs.workout_id`, projected BY NAME off
+ *  the log row, never the LEFT JOIN's `workouts.id`. It exists on this
+ *  wire for one reader: the Plan tab's chip keys on `isFreeRow`'s PAIR
+ *  (`workoutId` null AND `workoutType` null), which is what a Just Row
+ *  that stood in for a session looks like, and the pair is only a pair
+ *  when both halves are PRESENT. Null also for a workout since deleted
+ *  (`ON DELETE SET NULL`) — with its snapshot type still set that row is
+ *  not the free pair, so it wears no chip. Additive: an older client
+ *  ignores it, and `usePlanLinks.parseLink` tolerates an older server
+ *  that omits it. */
 export interface PlanLink {
   planIndex: number;
   id: string;
   workoutTitle: string;
   workoutType: string | null;
+  workoutId: string | null;
   linkedTitle: string | null;
   workoutIsGlobal: boolean | null;
 }
@@ -450,6 +472,12 @@ async function resolveNewestPlanLink(
       id: sessionLogs.id,
       workoutTitle: sessionLogs.workoutTitle,
       workoutType: sessionLogs.workoutType,
+      // The id the log links BY, off the log row itself (see `PlanLink`'s
+      // own comment). Under the FK it is null exactly when `workoutRowId`
+      // below is — but it is a different column answering a different
+      // question ("what did this row link to") and is projected by name
+      // so the two never have to be argued equal.
+      workoutId: sessionLogs.workoutId,
       // The linked row's OWN title and ownership — the identity pair.
       // `workouts.userId` is nullable and NULL marks a global row, the
       // same derivation `stores/workouts.ts` exposes as `isGlobal`; the
@@ -476,6 +504,7 @@ async function resolveNewestPlanLink(
     id: row.id,
     workoutTitle: row.workoutTitle,
     workoutType: row.workoutType,
+    workoutId: row.workoutId,
     // No joined workout row at all -> unknown identity: BOTH halves null
     // together, so a consumer can never pair a known title with an
     // unknown ownership or the reverse. A joined row -> its own title,
@@ -761,22 +790,25 @@ export function createLogsStore(db: Db) {
         let planKey: string | null = null;
         let planIndex: number | null = null;
 
-        // THE PLAN REFUSAL (Phase JR PR 1, spec rev 4). A free row never
-        // advances a plan, whatever the caller asked for — a Just Row is
-        // not a prescribed session, so it cannot be session n of 84.
-        // Server-side and unconditional: the client half (a log door that
-        // posts `advancesPlan: false`) is PR 2's, so this is the only
-        // enforcement that exists, and it is the one that has to hold.
+        // THE PLAN DEFAULT (substitution spec, 2026-09-02, §Mechanism 1;
+        // replaces Phase JR PR 1's unconditional refusal). Resolved ONCE,
+        // here, and nowhere else: an absent flag means "advance unless
+        // this is a free row". A free row (Just Row) advances only when
+        // its body asks to — it then STANDS IN for session n of N and
+        // receives the link below exactly as a prescribed session would,
+        // which is the whole stand-in record (no column: "a linked free
+        // row" IS "a Just Row stood in for `plan_index`"). A row that
+        // does not advance gets no link, so the delete path — which keys
+        // on the stored link, never on this flag — cannot un-count it.
         //
         // Keyed on `isFreeRow`'s PAIR, never on `workoutId` alone — see
         // that function's doc comment: the deleted-workout retry
         // (`LogSession.tsx:780-790`) posts a null id for a legitimate
         // plan-advancing session, and an id-only predicate would stall its
         // plan silently.
-        if (
-          input.advancesPlan &&
-          !isFreeRow(input.workoutId, input.workoutType)
-        ) {
+        const advancesPlan =
+          input.advancesPlan ?? !isFreeRow(input.workoutId, input.workoutType);
+        if (advancesPlan) {
           const [advanced] = await tx
             .insert(planState)
             .values({ userId, doneN: 1 })

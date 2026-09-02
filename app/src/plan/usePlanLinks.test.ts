@@ -17,6 +17,7 @@ function wireLink(overrides: Record<string, unknown> = {}) {
     id: "log-a",
     workoutTitle: "Slack Tide",
     workoutType: "O2",
+    workoutId: "workout-slack-tide",
     linkedTitle: "Slack Tide",
     workoutIsGlobal: true,
     ...overrides,
@@ -55,6 +56,7 @@ describe("usePlanLinks", () => {
       id: "log-a",
       workoutTitle: "Slack Tide",
       workoutType: "O2",
+      workoutId: "workout-slack-tide",
       linkedTitle: "Slack Tide",
       workoutIsGlobal: true,
     });
@@ -62,6 +64,7 @@ describe("usePlanLinks", () => {
       id: "log-b",
       workoutTitle: "Dust Whirl",
       workoutType: "AN",
+      workoutId: "workout-slack-tide",
       linkedTitle: "Dust Whirl",
       workoutIsGlobal: false,
     });
@@ -224,12 +227,69 @@ describe("usePlanLinks", () => {
   // records for its own tri-state: null is "unknown", not malformed, and
   // rejecting the entry costs the row its name.
   //
-  // Reachable in its own right, NOT a backstop for the plan refusal: the
+  // Reachable in its own right, NOT a backstop for the plan opt-in rule
+  // (formerly "the plan refusal", retired 2026-09-02): the
   // shared store contract deliberately advances a row that names a workout
   // and omits its type, and such a row becomes a plan link carrying a null
   // `workoutType`. (An earlier version of this comment said it was
   // reachable "only if the refusal fails to hold"; the truth table
   // disproves that.)
+  // `workoutId` (substitution spec, 2026-09-02, §Mechanism 1b) is the
+  // other half of the free PAIR the Plan tab's chip keys on, and it is
+  // tri-state on the wire the same way `workoutIsGlobal` is: a string
+  // (the row links to that workout), null (a free row, or a workout since
+  // deleted — the column is ON DELETE SET NULL), or ABSENT, which is what
+  // an OLDER server sends. Absence is carried through as `undefined`,
+  // never upgraded to null: null is a positive claim ("this is the free
+  // pair") that an old server never made, so a new build ahead of the
+  // deploy shows the plan with no chips rather than no plan.
+  it("carries workoutId null through as null (the free pair's id half, present)", async () => {
+    mockApiReturning({
+      links: [wireLink({ planIndex: 3, id: "free", workoutId: null })],
+    });
+    const { usePlanLinks } = await import("./usePlanLinks");
+    const { result } = renderHook(() => usePlanLinks("sprint"));
+
+    await waitFor(() => expect(result.current.size).toBe(1));
+    expect(result.current.get(3)?.id).toBe("free");
+    expect(result.current.get(3)?.workoutId).toBeNull();
+  });
+
+  it("parses an entry WITHOUT a workoutId key (an older server) with workoutId undefined, not null", async () => {
+    const entry = wireLink({ planIndex: 3, id: "old-server" });
+    delete (entry as { workoutId?: unknown }).workoutId;
+    expect("workoutId" in entry).toBe(false);
+    mockApiReturning({ links: [entry] });
+    const { usePlanLinks } = await import("./usePlanLinks");
+    const { result } = renderHook(() => usePlanLinks("sprint"));
+
+    await waitFor(() => expect(result.current.size).toBe(1));
+    const link = result.current.get(3);
+    expect(link?.id).toBe("old-server");
+    expect(link?.workoutId).toBeUndefined();
+  });
+
+  it.each([
+    ["a number", 7],
+    ["an object", { id: "x" }],
+    ["a boolean", true],
+  ])(
+    "drops an entry whose workoutId is %s, like any malformed link, keeping the well-formed ones",
+    async (_, bad) => {
+      mockApiReturning({
+        links: [
+          wireLink({ planIndex: 9, workoutId: bad }),
+          wireLink({ planIndex: 2, id: "good" }),
+        ],
+      });
+      const { usePlanLinks } = await import("./usePlanLinks");
+      const { result } = renderHook(() => usePlanLinks("sprint"));
+
+      await waitFor(() => expect(result.current.size).toBe(1));
+      expect(result.current.get(2)?.id).toBe("good");
+    },
+  );
+
   it("KEEPS an entry whose workoutType is null — absent, not malformed", async () => {
     mockApiReturning({
       links: [wireLink({ planIndex: 3, id: "free", workoutType: null })],

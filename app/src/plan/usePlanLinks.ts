@@ -25,11 +25,24 @@ import type { PlanKey } from "../api/usePlan";
  *  (or merely renamed) row pass as the prescribed test. Both are `null`
  *  when there is no workout to read — no `workoutId` on the log, or it
  *  has since been deleted — which is UNKNOWN identity, never "personal".
- *  See `Plan.tsx`'s `swapMark`. */
+ *  See `Plan.tsx`'s `swapMark`.
+ *
+ *  `workoutId` (substitution spec, 2026-09-02, §Mechanism 1b) is the id
+ *  the log row links BY, and it is TRI-state here on purpose: a string
+ *  (the row links to that workout), `null` (a free row — or a workout
+ *  since deleted, the column being ON DELETE SET NULL), or ABSENT, which
+ *  is what an OLDER server sends. It exists for one reader: the Plan tab
+ *  tests `isFreeRow(workoutId, workoutType)` — the PAIR, with the id
+ *  PRESENT — and renders the Just Row chip on it. Absence is never
+ *  upgraded to null the way `workoutIsGlobal`'s is: null is a positive
+ *  claim ("this is the free pair") an old server never made, so a new
+ *  build ahead of the deploy shows the plan with no chips rather than
+ *  no plan. */
 export interface PlanLink {
   id: string;
   workoutTitle: string;
   workoutType: string | null;
+  workoutId?: string | null;
   linkedTitle: string | null;
   workoutIsGlobal: boolean | null;
 }
@@ -89,6 +102,18 @@ function parseLink(
   if (e.workoutType !== null && typeof e.workoutType !== "string") {
     return null;
   }
+  // Substitution spec §Mechanism 1b: the same rule as the `workoutIsGlobal`
+  // guard below — a MISSING key is what an older server sends and is
+  // carried through as `undefined` (see the interface comment for why it
+  // is NOT upgraded to null); null and a string are the two answers; a
+  // present-but-wrong-shaped value fails, same as every field here.
+  if (
+    e.workoutId !== undefined &&
+    e.workoutId !== null &&
+    typeof e.workoutId !== "string"
+  ) {
+    return null;
+  }
   // Tri-state, and the three states are genuinely different: true/false
   // are answers, null is "unknown". A MISSING key is also unknown rather
   // than a rejection — that is what an older server sends, and rejecting
@@ -126,6 +151,7 @@ function parseLink(
       id: e.id,
       workoutTitle: e.workoutTitle,
       workoutType: e.workoutType,
+      workoutId: e.workoutId as string | null | undefined,
       linkedTitle,
       workoutIsGlobal,
     },

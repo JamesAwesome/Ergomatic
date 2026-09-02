@@ -405,6 +405,9 @@ describe("POST /api/test-history (Phase BL PR B: the recording decouple)", () =>
         actualSource: "stopwatch",
       },
     ],
+    // Required since the v0.35.0 sunset: the door this body's stopwatch
+    // step names (the rule the server derived with for builds <=811).
+    source: "timer",
   });
 
   async function createLog(app: ReturnType<typeof appFor>): Promise<string> {
@@ -1102,6 +1105,10 @@ describe("GET/POST /api/logs", () => {
         actualSource: "stopwatch",
       },
     ],
+    // Required since the v0.35.0 sunset (`source` derive-when-absent):
+    // the door a stopwatch step names, which is the member the server
+    // derived for this exact body while builds <=811 could still omit it.
+    source: "timer",
   });
 
   // Fix round 1 (task review, finding 4): a LITERAL, frozen copy of the
@@ -1128,6 +1135,12 @@ describe("GET/POST /api/logs", () => {
         actualSource: "stopwatch",
       },
     ],
+    // The ONE deliberate departure from the v0.11.0 wire shape: `source`
+    // became REQUIRED at the v0.35.0 sunset (ROADMAP), so a body without
+    // it 400s by design and the pin below would prove nothing about the
+    // heroes. The member is the one the server derived for this body
+    // while it still could (a stopwatch step, no device: `timer`).
+    source: "timer",
   });
 
   it("GET starts empty", async () => {
@@ -1300,6 +1313,7 @@ describe("GET/POST /api/logs", () => {
       workoutType: "AT",
       notes: null,
       steps: [{ label: "Work" }],
+      source: "manual",
     });
     expect(res.status).toBe(201);
 
@@ -1320,6 +1334,7 @@ describe("GET/POST /api/logs", () => {
       workoutType: "AT",
       notes: null,
       steps: [{ label: "Work" }],
+      source: "manual",
     });
     expect(res.status).toBe(201);
 
@@ -1347,7 +1362,7 @@ describe("GET/POST /api/logs", () => {
   // all, exactly `validLogBody()` as it stood before this task) must
   // still 201 and store all three heroes as null, not fabricated
   // defaults — additive-only between tags.
-  it("POST in the exact v0.11.0 body shape (no hero keys) still 201s and stores null-null-null (exit criterion 2)", async () => {
+  it("POST in the v0.11.0 body shape (no hero keys; plus the source the v0.35.0 sunset requires) still 201s and stores null-null-null (exit criterion 2)", async () => {
     const app = appFor(makeStores());
     const res = await asA(request(app).post("/api/logs")).send(
       V0_11_0_LOG_BODY,
@@ -2390,14 +2405,42 @@ describe("GET/POST /api/logs", () => {
     },
   );
 
-  it("advancesPlan absent behaves exactly like the pre-Task-3 default: the plan advances", async () => {
+  // The default is the STORE's, not this route's (substitution spec,
+  // 2026-09-02, §Mechanism 1): the route passes `advancesPlan` through
+  // untouched — absent stays absent — and `stores/logs.ts`'s `create`
+  // resolves `?? !isFreeRow(...)` once. A workout row with no key still
+  // advances, exactly as every log did before the field existed.
+  it("advancesPlan absent on a WORKOUT row advances the plan (the store's default, unchanged from before the field existed)", async () => {
     const app = appFor(makeStores());
-    const created = await asA(request(app).post("/api/logs")).send(
-      validLogBody(),
-    );
+    const body = validLogBody();
+    expect("advancesPlan" in body).toBe(false);
+    const created = await asA(request(app).post("/api/logs")).send(body);
     expect(created.status).toBe(201);
     const plan = await asA(request(app).get("/api/plan"));
     expect(plan.body.doneN).toBe(1);
+  });
+
+  // And the same absent key on a FREE ROW resolves the other way. This is
+  // the case a route-side `?? true` would break: it would hand the store a
+  // `true` the body never said, and the free row would advance. Real
+  // Postgres pins the same arm in `freeRow.integration.test.ts`; this one
+  // runs against the fake so the probe bites without Docker.
+  it("advancesPlan absent on a FREE ROW leaves the plan alone (the store's default, not the route's)", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
+    const created = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      workoutId: null,
+      workoutTitle: "Just Row",
+      workoutType: null,
+      steps: [],
+    });
+    expect(created.status).toBe(201);
+    const plan = await asA(request(app).get("/api/plan"));
+    expect(plan.body.doneN).toBe(0);
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === created.body.id);
+    expect(row).toMatchObject({ planKey: null, planIndex: null });
   });
 
   it("advancesPlan:true behaves exactly like the absent-field default", async () => {
@@ -2947,9 +2990,14 @@ describe("GET/POST /api/logs", () => {
         actualMeters: 100,
       },
     ],
+    // As for `V0_11_0_LOG_BODY`: `source` is the one field the v0.35.0
+    // sunset made required. A pm5 step with no `deviceName` derived
+    // `manual` under the old rule (device name wins, else a stopwatch
+    // step, else by hand), so that is the member this pin carries.
+    source: "manual",
   });
 
-  it("POST in the exact v0.12.0-era body shape (pm5 step, no actualSpm key) still 201s and stores spm verbatim as the old measured value (§6 exit criterion 3)", async () => {
+  it("POST in the v0.12.0-era body shape (pm5 step, no actualSpm key; plus the source the v0.35.0 sunset requires) still 201s and stores spm verbatim as the old measured value (§6 exit criterion 3)", async () => {
     const app = appFor(makeStores());
     const res = await asA(request(app).post("/api/logs")).send(
       V0_12_0_LOG_BODY,
@@ -2978,6 +3026,9 @@ describe("GET/POST /api/logs", () => {
       await asA(request(app).post("/api/logs")).send({
         ...validLogBody(),
         deviceName: "PM5 432331249 Row",
+        // A device name makes the fixture's `timer` a contradiction
+        // (`server/logSource.ts`); this row came through the monitor door.
+        source: "pm5",
       });
       const list = await asA(request(app).get("/api/logs"));
       expect(list.body[0].deviceName).toBe("PM5 432331249 Row");
@@ -3007,6 +3058,7 @@ describe("GET/POST /api/logs", () => {
         const res = await asA(request(app).post("/api/logs")).send({
           ...validLogBody(),
           deviceName,
+          source: "pm5",
         });
         expect(res.status).toBe(201);
       }
@@ -3270,9 +3322,12 @@ describe("GET/POST /api/logs", () => {
           actualSource: "stopwatch",
         },
       ],
+      // As for `V0_11_0_LOG_BODY`: the one field the v0.35.0 sunset made
+      // required, carrying the member the server derived for this body.
+      source: "timer",
     });
 
-    it("POST in the exact v0.14.0-era body shape (no series key) still 201s and stores series null (exit criterion 6)", async () => {
+    it("POST in the v0.14.0-era body shape (no series key; plus the source the v0.35.0 sunset requires) still 201s and stores series null (exit criterion 6)", async () => {
       const app = appFor(makeStores());
       const res = await asA(request(app).post("/api/logs")).send(
         V0_14_0_LOG_BODY,
@@ -3831,6 +3886,7 @@ describe("GET/POST /api/logs", () => {
             id: created.body.id,
             workoutTitle: "Slack Tide",
             workoutType: "O2",
+            workoutId: null,
             linkedTitle: null,
             workoutIsGlobal: null,
           },
@@ -3895,6 +3951,7 @@ describe("GET/POST /api/logs", () => {
             id: second.body.id,
             workoutTitle: "Dust Whirl",
             workoutType: "AN",
+            workoutId: null,
             linkedTitle: null,
             workoutIsGlobal: null,
           },
@@ -3972,6 +4029,7 @@ describe("GET/PUT /api/plan", () => {
           actualSource: "assumed",
         },
       ],
+      source: "manual",
     });
     vi.mocked(stores.planState.set).mockClear();
 
@@ -4002,6 +4060,7 @@ describe("GET/PUT /api/plan", () => {
           actualSource: "assumed",
         },
       ],
+      source: "manual",
     });
 
     const res = await asA(request(app).put("/api/plan")).send({
@@ -4031,6 +4090,7 @@ describe("GET/PUT /api/plan", () => {
           actualSource: "assumed",
         },
       ],
+      source: "manual",
     });
     const res = await asA(request(app).put("/api/plan")).send({ reset: true });
     expect(res.body).toMatchObject({ planKey: "sprint", doneN: 0 });

@@ -90,6 +90,8 @@ describe("POST/GET /api/logs: completedAt/tz round-trip through the real route a
       pain: null,
       notes: null,
       steps: [{ label: "2000 m" }],
+      // Required since the v0.35.0 sunset; `extra` may name its own door.
+      source: "manual",
       ...extra,
     };
   }

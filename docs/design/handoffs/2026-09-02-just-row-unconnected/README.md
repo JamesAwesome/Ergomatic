@@ -60,6 +60,13 @@ load-bearing three times). Not on the detail screen or the log door,
 because no type chip appears there for any row (`9-detail.png`,
 `6-log-door.png`).
 
+**Superseded, one day later (2026-09-02, #272):** `LogDoor.dc.html`'s
+`Save this row` is retired — the door now carries the shipped pair
+(`Log against plan · SESSION n OF N` / `Save without logging`, or the
+latter alone with no plan). See
+`docs/design/handoffs/2026-09-02-just-row-substitution/`. The board is
+kept as approved; this note keeps it from reading as current.
+
 ## Contrast (computed, WCAG AA floor 4.5:1)
 
 | pairing | ratio |
