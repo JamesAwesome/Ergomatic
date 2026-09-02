@@ -83,11 +83,13 @@
     <!-- THE JR CHIP (follow-on item 4, James 2026-09-02: "it's just missing
          the JR chip"). MECHANICAL: the workout detail's badge row sits above
          the title (1-detail.png: O2 · CUSTOM · EASY); the chip is TypeBadge's
-         own 30×22 mono shape. Filled --ink-3, TypeBadge's OWN fill for a
-         non-intensity value ("metadata, not a new intensity" — the same
-         rule .workout-row-custom records), distinct from TR's dark chip.
-         on-color on ink-3: 7.43:1, computed in TypeBadge.tsx itself. -->
-    <div><span class="badge" style="background: var(--ink-3); margin: 0;">JR</span></div>
+         own 30×22 mono shape. HOLLOW, not filled: the .workout-row-custom
+         metadata chip exactly (transparent, 1px --rule-3 border, --ink-3
+         text) in TypeBadge's 30×22 geometry. Every filled chip is an
+         intensity, TR's fill IS --ink, and a grey fill still read as TR's
+         neighbour; an outline cannot be mistaken for any of the four.
+         ink-3 on page 6.69:1, on surface 7.43:1. -->
+    <div><span class="badge" style="background: transparent; border: 1px solid var(--rule-3); color: var(--ink-3); margin: 0; box-sizing: border-box;">JR</span></div>
     <h1 class="h1">Just Row</h1>
     <!-- MECHANICAL: the shipped meta line minus the clause that stops being
          true. No new words. -->

@@ -6,7 +6,7 @@ with TIME ONLY. James's rulings (2026-09-02): time only, distance never
 typed or fabricated; the door's action is `Start Timer`; **every label is
 lifted from a shipped screen, mechanically.**
 
-**Status: REV 2d PRESENTED for Gate 0, 2026-09-02.** Not yet approved.
+**Status: REV 2e PRESENTED for Gate 0, 2026-09-02.** Not yet approved.
 Rev 1 invented three labels (`Done`, `PHONE CLOCK`, `Time it without the
 monitor`); James: "Match the prose to the other screens. Again make it
 all mechanical." Rev 2 replaces every invented word with the shipped one.
@@ -42,13 +42,15 @@ the plan carries, and the board shows the intended result.
 Follow-on item 4 rides this board. The chip appears where type chips
 appear: the door's badge row above the title (the workout detail's own
 slot) and the History rows' badge slot — on BOTH free rows, connected and
-phone-timed. It is `TypeBadge`'s 30×22 mono shape in **`--ink-3`, the fill
-`TypeBadge.tsx` itself already uses for a non-intensity value**
-("metadata, not a new intensity", 7.43:1 computed there) — the same rule
-`.workout-row-custom` records. Rev 2c used `--ink`; James: "get the
-chip's colour not to conflict with TR" (TR's chip is the dark one), so
-rev 2d takes the warm mid-grey the code already reserves for exactly
-this case. It is DERIVED from
+phone-timed. It is `TypeBadge`'s 30×22 mono geometry as a **hollow chip —
+`.workout-row-custom`'s own metadata treatment: transparent, 1px
+`--rule-3` border, `--ink-3` text** (the CUSTOM tag on the workout
+detail). Rev 2c filled it `--ink`, which is literally `--type-tr`'s
+value; rev 2d filled it `--ink-3`, which James still read as TR's
+neighbour ("still a bit close"). Rev 2e drops the fill: every filled
+chip on these screens is an intensity, so the one chip that is not an
+intensity is the one with no fill. `--ink-3` on page 6.69:1, on surface
+7.43:1. It is DERIVED from
 `workout_type: null` + `workout_id: null`, never stored — `"JR"` can
 never live in `workout_type` (the PM close gate: `isFreeRow` is
 load-bearing three times). Not on the detail screen or the log door,
@@ -59,7 +61,7 @@ because no type chip appears there for any row (`9-detail.png`,
 
 | pairing | ratio |
 | --- | --- |
-| on-color on ink-3 (the JR chip) | 7.43:1 |
+| ink-3 on surface (the hollow JR chip) | 7.43:1 |
 | ink on page | 15.41:1 |
 | ink-2 on page | 9.74:1 |
 | ink-3 on page | 6.69:1 |
