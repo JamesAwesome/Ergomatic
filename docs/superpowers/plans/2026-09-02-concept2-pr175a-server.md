@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Migration landed as 0021 (#268 took 0020 first); every 0020 below reads 0021.** The branch was rebased onto main on 2026-09-02 after #268 merged, the migration was deleted and regenerated off new main as `app/drizzle/0021_crazy_gamma_corps.sql`, and its five SQL statements were proved identical to the reviewed 0020 file. The plan text below is left as written (it is the record of what was planned, not of what shipped).
+
 **REV 1** — written 2026-09-02 against design rev 5 at worktree head `0991046c` (branch `wave-e-pr175-app-bind`). Every `file:line` below was read in this worktree at that head. Implements ONLY **PR1.75a** as scoped in design §0; PR1.75b (native + client) is a separate later plan and nothing here touches `app/src/` or `app/ios/`.
 
 **Goal:** Make a Concept2 link provably belong to the Ergomatic account that started it. Both completion paths (the web callback and a new native `POST /api/concept2/exchange`) authenticate the completing principal and refuse to exchange the code unless `attempt.userId === req.user.id`; every attempt records which surface minted it and can only complete on that surface; mint becomes one atomic upsert, one live attempt per user; the callback pages become the approved styled template with the Linked page naming both identities. Everything stays dark behind `C2_LINK_ENABLED`.

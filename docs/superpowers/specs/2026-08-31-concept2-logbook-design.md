@@ -298,7 +298,7 @@ so we build the RFC 8252 shape:
    new Ergomatic account, not a current holder's standing to act
    (`signin.ts:30-42`), and "one live attempt per user" is best-effort
    and raceable under concurrent mints, not enforced (gate doc §1,
-   corrected fix round 15 — now ENFORCED at PR1.75a, migration 0020) —
+   corrected fix round 15 — now ENFORCED at PR1.75a, migration 0021) —
    not the "four real bounds" of equal weight
    an earlier revision of this bullet claimed, and not the two the
    original "SUSPECTED" framing named either.** **REAFFIRMED (James,
@@ -428,7 +428,7 @@ nonce correlates the return to the attempt, and — this is the ACCEPTED
 DARK IMPLEMENTATION, not the ruled target — nothing today checks WHO is
 completing it, which is exactly the account-injection residual the
 design-gate ruling accepts for the dark plumbing. **TARGET, server half
-BUILT at PR1.75a (migration 0020,
+BUILT at PR1.75a (migration 0021,
 `2026-09-02-concept2-pr175-app-bind-design.md` §2): the `surface`
 column** (`"native"` | `"web"`, corrected fix
 round 15 — an earlier revision of this row said the column was "added
@@ -576,7 +576,7 @@ rather than inferred:**
   residual for — nonce-only, no principal-binding identity check on
   either completion route. Deployed prod behavior: unchanged.
 - **After PR1.75a:** the server side of the ruled activation shape —
-  migration 0020 (`surface`, `UNIQUE(user_id)`, `UNIQUE(c2_user_id)`),
+  migration 0021 (`surface`, `UNIQUE(user_id)`, `UNIQUE(c2_user_id)`),
   the cookie-authenticated web callback and the bearer-authenticated
   `POST /api/concept2/exchange`, `authVia`, the styled pages. **After
   PR1.75b:** the native return via `ASWebAuthenticationSession`

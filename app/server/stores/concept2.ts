@@ -4,9 +4,11 @@ import { concept2AuthAttempts, concept2Links } from "../db/schema.js";
 import { isUniqueViolation, pgConstraint } from "./errors.js";
 
 // Fix round 2 (task-2-report.md): the real constraint names, read from the
-// migrations that created them (not guessed) — `app/drizzle/0020_fearless_
-// shape.sql:27-28` names both UNIQUE additions explicitly; the nonce PK's
-// name (`app/drizzle/0018_natural_chronomancer.sql:2-3`, an inline
+// migrations that created them (not guessed) — `app/drizzle/0021_crazy_
+// gamma_corps.sql:31-32` names both UNIQUE additions explicitly (the file
+// was `0020_fearless_shape.sql` until #268 took index 0020 first, and the
+// old citation's `:27-28` pointed at the header, not the statements); the
+// nonce PK's name (`app/drizzle/0018_natural_chronomancer.sql:2-3`, an inline
 // `PRIMARY KEY` with no explicit CONSTRAINT clause) is Postgres's own
 // default `<table>_pkey` naming, confirmed empirically against a migrated
 // test database (`select conname from pg_constraint where conrelid =
@@ -240,7 +242,7 @@ export function createConcept2Store(db: Db) {
     // The old delete-then-insert image does NOT yield two rows on this
     // schema: measured against real Postgres (Task 2 fix round 2), it dies
     // with `concept2_auth_attempts_user_id_unique` propagating unmapped —
-    // "two rows" was the PRE-0020 behaviour, before that index existed.
+    // "two rows" was the PRE-0021 behaviour, before that index existed.
     // After that arm the unique violation this is meant to catch is the
     // PRIMARY KEY
     // (`concept2_auth_attempts_pkey`): the new nonce collided with another

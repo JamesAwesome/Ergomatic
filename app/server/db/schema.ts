@@ -558,9 +558,9 @@ export const concept2Links = pgTable("concept2_links", {
 // delete-then-insert image does NOT yield two rows on this schema: measured
 // against real Postgres (Task 2 fix round 2), it dies with
 // `concept2_auth_attempts_user_id_unique` propagating unmapped — "two rows"
-// was the PRE-0020 behaviour, before that index existed.
+// was the PRE-0021 behaviour, before that index existed.
 //
-// Migration 0020 rollback, both halves (design §2): (1) `surface` carries
+// Migration 0021 rollback, both halves (design §2): (1) `surface` carries
 // DEFAULT 'web' for ROLLBACK, not for writes — the PR1.5 image's
 // `createAttempt` inserts no `surface`, and a plain NOT NULL would make
 // every mint 500 after a rollback; new code always writes it explicitly.

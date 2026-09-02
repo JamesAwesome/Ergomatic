@@ -4134,7 +4134,8 @@ does not match these numbers._
 - **A wave's own split rule is a precedent, and the next spec re-bundled exactly
   what it split.** `ROADMAP.md:997-998` records why PR1/PR1.5 divided: "so one
   reviewer never holds a token-broker migration and an iOS deep-link contract in
-  one pass." Rev 2 then bundled migration 0020, an app-wide auth change, a
+  one pass." Rev 2 then bundled migration 0020 (renumbered 0021 at rebase
+  — #268 merged first), an app-wide auth change, a
   two-route identity ladder, the repo's first in-tree Swift plugin, Xcode project
   surgery, and the retirement of a three-day-old shipped mechanism — five risk
   models. **RULED: split into 1.75a (server, TRIAD, PM final gate) and 1.75b
@@ -4219,15 +4220,18 @@ does not match these numbers._
   and a pre-deploy check written the first way has no place to run.** #269's
   migration is guarded by a prod query for duplicate `c2_user_id`, framed as
   a pre-deploy step — but `ci.yml:181` deploys on push to main and
-  `server/index.ts:32` migrates at boot, so a failing 0020 is a prod boot
-  failure with no gap in between. **Any pre-deploy operator check on this repo
+  `server/index.ts:32` migrates at boot, so a failing 0020 (renumbered 0021
+  at rebase) is a prod boot failure with no gap in between. **Any pre-deploy operator check on this repo
   is a pre-MERGE check; say so, or it is decoration.**
 - **The migration-collision ruling is right, and its tie-break is "the dark PR
   pays."** #268 and #269 both mint 0020. Only one branch renumbers either
   way, so the question is who pays the cycle: the older, tester-visible,
   fully-green PR (#268, e2e included) or the dark one whose regenerate costs
   a server-only rerun. **Merge the tester-visible one first; the dark branch
-  regenerates.** Generalises past this pair.
+  regenerates.** Generalises past this pair. **Settled 2026-09-02:** #268
+  merged first and took 0020; #269 rebased and regenerated as 0021, with the
+  five SQL statements proved byte-identical to the reviewed file, so the
+  renumber cost a rerun and nothing else — the tie-break held.
 - **A fold amended for facts must be re-counted, and the counter should not be
   its own author.** #269's fold is mine from the shape gate with one bullet
   amended and the try-it command changed; the amendments took it from budget

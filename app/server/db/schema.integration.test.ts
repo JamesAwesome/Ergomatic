@@ -1539,21 +1539,29 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
 });
 
 // Wave E PR1.75a (2026-09-02-concept2-pr175-app-bind-design.md §2, TRIAD):
-// migration 0020 — `concept2_auth_attempts` gains `surface` (enum
-// link_surface, NOT NULL DEFAULT 'web') and UNIQUE(user_id); `concept2_links`
-// gains UNIQUE(c2_user_id) (D1, approved); every pre-existing attempt row is
+// migration 0021 (was 0020 until #268 merged first and took that index) —
+// `concept2_auth_attempts` gains `surface` (enum link_surface, NOT NULL
+// DEFAULT 'web') and UNIQUE(user_id); `concept2_links` gains
+// UNIQUE(c2_user_id) (D1, approved); every pre-existing attempt row is
 // DELETED first (15-minute disposable rows — an in-flight link at deploy
 // restarts at mint, already the retry story). Same pre/post-migration
 // harness as the 0018 block above: rows are seeded against a folder capped
-// at 0019, then the real folder applies 0020.
-describe("migration 0020: attempts surface + UNIQUE(user_id), links UNIQUE(c2_user_id), attempts wiped", () => {
+// at 0020, then the real folder applies 0021 ALONE — the staging assertion
+// below pins that, so a future renumbering that leaves this block behind
+// goes red here instead of silently testing someone else's migration.
+describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_user_id), attempts wiped", () => {
   let container: StartedPostgreSqlContainer;
   let pool: pg.Pool;
   let db: Db;
   let tempDir: string;
   let seededUserId: string;
+  // Captured in beforeAll, asserted in the first `it` — the staging is only
+  // a proof about THIS migration if these hold. Literals, never derived
+  // from the arrays below (a test that computes its expectation from the
+  // thing it gates cannot go red on it).
+  const staging = { appliedBefore: -1, appliedAfter: -1, newestTag: "" };
 
-  const PRE_0020_TAGS = [
+  const PRE_0021_TAGS = [
     "0000_skinny_silver_fox",
     "0001_tan_thunderball",
     "0002_rare_khan",
@@ -1574,15 +1582,16 @@ describe("migration 0020: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
     "0017_fair_whizzer",
     "0018_natural_chronomancer",
     "0019_happy_virginia_dare",
+    "0020_wooden_millenium_guard",
   ];
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer("postgres:18.4").start();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
-    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0020-"));
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0021-"));
     await mkdir(path.join(tempDir, "meta"));
-    for (const [i, tag] of PRE_0020_TAGS.entries()) {
+    for (const [i, tag] of PRE_0021_TAGS.entries()) {
       const idx = String(i).padStart(4, "0");
       await copyFile(
         path.join("drizzle", `${tag}.sql`),
@@ -1595,12 +1604,13 @@ describe("migration 0020: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
     }
     const journal = JSON.parse(
       await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
-    ) as { entries: { idx: number }[] };
+    ) as { entries: { idx: number; tag: string }[] };
+    staging.newestTag = journal.entries[journal.entries.length - 1].tag;
     await writeFile(
       path.join(tempDir, "meta", "_journal.json"),
       JSON.stringify({
         ...journal,
-        entries: journal.entries.filter((e) => e.idx <= 19),
+        entries: journal.entries.filter((e) => e.idx <= 20),
       }),
     );
     await migrate(db, { migrationsFolder: tempDir });
@@ -1608,28 +1618,46 @@ describe("migration 0020: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
     const [u] = await db
       .insert(users)
       .values({
-        googleSub: "pre-0020-user",
-        email: "pre-0020@migrate.test",
-        name: "Pre 0020",
+        googleSub: "pre-0021-user",
+        email: "pre-0021@migrate.test",
+        name: "Pre 0021",
       })
       .returning();
     seededUserId = u.id;
 
-    // TWO live attempts for ONE user, seeded against the pre-0020 schema —
+    // TWO live attempts for ONE user, seeded against the pre-0021 schema —
     // legal there (no UNIQUE(user_id) yet, the exact "raceable" state the
     // ruling named). Raw SQL because the typed builder already declares
     // `surface`, which this table does not have yet.
     await db.execute(
       sql`insert into "concept2_auth_attempts" ("nonce", "user_id", "weight_class")
-          values ('pre-0020-a', ${u.id}, 'H'), ('pre-0020-b', ${u.id}, 'L')`,
+          values ('pre-0021-a', ${u.id}, 'H'), ('pre-0021-b', ${u.id}, 'L')`,
     );
 
+    const applied = async () =>
+      Number(
+        (
+          await pool.query<{ n: string }>(
+            "select count(*)::text as n from drizzle.__drizzle_migrations",
+          )
+        ).rows[0].n,
+      );
+    staging.appliedBefore = await applied();
     await migrate(db, { migrationsFolder: "drizzle" });
+    staging.appliedAfter = await applied();
   });
 
   afterAll(async () => {
     await pool.end().catch(() => {});
     await container.stop().catch(() => {});
+  });
+
+  it("staged 0000..0020, then applied 0021 alone", () => {
+    expect(staging).toStrictEqual({
+      appliedBefore: 21,
+      appliedAfter: 22,
+      newestTag: "0021_crazy_gamma_corps",
+    });
   });
 
   it("wipes every pre-existing attempt (the 15-minute rows restart at mint)", async () => {
@@ -1685,8 +1713,8 @@ describe("migration 0020: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
     const [other] = await db
       .insert(users)
       .values({
-        googleSub: "post-0020-other",
-        email: "post-0020-other@migrate.test",
+        googleSub: "post-0021-other",
+        email: "post-0021-other@migrate.test",
         name: "Other",
       })
       .returning();

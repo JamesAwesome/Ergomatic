@@ -670,7 +670,7 @@ See the correction immediately below before reading the rest of this
 option as settled.**
 
 > **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#269):** the server half of
-> option (g) is BUILT: migration 0020 (`surface`, `UNIQUE(user_id)`, D1's
+> option (g) is BUILT: migration 0021 (`surface`, `UNIQUE(user_id)`, D1's
 > `UNIQUE(c2_user_id)`), `attempt.userId === req.user.id` BEFORE consume
 > and BEFORE exchange on BOTH the web callback (cookie, route-local
 > resolver) and `POST /api/concept2/exchange` (bearer), and the surface
@@ -965,7 +965,7 @@ alone.**
 ## 4. The device-check card
 
 > **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#269):** the server half of
-> option (g) is BUILT: migration 0020 (`surface`, `UNIQUE(user_id)`, D1's
+> option (g) is BUILT: migration 0021 (`surface`, `UNIQUE(user_id)`, D1's
 > `UNIQUE(c2_user_id)`), `attempt.userId === req.user.id` BEFORE consume
 > and BEFORE exchange on BOTH the web callback (cookie, route-local
 > resolver) and `POST /api/concept2/exchange` (bearer), and the surface
@@ -1011,7 +1011,7 @@ now build items against a picked shape, not open questions:**
   REAL consent grant (both surfaces, now authenticated per §3(g)), not
   the dev probe's fake URL.
 - (g)'s own three preconditions: the `surface` column and migration
-  (BUILT, 0020 at PR1.75a), the dual-route identity check (BUILT at
+  (BUILT, 0021 at PR1.75a), the dual-route identity check (BUILT at
   PR1.75a — `attempt.userId === req.user.id` before token exchange on
   both the web callback and `/api/concept2/exchange`), Concept2's
   approval of the native `redirect_uri` (log-dev DONE 2026-09-02; live
@@ -1073,7 +1073,7 @@ principal, matching what it actually proves.
 ## 6. Ruling
 
 > **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#269):** the server half of
-> option (g) is BUILT: migration 0020 (`surface`, `UNIQUE(user_id)`, D1's
+> option (g) is BUILT: migration 0021 (`surface`, `UNIQUE(user_id)`, D1's
 > `UNIQUE(c2_user_id)`), `attempt.userId === req.user.id` BEFORE consume
 > and BEFORE exchange on BOTH the web callback (cookie, route-local
 > resolver) and `POST /api/concept2/exchange` (bearer), and the surface

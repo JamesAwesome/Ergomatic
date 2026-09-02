@@ -7,11 +7,12 @@ Apple's documentation this session, each tagged. Superseded claims are gone, not
 annotated. **APPROVED — James, 2026-09-02** ("Designs approved": the Gate 0 render —
 rendered pages, the shared styled callback template, and the design calls listed
 there: identity-before-consume, bearer-wins, ephemeral:true, atomic upsert +
-migration 0020). Two hardening passes (attacker-lens antagonist, PM shape) were
-in flight at approval; any material change they force is presented to James as a
-delta before implementation, per the PR1.5 lesson. **Wave:** E · **Risk
+migration 0021 — was 0020 until #268 merged first). Two hardening passes
+(attacker-lens antagonist, PM shape) were in flight at approval; any material
+change they force is presented to James as a delta before implementation, per
+the PR1.5 lesson. **Wave:** E · **Risk
 class:** TRIAD — AUTH (the principal-binding routes) + a STORED SHAPE (`surface`
-column, `UNIQUE(user_id)`, **migration 0020** — 0019 is Phase JR's on main).
+column, `UNIQUE(user_id)`, **migration 0021** — 0020 is #268's on main).
 **Parent:** `2026-08-31-concept2-logbook-design.md` §Architecture 1-3 and
 `2026-09-01-concept2-pr15-gate.md` §3(g)/§6 (the ruling this PR discharges).
 Sequenced PR1.5 → **PR1.75** → PR2.
@@ -203,7 +204,7 @@ middleware change, the repo's first in-tree Swift, retirement of a three-day-old
 mechanism). CLAUDE.md's grouping tie-break — a stored-shape change plus an
 unrelated redesign in one pass → split — decides it.
 
-- **PR1.75a — server (TRIAD: stored shape + auth).** Migration 0020 + schema;
+- **PR1.75a — server (TRIAD: stored shape + auth).** Migration 0021 + schema;
   `stores/concept2.ts` (upsert `createAttempt`, `peekAttempt`, `surface` in both
   returns, `deleteAttemptsFor` retired); `auth/middleware.ts` (`authVia`,
   empty-cookie-is-absent, the disagreement log); `routes/concept2.ts` (surface at
@@ -269,7 +270,7 @@ same user" case cannot lock anyone out at either scope. Mint records
 exists for an attacker to choose. `neither present → 401` is unchanged and is in
 the test list.
 
-### 2. Stored shape (TRIAD) — migration 0020
+### 2. Stored shape (TRIAD) — migration 0021
 
 `concept2_auth_attempts` gains:
 
@@ -278,14 +279,14 @@ the test list.
 | `surface` | `pgEnum link_surface ('native','web')`, **NOT NULL DEFAULT 'web'** | the default exists for ROLLBACK, not for writes: the PR1.5 image's `createAttempt` inserts no `surface`, and a plain `NOT NULL` would make every mint 500 after a rollback (proven against real Postgres at the antagonist pass). New code always writes it explicitly. |
 | — | `UNIQUE (user_id)` | one live attempt per user, ENFORCED — the bound the PR1.5 ruling called "best-effort/raceable" becomes real |
 
-Migration 0020 first `DELETE`s every existing attempt (15-minute disposable rows;
+Migration 0021 first `DELETE`s every existing attempt (15-minute disposable rows;
 an in-flight link at deploy restarts at mint, already the retry story), then adds
 the enum, the column, and the unique index. Additive to every other table.
 **Rollback, second half (pass 2):** the surviving `UNIQUE(user_id)` turns the
 rollback image's concurrent double-mint (delete-then-insert, `stores/concept2.ts:159-165`)
 into a unique violation (500) rather than two rows. Accepted — a rare self-race,
 strictly smaller blast radius than the unbounded attempts the index prevents.
-**D1 APPROVED: 0020 also adds `UNIQUE (c2_user_id)` on `concept2_links`** — the cheap moment (`schema.ts:483` has no index today). It also survives a code rollback: the PR1.5 image's `upsertLink` has no mapping for this constraint, so after rollback a conflict on it answers with an unhandled 500 rather than this PR's 409 — immaterial while the table is empty and the flag is dark.
+**D1 APPROVED: 0021 also adds `UNIQUE (c2_user_id)` on `concept2_links`** — the cheap moment (`schema.ts:483` has no index today). It also survives a code rollback: the PR1.5 image's `upsertLink` has no mapping for this constraint, so after rollback a conflict on it answers with an unhandled 500 rather than this PR's 409 — immaterial while the table is empty and the flag is dark.
 
 **Mint is one atomic statement:** `INSERT … ON CONFLICT (user_id) DO UPDATE SET
 nonce = excluded.nonce, surface = excluded.surface, weight_class =
@@ -297,7 +298,7 @@ holds a row open on one connection and shows the concurrent insert blocks on
 the index rather than racing past it. The old delete-then-insert image does
 NOT yield two rows on this schema: measured against real Postgres (Task 2 fix
 round 2), it dies with `concept2_auth_attempts_user_id_unique` propagating
-unmapped — "two rows" was the PRE-0020 behaviour, before that index existed. A new
+unmapped — "two rows" was the PRE-0021 behaviour, before that index existed. A new
 nonce colliding with another row's PK (32 random bytes — not worth designing
 around) surfaces as a unique violation on `attempts_pkey`: the route retries
 once with a fresh nonce, then 500s. `deleteAttemptsFor` retires;
@@ -648,7 +649,7 @@ phrase grep pasted, all zero/accounted; (4) the walk table: per-request
 
 ## Decisions for James (from antagonist pass 2) — **D1 YES, D2 YES (James, 2026-09-02 "Approved"); D3 PENDING**
 
-- **D1 — detective control against code injection (stored shape, 0020).** Add
+- **D1 — detective control against code injection (stored shape, 0021).** Add
   `UNIQUE (c2_user_id)` on `concept2_links`; a link whose Concept2 account is
   already connected to a DIFFERENT Ergomatic user → `409 already_linked_elsewhere`
   (web: a 409 page). Stops the common injection case (victim already linked) and

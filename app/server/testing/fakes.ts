@@ -899,7 +899,7 @@ function makeFakeArticleReadsStore(): ArticleReadsStore {
 // `FOR UPDATE` case does; that test exists precisely because no fake can
 // stand in for it.
 //
-// PR1.75a: the two unique constraints migration 0020 added are mirrored
+// PR1.75a: the two unique constraints migration 0021 added are mirrored
 // here as the same typed errors the real store throws
 // (`AttemptNonceCollisionError` on a nonce held by another user's row,
 // `Concept2LinkConflictError` on a c2UserId held by another user's link),
