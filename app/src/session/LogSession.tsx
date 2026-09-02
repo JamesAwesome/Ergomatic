@@ -771,6 +771,20 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
       if (body.source === "pm5") {
         body.deviceName = NAMELESS_MONITOR_CAPTION;
       } else {
+        // RC-18 (M5.5): DEAD today, same reachability class as
+        // `capacitorBle.ts`'s picker arm — the OUTER `typeof === "string"`
+        // check above already can only be true when `source === "pm5"`,
+        // because `handleSave`/the manual door's `submit()` calls never
+        // set `deviceName` on the wire body in the first place
+        // (`LogFormFields.deviceName`'s own doc: "the monitor mode's ONLY
+        // addition to the shared body shape"). Kept anyway as the
+        // narrowing's own belt: if a future door ever DID attach a name,
+        // this is what stops it reaching the server's contradiction check
+        // (`server/logSource.test.ts`'s "timer/manual with a deviceName is
+        // refused" pins that check independently). Gated by pinning the
+        // REAL, reachable fact instead — `LogSession.test.tsx`'s "the
+        // timer/manual door's save never attaches a deviceName" legs —
+        // rather than faking a body shape no door can produce.
         delete body.deviceName;
       }
     }
