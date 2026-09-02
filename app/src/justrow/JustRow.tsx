@@ -10,6 +10,7 @@ import { deriveAxes } from "../monitor/connectedAxes";
 import { read as readHandoff } from "../monitor/handoffStore";
 import { useMonitorSession } from "../monitor/useMonitorSession";
 import ConnectedSurface from "../workout/ConnectedSurface";
+import FreeRowChip from "../workout/FreeRowChip";
 import { freeRowTotals } from "./totals";
 
 /**
@@ -19,9 +20,10 @@ import { freeRowTotals } from "./totals";
  * 2026-09-01: "when you click it, then it'll say connect, almost as though
  * it was a normal workout"). The rower arrives from a two-word control on
  * Today and finds the same anatomy every workout has, with the parts a free
- * row does not have simply missing: no type badge, no difficulty, no pain
- * estimate, no duration, no steps. What is left is the title, one line
- * saying what this is, and Connect.
+ * row does not have simply missing: no type badge (the badge row carries
+ * the derived JR chip instead — `FreeRowChip.tsx`), no difficulty, no pain
+ * estimate, no duration, no steps. What is left is the chip, the title, one
+ * line saying what this is, and Connect.
  *
  * **ONE action, and its absences are rulings rather than omissions.** No
  * Start Timer and no "log it after": ruling 2 makes this phase
@@ -125,6 +127,14 @@ export default function JustRow() {
           &larr; BACK
         </button>
 
+        {/* The workout detail's own badge row, above the title, holding the
+            one chip a free row has (handoff "The JR chip"). The door IS the
+            free row, so the pair it hands the chip is the pair a free row
+            stores — the chip stays derived from `isFreeRow`, never keyed on
+            this screen. */}
+        <div className="workout-detail-meta">
+          <FreeRowChip workoutId={null} workoutType={null} />
+        </div>
         <h1 className="screen-title">Just Row</h1>
         <p className="justrow-meta">
           NO TARGETS &middot; NO PLAN &middot; NEEDS THE MONITOR

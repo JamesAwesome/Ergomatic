@@ -92,6 +92,24 @@ describe("JustRow door", () => {
     ).toBeInTheDocument();
   });
 
+  // Handoff "The JR chip" (rev 2e): the chip appears where type chips appear
+  // — the workout detail's own badge row ABOVE the title. Its class is
+  // `free-row-chip`, never `type-badge`; the door has no intensity to badge.
+  it("wears the JR chip in a badge row above the title, and no .type-badge", () => {
+    const { container } = renderDoor();
+
+    const chip = container.querySelector(".free-row-chip")!;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toBe("JR");
+    expect(chip.parentElement).toHaveClass("workout-detail-meta");
+    expect(container.querySelector(".type-badge")).toBeNull();
+
+    const title = screen.getByRole("heading", { name: "Just Row" });
+    expect(
+      chip.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   /**
    * EXIT CRITERION 6, driven through the NEW door rather than the workout
    * screen's.
