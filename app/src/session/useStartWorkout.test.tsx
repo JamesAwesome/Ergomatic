@@ -9,7 +9,7 @@ import {
   startDraft,
   type SessionDraft,
 } from "./draft";
-import { buildRun } from "./engine";
+import { buildFreeRowRun, buildRun } from "./engine";
 import { loadRun, saveRun, type SessionRun } from "./run";
 import {
   loadMonitorRun,
@@ -161,6 +161,54 @@ describe("useStartWorkout", () => {
     expect(result.current.replaceStage).toBe("unlogged");
     expect(loadDraft()).toStrictEqual(draftA);
     expect(loadRun()).toStrictEqual(runA);
+  });
+
+  // Just Row without the monitor (spec 2026-09-02, lifetime table ⟨F8⟩;
+  // exit criterion 6, the second direction): a LIVE free-row run has NO
+  // draft, so the started-draft check below never sees it, and before this
+  // guard Start reached `confirmReplace()`'s `clearRun()` mid-row. The
+  // stored bytes are compared verbatim — the first press and the cancel
+  // must both leave the record exactly as the door wrote it.
+  it("stages 'in-progress' for a LIVE mode-justrow SessionRun with no draft, and neither the press nor cancel touches the stored bytes (criterion 6)", () => {
+    saveRun(buildFreeRowRun(new Date("2026-09-02T12:00:00.000Z")));
+    expect(loadDraft()).toBeNull();
+    const before = localStorage.getItem("ergomatic.sessionRun");
+    expect(before).not.toBeNull();
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
+      wrapper,
+    });
+
+    act(() => result.current.handleStart());
+
+    expect(result.current.replaceStage).toBe("in-progress");
+    expect(localStorage.getItem("ergomatic.sessionRun")).toBe(before);
+    expect(screen.queryByText("COUNTDOWN SCREEN")).not.toBeInTheDocument();
+
+    act(() => result.current.cancelReplace());
+
+    expect(result.current.replaceStage).toBeNull();
+    expect(localStorage.getItem("ergomatic.sessionRun")).toBe(before);
+  });
+
+  it("a COMPLETED mode-justrow SessionRun (finished, not yet saved at the log door) stages 'unlogged', ranked above in-progress", () => {
+    const run = buildFreeRowRun(new Date("2026-09-02T12:00:00.000Z"));
+    saveRun({
+      ...run,
+      index: 1,
+      actuals: {
+        0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 754 },
+      },
+      completedAt: "2026-09-02T12:12:34.000Z",
+    });
+    const before = localStorage.getItem("ergomatic.sessionRun");
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
+      wrapper,
+    });
+
+    act(() => result.current.handleStart());
+
+    expect(result.current.replaceStage).toBe("unlogged");
+    expect(localStorage.getItem("ergomatic.sessionRun")).toBe(before);
   });
 
   it("stages 'in-progress' for a started-but-not-finished draft with no run record", () => {
