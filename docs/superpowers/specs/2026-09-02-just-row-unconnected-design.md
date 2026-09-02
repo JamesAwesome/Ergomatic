@@ -132,7 +132,9 @@ REQUIRED on POST (a 400 when absent) and the derive path is deleted.**
 That is a breaking API change and so waits for a tag boundary per
 `docs/RELEASING.md`'s additive-only rule; it is filed in ROADMAP with
 that tag as its trigger, not left as "someday". Until then the derived
-member is also written to the ring as `source: derived` so an old build
+member is also logged on the API's stdout as `source=derived` (the server
+has no ring; an old build cannot file a client ring entry for a field it
+does not know — whole-branch review, 2026-09-02) so an old build
 posting through it is visible in diagnostics; when present the
 server checks it against the body and refuses a contradiction with a 400
 naming the field: `pm5` requires a non-null `deviceName`; `timer` and

@@ -291,8 +291,10 @@ const LOG_LIST_COLUMNS = {
   notes: sessionLogs.notes,
   deviceName: sessionLogs.deviceName,
   // Just Row unconnected spec (2026-09-02): a small scalar, same idiom as
-  // `deviceName`/`endedBy` — included in the list projection (History's
-  // meta word reads it, `src/log/storedSummary.ts`'s `sourceLabel`).
+  // `deviceName`/`endedBy` — carried in the list projection for parity
+  // with the detail row. No list consumer reads it yet (History's rows
+  // render no door word; `sourceLabel` lives on the DETAIL path,
+  // `src/log/storedSummary.ts`). Whole-branch review, 2026-09-02.
   source: sessionLogs.source,
   thumbs: sessionLogs.thumbs,
   avgSplitSeconds: sessionLogs.avgSplitSeconds,

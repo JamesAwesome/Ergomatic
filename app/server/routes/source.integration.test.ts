@@ -153,7 +153,7 @@ describe("POST/GET /api/logs: source is derived when absent, refused when it con
     expect(row.source).toBe("manual");
   });
 
-  it("the list projection carries source too (History's meta word reads it)", async () => {
+  it("the list projection carries source too (projection parity; no list consumer reads it yet)", async () => {
     const bearer = await bearerToken();
     const list = await request(app)
       .get("/api/logs?limit=100")

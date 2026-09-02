@@ -26,7 +26,7 @@ board is the corresponding capture with the fewest possible words changed.
 | `ClockFinish.dc.html` | `5-finish-confirm.png` | Verbatim: ▶ stages `Finish this session?` with `Keep going` / `Finish session`. Finish lands on `/justrow/log`. |
 | `ClockLandscape.dc.html` | `4-timer-landscape.png` | Same two words as portrait. |
 | `LogDoor.dc.html` | approved Just Row log door (2026-09-01) + `6-log-door.png` | Card cut to TIME. Provenance word `TIMER` from `summaryModel.ts`'s own vocabulary (`PM5 <id>` / `TIMER` / `LOGGED BY HAND`). |
-| `History.dc.html` | `8-history.png` | A row with no avg split and no distance gets NO second line (`LogRow.heroSnippet` returns `""`) — so title and date only. No badge (`workout_type` null). |
+| `History.dc.html` | `8-history.png` | A row with no avg split and no distance gets NO second line (`LogRow.heroSnippet` returns `""`) — so title and date only. The badge slot carries the hollow JR chip (rev 2c–2e, below), never a `.type-badge`. |
 | `Detail.dc.html` | `9-detail.png` | The shipped timer-row detail: `FROM YOUR LOG`, `← LOG`, title, `SEP 2 · 21:57 · TIMER`, TIME block, `Add how it felt`, `Delete session`. INTERVALS absent because `steps` is `[]`. |
 
 **One thing the reference exposed for the plan, not the design:** the

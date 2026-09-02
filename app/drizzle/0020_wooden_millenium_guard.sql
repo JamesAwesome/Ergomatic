@@ -20,7 +20,7 @@
 --      already wrong there, and the column exists so that no future row
 --      is. `server/logSource.ts`'s `deriveLogSource` is the same rule in
 --      TS; `routes/source.integration.test.ts` runs THIS file's CASE
---      against three rows and asserts the two agree.
+--      against five rows and asserts the two agree.
 --      `steps` is `jsonb` (`0001_tan_thunderball`:43), so
 --      `jsonb_array_elements` needs no cast; `->>` reads the text value.
 --   3. SET NOT NULL, which now holds for every row.

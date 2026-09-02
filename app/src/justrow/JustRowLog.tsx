@@ -77,6 +77,13 @@ type DoorEntry =
  *  MONITOR LOG paste, and pinned by name in this door's tests. */
 const CONFLICT_KIND = "justrow-log-door-conflict";
 
+/** The last conflict message filed by this module. `doorEntry` runs inside
+ *  a `useState` initializer, which React's StrictMode invokes twice in dev
+ *  builds; without this the same violated-invariant entry would be filed
+ *  twice for one mount (whole-branch review, 2026-09-02, NIT 4). One entry
+ *  per distinct pair is the honest count. */
+let lastConflictFiled: string | null = null;
+
 /** **Precedence, stated (exit criterion 7c): the monitor hand-off first,
  *  then the timer run.** Both present at once is a VIOLATED invariant —
  *  the coexistence guard at both doors (`ConnectAction`, the Just Row
@@ -92,12 +99,13 @@ function doorEntry(): DoorEntry | null {
     const monitorClosed = monitor.run.completedAt!;
     const timerClosed = timer.completedAt!;
     const timerNewer = Date.parse(timerClosed) > Date.parse(monitorClosed);
-    recordLogDoorEntry(
-      CONFLICT_KIND,
-      timerNewer
-        ? `rendered=timer completedAt=${timerClosed}; other=monitor sessionKey=${monitor.sessionKey} completedAt=${monitorClosed}`
-        : `rendered=monitor sessionKey=${monitor.sessionKey} completedAt=${monitorClosed}; other=timer completedAt=${timerClosed}`,
-    );
+    const message = timerNewer
+      ? `rendered=timer completedAt=${timerClosed}; other=monitor sessionKey=${monitor.sessionKey} completedAt=${monitorClosed}`
+      : `rendered=monitor sessionKey=${monitor.sessionKey} completedAt=${monitorClosed}; other=timer completedAt=${timerClosed}`;
+    if (message !== lastConflictFiled) {
+      lastConflictFiled = message;
+      recordLogDoorEntry(CONFLICT_KIND, message);
+    }
     return timerNewer
       ? { kind: "timer", run: timer }
       : { kind: "monitor", entry: monitor };
