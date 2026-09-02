@@ -5502,3 +5502,36 @@ same way.
   `ci-changes.sh` the PR BASE sha, so it diffs the whole range; "docs-only
   push, expect a skip" is only true of a bare `push` event, and expecting a
   skip will make a reviewer read a legitimately-running gate as stuck.
+
+### 2026-09-02 — Just Row substitution spec (TRIAD anchor)
+
+- **"Enforced at the store" was enforced at the route.** The spec moved a
+  free row's `advancesPlan` DEFAULT to `data.ts` while claiming the store
+  kept the check. Caught by reading `LogInput`'s type: `advancesPlan:
+  boolean` (required) makes `=== true` identical to the bare flag, so the
+  store's "rule" was a no-op. **Technique: for any "the server checks it"
+  claim, read the INPUT TYPE — an already-defaulted field cannot carry a
+  default, and the layer that defaults is the layer that enforces.**
+- **A door "already posts the flag" posted only one arm of it.**
+  `useLogForm` writes `advancesPlan` ONLY when false (`LogSession.tsx:720`);
+  `true` has never crossed the wire, by design and by comment. **Technique:
+  for "the client already sends X", grep the SETTER, not the option — the
+  call site passing `{x: true}` proves nothing about the body builder.**
+- **A "renders wrong / no mark" premise was half true.** `swapMark`'s
+  checkpoint branch already marks a free row (null identity pair falls back
+  to the snapshot title, which differs). **Technique: trace BOTH branches of
+  a two-branch predicate for the new input; a spec that says "it returns
+  undefined" usually traced the branch it was thinking about.**
+- **A design board asserted a string the app cannot produce.**
+  `INSTEAD OF 2K TEST` vs shipped `INSTEAD OF 2K Test` — the mark returns
+  `ref.title` uncased and the class has no `text-transform`. **Technique: a
+  board claiming "exactly as it reads today" is a testable claim; grep the
+  existing test that pins the live string before believing it.**
+- **"What does NOT change" is where the number change hides.** Making a free
+  row linkable silently enabled the plan footer on the log detail, the
+  un-tick delete copy, and `done_n` DECREMENT on deleting a Just Row —
+  none in scope. **Technique: for any spec that makes a row newly eligible
+  for an existing field, grep every READER of that field and diff the
+  behaviour, including the DELETE path.** (Disposition: all three adopted
+  as intended behaviour in rev 2, the decrement stated as a ruling for
+  James to overrule at Gate 0.)

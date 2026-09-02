@@ -57,8 +57,11 @@
      in for an AT day: the JR chip in the badge slot (today a free row would
      render the "type unknown" box, plan-badge-unknown.png), the name Just
      Row, and the SAME mark line the swap already uses — INSTEAD OF AT. Row
-     7 shows the checkpoint case James allowed: INSTEAD OF 2K TEST, the
-     prescription's own title, exactly as a swapped checkpoint reads today. -->
+     7 shows the checkpoint case James allowed: INSTEAD OF 2K Test — the
+     prescription's own title in ITS case, which is what the shipped mark
+     prints (swapMark returns ref.title uncased; .plan-row-swap has no
+     text-transform — pinned at Plan.test.tsx:539). Rev 1b wrote 2K TEST;
+     the antagonist caught it. -->
 <div style="width: 390px; height: 844px; background: var(--page); position: relative; box-sizing: border-box; padding: 22px 20px 0; overflow: hidden;">
   <h1 class="h1" style="font-size: 30px;">Plan</h1>
   <div class="plan-h" style="margin-top: 14px;"><p class="plan-title">Sprint (2k) Prep</p><div style="display: flex; gap: 10px;"><span class="btn">Reset</span><span class="btn">Switch</span></div></div>
@@ -70,7 +73,7 @@
     <div class="row row-two"><span class="num">4</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name">Slack Tide</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF TR</span></div>
     <div class="row row-two"><span class="num">5</span><span class="jr">JR</span><span class="name">Just Row</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF AT</span></div>
     <div class="row"><span class="num">6</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name">Sea Fret</span><span class="check">&#10003;</span></div>
-    <div class="row row-two"><span class="num">7</span><span class="jr">JR</span><span class="name">Just Row</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF 2K TEST</span></div>
+    <div class="row row-two"><span class="num">7</span><span class="jr">JR</span><span class="name">Just Row</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF 2K Test</span></div>
     <div class="row row-today"><span class="num" style="font-weight: 600; color: var(--ink);">8</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name"></span><span class="play">&#9654;</span></div>
     <div class="row"><span class="num">9</span><span class="badge" style="background: var(--type-at);">AT</span><span class="name"></span><span></span></div>
     <div class="row"><span class="num">10</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name"></span><span></span></div>
