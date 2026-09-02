@@ -197,9 +197,23 @@ slate.
   (`docs/design/handoffs/2026-09-02-just-row-unconnected/`, every label
   lifted from a captured shipped screen); spec at
   `docs/superpowers/specs/2026-09-02-just-row-unconnected-design.md`,
-  antagonist delta pass in flight; ships in ONE PR with the JR chip
-  below, TRIAD (a `mode` field on `SessionRun`).** The close found most
-  of it built: `Step`'s `{ k: "test" }` member yields a phase with no seconds
+  antagonist delta pass RAN (BLOCK on rev 1's mechanism, folded), James
+  hardened it twice → spec rev 5.1; IMPLEMENTING on branch
+  `jr-unconnected`; ships in ONE PR with the JR chip below, TRIAD: `mode`
+  required on `SessionRun`, a `stopwatch-elapsed` `PhaseActual` variant,
+  and `session_logs.source` (pm5 | timer | manual, NOT NULL, backfilled
+  by migration 0020 — every log door now writes which door the row came
+  in by; the client's provenance inference is deleted).** The close found
+  most of it built:
+- [ ] **`source` derive-when-absent SUNSET — trigger: the first tag cut
+      AFTER the unconnected-JR PR merges.** The server derives `source`
+      for a POST that omits it only so build 811-era TestFlight clients
+      keep saving (additive-only between tags). At that tag: `source`
+      becomes REQUIRED on `POST /api/logs` (400 when absent), the route's
+      `deriveLogSource` call and its `source=derived` log line are
+      deleted, and `docs/RELEASING.md`'s API note records the break. The
+      0020 BACKFILL rule stays (it is history, not a live inference).
+      Filed here per RF14 and the spec's exit criterion 8b. **XS** `Step`'s `{ k: "test" }` member yields a phase with no seconds
   and no metres, `Timer.tsx` counts UP for exactly that case
   (`Timer.test.tsx` pins it), and `SessionRun` with `workoutId: null`
   stores it with no `v` bump — **no new stored shape**; PR 1's server row
@@ -661,7 +675,11 @@ return;` and the union at `:600` is still `"warmup" | "work"`. Binding
 
 **Exit:** a phone locked before the first pull, a phone backgrounded mid-piece,
 and a link dropped mid-piece each produce a stored row that matches what the
-machine did, and the row says which door it came in by. **Fourth clause, added
+machine did, and the row says which door it came in by **(the door clause is
+DELIVERED by `session_logs.source` — pm5 | timer | manual, NOT NULL,
+backfilled — landing in the unconnected-JR PR, 2026-09-02; what remains of
+it for this wave is the no-reading row's own WORD, which posts and
+backfills `manual` today: `storedSummary.ts`'s header carries the history).** **Fourth clause, added
 at the phase-open gate (2026-08-28) so the durability chunks are inside the
 exit they build toward:** a connected row carries the erg's own summary
 numbers whenever the erg spoke them, and a storage failure never silently
