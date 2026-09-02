@@ -5718,3 +5718,64 @@ same way.
   `freeRow` opt-out there; the two that exist are `:2575`/`:4982`); the sunset
   row already says "the route's `deriveLogSource` call", so it survived the
   oracle correction untouched.
+
+## 2026-09-02 — Wave F `door` PR A plan, antagonist DELTA (post-spec, post-Gate-0-A)
+
+- **CLAIM: "clause 2 (`steps.length > 0`) is what stops every successful Just
+  Row reading STOPPED EARLY" — the spec's own most-emphasised clause, carried
+  into a code comment, two test comments and TWO named mutations.** FALSIFIED
+  by evaluating the predicate as WRITTEN rather than as ARGUED: clause 3
+  (`steps.some(s => s.actualSource === undefined)`) is already false for `[]`,
+  so clause 2 is redundant and both its mutations (`M3.1` delete clause 2;
+  `M4.1` drop `jsonb_array_length > 0`) leave every test green. Same in SQL:
+  `exists (select 1 from jsonb_array_elements('[]'::jsonb) …)` is false.
+  TECHNIQUE: **when a plan lands a defensive clause and a mutation that
+  "proves" it, run the SIBLING clauses against the same input first — a clause
+  added by an earlier pass to fix a THREE-clause predicate is often subsumed
+  by the fourth clause a later pass added, and the mutation inherits the
+  earlier pass's reasoning rather than the current code's.** The biting
+  mutation is the one that makes the empty case TRUE (`.every()` for `.some()`,
+  `not exists` for `exists`), never the one that deletes a redundant guard.
+- **A SUNSET'S BLAST RADIUS IS COUNTED IN CALL SITES AND MISSES THE FIXTURES
+  THAT EXIST TO BE OLD.** The plan's per-file table counted
+  `grep -c 'post("/api/logs")'` and reported "via helpers" for five e2e files.
+  Actual: `design.spec.ts` (5) and `today.spec.ts` (4) use NO helper, and
+  `screenshots.spec.ts` has two direct POSTs outside its `postLog`. Worse,
+  `data.test.ts` carries three `Object.freeze`d bodies named
+  `V0_11_0_LOG_BODY`/`V0_12_0_LOG_BODY`/(a third) whose tests assert an OLD
+  client "still 201s", plus `e2e/log.spec.ts`'s `postV0110Log` — the plan's
+  instruction ("add `source` to each file's shared body helper") would destroy
+  the exact fixtures that encode the contract the sunset breaks. TECHNIQUE:
+  **for any required-field sunset, grep the request VERB not the helper
+  (`grep -rn 'fetch("/api/logs"'` as well as `.post(`), and grep the test tree
+  for `Object.freeze` / "frozen" / a version number in a fixture NAME — a repo
+  that pins old wire shapes on purpose has tests that must INVERT, not be
+  swept.**
+- **CONVERTING A TEST'S ASSERTION SILENTLY REMOVES ITS ROWS.**
+  `source.integration.test.ts:135/144/150` are the only POSTs before `:157`'s
+  list-projection parity test, whose `arrayContaining` at `:164` the same plan
+  separately edits as "mirror 8". Making the three legs assert a 400 leaves
+  `:164` with no fixtures. TECHNIQUE: **in a shared-app integration file,
+  before changing a test from "creates a row" to "is rejected", grep the rest
+  of the file for readers of the collection it was seeding — vitest runs `it`s
+  in file order, so the coupling is positional and invisible to a per-test
+  review.**
+- **A LIST/DETAIL "agree by construction" CLAIM IS ABOUT ONE BOOLEAN, NEVER THE
+  WORD.** The chip is gated on `partial`, so a link-lost Just Row shows
+  `LINK LOST` on the detail screen and nothing in History — the divergence
+  class the spec's own agreement test was built for, one field to the left of
+  where it looks. TECHNIQUE: **when a surface derives BOTH a boolean and a
+  word from one predicate, check that the agreement test compares the word.**
+- **Attacked and HELD:** `LOG_SOURCES` really is `readonly LogSource[]`, so
+  `M1.1` is a genuine compiler-blindness probe; only two exhaustive switches
+  exist over `LogSource`; `interrupted` is in the `ended_by` pgEnum AND in
+  `data.ts`'s `ENDED_BY_VALUES`, so the SQL allowlist cannot throw;
+  `coalesce(…, false)` is load-bearing (`ended_by` nullable, `source`/`steps`
+  NOT NULL) and its mutation bites; `data.ts:472-475` really does 400 an
+  explicit `actualSource: null`, so `NOT (s ? 'actualSource')` ≡ `undefined`;
+  the partial chip really cannot reuse `.free-row-chip`
+  (`FreeRowChip.test.tsx:71-76` pins one rule, one selector);
+  `ROADMAP.md:701`'s `schema.ts:369` is stale and `:425` is right; the
+  shortened-literal grep returns exactly the 6 hits claimed; no `.summary-meta`
+  e2e locator can see a second element; and PR A introduces no session-scoped
+  state, so RF27 owes nothing.

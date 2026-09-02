@@ -114,8 +114,22 @@ each one already cost somebody a round somewhere.
   ```
   grep -rEn 'pm5.{0,4}timer.{0,4}manual' app | grep -v node_modules
   ```
-  It returned 9 hits at `03352ea2` (mirrors 1, 2, 3, 6, 8, 9, 10 plus two
-  stale test TITLES and one comment — all listed in Task 1's sweep).
+  It returned 9 hits at `f6a16963`, and the DELTA pass classified every one:
+  `schema.ts:152` (mirror 1), `domain/types.ts:102` (mirror 2's TUPLE only),
+  `data.ts:1678` (mirror 3), `screenshots.spec.ts:2467` (a comment beside
+  mirror 6), `source.integration.test.ts:164` (mirror 8), `:252` (mirror 9),
+  `:431` (a genuinely stale TITLE), `drizzle/0020_*.sql:33` (the enum's
+  creation, not mirror 10 — 0022 does not exist yet), and
+  `source.integration.test.ts:411`, which is **NOT stale**: it names what
+  0020's backfill produced for pre-0020 rows, an outcome list rather than the
+  enum's membership. Do not touch it.
+  **The census MISSES three mirrors — say so rather than trusting it alone.**
+  `domain/types.ts:101`'s type alias escapes the window (`" | "` between the
+  members is 5 characters, over `.{0,4}`), and mirrors 4, 5 and 7 put their
+  members on separate `case` lines. Those are the compile-enforced ones, which
+  is why the omission is survivable — but a census that silently drops the
+  UNION beside the tuple it does find is the RF11 shape, and the tuple is the
+  half that compiles clean when short.
 - **Re-check the migration index AT GENERATION.** 0019, 0020 and 0021 were
   all regenerated on rebase. Before `pnpm db:generate`, run
   `gh pr list --state open --json number,title` and check every open PR for a
@@ -216,28 +230,41 @@ each caught a stale transcription).
 | `eligibilityFailure` | `app/server/concept2/mapping.ts:43-55`, null check at `:49` | `SessionLogRow` at `:19-30`; `toMappingRow` at `routes/concept2.ts:136-157`; caller at `:627` |
 | Latest migration | `app/drizzle/0021_crazy_gamma_corps.sql` | next index is **0022** |
 | Screenshot precedents | `screenshots.spec.ts:2768` (`log-detail`), `:2698` (`log-history`), `:4844` (`justrow-history-chip`), `:968`/`:1031` (portrait+landscape pair) | |
-| e2e `postLog` helpers | `screenshots.spec.ts:2455-2500`, `log.spec.ts:66-106` | **neither posts `endedBy`; `log.spec.ts`'s posts no `source`** |
+| e2e `postLog` helpers | `screenshots.spec.ts:2446-2500`, `log.spec.ts:66-105` | **neither posts `endedBy`; `log.spec.ts`'s posts no `source`** |
+| e2e frozen old-client helpers | `log.spec.ts:112` and `screenshots.spec.ts:2663` (both `postV0110Log`) | deliberately v0.11.0-shaped; the sunset breaks both — see Task 7's B3 ruling |
 
-**Sunset blast radius, counted at `03352ea2`** (`grep -c 'post("/api/logs")'`
-per file, plus the e2e `postLog` helpers):
+**Sunset blast radius, re-counted at `f6a16963`** (DELTA verdict B2 — the
+previous table was wrong twice over: it counted `grep -c 'post("/api/logs")'`
+per server file and then wrote "via helpers" for five e2e files, two of which
+use no helper at all, while its per-file numbers came from a different head).
+Two commands, both re-runnable, and their output is the table:
 
-| File | POSTs | mentions `source` | mentions `deviceName` |
-| --- | --- | --- | --- |
-| `server/routes/data.test.ts` | 164 | 20 | 16 |
-| `server/routes/machineSummary.integration.test.ts` | 13 | 1 | 0 |
-| `server/routes/completedAt.integration.test.ts` | 9 | 0 | 0 |
-| `server/routes/isolation.integration.test.ts` | 8 | 2 | 0 |
-| `server/routes/freeRow.integration.test.ts` | 7 | 4 | 0 |
-| `server/routes/endedBy.integration.test.ts` | 4 | 0 | 0 |
-| `server/routes/concept2.integration.test.ts` | 3 | 2 | 1 |
-| `server/routes/seriesCapture.integration.test.ts` | 2 | 0 | 0 |
-| `server/app.test.ts`, `logAmendment.integration.test.ts`, `testHistoryDecouple.integration.test.ts` | 1 each | 0 | 0 |
-| `e2e/log.spec.ts`, `e2e/today.spec.ts`, `e2e/design.spec.ts`, `e2e/connected.spec.ts`, `e2e/screenshots.spec.ts` | via helpers | partial | partial |
+```
+grep -rn 'fetch("/api/logs"' app/e2e
+grep -rn 'post("/api/logs")' app/server
+```
 
-Most sites route through a per-file body helper (`data.test.ts` has two
-`validLogBody` factories at `:394` and `:1090`, referenced 175 times), so the
-sweep is mechanical — but it is the largest single piece of work in this PR
-and Task 7 is sized for it.
+| File | POSTs at this head | The `source` each site must state |
+| --- | --- | --- |
+| `server/routes/data.test.ts` | 164 | both `validLogBody` factories (`:394`, `:1090`; `grep -c validLogBody` → **164**) default `manual`; every site carrying a `deviceName` states `pm5`. **The three frozen bodies are EXEMPT — see B3 below** |
+| `server/routes/machineSummary.integration.test.ts` | **11** | per body shape |
+| `server/routes/freeRow.integration.test.ts` | 7 | per body shape |
+| `server/routes/completedAt.integration.test.ts` | **5** | per body shape |
+| `server/routes/isolation.integration.test.ts` | **4** | per body shape |
+| `server/routes/concept2.integration.test.ts` | 3 | `:147`'s `deviceName` → `pm5`. **`:92`'s `source: "James Morelli"` is the C2 API's own field, NOT `LogSource`** — do not sweep it |
+| `server/routes/source.integration.test.ts` | 3 | all three are the derive legs at `:135`/`:144`/`:150`; Task 7 step 1 INVERTS them — **and see B4: they are also the only seeders for `:156`** |
+| `server/routes/endedBy.integration.test.ts` | **2** | per body shape |
+| `server/app.test.ts`, `logAmendment.integration.test.ts`, `seriesCapture.integration.test.ts` (**1**), `testHistoryDecouple.integration.test.ts` | 1 each | per body shape |
+| `e2e/design.spec.ts` | **5, NO helper** — `:124`, `:166`, `:219`, `:367`, `:2519` | `:219` and `:367` post `deviceName: "PM5 432331249"` → `source: "pm5"`; the other three per shape |
+| `e2e/today.spec.ts` | **4, NO helper** — `:194`, `:243`, `:283`, `:1144` | per body shape |
+| `e2e/screenshots.spec.ts` | `postLog` (`:2446`, 9 call sites) **plus two POSTs outside it**: `:293` (`seedLogs`'s own loop) and `:2665` (`postV0110Log`) | `postLog` gets NO blanket default (**M-4**); `:293` per shape; `:2665` is a frozen old-client shape (**B3**) |
+| `e2e/log.spec.ts` | `postLog` (`:66`, its fetch at `:87`) and `postV0110Log` (`:112`, fetch at `:114`) | `postLog` defaults `manual`; `postV0110Log` is frozen (**B3**) |
+| `e2e/connected.spec.ts` | **0** | `:817` is a GET; the old table's "via helpers" row was wrong about this file |
+
+Most SERVER sites route through a per-file body helper, so that half is
+mechanical. The e2e half is not: nine call sites in two files have no helper
+to edit, and four fixtures across three files exist *because* they are
+old-shaped. Task 7 is sized for both halves.
 
 ---
 
@@ -322,10 +349,14 @@ build's behaviour no arm in this PR can change, stated in the release note.
       ```
       grep -rEn 'pm5.{0,4}timer.{0,4}manual' app | grep -v node_modules
       ```
-      Nine hits at `03352ea2`. Confirm each is on the ten-item list or is one
-      of the three sweep-only items (`source.integration.test.ts:411` and
-      `:431` are test TITLES; `screenshots.spec.ts:2467` is a comment). A hit
-      you cannot classify is a finding — report it.
+      Nine hits at `f6a16963`, each already classified in Global Constraints
+      above — confirm the output still matches that classification exactly.
+      Sweep-only: `:431`'s title and `screenshots.spec.ts:2467`'s comment.
+      **Leave `source.integration.test.ts:411` alone** (it describes 0020's
+      backfill outcome, not the enum). **And do not treat the census as
+      complete**: it misses `domain/types.ts:101` and mirrors 4, 5, 7 — the
+      ten-item list is the authority, the census is a cross-check. A hit you
+      cannot classify is a finding — report it.
 - [ ] **Step 2: Write the failing POST seam legs** in
       `server/routes/source.integration.test.ts`, modelled verbatim on its
       existing per-value legs (read `:172-232` first and copy the
@@ -425,15 +456,26 @@ build's behaviour no arm in this PR can change, stated in the release note.
       `domain/types.ts:98-100`) to say TEN and to name which are
       compile-enforced and which are not — quoting the `LOG_SOURCES`-is-not-a-
       tuple hazard by name.
-- [ ] **Step 7: Update mirrors 8 and 9 and the two stale test titles.**
-      `source.integration.test.ts:164`'s `arrayContaining` gains
-      `"no-reading"` **only if the fixture set actually seeds one** — if it
-      does not, leave the array and add a comment saying why (an
-      `arrayContaining` over a set the fixtures never produce is a gate that
-      cannot go red; do not manufacture one). `:252`'s expected message
-      becomes the new literal. `:411`'s and `:431`'s titles get the fourth
-      member. `:431`'s body still posts `'bogus'` and still expects `22P02` —
-      the assertion is unchanged, only the title was stale.
+- [ ] **Step 7: Update mirrors 8 and 9 and the ONE stale test title.**
+      **`source.integration.test.ts:164`'s `arrayContaining` GAINS
+      `"no-reading"` — and this step is COUPLED to Task 7 step 1** (DELTA
+      verdict B4). The array may only list a member the fixtures actually
+      seed, and today nothing seeds one; Task 7 step 1 adds an explicit-
+      `source` seeding leg per member (including `no-reading`) BEFORE the
+      list-projection test at `:156`, which is what makes this extension a
+      real gate rather than decoration. **If Task 7 is not landing in the same
+      PR, do not extend the array** — say so instead. Task 7 step 1 carries
+      the mirrored note.
+      `:252`'s expected message becomes the new literal.
+      **`:431`'s title only** gets the fourth member ("the column is the
+      enum: Postgres refuses a value outside pm5 | timer | manual"); its body
+      still posts `'bogus'` and still expects `22P02`, unchanged.
+      **`:411` is NOT stale and must NOT be touched** (found by reading it at
+      `f6a16963`): "rows inserted BEFORE 0020 read back pm5 / pm5 / timer /
+      manual / manual after it" describes what 0020's BACKFILL produced for
+      pre-0020 rows — an outcome list, not the enum's membership. Rows that
+      predate 0020 cannot read back a member added in 0022. The census hit
+      there is a false positive; record it as one.
 - [ ] **Step 8: Generate the migration.** First
       `gh pr list --state open --json number,title,files` (or
       `gh pr diff <n> --name-only`) and confirm no open PR carries a
@@ -767,6 +809,20 @@ ready-for-merge comment carries the tester-floor reminder.
   export function partialChipWord(
     endedBy: (CloseReason | "interrupted") | null | undefined,
   ): string | undefined;
+
+  /** THE LIST'S WHOLE RULE, so the two surfaces cannot disagree about the
+   *  WORD (DELTA verdict M-3). `link-lost` is UNGATED here exactly as it is
+   *  in `buildCloseLine`: a link-lost row the PARTIAL predicate EXCLUDES —
+   *  a link-lost Just Row, or one with every step measured — still reads
+   *  `LINK LOST · the app lost the monitor` on the detail screen, so a chip
+   *  gated on `partial` alone would leave History silent about the one row
+   *  the detail screen shouts about. The other four words render only when
+   *  the row is partial. Both branches are value equalities, never
+   *  negations. */
+  export function historyChipWord(row: {
+    partial: boolean;
+    endedBy: (CloseReason | "interrupted") | null;
+  }): string | undefined;
   ```
 - Produces: `StoredSummaryView.closeLine?: string` (renamed from
   `linkLostLine`) — `FromTheLog.tsx` renders it in the same slot.
@@ -781,8 +837,11 @@ ready-for-merge comment carries the tester-floor reminder.
 
       ```ts
       // Just Row: a free row has no plan to be partial against. Every
-      // connected JR closes `rower` (useMonitorSession.ts:5010), so without
-      // clause 2 every successful Just Row would read STOPPED EARLY.
+      // connected JR closes `rower` (useMonitorSession.ts:5010), so this is
+      // the leg that would go red if the rule ever stopped excluding it.
+      // NOTE (DELTA verdict B1): clause 2 is NOT what excludes it — clause 3
+      // already does, because `[].some(...)` is false. The mutation that
+      // bites here is clause 3 → `.every` (M3.1), never deleting clause 2.
       expect(partialCloseReason({ source: "pm5", steps: [], endedBy: "rower" }))
         .toBeUndefined();
 
@@ -841,9 +900,10 @@ ready-for-merge comment carries the tester-floor reminder.
         // timer step never rowed emits actualSplit = targetSplit,
         // actualSource "assumed" — byte-identical to one rowed to plan.
         if (row.source !== "pm5") return undefined;
-        // Clause 2: a connected Just Row stores `steps: []` and has no plan
-        // to be partial against. Without this, every successful JR is
-        // PARTIAL (they all close `rower`, useMonitorSession.ts:5010).
+        // Clause 2: a connected Just Row stores `steps: []` and has no
+        // plan to be partial against. Redundant given clause 3 (`[].some`
+        // is false); kept as an explicit statement of the rule, not as the
+        // thing that enforces it.
         if (row.steps.length === 0) return undefined;
         // Clause 3: an interval never reached carries no `actualSource` at
         // all (logDraft.ts:913-917, "Unambiguous against the row-local
@@ -871,6 +931,10 @@ ready-for-merge comment carries the tester-floor reminder.
       // partial line fits. The release note's promise
       // (releaseNotes.ts:351) is that LINK LOST appears on the detail —
       // unchanged.
+      // DECLARED FIRST: `CLOSE_REASON_WORDS` reads it in its initialiser,
+      // and a `const` below would be a TDZ ReferenceError at module load.
+      const LINK_LOST_LINE = "LINK LOST · the app lost the monitor";
+
       const CLOSE_REASON_WORDS: Record<PartialCloseReason, { line: string; chip: string }> = {
         rower: { line: "STOPPED EARLY", chip: "STOPPED EARLY" },
         "link-lost": { line: LINK_LOST_LINE, chip: "LINK LOST" },
@@ -878,8 +942,6 @@ ready-for-merge comment carries the tester-floor reminder.
         "program-failed": { line: "THE PROGRAM DID NOT LOAD", chip: "PROGRAM NOT LOADED" },
         interrupted: { line: "LEFT UNFINISHED", chip: "UNFINISHED" },
       };
-
-      const LINK_LOST_LINE = "LINK LOST · the app lost the monitor";
 
       // §1.2: `link-lost` keeps its OWN ungated, steps-independent trigger
       // exactly as it has since the cohort-unlock spec — it is a
@@ -943,11 +1005,20 @@ ready-for-merge comment carries the tester-floor reminder.
 - [ ] **Step 8: Commit:**
       `feat: a stopped connected row says so, with N of M intervals measured`
 - [ ] **Step 9: Mutations.**
-      - **M3.1** Delete clause 2 (`if (row.steps.length === 0) return undefined;`):
-        the Just Row leg must go red with
-        `expected undefined to be 'rower'` inverted — i.e.
+      - **M3.1** (rewritten by the DELTA pass — the old version could not
+        bite). **Do NOT delete clause 2**: `[].some(...)` is false, so clause
+        3 already returns `undefined` for a Just Row and every test stays
+        green. Mutate **clause 3** instead, to the form that makes the empty
+        case TRUE:
+        ```ts
+        if (!row.steps.every((s) => s.actualSource === undefined)) return undefined;
+        ```
+        `[].every()` is `true`, so the Just Row now falls through to clause 4
+        and comes back `rower`. The **Just Row leg must go red** with
         `expected 'rower' to be undefined`, and the render leg reads
         `STOPPED EARLY · 0 of 0 intervals measured`. Record the exact text.
+        (Run the old mutation too, once, and record that it stays GREEN —
+        that green is the evidence for clause 2's comment.)
       - **M3.2** Delete clause 4 (return the raw `endedBy`, unfiltered): the
         `finished` + short-step leg must go red — the row now renders a
         marker where the spec says the copy stays what it is today. Record.
@@ -977,18 +1048,28 @@ ready-for-merge comment carries the tester-floor reminder.
 - Modify: `app/server/stores/logs.ts:280-331` (`LOG_LIST_COLUMNS`)
 - Modify: `app/src/api/useRecentLogs.ts:19-77` (`RecentLog` gains `partial`
   and `endedBy`)
+- Modify (fixtures — `RecentLog.partial` is REQUIRED, so every existing
+  builder stops compiling): `app/src/log/HistoryList.test.tsx:24` (`makeLog`),
+  `app/src/log/useLogHistory.test.ts:18` (`makeLog`),
+  `app/src/today/Today.test.tsx:178` (`const LOGS: RecentLog[]`). Verified by
+  grepping `RecentLog` across `src/` at `f6a16963` — these three plus
+  `useRecentLogs.ts` itself are every declaration site.
 - Modify: `app/src/log/LogRow.tsx:201-232`
 - Modify: `app/src/index.css` (a new chip rule beside `.free-row-chip:548`,
   and the `.today-log-hero:2433` modifier)
 - Test: `app/server/routes/source.integration.test.ts` or a new
   `app/server/routes/partial.integration.test.ts` (list/detail agreement),
   `app/src/log/HistoryList.test.tsx`, `app/src/log/LogRow` coverage via
-  `HistoryList.test.tsx`, `app/src/workout/FreeRowChip.test.tsx` (extend the
-  structural rule pin)
+  `HistoryList.test.tsx`, and a NEW structural test in `app/src/log/`
+  (declarations-equal pin; L9 — it needs its own `index.css` path regex,
+  see step 5). **`app/src/workout/FreeRowChip.test.tsx` is NOT edited**: its
+  one-rule/one-selector pins (`:68`, `:70`) are what forbid the grouped
+  selector, and they only stay meaningful untouched.
 
 **Interfaces:**
 - Consumes: Task 3's `partialCloseReason` (as the TS oracle in the agreement
-  test) and `partialChipWord` (the client's word).
+  test) and `historyChipWord` (the list's whole word rule, `partialChipWord`
+  plus `link-lost`'s ungated arm — DELTA verdict M-3).
 - Produces: `RecentLog.partial: boolean` and
   `RecentLog.endedBy: (CloseReason | "interrupted") | null` — both additive on
   the response; `LOG_LIST_COLUMNS` already selects `endedBy`
@@ -1014,6 +1095,10 @@ reading a new list response ignores an unknown key.
           { name: "just row", body: { source: "pm5", deviceName: "PM5 432331249", endedBy: "rower", steps: [] } },
           { name: "finished short", body: { source: "pm5", deviceName: "PM5 432331249", endedBy: "finished", steps: PARTIAL_STEPS } },
           { name: "legacy null close", body: { source: "pm5", deviceName: "PM5 432331249", steps: PARTIAL_STEPS } },
+          // DELTA verdict M-3: the divergence class is one field to the LEFT
+          // of the boolean. This row is NOT partial (clause 3 excludes an
+          // empty steps array) and the detail screen still says LINK LOST.
+          { name: "link-lost just row", body: { source: "pm5", deviceName: "PM5 432331249", endedBy: "link-lost", steps: [] } },
         ];
         // …POST each, GET the detail for each id, GET the list once…
         for (const { name, id } of created) {
@@ -1025,11 +1110,28 @@ reading a new list response ignores an unknown key.
           // A legacy row must read `false`, never `null` — SQL's
           // `true AND NULL` is NULL, and the client type says boolean.
           expect(typeof listRow.partial, name).toBe("boolean");
+          // AND THE WORD, not only the boolean (DELTA verdict M-3). The two
+          // surfaces carry different-LENGTH forms of one close reason
+          // (`PROGRAM DROPPED` vs `THE MONITOR DROPPED THE PROGRAM`), so
+          // what must agree is that they SPEAK on the same rows — a
+          // boolean-only agreement passes while `link-lost just row` says
+          // LINK LOST on the detail screen and nothing in History.
+          expect(historyChipWord(listRow) !== undefined, name).toBe(
+            buildStoredSummary(detail).closeLine !== undefined,
+          );
         }
+        // The divergence this row exists for, named explicitly: NOT partial,
+        // and both surfaces still say it.
+        expect(historyChipWord(listById.get(linkLostJustRowId)!)).toBe(
+          "LINK LOST",
+        );
+        expect(
+          buildStoredSummary(detailById.get(linkLostJustRowId)!).closeLine,
+        ).toBe("LINK LOST · the app lost the monitor");
       });
       ```
-      **`partialCloseReason` is imported from `src/log/storedSummary.ts` into
-      a server test.** If the integration project's config forbids that
+      **`partialCloseReason`, `historyChipWord` and `buildStoredSummary` are
+      all imported from `src/log/storedSummary.ts` into a server test.** If the integration project's config forbids that
       import, put the test in the client project driving a mocked API and
       keep a server-side leg asserting the raw SQL values instead — say which
       you did and why, and do NOT hand-copy the predicate into the test (that
@@ -1070,12 +1172,16 @@ reading a new list response ignores an unknown key.
           where not (s ? 'actualSource')
         ), false)`,
       ```
-      **Two things to verify at the DB, not by reading:** (a) that
-      `jsonb_array_length` never errors — `steps` is validated as an array by
-      the route and 0020 already calls `jsonb_array_elements` on it unguarded,
-      but confirm on a real row; (b) that the `?` operator survives drizzle's
-      parameterisation (drizzle uses `$n`, not `?`, so it should — but prove
-      it by the test going green, not by reading).
+      **`steps` is safe unguarded — this is settled by evidence, not by a
+      "confirm on a real row"** (L10): the route rejects a non-array outright
+      (`routes/data.ts:1629-1630`, `"steps must be an array"`, and the column
+      is NOT NULL), and migration 0020 already ran
+      `jsonb_array_elements("steps")` over EVERY row in the table
+      (`drizzle/0020_wooden_millenium_guard.sql:36-39`) — it shipped, so no
+      stored row can be a non-array. State that; do not re-open it.
+      **One thing genuinely to prove at the DB, not by reading:** that the `?`
+      operator survives drizzle's parameterisation (drizzle uses `$n`, not
+      `?`, so it should — but prove it by the test going green).
 - [ ] **Step 4: `RecentLog` gains the two fields**, each with a doc comment in
       the file's own convention (required-and-nullable for `endedBy`,
       required-boolean for `partial`), naming `LOG_LIST_COLUMNS` as the
@@ -1101,15 +1207,23 @@ reading a new list response ignores an unknown key.
       .log-partial-chip { /* … same declarations … */ }
       ```
       Add a structural test asserting the two rules' declaration sets are
-      identical (the same `postcss`-style parsing idiom
-      `FreeRowChip.test.tsx:64-70` already uses).
+      identical (the same `cssRules`/`commentStrippedSource` idiom
+      `FreeRowChip.test.tsx:64-70` uses — its one-rule pin is `:68`, its
+      one-selector pin `:70`). **Write the new test its OWN path regex**
+      (L9): `FreeRowChip.test.tsx:15` resolves `index.css` with
+      `.replace(/workout\/[^/]+\.test\.tsx$/, "index.css")`, which is scoped
+      to `src/workout/` and silently fails to substitute from `src/log/` —
+      the read would then point at the test file itself and the rule lookup
+      would come back empty (a green-by-vacuity gate, RF21). Use
+      `/log\/[^/]+\.test\.tsx$/` and assert the loaded CSS is non-empty
+      before asserting anything about a rule.
 - [ ] **Step 6: `LogRow` renders the chip on the numbers line** (Gate 0-A slot
       B — approved: the chip sits beside the numbers it qualifies; Today's
       last three render no numbers line and therefore no chip, the accepted
       cost):
 
       ```tsx
-      const chip = hero ? partialChipWord(log.partial ? log.endedBy : null) : undefined;
+      const chip = hero ? historyChipWord(log) : undefined;
       // …
       {(snippet !== "" || chip !== undefined) && (
         <span className={`today-log-hero${chip !== undefined ? " today-log-hero-chipped" : ""}`}>
@@ -1132,32 +1246,58 @@ reading a new list response ignores an unknown key.
       with the right short word; a `partial: false` row renders none; a Today
       row (`hero` false) renders none even when `partial: true`; and the
       chip's element is `.log-partial-chip`, never `.type-badge` or
-      `.free-row-chip`. Run them red first and quote the failure.
+      `.free-row-chip`. **Plus M-3's two legs:** a `partial: false` row with
+      `endedBy: "link-lost"` DOES render `LINK LOST` (the ungated word, in
+      lockstep with the detail line), and a `partial: false` row with
+      `endedBy: "rower"` renders nothing. Run them red first and quote the
+      failure.
 - [ ] **Step 8: Run** `pnpm test --project unit --project client` and
       `pnpm test --project integration -t "partial"`. Green.
 - [ ] **Step 9: Commit:**
       `feat: History rows wear a short chip when a session stopped early`
 - [ ] **Step 10: Mutations.**
-      - **M4.1** Drop the `jsonb_array_length(...) > 0` clause from the SQL:
-        the **Just Row list row flips to `true` while its detail row says
+      - **M4.1** (rewritten by the DELTA pass — the old version could not
+        bite). **Dropping `jsonb_array_length(...) > 0` changes nothing**:
+        `exists (select 1 from jsonb_array_elements('[]'::jsonb) …)` is
+        already false, exactly as `[].some(...)` is in TS. Mutate the EXISTS
+        to its negation instead:
+        ```sql
+        and not exists (
+          select 1 from jsonb_array_elements(${sessionLogs.steps}) as s
+          where not (s ? 'actualSource')
+        )
+        ```
+        The **Just Row list row flips to `true` while its detail row says
         `false`** — the agreement test must go red with
         `expected true to be false` on the "just row" name. This is the
-        list/detail divergence gate; record its exact message.
+        list/detail divergence gate; record its exact message. (Run the old
+        mutation once and record that it stays GREEN.)
       - **M4.2** Remove `coalesce(..., false)`: the "legacy null close" leg
         must go red on `expected 'object' to be 'boolean'` (SQL NULL arrives
         as `null`). If it does not, the coalesce is not load-bearing and that
         is itself a finding — report it rather than keeping a decorative wrap.
-      - **M4.3** Change the SQL allowlist to `<> 'finished'`: the "legacy null
-        close" row must flip (or stay false via the coalesce — check which,
-        and if the mutation does not bite, add a leg seeding a `program-failed`
-        row and a hypothetical sixth value so it does).
+      - **M4.3 is DROPPED (DELTA verdict M-1).** `<> 'finished'` cannot be
+        made to bite by any row this system can produce: `null <> 'finished'`
+        is NULL, which the `coalesce` turns into the same `false` the
+        allowlist gives, and a sixth `ended_by` value cannot be inserted
+        (`ended_by` is a pgEnum — an unknown member 400s at the route and
+        `22P02`s at the DB). **State plainly that the allowlist-not-negation
+        property is UNGATEABLE in SQL** and that it rests on the comment plus
+        the TS side's own clause-4 gate (M3.2), rather than shipping a
+        mutation claim that cannot fail. RF21: a claim you cannot make red is
+        decoration.
       - **M4.4** Change `LogRow`'s gate from `log.partial` to `true`: the
         `partial: false` leg must go red with a chip rendering on a complete
         row.
-      - **M4.5** Point the chip at `.free-row-chip`: `e2e/justrow.spec.ts` must
-        go red. Run it (`pnpm e2e -- justrow.spec.ts` after the stack is up)
-        and record the strict-mode / text failure — this is the probe that
-        proves the separate class was necessary rather than assumed.
+      - **M4.5 is DROPPED (DELTA verdict M-2).** Pointing the chip at
+        `.free-row-chip` only breaks `e2e/justrow.spec.ts` if a PARTIAL row
+        is on the same Just Row pages those assertions count — and none of
+        its fixtures seeds one, so the mutation runs green and proves
+        nothing. Do NOT seed one just to feed the probe. **The own-class
+        decision rests on `FreeRowChip.test.tsx:68` and `:70`** — one rule,
+        selectors exactly `[".free-row-chip"]` — which go red on sight if the
+        chip is added to that rule as a grouped selector. Say that in the
+        report instead of claiming an e2e probe.
 
 ---
 
@@ -1181,13 +1321,26 @@ reading a new list response ignores an unknown key.
 at seven sites. **`namePrefix: "PM5"` at `webBluetooth.ts:288` and
 `capacitorBle.ts:480` is DISCOVERY, not copy — do not touch it.**
 
-- [ ] **Step 1: Failing tests at the two REACHABLE transport sites**, driven
-      through their real producers, never by calling the fallback directly:
-      - `capacitorBle.test.ts`: `getConnectedDevices` returns a held device
-        whose `name` is `undefined`; assert the mapped entry's `name` is
+- [ ] **Step 1: Two of the three gates ALREADY EXIST — edit them, do not
+      claim new ones** (L3). Read each at `f6a16963` first:
+      - **`capacitorBle.test.ts:433`** — the test at `:425`, "a held device
+        with no advertised name falls back to 'PM5', same as the picker
+        path", already drives `getConnectedDevices` with
+        `name: undefined as unknown as string` and pins
+        `[{ id: "held-1", name: "PM5" }]`. This is the existing gate: change
+        the pin to `"MONITOR"` **and the title with it** (a title naming the
+        old literal is a stale rationale, which is a defect here). It goes
+        red on the literal change alone, before you touch the source.
+      - **`surfaceModel.test.ts:2354` and `:2356-2358`** — the test at `:2349`
+        ("never renders the `PM5` placeholder unless the picker gave us
+        nothing") already asserts `deviceCaption` is `"PM5"` and
+        `"PM5 · LOST"` from `deviceName: null`. Same treatment; this is
+        Step 2's surfaceModel leg, already written.
+      - **`webBluetooth.test.ts` is the only genuinely NEW leg**: its sole
+        `"PM5"` today is the discovery filter at `:243`. Write it — a device
+        matched by the OR'd SERVICE filter (not the `namePrefix` one) with
+        `name: undefined`, asserting the mapped entry's `name` is
         `"MONITOR"`.
-      - `webBluetooth.test.ts`: a device matched by the OR'd SERVICE filter
-        (not the `namePrefix` one) with `name: undefined`; same assertion.
 - [ ] **Step 2: Apply the reachability test to the two UNSETTLED sites before
       pinning either** (spec §3, and RF21's "a fallback can be unreachable by
       construction and still get a test"):
@@ -1197,9 +1350,10 @@ at seven sites. **`namePrefix: "PM5"` at `webBluetooth.ts:288` and
         `session.deviceName`. That field is `null` in `INITIAL_STATE`
         (`useMonitorSession.ts:1489`) and is re-nulled by the `failed`
         (`:4302`) and cancel (`:4384`) patches. **VERDICT (verify, do not
-        assume): reachable.** Write a leg building the surface model with
-        `deviceName: null` and asserting the caption reads `MONITOR` /
-        `MONITOR · LOST`.
+        assume): reachable.** The leg already exists —
+        `surfaceModel.test.ts:2349-2358` builds the model with
+        `deviceName: null` and pins both captions (L3). Retarget it at
+        `MONITOR` / `MONITOR · LOST`; do not write a second one.
       - `JustRow.tsx:301` — `ready` is `axes.program === "armed"` (`:296`),
         and the only caller of `beginFreeRow()` is the effect at `:108-118`,
         which requires `session.deviceName !== null`. **VERDICT (verify by
@@ -1235,6 +1389,15 @@ at seven sites. **`namePrefix: "PM5"` at `webBluetooth.ts:288` and
         name and that the literal is now `MONITOR`.
       - `LogSession.tsx:723` and `storedSummary.ts:295-298` both describe the
         old fallback.
+      - **Three more the plan's first pass missed** (L8, all found by
+        `grep -rn '"PM5"' app/src` at `f6a16963`): `driver.ts:647` and
+        `driver.ts:1013` both name _"the literal `"PM5"` placeholder"_ in
+        `DriverOptions.deviceName`'s doc and beside `capabilities`, and
+        `useMonitorSession.ts:2826` says the stored name is _"never the
+        `"PM5"` placeholder"_. All three are the sentence this task
+        falsifies. `ConnectedSurface.tsx:520` (_"never `"PM5"` (RC-18
+        standing rule)"_) stays correct as written — check it, do not edit
+        it.
       - Then sweep: `grep -rn '"PM5"' app/src | grep -v node_modules` and
         classify every remaining hit as discovery-filter, test fixture, or
         stale prose.
@@ -1356,15 +1519,55 @@ to save ANY log**, not just the derive path — the blast radius the ROADMAP row
 understated. James (2026-09-02): _"i can make sure they are by merge. remind me
 before we do."_ The ready-for-merge comment carries that reminder verbatim.
 
-- [ ] **Step 1: Failing tests.**
+- [ ] **Step 1: Failing tests — and the seeding legs the inversion
+      REMOVES** (DELTA verdict B4).
       - `source.integration.test.ts`: a POST with no `source` at all is a 400
         naming the field. Expected body:
         `{ error: "source is required", field: "source" }` — pick the literal
         and pin it here, since it is user-facing.
+      - **FIRST, before `:156`: add explicit-`source` seeding legs, one per
+        member including `no-reading`.** `:135`, `:144` and `:150` are the
+        ONLY POSTs in this file ahead of the list-projection parity test at
+        `:156`, whose `arrayContaining` at `:164` is mirror 8 — vitest runs
+        `it`s in file order, so converting those three to 400 legs leaves
+        `:164` reading an empty collection and the mirror-8 extension gating
+        nothing. The new legs post `source` explicitly (`pm5` with a
+        `deviceName`, `timer`, `manual`, `no-reading` with none) through
+        `postThenGet`, and `:164`'s array becomes
+        `["pm5", "timer", "manual", "no-reading"]`. **Task 1 step 7 carries
+        the other half of this coupling.**
       - `source.integration.test.ts`: the three existing "absent source,
         …derived…" legs (`:135`, `:144`, `:150`) now assert the 400 instead of
         the derived member. **Do not delete them** — they become the sunset's
         own gate, and their titles change to say so.
+      - **THE FROZEN OLD-CLIENT FIXTURES INVERT; THEY DO NOT GET A `source`**
+        (DELTA verdict B3). `data.test.ts` carries three `Object.freeze`d
+        bodies that exist precisely to prove an old client's wire shape still
+        works — `V0_11_0_LOG_BODY` (`:1116`, asserted at `:1353`),
+        `V0_12_0_LOG_BODY` (`:2931`, asserted at `:2955`) and
+        `V0_14_0_LOG_BODY` (`:3258`, asserted at `:3278`). Adding `source` to
+        them destroys the exact fixtures that encode the contract this sunset
+        breaks. **Each one's assertion INVERTS**: the POST now returns 400 on
+        field `source`, and the test title says the floor
+        ("…is REFUSED after the v0.34.0 sunset — an old client cannot save").
+        They become the sunset's own backward-compatibility gate.
+        **Mutation:** restore the `deriveLogSource` call in the route → those
+        legs 201 wrongly → red. (This is M7.1's twin at the fake-store layer;
+        record both.)
+      - **The two e2e `postV0110Log` helpers are the observed EXCEPTION to
+        that ruling, and the plan states it rather than discovering it in
+        review.** `e2e/log.spec.ts:112` seeds a row whose RENDERING is the
+        assertion (`:186`, exit criterion 2: a v0.11.0 row renders no hero
+        snippet), and `e2e/screenshots.spec.ts:2663` seeds one for a capture.
+        A 400 there empties the assertion and blanks the capture — it does not
+        invert into anything. Both helpers therefore gain
+        `source: "timer"` — the member `deriveLogSource` produced for their
+        body (a `stopwatch` step, no device; pinned by
+        `source.integration.test.ts:144`) — with a comment saying the body is
+        no longer verbatim-v0.11.0 and that the wire-shape contract now lives
+        in `data.test.ts`'s three inverted legs. **Say which fixture is a
+        CONTRACT and which is a SEED in each comment**; that distinction is
+        the whole of this ruling.
       - `LogSession.test.tsx`: a monitor-door save whose advertised device name
         is `""` (or 65+ chars) still saves — asserting the posted body carries
         `source: "pm5"` and a `deviceName` of `"MONITOR"`, not a body with
@@ -1400,23 +1603,63 @@ before we do."_ The ready-for-merge comment carries that reminder verbatim.
         // save — the exact loss this guard exists to prevent. It substitutes
         // RC-18's neutral literal instead: the row keeps its true door and
         // its device-name column reads as the caption it is.
-        body.deviceName = MONITOR_DEVICE_NAME;
+        //
+        // THE `pm5` NARROWING IS KEPT (L5): the biconditional forbids a name
+        // on `timer`, `manual` and `no-reading`, so substituting one on a
+        // non-pm5 body would manufacture the very contradiction the server
+        // 400s. Only the connected door gets a substituted caption; every
+        // other door drops the field, exactly as today.
+        //
+        // THE TRADE, STATED (L7): a name longer than 64 characters is real
+        // and gets REPLACED by a caption, so its tail is not stored. That is
+        // the same posture the empty-name case has always had (nothing was
+        // stored at all), and it is preferred to losing the save. Both arms
+        // are UNOBSERVED HARDENING — no capture in `docs/monitor/sessions/`
+        // has ever shown a PM5 advertising an empty or 65+-character name —
+        // not a defect being fixed.
+        if (body.source === "pm5") {
+          body.deviceName = NAMELESS_MONITOR_CAPTION;
+        } else {
+          delete body.deviceName;
+        }
       }
       ```
-      **`MONITOR_DEVICE_NAME` is the same literal Task 5 introduced** — export
-      it once (from `src/monitor/transports/` or a shared constant beside the
-      driver) rather than typing `"MONITOR"` an eighth time, and say where you
-      put it. Reconcile the guard's comment at `:721-729` in full.
+      **`NAMELESS_MONITOR_CAPTION` is the same literal Task 5 introduced** —
+      export it once (from `src/monitor/transports/` or a shared constant
+      beside the driver) rather than typing `"MONITOR"` an eighth time, and
+      say where you put it. **The name is `NAMELESS_MONITOR_CAPTION`, NOT
+      `MONITOR_DEVICE_NAME`** (L6): `e2e/design.spec.ts:2136` already defines
+      `const MONITOR_DEVICE_NAME = "PM5 432331249 Row"` — a REAL advertised
+      name, used at `:2180` and `:5381` — so that identifier already means the
+      opposite thing in this tree. Reconcile the guard's comment at `:721-729`
+      in full.
 - [ ] **Step 5: The fixture sweep.** Work file by file down the blast-radius
       table, adding `source` to each file's shared body helper (or to each
       call site where there is none):
       - `server/routes/data.test.ts` — BOTH `validLogBody` factories (`:394`,
-        `:1090`), 175 references between them. Default `source: "manual"`; the
-        16 `deviceName` sites pass `source: "pm5"` explicitly.
+        `:1090`), **164** references between them
+        (`grep -c validLogBody server/routes/data.test.ts` at `f6a16963` —
+        the plan's earlier "175" was from another head). Default
+        `source: "manual"`; every site carrying a `deviceName` passes
+        `source: "pm5"` explicitly. **The three frozen bodies are exempt —
+        step 1's B3 ruling.**
       - `e2e/log.spec.ts:66-106`'s `postLog` — add `source: "manual"` to the
         defaults object (its callers post no `deviceName`).
-      - `e2e/screenshots.spec.ts`'s `postLog` already accepts `source`; give it
-        a default so the ~20 seeds that omit it keep working.
+      - **`e2e/screenshots.spec.ts`'s `postLog` gets NO blanket default**
+        (DELTA verdict M-4). A default silently re-derives one door for every
+        capture; each of the 9 call sites states its own `source` as a
+        per-fixture literal reproducing what the server previously derived
+        for that body. Of the file's 13 `deviceName:` occurrences only two
+        ride a `postLog` body — `:2781` (`log-detail`, → `source: "pm5"`) and
+        `:4864` (already states `source: "pm5"`); the other eleven are
+        monitor-run/fake fixtures, not log posts, and are not swept. Every
+        other seed takes the member its own shape implies (a `stopwatch` step
+        and no device → `timer`; neither → `manual`). Also sweep the two
+        POSTs OUTSIDE the helper: `:293` (`seedLogs`) and `:2665`
+        (`postV0110Log` — B3's exception).
+        **A capture diff is expected to be EMPTY**: `source` changes no
+        pixel, and `pnpm screenshots` in Task 8 is what proves it. A non-empty
+        diff means a fixture's door moved — investigate, do not commit it.
       - The remaining server test files, each with `source` matching what the
         body already implies. **Never derive it in test code** — that would be
         a hand-copy of `deriveLogSource` (RF11's mirror shape). Each fixture
@@ -1474,6 +1717,23 @@ before we do."_ The ready-for-merge comment carries that reminder verbatim.
       - Just Row: an existing `justrow.spec.ts` history leg still passes with
         exactly the `.free-row-chip` counts it asserts today — this is the
         regression the separate chip class exists to avoid.
+      - **THE `no-reading` SEAM, START TO FINISH (DELTA verdict M-5, RF24).**
+        Every other gate on `no-reading` in this plan enters the pipe
+        downstream of the thing that decides it: `LogSession.test.tsx` reads
+        an intercepted body, `storedSummary.test.ts` builds a row by hand,
+        the integration legs POST an explicit `source`. **Nothing starts
+        upstream of the producer**, which is `connectedNoRecord` — a
+        MOUNT-TIME `useState` at `LogSession.tsx:1574-1576` reading
+        `connectedArrivalWithNoRecord(searchParams)` (`:387-389`). A snapshot
+        taken once at mount is precisely the shape RF24's measured defect
+        had. The leg: sign in, `page.goto('/library/<id>/log?from=monitor')`
+        with an EMPTY handoff store (the deep-link idiom is already used at
+        `design.spec.ts:5361` and `session.spec.ts:1549` — the latter arrives
+        at the plain manual form for exactly this reason), fill and Save, then
+        open the row from History and assert the detail screen reads
+        `NO MONITOR READING` **with a wall-clock time beside it** (§2.3's
+        allowlist, the half a hand-built row cannot prove reached storage).
+        One leg, one browser, both halves of the seam.
 - [ ] **Step 2: `pnpm e2e`** (RF1 — this diff touches `app/src/`). Green, all
       specs, not just the new ones.
 - [ ] **Step 3: Screenshots.** Add two captures modelled on
@@ -1518,14 +1778,16 @@ before we do."_ The ready-for-merge comment carries that reminder verbatim.
 | The posted body says `no-reading` | `LogSession.test.tsx` | post `"manual"` unconditionally |
 | `buildStoredTotalLine` keys on `source` | `storedSummary.test.ts` | restore `row.deviceName === null` (needs the `timer`-with-a-name discriminator row) |
 | C2 eligibility keys on `source` | `mapping.test.ts` | restore `row.deviceName === null` (same discriminator row) |
-| Just Row is NOT partial | `storedSummary.test.ts` | drop clause 2 → reads `STOPPED EARLY` |
+| Just Row is NOT partial | `storedSummary.test.ts` | clause 3 → `.every` (`[].every()` is true) → reads `STOPPED EARLY`. **Deleting clause 2 does NOT bite** — see M3.1 |
 | `finished` + short step is NOT partial | `storedSummary.test.ts` | drop clause 4 → renders a marker |
 | `N` counts MEASURED, not `actualSource` presence | `storedSummary.test.ts` | count `actualSource !== undefined` → the lost-boundary row's count changes |
 | `link-lost` keeps its ungated line | `storedSummary.test.ts` | delete the non-partial `link-lost` branch |
 | Only `link-lost` is ungated | `storedSummary.test.ts` | widen the ungated branch to all five → `rower` Just Row reads `STOPPED EARLY` |
-| **List `partial` == detail predicate** | integration | drop `steps.length > 0` from the SQL → Just Row list `true`, detail `false` |
+| **List `partial` == detail predicate** | integration | `exists` → `not exists` → Just Row list `true`, detail `false`. **Dropping `jsonb_array_length > 0` does NOT bite** — see M4.1 |
 | List `partial` is a boolean, never null | integration | remove `coalesce(…, false)` |
 | The chip renders only on partial hero rows | `HistoryList.test.tsx` | gate on `true` instead of `log.partial` |
+| **List and detail agree on the WORD, not just the boolean** | integration | gate the chip on `partial` alone → the `link-lost just row` row says `LINK LOST` on the detail and nothing in History (M-3) |
+| **A `no-reading` row survives mount → POST → storage → detail** | `e2e` | force `connectedNoRecord` to `false` → the row saves `manual` and the detail reads `LOGGED BY HAND` with no time (M-5, RF24) |
 | The chip is not the JR chip | `e2e/justrow.spec.ts` | point it at `.free-row-chip` |
 | `MONITOR` at the two reachable transport sites | transport tests | restore `"PM5"` at each |
 | `MONITOR` in the connected caption | `surfaceModel.test.ts` | restore `"PM5"` |
@@ -1548,14 +1810,11 @@ Above the fold: **~120 words, ~25 words per bullet. Count, don't feel.**
 ```markdown
 This PR makes a saved row say what happened to it.
 
-- A connected session you stopped short now reads `STOPPED EARLY · 2 of 5
-  intervals measured` on its detail screen, with the right sentence for
-  whoever ended it, and a short chip in History.
+- A connected session you stopped short reads `STOPPED EARLY · 2 of 5
+  intervals measured` on its detail screen, and a short chip in History.
 - A connected session that measured nothing reads `NO MONITOR READING` with
-  its clock time, not `LOGGED BY HAND` — the word the live screen already used.
-- An erg that advertises no name stores `MONITOR`, not an invented model number.
-- Riders: `preferences.warmup` dropped, the legacy warm-up guards removed, one
-  RC-12 comment reconciled.
+  its clock time, not `LOGGED BY HAND`, the word the live screen already uses.
+- A nameless erg stores `MONITOR`, not an invented model number.
 - **Breaking:** `source` is now required when saving. Every tester must be on
   v0.34.0 or later.
 - Try it: stop a connected piece mid-workout and open it from the log.
@@ -1567,6 +1826,8 @@ tester is on v0.34.0 or later (James, 2026-09-02).**
 
 - Spec: `docs/superpowers/specs/2026-09-02-door-partial-design.md` §1–§4.
   Gate 0-A: `docs/superpowers/specs/2026-09-02-door-gate-a.html`, APPROVED.
+- Riders (no tester-visible surface, moved off the fold): `preferences.warmup`
+  dropped, the legacy warm-up guards removed, one RC-12 comment reconciled.
 - Head SHA, commit count, test counts, e2e duration — reproduced, not cited.
 - Every mutation from the gates table with the exact failure text it produced,
   and the three ungated changes with why each carries no gate.
@@ -1631,5 +1892,6 @@ step 8) and the sunset's 400 message literal (Task 7 step 1).
 allowlist; the SQL in Task 4 encodes the same five values and the agreement
 test is what proves they have not drifted. `RecentLog.endedBy` (Task 4) is
 typed `(CloseReason | "interrupted") | null`, matching `StoredLog.endedBy`'s
-union at `storedSummary.ts:191`. `MONITOR_DEVICE_NAME` (Tasks 5 and 7) is one
-exported constant, not two literals.
+union at `storedSummary.ts:191`. `NAMELESS_MONITOR_CAPTION` (Tasks 5 and 7) is one
+exported constant, not two literals — and NOT `MONITOR_DEVICE_NAME`, which
+`e2e/design.spec.ts:2136` already binds to a real advertised name.
