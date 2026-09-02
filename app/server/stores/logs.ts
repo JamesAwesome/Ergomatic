@@ -143,15 +143,23 @@ export interface LogInput {
   // Post-workout-summary spec (2026-08-17), §3: optional/nullable, same
   // shape as `deviceName` below — absent or explicit null both store null.
   thumbs?: Thumbs | null;
-  // Task 3 (outside-plan logging): true (the default the route falls back
-  // to when the client omits the field — routes/data.ts) means this log
-  // counts toward the active plan's progress, exactly like every log
-  // before this field existed. false is an off-app/free row the rower
-  // explicitly doesn't want counted (e.g. a make-up row logged twice in
-  // one day, or a workout done outside the plan entirely) — `create`
-  // below skips the plan_state upsert for it, but the log row itself is
-  // always inserted either way.
-  advancesPlan: boolean;
+  // Task 3 (outside-plan logging): true means this log counts toward the
+  // active plan's progress, exactly like every log before this field
+  // existed. false is an off-app row the rower explicitly doesn't want
+  // counted (e.g. a make-up row logged twice in one day, or a workout done
+  // outside the plan entirely) — `create` below skips the plan_state
+  // upsert for it, but the log row itself is always inserted either way.
+  //
+  // Substitution spec (2026-09-02, §Mechanism 1, TRIAD): OPTIONAL, and the
+  // default lives HERE, once — not at the route, which passes the field
+  // through untouched (`routes/data.ts`). Absent resolves to
+  // `!isFreeRow(workoutId, workoutType)`: a workout row advances unless
+  // its body says `false`; a free row (Just Row) advances only when its
+  // body says `true` — it then stands in for the session and receives the
+  // plan link like any other advancing save. The layer that defaults is
+  // the layer that enforces (antagonist, 2026-09-02): a required boolean
+  // here made every store-side "rule" identical to the bare flag.
+  advancesPlan?: boolean;
   // Phase 7C Task 3 (spec §5/§6): session-scoped provenance, optional —
   // absent means null (a phone-timer log has no device to name). Not part
   // of `steps`: see `db/schema.ts`'s `sessionLogs.deviceName` doc comment
@@ -761,22 +769,25 @@ export function createLogsStore(db: Db) {
         let planKey: string | null = null;
         let planIndex: number | null = null;
 
-        // THE PLAN REFUSAL (Phase JR PR 1, spec rev 4). A free row never
-        // advances a plan, whatever the caller asked for — a Just Row is
-        // not a prescribed session, so it cannot be session n of 84.
-        // Server-side and unconditional: the client half (a log door that
-        // posts `advancesPlan: false`) is PR 2's, so this is the only
-        // enforcement that exists, and it is the one that has to hold.
+        // THE PLAN DEFAULT (substitution spec, 2026-09-02, §Mechanism 1;
+        // replaces Phase JR PR 1's unconditional refusal). Resolved ONCE,
+        // here, and nowhere else: an absent flag means "advance unless
+        // this is a free row". A free row (Just Row) advances only when
+        // its body asks to — it then STANDS IN for session n of N and
+        // receives the link below exactly as a prescribed session would,
+        // which is the whole stand-in record (no column: "a linked free
+        // row" IS "a Just Row stood in for `plan_index`"). A row that
+        // does not advance gets no link, so the delete path — which keys
+        // on the stored link, never on this flag — cannot un-count it.
         //
         // Keyed on `isFreeRow`'s PAIR, never on `workoutId` alone — see
         // that function's doc comment: the deleted-workout retry
         // (`LogSession.tsx:780-790`) posts a null id for a legitimate
         // plan-advancing session, and an id-only predicate would stall its
         // plan silently.
-        if (
-          input.advancesPlan &&
-          !isFreeRow(input.workoutId, input.workoutType)
-        ) {
+        const advancesPlan =
+          input.advancesPlan ?? !isFreeRow(input.workoutId, input.workoutType);
+        if (advancesPlan) {
           const [advanced] = await tx
             .insert(planState)
             .values({ userId, doneN: 1 })

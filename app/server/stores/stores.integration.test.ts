@@ -674,8 +674,9 @@ describe("domain stores against real Postgres", () => {
     });
 
     // THE FREE-ROW PREDICATE, against real Postgres (Phase JR PR 1 Task 1;
-    // spec rev 4, James's sign-off 2026-09-01). Three rows, and the second
-    // and third are the regressions — the first is the easy one.
+    // spec rev 4, James's sign-off 2026-09-01; the first row FLIPPED by the
+    // substitution spec, 2026-09-02). Three rows, and the second and third
+    // are the regressions — the first is the easy one.
     //
     // The predicate is the PAIR (`workoutId` AND `workoutType` both null),
     // never `workoutId` alone. Row 2 is why: `LogSession.tsx:780-790`
@@ -685,7 +686,12 @@ describe("domain stores against real Postgres", () => {
     // plan-advancing session posting a null workout id, and an id-only
     // predicate would stall its plan silently — a 201, and SESSION n OF 84
     // does not move.
-    it("a FREE ROW (both null) never advances the plan, even asking to", async () => {
+    //
+    // Row 1 no longer refuses: a free row that ASKS to advance stands in
+    // for the session (substitution spec §Mechanism 1) and receives the
+    // link. The pair still decides the DEFAULT — the absent-key arm lives
+    // in the shared contract suite, against both stores.
+    it("a FREE ROW (both null) asking to advance DOES advance, and receives the link", async () => {
       const logs = createLogsStore(db);
       const planState = createPlanStateStore(db);
       const users = createUserStore(db);
@@ -703,11 +709,12 @@ describe("domain stores against real Postgres", () => {
 
       expect(await planState.get(fresh.id)).toStrictEqual({
         planKey: "sprint",
-        doneN: 0,
+        doneN: 1,
       });
       const list = await logs.list(fresh.id, 10);
       const stored = list.find((row) => row.id === id);
-      expect(stored?.planKey ?? null).toBeNull();
+      expect(stored?.planKey).toBe("sprint");
+      expect(stored?.planIndex).toBe(0);
     });
 
     it("a null workout id that still carries a type DOES advance (the deleted-workout retry)", async () => {

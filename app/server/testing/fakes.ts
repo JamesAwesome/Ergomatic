@@ -666,13 +666,17 @@ function makeFakeLogsStore(
       // plan chosen (returned planKey null).
       let planKey: string | null = null;
       let planIndex: number | null = null;
-      // Phase JR PR 1: mirrors the real store's FREE-ROW refusal
-      // (`stores/logs.ts`) — a Just Row never advances a plan, whatever the
-      // caller asked for. Kept in step by the shared contract suite rather
-      // than by this comment: `storeContracts.ts` runs the predicate's truth
-      // table against BOTH implementations, which is the only thing that
-      // can catch this fake and the real store disagreeing.
-      if (advancesPlan && !isFreeRow(input.workoutId, input.workoutType)) {
+      // Substitution spec (2026-09-02): mirrors the real store's PLAN
+      // DEFAULT (`stores/logs.ts`'s `create`) — an absent flag resolves,
+      // once, to "advance unless this is a free row"; a free row advances
+      // only when asked. Kept in step by the shared contract suite rather
+      // than by this comment: `storeContracts.ts` runs the twelve-row
+      // truth table (four pairs × true/false/absent) against BOTH
+      // implementations, which is the only thing that can catch this fake
+      // and the real store disagreeing.
+      const advances =
+        advancesPlan ?? !isFreeRow(input.workoutId, input.workoutType);
+      if (advances) {
         const advanced = planState._advance(userId);
         if (advanced.planKey !== null) {
           planKey = advanced.planKey;

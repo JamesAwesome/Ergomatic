@@ -1725,7 +1725,12 @@ export function createDataRouter({
       pain: (body.pain as number | null | undefined) ?? null,
       notes: (body.notes as string | null | undefined) ?? null,
       steps,
-      advancesPlan: (body.advancesPlan as boolean | undefined) ?? true,
+      // Passed through UNTOUCHED — absent stays absent. The default is the
+      // store's (`stores/logs.ts`'s `create`: `?? !isFreeRow(...)`), so a
+      // free row advances only when the body says so and a workout row
+      // advances unless it says not to. A `?? true` here used to pre-empt
+      // that resolution (substitution spec, 2026-09-02, §Mechanism 1).
+      advancesPlan: body.advancesPlan as boolean | undefined,
       deviceName: postedDeviceName,
       source,
       thumbs: (body.thumbs as Thumbs | null | undefined) ?? null,

@@ -513,27 +513,57 @@ export function describeStoreContracts(
       });
 
       // THE FREE-ROW PREDICATE'S TRUTH TABLE (Phase JR PR 1, review of
-      // 29e00561). Lives HERE rather than in either implementation's own
-      // suite because that is the only thing that can catch the fake and
-      // the real store disagreeing — which is exactly what happened: the
-      // fake checked `advancesPlan` alone and advanced a free row while
-      // Postgres refused it, so the same input moved `doneN` in one and
-      // not the other.
+      // 29e00561; widened by the substitution spec, 2026-09-02). Lives HERE
+      // rather than in either implementation's own suite because that is
+      // the only thing that can catch the fake and the real store
+      // disagreeing — which is exactly what happened: the fake checked
+      // `advancesPlan` alone and advanced a free row while Postgres refused
+      // it, so the same input moved `doneN` in one and not the other.
       //
-      // The pair matters, and row 2 is why. `LogSession.tsx:780-790`
-      // retries a save with `workoutId: null` when the server 400s
-      // specifically on `workoutId` (the workout was deleted between that
-      // door's mount and the Save click). That is a legitimate
-      // plan-advancing session posting a null id, and a predicate keyed on
-      // the id alone would stall its plan silently.
+      // Since the substitution spec the pair decides the DEFAULT, not a
+      // refusal: `advancesPlan ?? !isFreeRow(workoutId, workoutType)`,
+      // resolved ONCE in each store. So the table has three columns of
+      // flag — `true`, `false`, and ABSENT (the key deleted, not set to
+      // undefined, because that is what an older client's body looks like)
+      // — against the four pairs. A free row advances iff it asks; every
+      // other row advances unless it declines.
+      //
+      // The pair matters, and the "null id with a type" rows are why.
+      // `LogSession.tsx:780-790` retries a save with `workoutId: null` when
+      // the server 400s specifically on `workoutId` (the workout was
+      // deleted between that door's mount and the Save click). That is a
+      // legitimate plan-advancing session posting a null id, and a
+      // predicate keyed on the id alone would stall its plan silently.
+      // Twelve LITERAL rows, never a formula: an expected column derived
+      // from `isFreeRow` would retune itself with the code it gates (RF21).
+      const FREE = { pair: "a FREE ROW (both null)", id: null, type: null };
+      const NULL_ID = {
+        pair: "a null id that still carries a type",
+        id: null,
+        type: "O2",
+      };
+      const NO_TYPE = {
+        pair: "a named workout with no type",
+        id: "id",
+        type: null,
+      };
+      const ORDINARY = { pair: "an ordinary row", id: "id", type: "O2" };
       it.each([
-        ["a FREE ROW (both null)", null, null, 0],
-        ["a null id that still carries a type", null, "O2", 1],
-        ["a named workout with no type", "id", null, 1],
-        ["an ordinary row", "id", "O2", 1],
+        { ...FREE, flag: "true", expected: 1 },
+        { ...FREE, flag: "false", expected: 0 },
+        { ...FREE, flag: "absent", expected: 0 },
+        { ...NULL_ID, flag: "true", expected: 1 },
+        { ...NULL_ID, flag: "false", expected: 0 },
+        { ...NULL_ID, flag: "absent", expected: 1 },
+        { ...NO_TYPE, flag: "true", expected: 1 },
+        { ...NO_TYPE, flag: "false", expected: 0 },
+        { ...NO_TYPE, flag: "absent", expected: 1 },
+        { ...ORDINARY, flag: "true", expected: 1 },
+        { ...ORDINARY, flag: "false", expected: 0 },
+        { ...ORDINARY, flag: "absent", expected: 1 },
       ])(
-        "create: %s asking to advance leaves done_n at %s",
-        async (_label, id, type, expected) => {
+        "create: $pair with advancesPlan $flag leaves done_n at $expected",
+        async ({ id, type, flag, expected }) => {
           const stores = await makeStores();
           const userId = await stores.makeUser();
           const workoutId =
@@ -546,14 +576,14 @@ export function describeStoreContracts(
                   )
                 ).id;
 
-          await stores.logs.create(
-            userId,
-            logInput({
-              workoutId,
-              workoutType: type,
-              advancesPlan: true,
-            }),
-          );
+          const input = logInput({ workoutId, workoutType: type });
+          if (flag === "absent") {
+            delete (input as { advancesPlan?: boolean }).advancesPlan;
+            expect("advancesPlan" in input).toBe(false);
+          } else {
+            input.advancesPlan = flag === "true";
+          }
+          await stores.logs.create(userId, input);
 
           const state = await stores.planState.get(userId);
           expect(state?.doneN ?? 0).toBe(expected);
@@ -597,7 +627,7 @@ export function describeStoreContracts(
         });
       });
 
-      it("create with advancesPlan:true behaves exactly like the absent-field default", async () => {
+      it("create with advancesPlan:true on a workout row behaves exactly like the absent-field default", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
         await stores.logs.create(userId, logInput({ advancesPlan: true }));

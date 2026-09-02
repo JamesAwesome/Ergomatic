@@ -2390,14 +2390,42 @@ describe("GET/POST /api/logs", () => {
     },
   );
 
-  it("advancesPlan absent behaves exactly like the pre-Task-3 default: the plan advances", async () => {
+  // The default is the STORE's, not this route's (substitution spec,
+  // 2026-09-02, §Mechanism 1): the route passes `advancesPlan` through
+  // untouched — absent stays absent — and `stores/logs.ts`'s `create`
+  // resolves `?? !isFreeRow(...)` once. A workout row with no key still
+  // advances, exactly as every log did before the field existed.
+  it("advancesPlan absent on a WORKOUT row advances the plan (the store's default, unchanged from before the field existed)", async () => {
     const app = appFor(makeStores());
-    const created = await asA(request(app).post("/api/logs")).send(
-      validLogBody(),
-    );
+    const body = validLogBody();
+    expect("advancesPlan" in body).toBe(false);
+    const created = await asA(request(app).post("/api/logs")).send(body);
     expect(created.status).toBe(201);
     const plan = await asA(request(app).get("/api/plan"));
     expect(plan.body.doneN).toBe(1);
+  });
+
+  // And the same absent key on a FREE ROW resolves the other way. This is
+  // the case a route-side `?? true` would break: it would hand the store a
+  // `true` the body never said, and the free row would advance. Real
+  // Postgres pins the same arm in `freeRow.integration.test.ts`; this one
+  // runs against the fake so the probe bites without Docker.
+  it("advancesPlan absent on a FREE ROW leaves the plan alone (the store's default, not the route's)", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
+    const created = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      workoutId: null,
+      workoutTitle: "Just Row",
+      workoutType: null,
+      steps: [],
+    });
+    expect(created.status).toBe(201);
+    const plan = await asA(request(app).get("/api/plan"));
+    expect(plan.body.doneN).toBe(0);
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === created.body.id);
+    expect(row).toMatchObject({ planKey: null, planIndex: null });
   });
 
   it("advancesPlan:true behaves exactly like the absent-field default", async () => {
