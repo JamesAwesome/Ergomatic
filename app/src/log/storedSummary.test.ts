@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LOG_SOURCES } from "../../domain/types";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type {
   MeasuredRow,
@@ -1575,24 +1576,21 @@ const PARTIAL_TABLE: {
     shape: "one measured, one lost boundary, three never reached",
     outcomes: EVERY_CLOSE_BUT_FINISHED,
   },
-  // Clause 1: a timer row cannot be partial in stored data at all, whatever
-  // its steps or its close say.
-  {
-    source: "timer",
-    shape: "no steps (a connected Just Row)",
-    outcomes: NOTHING,
-  },
-  { source: "timer", shape: "every step measured", outcomes: NOTHING },
-  {
-    source: "timer",
-    shape: "two measured, three never reached",
-    outcomes: NOTHING,
-  },
-  {
-    source: "timer",
-    shape: "one measured, one lost boundary, three never reached",
-    outcomes: NOTHING,
-  },
+  // Clause 1 over the WHOLE enum, not just its nearest neighbour: `pm5` is
+  // the only door that stores planned-vs-measured steps, so every one of the
+  // other three `LOG_SOURCES` members (`domain/types.ts:101-102`) is
+  // excluded whatever its steps or its close say. Pinning all four means a
+  // fifth member added later cannot slip through by resembling `timer`.
+  ...(["timer", "manual", "no-reading"] as const).flatMap((source) =>
+    (
+      [
+        "no steps (a connected Just Row)",
+        "every step measured",
+        "two measured, three never reached",
+        "one measured, one lost boundary, three never reached",
+      ] as const
+    ).map((shape) => ({ source, shape, outcomes: NOTHING })),
+  ),
 ];
 
 const PARTIAL_CROSS_PRODUCT: {
@@ -1624,10 +1622,14 @@ describe("partialCloseReason — door spec §1.1, the four clauses", () => {
 
   // Just Row: a free row has no plan to be partial against. Every connected
   // JR closes `rower` (`useMonitorSession.ts:5010`), so this is the leg that
-  // would go red if the rule ever stopped excluding it. NOTE: clause 2 is
-  // NOT what excludes it — clause 3 already does, because `[].some(...)` is
-  // false. The mutation that bites here is clause 3 -> `.every`, never
-  // deleting clause 2.
+  // would go red if the rule ever stopped excluding it. WHICH clause
+  // excludes it, measured rather than reasoned (see `partialCloseReason`'s
+  // own clause-2 comment): clause 2 returns first for `steps: []`, so it IS
+  // what excludes this row today — clause 3 would also do it (`[].some(...)`
+  // is false), which is why clause 2 is redundant, but redundant is not the
+  // same as inert. The probe that bites THIS leg is clause 2 deleted AND
+  // clause 3 flipped to `.every` (M3.1c, "expected 'rower' to be
+  // undefined"); either mutation on its own leaves this assertion green.
   it("a connected Just Row is never partial, however it closed", () => {
     expect(
       partialCloseReason({ source: "pm5", steps: [], endedBy: "rower" }),
@@ -1694,6 +1696,16 @@ describe("partialCloseReason — door spec §1.1, the four clauses", () => {
         endedBy: "rower",
       }),
     ).toBe("rower");
+  });
+
+  // The table above is only a clause-1 pin if it names EVERY door. Asserted
+  // against `LOG_SOURCES` itself (`domain/types.ts:121`) rather than against
+  // a retyped list, so a fifth member added to the enum makes this leg red
+  // instead of silently going unexercised.
+  it("the table covers every LogSource, so clause 1 is pinned over the whole enum", () => {
+    expect(
+      [...new Set(PARTIAL_TABLE.map((e) => e.source))].sort(),
+    ).toStrictEqual([...LOG_SOURCES].sort());
   });
 
   it("the allowlist is exactly the server enum minus finished, in the spec's order", () => {

@@ -476,19 +476,15 @@ describe("FromTheLog — door spec §1 PARTIAL marker", () => {
     const marker = await screen.findByText(
       "STOPPED EARLY · 2 of 5 intervals measured",
     );
-    const heroes = container.querySelector(".summary-heroes");
+    const heroes = container.querySelector(".summary-heroes-block");
     expect(heroes).not.toBeNull();
-    // The marker precedes the heroes block, and the heroes block does not
-    // precede the marker — both directions, since a single-bit check can
-    // pass on garbage (this file's own readback/intervals idiom).
-    expect(
-      marker.compareDocumentPosition(heroes!) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      heroes!.compareDocumentPosition(marker) &
-        Node.DOCUMENT_POSITION_PRECEDING,
-    ).toBeTruthy();
+    // Order by INDEX in document order, not by a bit mask: both directions
+    // of `compareDocumentPosition` are one fact restated, and an index pair
+    // says which slot the marker actually occupies. The marker sits between
+    // the meta block and the heroes — spec §1.3's "ABOVE the heroes, between
+    // the black rule and AVG SPLIT", the slot `LINK LOST` already used.
+    const ordered = [...container.querySelectorAll("*")];
+    expect(ordered.indexOf(marker)).toBeLessThan(ordered.indexOf(heroes!));
   });
 
   it("a link-lost partial row gains the suffix on the existing sentence", async () => {
