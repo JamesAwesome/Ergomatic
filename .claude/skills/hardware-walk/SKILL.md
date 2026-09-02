@@ -27,6 +27,9 @@ approval before any docker command runs, in this exact shape:
     Captures you'll be asked for: <count, each named, each landing in a
       rest or between pieces>
     Phone needed: <NO (default) | YES because <walk item>>
+    Recordings: <YES — web lab walk | NO — phone walk, photos + saved
+      rows are the only evidence (the recording seam is dev/web only;
+      native builds cannot produce one — see Phase 1)>
 
 **SHORTEST INTERVAL THAT PROVES THE POINT — James, 2026-08-26: _"our skill
 should instruct you to recommend short intervals. a 500m interval is not short.
@@ -104,6 +107,13 @@ James never hand-gathers what you can reach:
   screen's `RECORDING · DOWNLOAD` row — one tap, ask for it in the
   post-piece gap. NEVER via console `download()` (drops the header's
   program — walk-2026-08-16's lesson).
+  **RECORDINGS EXIST ONLY ON THE WEB LAB BUILD.** The recording tap is a
+  dev/web-only seam (record-replay Stage A, PR #100); native/TestFlight
+  builds ship without it, and there is no `RECORDING · DOWNLOAD` row to
+  tap. A phone walk produces NO recordings — its evidence is photos and
+  the saved rows, the plan says so up front, and asking the operator for
+  a download on a phone walk is asking for a control that does not exist
+  (this happened, 2026-09-01, mid the JR exit walk).
 - The diagnostics ring survives navigation in sessionStorage
   (`ergomatic:last-rowed-log`); if you need it, give him the one-liner:
   `copy(sessionStorage.getItem("ergomatic:last-rowed-log"))` — one paste

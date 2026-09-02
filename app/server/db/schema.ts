@@ -504,9 +504,15 @@ export const concept2Links = pgTable("concept2_links", {
 });
 
 // Single-use, 15-minute link attempts: the browser hop carries no
-// credential, so the nonce IS the user binding (spec §Architecture 1).
+// credential, so the nonce CORRELATES the browser's return to this
+// attempt (spec §Architecture 1) — it does not by itself BIND the
+// consenting principal's identity; nothing here checks WHO completes it.
+// That identity check is the ruled activation shape's job (PR1.75,
+// gate doc 2026-09-01-concept2-pr15-gate.md §6), not this table.
 // No redirect_kind column — Branch A is chosen and the redirect URI is one
-// env-derived constant (plan deviation 1).
+// env-derived constant (plan deviation 1, superseded by the ruled hybrid —
+// see the design spec's Stored-Shapes section for the target `surface`
+// column, not yet added here).
 export const concept2AuthAttempts = pgTable("concept2_auth_attempts", {
   nonce: text("nonce").primaryKey(),
   userId: uuid("user_id")

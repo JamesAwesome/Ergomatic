@@ -164,7 +164,10 @@ export function createConcept2Store(db: Db) {
       });
     },
 
-    // Single-use (spec §Architecture 1: the nonce IS the user binding).
+    // Single-use (spec §Architecture 1: the nonce CORRELATES the return
+    // to the attempt; it does not BIND the consenting principal — see
+    // schema.ts's own comment on this table, and PR1.75 for the identity
+    // check that would).
     // ONE atomic `DELETE ... WHERE nonce = $1 RETURNING`, unconditional on
     // age — a second call for the same nonce always returns null because
     // the row is already gone, and an expired-but-never-consumed nonce is

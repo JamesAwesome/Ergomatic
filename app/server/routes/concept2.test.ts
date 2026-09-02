@@ -206,7 +206,7 @@ describe("concept2 router: auth guard", () => {
     expect(res.status).toBe(401);
   });
 
-  it("callback carries NO requireUser (the nonce binds, not a session)", async () => {
+  it("callback carries NO requireUser (the nonce correlates, not a session)", async () => {
     const { app } = buildApp();
     // No Authorization header at all; missing state/code -> 400, never 401.
     const res = await request(app).get("/api/concept2/callback");

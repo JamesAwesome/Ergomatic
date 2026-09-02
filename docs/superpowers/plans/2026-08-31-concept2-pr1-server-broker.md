@@ -4,9 +4,25 @@
 
 **REV 2** — the antagonist premise pass (2026-08-31, verdict REVISE) is folded in; see "Premise-pass disposition" below for what changed and why. Rev 1's superseded claims are REPLACED, not appended.
 
+**CORRECTED 2026-09-01 (PR1.5 review round):** this plan is historical — PR1
+shipped and merged on the shape described below. That shape is now labeled
+**ACCEPTED-DARK**: every "the nonce IS/binds the user" sentence in this
+document (§Architecture, the route table, the schema comment, the Callback
+route-logic bullet) describes what the code does, not a correct security
+claim, and is corrected here rather than rewritten, per the standing rule
+against silently editing merged-plan history. The accurate statement: the
+nonce/`state` value **CORRELATES** a callback request to its mint attempt
+(same attempt, same weight class); it does not authenticate who is present
+at the callback — the route runs with `NO requireUser` and accepts any
+browser holding a valid, unexpired, unconsumed nonce, which is exactly the
+Branch A / F1 residual PR1.5's design gate accepted as ACCEPT-bounded-dark
+(`ROADMAP.md`'s "C2 account injection" row). Binding the actual **consenting
+principal** — checking the request against a bearer (native) or session
+cookie (web) identity before exchange — is PR1.75's job, not shipped here.
+
 **Goal:** The server side of the Concept2 link: token broker (mint → system-browser consent → callback exchange), link/unlink routes, the upload route that posts an eligible stored row to C2 and records the result id, plus the stored shapes and the `C2_LINK_ENABLED` availability gate — everything dark by default.
 
-**Architecture:** Branch A (PROVEN at PR0: `state` echoes durably). The server holds `client_secret` and tokens; the browser hop carries no credential — a single-use, 15-minute `concept2_auth_attempts` nonce IS the user binding. Every route re-checks availability server-side (capability gate, not a hide). Upload reads only validated stored values, band-checks the two `machineSummary` fields, writes `c2_result_id`/`c2_user_id` when C2 acknowledges the row — a 2xx, or a 409 whose body names the colliding id (RF25's durable-recovery write). **No automatic path ever deletes a link** — token-endpoint failures set `needs_reauth_at`, and refresh is serialized per user with `SELECT … FOR UPDATE`.
+**Architecture:** Branch A (PROVEN at PR0: `state` echoes durably). The server holds `client_secret` and tokens; the browser hop carries no credential — a single-use, 15-minute `concept2_auth_attempts` nonce IS the user binding [corrected 2026-09-01, see top-of-file note: read as CORRELATES the attempt, not binds a principal]. Every route re-checks availability server-side (capability gate, not a hide). Upload reads only validated stored values, band-checks the two `machineSummary` fields, writes `c2_result_id`/`c2_user_id` when C2 acknowledges the row — a 2xx, or a 409 whose body names the colliding id (RF25's durable-recovery write). **No automatic path ever deletes a link** — token-endpoint failures set `needs_reauth_at`, and refresh is serialized per user with `SELECT … FOR UPDATE`.
 
 **Tech Stack:** Express 5, Drizzle + Postgres, Vitest (+ supertest, @testcontainers/postgresql for integration), global `fetch` (injected for tests). pnpm only, ESM only, server imports use `.js` extensions.
 
@@ -63,7 +79,7 @@
 | route | auth | success | failures |
 | --- | --- | --- | --- |
 | `POST /api/concept2/connect` `{weightClass}` | user | `200 {authorizeUrl}` | 403 `{error:"unavailable"}`; 400 field-named |
-| `GET /api/concept2/callback?code&state` | none (nonce binds) | 200 HTML "Linked. Return to the app." | 403 HTML (unavailable — checked AT callback); 400 HTML (missing/unknown/expired/consumed state); 502 HTML (exchange failed) |
+| `GET /api/concept2/callback?code&state` | none (nonce correlates the attempt, does not bind a principal — corrected 2026-09-01, see top note) | 200 HTML "Linked. Return to the app." | 403 HTML (unavailable — checked AT callback); 400 HTML (missing/unknown/expired/consumed state); 502 HTML (exchange failed) |
 | `GET /api/concept2/link` | user | `200 {available:false}` \| `{available:true,linked:false}` \| `{available:true,linked:true,weightClass,c2UserId,needsReauth}` | never 4xx/5xx for availability; never tokens |
 | `DELETE /api/concept2/link` | user | 204 (idempotent; user-initiated unlink is the ONE path that deletes) | 403 `{error:"unavailable"}` |
 | `POST /api/concept2/results/:logId` `{tz}` | user | `200 {resultId}` (fresh write or already-sent) | 403 `{error:"unavailable"}`; 404 (bad/foreign/absent id); 400 (bad/absent `tz`); 409 `{error:"unlinked"}`; 409 `{error:"needs_reauth"}`; 409 `{error:"duplicate", c2ResultId}`; 422 `{error:"not_eligible", reason}`; 502 `{error:"c2_error"}` |
@@ -127,6 +143,10 @@ export const concept2Links = pgTable("concept2_links", {
 
 // Single-use, 15-minute link attempts: the browser hop carries no
 // credential, so the nonce IS the user binding (spec §Architecture 1).
+// [CORRECTED 2026-09-01: read "binding" as CORRELATION — the nonce ties a
+// callback to its mint attempt, it does not authenticate who is present at
+// the callback. This shape is ACCEPTED-DARK per PR1.5's design gate; PR1.75
+// adds the actual bearer/cookie principal check. See top-of-file note.]
 // No redirect_kind column — Branch A is chosen and the redirect URI is one
 // env-derived constant (plan deviation 1).
 export const concept2AuthAttempts = pgTable("concept2_auth_attempts", {
@@ -376,7 +396,7 @@ Plus on `stores/logs.ts`: `recordC2Result(userId: string, logId: string, c2Resul
 
 - Route logic locked:
   - **Mint** (`POST /api/concept2/connect`, requireUser): unavailable → 403 `{error:"unavailable"}` BEFORE any store call (matrix: no attempt row). Validate `weightClass` ∈ H|L → 400 field-named. `deleteExpiredAttempts(ATTEMPT_MAX_AGE_MS)` + `deleteAttemptsFor(user)` (GC is the server's, no cron), `nonce = randomBytes(32).toString("hex")`, `createAttempt`, return `{authorizeUrl: client.authorizeUrl(nonce)}`.
-  - **Callback** (`GET /api/concept2/callback`, NO requireUser — the nonce binds; GETs pass `originCheck` untouched, and the MOUNT ORDER in Task 7 is what keeps `requireUser` away from this route): responses are tiny inline HTML (`res.status(n).type("html").send(...)`), never JSON — this is a browser navigation. Order (matrix row 3, pinned): (1) if unavailable → consume/delete the attempt if `state` present, 403 page, NO exchange (stub asserts `exchangeCode` never called); (2) `state`/`code` missing → 400 page; (3) `consumeAttempt(state, ATTEMPT_MAX_AGE_MS)` null (unknown/expired/second use) → 400 page; (4) `exchangeCode` → failure → 502 page, attempt already consumed (retry restarts at mint — single-use preserved); (5) `fetchMe` → failure → 502 page; (6) `upsertLink` with attempt's userId + weightClass (clears `needsReauthAt`) → 200 "Linked. Return to the app." The app learns the outcome by re-fetching `GET /link` on foreground (PR1.5/PR2).
+  - **Callback** (`GET /api/concept2/callback`, NO requireUser — the nonce correlates the attempt, it does not bind a principal [corrected 2026-09-01, see top note]; GETs pass `originCheck` untouched, and the MOUNT ORDER in Task 7 is what keeps `requireUser` away from this route): responses are tiny inline HTML (`res.status(n).type("html").send(...)`), never JSON — this is a browser navigation. Order (matrix row 3, pinned): (1) if unavailable → consume/delete the attempt if `state` present, 403 page, NO exchange (stub asserts `exchangeCode` never called); (2) `state`/`code` missing → 400 page; (3) `consumeAttempt(state, ATTEMPT_MAX_AGE_MS)` null (unknown/expired/second use) → 400 page; (4) `exchangeCode` → failure → 502 page, attempt already consumed (retry restarts at mint — single-use preserved); (5) `fetchMe` → failure → 502 page; (6) `upsertLink` with attempt's userId + weightClass (clears `needsReauthAt`) → 200 "Linked. Return to the app." The app learns the outcome by re-fetching `GET /link` on foreground (PR1.5/PR2).
   - **Link GET** (requireUser): unavailable → `200 {available:false}` (200 on purpose — the matrix's one non-403 row). Else `{available:true, linked, weightClass?, c2UserId?, needsReauth: link.needsReauthAt !== null}` (`c2UserId` is the linked account's numeric id, for PR2's sent-state/View-on-Concept2 needs). Tokens never serialized.
   - **Link DELETE** (requireUser): unavailable → 403; else `deleteLink`, 204 — the ONE delete path, user-initiated (V5: no revocation endpoint; unlink is local). Flag-off later hides but deletes nothing (lifecycle rule).
   - **Upload** (`POST /api/concept2/results/:logId`, requireUser): unavailable → 403. UUID_RE fail → 404. `tzError(body.tz)` failure or `tz` absent → 400 field-named. `logs.get(user, id)` null → 404. Link null → 409 `{error:"unlinked"}`. `needsReauthAt` set → 409 `{error:"needs_reauth"}`. Already-sent short-circuit (deviation 5) → 200 `{resultId}`. `eligibilityFailure` → 422 `{error:"not_eligible", reason}`. **Persist tz** (deviation 2): if `row.tz === null`, `recordTz(...)` with the body's zone, and use it as `effectiveTz`; else `effectiveTz = row.tz`. **Token freshness inside `withLinkLock`:** locked re-read; if `expiresAt > now + TOKEN_REFRESH_SKEW_MS` → `{action:"none"}` with the stored access token (covers "another request already refreshed"); else `client.refreshTokens(link.refreshToken)` → ok → `{action:"store", tokens}` and use the new access token; grantDead → `{action:"flagReauth"}` and respond 409 `{error:"needs_reauth"}` (link + weight_class INTACT — deviation 3); retryable → `{action:"none"}` and respond 502 `{error:"c2_error"}`. Then `postResult(accessToken, buildC2Payload(row, link, effectiveTz))`: 201 → `recordC2Result(user, logId, resultId, link.c2UserId)` (on a false return — row deleted concurrently — respond 502 `{error:"c2_error"}`; RF25: this route owns the seam; the named recovery is re-send → C2 409 → duplicate, a state the UI has) → 200 `{resultId}`; duplicate → 409 `{error:"duplicate", c2ResultId}` (durably recorded with the locked link's identity BEFORE responding; if that write also fails, still respond duplicate); auth → ONE refresh-and-retry through the same locked path, then as above; c2_error → 502.

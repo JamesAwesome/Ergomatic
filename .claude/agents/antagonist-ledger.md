@@ -4792,6 +4792,181 @@ SPLIT oracle were attacked.
   upstream of the producer — with the caveat that it gates ONE reader while Today's
   own mount snapshot is the other.
 
+## Wave E PR1.5 full pass (TRIAD — AUTH), 2026-09-01, worktree head 303987ab
+
+Target: the revised native-link design — plan
+`docs/superpowers/plans/2026-09-01-concept2-pr15-native-link.md`, the rebuilt
+gate package `…-pr15-gate.md`, the walk card `…-pr15-walk.md`, and the round-2
+implementation. Verdict REVISE: two broken claims, five over-stated ones,
+three missing option classes, and the build-fold claim PROVEN by producing
+the artifact.
+
+**Falsified, and the technique that settled each**
+
+1. **"The register-before-open contract is satisfied by construction."**
+   BROKEN. `useForegroundRefetch.ts:107` depends on `[cb]`, and the only
+   consumer that exists (`Concept2LinkProbe.tsx:35`) passes an inline arrow —
+   so every render tears down and asynchronously re-adds the native
+   `browserFinished` listener, and a dismiss landing in that window is the
+   exact miss the fix round exists to close. Technique: **when a comment
+   claims a lifecycle property "for free", read the dependency array and then
+   read what the ONE real consumer passes into it.** The tests all pass a
+   stable `vi.fn()` hoisted outside the render function, so nothing could go
+   red — RF21/RF24 in hook form: the gate's fixture is the only shape it can
+   fail on.
+
+2. **"Step 7: the counter should read 2."** BROKEN, and determined, not
+   probabilistic. Backgrounding and returning restores the presented
+   `SFSafariViewController`, so the operator lands on the browser sheet and
+   cannot read the counter without dismissing — which fires `browserFinished`.
+   The real value is 3. Technique: **walk the operator's VIEW, not just their
+   taps — ask what is on screen when the instruction says "read the counter."**
+   RF13's class; the card also told him `log-dev.concept2.com` would show an
+   error page (it returns HTTP 200) and labelled a fold check as "confirm you
+   built with the flag" (it confirms neither the flag nor the phone's build).
+
+3. **"Bounded today by two things only: ALLOWED_EMAILS and the dark flag."**
+   Under-stated. Two more real bounds sit in the same file the doc cites:
+   one live attempt per user (`routes/concept2.ts:159-161`, its own comment
+   says so) and a 15-minute delivery window (`ATTEMPT_MAX_AGE_MS`,
+   `routes/concept2.ts:38`, enforced in `consumeAttempt`'s `fresh` column).
+   Technique: **for a ruling doc, enumerate the posture from the code, not
+   from the threat sentence** — the same read that finds the residual finds
+   the bounds, and leaving them out biases the ruling against "accept".
+
+4. **"(b)'s information cost: the email is shown to whoever holds the URL."**
+   Over-stated. Minting is `requireUser`-gated (`routes/concept2.ts:139`), so
+   the only way a URL exists is that someone holding that user's session made
+   it — in the attack scenario the email displayed is the ATTACKER's own, and
+   (b) makes the attack self-identifying. Technique: **trace who can CAUSE the
+   disclosure, not who can receive it.**
+
+5. **"(c) costs a second tap."** It costs more: (c)'s Confirm button competes
+   with the dismissal gesture in the same modal, and dismissal is exactly what
+   PR1.5's own return signal keys on and what the walk card trains. Technique:
+   **read the mitigation against the OTHER document shipped in the same PR** —
+   this collision is invisible from inside either doc alone.
+
+6. **The gate package's option list was missing its cheapest member.** A
+   pre-consent interstitial on our own origin (`/api/concept2/start?state=…`
+   → identity → 302 to C2) prevents at the consenting principal BEFORE
+   anything is written: no pending state, no confirm token, no GC, no stored
+   shape, no change to `consumeAttempt`. Also missing: shortening
+   `ATTEMPT_MAX_AGE_MS`, and a `UNIQUE` on `concept2_links.c2_user_id` — the
+   only option that gives the VICTIM a signal at zero disclosure. Technique:
+   **for any "accept / detect / prevent" package, ask separately about
+   constraining the TARGET and constraining the WINDOW** — those are option
+   classes, not variations, and a principal-shaped list will never contain
+   them.
+
+**Attacked and HELD**
+
+`browserFinished` as the right event (verbatim in the installed
+`definitions.d.ts:16-17`, corroborated in the plugin's own
+`safariViewControllerDidFinish` → `notifyListeners` iOS source); `resume`
+alone genuinely missing the modal dismiss (`@capacitor/app`
+`definitions.d.ts:217/227` map pause/resume to didEnterBackground/
+willEnterForeground, which a modal presentation never raises); §2's credential
+fact (attacked via `WKHTTPCookieStore` — no rescue, because there is no
+Ergomatic cookie on native to share, `api.ts:14-17`); (c) surviving the
+single-use nonce (verified against `routes/concept2.ts:193-196` +
+`stores/concept2.ts:181-196` — it mints a new token and confirms after the
+exchange, reopening nothing); §3's rebuild around the consenting principal
+(there is NO minter-binding fix, because minter == attacker); the build-time
+fold; every quote and nine spot-checked `file:line` citations.
+
+**Techniques worth keeping**
+
+- **Build it twice.** RF12's rule, applied to a NEW dev flag: `vite build`
+  with and without the exported var, grep six needles over both trees. It
+  settled the fold, the red proof, that a shell `export` of a `VITE_`-prefixed
+  var reaches a production build, that `ios:build` is the same invocation the
+  walk card names, AND the plan's own narrowed lazy-chunk claim — four
+  questions, one command run twice.
+- **`curl` the URL an operator instruction predicts.** "It will very likely
+  show an error page" is a factual claim about a host, and it costs one
+  command to check. It was wrong.
+- **Read the operator's SCREEN.** RF13's usual form is "the flag doesn't reach
+  the code"; this pass found the other form — the flag works, the taps work,
+  and the operator physically cannot see the readout at the step that tells
+  him to read it.
+- **A ruling document is evidence, and under-stating the posture biases the
+  ruling.** Both directions count: bounds left out make "accept" look worse,
+  and a cost over-stated makes "detect" look worse. Enumerate both halves
+  from the code.
+
+**CORRECTION (2026-09-01, fix round 9 scoped re-review — a visible
+correction, not a silent rewrite: the entry above is left as this pass
+wrote it, since it is a record of what was found and believed AT THE
+TIME, and erasing it would just make the same claim easy to re-believe
+later).** Two claims in this entry were superseded by the SAME gate
+document this pass reviewed, after later rounds read primary sources this
+pass did not:
+- Finding 6's `"accept / detect / prevent"` phrasing (this entry's own
+  words, matching the gate doc's THEN-current taxonomy) was renamed by
+  the gate doc's own round 7 to accept / detect / physically-confirm —
+  nothing in the package as it stood achieved cryptographic principal
+  binding, so "prevent" was the wrong word throughout. **The defect was
+  not merely a label, round 10 clarifies: finding 6's own claim that the
+  interstitial "prevents ... BEFORE anything is written" was FALSIFIED,
+  not just mislabeled — the gate doc's own §3(d) proof shows it is
+  BYPASSABLE by the publicly-constructible raw authorize URL, which
+  skips the interstitial's origin entirely.** Round 9 then added a
+  FOURTH bucket, app-bind (option (g), an authenticated app-return
+  exchange) — round 10 found the SAME bypass shape applies to (g) too:
+  as round 9 wrote it, (g) did NOT achieve unconditional principal
+  binding either, since nothing stops an attacker minting for the WEB
+  surface and completing through the existing, unauthenticated https
+  callback, never reaching (g)'s own check. (g) needs an added
+  precondition (a surface-binding column enforced at both routes) before
+  the "first and only option that does" claim holds. **Round 12 found
+  round 10's OWN fix insufficient, on the SAME claim: a surface column
+  only stops a nonce crossing surfaces — it does nothing about the web
+  path used NORMALLY, since `/api/concept2/callback` stays
+  unauthenticated regardless of a correct surface tag. An attacker can
+  mint a WEB-surface attempt and the victim's ordinary, correctly-
+  surfaced consent still links the account under the attacker's id, no
+  cross-surface trick required. A surface column is ROUTE INTEGRITY, not
+  PRINCIPAL AUTHORITY — round 10 conflated the two, and this correction
+  block repeated that conflation. (g) needs BOTH the surface column AND
+  a real identity check on BOTH completion routes (native's own new
+  exchange route, plus the EXISTING web callback retrofitted with one)
+  before it binds anything.**
+- "Attacked and HELD... §2's credential fact (attacked via
+  `WKHTTPCookieStore` — no rescue, because there is no Ergomatic cookie on
+  native to share, `api.ts:14-17`)" HELD for the NATIVE APP's own
+  credential specifically (a Keychain bearer, never a cookie) — that part
+  is still true today. But the broader shape of the claim, that no
+  Ergomatic-issued cookie exists anywhere in this flow, was narrowed by
+  the gate doc's own round 5/7: the SERVER does issue a real
+  `erg_session` cookie, for WEB sessions (`server/auth/cookies.ts:6,20-29`)
+  — only the native app itself never carries one. Neither correction
+  changes this pass's verdict (REVISE) or any of its other five findings.
+
+**SECOND CORRECTION (2026-09-01, fix round 15, reviewer finding — this
+entry's own finding 3 is itself now further refined, not reversed):**
+finding 3's "two more real bounds" (one live attempt per user, the
+15-minute window) grew the census from two to four, and every later
+round through 14 carried that four-bound framing forward as though all
+four held equal weight. A reviewer re-read the same two cited files and
+found two of the four weaker than the doc claimed: `ALLOWED_EMAILS`
+(`signin.ts:30-42`) gates NEW-account admission only — an
+already-admitted account is never re-checked — not a current holder's
+standing to act; and "one live attempt per user" is a three-call,
+untransacted mint sequence with no `UNIQUE(user_id)`
+(`server/routes/concept2.ts:157-167`, `schema.ts:510-519`), raceable
+under CONCURRENT mints even though a sequential second mint does replace
+the first, as originally claimed. The gate doc's §1 now reads two firm
+bounds (the nonce's single-use + 15-minute expiry) plus the dark flag,
+and two soft/best-effort factors the acceptance does not lean on.
+**Shown this corrected picture, James REAFFIRMED the same ACCEPT
+ruling** — the correction narrowed the evidence, not the decision.
+Technique, same shape as this entry's own finding 3: **re-read a ruling
+doc's cited code against the doc's OWN prose, not just against the
+threat sentence** — a census can be under-stated in one direction and
+over-stated in another within the same revision, and both are found the
+same way.
+
 ## 2026-09-02 — Wave F PR 3 §4 freeze-predicate design: the fix that ignored its own capture
 
 - **Claim (plan §4 Design, first draft):** "a pause may not be declared until

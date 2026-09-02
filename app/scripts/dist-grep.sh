@@ -10,7 +10,7 @@
 # record/replay stage A) — because a single gate that only ever grows is
 # easier to trust than several that might drift apart.
 #
-# SEVEN needles, seven different reasons — and every needle is a STRING
+# EIGHT needles, eight different reasons — and every needle is a STRING
 # LITERAL from the source, deliberately never a function/variable
 # identifier: `vite build` minifies the production bundle, which renames
 # every identifier it can (verified empirically this task — grepping for
@@ -100,6 +100,17 @@
 #   `docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`'s
 #   `## Testing` section: "the client secret's env name proven absent
 #   from `dist/`, both directions" (Wave E PR1).
+# - `C2 link probe (dev harness)` — Wave E PR1.5 fix round 2 (P1a-device):
+#   `Concept2LinkProbe.tsx`'s own `data-c2-link-probe` value, the same
+#   "stable data-attribute, not a function identifier" shape as
+#   `Just Row observer (instrument)` above. The card is lazy-imported on
+#   `You.tsx` behind the SAME `DEV`-or-explicit-flag condition shape
+#   (`VITE_ENABLE_C2_LINK_PROBE` this time) — this string appearing in a
+#   PRODUCTION build (the flag unset) means that gate failed the same way
+#   the `Just Row observer` check's would. Flipped on purpose in the walk
+#   card's own red-proof step
+#   (`docs/superpowers/plans/2026-09-01-concept2-pr15-walk.md`) to prove
+#   this needle can actually fail before trusting its green (RF12/RF21).
 #
 # Usage: `bash scripts/dist-grep.sh` from `app/`, AFTER `pnpm build` has
 # populated `dist/client`. Exits non-zero (and prints every match) the
@@ -113,7 +124,7 @@ if [ ! -d "$DIST" ]; then
   exit 1
 fi
 
-NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET")
+NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "C2 link probe (dev harness)")
 FAILED=0
 
 for needle in "${NEEDLES[@]}"; do

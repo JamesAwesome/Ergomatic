@@ -122,7 +122,16 @@ processing. No Beta App Review for internal.
 
 Fallback (GUI, if the CLI upload ever breaks): `pnpm ios:build` then
 `pnpm ios:open` → Xcode: Product → Archive → Distribute App →
-TestFlight (internal).
+TestFlight (internal). **Round 7 review caveat: this path calls the SAME
+`pnpm ios:build` `ios-release.sh` calls, but never runs `ios-release.sh`
+itself — none of its guards (the `VITE_ENABLE_C2_LINK_PROBE` shell/`.env`
+checks, or the dist:grep-after-build check) run here.** If your shell (or
+an `.env*` file) has `VITE_ENABLE_C2_LINK_PROBE` set for a walk
+(`docs/superpowers/plans/2026-09-01-concept2-pr15-walk.md`), this path
+will happily build the dev-only probe card into a release. **Run
+`pnpm dist:grep` yourself, by hand, right after `pnpm ios:build` and
+BEFORE archiving in Xcode** — it must print `dist-grep: OK`; if it
+doesn't, stop and find out why before touching Product → Archive.
 
 Notes: internal builds expire after 90 days — re-upload (no new tag needed;
 BUILD increments with any new commit).
