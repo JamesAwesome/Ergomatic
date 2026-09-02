@@ -192,8 +192,14 @@ slate.
   carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
   `OBJ_WORKOUTTYPE_T` entry). One driver change plus one walk leg. **M**
 - **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
-  infinite timer and the ability to log. The close found most of it
-  built: `Step`'s `{ k: "test" }` member yields a phase with no seconds
+  infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
+  James ruled TIME ONLY; Gate 0 PASSED on rev 2e
+  (`docs/design/handoffs/2026-09-02-just-row-unconnected/`, every label
+  lifted from a captured shipped screen); spec at
+  `docs/superpowers/specs/2026-09-02-just-row-unconnected-design.md`,
+  antagonist delta pass in flight; ships in ONE PR with the JR chip
+  below, TRIAD (a `mode` field on `SessionRun`).** The close found most
+  of it built: `Step`'s `{ k: "test" }` member yields a phase with no seconds
   and no metres, `Timer.tsx` counts UP for exactly that case
   (`Timer.test.tsx` pins it), and `SessionRun` with `workoutId: null`
   stores it with no `v` bump — **no new stored shape**; PR 1's server row
@@ -204,7 +210,11 @@ slate.
   row savable? The only item with an outside voice; first to build. **S/M**
 - **"JR" badge on Just Row sessions**, in the manner of the other type
   chips (James, 2026-09-01 — supersedes the shipped "no type chip on
-  purpose" stance). **A DERIVED display concern, never stored:**
+  purpose" stance). **DESIGNED 2026-09-02 on the unconnected board
+  above: a HOLLOW chip (the CUSTOM tag's treatment, `.free-row-chip`,
+  never `.type-badge`) — a filled ink chip was literally `--type-tr`,
+  ink-3 "still a bit close"; rides the unconnected PR.** **A DERIVED
+  display concern, never stored:**
   `isFreeRow(workoutId, workoutType)` is load-bearing three times (the
   server's plan refusal, its empty-`steps` allowance, the absent badge),
   so `"JR"` can never live in `workout_type`. Visual precedent exists —
