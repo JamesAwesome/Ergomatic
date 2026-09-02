@@ -12487,7 +12487,7 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
     // against `lastResumeAtMsRef`, captured in its own `act()` with no
     // `vi.advanceTimersByTime` call, hence unlagged): the pause-closing
     // frame (the 4th stall tick) is read at resume+3×40ms, not +4×40ms.
-    expect(declared[0]!.detail).toContain("sinceResumeMs=120");
+    expect(declared[0]!.detail).toMatch(/sinceResumeMs=120$/);
   });
 
   /** A hand-advanced ms clock for `MonitorSessionDeps.now` — decoupled from

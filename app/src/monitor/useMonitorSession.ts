@@ -1880,9 +1880,10 @@ export function useMonitorSession(
    *  at `PAUSED_FRAME_HOLD` on every rowing frame, reset to `[]` on every
    *  non-rowing one (`frame.state !== "rowing" || frame.distanceMeters <=
    *  0`), so the instant `freeze.frames` first reaches the hold, this
-   *  window holds exactly that frozen run's own arrivals — no other reset
-   *  is needed to keep the two in lockstep, because a fresh window empties
-   *  on the same frame `nextFreezeRun`'s own key discards. `pause-declared`
+   *  window holds exactly that frozen run's own arrivals — see the append
+   *  site's own comment in `handleFrame` for what actually guarantees this
+   *  (the append count and the window cap, NOT the mirrored non-rowing
+   *  reset, which is defensive). `pause-declared`
    *  reads it to log `gapsMs`, the inter-arrival gaps between those frames.
    *  LIFETIME (own table, §3 timing addendum): cleared (to `[]`) at
    *  `connect()`, at each of the three per-run reset sites
@@ -1896,7 +1897,7 @@ export function useMonitorSession(
    *  first resume since the run began. `pause-declared` reads it to log
    *  `sinceResumeMs` (the elapsed ms since that edge, or `"none"` while
    *  still `null`) — never read by any predicate (I3). PER-RUN, not
-   *  per-session: cleared (to `null`) at the same four sites
+   *  per-session: cleared (to `null`) at the same five sites
    *  `frameArrivalsRef` is — `connect()`, the three per-run resets
    *  (`program()`/`beginFreeRow()`'s fresh arms, the RC-37
    *  programDropped/ready exit), and `teardown()` — survives neither
@@ -3098,16 +3099,21 @@ export function useMonitorSession(
         // it (I3): reads `frame`/`nowDate()` only, never
         // `freeze`/`wasPaused`/`nowPaused`.
         //
-        // THE REAL GUARANTEE is a numeric relation, not a synchronised
-        // reset: `PULL_EVIDENCE_FRAMES` (5) > `PAUSED_FRAME_HOLD` (4) forces
-        // at least 7 live-branch appends to accumulate before ANY
-        // declaration (5 strictly-increasing pull frames, the last of which
-        // is also the freeze run's own first frame, plus 3 more identical
-        // frames to reach the hold) — so by the time a declaration is
-        // possible, this window (capped at the last `PAUSED_FRAME_HOLD`
-        // entries) is always fully refreshed with the DECLARING run's own
-        // frames, whether or not the branch below ever resets it. The
-        // ready→live transition frame is a separate case, not this one: it
+        // THE REAL GUARANTEE is structural, not a synchronised reset:
+        // (i) every frame that increments `freeze.frames` appends here, in
+        // this same straight-line block with nothing between; (ii) the
+        // window cap IS `PAUSED_FRAME_HOLD`; (iii) a declaration fires on
+        // the frame `frames` first reaches the hold, and `pulled` cannot
+        // flip mid-run (an identical frame resets the pull streak, so it is
+        // already true or never becomes true during a frozen run). So the
+        // last HOLD entries at a declaration are the DECLARING run's own
+        // frames whether or not the branch below ever resets. Corroboration
+        // by count: `PULL_EVIDENCE_FRAMES` (5) > `PAUSED_FRAME_HOLD` (4)
+        // means at least 7 appends precede any declaration (5 strictly-
+        // increasing pull frames, the last doubling as the run's first,
+        // plus 3 identical frames = 8; 7 in the tight case where the first
+        // pull frame is the ready→live seed, which is never appended — see
+        // below). The ready→live transition frame is a separate case: it
         // seeds `freezeRef` via `nextFreezeRun(null, frame)` in the `ready`
         // branch above and returns before reaching here, so it is never
         // appended — harmless, since `pulled` is unconditionally `false` on
