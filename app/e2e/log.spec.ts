@@ -74,7 +74,13 @@ async function postLog(
     distanceMeters?: number | null;
     timeSeconds?: number | null;
     notes?: string | null;
-    steps?: { label: string; actualSource?: string }[];
+    // `actualSeconds` added by door PR A Task 7: `measuredElapsedSeconds`
+    // (`src/log/storedSummary.ts`) counts a `pm5` step as MEASURED only when
+    // `actualSeconds` is present and at/above `MIN_MEASURABLE_ELAPSED_SECONDS`
+    // (1). A step carrying `actualSource: "pm5"` and nothing else is NOT
+    // measured, so the `N of M intervals measured` suffix cannot be seeded
+    // through this helper without the field.
+    steps?: { label: string; actualSource?: string; actualSeconds?: number }[];
     advancesPlan?: boolean;
     // The workout this log LINKS TO. Defaults to null below, which is
     // what every caller in this file used before the plan row started
@@ -318,6 +324,199 @@ test("a stopped connected session wears its chip in History, over a REAL list re
     "AVG 1:58.0 · 6,200 m",
   );
   await expect(finished.locator(".log-partial-chip")).toHaveCount(0);
+});
+
+// Door spec (2026-09-02) §1.2/§1.3, THROUGH THE REAL STACK. The unit suite
+// (`storedSummary.test.ts`) proves the predicate and the sentence over
+// hand-built rows; `FromTheLog.test.tsx` proves the slot over an intercepted
+// body. Neither proves that a row POSTed to the real route, stored in real
+// Postgres and re-read through `GET /api/logs/:id` still satisfies all four
+// clauses — `steps` round-trips through JSONB, and `actualSource`/
+// `actualSeconds` are exactly the fields clause 3 and `N` read.
+test("a stopped connected row reads STOPPED EARLY with its measured count on the detail screen, over a REAL stored row", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `log-partial-detail-${RUN_ID}@e2e.test`,
+    name: "Log Partial Detail",
+  });
+
+  // Five intervals, two of them genuinely MEASURED (`actualSource: "pm5"`
+  // WITH an `actualSeconds` at/above the 1s floor — `actualSource` alone
+  // does not count, which is the distinction `N` exists to make). The
+  // remaining three carry no `actualSource` at all, which is clause 3's
+  // own "never reached" shape and what guarantees N < M.
+  const { id } = await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    steps: [
+      { label: "Work 1", actualSource: "pm5", actualSeconds: 480 },
+      { label: "Work 2", actualSource: "pm5", actualSeconds: 472 },
+      { label: "Work 3" },
+      { label: "Work 4" },
+      { label: "Work 5" },
+    ],
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+
+  await page.goto(`/today/log/${id}`);
+  await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+
+  // Gate 0-A slot A: the marker line, ABOVE the heroes. `.summary-meta` is
+  // the class the header's own secondary line uses, so this locator matches
+  // the date/source line too — scoped by text, then positioned by index
+  // against the heroes block below.
+  const marker = page.locator("p.summary-meta", {
+    hasText: "STOPPED EARLY",
+  });
+  await expect(marker).toHaveText("STOPPED EARLY · 2 of 5 intervals measured");
+  // ABOVE the heroes, not beneath: `Node.DOCUMENT_POSITION_FOLLOWING` (4) is
+  // set when the heroes block comes AFTER the marker in document order.
+  const markerPrecedesHeroes = await page.evaluate(() => {
+    const m = [...document.querySelectorAll("p.summary-meta")].find((el) =>
+      el.textContent?.includes("STOPPED EARLY"),
+    );
+    const heroes = document.querySelector(".summary-heroes-block");
+    if (m === undefined || heroes === null) return null;
+    return (m.compareDocumentPosition(heroes) & 4) !== 0;
+  });
+  expect(markerPrecedesHeroes).toBe(true);
+
+  // RF7 in test form: the heroes are real numbers, not fallback dashes, so
+  // the marker is qualifying something the rower can actually read.
+  await expect(page.locator(".summary-hero-value").first()).toHaveText(
+    "2:04.5",
+  );
+});
+
+// Door spec §1.2: `link-lost` keeps its OWN ungated, steps-independent
+// trigger. This row has EVERY step measured, so the PARTIAL predicate
+// EXCLUDES it (clause 3) — and the sentence must still render, without the
+// `N of M` suffix. The regression this guards is a "subsumed" marker: had
+// the four new words simply replaced the link-lost line, this row would
+// have gone silent, and no unit test seeded through the real route would
+// have said so.
+test("a link-lost row with every interval measured keeps its ungated LINK LOST line and gains NO measured count", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `log-linklost-detail-${RUN_ID}@e2e.test`,
+    name: "Log Link Lost Detail",
+  });
+
+  const { id } = await postLog(page, {
+    workoutTitle: "Occluded Front",
+    workoutType: "AT",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "link-lost",
+    steps: [
+      { label: "Work 1", actualSource: "pm5", actualSeconds: 600 },
+      { label: "Work 2", actualSource: "pm5", actualSeconds: 598 },
+    ],
+    avgSplitSeconds: 118,
+    distanceMeters: 6200,
+  });
+
+  await page.goto(`/today/log/${id}`);
+  await expect(
+    page.getByRole("heading", { name: "Occluded Front" }),
+  ).toBeVisible();
+
+  // Gate 0-A decision (a): the shortened literal, exactly — the trailing
+  // "before the end" clause went so the combined PARTIAL line fits.
+  await expect(
+    page.locator("p.summary-meta", { hasText: "LINK LOST" }),
+  ).toHaveText("LINK LOST · the app lost the monitor");
+  // And NOT the partial suffix: this row is not partial, and the count
+  // would be `2 of 2` — the reading clause 3 exists to make impossible.
+  await expect(page.getByText("intervals measured")).toHaveCount(0);
+});
+
+// THE `no-reading` SEAM, START TO FINISH (RF24). Every other gate on
+// `no-reading` in this PR enters the pipe DOWNSTREAM of the thing that
+// decides it: `LogSession.test.tsx` reads an intercepted body,
+// `storedSummary.test.ts` builds a row by hand, and the integration legs
+// POST an explicit `source`. The producer is `connectedNoRecord` — a
+// MOUNT-TIME `useState` snapshot (`LogSession.tsx:1620-1622`) of
+// `connectedArrivalWithNoRecord(searchParams)` (`:388-390`) — and a
+// mount-time snapshot that never re-reads is precisely the shape RF24's
+// measured defect had. This leg starts UPSTREAM of it: a real arrival at
+// the real URL with an EMPTY handoff store, a real Save, and the stored
+// row read back through the real detail screen.
+test("a connected arrival with no reading saves as no-reading and reads NO MONITOR READING, with a wall-clock time, from the log", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `log-noreading-${RUN_ID}@e2e.test`,
+    name: "Log No Reading",
+  });
+
+  // BASELINES FIRST. Without them `LogSession.tsx:2107` short-circuits the
+  // whole manual door to the "Set baselines" stub for any workout whose
+  // steps resolve against a pace reference (`needsBaselines`), and the form
+  // this leg needs never renders. Measured: the first run of this leg met
+  // `Log <title>` from that stub instead of the summary.
+  await setBaselines(page, { k2Seconds: 105, k6Seconds: 115 });
+
+  // A real, seeded library workout — the same "read the id off the detail
+  // URL" idiom `session.spec.ts:1526-1529` uses for its own forced
+  // fallthrough to this door.
+  await page.goto("/library");
+  await page.locator(".workout-row").first().click();
+  await expect(page.locator("h1.workout-detail-title")).toBeVisible();
+  const title = await page.locator("h1.workout-detail-title").textContent();
+  const workoutId = page.url().match(/\/library\/([^/]+)$/)?.[1];
+  expect(workoutId).toBeTruthy();
+
+  // THE EMPTY HANDOFF STORE is the whole premise: a fresh account has never
+  // run a connected session, so `readHandoff()` is null and
+  // `connectedArrivalWithNoRecord` is true on this exact URL. The key is
+  // `MONITOR_RUN_KEY` verbatim (`src/monitor/monitorRun.ts:28`) — the one
+  // slot `handoffStore` reads (`handoffStore.ts:455`).
+  expect(
+    await page.evaluate(() =>
+      window.localStorage.getItem("ergomatic.monitorRun"),
+    ),
+  ).toBeNull();
+  await page.goto(`/library/${workoutId}/log?from=monitor`);
+  // `PostWorkoutSummary`'s own bare title (`:261`) — NOT the
+  // `Log <title>` of the baseline stub above, so this assertion is also
+  // what proves the summary form is what rendered.
+  await expect(page.locator("h1.screen-title")).toHaveText(title!);
+  // The LIVE screen's own word, from `summaryModel.ts`'s
+  // `NO_MONITOR_READING_SOURCE` — the half this seam's stored arm must
+  // equal. Also the observable that proves `connectedNoRecord` really is
+  // true on this mount, before anything is saved.
+  await expect(page.locator("p.summary-meta")).toContainText(
+    "NO MONITOR READING",
+  );
+
+  // Fill and Save — the manual door's own idiom (`connected.spec.ts`'s own
+  // fill block). No plan is active on a fresh account, so
+  // `Save without logging` leads alone.
+  await page.getByRole("button", { name: "HELD" }).click();
+  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Save without logging" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+
+  // OPENED FROM THE LOG — the row the producer wrote, re-read through the
+  // real list and the real detail route.
+  await page.goto("/today/log");
+  await page.locator(".today-log-row").first().click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+
+  // §2.1: the stored word, not `LOGGED BY HAND`. §2.3: WITH a wall-clock
+  // time — the positive allowlist's own member, and the half a hand-built
+  // row can never prove reached storage. `manual` renders `DATE · WORD`;
+  // this row must render `DATE · H:MM · NO MONITOR READING`.
+  await expect(page.locator("p.summary-meta").first()).toHaveText(
+    /^[A-Z]{3} \d{1,2} · \d{1,2}:\d{2} · NO MONITOR READING$/,
+  );
 });
 
 test("a fresh account sees the exact empty-state string on /today/log", async ({
