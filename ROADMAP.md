@@ -193,6 +193,11 @@ slate.
   stops being "sends no bytes" and gains a reject path and an ack gate;
   carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
   `OBJ_WORKOUTTYPE_T` entry). One driver change plus one walk leg. **M**
+  **RE-CONFIRMED by James, 2026-09-02 ("i do want item 2"), after using the
+  ready fix: build it. Its own PR (wire semantics + a walk leg), after the
+  Timer-mode design pass. Ground already in the repo: the 08-31 walk's
+  OPEN 5, the p.80 JustRow frame at `docs/monitor/pm5-interface-notes.md:204`,
+  RC-38 rides with it.**
 - **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
   infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
   James ruled TIME ONLY; Gate 0 PASSED on rev 2e
@@ -259,7 +264,8 @@ slate.
   two screens. For a phase whose promise is "the machine's own numbers
   land in your log", showing a figure the erg never displays deserves a
   line at the next design pass. **XS**
-- [ ] **`source` derive-when-absent SUNSET — trigger: v0.35.0, the tag
+- [x] **`source` derive-when-absent SUNSET — DONE in the v0.35.0 PR
+      (2026-09-02); trigger was v0.35.0, the tag
       AFTER the one that ships #268 (v0.34.0, shipped 2026-09-02). NOT
       v0.34.0: firing it on the tag that introduces the field 400s every
       save from every build still installed. DELIBERATE CO-TAG (#272's PM

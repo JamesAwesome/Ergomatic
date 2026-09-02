@@ -5,6 +5,21 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.35.0 (2026-09-02): range v0.34.0..main = #272 (substitution) plus
+    // this PR (the `source` sunset + these notes), accounted per RF15
+    // (`git log v0.34.0..origin/main --oneline`). Item 1 is #272 and
+    // carries the sentence ROADMAP owed, retiring v0.32.0's "A Just Row
+    // never advances your plan". Item 2 is the sunset: the one API break
+    // in this tag, said plainly for anyone still on a build before 0.34 —
+    // it is not a feature and it is not hidden.
+    version: "v0.35.0",
+    date: "2026-09-02",
+    items: [
+      "A Just Row can now stand in for a plan session. On a plan day the Just Row log door offers Log against plan, SESSION n OF 84 moves on, and the Plan tab marks the row INSTEAD OF whatever was asked for. v0.32.0 said a Just Row never advances your plan; now it can, when you say so, and never otherwise.",
+      "If you are still on a build before 0.34, update: from this release the server refuses a save that does not say which door it came in by, which those builds cannot say. Builds 0.34 and later are unaffected.",
+    ],
+  },
+  {
     // v0.34.0 (2026-09-02): range v0.33.0..main = 8 commits, accounted per
     // RF15 (`git log v0.33.0..origin/main --oneline`, no --merges). Noted:
     // #268 (items 1 and 2, the phone-timed Just Row and the JR chip — and
