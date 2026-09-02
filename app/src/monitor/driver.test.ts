@@ -56,7 +56,6 @@ import {
   computeIntervalAccrued,
   computeIntervalRemaining,
   createPm5Driver,
-  NAMELESS_MONITOR_CAPTION,
   ProgramBusyError,
   ProgramRejectionError,
   restPairComplete,
@@ -656,14 +655,17 @@ describe("createPm5Driver: capabilities", () => {
       canProgram: true,
       hasStrokeRate: true,
       reportsIntervals: true,
-      deviceName: NAMELESS_MONITOR_CAPTION,
+      // RF21 first corollary (fix round 1): pinned with the independent
+      // literal, not the imported production symbol — a retune of
+      // NAMELESS_MONITOR_CAPTION's own value must not retune this pin.
+      deviceName: "MONITOR",
     });
   });
 
   // The realistic fixture (briefing: "at least one test per client task
   // starts from a real library workout"): Sea Fret, the same compiled
   // program `seaFretProgram()` builds for the busy-error tests below.
-  it("carries the picked device's own name (options.deviceName) in capabilities — never the placeholder — when one was provided (today: always reports the 'MONITOR' placeholder, ignoring any name given)", () => {
+  it("carries the picked device's own name (options.deviceName) in capabilities — never the placeholder — when one was provided", () => {
     const { driver } = harness(
       { program: seaFretProgram() },
       { deviceName: "PM5 432331249" },

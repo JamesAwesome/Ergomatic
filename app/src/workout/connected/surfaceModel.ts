@@ -1885,11 +1885,24 @@ export function splitHero(display: string): [string, string] {
  *  named follow-on (design spec §C5 — "7B ships lose-and-degrade"), so the
  *  caption states the fact, `LOST`, and promises nothing.
  *
- *  RC-18 (door spec §3): REACHABLE, unlike `JustRow.tsx`'s own caption —
- *  `ConnectedSurface.tsx` calls this every render, including before the
- *  picker has resolved (`session.deviceName` is `null` in `INITIAL_STATE`),
- *  so `NAMELESS_MONITOR_CAPTION` genuinely surfaces here, not only as a
- *  hypothetical caller-bug fallback. */
+ *  RC-18 (door spec §3, fix round 1 — an earlier pass here wrongly called
+ *  this REACHABLE): DEAD, same class as `JustRow.tsx`'s own caption.
+ *  `buildSurfaceModel`'s only production caller is `ConnectedSurface.tsx`
+ *  (`:625`), and BOTH of ConnectedSurface's own callers gate its render
+ *  behind a phase where `deviceName` is never null:
+ *  `ConnectedInterstitial.tsx`'s phase gate renders it from `"ready"`
+ *  onward (`:773`), and `JustRow.tsx`'s own gate is
+ *  `axes.session !== "none" || (showNumbers && axes.program === "armed")`
+ *  (`:183`). `deriveSession`/`deriveProgram` (`connectedAxes.ts:215-253`)
+ *  return `"none"`/not-`"armed"` for every phase that nulls `deviceName`
+ *  (`idle` in `INITIAL_STATE`, `picking`, `failed` —
+ *  `useMonitorSession.ts:1496`/`:4312`/`:4394`); `disconnected` retains
+ *  whatever name was already there. So the `INITIAL_STATE` null this
+ *  fallback guards against never reaches a real render — the pre-existing
+ *  comment above the retargeted `surfaceModel.test.ts` leg already called
+ *  this "a caller bug" before RC-18 touched the file, and that leg still
+ *  pins the pure function's own total behavior (a `deviceName: null` input
+ *  it must still handle), not a reachable production render. */
 function deviceCaptionFor(
   deviceName: string | null,
   linkLost: boolean,

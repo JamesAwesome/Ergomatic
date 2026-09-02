@@ -38,7 +38,6 @@ import {
 } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder";
 import type { MonitorLogEntry } from "../monitor/eventLog";
-import { NAMELESS_MONITOR_CAPTION } from "../monitor/driver";
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
@@ -3938,7 +3937,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     // reads the neutral caption rather than lying `manual` about a row the
     // monitor produced (#273's interim fix, superseded by this test).
     expect(body.source).toBe("pm5");
-    expect(body.deviceName).toBe(NAMELESS_MONITOR_CAPTION);
+    expect(body.deviceName).toBe("MONITOR");
   });
 
   it("a >64-char deviceName is substituted with MONITOR too, and the pm5 door survives (Door PR A, step 6)", async () => {
@@ -3968,20 +3967,26 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     const body = parsedBodies(apiFn)[0]!;
     expect(body.source).toBe("pm5");
-    expect(body.deviceName).toBe(NAMELESS_MONITOR_CAPTION);
+    expect(body.deviceName).toBe("MONITOR");
   });
 
-  // The `pm5` narrowing's own gate (RC-18 mutation M5.5): the guard above
-  // substitutes `NAMELESS_MONITOR_CAPTION` ONLY when `body.source === "pm5"`
-  // — a REAL, reachable timer save never has a `deviceName` key to begin
-  // with (`handleSave`'s own `submit()` call never sets one), so this test
-  // does not fake an unreachable state; it pins what the timer door's own
-  // real body already looks like. Mutating the narrowing away (substitute
-  // unconditionally, on every door) makes this leg the one that catches
-  // it: the timer body would gain a `deviceName` the biconditional forbids
-  // (`server/logSource.ts`), and no other client test notices, since none
-  // asserts this door's body lacks the key.
-  it("the timer door's save never attaches a deviceName (the pm5 narrowing's own gate)", async () => {
+  // RC-18 mutation M5.5, fix round 1 (an earlier title here overclaimed
+  // "the pm5 narrowing's own gate"): the `pm5` narrowing is DEAD by
+  // construction — no other door's `submit()` call ever sets
+  // `fields.deviceName` (`handleSave`'s own call never does), so the
+  // guard's outer `typeof body.deviceName === "string"` check already
+  // can only be true when `source === "pm5"`, with or without the inner
+  // narrowing. Measured (M5.5): removing ONLY the narrowing (substitute
+  // unconditionally, outer check kept) left the full client suite green —
+  // this leg included, since a timer body never reaches the guard at all.
+  // Only replacing the WHOLE guard, outer check included, made this leg
+  // red. What this pins instead is the REAL, reachable fact: the timer
+  // door's own save body never carries a `deviceName` key
+  // (`handleSave`'s `submit()` call, `:1447`). The narrowing's actual
+  // backstop, if a future door ever does attach a name, is
+  // `server/logSource.test.ts`'s pre-existing "timer with a deviceName is
+  // refused" test — independent of this file, unaffected by this PR.
+  it("the timer door's save never attaches a deviceName", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     mockBaselines();
@@ -4012,9 +4017,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect("deviceName" in body).toBe(false);
   });
 
-  // Same gate, the manual door's own real body (`handleManualSave`'s
-  // `submit()` call, `:2144`, never sets `deviceName` either).
-  it("the manual door's save never attaches a deviceName (the pm5 narrowing's own gate)", async () => {
+  // Same fact, the manual door's own real body (`:2144`'s `submit()` call
+  // never sets `deviceName` either) — see the timer-door leg above for
+  // what was actually measured about the narrowing.
+  it("the manual door's save never attaches a deviceName", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();

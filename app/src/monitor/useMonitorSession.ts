@@ -1097,14 +1097,20 @@ export interface MonitorSessionDeps {
   burstLingerSchedule?: (cb: () => void, ms: number) => () => void;
   /** Passed to `createPm5Driver`. `deviceName` is NOT accepted here — it
    *  comes from the picker result, never from a caller's guess. Spec I5's
-   *  own "no screen ever renders the placeholder" ruling does NOT hold as
-   *  written: `surfaceModel.ts`'s `deviceCaptionFor` DOES reach it —
-   *  `ConnectedSurface.tsx` renders across every phase, including before
-   *  the picker resolves, unlike `JustRow.tsx`'s caption, which is gated
-   *  behind `ready` and never sees a null name (RC-18, verified by reading
-   *  every `beginFreeRow` call site). RC-18's fix is what makes I5's INTENT
-   *  true rather than its letter: the literal is `NAMELESS_MONITOR_CAPTION`
-   *  (`"MONITOR"`), not the invented `"PM5"` this comment used to name. */
+   *  own "no screen ever renders the placeholder" ruling HOLDS as written
+   *  (fix round 1 — an earlier pass here wrongly claimed `surfaceModel.ts`'s
+   *  `deviceCaptionFor` was an exception): `ConnectedSurface.tsx`'s only
+   *  two callers both gate its render behind a phase where `deviceName` is
+   *  never null (`ConnectedInterstitial.tsx`'s phase gate, `"ready"`
+   *  onward; `JustRow.tsx`'s own `session !== "none" || (showNumbers &&
+   *  armed)` gate), so neither caption ever paints the placeholder in
+   *  production — see `deviceCaptionFor`'s own comment
+   *  (`surfaceModel.ts`) for the full reachability argument. RC-18's
+   *  rename is consistency work, not a reachable-violation fix: the
+   *  literal both fallbacks carry is `NAMELESS_MONITOR_CAPTION`
+   *  (`"MONITOR"`), not the invented `"PM5"` this comment used to name,
+   *  kept only so a future caller that DOES reach either fallback (a bug,
+   *  per I5) never invents a brand name doing it. */
   driverOptions?: Omit<DriverOptions, "deviceName">;
 }
 
