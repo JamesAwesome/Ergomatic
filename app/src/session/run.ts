@@ -172,13 +172,15 @@ function isSessionRun(value: unknown): value is Omit<SessionRun, "mode"> & {
  *    from here — a cycle, and one that would drag the monitor tree into
  *    every phone-timer screen.
  *
- *  The clear therefore lives at the one point a rower actually commits to a
+ *  The clear therefore lives at the points a rower actually commits to a
  *  phone-timer session — `session/useStartWorkout.ts`'s `confirmReplace`
  *  (Phase 6I Task 4: extracted from WorkoutDetail's own former
  *  `startSession`, its one caller), on the line after its own `clearRun()`
  *  call and downstream of the staged confirm `handleStart` puts in front of
- *  it. Same shape, same reason, same place as the 6B F5 fix that put
- *  `clearRun()` there. */
+ *  it, and the Just Row door's own Start Timer (`justrow/JustRow.tsx`,
+ *  spec 2026-09-02), which retires the stale record on the line after a
+ *  SUCCESSFUL `saveRun` and behind the same staged confirm. Same shape,
+ *  same reason, same place as the 6B F5 fix that put `clearRun()` there. */
 export function saveRun(r: SessionRun): boolean {
   try {
     localStorage.setItem(RUN_KEY, JSON.stringify(r));

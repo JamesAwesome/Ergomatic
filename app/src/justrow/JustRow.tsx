@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConnectAction from "../monitor/ConnectAction";
+import {
+  connectGuardStage,
+  type ConnectGuardStage,
+} from "../monitor/monitorRun";
+import {
+  currentUnretired as currentUnretiredHandoff,
+  retire as retireHandoff,
+} from "../monitor/handoffStore";
+import { buildFreeRowRun } from "../session/engine";
+import { saveRun } from "../session/run";
 // Review #1, finding 4: the keep-awake lock. The programmed flow acquires
 // it in ConnectedInterstitial's mount effect; this screen bypasses that
 // component entirely, and without its own acquire the phone sleeps mid-row
@@ -25,18 +35,22 @@ import { freeRowTotals } from "./totals";
  * estimate, no duration, no steps. What is left is the chip, the title, one
  * line saying what this is, and Connect.
  *
- * **ONE action, and its absences are rulings rather than omissions.** No
- * Start Timer and no "log it after": ruling 2 makes this phase
- * connected-only, so a door offering a phone-timer path would promise
- * something the phase deliberately does not build.
+ * **Two actions, in the detail's own order: Connect, then Start Timer**
+ * (Just Row without the monitor, spec 2026-09-02, §Mechanism piece 2 —
+ * the reversal of Phase JR's connected-only ruling 2, and the detail's own
+ * outlined second action in the same slot under Connect). Still no "log it
+ * after": a free row has nothing to log by hand. The absence is a ruling,
+ * not an omission.
  *
- * **The guard in front of Connect is load-bearing.** `ConnectAction` stages
- * a confirm whenever an unlogged phone-timer session or an unretired monitor
- * record is on disk, because `createMonitorRun`'s `clearRun()` destroys the
- * former unconditionally the moment the rower starts pulling. Reusing that
- * component rather than calling `connect()` here is what makes this door
- * keep the same promise the workout screen does — the F5 data-loss class,
- * and this phase's exit criterion 6.
+ * **The guard in front of BOTH actions is load-bearing.** `ConnectAction`
+ * stages a confirm whenever an unlogged phone-timer session or an unretired
+ * monitor record is on disk, because `createMonitorRun`'s `clearRun()`
+ * destroys the former unconditionally the moment the rower starts pulling.
+ * Reusing that component rather than calling `connect()` here is what
+ * makes this door keep the same promise the workout screen does — the F5
+ * data-loss class, and this phase's exit criterion 6. `StartTimerAction`
+ * below asks the SAME predicate (`connectGuardStage`) before it overwrites
+ * `RUN_KEY`, for the same reason, in the other direction.
  */
 export default function JustRow() {
   const navigate = useNavigate();
@@ -136,9 +150,9 @@ export default function JustRow() {
           <FreeRowChip workoutId={null} workoutType={null} />
         </div>
         <h1 className="screen-title">Just Row</h1>
-        <p className="justrow-meta">
-          NO TARGETS &middot; NO PLAN &middot; NEEDS THE MONITOR
-        </p>
+        {/* `NEEDS THE MONITOR` left this line the day Start Timer arrived
+            (handoff 2026-09-02: "no longer true; no new words"). */}
+        <p className="justrow-meta">NO TARGETS &middot; NO PLAN</p>
 
         {/* The workout detail's own preview band, carrying the two facts a
             rower cannot get anywhere else: the machine keeps its own clock,
@@ -153,6 +167,7 @@ export default function JustRow() {
 
         <div className="action-stack">
           <ConnectAction onProceed={handleProceed} />
+          <StartTimerAction />
         </div>
       </main>
     );
@@ -327,5 +342,104 @@ export default function JustRow() {
         </button>
       </div>
     </main>
+  );
+}
+
+/**
+ * Start Timer — the unconnected free row (spec 2026-09-02, §Mechanism
+ * piece 2; exit criteria 1 and 6).
+ *
+ * **The guard is Connect's own predicate, `connectGuardStage`, with the
+ * detail's own Start Timer panel in front of it.** The predicate is what
+ * the coexistence guard IS — an unlogged or live `SessionRun` and an
+ * unretired `MonitorRun` both stage, in the same severity order Connect
+ * uses — and it is shared as a function so the two doors can never
+ * disagree about what is on disk. The PANEL is `WorkoutDetail`'s Start
+ * Timer one, not `ConnectAction`'s: its sentence names the press
+ * ("Starting a new one discards it", "Replace session"), and putting
+ * Connect's "Connecting discards it" / "Connect anyway" under a Start Timer
+ * press would promise a connection the button does not make. No
+ * `stageRetire` on the hand-off store either — that authorization is
+ * consumed by `useMonitorSession`'s "armed" event, which a timer never
+ * reaches, so staging it here would leave a live authorization for some
+ * later, unrelated Connect press to inherit (`ConnectAction`'s own F-3).
+ *
+ * **On proceed, in this order:** `saveRun(buildFreeRowRun(now))` FIRST —
+ * it overwrites `RUN_KEY`, which is the destruction the confirm authorised
+ * — then, only once that write succeeded, retire any stale monitor record
+ * the same way `useStartWorkout.confirmReplace` does (`"start-replace"`),
+ * then `/session/run`. The Countdown is skipped: it exists to set targets,
+ * and there are none. A failed write (`saveRun` returns false — quota,
+ * private-mode Safari) says so inline and destroys nothing (RF25: the
+ * caller of a boolean-returning persist branches on it); navigating to a
+ * Timer with nothing behind it would bounce to Today with no word.
+ *
+ * Retiring the monitor record on proceed is what keeps the log door's
+ * both-records case (exit criterion 7c) a VIOLATED invariant rather than a
+ * designed one: the rower has just been told the stale session is
+ * discarded, and a record left behind would surface beside the finished
+ * timer run at `/justrow/log`.
+ */
+function StartTimerAction() {
+  const navigate = useNavigate();
+  const [stage, setStage] = useState<ConnectGuardStage>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  function proceed() {
+    if (!saveRun(buildFreeRowRun(new Date()))) {
+      setStage(null);
+      setStartError("Couldn't start this session. Try again.");
+      return;
+    }
+    const stale = currentUnretiredHandoff();
+    if (stale !== null) {
+      retireHandoff(
+        [{ sessionKey: stale.sessionKey, revision: stale.revision }],
+        "start-replace",
+      );
+    }
+    void navigate("/session/run");
+  }
+
+  function handleStart() {
+    const staged = connectGuardStage(currentUnretiredHandoff() !== null);
+    if (staged !== null) {
+      setStage(staged);
+      return;
+    }
+    proceed();
+  }
+
+  if (stage !== null) {
+    return (
+      <div className="baseline-confirm">
+        <p className="baseline-confirm-line">
+          {stage === "unlogged"
+            ? "You have an unlogged session. Starting a new one discards it."
+            : "A session is in progress. Replace it?"}
+        </p>
+        <div className="baseline-actions">
+          <button
+            type="button"
+            className="button-outline"
+            onClick={() => setStage(null)}
+          >
+            Cancel
+          </button>
+          <button type="button" className="button-primary" onClick={proceed}>
+            Replace session
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <button type="button" className="button-l2" onClick={handleStart}>
+        Start Timer
+      </button>
+      {startError !== null && <p className="baseline-error">{startError}</p>}
+    </>
   );
 }

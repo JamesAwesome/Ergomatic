@@ -46,6 +46,7 @@ import {
 } from "../monitor/handoffStore";
 import type { SeriesData } from "../monitor/seriesRecorder";
 import type { MonitorLogEntry } from "../monitor/eventLog";
+import { LOG_DOOR_MISS_KEY, recordLogDoorMiss } from "./logDoorDiagnostics";
 import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import PostWorkoutSummary, { singleTargetHint } from "./PostWorkoutSummary";
@@ -238,62 +239,10 @@ function manualLockedBaseline(
     : null;
 }
 
-// Task 1 (lost-monitor design spec): mirrors `recordPostSacrifice`'s own
-// append idiom (below, module scope), recording WHICH gate a `from=monitor`
-// arrival missed on. Best-effort and silent on any failure (missing or
-// malformed stash, localStorage disabled) — diagnostics never block this
-// screen's render.
-//
-// **ITS OWN KEY, AND THE PREMISE THAT SENT IT SOMEWHERE ELSE WAS FALSE**
-// (fix round, whole-branch review MEDIUM). Task 1 appended these entries
-// straight onto `ergomatic:last-session-log`, on the stated premise that a
-// `from=monitor` arrival "just finished tearing down the connected session
-// that sent it here, so this key is very likely to already hold that
-// session's own exported ring". It does not — it holds the PREVIOUS
-// session's ring, and it is about to be overwritten:
-//
-//  - this append runs during `ManualDoorLog`'s RENDER (a lazy `useState`
-//    initializer, below), and
-//  - `useMonitorSession.ts`'s `teardown` is a PASSIVE effect cleanup
-//    (`useEffect(() => teardown, [teardown])`) whose stash does a full
-//    `localStorage.setItem` of that same key.
-//
-// React runs the new route's render before the old subtree's passive
-// unmount, so on the flagship `?from=monitor` arrival the entry was written
-// and clobbered milliseconds later — destroyed on the one path it was built
-// for, with every unit test green because they called `monitorModeRun`
-// directly and never navigated.
-//
-// A separate key, rather than teaching `teardown` to merge: the two writers
-// are on opposite sides of a navigation, neither can see the other's
-// timing, and a merge would have to distinguish "entries from the session
-// I am closing" from "entries from the session before it" using data
-// neither side carries. The single-artifact intent survives in the READ:
-// `readMonitorLogStash` merges the misses onto the ring, so `MONITOR LOG ·
-// COPY` still yields one story in one paste.
-const LOG_DOOR_MISS_KEY = "ergomatic:log-door-misses";
-const LOG_DOOR_MISS_CAPACITY = 500;
-
-function recordLogDoorMiss(condition: string): void {
-  try {
-    const raw = localStorage.getItem(LOG_DOOR_MISS_KEY);
-    let entries = raw !== null ? (JSON.parse(raw) as MonitorLogEntry[]) : [];
-    const nextSeq =
-      entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
-    entries.push({
-      seq: nextSeq,
-      atMs: Date.now(),
-      kind: "log-door-miss",
-      detail: condition,
-    });
-    if (entries.length > LOG_DOOR_MISS_CAPACITY) {
-      entries = entries.slice(entries.length - LOG_DOOR_MISS_CAPACITY);
-    }
-    localStorage.setItem(LOG_DOOR_MISS_KEY, JSON.stringify(entries));
-  } catch {
-    // Best-effort diagnostics; never block or complicate this screen's render.
-  }
-}
+// The log doors' diagnostics side-channel — `recordLogDoorMiss`, the key
+// and its capacity — lives in `./logDoorDiagnostics.ts` (moved there when
+// the Just Row door needed to write to it; the full account of WHY it is
+// its own key rather than the session stash travelled with it).
 
 /** The monitor mode gate (7C spec §4) — the manual door's route
  *  (`/library/:id/log`) is ALSO where `WorkoutDetail.tsx`'s

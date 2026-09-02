@@ -1,13 +1,18 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { buildDraft } from "../session/draft";
-import { buildRun } from "../session/engine";
-import { saveRun, type SessionRun } from "../session/run";
-import { resetForTests as resetHandoffStoreForTests } from "../monitor/handoffStore";
+import { buildFreeRowRun, buildRun } from "../session/engine";
+import { RUN_KEY, loadRun, saveRun, type SessionRun } from "../session/run";
+import { createMonitorRun } from "../monitor/monitorRun";
+import {
+  commit as commitHandoff,
+  currentUnretired as currentUnretiredHandoff,
+  resetForTests as resetHandoffStoreForTests,
+} from "../monitor/handoffStore";
 import JustRow from "./JustRow";
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
@@ -58,19 +63,23 @@ describe("JustRow door", () => {
     resetHandoffStoreForTests();
   });
 
-  it("offers Connect and nothing else", () => {
+  it("offers Connect first and Start Timer under it, and no log-it-after", () => {
     renderDoor();
 
-    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
-
-    // THE ABSENCES ARE THE RULING, not an omission. Ruling 2 makes this
-    // phase connected-only, so a door offering a phone-timer path would
-    // promise something the phase deliberately does not build. Asserted
-    // structurally, by name, because "renders one button" would pass a
-    // version that renamed Connect into something else.
+    const connect = screen.getByRole("button", { name: "Connect" });
+    expect(connect).toBeInTheDocument();
+    // Just Row without the monitor (spec 2026-09-02, §Mechanism piece 2;
+    // handoff `Main.dc.html`): the detail's own second action, in the
+    // detail's own outlined L2 shape, in the same slot under Connect.
+    const startTimer = screen.getByRole("button", { name: "Start Timer" });
+    expect(startTimer).toHaveClass("button-l2");
     expect(
-      screen.queryByRole("button", { name: /start timer/i }),
-    ).not.toBeInTheDocument();
+      connect.compareDocumentPosition(startTimer) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Still no log-it-after: a free row has nothing to log by hand. Asserted
+    // by name, because "renders two buttons" would pass a version that
+    // renamed one of them.
     expect(
       screen.queryByRole("button", { name: /log it after/i }),
     ).not.toBeInTheDocument();
@@ -82,9 +91,9 @@ describe("JustRow door", () => {
     expect(
       screen.getByRole("heading", { name: "Just Row" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("NO TARGETS · NO PLAN · NEEDS THE MONITOR"),
-    ).toBeInTheDocument();
+    // The handoff's exact string: `NEEDS THE MONITOR` left the line the day
+    // it stopped being true (spec 2026-09-02, Global Constraints).
+    expect(screen.getByText("NO TARGETS · NO PLAN")).toBeInTheDocument();
     expect(
       screen.getByText(
         /The monitor keeps its own time\. Pull when you are ready/,
@@ -161,6 +170,151 @@ describe("JustRow door", () => {
       await screen.findByRole("heading", { name: "Could not connect" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+});
+
+/**
+ * Start Timer — the unconnected free row (spec 2026-09-02, §Mechanism piece
+ * 2; exit criteria 1 and 6). The door's second action goes through the SAME
+ * coexistence guard Connect's does (`connectGuardStage`, the shared
+ * predicate over both records), because its proceed path OVERWRITES
+ * `RUN_KEY` — a finished-but-unlogged phone-timer session would be gone
+ * without a word. The F5 data-loss class, at the second door.
+ */
+describe("JustRow door: Start Timer", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+    vi.useRealTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function renderDoorWithRoutes() {
+    return render(
+      <MemoryRouter initialEntries={["/justrow"]}>
+        <Routes>
+          <Route path="/justrow" element={<JustRow />} />
+          <Route path="/session/run" element={<p>TIMER ROUTE</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("with nothing on disk, saves a mode: justrow run stamped now and lands on the Timer", async () => {
+    // Date alone is faked so userEvent's own timers keep running.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-02T21:40:00.000Z"));
+    renderDoorWithRoutes();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
+
+    // The Countdown is skipped: it exists to set targets, and there are none.
+    expect(await screen.findByText("TIMER ROUTE")).toBeInTheDocument();
+    const run = loadRun();
+    expect(run).not.toBeNull();
+    expect(run!.mode).toBe("justrow");
+    expect(run!.workoutId).toBeNull();
+    expect(run!.title).toBe("Just Row");
+    expect(run!.completedAt).toBeNull();
+    expect(run!.startedAt).toBe("2026-09-02T21:40:00.000Z");
+    expect(run!.phases).toHaveLength(1);
+    expect(run!.phases[0]!.type).toBe("test");
+    expect(run!.phases[0]!.label).toBe("Just Row");
+  });
+
+  /** EXIT CRITERION 6, first direction: Start Timer over an unlogged run
+   *  stages the confirm; Cancel leaves the record BYTE-IDENTICAL. The
+   *  bytes are compared, not the parsed record — a "same fields" check
+   *  would pass a version that re-serialised (or upgraded) the record on
+   *  the way past. */
+  it("over an unlogged run, stages the Start confirm; Cancel leaves the bytes identical and stays on the door", async () => {
+    saveRun(unloggedTimerSession());
+    const before = localStorage.getItem(RUN_KEY);
+    renderDoorWithRoutes();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
+
+    // The detail's own Start Timer sentence — the verb names THIS press.
+    expect(
+      screen.getByText(
+        "You have an unlogged session. Starting a new one discards it.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Replace session" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("TIMER ROUTE")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(localStorage.getItem(RUN_KEY)).toBe(before);
+    expect(screen.getByRole("button", { name: "Start Timer" })).toBeVisible();
+    expect(screen.queryByText("TIMER ROUTE")).not.toBeInTheDocument();
+  });
+
+  it("over a LIVE run, stages the in-progress sentence — the same severity order Connect's guard uses", async () => {
+    saveRun(buildFreeRowRun(new Date("2026-09-02T21:00:00.000Z")));
+    renderDoorWithRoutes();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
+
+    expect(
+      screen.getByText("A session is in progress. Replace it?"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("TIMER ROUTE")).not.toBeInTheDocument();
+  });
+
+  it("Replace session writes the free-row run over the unlogged one and retires a stale monitor record", async () => {
+    saveRun(unloggedTimerSession());
+    // A dead connected record on the store too: the same thing Connect's
+    // guard stages "unlogged" for, and the record the log door would
+    // otherwise find beside the finished timer run (criterion 7c's
+    // invariant, kept at this door by retiring it on proceed).
+    const monitor = createMonitorRun(
+      {
+        workoutId: null,
+        title: "Just Row",
+        program: { intervals: [] },
+        deviceName: "PM5 432331249",
+        logSeed: { steps: [], paces: {} },
+        mode: "justrow",
+      },
+      new Date("2026-09-01T09:00:00.000Z"),
+    );
+    commitHandoff(monitor.startedAt, null, {
+      ...monitor,
+      completedAt: "2026-09-01T09:10:20.000Z",
+    });
+    renderDoorWithRoutes();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Replace session" }),
+    );
+
+    expect(await screen.findByText("TIMER ROUTE")).toBeInTheDocument();
+    expect(loadRun()?.mode).toBe("justrow");
+    expect(loadRun()?.completedAt).toBeNull();
+    expect(currentUnretiredHandoff()).toBeNull();
+  });
+
+  /** RF25: `saveRun` returns false on a storage failure; navigating to a
+   *  Timer with nothing behind it would bounce to Today with no word. */
+  it("when the run cannot be stored, says so inline and stays on the door", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+    renderDoorWithRoutes();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
+
+    expect(
+      screen.getByText("Couldn't start this session. Try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("TIMER ROUTE")).not.toBeInTheDocument();
   });
 });
 
