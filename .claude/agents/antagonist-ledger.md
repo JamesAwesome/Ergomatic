@@ -5113,10 +5113,12 @@ same way.
   null` as its mode marker. **Technique:** when a spec rejects marker A for
   being "free today, silent tomorrow", check whether it then adopts marker A's
   logic somewhere downstream. Specs are internally inconsistent about their own
-  best arguments. **Controller's disposition (rev 2):** adopted as a
-  CLOSED-WORLD rule stated in the spec with the false positive named at the
-  predicate, because the deterministic alternative (a stopwatch `LogStep`)
-  would change the approved detail board and the parent's `steps: []` shape.
+  best arguments. **Controller's disposition:** rev 2 adopted it as a
+  closed-world rule with the false positive named; James read that and said
+  "Harden it" — rev 3 stores provenance as a nullable `session_logs.source`
+  enum written by every door, which is the field `storedSummary.ts:36-66` had
+  already queued under Phase LM. The finding stands as written: the fix was
+  the column, not a better comment.
 - **HELD under attack:** `mode` survives every engine transition (all eight
   spread `...run` — `engine.ts:170/179/192/203/220/229/243/278`; no field-by-
   field reconstruction exists). Connect IS guarded for a live Just Row

@@ -1,9 +1,11 @@
 # Just Row without the monitor (time only) — design
 
-**Status: Gate 0 PASSED (rev 2e, James, 2026-09-02). Spec REV 2 after the
-antagonist delta pass (2026-09-02, verdict BLOCK on rev 1's mechanism —
-eleven findings, all folded in below and marked ⟨F#⟩); awaiting James's
-read.** The product shape did not change; the mechanism did. Phase JR follow-on items 3 (unconnected
+**Status: Gate 0 PASSED (rev 2e, James, 2026-09-02). Spec REV 3.** Rev 2
+folded the antagonist's delta pass (BLOCK on rev 1's mechanism — eleven
+findings, marked ⟨F#⟩). Rev 3 answers James's "Harden it" (2026-09-02) on
+rev 2's one heuristic: provenance is now a STORED FACT on every log row,
+not an inference from an absence. The product shape has not changed since
+Gate 0. Phase JR follow-on items 3 (unconnected
 mode) and 4 (the JR chip), built together as one PR.
 Handoff: `docs/design/handoffs/2026-09-02-just-row-unconnected/` (boards,
 the mechanical reference captures, contrast table).
@@ -64,7 +66,8 @@ none.
   body with neither number and gets 201. **`workoutTitle` is REQUIRED**
   (`data.ts:1369-1372`, non-empty string) — every shipping free-row body
   carries `"Just Row"` ⟨F2⟩.
-- **Provenance is not a column.** The detail's meta word comes from
+- **Provenance was not a column — and the repo had already ruled it
+  should be one.** The detail's meta word comes from
   `storedSummary.ts:272-276` `sourceLabel`: `deviceName` if present,
   else `TIMER` if any step carries `actualSource: "stopwatch"`, else
   `LOGGED BY HAND` — and `buildMeta:300` drops the time-of-day segment
@@ -72,11 +75,18 @@ none.
   not what the detail reads; rev 1 named the wrong module and claimed
   `timeSeconds` drives the word, which it never reads ⟨F3⟩. `session_logs`
   has no row-level source column (the `source` enum at `schema.ts:130` is
-  the workouts table's).
+  the workouts table's). **RF18, found on the second look:** the same
+  file's header (`storedSummary.ts:36-66`, "SOURCE INFERENCE") documents a
+  row that is already wrong about its door — a connected session the app
+  never heard a pull from, saved through the manual door — and concludes
+  *"Fixing it needs a new stored field plus a migration"*, examined and
+  rejected reusing `endedBy` or `deviceName` for it, and queued the field
+  under ROADMAP `## Phase LM`. This spec lands that field.
 
 ## Mechanism
 
-**Two stored-shape changes, both on `SessionRun` (localStorage), TRIAD.**
+**Three stored-shape changes, TRIAD: two on `SessionRun` (localStorage)
+and one on `session_logs` (Postgres, migration 0020).**
 (a) `mode?: "justrow"` — the same word `MonitorRun.mode` already uses, so
 one vocabulary names a free row on both records. No `v` bump, but
 **validated, not loose**: `isSessionRun` gains the clause
@@ -88,9 +98,24 @@ becomes OPTIONAL: a metre-less phase has no split, `NaN` is not a legal
 value (it serialises to `null` and round-trips as a typed `number`), and
 omitting it must be representable ⟨F5⟩. Every reader of `splitSeconds`
 (`logDraft.ts:466` writes `actualSplit` from it) skips when undefined.
-Alternatives rejected: `workoutId === null` as the marker (free today,
-silent tomorrow — nothing prevents a future producer); a
-`title === "Just Row"` check (a rower can name a workout that).
+(c) **`session_logs.source`**: a nullable `pgEnum("log_source",
+["pm5", "timer", "manual"])`, additive (old rows read back `null`),
+validated on POST as optional-but-one-of-three, returned on every GET.
+**Every log door writes it from now on**: the connected Just Row door
+posts `pm5`, this timer door posts `timer`, `LogSession` posts `timer`
+when it is closing a `SessionRun` and `manual` from `Log it after`. This
+is the "which door" fact the file header above says the schema lacks;
+it hardens provenance for EVERY row, not only free ones, and gives Phase
+LM's queued no-reading row a column to be honest in (that row's exact
+value is LM's call, not this spec's — it posts `manual` today and keeps
+doing so until LM rules). Alternatives rejected: `workoutId === null` as
+the marker (free today, silent tomorrow — nothing prevents a future
+producer); a `title === "Just Row"` check (a rower can name a workout
+that); inferring `TIMER` from `steps: [] && deviceName === null` (rev 2's
+closed-world rule — the antagonist named it the same "free today, silent
+tomorrow" shape, and James said harden it); posting one stopwatch
+`LogStep` (deterministic, but it puts an INTERVALS table on the approved
+detail board and bends the parent's `steps: []` shape).
 
 ### Lifetime table (RF27)
 
@@ -179,24 +204,19 @@ which record each branch holds). Every reader below branches on
 6. **Reading it back.** History: `LogRow.heroSnippet` already returns `""`
    with no avg and no distance — title and date only, by construction.
    Detail: `SummaryHeroesBlock` already renders TIME alone when only
-   `time` is defined. **Provenance** ⟨F3, F11⟩: `storedSummary.ts`'s
-   `sourceLabel` gains one clause between the device check and the
-   stopwatch-step check: `isFreeRow(row.workoutId, row.workoutType) &&
-   row.steps.length === 0 && row.deviceName === null` ⇒ `TIMER`, which
-   also restores the time-of-day segment. **This is a closed-world rule,
-   stated as such:** a free row has exactly two producers — the connected
-   Just Row door, which always stores a `deviceName` (`MonitorRun.deviceName`
-   is non-null, `monitorRun.ts:167`; the server requires 1–64 chars,
-   `data.ts:1481-1486`) — and this phone timer. The Just Row door offers no
-   `Log it after`, so no hand-logged free row exists, and follow-on item 5
-   (substitution) reuses these same two producers. The rule's false
-   positive is named: **a future manual free-row door would read `TIMER`
-   unless it stores its provenance** — the predicate carries that sentence
-   as a tripwire comment, and the alternative (posting one stopwatch
-   `LogStep`) was rejected because it would put an INTERVALS table on the
-   detail the approved board does not show and break the parent's
-   `steps: []` shape. Pinned RF24-style: the test starts at the door and
-   asserts `SEP · hh:mm · TIMER` at the detail.
+   `time` is defined. **Provenance** ⟨F3, F11, hardened rev 3⟩:
+   `sourceLabel` reads the stored column FIRST — `pm5` ⇒ `deviceName`
+   (falling back to the literal `PM5` if a `pm5` row somehow has none),
+   `timer` ⇒ `TIMER`, `manual` ⇒ `LOGGED BY HAND` — and only a `null`
+   source (every row saved before this ships) falls through to today's
+   inference, unchanged byte-for-byte. `buildMeta`'s time-of-day rule
+   keys on the same resolved word, so a `timer` row shows its clock time
+   as the board does. No absence is ever read as a fact: a free row with
+   `source: "timer"` reads `TIMER` because it SAYS so. Pinned RF24-style
+   across the seam: the test starts at the door, POSTs through the real
+   validator, GETs the row back, and asserts `SEP · hh:mm · TIMER` at the
+   detail; a second test pins a `source: null` fixture rendering exactly
+   as before.
 7. **The JR chip** — a new `FreeRowChip` component with its own class
    (`free-row-chip`), NEVER `.type-badge` (exit criterion 2's structural
    pin stays true: no `.type-badge` for a free row). Rendered where
@@ -207,9 +227,13 @@ which record each branch holds). Every reader below branches on
 
 ## What does NOT change
 
-- No server change, no migration. The connected Just Row's behaviour is
-  untouched; its files are (`JustRow.tsx` gains the second action,
-  `JustRowLog.tsx` the second entry kind).
+- **Additive server change only:** migration 0020 adds the nullable
+  `source` column and enum; the validator accepts it as optional; the
+  API stays additive-only between tags (an old TestFlight build posts no
+  `source` and its rows read back exactly as today). The connected Just
+  Row's behaviour is untouched except that it now posts `source: "pm5"`;
+  its files are touched (`JustRow.tsx` gains the second action,
+  `JustRowLog.tsx` the second entry kind and the `source` field).
 - No wake lock, no background mode, no distance entry.
 - `advancesPlan` stays `false`; item 5 (substitution) is its own PR.
 - v0.32.0's notes said "connect to the erg" and "no type chip, on
@@ -226,8 +250,18 @@ which record each branch holds). Every reader below branches on
    at the door (RF24).
 2. `plan_state.done_n` unchanged across that save (rides the existing
    integration test's shape with a time-only body).
-3. The saved row's detail reads `TIMER` in its meta line and renders TIME
-   alone — no AVG SPLIT, no DISTANCE, no INTERVALS, no machine block.
+3. The saved row's detail reads `SEP · hh:mm · TIMER` in its meta line
+   and renders TIME alone — no AVG SPLIT, no DISTANCE, no INTERVALS, no
+   machine block — asserted on a row that went through the real POST
+   validator and came back from GET (the producer → consumer seam, RF24).
+3b. `source`: the validator rejects a value outside `pm5 | timer | manual`
+   with a 400 naming the field, and accepts its absence; every door's
+   posted body carries the right member (JustRowLog monitor entry `pm5`,
+   timer entry `timer`; LogSession run-close `timer`, Log-it-after
+   `manual`) — one assertion per door on the posted body; and a stored
+   row with `source: null` renders its meta line byte-identically to
+   today (fixtures: a `deviceName` row, a stopwatch-step row, an
+   all-assumed row).
 4. History renders the row with no second line and a `.free-row-chip`,
    and no `.type-badge` (criterion 2 of the parent spec, still true).
 5. Backgrounding: a run whose `phaseStartedAt` is 10 minutes in the past
@@ -247,14 +281,18 @@ which record each branch holds). Every reader below branches on
 
 ## PR shape
 
-One PR, TRIAD (two `SessionRun` stored-shape changes). The antagonist's
+One PR, TRIAD (two `SessionRun` stored-shape changes plus the additive
+`session_logs.source` migration). The antagonist's
 delta pass ran on rev 1 (BLOCK; every finding folded here — the ledger
 entry rides this branch); the plan follows James's read of rev 2, then
 implementation, then the PM final-PR gate. Fast path does not apply
-(stored shapes; roughly eleven product files: `run.ts`, `engine.ts`,
-`Timer.tsx`, `JustRow.tsx`, `JustRowLog.tsx`, `Today.tsx`,
-`storedSummary.ts`, `LogRow.tsx`, `useStartWorkout.ts`, `AppRoutes.tsx`,
-a new `FreeRowChip.tsx`). Capture note for the plan: a History row that
+(stored shapes; roughly fourteen product files: `run.ts`, `engine.ts`,
+`Timer.tsx`, `JustRow.tsx`, `JustRowLog.tsx`, `LogSession.tsx`,
+`Today.tsx`, `storedSummary.ts`, `LogRow.tsx`, `useStartWorkout.ts`,
+`AppRoutes.tsx`, a new `FreeRowChip.tsx`, `server/db/schema.ts` +
+migration 0020, `server/routes/data.ts`). The plan also reconciles
+ROADMAP `## Phase LM`'s queued "new stored field" row: the field lands
+here; LM keeps only the naming question for the no-reading row. Capture note for the plan: a History row that
 carries BOTH a hero snippet and the chip is a new fifth flex child on
 `.today-log-row` (`LogRow.tsx:189-199`'s wrap comment) — `pnpm screenshots`
 on that row.
