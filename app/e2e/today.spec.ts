@@ -203,6 +203,7 @@ async function neutralizeGlobalRecency(
               notes: null,
               steps: [{ label: "Work" }],
               advancesPlan: false,
+              source: "manual",
             }),
           }),
         ),
@@ -252,6 +253,7 @@ async function logOnce(page: Page, title: string): Promise<void> {
         notes: null,
         steps: [{ label: "Work" }],
         advancesPlan: false,
+        source: "manual",
       }),
     });
     return { ok: res.ok, status: res.status };
@@ -292,6 +294,7 @@ async function postLogForWorkout(
         notes: null,
         steps: [{ label: "Work" }],
         advancesPlan: false,
+        source: "manual",
       }),
     });
     if (!res.ok) return { ok: false, status: res.status, id: "" };
@@ -1152,6 +1155,7 @@ async function advancePlanBy(page: Page, count: number): Promise<void> {
           pain: 1,
           notes: null,
           steps: [{ label: "Work" }],
+          source: "manual",
         }),
       });
       if (!res.ok) return { ok: false, status: res.status };

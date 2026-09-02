@@ -257,6 +257,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
             spm: 22,
           },
         ],
+        source: "timer",
       });
     expect(logRes.status).toBe(201);
     aLogId = logRes.body.id;
@@ -381,6 +382,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
         pain: 2,
         notes: null,
         steps: [{ label: "x", targetSplit: 100, actualSource: "assumed" }],
+        source: "manual",
       });
     expect(logRes.status).toBe(400);
     expect(logRes.body.field).toBe("workoutId");
@@ -429,6 +431,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
         pain: 2,
         notes: "delete me only via A",
         steps: [{ label: "Work", targetSplit: 130 }],
+        source: "manual",
         // Not plan-linked: this test is about the owner-check idiom, not
         // the un-count rule (exhaustively covered in storeContracts.ts) —
         // keeping this row out of A's shared plan_state (from `aLogId`'s
@@ -635,6 +638,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
             actualSource: "assumed",
           },
         ],
+        source: "manual",
       });
     expect(logRes.status).toBe(201);
 

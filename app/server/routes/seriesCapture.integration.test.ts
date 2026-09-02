@@ -104,6 +104,7 @@ describe("POST /api/logs: the full 14,400-sample worst-case series, through the 
         workoutType: "AT",
         notes: null,
         steps: [{ label: "Work" }],
+        source: "manual",
         series,
       });
     // Not 413: the route-scoped 1mb limit (app.ts) let this ~720 KB body

@@ -145,6 +145,7 @@ function finishedLogBody(extra: Record<string, unknown> = {}) {
     notes: null,
     steps: [{ label: "2000 m" }],
     deviceName: "PM5 432331249 Row",
+    source: "pm5",
     endedBy: "finished",
     workSeconds: 254.8,
     workMeters: 935,

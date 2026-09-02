@@ -16,7 +16,7 @@ import {
   type WorkoutType,
 } from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
-import { deriveLogSource, logSourceContradiction } from "../logSource.js";
+import { logSourceContradiction } from "../logSource.js";
 import type { ArticleReadsStore } from "../stores/articleReads.js";
 import {
   BASELINE_SOURCES,
@@ -1655,40 +1655,36 @@ export function createDataRouter({
     // Just Row unconnected spec (2026-09-02, §Mechanism stored shape (c),
     // TRIAD; exit criterion 3b): which door this row came through. Sits
     // AFTER `deviceName` and `steps` are validated because it is checked
-    // against both. Optional on the wire for exactly one reason —
-    // additive-only between tags: an installed build that predates the
-    // column posts no `source`, and for it the server derives the member
-    // once, at write time, by the same rule migration 0020 backfilled
-    // every older row with (`server/logSource.ts`). That derive path has
-    // a dated SUNSET (ROADMAP: required on POST at the first tag after
-    // this ships). Present means the client is stating a fact, so: a
-    // non-member is a 400 (explicit `null` included — there is no "unknown"
-    // door), and a member the body contradicts is a 400 naming the field.
+    // against both. REQUIRED on the wire since v0.35.0 (the ROADMAP's
+    // "`source` derive-when-absent SUNSET"): for builds <=811 the server
+    // derived the member from the body instead (`server/logSource.ts`'s
+    // `deriveLogSource`, logged as `source=derived`) because a build that
+    // predated the column could not post it — additive-only between tags.
+    // That path was deleted at the v0.35.0 tag, one tag after the column
+    // shipped; a build that posts no `source` now gets a 400 naming the
+    // field, the same shape as every other refusal below. The client is
+    // stating a fact, so: absent is a 400, a non-member is a 400 (explicit
+    // `null` included — there is no "unknown" door), and a member the body
+    // contradicts is a 400 naming the field.
     const postedDeviceName = (body.deviceName as string | undefined) ?? null;
     const sourceEvidence = { deviceName: postedDeviceName, steps };
-    let source: LogSource;
     if (body.source === undefined) {
-      source = deriveLogSource(sourceEvidence);
-      // The server keeps no diagnostics ring of its own; this line is the
-      // server-side equivalent of the client's `source: derived` ring entry
-      // the spec asks for — an old build posting through the derive path
-      // is visible in the API's stdout until the sunset deletes the path.
-      console.info(`POST /api/logs source=derived (${source})`);
-    } else {
-      if (!LOG_SOURCES.includes(body.source as LogSource)) {
-        badRequest(res, "source must be one of pm5, timer, manual", "source");
-        return;
-      }
-      const contradiction = logSourceContradiction(
-        body.source as LogSource,
-        sourceEvidence,
-      );
-      if (contradiction !== null) {
-        badRequest(res, contradiction, "source");
-        return;
-      }
-      source = body.source as LogSource;
+      badRequest(res, "source is required", "source");
+      return;
     }
+    if (!LOG_SOURCES.includes(body.source as LogSource)) {
+      badRequest(res, "source must be one of pm5, timer, manual", "source");
+      return;
+    }
+    const contradiction = logSourceContradiction(
+      body.source as LogSource,
+      sourceEvidence,
+    );
+    if (contradiction !== null) {
+      badRequest(res, contradiction, "source");
+      return;
+    }
+    const source: LogSource = body.source as LogSource;
 
     // Series capture spec (2026-08-19), §3: optional, absent or null both
     // mean "this run had no series" — validated the same field-named-400

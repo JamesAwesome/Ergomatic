@@ -742,12 +742,13 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
       // Just Row unconnected spec (2026-09-02): the monitor door's `pm5`
       // is a contradiction without a `deviceName` (`server/logSource.ts`
       // 400s it, which would block the WHOLE save this guard exists to
-      // let through), so the door claim goes with the name and the server
-      // derives the member for this one body — logged there as
-      // `source=derived`, so the row is visible in diagnostics rather
-      // than silently mis-doored. It renders `LOGGED BY HAND`, which is
-      // what the same row rendered before the column existed.
-      if (body.source === "pm5") delete body.source;
+      // let through), so the door claim goes with the name. Since the
+      // v0.35.0 sunset `source` is REQUIRED on the wire (an absent one is
+      // its own 400), so this body states `manual` itself — the member
+      // the server derived for it while it still could (no device name,
+      // no stopwatch step). It renders `LOGGED BY HAND`, which is what
+      // the same row rendered before the column existed.
+      if (body.source === "pm5") body.source = "manual";
     }
     try {
       // Fix round (MED-1): every retry below rebuilds from `currentBody`

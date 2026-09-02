@@ -70,6 +70,9 @@ describe("POST /api/test-history against real Postgres (Phase BL PR B)", () => {
         ],
         avgSplitSeconds: 118.4,
         endedBy: "finished",
+        // Required since the v0.35.0 sunset; no deviceName and no
+        // stopwatch step derived `manual` under the old rule.
+        source: "manual",
       });
     expect(res.status).toBe(201);
     return res.body.id as string;
