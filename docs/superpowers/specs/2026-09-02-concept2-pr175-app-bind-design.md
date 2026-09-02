@@ -630,7 +630,7 @@ button carries the `WebAuth` plugin — enforced by `linkClient`, not assumed.**
    `"never a real link"` `"posts nothing and carries no client id"`.
 6. (a) Both redirect URIs registered at log-dev — DONE for native, confirm web;
    1.75b's walk prerequisite. (b) Live-portal registration is NOT PR1.75's exit:
-   owner = the ROADMAP C2 register row + the flag-flip runbook.
+   owner = the ROADMAP C2 register row's still-owed line (no flag-flip runbook exists; PM final gate C5, 2026-09-02).
 7. The eight callback pages (§7) approved rendered by James — DONE 2026-09-02
    (the 409 Already-linked frame and the both-identities Linked frame were on
    the artifact when D1/D2 were approved).
