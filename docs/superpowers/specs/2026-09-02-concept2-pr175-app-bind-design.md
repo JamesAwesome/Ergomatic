@@ -659,8 +659,11 @@ phrase grep pasted, all zero/accounted; (4) the walk table: per-request
 - The callback's `ambiguous_auth` refusal answers JSON, not a page: only a
   non-browser caller can put a bearer on a top-level GET, and the approved page
   set has no such page. The check sits as per-route middleware right after
-  `requireUser`, BEFORE availability — an auth-shape refusal like the 401, so an
-  ambiguous request gets 400 even while the flag is off (dark routes only).
+  `requireUser`, BEFORE availability, on the JSON routes; on the callback —
+  which has no `requireUser` to sit after — it is step 3 (after step 0's
+  header and step 1's availability check), beside the `notSignedIn` 401 it
+  replaces — an auth-shape refusal, so an ambiguous request gets 400 even
+  while the flag is off (dark routes only).
 - `requireUser` performs a second session lookup only when BOTH credentials are
   present (the only way to detect disagreement); the instrument measures how
   often that is.

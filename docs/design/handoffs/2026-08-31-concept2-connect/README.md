@@ -90,14 +90,14 @@ WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
 - **1c Linked**: LINKED ✓ status; helper "Finished monitor rows can be sent
   from the log. Send state shows on each row." (12px `#57544c`); hairline;
   **Unlink Concept2** button (52px, outline `1px solid #b5341f`, text
-  `#b5341f` 16px 600). No weight class shown. **Owed amendment (added
-  PR1.5 fix round, post-2026-09-01 account-injection ruling): the
-  callback page and this card should also name which Ergomatic account
-  received the link (design-gate ruling §6, option (b) — the
-  detect-identity hedge). That copy is NOT in this frozen board and is
-  NOT approved — it needs its own rendered Gate 0 pass before PR2
-  implements it. This note records the gap; it does not authorize a copy
-  change against the frozen board above (see Fidelity).**
+  `#b5341f` 16px 600). No weight class shown. **Gate 0 amendment,
+  callback pages: APPROVED 2026-09-02 and BUILT at PR1.75a — the shared
+  callback template (`2026-09-02-concept2-pr175-app-bind-design.md` §7)
+  now covers 401 Not signed in, 403 Wrong account, 409 Already linked
+  (D1) and a Linked page naming BOTH identities (D2). This CARD's own
+  identity line (the detect-identity hedge for the app surface) is
+  still NOT in the frozen board and still needs its own rendered Gate 0
+  pass before PR2 implements it.**
 - **1d Unlink armed confirm** (two-tap): first tap swaps in explainer
   "Unlink removes this app's access. Rows already sent stay on Concept2."
   and the button becomes filled `#b5341f` / `#fffdf7`, label "Tap again to
