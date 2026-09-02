@@ -1,0 +1,11 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "1 · /justrow/log with a plan" },
+    { "file": "LogDoorNoPlan.dc.html", "x": 520, "y": 0, "w": 390, "h": 844, "title": "2 · /justrow/log, no plan" },
+    { "file": "PlanRow.dc.html", "x": 1040, "y": 0, "w": 390, "h": 844, "title": "3 · Plan tab, two stand-ins" }
+  ],
+  "annotations": [
+    { "id": "mech", "x": 0, "y": -200, "w": 1430, "text": "A JUST ROW CAN STAND IN FOR THE NEXT PLAN SESSION. Nothing new is drawn: the log door borrows PostWorkoutSummary's own button pair and its no-plan rule; the Plan tab prints the mark it already prints for any swap (INSTEAD OF <what the plan asked for>), with the JR chip where a free row would otherwise show the type-unknown box. Checkpoint days included (James, 2026-09-02): INSTEAD OF 2K TEST reads exactly as a swapped checkpoint reads today.\n\nCONTRAST (AA 4.5:1): on-color on accent 5.94 · ink on surface 17.11 · ink-3 on page 6.69 (mark, JR chip) · ink on page 15.41. Buttons 54/48 px." }
+  ],
+  "launch": { "view": "canvas" }
+}
