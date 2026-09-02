@@ -238,3 +238,51 @@ Web/OS API names its availability floor against
    sibling phrasings in the same round.
 5. Then, and only then: the PR comment explaining the round + the chat
    sentence, both explicit.
+
+## Plan authoring: what the hardening loop should never have to find
+
+Measured on Wave E PR1.75b (2026-09-02), whose native plan took ELEVEN
+antagonist passes (`git log 606d3f72..15fb3c61` on `wave-e-pr175b-native`).
+Six of the eleven found drift in bookkeeping the plan itself invented, and
+three of the remaining five found things the author could have found by
+running a command. The four rules below exist to make
+those eight passes unnecessary; the `harden` skill owns what is left.
+
+- **A plan states no number it has not measured.** Every expected count,
+  line count, and gate pass value carries the command that produced it and
+  the tree it ran against (a commit SHA, or "the baseline worktree at
+  `<sha>`"). A reasoned pass value is a heuristic wearing a number: gate (a)
+  asserted a `SwiftCompile` log count of `1` — the one value it can never
+  legitimately print, since a real Sources-phase member counts 4 on a cold
+  build and 0 on a warm one. Nobody had run the build.
+- **Cite by provenance, never by the plan's own line numbers, and carry no
+  self-describing bookkeeping.** A plan-internal citation cannot survive its
+  own fold — prepending one paragraph moved two of them by +2 in the commit
+  that wrote them. Cite Task/step/symbol. The same rule kills pass-count
+  bullets, revision tallies, and hand-transcribed corpus tables: a
+  twelve-row census table of expected counts drifted at five consecutive
+  passes. If a census is needed, the plan carries the SCRIPT and a
+  base-vs-head diff, never the numbers.
+- **Paste-test every prescribed block before the plan is finished.** Extract
+  each code block to its REAL path in a scratch tree and run the repo's own
+  gates — `pnpm typecheck` and `pnpm lint`, not only `format:check`, which
+  is the one gate that cannot fail on semantics — then run the prescribed
+  tests against the prescribed implementation. Run every shell block and
+  every mutation instruction as written (`node -e`, `bash -n`); a mutation
+  is code. Check each command's inputs against `.gitignore` and walk the
+  prerequisite chain to the first command whose inputs are all TRACKED —
+  fixing only the hop that failed left `cap sync` needing a gitignored
+  `dist/` one layer up. This is the rule most worth making mechanical: it is
+  a command, not an intention.
+- **Anything handed to James is checked against HIS shell and HIS machine.**
+  RF13 extended: `set -a; . .env; set +a` and `export` are bash, his default
+  shell is fish, and the walk card's FIRST block would have failed. Read what
+  a prescribed command WRITES, not only what it prints (`pnpm ios:build`
+  stamps two tracked files), and name who restores it. For every walk
+  observation, state the precondition that makes a NO possible — without it
+  the observation is decoration.
+
+Two habits that cost passes on the same plan and are cheap to keep: for
+every "grep X finds nothing" sentence, paste the grep's ACTUAL output and
+name any hit that does not count; and before citing "replace lines N-M",
+print line M+1 and confirm it is not part of what you named.
