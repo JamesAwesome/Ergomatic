@@ -53,10 +53,11 @@ written. Each section names what held and what was corrected.
    row cannot be partial in stored data at all: `/session/log` is reached only
    from `isComplete(run)` (`Timer.tsx:477-483`), and the abandon path's own
    copy is _"Nothing will be saved: no log, no actuals."_ (`Timer.tsx:815`).
-2. `steps.length > 0` — a connected Just Row stores `steps: []`
-   (`JustRowLog.tsx:244`) and ordinarily closes `endedBy: "rower"` (End or
-   TERMINATE, `monitorRun.ts:184-188`); it can also close `link-lost`
-   (`useMonitorSession.ts:665`) or `interrupted` (Today's row), and the
+2. `steps.length > 0` — a connected Just Row stores `steps: []` (two
+   writers: `JustRowLog.tsx:209` pm5, `:178` timer) and ordinarily closes
+   `endedBy: "rower"` (End or TERMINATE, `monitorRun.ts:184-188`,
+   `useMonitorSession.ts:5010`); it can also close `link-lost` (same line,
+   `linkGone`) or `interrupted` (Today's row), and the
    driver's terminal branch (`driver.ts:2605-2622`) has no free-row opt-out, so
    a piece set up at the PM5 while the app watches in Just Row could close
    `finished` (SUSPECTED, no capture). Whatever the close, a free row has no
@@ -105,14 +106,19 @@ the rower produced; there is no threshold.
 | `program-failed` | our `program()` call failed against an already-open run (`useMonitorSession.ts:4946`); reaches the log only via Today's unlogged row, carrying the previous program's steps | `THE PROGRAM DID NOT LOAD · N of M intervals measured` |
 | `interrupted` | the record was closed from Today's unlogged row with no wire evidence (`monitorRun.ts:1108-1119`) | `LEFT UNFINISHED · N of M intervals measured` |
 
-**`N` = `steps.filter(isMonitorRowMeasurable).length`** — the repo's ONE
-counting rule, `isMeasuredReading` (`summaryModel.ts:613-619`: from the
-monitor AND `elapsedSeconds >= 1`) through its `LogStep` adapter
-(`summaryModel.ts:987-989`), whose own comment says _"so the connected
-surface's lost banner counts intervals by the same rule this screen will judge
-them by."_ `N` therefore counts intervals MEASURED, the same quantity as "N
-intervals kept" on the live surface — one number, two surfaces, never a
-third rule. `M` = `steps.length`. **`N` is not progress:** after a lost
+**`N` = `steps.filter((s) => measuredElapsedSeconds(s) !== undefined).length`**
+— the stored door's own generalisation (`storedSummary.ts:801`, over
+`StoredLogStep`), whose doc comment (`:784-786`) says it _"generalizes
+`summaryModel.ts`'s own per-door floor checks (`isMonitorRowMeasurable`/
+`timerMeasurableElapsedSeconds`)"_. The shared primitive is
+`isMeasuredReading` (`summaryModel.ts:613-619`: from the monitor AND
+`elapsedSeconds >= 1`), which the live surface's lost banner counts by through
+the non-exported `LogStep` adapter at `summaryModel.ts:987-989` (_"so the
+connected surface's lost banner counts intervals by the same rule this screen
+will judge them by"_). On a `pm5` row both reduce to `actualSource === "pm5"
+&& actualSeconds >= 1`, so `N` counts intervals MEASURED — the same quantity
+as "N intervals kept" on the live surface, one primitive under three
+spellings, and the spec introduces no fourth. `M` = `steps.length`. **`N` is not progress:** after a lost
 boundary (`logDraft.ts:804-806`) a rower who did two and a bit reads
 `1 of 5 intervals measured`, which is true of what was measured and silent
 about what was rowed; the copy says "measured", and that row (a stop after a
@@ -121,13 +127,20 @@ lost boundary) is IN Gate 0-A so James approves it rendered, not described.
 **The close-reason line keeps its own trigger.** `LINK_LOST_LINE` renders on
 `endedBy === "link-lost"` ALONE, steps-independent by design
 (`storedSummary.ts:955-962`), and it is a release-noted promise
-(`releaseNotes.ts:351`). It is NOT replaced: the line's allowlist widens to
-the five close reasons above (its own word per reason), and
-`· N of M intervals measured` is a SUFFIX appended only when all four
-PARTIAL clauses hold. A link-lost Just Row and a link-lost row with every step
-measured keep their `LINK LOST` line, suffix-free. The allowlist is never a
-negation, so a future sixth close reason renders nothing rather than a wrong
-word.
+(`releaseNotes.ts:351`). It is NOT replaced and its trigger does NOT widen:
+`link-lost` keeps its own ungated, steps-independent line exactly as today,
+and gains the `· N of M intervals measured` suffix only when all four PARTIAL
+clauses hold. **The other four words (`STOPPED EARLY`, `THE MONITOR DROPPED
+THE PROGRAM`, `THE PROGRAM DID NOT LOAD`, `LEFT UNFINISHED`) render ONLY when
+all four PARTIAL clauses hold**; a non-partial `rower`/`interrupted`/
+`program-*` row renders nothing, as today. This matters because every
+connected Just Row closes `rower` (`useMonitorSession.ts:5010`) and a planned
+row Ended after its last interval does too — a steps-independent
+`STOPPED EARLY` would print on both. A link-lost Just Row and a link-lost row
+with every step measured keep their `LINK LOST` line, suffix-free. Both
+allowlists are value equalities, never negations, so a future sixth close
+reason renders nothing rather than a wrong word. PARTIAL ⟹ `N < M` (clause 3
+guarantees an unmeasured step), so the suffix can never read `5 of 5`.
 
 ### 1.3 Where it renders
 
@@ -202,9 +215,9 @@ word. A fourth member added without touching it silently gains a time the
 live screen never shows (phase-lm.md:314-318 predicted exactly this). PR A
 replaces it with an allowlist: `timeLabel` renders for `pm5`, `timer` and
 `no-reading` (the session happened at a clock time the app witnessed), never
-for `manual`. `sourceLabel`'s switch stays TOTAL over `LogSource` with the
-repo's `assertNever` (`connectedAxes.ts:153`), so the compiler is what forces
-this mirror to move; the additive matrix's blank-word row below is an OLD
+for `manual`. `sourceLabel`'s switch is already TOTAL over `LogSource` with
+no `default` (`storedSummary.ts:299`), so the compiler forces this mirror to
+move; it stays that way. The additive matrix's blank-word row below is an OLD
 build's behaviour, which no arm in this PR can change.
 
 ### 2.4 The migration, and why it is not additive the way the column was
@@ -241,9 +254,17 @@ three are not compile-enforced):** the pgEnum (`schema.ts:152`),
 switch, `e2e/screenshots.spec.ts:2470`'s type, `summaryModel.ts`'s live word,
 `routes/source.integration.test.ts:164` and `:252` (the latter pins the exact
 400 message and goes red on day one), and the migration. All move in one
-commit; the schema comment is corrected to count them — and the plan runs the
-census command (`grep -rn '"pm5", "timer", "manual"' app`) rather than
-trusting this paragraph.
+commit; BOTH "three mirrors" comments (`schema.ts:149-151`,
+`domain/types.ts:98-100`) are corrected to count them. No single grep finds
+the set (`grep -rn '"pm5", "timer", "manual"' app` returns only the three
+array/literal forms), so the plan enumerates the ten by name. Which are
+compile-enforced: the two `switch`es (total over `LogSource`, no `default`,
+so a fourth member errors on its own — no `assertNever` mechanism needed).
+Which are NOT, and the dangerous one by name: **`LOG_SOURCES` is
+`readonly LogSource[]` (`domain/types.ts:102`), not a tuple — a short array
+compiles clean, and `routes/data.ts:1677` validates the wire against it, so
+omitting `no-reading` there 400s every save of the new member with nothing
+red.** The POST seam test (§8.1) is what makes that omission red.
 
 ---
 
@@ -276,8 +297,9 @@ copy, and do not change.
 - `useMonitorSession.ts:1100`'s claim _"no screen ever renders the `"PM5"`
   placeholder"_ is contradicted by `surfaceModel.ts:1890` (reachable);
   `JustRow.tsx:301` sits behind an arm that required `deviceName !== null`
-  (`:112`) and may be as dead as `capacitorBle.ts:494` — the plan applies the
-  reachability test before pinning it. The comment sweep also covers
+  (`:114`) and may be as dead as `capacitorBle.ts:494`; `surfaceModel.ts:1890`
+  is not behind a name filter but its callers' name provenance is untraced —
+  the plan applies the same reachability test to BOTH before pinning either. The comment sweep also covers
   `LogSession.tsx:723` and `storedSummary.ts:295-298`, both describing the
   old fallback.
 - **Why `MONITOR` is what makes a nameless erg's save LEGAL:** a `pm5` row
@@ -358,27 +380,29 @@ forever; a new `actualSource` member 400s the whole save with no retry. New
 key names make the old-server degradation identical to not shipping §5:
 both keys dropped together, the row reads as it does today. `steps` is
 untyped `jsonb` (`schema.ts:195`); no migration. **But the NEW server drops
-them too until its explicit field list grows** (`routes/data.ts:593-604`, ten
+them too until its explicit field list grows** (`routes/data.ts:593-605`, ten
 `if (x !== undefined) step.x = x` lines): PR B's task (0) widens `LogStep`,
 the route's field list and its bounds, and the headline gate starts at
 `POST /api/logs` and reads the row back through `GET` (RF24).
 
-**The pair is elapsed, not rowing time.** `domain/monitor/types.ts:189-190`:
+**The pair is elapsed, not rowing time.** `domain/monitor/types.ts:189-191`:
 _"There is NO paused state on the wire — mid-workout the clock runs whether
 or not the rower pulls."_ A rower who stops pulling and then presses End
 banks a `partialSeconds` that includes idle time. **No split, pace or rate is
 ever derived from the partial pair**; the step row shows the two numbers as
 what they are (metres so far, interval clock so far). A `rowing` frame with
-`intervalIndex: null` (the D3 divergence, `types.ts:151-159`) writes no
+`intervalIndex: null` (the D3 divergence, `types.ts:152-159`) writes no
 partial — absence over invention, the rule `logDraft` already applies to
 null-index actuals.
 
 ### 5.2 Invariants (stated as invariants, not mechanisms — RF27)
 
 - **I-B1** A partial is written only on a close with `endedBy ≠ finished`.
-  Tier B2 (`isReconstructableClose` = `finished | null | undefined`) therefore never sees
-  one, and its "provably historical, non-growing" population
-  (`storedSummary.ts:390-400`) stays true.
+  Tier B2 (`isReconstructableClose` = `finished | null | undefined`,
+  `storedSummary.ts:513-515`) therefore never sees one, and the GATED
+  population stays "provably historical" (`:406`) and "genuinely closed,
+  non-growing" (`:466`) — the block at `:390-400` records the earlier,
+  ungated version of that claim being FALSE, which is why the gate exists.
 - **I-B2** A partial is never an `IntervalActual`. `measuredIntervalCount`
   (`summaryModel.ts:648-653`) reads `run.actuals`, so "N intervals kept" does
   not move; a partial single-interval piece is still `kept = 0`.
@@ -402,7 +426,7 @@ null-index actuals.
 
 | state | mint | clear | survives teardown / relaunch / re-arm |
 |---|---|---|---|
-| in-flight interval reading (`lastRowingFrameRef`: `{ intervalIndex, meters, seconds }`) | every `state === "rowing"` frame of the live run with a non-null `intervalIndex` | each boundary actual for that interval (the in-flight interval advanced); the FOUR per-run reset sites `rowingStreakRef` uses (`useMonitorSession.ts:3536` RC-37 exit, `:4810` `beginFreeRow`, `:4886` `program`, `:5169` cancel) plus `connect()` and `teardown()` — six, enumerated by line in the plan (the `beginFreeRow` copy was missed once before, its own comment says so) | no / no / no |
+| in-flight interval reading (`lastRowingFrameRef`: `{ intervalIndex, meters, seconds }`) | every `state === "rowing"` frame of the live run with a non-null `intervalIndex` | each boundary actual for that interval (the in-flight interval advanced); the FOUR per-run reset sites `rowingStreakRef` clears at (`useMonitorSession.ts:3536` RC-37 exit, `:4810` `beginFreeRow`, `:4886` `program`, `:5169` cancel — `rowingStreakRef` itself clears at exactly those four and NOT at connect/teardown), PLUS, for this ref only, `connect()` (`:4307`) and `teardown()` (`:3824`) — six sites for the new ref, enumerated by line in the plan (the `beginFreeRow` copy was missed once before, its own comment says so) | no / no / no |
 
 The close arms that write a partial: the user End arm, the live-drop arm
 (`program-dropped`), and the link-lost arm — each reads the ref once at close

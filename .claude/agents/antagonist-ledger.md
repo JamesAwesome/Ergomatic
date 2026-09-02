@@ -5670,3 +5670,51 @@ same way.
   `deviceName` consumer is a null check, never a value comparison); clause 4's
   allowlist is exactly the server enum minus `finished`; `interrupted` has no
   live frame; the additive matrix's old-client-reads-new-row row is correct.
+
+- **2026-09-02, `door` spec DELTA pass (the revision that applied the spec
+  pass).** The five blockers landed and 27 of 31 new citations were exact —
+  and the fix to the biggest one OVER-CORRECTED. "LINK LOST is subsumed" was
+  closed by widening `buildLinkLostLine`'s allowlist from one value to five,
+  keeping its steps-INDEPENDENT trigger — which prints `STOPPED EARLY` on
+  every connected Just Row (`steps: []`, `endedBy: "rower"`,
+  `useMonitorSession.ts:5010`), the population the spec's own clause 2 exists
+  to protect, and on a planned row Ended after its last interval. TECHNIQUE:
+  **when a fix widens a predicate to preserve something, enumerate the rows
+  the WIDENING newly admits, not the rows the old predicate excluded** — a
+  spec that fixes an under-render by loosening a trigger will exemplify only
+  the case where the loosening is harmless (here, link-lost, where the word is
+  true regardless of steps), and never state what the new population renders.
+- **A shared rule can have three spellings, and the spec will name the one
+  that cannot be called.** `N = steps.filter(isMonitorRowMeasurable)` — that
+  function is `function`, not `export function` (`summaryModel.ts:987`), takes
+  the LIVE door's `LogStep`, and the stored door where the marker renders
+  already carries the generalisation (`storedSummary.ts:801`), whose own doc
+  comment says it generalises exactly that check. TECHNIQUE: **before
+  accepting "the repo's ONE rule", grep the rule's name and read the comments
+  that CITE it — this repo documents its own generalisations at the
+  generalisation, and the sibling that names you is the one you should have
+  called.** Corollary: check `export` before citing a function as shared.
+- **A prescribed census command is a gate, and it can be unable to go red.**
+  The spec told the plan to trust `grep -rn '"pm5", "timer", "manual"' app`
+  over its own ten-item paragraph; the command returns THREE. Worse, the most
+  dangerous mirror is invisible to both compiler and grep: `LOG_SOURCES` is
+  `readonly LogSource[]` (`domain/types.ts:102`), so a short array compiles
+  clean and 400s every save of the new member. TECHNIQUE: **run any command a
+  spec prescribes, and count its hits against the list it replaces** — same
+  ten seconds as the previous pass's census check, one layer up.
+- **Corrected where argued, left where used — again, and in the same file
+  pair.** The revision fixed `logDraft.ts:857`→`:864`, `:600`→`:607`,
+  `types.ts:607`→`:630-631` in the spec and left all three in
+  `ROADMAP.md:702-707`, the document every one of them was transcribed FROM.
+  TECHNIQUE: after correcting a transcribed citation, grep the NUMBER in the
+  source document, not just the subject in the code.
+- **Attacked and HELD:** the SQL boolean needs no elapsed clause (the floor
+  lives in N, not the predicate) and `NOT (s ? 'actualSource') ≡ undefined`
+  because `data.ts:472-479` 400s an explicit null; `M` is work intervals, not
+  steps-plus-rests (`logDraft.ts:856`); the RC-12 rider really is ONE site —
+  `schema.ts:237-251` already carries the CORRECTED block the history doc
+  still lists as owed, so `docs/history/` was the stale record, not the
+  ROADMAP; the `driver.ts:2605-2622` free-row SUSPECTED claim is honest (no
+  `freeRow` opt-out there; the two that exist are `:2575`/`:4982`); the sunset
+  row already says "the route's `deriveLogSource` call", so it survived the
+  oracle correction untouched.

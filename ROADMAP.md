@@ -495,9 +495,13 @@ rower's work silently.
       two of its four founding decisions before the spec was written:
       - **PR A — the stored WORD (TRIAD).** PARTIAL as a stored-state read
         (no new column): connected row, steps present, at least one step
-        never measured, non-`finished` close — NOT `endedBy != finished`,
-        which would mark every connected Just Row partial; a short step on a
-        `finished` row is measurement loss, not a partial. A fourth
+        never measured, and `endedBy` in the five-value allowlist (never
+        `!= finished`: legacy rows store `null` and would all read partial;
+        the steps-present clause is what excludes a connected Just Row); a
+        short step on a `finished` row is measurement loss, not a partial.
+        The count in the marker is intervals MEASURED, the lost banner's own
+        rule; the shipped `LINK LOST` line keeps its trigger and gains a
+        suffix; the other four words render only when PARTIAL holds. A fourth
         `log_source` member `no-reading` (NO device name — the first draft
         required one and reversed a recorded PM ruling), rendering
         `NO MONITOR READING` in the log as on the live screen, with the
@@ -699,12 +703,12 @@ saves three round trips.
       at "the first server-touching phase after TWO tags have shipped",
       deliberately countable. **Ten tags have shipped since.**
 - [ ] **Remove the legacy warm-up guards on the persisted `LogSeed.steps[].kind`
-      union.** `logDraft.ts:857` still carries `if (seedStep.kind === "warmup")
-return;` and the union at `:600` is still `"warmup" | "work"`. Binding
+      union.** `logDraft.ts:864` (was `:857`) still carries `if (seedStep.kind === "warmup")
+return;` and the union at `:607` (was `:600`) is still `"warmup" | "work"`. Binding
       sub-ruling from WU: `kind` stays the literal union, never widened to
       `string`. Same expired trigger as above.
 - [ ] **RC-12's last unreconciled comment.** Four of six sites are already
-      corrected; `domain/monitor/types.ts:607` still claims `onDisconnect`
+      corrected; `domain/monitor/types.ts:630-631` (was `:607`, now the `Transport` interface) still claims `onDisconnect`
       covers "the Bluetooth stack resetting" without qualification. The
       neighbouring iOS-backgrounding claim was already struck as false.
 
@@ -1197,7 +1201,7 @@ X" is a real disposition — most of these are single files.
       Concept2.** Filed at the door anchor pass, 2026-09-02 (RF14), narrowed
       at the spec pass. `server/concept2/mapping.ts:50` fences the export on
       `endedBy === "finished"`; End and TERMINATE both close `rower`
-      (`monitorRun.ts:184-188`, `JustRowLog.tsx:244`), which is every
+      (`monitorRun.ts:184-188`, `useMonitorSession.ts:5010`; `steps: []` at `JustRowLog.tsx:209`), which is every
       ordinary Just Row. Whether the driver's terminal branch
       (`driver.ts:2605-2622`, no free-row opt-out) can close a free row
       `finished` when a piece is set up at the PM5 is SUSPECTED and
