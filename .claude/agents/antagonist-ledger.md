@@ -5535,3 +5535,46 @@ same way.
   behaviour, including the DELETE path.** (Disposition: all three adopted
   as intended behaviour in rev 2, the decrement stated as a ruling for
   James to overrule at Gate 0.)
+
+### 2026-09-02 — Just Row substitution spec REV 2 (second pass: attack the fixes)
+
+- **A "within 1 px" layout assertion placed in a jsdom test.** Rev 2's
+  centring fix arrived with a gate that measures `getBoundingClientRect()`
+  in `Plan.test.tsx`. Ran jsdom directly: every rect is
+  `{w:0,h:0,top:0,left:0}`, so `|0−0| ≤ 1` passes against any layout.
+  **Technique: before believing a geometry gate, count the file's existing
+  geometry assertions — `Plan.test.tsx` had 0, `design.spec.ts` had 61
+  `boundingBox` calls. The suite already tells you which layer can see
+  layout.**
+- **A CSS fix aimed at a property the layout mode ignores.** The spec
+  prescribed `justify-self: center` for slots in `.plan-row` and
+  `.today-log-row`, both `display:flex` — `justify-self` is inert there.
+  Its premise ("today the row top-aligns its badge") was also false:
+  `.plan-row-swapped` is already `display:grid; align-items:center`.
+  **Technique: read the CONTAINER's `display` before accepting any
+  alignment fix, and read the rule the fix claims to change — RF21's flex
+  smell recurs with `justify-self` as well as `min-width`.**
+- **A tolerant parser told to become strict.** "`parseLink` accepts
+  `string | null`" would drop every entry when an OLD server omits the new
+  key — the exact failure the same function's `workoutIsGlobal` comment
+  already documents ("a MISSING key is … what an older server sends").
+  **Technique: when adding a field to a wire shape, read the neighbouring
+  field's guard — a parser that survived one additive change has already
+  written down the rule the new one must follow.**
+- **A Gate-0 artifact that denies the change its spec makes.** The handoff
+  README said "Nothing else changes" while the spec moved every swapped
+  row's badge; James approved the board on the README. **Technique: diff
+  the handoff's "what changes" column against the spec's mechanism section
+  line by line — the approval attaches to the README, not the spec.**
+- **An amendment aimed at the wrong criterion number.** Spec and ROADMAP
+  both amended "frozen exit criterion 1 (`done_n` unchanged)"; criterion 1
+  pins the POST body and the retired button, criterion 2 is `done_n`.
+  **Technique: open the frozen criteria and read the numbered line, never
+  the paraphrase that has been copied between two documents.**
+- **Held under attack (vetted ground for the implementation):** the store-
+  side `?? !isFreeRow(...)` default is behaviour-identical on all four
+  arms; `stores.logs.create` has exactly one production caller
+  (`data.ts:1718`); the delete decrement keys on the stored LINK, not on
+  `advancesPlan`, and link fields are written inside the same `if` as the
+  advance, so a non-opted-in free row cannot decrement; `advancesPlan:
+  true` is accepted unchanged by an old server.

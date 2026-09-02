@@ -233,9 +233,11 @@ slate.
   2026-09-01: "advances the record, records the stand-in"): the rower
   may say "this free row stands in for session N"; it advances the plan
   AND the row records that it stood in. Default stays off-plan. **TRIAD**
-  — it changes what SESSION n OF 84 means and amends frozen exit
-  criterion 1 (`done_n` unchanged across a Just Row save) with its own
-  gate; it removes the server's ONLY free-row plan enforcement
+  — it changes what SESSION n OF 84 means and amends the unconnected
+  spec's frozen exit criterion 2 (`done_n` unchanged across a Just Row
+  save) with its own gate, retiring its criterion 1's `Save this row`
+  pin; the Gate 0 centring rule also moves every swapped plan row's
+  badge (stated in the handoff README); it removes the server's ONLY free-row plan enforcement
   (`logs.ts`'s `!isFreeRow(...)`), so the substitution must be an
   explicit stored fact the server checks, not a client promise; and the
   reversing release note must acknowledge v0.32.0's "A Just Row never
