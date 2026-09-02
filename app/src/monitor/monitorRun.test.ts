@@ -55,13 +55,13 @@ const t0 = new Date("2026-08-05T12:00:00.000Z");
 // accumulation), not about seed CONTENT, so one placeholder constant fills
 // every call site rather than a bespoke seed per test.
 const TEST_SEED: LogSeed = {
-  // `kind: "warmup"` is deliberate, not stale: Phase WU removed the
-  // producer, but `LogSeed` is PERSISTED, so a `MonitorRun` stored
-  // before Phase WU still carries this exact value. Keeping it here
-  // exercises `buildMonitorLogSteps`' legacy skip (`logDraft.ts`) — do
-  // not "modernize" this to a plain step, that changes what the
-  // function under test emits and moves assertions below.
-  steps: [{ label: "8:00 warm-up", kind: "warmup" }],
+  // Placeholder content only — this file's tests are about the RECORD's
+  // own mechanics (cross-clear, versioning, actual accumulation), never
+  // about `buildMonitorLogSteps`, which this file does not call. Door PR A
+  // (spec §4 rider 2) narrowed `LogSeed.steps[].kind` to the literal
+  // `"work"` and removed that function's legacy `"warmup"` skip, so this
+  // reads "work" like any other seed step would since Phase WU.
+  steps: [{ label: "8:00 warm-up", kind: "work" }],
   paces: {},
 };
 

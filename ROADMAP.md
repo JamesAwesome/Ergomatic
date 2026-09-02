@@ -746,20 +746,27 @@ the re-scope — not a branch of their own and not the lifecycle spec's PRs. The
 none of that migration's risk, so bundling them costs a reviewer nothing and
 saves three round trips.
 
-- [ ] **`ALTER TABLE "preferences" DROP COLUMN "warmup";`** — one line, safe
-      once no deployed image reads it. Still present at
-      `server/db/schema.ts:369`. **Its trigger fired long ago:** Phase WU set it
-      at "the first server-touching phase after TWO tags have shipped",
-      deliberately countable. **Ten tags have shipped since.**
-- [ ] **Remove the legacy warm-up guards on the persisted `LogSeed.steps[].kind`
-      union.** `logDraft.ts:864` (was `:857`) still carries `if (seedStep.kind === "warmup")
-return;` and the union at `:607` (was `:600`) is still `"warmup" | "work"`. Binding
-      sub-ruling from WU: `kind` stays the literal union, never widened to
-      `string`. Same expired trigger as above.
-- [ ] **RC-12's last unreconciled comment.** Four of six sites are already
-      corrected; `domain/monitor/types.ts:630-631` (was `:607`, now the `Transport` interface) still claims `onDisconnect`
-      covers "the Bluetooth stack resetting" without qualification. The
-      neighbouring iOS-backgrounding claim was already struck as false.
+- [x] **`ALTER TABLE "preferences" DROP COLUMN "warmup";`** — one line, safe
+      once no deployed image reads it. **DONE (door PR A, migration 0022,
+      Task 1):** the column is dropped and the `preferences.warmup` Drizzle
+      field is removed from `server/db/schema.ts` in the same commit
+      (comment now at `:423-432`). Its trigger fired long ago: Phase WU set
+      it at "the first server-touching phase after TWO tags have shipped",
+      deliberately countable, and ten tags had shipped by the time this
+      rider rode.
+- [x] **Remove the legacy warm-up guards on the persisted `LogSeed.steps[].kind`
+      union.** **DONE (door PR A, Task 6):** the guard at `logDraft.ts:864`
+      (`if (seedStep.kind === "warmup") return;`) is deleted, and the union
+      at `logDraft.ts:607` is narrowed to the literal `"work"` — per the
+      binding sub-ruling from WU, never widened to `string`. The accepted
+      residual (an unlogged pre-removal `MonitorRun` still on a phone) is
+      written at the removal site; `storedSummary.ts`'s Σ-gap comment is
+      reconciled in the same commit.
+- [x] **RC-12's last unreconciled comment.** **DONE (door PR A, Task 6):**
+      `domain/monitor/types.ts`'s `onDisconnect` doc block no longer claims
+      "the phone's Bluetooth stack resetting" or "iOS backgrounding" as
+      causes — both are folded into one sentence stating the walks
+      established it covers NEITHER (`docs/history/phase-rc.md:2054-2056`).
 
 **Exit:** a phone locked before the first pull, a phone backgrounded mid-piece,
 and a link dropped mid-piece each produce a stored row that matches what the

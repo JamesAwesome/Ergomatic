@@ -26,6 +26,7 @@ import {
   MONITOR_SPM_MAX,
   spmIsMeasured,
 } from "./logDraft";
+import type { LogSeed } from "./logDraft";
 
 // Realistic fixtures throughout (repo convention, CLAUDE.md's own recurring
 // failure #3): every table below is a REAL library workout from
@@ -1037,10 +1038,11 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
   // PHASE WU deleted the integration case that stood here: it drove the
   // warm-up SETTING through `buildRun` and pinned the `kind: "warmup"` seed
   // step plus its "8:00 warm-up"/"2000 m warm-up" label idiom. There is no
-  // setting and no producer left, so nothing can write that kind. The seed
-  // reader that still honours it on PERSISTED records is pinned below,
-  // under "a stored run written before `type` existed still drops its
-  // warm-up when loaded back".
+  // setting and no producer left, so nothing can write that kind. Door PR A
+  // (rider 2) then removed the reader that used to honour it on PERSISTED
+  // records; a legacy `kind: "warmup"` step's fate is pinned below, under
+  // "a stored run written before `type` existed still logs cleanly, and its
+  // legacy warm-up step now produces a step too".
 
   it("a 'test' phase (defensive only — compileProgram never lets one reach production) seeds a bare, un-prefixed label", () => {
     const draft = buildDraft({
@@ -1331,7 +1333,17 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     });
   });
 
-  it("a LEGACY kind:'warmup' seed step produces NO step (manual parity, adversarial B2) and shifts nothing", () => {
+  it("the type no longer admits `kind: 'warmup'` — LogSeed.steps[].kind is the literal `\"work\"`, never widened to `string` (Phase WU's binding sub-ruling)", () => {
+    // @ts-expect-error — rider 2 (door PR A, spec §4) narrowed the union;
+    // this must fail to compile, or the narrowing regressed.
+    const illegal: LogSeed["steps"][number] = { label: "x", kind: "warmup" };
+    // The `@ts-expect-error` above is the real assertion (compile-time);
+    // this runtime one only satisfies the lint rule that every test makes
+    // one.
+    expect(illegal.label).toBe("x");
+  });
+
+  it("a LEGACY kind:'warmup' seed step now produces a step LIKE ANY OTHER — Phase WU's owed removal, discharged by door PR A (spec §4 rider 2)", () => {
     const draft = buildDraft({
       id: "id-walk4-warmup-variant",
       title: "Walk 4 (warmup variant)",
@@ -1352,22 +1364,23 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     const built = buildRun(draft, BASELINES, NOW);
     const program = compileOrThrow(built.phases);
     // PHASE WU: nothing PRODUCES `kind: "warmup"` any more — `buildRun`'s
-    // warm-up argument and the phase type behind it are both gone. The
-    // reader that skips such a step is deliberately KEPT, because `LogSeed`
-    // is PERSISTED and a `MonitorRun` written before Phase WU still carries
-    // the value (see `LogSeed`'s own doc comment). So this fixture writes
-    // the legacy value by hand onto an otherwise real seed — which is
-    // exactly the shape that comes back out of localStorage — instead of
-    // asking a producer that no longer exists to make one.
+    // warm-up argument and the phase type behind it are both gone. Rider 2
+    // REMOVED the reader's guard (`logDraft.ts:864`) and narrowed the type
+    // to `"work"` only, so this fixture forces the legacy runtime shape
+    // (a `MonitorRun` written before this ships, still carrying the
+    // string "warmup" once it comes back out of JSON) past the type with
+    // an explicit unsafe cast — exactly what `JSON.parse` hands back, which
+    // no compile-time type can prevent.
     const realSeed = buildLogSeed(built.phases, BASELINES);
+    const legacyStep = {
+      ...realSeed.steps[0]!,
+      kind: "warmup",
+    } as unknown as (typeof realSeed.steps)[number];
+    expect((legacyStep as { kind: unknown }).kind).toBe("warmup");
     const logSeed = {
       ...realSeed,
-      steps: [
-        { ...realSeed.steps[0]!, kind: "warmup" as const },
-        ...realSeed.steps.slice(1),
-      ],
+      steps: [legacyStep, ...realSeed.steps.slice(1)],
     };
-    expect(logSeed.steps.map((s) => s.kind)).toStrictEqual(["warmup", "work"]);
     const run: MonitorRun = {
       v: 2,
       workoutId: draft.workoutId,
@@ -1375,8 +1388,8 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       program,
       logSeed,
       actuals: [
-        // A boundary at the warmup's own position — even if the machine
-        // reports one, it must never surface as a step of its own.
+        // A boundary at the legacy step's own position — it now surfaces
+        // as a step of its own, same as any other position.
         {
           index: 0,
           elapsedSeconds: 60,
@@ -1402,11 +1415,17 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       terminated: false,
     };
     const steps = buildMonitorLogSteps(run);
-    expect(steps).toHaveLength(1);
-    expect(steps[0]!.label).toBe(logSeed.steps[1]!.label);
+    // BOTH positions now produce a step — the legacy warm-up position lost
+    // its special treatment along with the guard.
+    expect(steps).toHaveLength(2);
+    expect(steps[0]!.label).toBe(logSeed.steps[0]!.label);
     expect(steps[0]!.actualSource).toBe("pm5");
-    expect(steps[0]!.actualSeconds).toBe(37.8);
-    expect(steps[0]!.actualMeters).toBe(102);
+    expect(steps[0]!.actualSeconds).toBe(60);
+    expect(steps[0]!.actualMeters).toBe(0);
+    expect(steps[1]!.label).toBe(logSeed.steps[1]!.label);
+    expect(steps[1]!.actualSource).toBe("pm5");
+    expect(steps[1]!.actualSeconds).toBe(37.8);
+    expect(steps[1]!.actualMeters).toBe(102);
   });
 
   // THE PRE-WAVE RECORD, READ BY POST-WAVE CODE (close-out C, antagonist
@@ -1421,17 +1440,16 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
   // `buildMonitorLogSteps` is the ONLY production reader of a program that
   // came back out of localStorage (every other consumer, the connected
   // surface included, gets a program `WorkoutDetail` compiled fresh in
-  // memory at Connect), and it is safe for exactly one reason this test
-  // exists to keep true: it decides warm-up-ness from
-  // `logSeed.steps[i].kind`, never from `ProgramInterval.type`. `LogSeed`'s
-  // own doc comment above calls `kind` "REDUNDANT with
-  // `ProgramInterval.type`" and contemplates retiring it; retiring it in
-  // favour of `type` would silently emit a warm-up row for every record
-  // that straddles the update. So this walks the REAL stored shape —
-  // JSON in localStorage, through `loadMonitorRun`, with the legacy
-  // intervals — rather than a hand-built object that happens to carry the
-  // new field.
-  it("a stored run written before `type` existed still drops its warm-up when loaded back", () => {
+  // memory at Connect). Door PR A (rider 2) removed the seed's own
+  // `kind === "warmup"` skip, so this test's remaining subject is
+  // narrower than it used to be: it proves the ABSENT `type` field, on
+  // its own, does not crash or misroute the reader. The legacy
+  // `kind: "warmup"` seed step this fixture also carries now produces a
+  // step like any other, same as the case above — this walks the REAL
+  // stored shape (JSON in localStorage, through `loadMonitorRun`, with
+  // the legacy intervals) rather than a hand-built object, so both
+  // legacy facts are exercised together.
+  it("a stored run written before `type` existed still logs cleanly, and its legacy warm-up step now produces a step too", () => {
     localStorage.clear();
     const draft = buildDraft({
       id: "id-walk4-legacy-variant",
@@ -1514,11 +1532,16 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(loaded!.program.intervals[0]).not.toHaveProperty("type");
 
     const steps = buildMonitorLogSteps(loaded!);
-    expect(steps).toHaveLength(1);
-    expect(steps[0]!.label).toBe(logSeed.steps[1]!.label);
-    expect(steps[0]!.actualSource).toBe("pm5");
-    expect(steps[0]!.actualSeconds).toBe(37.8);
-    expect(steps[0]!.actualMeters).toBe(102);
+    // BOTH intervals now produce a step. The legacy warm-up position (0)
+    // has no matching actual in this fixture — an unmatched interval gets
+    // NO actual and NO source (§3's own rule), never a fabricated one.
+    expect(steps).toHaveLength(2);
+    expect(steps[0]!.label).toBe(logSeed.steps[0]!.label);
+    expect(steps[0]!.actualSource).toBeUndefined();
+    expect(steps[1]!.label).toBe(logSeed.steps[1]!.label);
+    expect(steps[1]!.actualSource).toBe("pm5");
+    expect(steps[1]!.actualSeconds).toBe(37.8);
+    expect(steps[1]!.actualMeters).toBe(102);
   });
 
   it("a lost boundary (actuals shorter, that index absent) leaves the step with NO actual and NO source, never 'assumed'", () => {
@@ -1782,19 +1805,16 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(steps[0]!.actualSplit).toBe(WALK4_ACTUALS[0]!.avgSplit);
   });
 
-  // Branch review Medium-2: mutant M2b keyed the warmup skip on `i === 0`
-  // instead of `seedStep.kind === "warmup"` and survived the whole suite —
-  // every warmup fixture on the branch was LEADING. That fixture used to
-  // be authorable (`wu` carried no positional constraint), and since
-  // 2026-08-09's warmup setting it was not: the setting only ever
-  // PREPENDED, so nothing in production could put a warmup phase in the
-  // middle any more, and since Phase WU
-  // nothing can put one ANYWHERE. The skip is still written
-  // position-independently and this test still holds it to that: the
-  // fixture is a real three-interval program whose MIDDLE seed step is
-  // hand-set to the legacy `kind: "warmup"` — the shape a pre-WU record
-  // can hand the reader out of localStorage.
-  it("a LEGACY MID-LIST kind:'warmup' seed step produces NO step and does not shift the following work step's mapping (branch review Medium-2)", () => {
+  // Branch review Medium-2's own mutant (M2b, keying the skip on `i === 0`
+  // instead of `seedStep.kind === "warmup"`) no longer applies: door PR A
+  // (rider 2) deleted the skip it targeted. What survives from that round
+  // is the fixture — a real three-interval program whose MIDDLE seed step
+  // is hand-set to the legacy `kind: "warmup"`, the shape a pre-removal
+  // record can hand the reader out of localStorage — now repurposed to
+  // prove the opposite: a legacy tag anywhere in the list, not just
+  // leading, produces a step in its own place and does not disturb either
+  // neighbour's mapping.
+  it("a LEGACY MID-LIST kind:'warmup' seed step now produces a step in place and does not shift either neighbour's mapping", () => {
     const draft = buildDraft({
       id: "id-mid-workout-warmup",
       title: "Mid-Workout Warmup",
@@ -1823,19 +1843,17 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     const built = buildRun(draft, BASELINES, NOW);
     const program = compileOrThrow(built.phases);
     const realSeed = buildLogSeed(built.phases, BASELINES);
+    // The unsafe cast forces the legacy runtime shape (a persisted
+    // `kind: "warmup"` string) past the now-narrower `LogSeed` type — see
+    // the leading-position case above for why.
+    const legacyMidStep = {
+      ...realSeed.steps[1]!,
+      kind: "warmup",
+    } as unknown as (typeof realSeed.steps)[number];
     const logSeed = {
       ...realSeed,
-      steps: [
-        realSeed.steps[0]!,
-        { ...realSeed.steps[1]!, kind: "warmup" as const },
-        realSeed.steps[2]!,
-      ],
+      steps: [realSeed.steps[0]!, legacyMidStep, realSeed.steps[2]!],
     };
-    expect(logSeed.steps.map((s) => s.kind)).toStrictEqual([
-      "work",
-      "warmup",
-      "work",
-    ]);
     expect(program.intervals).toHaveLength(3);
     const run: MonitorRun = {
       v: 2,
@@ -1853,8 +1871,8 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           avgHeartRateBpm: 118,
           restDistanceMeters: 0,
         },
-        // A boundary landing on the mid-workout warmup's own position —
-        // even if the machine reports one, it must never surface as a step.
+        // A boundary landing on the mid-workout legacy step's own
+        // position — it now surfaces as a step of its own.
         {
           index: 1,
           elapsedSeconds: 60,
@@ -1880,19 +1898,27 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       terminated: false,
     };
     const steps = buildMonitorLogSteps(run);
-    // Exactly two steps — the warmup at position 1 produced none.
-    expect(steps).toHaveLength(2);
+    // All three steps now produced — the legacy tag at position 1 no
+    // longer removes anything, and neither neighbour's own mapping moves.
+    expect(steps).toHaveLength(3);
     expect(steps[0]!.label).toBe(logSeed.steps[0]!.label);
     expect(steps[0]!.meters).toBe(100);
-    // The second WORK step keeps ITS OWN mapping (interval 2, 200 m,
-    // interval 2's actual) — not shifted onto the warmup's interval 1.
-    expect(steps[1]!.label).toBe(logSeed.steps[2]!.label);
-    expect(steps[1]!.meters).toBe(200);
-    expect(steps[1]!.targetSplit).toBe(program.intervals[2]!.targetSplit);
+    expect(steps[0]!.actualSource).toBe("pm5");
+    expect(steps[0]!.actualSeconds).toBe(32.1);
+    expect(steps[1]!.label).toBe(logSeed.steps[1]!.label);
+    expect(steps[1]!.seconds).toBe(60);
     expect(steps[1]!.actualSource).toBe("pm5");
-    expect(steps[1]!.actualSeconds).toBe(65.3);
-    expect(steps[1]!.actualMeters).toBe(200);
-    expect(steps[1]!.actualSpm).toBe(23);
+    expect(steps[1]!.actualSeconds).toBe(60);
+    expect(steps[1]!.actualMeters).toBe(0);
+    // The trailing WORK step keeps ITS OWN mapping (interval 2, 200 m,
+    // interval 2's actual) — not shifted onto the legacy step's interval 1.
+    expect(steps[2]!.label).toBe(logSeed.steps[2]!.label);
+    expect(steps[2]!.meters).toBe(200);
+    expect(steps[2]!.targetSplit).toBe(program.intervals[2]!.targetSplit);
+    expect(steps[2]!.actualSource).toBe("pm5");
+    expect(steps[2]!.actualSeconds).toBe(65.3);
+    expect(steps[2]!.actualMeters).toBe(200);
+    expect(steps[2]!.actualSpm).toBe(23);
   });
 
   // Branch review Medium-3: mutant `step.targetSplit =

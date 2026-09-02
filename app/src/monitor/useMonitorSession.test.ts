@@ -158,11 +158,18 @@ const TEST_SEED: { logSeed: LogSeed } = {
   logSeed: {
     // `kind: "warmup"` is deliberate, not stale: Phase WU removed the
     // producer, but `LogSeed` is PERSISTED, so a `MonitorRun` stored
-    // before Phase WU still carries this exact value. Keeping it here
-    // exercises `buildMonitorLogSteps`' legacy skip (`logDraft.ts`) —
-    // do not "modernize" this to a plain step, that changes what the
-    // function under test emits and moves assertions below.
-    steps: [{ label: "8:00 warm-up", kind: "warmup" }],
+    // before Phase WU still carries this exact value at runtime. Door PR A
+    // (spec §4 rider 2) narrowed the TYPE to the literal `"work"` and
+    // removed `buildMonitorLogSteps`' own legacy skip, but this file's
+    // hero-computation paths can still reach `summaryModel.ts`'s SEPARATE
+    // `warmupIndex` (RC-5's legacy-run detection, untouched by that rider),
+    // so the runtime string stays "warmup" here via an unsafe cast rather
+    // than changing what this fixture models — do not "modernize" this to
+    // a plain step, that changes what downstream code sees and moves
+    // assertions below.
+    steps: [
+      { label: "8:00 warm-up", kind: "warmup" },
+    ] as unknown as LogSeed["steps"],
     paces: { k6: 120 },
   },
 };

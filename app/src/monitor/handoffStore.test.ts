@@ -40,8 +40,12 @@ type StoreModule = typeof import("./handoffStore");
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 const t0 = new Date("2026-08-05T12:00:00.000Z");
 
+// Placeholder content only — this file's tests are about handoff-store
+// mechanics, never about `kind`. Door PR A narrowed `LogSeed.steps[].kind`
+// to the literal `"work"` (spec §4 rider 2), so this reads "work" like any
+// other seed step would since Phase WU.
 const TEST_SEED: LogSeed = {
-  steps: [{ label: "8:00 warm-up", kind: "warmup" }],
+  steps: [{ label: "8:00 warm-up", kind: "work" }],
   paces: {},
 };
 

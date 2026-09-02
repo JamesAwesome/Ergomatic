@@ -656,19 +656,27 @@ export function measuredIntervalCount(
 // Monitor door
 // ---------------------------------------------------------------------
 
-/** KEEP (Phase WU). A LEGACY warm-up interval's position in
- *  `run.program.intervals`, or -1 when this run has none — which post-WU is
- *  every run built by today's code, since `buildLogSeed` (`logDraft.ts`)
- *  can no longer write `kind: "warmup"`. It stays because `LogSeed` is
- *  PERSISTED: a `MonitorRun` stored before Phase WU still carries the
- *  value, and dropping this would silently fold that run's warm-up
+/** KEEP. A LEGACY warm-up interval's position in `run.program.intervals`,
+ *  or -1 when this run has none — which is every run built by today's code,
+ *  since `buildLogSeed` (`logDraft.ts`) has not been able to write
+ *  `kind: "warmup"` since Phase WU. `LogSeed.steps[].kind` is now typed
+ *  `"work"` only (door PR A, spec §4 rider 2, narrowed the union — that
+ *  rider's own scope was the READER at `logDraft.ts`'s
+ *  `buildMonitorLogSteps`, a SEPARATE mechanism from this one; it did not
+ *  touch this function), but a `MonitorRun` stored before either change
+ *  still carries the string `"warmup"` at runtime once it comes back out
+ *  of JSON, despite the type saying otherwise — the same "trust the wire,
+ *  not the type" reasoning `MonitorRun`'s own `interval.type === undefined`
+ *  comment relies on. The unchecked read below is what lets this function
+ *  keep finding it: dropping this would silently fold that run's warm-up
  *  interval into its AVG SPLIT — moving a number on a record already shown
  *  to the rower. Also -1 when there is no `logSeed` at all (a v1
  *  `MonitorRun` predating the field, `MonitorRun.logSeed`'s own doc
- *  comment). Owed removal: ROADMAP Phase WU, at the first server-touching
- *  phase after two tags have shipped. */
+ *  comment). */
 function warmupIndex(run: MonitorRun): number {
-  return run.logSeed?.steps.findIndex((s) => s.kind === "warmup") ?? -1;
+  return (
+    run.logSeed?.steps.findIndex((s) => (s.kind as string) === "warmup") ?? -1
+  );
 }
 
 /** THE FUSED TOTAL (work + rest distance), Σ(work + rest) over ALL

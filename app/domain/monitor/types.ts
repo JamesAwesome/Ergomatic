@@ -628,22 +628,25 @@ export interface Transport {
    *  which arrives via `onDisconnect` instead. */
   disconnect(): Promise<void>;
   /** Registers a callback for an UNEXPECTED link drop (radio out of range,
-   *  the phone's Bluetooth stack resetting, a reported Bluetooth-disabled
-   *  event) — never fired by a caller-initiated `disconnect()`. Returns
-   *  an unsubscribe function.
+   *  a reported Bluetooth-disabled event) — never fired by a
+   *  caller-initiated `disconnect()`. Returns an unsubscribe function.
    *
-   *  **CORRECTED (Phase LL Task 2, link-truth design spec §2 mechanism
-   *  2):** this comment used to name "iOS backgrounding" among the
-   *  causes of an unexpected `onDisconnect` — false. `Info.plist`
-   *  declares no `UIBackgroundModes`, so the app's whole JS runtime
-   *  simply SUSPENDS while backgrounded; nothing in this codebase
-   *  observes CoreBluetooth actually tearing the link down for that
-   *  reason specifically, and whether `didDisconnectPeripheral` even
-   *  fires for a backgrounded app is INFERENCE, not measured (Apple
-   *  documents only the connect/cancel cases — walk item W5). Backgrounding
-   *  is instead detected at the ADAPTER layer (`src/adapters/
-   *  appLifecycle.ts`) and handled by treating the frame stream as
-   *  suspect on resume (`useMonitorSession.ts`'s own `frameSilence`) —
-   *  a SEPARATE mechanism from this callback, never a producer of it. */
+   *  **RC-12 (`docs/history/phase-rc.md:2054-2056`):** this comment used
+   *  to also name "the phone's Bluetooth stack resetting" and "iOS
+   *  backgrounding" among the causes of an unexpected `onDisconnect` — the
+   *  walks established it covers NEITHER. No capture or walk has ever shown
+   *  this callback firing for a Bluetooth-stack reset; that claim was
+   *  unsourced. For backgrounding specifically: `Info.plist` declares no
+   *  `UIBackgroundModes`, so the app's whole JS runtime simply SUSPENDS
+   *  while backgrounded; nothing in this codebase observes CoreBluetooth
+   *  actually tearing the link down for that reason, and whether
+   *  `didDisconnectPeripheral` even fires for a backgrounded app is
+   *  INFERENCE, not measured (Apple documents only the connect/cancel
+   *  cases — walk item W5; Phase LL Task 2, link-truth design spec §2
+   *  mechanism 2). Backgrounding is instead detected at the ADAPTER layer
+   *  (`src/adapters/appLifecycle.ts`) and handled by treating the frame
+   *  stream as suspect on resume (`useMonitorSession.ts`'s own
+   *  `frameSilence`) — a SEPARATE mechanism from this callback, never a
+   *  producer of it. */
   onDisconnect(cb: (reason: string) => void): () => void;
 }
