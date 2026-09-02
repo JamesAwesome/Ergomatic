@@ -1170,6 +1170,17 @@ promoted into a wave, or it is killed with a reason. "Rides the next PR touching
 X" is a real disposition — most of these are single files.
 
 ## Codebase-audit owners
+- **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02): on
+  the connected lost-link banner (`ConnectedSurface.tsx`'s `LostBanner`, the
+  `kept === 0` arm), that line reads as loss at the exact moment the
+  RECONNECT is nullifying it — scary and, given recovery, false. Proposed:
+  `kept === 0` renders the title alone (no body); `kept >= 1` keeps
+  "N intervals kept." Copy-only, one file, cosmetic failure mode —
+  FAST-PATH eligible, but a rendered **Gate 0** first (it changes what a
+  rower reads). **Rides PR 4 (§5 partial metres) — James, 2026-09-02**: the
+  same PR that makes a part-rowed interval count toward "kept" owns what the
+  zero-kept banner says, one Gate 0 for the whole kept vocabulary. Evidence:
+  `ConnectedSurface.tsx:848`.
 
 - **v0.32.0's notes owe the DIAGNOSTICS door its affordance sentence** (PM
   gate on #258, 2026-09-01): where it is (You → DIAGNOSTICS → Monitor logs),

@@ -1871,6 +1871,63 @@ export function useMonitorSession(
   const resumeStaleRunRef = useRef<{ key: string; frames: number } | null>(
     null,
   );
+  /** §3 timing addendum (Wave F PR 3, lifecycle design spec 2026-08-31 §3;
+   *  the antagonist-rejected "distance advanced" latch's own successor
+   *  instrument — READ ONLY, never a predicate input, I3). A rolling window
+   *  of the last `PAUSED_FRAME_HOLD` ROWING-frame arrival times
+   *  (`nowDate().getTime()`), maintained beside `freezeRef` with the
+   *  identical rowing/non-rowing split `nextFreezeRun` itself uses — capped
+   *  at `PAUSED_FRAME_HOLD` on every rowing frame, reset to `[]` on every
+   *  non-rowing one (`frame.state !== "rowing" || frame.distanceMeters <=
+   *  0`), so the instant `freeze.frames` first reaches the hold, this
+   *  window holds exactly that frozen run's own arrivals — see the append
+   *  site's own comment in `handleFrame` for what actually guarantees this
+   *  (the append count and the window cap, NOT the mirrored non-rowing
+   *  reset, which is defensive). `pause-declared`
+   *  reads it to log `gapsMs`, the inter-arrival gaps between those frames.
+   *  LIFETIME (own table, §3 timing addendum): cleared (to `[]`) at
+   *  `connect()`, at each of the three per-run reset sites
+   *  (`program()`/`beginFreeRow()`'s fresh arms, the RC-37
+   *  programDropped/ready exit), and at `teardown()` — survives neither
+   *  teardown, relaunch, nor re-arm. */
+  const frameArrivalsRef = useRef<number[]>([]);
+  /** §3 timing addendum: `nowDate().getTime()` at the most recent FOREGROUND
+   *  lifecycle edge this RUN has seen — armed beside `resumeEdgeArmedRef`
+   *  itself (the same "foreground" branch, same instant), `null` until the
+   *  first resume since the run began. `pause-declared` reads it to log
+   *  `sinceResumeMs` (the elapsed ms since that edge, or `"none"` while
+   *  still `null`) — never read by any predicate (I3). PER-RUN, not
+   *  per-session: cleared (to `null`) at the same five sites
+   *  `frameArrivalsRef` is — `connect()`, the three per-run resets
+   *  (`program()`/`beginFreeRow()`'s fresh arms, the RC-37
+   *  programDropped/ready exit), and `teardown()` — survives neither
+   *  teardown, relaunch, nor re-arm. A mid-session `program()`/
+   *  `beginFreeRow()` clears it exactly like `resumeEdgeArmedRef`, so a
+   *  pause declared right after such a reset reads `sinceResumeMs=none`
+   *  even if this SESSION resumed earlier, under a prior run. */
+  const lastResumeAtMsRef = useRef<number | null>(null);
+  /** §3 timing addendum: the first-`PAUSED_FRAME_HOLD`-post-resume-frame
+   *  arrival-time collector. Minted as `[]` at the SAME foreground edge that
+   *  arms `resumeEdgeArmedRef`/seeds `lastResumeAtMsRef` (so the very frame
+   *  that consumes that arm is already this window's first entry) — every
+   *  later frame (regardless of the arm/stale-run branch it takes above)
+   *  appends its own arrival while this is non-`null`; on reaching
+   *  `PAUSED_FRAME_HOLD` entries the three gaps between them are logged as
+   *  `resume-first-frame`'s own `nextGapsMs=[…]` and the ref returns to
+   *  `null`. `null` whenever no such window is open (never armed yet this
+   *  session, already closed, or a fresh arm/connect discarded it). LIFETIME:
+   *  the three per-run reset sites and `connect()` discard it SILENTLY (no
+   *  entry — an unfinished window from a run/session that is over is not a
+   *  truncation of anything still live); TWO sites LOG a close instead of
+   *  discarding it — `teardown()` (`nextGapsMs=truncated`, "the session
+   *  ended before the fourth frame arrived") and a SECOND foreground edge
+   *  arriving while this is still non-`null` (`nextGapsMs=superseded
+   *  frames=<n>`, `<n>` the arrivals the open window had already collected)
+   *  — mirroring `resumeStaleRunRef`'s own `endedBy=resumed` discipline
+   *  (frame handler, above): a second resume must not silently discard the
+   *  first window's partial evidence. Survives neither teardown, relaunch,
+   *  nor re-arm. */
+  const postResumeArrivalsRef = useRef<number[] | null>(null);
   // §6's latch counters and their once-per-session guard, and the logical
   // session's own identity, USED TO LIVE HERE as four standalone refs
   // (`resumeLatchCountRef`/`resumeCountRef`/`latchCountRecordedRef`/
@@ -2649,6 +2706,28 @@ export function useMonitorSession(
           resumeStaleRunRef.current = null;
         }
       }
+      // §3 timing addendum: independent of whichever branch above ran (or
+      // neither) this frame — a stale run and this window are governed by
+      // different rules, and `postResumeArrivalsRef` is seeded EMPTY at the
+      // foreground edge itself (below), so the very frame that consumed the
+      // arm above is already this window's first entry, counted here like
+      // every frame after it. Instrument-only: no predicate reads this (I3).
+      if (postResumeArrivalsRef.current !== null) {
+        const arrivals = [
+          ...postResumeArrivalsRef.current,
+          nowDate().getTime(),
+        ];
+        if (arrivals.length >= PAUSED_FRAME_HOLD) {
+          const nextGapsMs = arrivals.slice(1).map((t, i) => t - arrivals[i]!);
+          sessionRef.current?.log.record(
+            "resume-first-frame",
+            `nextGapsMs=[${nextGapsMs.join(",")}]`,
+          );
+          postResumeArrivalsRef.current = null;
+        } else {
+          postResumeArrivalsRef.current = arrivals;
+        }
+      }
       const phase = stateRef.current.phase;
       // FIRST ROWING FRAME WITH FLYWHEEL EVIDENCE -> live (spec §2:
       // every transition maps to a real event or frame field). Two
@@ -3014,6 +3093,49 @@ export function useMonitorSession(
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
         const nowPaused = isPausedRun(freeze);
+        // §3 timing addendum: mirror `nextFreezeRun`'s own rowing/non-rowing
+        // split into `frameArrivalsRef`'s matching rolling window. Pure
+        // measurement riding beside the predicate call above, never inside
+        // it (I3): reads `frame`/`nowDate()` only, never
+        // `freeze`/`wasPaused`/`nowPaused`.
+        //
+        // THE REAL GUARANTEE is structural, not a synchronised reset:
+        // (i) every frame that increments `freeze.frames` appends here, in
+        // this same straight-line block with nothing between; (ii) the
+        // window cap IS `PAUSED_FRAME_HOLD`; (iii) a declaration fires on
+        // the frame `frames` first reaches the hold, and `pulled` cannot
+        // flip mid-run (an identical frame resets the pull streak, so it is
+        // already true or never becomes true during a frozen run). So the
+        // last HOLD entries at a declaration are the DECLARING run's own
+        // frames whether or not the branch below ever resets. Corroboration
+        // by count: `PULL_EVIDENCE_FRAMES` (5) > `PAUSED_FRAME_HOLD` (4)
+        // means at least 7 appends precede any declaration (5 strictly-
+        // increasing pull frames, the last doubling as the run's first,
+        // plus 3 identical frames = 8; 7 in the tight case where the first
+        // pull frame is the ready→live seed, which is never appended — see
+        // below). The ready→live transition frame is a separate case: it
+        // seeds `freezeRef` via `nextFreezeRun(null, frame)` in the `ready`
+        // branch above and returns before reaching here, so it is never
+        // appended — harmless, since `pulled` is unconditionally `false` on
+        // that seed (a fresh `pull` can't yet have reached
+        // `PULL_EVIDENCE_FRAMES`), so it can never itself be the declaring
+        // run.
+        //
+        // The reset branch immediately below (mirroring `nextFreezeRun`'s
+        // own non-rowing clear) is DEFENSIVE, belt-and-braces: it is not
+        // load-bearing for the guarantee above, which holds on the append
+        // count alone. Verified by mutation — deleting the reset (always
+        // appending, never clearing) left all 169 client test files / 4411
+        // tests green, so no committed test can currently make this branch
+        // bite.
+        if (frame.state !== "rowing" || frame.distanceMeters <= 0) {
+          frameArrivalsRef.current = [];
+        } else {
+          frameArrivalsRef.current = [
+            ...frameArrivalsRef.current,
+            nowDate().getTime(),
+          ].slice(-PAUSED_FRAME_HOLD);
+        }
         // RC-25 (James, 2026-08-26: "Add the instrument now"). The pause is
         // DERIVED and was never logged, which is why his sighting of a false
         // `PULL TO RESUME` at a rest boundary left no trace and had to be
@@ -3032,10 +3154,25 @@ export function useMonitorSession(
         // Records what was MEASURED and asserts no cause — the same rule the
         // resume line follows since the trigger fix.
         if (nowPaused && !wasPaused) {
+          // §3 timing addendum: the gaps between the frozen run's own
+          // arrivals (`frameArrivalsRef`, already exactly this run's last
+          // `PAUSED_FRAME_HOLD` frames the instant `frames` first reaches
+          // the hold — see that ref's own doc comment) and how long since
+          // the most recent foreground edge, `"none"` if this session has
+          // never resumed. Measured, not consulted: neither field changes
+          // `nowPaused` above (I3).
+          const gapsMs = frameArrivalsRef.current
+            .slice(1)
+            .map((t, i) => t - frameArrivalsRef.current[i]!);
+          const sinceResumeMs =
+            lastResumeAtMsRef.current === null
+              ? "none"
+              : nowDate().getTime() - lastResumeAtMsRef.current;
           sessionRef.current?.log.record(
             "pause-declared",
             `frames=${freeze.frames} hold=${PAUSED_FRAME_HOLD} pulled=${freeze.pulled} ` +
-              `d=${frame.distanceMeters} split=${frame.currentSplit} spm=${frame.spm}`,
+              `d=${frame.distanceMeters} split=${frame.currentSplit} spm=${frame.spm} ` +
+              `gapsMs=[${gapsMs.join(",")}] sinceResumeMs=${sinceResumeMs}`,
           );
         }
         update({ frame, frozen: nowPaused });
@@ -3450,6 +3587,14 @@ export function useMonitorSession(
         // `resumeEdgeArmedRef` immediately above already gets — see
         // `preBackgroundFreezeKeyRef`'s own doc comment.
         preBackgroundFreezeKeyRef.current = null;
+        // §3 timing addendum: silent per-run discard, same three sites as
+        // `resumeEdgeArmedRef` — an open window from a run that just ended
+        // is not a truncation of anything still live (that report belongs
+        // to `teardown()` alone — see `postResumeArrivalsRef`'s own doc
+        // comment).
+        frameArrivalsRef.current = [];
+        lastResumeAtMsRef.current = null;
+        postResumeArrivalsRef.current = null;
         // Hand-off store design spec §1: same per-run reset `cancel()`
         // applies to this ref, for the identical reason — see that
         // function's own comment.
@@ -3816,6 +3961,21 @@ export function useMonitorSession(
         );
         resumeStaleRunRef.current = null;
       }
+      // §3 timing addendum: `teardown` is the one site that LOGS this
+      // window's close (`postResumeArrivalsRef`'s own doc comment) — "the
+      // session ended before the fourth post-resume frame arrived" is
+      // itself the finding, not silence. Same choke-point reasoning as the
+      // `resume-stale-run` close immediately above, and it must run before
+      // the same `stash()` below.
+      if (postResumeArrivalsRef.current !== null) {
+        sessionRef.current?.log.record(
+          "resume-first-frame",
+          "nextGapsMs=truncated",
+        );
+        postResumeArrivalsRef.current = null;
+      }
+      frameArrivalsRef.current = [];
+      lastResumeAtMsRef.current = null;
 
       // STEP 2: STASH. THE LOG SURVIVES THE SESSION (2026-08-08, hardware
       // walk 2): the ended hand-off frame navigates away on its first
@@ -4338,6 +4498,11 @@ export function useMonitorSession(
       // Final whole-branch review, item 2: same per-session floor as
       // `resumeEdgeArmedRef` immediately above — see its own doc comment.
       preBackgroundFreezeKeyRef.current = null;
+      // §3 timing addendum: same per-session floor, silently — a fresh
+      // connection starts with no arrivals, no resume, no open window.
+      frameArrivalsRef.current = [];
+      lastResumeAtMsRef.current = null;
+      postResumeArrivalsRef.current = null;
       // S6: once per ordinary product connect, straight into this session's
       // own ring — see `requestStoragePersistence`'s own doc comment for the
       // full reasoning.
@@ -4537,6 +4702,24 @@ export function useMonitorSession(
           preBackgroundKey: preBackgroundFreezeKeyRef.current,
           framesWhileHidden,
         };
+        // §3 timing addendum: armed at this SAME foreground edge, beside
+        // `resumeEdgeArmedRef` itself — see `lastResumeAtMsRef`'s and
+        // `postResumeArrivalsRef`'s own doc comments for why here (not the
+        // arm-consume site in `handleFrame`) is the mint site for both.
+        //
+        // A SECOND foreground edge before the first window closes must not
+        // silently discard it — mirrors `resumeStaleRunRef`'s own
+        // `endedBy=resumed` discipline (frame handler, above): record what
+        // the still-open window had collected BEFORE this edge reassigns
+        // it, never merge or lose it quietly.
+        if (postResumeArrivalsRef.current !== null) {
+          log.record(
+            "resume-first-frame",
+            `nextGapsMs=superseded frames=${postResumeArrivalsRef.current.length}`,
+          );
+        }
+        lastResumeAtMsRef.current = nowDate().getTime();
+        postResumeArrivalsRef.current = [];
         // Only when we latched — see this handler's own header for why
         // calling this on a non-latching resume would disarm the watchdog
         // and leave a genuinely silent stream showing nothing at all.
@@ -4575,7 +4758,7 @@ export function useMonitorSession(
       // claim a NEWER attempt is holding, or two connects run at once.
       if (!superseded()) connectingRef.current = false;
     }
-  }, [fail, handleEvent, update, mintSessionId]);
+  }, [fail, handleEvent, update, mintSessionId, nowDate]);
 
   /**
    * PHASE JR PR 2 — the free row's arm, and `program()`'s counterpart.
@@ -4661,6 +4844,11 @@ export function useMonitorSession(
     // Same per-run reset `resumeEdgeArmedRef` immediately above gets — see
     // `preBackgroundFreezeKeyRef`'s own doc comment.
     preBackgroundFreezeKeyRef.current = null;
+    // §3 timing addendum: same per-run discard, silently — see
+    // `postResumeArrivalsRef`'s own doc comment for why this site never logs.
+    frameArrivalsRef.current = [];
+    lastResumeAtMsRef.current = null;
+    postResumeArrivalsRef.current = null;
     identityRef.current = {
       program: { intervals: [] },
       workoutId: null,
@@ -4717,6 +4905,11 @@ export function useMonitorSession(
       // `resumeEdgeArmedRef` immediately above already gets — see
       // `preBackgroundFreezeKeyRef`'s own doc comment.
       preBackgroundFreezeKeyRef.current = null;
+      // §3 timing addendum: same per-run discard, silently — see
+      // `postResumeArrivalsRef`'s own doc comment for why this site never logs.
+      frameArrivalsRef.current = [];
+      lastResumeAtMsRef.current = null;
+      postResumeArrivalsRef.current = null;
       const driver = driverRef.current;
       if (driver === null) {
         fail({

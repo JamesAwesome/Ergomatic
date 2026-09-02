@@ -5302,3 +5302,203 @@ same way.
   worktree branch despite the read-only brief. Content was reviewed and kept;
   the breach stands as the reason "agents propose, the controller lands" is in
   CLAUDE.md and not only in the dispatch text.
+
+## 2026-09-02 — Wave F PR 3 §4 freeze-predicate design: the fix that ignored its own capture
+
+- **Claim (plan §4 Design, first draft):** "a pause may not be declared until
+  at least one frame has ADVANCED distance since the resume edge" suppresses
+  the resume-stall false positive; I1/I2 "HOLD." Believed because Reading 2
+  showed distance advancing throughout the false pause, so "advance = fresh
+  stream" looked like the discriminator.
+- **FALSE. The mechanism is inert for Reading 2, the capture it was designed
+  from.** Technique: trace the founding capture's literal frame numbers
+  against the proposed latch instead of reasoning abstractly. `pause-declared
+  frames=4 d=115.3` (seq 33) means 4 identical frames at 115.3; the resume
+  frame is 110.8 (seq 29). The latch clears on "first frame > 110.8" — which
+  is the FIRST 115.3 frame, three frames before the pause. The stall value is
+  itself an advance over the resume frame, so any "advanced since resume"
+  test clears exactly when it must hold. Both candidate shapes the plan
+  floated break identically, because there is one distinct post-resume value
+  appearing four times.
+- **Root lesson: when a discriminator keys on a monotonic quantity
+  (distance), confirm the failure case isn't monotonic too.** A re-emission
+  stall and a genuine row-then-stop are both "advance then freeze" in
+  distance; distance cannot separate them. The deterministic axis is frame
+  ARRIVAL TIMING — which the spec (§4) originally named and the plan's design
+  silently dropped. Brittleness axis: a HEURISTIC (infer "fresh stream" from
+  a distance advance) presented as deterministic; the machine never told us
+  "this frame is a re-emission."
+- **Second catch (I1 overstated):** the design marked I1 "HOLDS" analysing
+  only resume→row→stop. Resume→already-stopped never advances, so the latch
+  never clears and a genuine pause is suppressed forever; every foreground
+  edge re-arms it (a second resume suppresses a real stop); the
+  absolute-distance reference goes stale across a no-rest interval boundary
+  where `distanceMeters` resets to 0. Technique: enumerate producers of "no
+  advance after a resume edge" — the design imagined one and missed three.
+- **RF21 trap:** the named suppression-mutation can only go red by
+  constructing a stall with no post-resume advance — which is a genuine stop,
+  so its green state encodes the fix suppressing a real pause. A mutation
+  whose green means "the bug is present" is decoration; the tell that the
+  mechanism, not the test, is wrong.
+- **VETTED GROUND that held:** the defect's location and cause (post-resume
+  repeat-stall on a fresh value; `stale`'s pre-vs-post window genuinely can't
+  gate it) is correct; I3 (pure predicate, stateful suppression) is
+  satisfiable. Only the discriminator was broken. **Ruled (James, option 1):
+  instrument arrival timing first, then design.**
+
+## 2026-09-02 — Wave F PR 3 §3 timing addendum (PR #267), pre-review pass 1
+
+- **Claim: "corpus regression over every committed recording asserting
+  identical `pause-declared` count and positions."** FALSE — no suite asserts
+  `pause-declared` at all. Technique: **grep the asserted STRING across
+  `app/src`, not the suite names.** `grep -rn "pause-declared" app/src`
+  returned one file; three corpus replay suites exist and none touch it. A
+  "regression over the corpus" claim is settled by grepping for the thing it
+  says it pins.
+- **Claim: "the corpus replay harness calls the predicate directly and is
+  structurally unable to see this change."** Half true, and the false half
+  was the stronger evidence: `lifecycleReplay.test.ts` drives the REAL hook
+  over a committed recording with a real lifecycle transition and reads the
+  ring — it can see the change and stayed green. **When a PR argues a gate is
+  blind, check whether a DIFFERENT gate is sighted.**
+- **Claim: a mirrored reset keeps two structures "in lockstep."** Real and
+  correct, but UNFALSIFIABLE: removing it left 165 client files / 4385 tests
+  green. **Mutate the defensive branch, not only the asserted one.** The
+  actual guarantee was a numeric relation nobody had written down —
+  `PULL_EVIDENCE_FRAMES` (5) > `PAUSED_FRAME_HOLD` (4) forces ≥7 window
+  appends before any declaration. A comment crediting the wrong mechanism
+  survives every test.
+- **Merge mechanics are a finding class, not a chore.** `gh pr view --json
+  mergeable,mergeStateStatus` said CONFLICTING/DIRTY and the head had ZERO
+  check-runs while the body reported gate results as final. **Run both as the
+  first step of any pre-merge pass.** `git merge-tree --write-tree
+  origin/main <head>` names the conflicting file before the reviewer does.
+- **Attacked and HELD:** predicate byte-identity (hashed the
+  `freezeKey`→`NO_FREEZE` region on both revs); `gapsMs` always the declaring
+  run's own four frames (proven from the two constants); edge-only; injected
+  clock throughout; counts and coverage reproduced to the digit; all three
+  named mutations reproduced red.
+
+## 2026-09-02 — Wave F PR 3 §3 timing addendum (PR #267), pre-review pass 2
+
+- **The fix wave introduced no defect; every finding was the fix wave's own
+  reconciliation debt.** Nothing in the code broke under attack (predicate
+  byte-identity re-proved by hunk positions; `gapsMs`'s three-entry
+  guarantee attacked through four independent clear sites and held; the M3
+  `frames=<n>` count correct at all four window depths).
+- **Claim: pass 1's M2 "lockstep" comment was fixed.** HALF FIXED. The
+  append-site comment was rewritten to credit the append count; the ref's
+  OWN doc comment 1,230 lines earlier still credited the mirrored reset
+  ("no other reset is needed to keep the two in lockstep"). Technique:
+  **after a comment fix, grep the ref's IDENTIFIER, not the fixed phrase** —
+  a mechanism is usually described twice, once where it is argued and once
+  where it is declared, and a fix lands on one.
+- **Claim: pass 1's B3 removed the false "corpus regression" claim from the
+  plan.** HALF FIXED, in the SAME FILE: the Gates paragraph was corrected
+  and the INVARIANTS section's I1 kept the identical parenthetical.
+  Technique: **when withdrawing a claim, grep the phrase inside the file you
+  just edited before grepping the tree** — invariant/requirement sections
+  restate gates in the future tense and read as forward-looking, so a
+  phrase-sweep aimed at "claims" skips them.
+- **A comment's replacement attribution deserves the same attack as the one
+  it replaced.** The new "REAL GUARANTEE is `PULL_EVIDENCE_FRAMES (5) >
+  PAUSED_FRAME_HOLD (4)`" is true but not load-bearing — set PULL=3 and the
+  guarantee still holds on locality alone (every frame that increments
+  `freeze.frames` appends in the same straight-line block; the window cap IS
+  the hold). Technique: **falsify a numeric attribution by changing the
+  numbers on paper** — if the conclusion survives the constants moving, the
+  constants are not the reason.
+- **Cheap census that found three items at once:** `gh pr diff --name-only`
+  against the PR body (ROADMAP.md unaccounted for), leg count in the test
+  file against the plan's "four new legs" (five), and named mutations
+  against new record sites (four vs five). All three are counts, all three
+  are one command each, and all three were review rounds waiting to happen.
+
+## 2026-09-02 — Wave F PR 3 §3 timing addendum (PR #267), pre-review pass 3
+
+- **No defect in the code, third pass running: the structural guarantee the
+  fix wave substituted for the old numeric one is TRUE and deterministic.**
+  `pulled` cannot flip mid-run because `nextRowingStreak` returns
+  `{frames: 1}` for any rowing frame that does not STRICTLY beat the previous
+  distance, and every frame of a freeze run shares `freezeKey`'s distance —
+  so the `pulled` disjunct can only be satisfied on the run's FIRST frame.
+  Technique: **attack a claim about a derived flag by reading the SIBLING
+  pure function it delegates to** (`nextRowingStreak`), not the function that
+  states the claim (`nextFreezeRun`) — the reset-to-one rule that settles it
+  lives entirely in the callee.
+- **A WITHDRAWAL CAN OVER-WITHDRAW, and the over-withdrawal reads as a
+  contradiction with production source.** Pass 1 correctly killed "corpus
+  regression asserting `pause-declared` count and positions" (no suite
+  asserts that string). The corrected plan then said such a regression is
+  "TO BE BUILT" — while `useMonitorSession.test.ts:8329` already replays
+  ALL NINE committed recordings through the pure predicate and pins pause
+  ONSET FRAMES (`expect(onsets).toStrictEqual(...)`), which is what the
+  hook's own comment at `:3143` means by "corpus regression over all nine
+  committed recordings". Technique, the mirror of pass 2's: **after
+  withdrawing a claim, grep the withdrawn phrase for a TRUE instance, not
+  only for un-fixed copies** — if production source still asserts it and is
+  right, the correction is what needs the qualifier ("that STRING", not
+  "that regression").
+- **Re-run a comment's own claimed mutation to check its NUMBER, not just
+  its conclusion.** `useMonitorSession.ts:3128` credited "169 client test
+  files / 4410 tests green" with the defensive reset deleted. Re-running the
+  same mutation at head reproduced the conclusion (still fully green) and
+  falsified the count: 169 files / **4411** tests — the figure predated the
+  fifth leg added two commits later. A stale count in a production comment
+  is the cheapest possible review round, and only re-running finds it.
+- **Attacked and HELD:** the 7-append lower bound (traced from the ready→live
+  seed, which is never appended); five clear sites enumerated by grep rather
+  than read from the comment; `lastResumeAtMsRef` armed at EVERY foreground
+  edge (only `event !== "foreground"` returns before the write);
+  `postResumeArrivalsRef`'s "every later frame appends" (no `return` between
+  `handleFrame`'s entry and the append); predicate byte-identity by hunk
+  position; the `nowDate` dep-array addition is identity-safe
+  (`useCallback(..., [])`); no consumer of either ring kind exists outside
+  the hook and its test.
+
+## 2026-09-02 — Wave F PR 3 §3 timing addendum (PR #267), pre-review pass 4
+
+- **Fourth pass, first pass with no code finding at all — and the one
+  remaining defect was a body that contradicted ITSELF.** The PR's top fold
+  said `resume-first-frame` "records the first four post-resume GAPS"; its
+  own Record block, five lines down, said "the first four post-resume
+  ARRIVALS". `PAUSED_FRAME_HOLD = 4` arrivals yield THREE gaps
+  (`useMonitorSession.ts:2720`, and the leg asserts `nextGapsMs=[70,70,70]`
+  literally at `useMonitorSession.test.ts:12596`). Technique, cheaper than
+  reading either half: **grep the PR body for the SAME noun phrase twice**
+  (`gh pr view --json body -q .body | grep -o "four post-resume [a-z]*"`
+  returned `gaps` and `arrivals`) — a body that states one fact in the fold
+  and again in the Record can disagree with itself, and the fold is the half
+  James reads.
+- **A count-vs-collection off-by-one hides behind a constant's name.** Seven
+  places state this fact; five say frames/arrivals and two say gaps, and the
+  two are the ones that wrote `HOLD` instead of `HOLD-1`. **When a window of
+  N samples produces N-1 intervals, grep the constant's name and check every
+  sentence that uses it for which of the two it means** — the plan's own
+  lifetime-table row got it wrong in the parenthetical and right in the clear
+  column, in a single line.
+- **Attacked and HELD (the vetted ground is now closed):** the corrected I1
+  paragraph (`:8395`'s `toStrictEqual` over all nine files, and `:3143` is
+  genuinely the comment it names); every body number reproduced rather than
+  cited — 15 commits, 5 files, 223/6090|1, e2e 8m6s from check-run
+  timestamps, and the production comment's 169/4411 reproduced exactly by
+  re-running the client suite; the append/record ordering (no `return`
+  between `:3137` and `:3156`) and guard identity (`:1340` == `:3131`)
+  proving `gapsMs` is the declaring run's own frames; all five
+  `lastResumeAtMsRef` clear sites named by enclosing function; ring capacity
+  500 vs one added entry per resume; the ROADMAP register row's
+  `ConnectedSurface.tsx:848` citation; `merge-tree` clean and a CI run
+  present at head.
+
+- **2026-09-02, PR #267 pass 5 (closure):** BLANK on code and on the
+  gaps/arrivals sweep; the only residue was a Record block that said "two
+  internal passes" above a narration of five, and a "Pass 5 verdict below"
+  pointing at nothing. Technique: **a PR body's own bolded lead-in is a
+  figure like any other — grep the noun it counts against the items it then
+  lists** (`grep -c "^Pass [0-9]"` vs the word before "internal passes"), the
+  same sweep RF27's pre-ready checklist item 3 asks for and the same class
+  pass 4 caught one round earlier in a different sentence. Second: **a
+  `pull_request` CI event never skips the code jobs** — `ci.yml:31` feeds
+  `ci-changes.sh` the PR BASE sha, so it diffs the whole range; "docs-only
+  push, expect a skip" is only true of a bare `push` event, and expecting a
+  skip will make a reviewer read a legitimately-running gate as stuck.
