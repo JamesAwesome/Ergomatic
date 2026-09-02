@@ -6091,3 +6091,29 @@ same way.
   attack on check (c) failed — an existing grant does NOT suppress Concept2's consent
   screen (the 08-31 crossconnect authorized user 2211 on the same client, and D3 on 09-02
   still rendered "Authorize James Morelli to use your account?").
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 5, verifying pass 4's fixes)
+
+- **A red proof that names its MUTATION but not its TREE.** Task 8's census probe said
+  "delete the leader-strip and re-run: the wrapped hit disappears" — true at the baseline,
+  a guaranteed no-op at the head. Measured corpus-wide: the leader strip changes exactly
+  ONE count in the whole corpus, `Concept2LinkProbe.tsx`'s wrapped phrase, and the same
+  plan rewrites that file and deletes the phrase. **Technique: for any probe run over a
+  CORPUS rather than one file, diff the normaliser's output with and without the mutation
+  at the tree the step actually runs on — if only one file discriminates, ask whether the
+  plan changes that file before the probe fires. A red proof states the tree, not just the
+  mutation.**
+- **A plan's own pass-count bullet goes stale at every fold, and it is the one that reaches
+  the reviewer.** REV 5 folded pass 4 and left "THREE DELTA passes … folded at REV 2, REV 3
+  and REV 4" ticked `- [x]` in Task 9 AND in the PR Record's risk line. **Technique: after
+  folding a pass, grep the plan for the pass COUNT and for every REV number, the same sweep
+  CLAUDE.md already demands for a withdrawn claim's phrasing.**
+- **Attacked and HELD:** all three `describeStatus` orderings run in Node (correct green/green,
+  the old reorder green on re-read, the bottom-move red on both); `ROADMAP.md:1120-1127` vs
+  `:1128` verbatim; the four ephemeral-precondition sites consistent, with a NO now reachable;
+  the fold at 120 words / 24 longest by `wc`, every bullet backed by a named walk RECORD or
+  test; every mutation table's target committed before its probe; and — newly measured — gate
+  (a)'s pass value of `1`, counted against a real Sources-phase member in
+  `App.SwiftFileList` (`grep -c 'App/AppDelegate\.swift$'` → `1`), so the number that replaced
+  the unmeasurable `SwiftCompile` count is itself measured. ~40 `file:line` citations re-read
+  at this head, one drifted (`eslint.config.js:86-89` excludes `src/adapters/**` at `:90`).
