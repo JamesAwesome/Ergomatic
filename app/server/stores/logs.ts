@@ -420,12 +420,25 @@ const LOG_LIST_COLUMNS = {
  *  (schema.ts — deliberately NOT `workoutTypeEnum`, which is
  *  the `workouts` table's column). New writes are validated against the
  *  union at the route, but rows stored before that check exist, so every
- *  consumer still has to narrow it for itself. */
+ *  consumer still has to narrow it for itself.
+ *
+ *  `workoutId` (substitution spec, 2026-09-02, §Mechanism 1b) is the id
+ *  the log row LINKS BY — `session_logs.workout_id`, projected BY NAME off
+ *  the log row, never the LEFT JOIN's `workouts.id`. It exists on this
+ *  wire for one reader: the Plan tab's chip keys on `isFreeRow`'s PAIR
+ *  (`workoutId` null AND `workoutType` null), which is what a Just Row
+ *  that stood in for a session looks like, and the pair is only a pair
+ *  when both halves are PRESENT. Null also for a workout since deleted
+ *  (`ON DELETE SET NULL`) — with its snapshot type still set that row is
+ *  not the free pair, so it wears no chip. Additive: an older client
+ *  ignores it, and `usePlanLinks.parseLink` tolerates an older server
+ *  that omits it. */
 export interface PlanLink {
   planIndex: number;
   id: string;
   workoutTitle: string;
   workoutType: string | null;
+  workoutId: string | null;
   linkedTitle: string | null;
   workoutIsGlobal: boolean | null;
 }
@@ -458,6 +471,12 @@ async function resolveNewestPlanLink(
       id: sessionLogs.id,
       workoutTitle: sessionLogs.workoutTitle,
       workoutType: sessionLogs.workoutType,
+      // The id the log links BY, off the log row itself (see `PlanLink`'s
+      // own comment). Under the FK it is null exactly when `workoutRowId`
+      // below is — but it is a different column answering a different
+      // question ("what did this row link to") and is projected by name
+      // so the two never have to be argued equal.
+      workoutId: sessionLogs.workoutId,
       // The linked row's OWN title and ownership — the identity pair.
       // `workouts.userId` is nullable and NULL marks a global row, the
       // same derivation `stores/workouts.ts` exposes as `isGlobal`; the
@@ -484,6 +503,7 @@ async function resolveNewestPlanLink(
     id: row.id,
     workoutTitle: row.workoutTitle,
     workoutType: row.workoutType,
+    workoutId: row.workoutId,
     // No joined workout row at all -> unknown identity: BOTH halves null
     // together, so a consumer can never pair a known title with an
     // unknown ownership or the reverse. A joined row -> its own title,

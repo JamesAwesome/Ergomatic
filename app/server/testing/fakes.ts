@@ -418,12 +418,12 @@ type FakeLogRow = Omit<LogInput, "advancesPlan"> & {
 // public API, so no contract case can pin `id DESC` without reaching past
 // the stores into raw SQL, which the shared suite does not do.
 /** The winning row per index, BEFORE provenance is resolved. `workoutId`
- *  is the fake's stand-in for the real store's LEFT JOIN: only
- *  `listPlanLinks` (which can reach the workouts store) turns it into
- *  `PlanLink.workoutIsGlobal`. `delete` reads nothing but `id`. */
-type FakeLinkWinner = Omit<PlanLink, "workoutIsGlobal" | "linkedTitle"> & {
-  workoutId: string | null;
-};
+ *  here is the row's STORED id, the fake's stand-in for the real store's
+ *  LEFT JOIN key: only `listPlanLinks` (which can reach the workouts
+ *  store) turns it into `PlanLink.workoutIsGlobal` — and into the
+ *  projected `PlanLink.workoutId`, which the FK would already have nulled
+ *  for a deleted workout in Postgres. `delete` reads nothing but `id`. */
+type FakeLinkWinner = Omit<PlanLink, "workoutIsGlobal" | "linkedTitle">;
 
 function resolveNewestFakeLink(
   rows: FakeLogRow[],
@@ -587,6 +587,13 @@ function makeFakeLogsStore(
           workoutId === null ? null : await workouts.get(userId, workoutId);
         resolved.push({
           ...link,
+          // `session_logs.workout_id` is ON DELETE SET NULL in Postgres;
+          // this fake's `workouts.remove` never reaches the log rows, so
+          // the FK is answered here instead: a stored id whose workout is
+          // gone reads back null, the way the real column already does.
+          // (`list`/`get` still hand back the stale id — a pre-existing
+          // gap this projection does not widen.)
+          workoutId: workout === null ? null : workoutId,
           // Both halves of identity move together — null with no joined
           // row, the row's own pair otherwise. Mirrors the real store's
           // `workoutRowId === null` guard.

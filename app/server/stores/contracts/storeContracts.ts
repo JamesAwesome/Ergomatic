@@ -1498,9 +1498,11 @@ export function describeStoreContracts(
               workoutTitle: "Slack Tide",
               workoutType: "O2",
               // `logInput` carries `workoutId: null` — an off-app row with
-              // no workout to resolve. Identity is UNKNOWN, and both
-              // halves are null TOGETHER; the cases below cover the two
-              // real answers.
+              // no workout to resolve. The id is projected as-is (the
+              // substitution spec's chip keys on the PAIR of it and
+              // `workoutType`); identity is UNKNOWN, and both halves are
+              // null TOGETHER; the cases below cover the two real answers.
+              workoutId: null,
               linkedTitle: null,
               workoutIsGlobal: null,
             },
@@ -1534,6 +1536,42 @@ export function describeStoreContracts(
               id: second.id,
               workoutTitle: "Dust Whirl",
               workoutType: "AN",
+              workoutId: null,
+              linkedTitle: null,
+              workoutIsGlobal: null,
+            },
+          ]);
+        });
+
+        // THE FREE PAIR ON THE WIRE (substitution spec, 2026-09-02,
+        // §Mechanism 1b). A Just Row that stood in for a session is a
+        // linked row whose `workoutId` AND `workoutType` are both null —
+        // that pair, with the id PRESENT, is what the Plan tab's chip keys
+        // on. Pinned as the full shape so a projection that dropped the
+        // id (or upgraded it to a missing key) goes red here, against both
+        // stores.
+        it("carries the free PAIR on a linked free row: workoutId null beside workoutType null", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const standIn = await stores.logs.create(
+            userId,
+            logInput({
+              workoutId: null,
+              workoutTitle: "Just Row",
+              workoutType: null,
+              advancesPlan: true,
+            }),
+          );
+
+          const links = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(links).toStrictEqual([
+            {
+              planIndex: 0,
+              id: standIn.id,
+              workoutTitle: "Just Row",
+              workoutType: null,
+              workoutId: null,
               linkedTitle: null,
               workoutIsGlobal: null,
             },
@@ -1569,6 +1607,9 @@ export function describeStoreContracts(
           const [link] = await stores.logs.listPlanLinks(userId, "sprint");
           expect(link!.workoutIsGlobal).toBe(true);
           expect(link!.linkedTitle).toBe("2K Test");
+          // And the id the row LINKS BY rides alongside, BY NAME off the
+          // log row — a workout row's link is never the free pair.
+          expect(link!.workoutId).toBe(global.id);
         });
 
         // Identity is a PAIR off one row, and the snapshot is not part of
@@ -1640,10 +1681,9 @@ export function describeStoreContracts(
               workoutType: "O2",
             }),
           );
-          expect(
-            (await stores.logs.listPlanLinks(userId, "sprint"))[0]!
-              .workoutIsGlobal,
-          ).toBe(false);
+          const [before] = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(before!.workoutIsGlobal).toBe(false);
+          expect(before!.workoutId).toBe(personal.id);
 
           await stores.workouts.remove(userId, personal.id);
 
@@ -1652,6 +1692,13 @@ export function describeStoreContracts(
           // pair a known title with an unknown ownership.
           expect(link!.workoutIsGlobal).toBeNull();
           expect(link!.linkedTitle).toBeNull();
+          // `session_logs.workout_id` is ON DELETE SET NULL, so the id the
+          // row links by is null too — the SAME value the join's own
+          // row-id guard reads, which is why the real store may project
+          // the column by name and the fake must answer the way the FK
+          // does. (Substitution spec §Mechanism 1b: with the snapshot type
+          // still "O2" this row is NOT the free pair, so no chip.)
+          expect(link!.workoutId).toBeNull();
           // The snapshot columns survive the delete — that is the whole
           // point of storing them rather than joining for them.
           expect(link!.workoutTitle).toBe("Sea Fret");
