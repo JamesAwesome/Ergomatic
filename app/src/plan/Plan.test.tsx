@@ -1,10 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { PLANS } from "../../domain/plans";
 import type { PlanData, PlanKey, PlanSequenceItem } from "../api/usePlan";
 import type { PlanLink } from "./usePlanLinks";
+import { commentStrippedSource, cssRules } from "../test/cssView";
+
+/** `index.css` with every comment stripped — `FreeRowChip.test.tsx`'s own
+ *  view of the stylesheet, for its reason: a rule's PROSE must never be
+ *  able to satisfy an assertion about its declarations. Same
+ *  `import.meta.url` surgery, one directory up from `plan/`. */
+const PLAN_CSS = commentStrippedSource(
+  readFileSync(
+    import.meta.url
+      .replace(/^file:\/\//, "")
+      .replace(/plan\/[^/]+\.test\.tsx$/, "index.css"),
+    "utf-8",
+  ),
+);
 
 // Realistic fixture per repo convention: the real 84-code sequence from
 // domain/plans.ts (not a 3-row hand stub), status derived exactly like
@@ -814,6 +829,124 @@ describe("Plan (done-row workout names and swap marks)", () => {
     expect(rowAt(4).querySelector(".plan-row-swap")?.textContent).toBe(
       "INSTEAD OF AT",
     );
+  });
+
+  // Substitution spec (2026-09-02) §Mechanism 3, exit criterion 3: a
+  // LINKED FREE ROW — the pair `(workoutId: null, workoutType: null)` with
+  // the id PRESENT — is a Just Row that stood in for the session. Its
+  // badge slot wears the JR chip (`FreeRowChip`, its own class, never
+  // `.type-badge`), NOT the unknown-type box that `rowedType(link) ===
+  // undefined` would otherwise fire on the same null type — the free-pair
+  // test runs FIRST, and that order is load-bearing ⟨F5⟩. The mark is the
+  // existing `INSTEAD OF` line: the plan's own type on a type day, the
+  // prescription's title in its own case on a checkpoint day.
+  function freeRowLink(overrides: Partial<PlanLink> = {}): PlanLink {
+    return link({
+      workoutTitle: "Just Row",
+      workoutType: null,
+      workoutId: null,
+      linkedTitle: null,
+      workoutIsGlobal: null,
+      ...overrides,
+    });
+  }
+
+  it("a Just Row that stood in on a TYPE day: the JR chip, no type badge, no unknown box, the name, INSTEAD OF AT", async () => {
+    // Index 4 is an AT day in the real sprint sequence.
+    await readyWithLinks(new Map([[4, freeRowLink()]]));
+
+    const row = rowAt(4);
+    expect(row.querySelector(".free-row-chip")?.textContent).toBe("JR");
+    expect(row.querySelector(".type-badge")).toBeNull();
+    expect(row.querySelector(".plan-row-badge-unknown")).toBeNull();
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe("Just Row");
+    expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
+      "INSTEAD OF AT",
+    );
+    expect(row).toHaveClass("plan-row-swapped");
+  });
+
+  it("a Just Row that stood in on a CHECKPOINT day is marked against the prescription, in the title's own case", async () => {
+    // Index 6 is the sprint plan's first checkpoint (2K Test).
+    await readyWithLinks(new Map([[6, freeRowLink()]]));
+
+    const row = rowAt(6);
+    expect(row.querySelector(".free-row-chip")?.textContent).toBe("JR");
+    expect(row.querySelector(".type-badge")).toBeNull();
+    expect(row.querySelector(".plan-row-name")?.textContent).toBe("Just Row");
+    expect(row.querySelector(".plan-row-swap")?.textContent).toBe(
+      "INSTEAD OF 2K Test",
+    );
+  });
+
+  // The two null-type cases are DISTINCT and both pinned: the free PAIR
+  // is a chip; an unreadable type STRING beside a null id is still the
+  // box, because `isFreeRow` needs both halves null.
+  it("a linked row with an UNKNOWN type string (id null) still renders the unknown box, never the chip", async () => {
+    await readyWithLinks(
+      new Map([
+        [
+          3,
+          link({
+            workoutTitle: "Slack Tide",
+            workoutType: "nonsense",
+            workoutId: null,
+          }),
+        ],
+      ]),
+    );
+
+    const row = rowAt(3);
+    expect(row.querySelector(".plan-row-badge-unknown")).not.toBeNull();
+    expect(row.querySelector(".free-row-chip")).toBeNull();
+    expect(row.querySelector(".plan-row-swap")).toBeNull();
+  });
+
+  // An OLDER server omits `workoutId` altogether (`usePlanLinks`: absence
+  // is never upgraded to null). Null is a positive claim the old server
+  // never made, so the chip needs the key PRESENT — a new build ahead of
+  // the deploy shows the plan with no chips, exactly as today, rather than
+  // guessing a stand-in from a type it cannot read.
+  it("a null-type link with workoutId ABSENT (an older server) renders no chip — the unknown box, as today", async () => {
+    const { workoutId: _absent, ...withoutId } = freeRowLink();
+    void _absent;
+    await readyWithLinks(new Map([[4, withoutId]]));
+
+    const row = rowAt(4);
+    expect(row.querySelector(".free-row-chip")).toBeNull();
+    expect(row.querySelector(".plan-row-badge-unknown")).not.toBeNull();
+    expect(row.querySelector(".plan-row-swap")).toBeNull();
+  });
+
+  // Gate 0 (James, 2026-09-02: "make sure to still center the chips"):
+  // on a two-line swapped row the badge slot, the number and the status
+  // glyph span BOTH grid rows so they centre against name + mark, and the
+  // mark sits in the NAME's column rather than starting under the badge.
+  // This is the rule that moves every swapped row's `TypeBadge` too, on
+  // purpose. jsdom lays nothing out, so the GEOMETRY lives in
+  // `e2e/design.spec.ts` (`boundingBox`, ⟨G1⟩); this pins the DECLARATION
+  // on the served stylesheet's source, comment-stripped, so a rule that
+  // is deleted or moved cannot stay green on its own prose.
+  it("the swapped row's badge slot, number and status glyph span both grid rows, and the mark sits in the name's column", () => {
+    const rules = cssRules(PLAN_CSS).filter((r) => r.at.length === 0);
+    const spanning = rules.filter((r) => r.body.includes("grid-row: 1 / -1"));
+    const selectors = spanning.flatMap((r) => r.selectors);
+    for (const sel of [
+      ".plan-row-swapped .free-row-chip",
+      ".plan-row-swapped .type-badge",
+      ".plan-row-swapped .plan-row-index",
+      ".plan-row-swapped .plan-row-status",
+    ]) {
+      expect(
+        selectors,
+        `expected a grid-row: 1 / -1 rule for ${sel}`,
+      ).toContain(sel);
+    }
+    const mark = rules.filter((r) =>
+      r.selectors.includes(".plan-row-swapped .plan-row-swap"),
+    );
+    expect(mark, "expected exactly one swapped-mark rule").toHaveLength(1);
+    expect(mark[0]!.body).toContain("grid-column: 3 / -1");
   });
 
   // The box is only for a LINKED row whose stored type is unreadable. An
