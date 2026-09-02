@@ -230,15 +230,16 @@ slate.
   #268 with item 3 (hollow `.free-row-chip` on the door and every free
   row in History/Today), so item 5's plan-linked free row will already
   carry it. **S**
-- **Logging a Just Row against a plan — as SUBSTITUTION** — **IN
-  PROGRESS 2026-09-02 on branch `jr-substitution`:** Gate 0 PASSED rev 1d
+- **Logging a Just Row against a plan — as SUBSTITUTION** — **SHIPPED in
+  #272 (2026-09-02):** Gate 0 PASSED rev 1d
   (`docs/design/handoffs/2026-09-02-just-row-substitution/`), spec rev 3
   after two antagonist passes
   (`docs/superpowers/specs/2026-09-02-just-row-substitution-design.md`),
-  plan in execution. No new stored shape: the link is the stand-in
-  record; the store resolves `advancesPlan ?? !isFreeRow`. Deleting a
-  stood-in Just Row un-ticks the session (stated, not overruled). The
-  original row follows:
+  PM TRIAD gate SHIP-WITH-CONDITIONS (all landed in the PR). No new
+  stored shape: the link is the stand-in record; the store resolves
+  `advancesPlan ?? !isFreeRow`. Deleting a stood-in Just Row un-ticks the
+  session (stated, not overruled; the shipped delete copy already warns,
+  keyed on `planKey`). The original row follows:
 - **(original)** Logging a Just Row against a plan — as SUBSTITUTION (James,
   2026-09-01: "advances the record, records the stand-in"): the rower
   may say "this free row stands in for session N"; it advances the plan
@@ -259,9 +260,13 @@ slate.
   land in your log", showing a figure the erg never displays deserves a
   line at the next design pass. **XS**
 - [ ] **`source` derive-when-absent SUNSET — trigger: v0.35.0, the tag
-      AFTER the one that ships #268 (expected v0.34.0). NOT v0.34.0:
-      firing it on the tag that introduces the field 400s every save from
-      every build still installed.** The server derives `source`
+      AFTER the one that ships #268 (v0.34.0, shipped 2026-09-02). NOT
+      v0.34.0: firing it on the tag that introduces the field 400s every
+      save from every build still installed. DELIBERATE CO-TAG (#272's PM
+      gate): v0.35.0 also carries the substitution feature (#272); the
+      sunset lands as its own XS PR BEFORE the v0.35.0 tag is cut, so the
+      tag carries both on purpose — builds ≤811 (v0.32.0) lose saves at
+      that tag, build 823+ already posts `source`.** The server derives `source`
       for a POST that omits it only so build 811-era TestFlight clients
       keep saving (additive-only between tags). At that tag: `source`
       becomes REQUIRED on `POST /api/logs` (400 when absent), the route's
@@ -296,6 +301,15 @@ slate.
       A design pass with a Gate 0 (both orientations, the programmed and
       the free-row timer side by side, since the fix is for both), then a
       fast-path or small PR. **S**
+- [ ] **Free-row copy, three notes for ONE design pass (batched, not one
+      per gate — #268's and #272's PM gates):** (1) the Just Row door's
+      paragraph ("The monitor keeps its own time…") now captions two
+      buttons and describes one; (2) a time-only row's History line shows
+      no number until opened; (3) with no plan the Just Row log door's only
+      button reads `Save without logging` (was `Save this row`) — consistent
+      with the shipped summary door, and a stranger meets a button that
+      names what it does NOT do, now on two screens. Rides the Timer-mode
+      design pass above. **XS–S**
 
 **Owed within PR 2's own scope, recorded here so phase close can quote
 it:** a free row recovered with a `truncated` series trace (>4 h of rowing,
