@@ -6046,3 +6046,48 @@ same way.
   plan's `customModule="App" customModuleProvider="target"` the correct
   replacement; all Task 3 deletion ranges exact; and the three pre-existing
   main-checkout items named correctly.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 4, verifying pass 3's fixes)
+
+- **A test added because a probe could not discriminate, gated by a mutation that also
+  cannot discriminate.** REV 4 added a RE-READ test because "the mount test alone cannot
+  tell a correct check order from a swapped one" — and named its biting mutation as
+  "`statusError` moved BELOW the `status === null` check". Measured in Node against the
+  plan's own `describeStatus`: that reordering still returns `unreadable` on the re-read
+  path (statusError is checked before `!status.available`), so the new test stays GREEN
+  and the row would be logged as biting. The plan's PROSE described the right mutation
+  ("falls straight through to `not linked`"); only moving the check below `!status.linked`
+  produces it. **Technique: for a guarded ORDER, do not describe the mutation by which
+  neighbour it moves past — run every reordering against every state the tests reach, and
+  name the destination that changes ALL of them. Prose describing a mutant's effect and the
+  instruction producing it are two claims; check them separately.**
+- **A cited edit RANGE that includes the first line of the next thing.** Task 8's "replace
+  the Status block (`ROADMAP.md:1120-1128`)" — the block is 1120-1127; 1128 is the PR2 row.
+  **Technique: for any "replace lines N-M" instruction, print line M+1 as well and confirm
+  it is NOT part of what you named.** Same family as the ledger's heredoc-anchor entry: a
+  line number is only an anchor once you have looked at both ends of it.
+- **A walk observation whose precondition the card never establishes.** Check (a) told the
+  operator the sheet "should ask you to log in even if Safari already has a Concept2
+  session" — but no step signs in to Concept2 in the phone's Safari, so "it asked me to log
+  in" is exactly what a NON-ephemeral session produces on a fresh phone. It was also absent
+  from the check's RECORD bullets and from the report's contents, while the PR fold sold it
+  above the fold as a rower-facing control. **Technique: for every walk observation, ask
+  what state the phone must be in for a NO to be possible — if the card does not put it
+  there, the observation is decoration, and the fix is a precondition step plus a RECORD
+  line, not better wording.**
+- **Attacked and HELD (this pass added no new ground beyond the above):** the busy test
+  simulated in Node — correct code passes in 145 ms, the `finally`-deleted mutant fails at
+  exactly `expected [ … ] to have a length of 2 but got 1`, and the shared-`Response`
+  counterfactual reproduces the JSDoc's predicted failure verbatim (Node 26's message is
+  `Body is unusable: Body has already been read`); `pnpm build` → `cap sync` → `-list` from
+  a truly emptied `dist/` (`git diff -- app/ios` EMPTY; `public/` = 74 files, css/html/js/
+  png/woff/woff2, zero census-matching extensions); `census.sh` exits 0 with
+  `browserFinished` = 52 under `app/src`; both e2e greps reproduce (one PM5 comment, one
+  empty); `ios-google-client-id.sh` written and run — 5/5 cases pass on the real plist, the
+  index-0 PlistBuddy mutant fails 2; `ios-release.test.sh` is `set -uo pipefail` with no
+  `-e`, so the new block's idiom matches the file; migrations run at boot
+  (`server/index.ts:32`) so the walk DB needs no migrate step; `c2UserId` IS unique but a
+  `--rm` walk container makes collision unreachable; the fold counts 119/24 exactly; and an
+  attack on check (c) failed — an existing grant does NOT suppress Concept2's consent
+  screen (the 08-31 crossconnect authorized user 2211 on the same client, and D3 on 09-02
+  still rendered "Authorize James Morelli to use your account?").
