@@ -4128,3 +4128,65 @@ does not match these numbers._
   #258 134, **#268 186 → trimmed to budget at the gate**. The regression
   was a 53-word arrow-diagram bullet ("door → Start Timer → ▶ → Finish →
   door"). **A route is not an outcome.**
+
+## Phase-open/shape gate, 2026-09-02 (Wave E PR1.75 — the ruled activation shape, design rev 2)
+
+- **A wave's own split rule is a precedent, and the next spec re-bundled exactly
+  what it split.** `ROADMAP.md:997-998` records why PR1/PR1.5 divided: "so one
+  reviewer never holds a token-broker migration and an iOS deep-link contract in
+  one pass." Rev 2 then bundled migration 0020, an app-wide auth change, a
+  two-route identity ladder, the repo's first in-tree Swift plugin, Xcode project
+  surgery, and the retirement of a three-day-old shipped mechanism — five risk
+  models. **RULED: split into 1.75a (server, TRIAD, PM final gate) and 1.75b
+  (native, antagonist DELTA, carries the walk).** The split's own gate is one
+  command: `gh pr view <n> --json files | grep server` returns empty on 1.75b.
+  **At every shape gate, grep the ROADMAP for a recorded split rule on the same
+  wave before endorsing a bundle** — the rule outlives the session that wrote it
+  and nothing else re-reads it.
+- **"Behind the flag" is a claim about a route, not about a PR, and one piece
+  usually isn't.** Rev 2's `authVia` change lands in `requireUser`, mounted
+  `router.use("/api", requireUser)` (`routes/data.ts:826`) — app-wide, deploying
+  to prod web on merge — and added a new `400 ambiguous_auth` there on a premise
+  the spec itself labels UNMEASURED, whose measuring instrument runs on the NEXT
+  PR's walk. **Ask of every dark PR: which file in this diff is NOT behind the
+  flag, and does anything in it rest on an unmeasured premise?** Ruling: the
+  app-wide path gets an INSTRUMENT (bearer-wins plus a structured log), the dark
+  routes get the hard refusal, and the refusal is promoted after the walk
+  measures it. This is the #249 residual-deadline rule applied to a NEW risk
+  rather than an inherited one: the deadline is the earlier of "evidence first
+  exists" and "the fix stops being cheap", and rev 2 had them the wrong way round.
+- **A comment whose own words the PR falsifies is the cheapest census item there
+  is, and this wave has now produced three.** `Concept2LinkProbe.tsx:5-10` says
+  "never a real link… this card posts nothing and carries no client id or state"
+  — 1.75b adds the real-link button. `routes/concept2.ts:182` says "the nonce
+  correlates, not binds". `schema.ts:512` says the surface column is "not yet
+  added here". **A reconciliation TASK with a grep census of the WITHDRAWN
+  PHRASES as its exit gate is now standing for any PR in this wave**; 17 sites
+  and 15 phrases were enumerable from the spec alone, before a line was written.
+  PR1.5 spent ~16 rounds discovering this list one clause at a time.
+- **Half-discharged external dependencies need a named owner at the shape gate,
+  not at the exit.** ROADMAP's PR1.75 line names "Concept2's own approval of the
+  new native `redirect_uri`"; rev 2 measured it on log-dev and left the live
+  portal as an unowned "cutover step". Assigned to the C2 register row.
+  Generalise: **when a criterion is satisfied on a staging authority, say which
+  half remains and who holds it — a measured half reads as a discharged whole.**
+- **A stale ROADMAP checkbox recurred in the same wave that already fixed one.**
+  `ROADMAP.md:989` still shows PR1.5 as `[ ]` with #257 merged into main as
+  `027e987f`; PR1's identical bug was caught at its own fix round 5. The wave's
+  merge step does not tick its own box. Cheap fix, but the pattern is that the
+  ROADMAP is edited by the PR that PLANS work and not by the one that FINISHES
+  it.
+- **`ephemeral: true` is a product decision the ruling never asked for, and it is
+  right.** Non-ephemeral shares Safari's cookie jar, so on a shared phone the next
+  link silently completes against whoever last signed into Concept2 — the mirror
+  of the residual this PR exists to close — and PR2's identity line, the only
+  other thing that would disclose it, is not built. Cost stated in rower words:
+  a fresh Concept2 login every link, and no OS "wants to use concept2.com"
+  prompt. **Recommend ship; put it to James as a named binary at the design
+  gate, never as a spec default with a footnote.** (James approved it named on
+  the Gate 0 artifact, 2026-09-02.)
+- **Release: none, and the wave's reserved version is stale twice.** v0.31.0 went
+  to #248, v0.32.0 to #258, v0.33.0 to the diagnostics notes. Wave E's PR2
+  re-checks at ITS merge — the #248 rule ("a reservation is a claim, not an
+  allocation") has now been vindicated three gates running and should stop being
+  restated as news.

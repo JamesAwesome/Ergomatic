@@ -1083,7 +1083,7 @@ closed with zero Concept2 contact.
       including the measured refresh-endpoint corrections); **PR #249
       MERGED** 2026-09-01 (main `27fe6b4a`) — fixed here, fix round 5,
       after this row was found still calling it open past its merge.
-- [ ] **PR1.5 — the native link flow**, on device: system-browser consent
+- [x] **PR1.5 — the native link flow**, on device: system-browser consent
       (`@capacitor/browser`) and the return-to-app refresh seam
       (`useReturnToApp` — renamed from the working title "foreground
       re-fetch" once `browserFinished` proved an equally load-bearing,

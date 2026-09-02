@@ -1,6 +1,6 @@
 # Wave E PR1.75 — full option (g): the authenticated activation shape (design)
 
-**Date:** 2026-09-02 · **Status:** REV 3 — rev 2 folded the antagonist's full TRIAD
+**Date:** 2026-09-02 · **Status:** REV 4 — the PM shape pass (2026-09-02, verdict SPLIT) is folded: §0 PR shape, §1 narrowed, exit criteria 5/6/8 rewritten. REV 3 — rev 2 folded the antagonist's full TRIAD
 pass (verdict REVISE); rev 3 replaces the Apple-platform lines rev 2 carried on the
 antagonist's initial (later WITHDRAWN as unsourced) claims with facts fetched from
 Apple's documentation this session, each tagged. Superseded claims are gone, not
@@ -155,6 +155,53 @@ user" is a database invariant. Nothing is invented on the system's behalf.
 
 ## The design
 
+### 0. PR shape — TWO PRs, in order (PM ruling 2026-09-02; CLAUDE.md's split test)
+
+`ROADMAP.md:997-998` already split PR1 from PR1.5 "so one reviewer never holds a
+token-broker migration and an iOS deep-link contract in one pass"; this design
+bundled five risk models (migration, two-route identity ladder, an app-wide
+middleware change, the repo's first in-tree Swift, retirement of a three-day-old
+mechanism). CLAUDE.md's grouping tie-break — a stored-shape change plus an
+unrelated redesign in one pass → split — decides it.
+
+- **PR1.75a — server (TRIAD: stored shape + auth).** Migration 0020 + schema;
+  `stores/concept2.ts` (upsert `createAttempt`, `peekAttempt`, `surface` in both
+  returns, `deleteAttemptsFor` retired); `auth/middleware.ts` (`authVia`,
+  empty-cookie-is-absent, the disagreement log); `routes/concept2.ts` (surface at
+  mint, per-surface `redirect_uri`, `state` in the mint response, the callback
+  ladder with its route-local cookie resolver, `POST /exchange`, the route-level
+  disagreement refusal, the six-page template); `concept2/client.ts`
+  (`redirect_uri` as an argument, both call sites); `testing/fakes.ts`; tests;
+  ROADMAP's stale PR1.5 checkbox. **Gate: zero files under `app/src/` or
+  `app/ios/`.** Antagonist: SKIP, spoken — the full TRIAD pass covered every
+  server invariant here and the split adds none (§1's narrowing is a narrowing).
+  PM: FULL final-PR gate. Walk: none (CI-provable).
+  **Intentional interval, stated in the PR body:** after 1.75a, mint returns
+  `haus.waffle.ergomatic://oauth/callback` to any bearer caller and nothing on
+  the device can receive it yet. Harmless (flag off; the only native consumer,
+  `Concept2LinkProbe`, never calls mint) and deliberate.
+- **PR1.75b — native + client (not TRIAD).** `WebAuthPlugin.swift`,
+  `MyViewController.swift`, `Main.storyboard`, `project.pbxproj`, `Info.plist`
+  (**register the scheme regardless** — one entry, zero cost, deletes a
+  walk-burning failure mode; the walk still RECORDS whether it was needed);
+  `src/native/webAuth.ts`; `src/adapters/linkFlow.ts`; the PR1.5 return-arm
+  retirement **as a CENSUS** (every consumer of `onBrowserFinished`,
+  `useReturnToApp`, `openExternalUrl` listed with its fate, plus one sentence on
+  why PR2's link-out needs no return signal — if that sentence cannot be written
+  the arm stays and the two-mechanism note is recorded); the probe's real-link
+  button. **Gate: zero files under `app/server/`, zero migrations.** Antagonist:
+  DELTA pass on the plan (a new mechanism + a retirement). PM: scoped ~10-min
+  gate (census empty, walk record complete, fold count). **The walk runs BEFORE
+  the PR opens** — two of its outputs (Info.plist necessity, `state` echo) can
+  change 1.75b's own code.
+- **Order is a hard dependency:** 1.75b posts to `/exchange` and needs the native
+  `redirect_uri` + explicit `state`, all minted by 1.75a. Every intermediate
+  state ships flag-off. **Release: none** for either.
+- **Activation gate discharge needs BOTH:** 1.75a satisfies every clause of the
+  gate doc §6 precondition literally and not its intent (no native return
+  exists). Neither PR body says "code-complete"; the ROADMAP PR1.75 row gets a
+  per-clause disposition of `ROADMAP.md:999-1020` at 1.75b's merge.
+
 ### 1. Surface authority is SERVER-DERIVED; both-present is resolved, not refused
 
 `requireUser` sets `req.authVia = "bearer" | "cookie"` — request-lifetime, never
@@ -162,11 +209,19 @@ persisted — according to which credential it resolved. A cookie whose value is
 the empty string (what `clearSessionCookie()` leaves behind) counts as ABSENT.
 **Both-present rule (the gate doc's own named resolution, §3(g) round 16):
 bearer wins** — native is the only consumer that carries one, and an attacker who
-supplies their own bearer gains nothing by also supplying a cookie. **Refusal is
-reserved for genuine DISAGREEMENT:** both credentials present AND resolving to
-DIFFERENT users → `400 {error:"ambiguous_auth"}`. Two valid sessions for two
-people on one request is a broken or forged client, refused loudly; the
-common "both present, same user" case cannot lock anyone out. Mint records
+supplies their own bearer gains nothing by also supplying a cookie. **Disagreement (both
+present AND resolving to DIFFERENT users) is handled at TWO scopes, because
+`requireUser` is mounted app-wide (`router.use("/api", requireUser)`,
+`routes/data.ts:826`) and deploys to prod web on merge, while whether the native
+jar can ever carry `erg_session` is UNMEASURED until PR1.75b's walk (PM ruling,
+2026-09-02 — the evidence must not arrive one PR after the refusal):**
+(a) app-wide, `requireUser` resolves bearer-wins and emits ONE structured log
+line `{event:"auth_disagreement", bearerUser, cookieUser, path}` — an instrument,
+never a refusal; (b) on `/api/concept2/*` (dark behind the flag) the same
+condition is a hard `400 {error:"ambiguous_auth"}`, checked in the route module
+against `req.authVia` plus a second cookie resolution. Promoting (b) app-wide is
+a three-line follow-up AFTER the walk reads the log. The common "both present,
+same user" case cannot lock anyone out at either scope. Mint records
 `surface = authVia === "bearer" ? "native" : "web"`; no client-asserted surface
 exists for an attacker to choose. `neither present → 401` is unchanged and is in
 the test list.
@@ -359,8 +414,11 @@ approval + PR2.
 
 - **`requireUser`:** bearer → `authVia:"bearer"`; cookie → `"cookie"`; empty-value
   cookie → absent; both, SAME user → bearer wins, `authVia:"bearer"`; both,
-  DIFFERENT users → 400 `ambiguous_auth`, no session resolved (mutation: resolve
-  bearer regardless → red); neither → 401.
+  DIFFERENT users → bearer resolved AND the `auth_disagreement` log line emitted
+  with both user ids (mutation: drop the log → red); neither → 401.
+- **Concept2 routes, disagreement:** both present, different users → 400
+  `ambiguous_auth` on mint, callback and exchange, nothing consumed (mutation:
+  skip the route-level check → mint succeeds → red).
 - **Mint:** bearer → `surface:"native"` + native `redirect_uri` in the URL; cookie
   → `"web"` + web redirect; response carries `state`; the PK-collision retry.
 - **Store, real Postgres:** two CONCURRENT mints for one user → exactly one row.
@@ -421,27 +479,50 @@ approval + PR2.
    consent, the callback delivered to the app; the `state`-echo and Info.plist
    facts RECORDED; the walk's per-request `authVia`/both-present readings
    RECORDED.
-5. The record is reconciled BEFORE the PR opens: parent spec §Architecture 1-3
-   and Stored Shapes say `surface` EXISTS; ROADMAP's PR1.75 line ("a transaction
-   around mint" → "one atomic upsert", equivalent) and the C2 register row say the
-   activation precondition is code-complete pending write approval + PR2; the
-   gate doc §6 gains a one-line "built in PR1.75" note; all live comments state
-   the CURRENT contract; PR1.5's retired native return arm is gone, not
-   commented out.
-6. Both redirect URIs registered at log-dev (walk prerequisite — DONE for native,
-   confirm web); live-portal registration recorded as a cutover step.
-7. The two callback pages (§7) approved rendered by James at this design's gate.
+5. **Reconciliation is a numbered TASK in each plan with a grep census as its
+   exit gate**, pre-paid from the 17 sites the PM enumerated (server: `schema.ts:508-515`,
+   `routes/concept2.ts:14-19,37-41,160-171,182`, `routes/data.ts:820-826`, the
+   five `deleteAttemptsFor` sites; client: `Concept2LinkProbe.tsx:5-10`,
+   `useReturnToApp.ts:8-45`, the `onBrowserFinished` consumers; records:
+   `ROADMAP.md:989,999-1020,1304`, parent spec `:429-441,568`, gate doc
+   `:990-995` §3(g)/§4/§6 with a SUPERSESSION marker not a deletion, the design
+   handoff README `:94-97`). The exit is the grep output pasted into the PR,
+   every phrase 0 hits or one accounted historical hit:
+   `"correlates, not binds"` `"No redirect_kind column"` `"not yet added here"`
+   `"deliberately unauthenticated"` `"unauthenticated BY DESIGN"`
+   `"sequential-replace guarantee"` `"best-effort and RACEABLE"`
+   `"delete/delete/insert"` `"one live attempt per user"` `"none built yet"`
+   `"no migration exists yet"` `"appUrlOpen"` `"browserFinished"`
+   `"never a real link"` `"posts nothing and carries no client id"`.
+6. (a) Both redirect URIs registered at log-dev — DONE for native, confirm web;
+   1.75b's walk prerequisite. (b) Live-portal registration is NOT PR1.75's exit:
+   owner = the ROADMAP C2 register row + the flag-flip runbook.
+7. The six callback pages (§7) approved rendered by James — DONE 2026-09-02.
+8. **What is NOT discharged, written down:** the ROADMAP PR1.75 row carries a
+   one-line disposition per clause of `ROADMAP.md:999-1020` at 1.75b's merge, and
+   an explicit still-owed line: flag flip, live-portal registration, PR2's
+   surface + identity line, promotion of the app-wide disagreement refusal.
+
+**Five-minute "code-complete" check for James:** (1) `gh pr view <1.75b> --json
+files | grep server` → empty; (2) the six identity rows green in
+`pnpm test --project integration -- concept2` plus the mutation log; (3) the
+phrase grep pasted, all zero/accounted; (4) the walk table: per-request
+`authVia` + both-present, `state` echoed y/n, Info.plist needed y/n; (5)
+`ROADMAP.md` PR1.75 `[x]` with the still-owed line.
 
 ## Gates
 
-Antagonist full pass: DONE 2026-09-02 (REVISE → this rev 2). → **James approves
-the design + the two rendered pages** → plan → implementation (worktree
-`Ergomatic-wt-c2pr175`, branch `wave-e-pr175-app-bind`) → per-task review →
-device walk → PM final-PR gate (TRIAD) → James merges. No implementation before
-the approval.
+Antagonist full pass: DONE 2026-09-02 (REVISE → rev 2). Attacker-lens pass:
+2026-09-02 (folded per its report). PM shape pass: DONE 2026-09-02 (SPLIT →
+this rev 4). James approved the design + pages 2026-09-02. → plan 1.75a → premise
+pass → implement (worktree `Ergomatic-wt-c2pr175`, branch `wave-e-pr175-app-bind`)
+→ per-task review → PM final-PR gate (TRIAD) → James merges → plan 1.75b (new
+worktree) → antagonist DELTA → implement → device walk → scoped PM gate → James
+merges. Material deltas forced by a pass are presented to James before code.
 
 ## Out of scope, named
 
 PR2's surface and its Gate 0 identity-copy amendment; the `ALLOWED_EMAILS`
 revocation model; PKCE (Concept2 does not offer it); Android; the upload/refresh
-paths; flipping the flag.
+paths; flipping the flag; promoting the app-wide disagreement refusal (after
+1.75b's walk measures the premise).
