@@ -1,0 +1,990 @@
+<title>Door Gate 0-A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --d-ground: #f6f7f9; --d-panel: #ffffff; --d-ink: #151820; --d-ink-2: #3b424f;
+    --d-muted: #5c6472; --d-hair: #e3e6eb; --d-accent: #2f5d8a; --d-accent-soft: #e8eff6;
+    --d-good: #1c6b4f; --d-good-soft: #e6f2ec; --d-bad: #a3341f; --d-bad-soft: #f7ebe8;
+    --d-shadow: 0 1px 2px rgba(21,24,32,.06), 0 8px 24px rgba(21,24,32,.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --d-ground: #101318; --d-panel: #171b22; --d-ink: #e7eaef; --d-ink-2: #b9c0cc;
+      --d-muted: #8d95a3; --d-hair: #272d37; --d-accent: #7fadda; --d-accent-soft: #1b2733;
+      --d-good: #62c39c; --d-good-soft: #16261f; --d-bad: #e08a72; --d-bad-soft: #2a1a16;
+      --d-shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --d-ground: #101318; --d-panel: #171b22; --d-ink: #e7eaef; --d-ink-2: #b9c0cc;
+    --d-muted: #8d95a3; --d-hair: #272d37; --d-accent: #7fadda; --d-accent-soft: #1b2733;
+    --d-good: #62c39c; --d-good-soft: #16261f; --d-bad: #e08a72; --d-bad-soft: #2a1a16;
+    --d-shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
+  }
+  body { background: var(--d-ground); color: var(--d-ink); font-family: "Archivo", system-ui, sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 52px 24px 90px; display: flex; flex-direction: column; gap: 44px; }
+  .eyebrow { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--d-accent); margin: 0 0 10px; }
+  h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 700; letter-spacing: -.025em; line-height: 1.1; margin: 0 0 12px; text-wrap: balance; }
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.015em; margin: 0 0 6px; text-wrap: balance; }
+  h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 12px; max-width: 68ch; color: var(--d-ink-2); }
+  p:last-child { margin-bottom: 0; }
+  strong { color: var(--d-ink); }
+  .rule { height: 1px; background: var(--d-hair); border: 0; margin: 0; }
+  .strip { overflow-x: auto; padding: 4px 4px 14px; margin: 0 -4px; }
+  .frames { display: flex; gap: 26px; align-items: flex-start; width: max-content; }
+  .col { display: flex; flex-direction: column; gap: 10px; max-width: 372px; }
+  .col-l { max-width: 720px; }
+  .lab { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .cap { font-size: 12px; line-height: 1.45; color: var(--d-muted); margin: 0; max-width: 372px; }
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: 10px; letter-spacing: .1em; }
+  .tag-rec { background: var(--d-good-soft); color: var(--d-good); }
+  .tag-bad { background: var(--d-bad-soft); color: var(--d-bad); }
+  .tag-alt { background: var(--d-accent-soft); color: var(--d-accent); }
+  .decision { background: var(--d-panel); border: 1px solid var(--d-hair); border-left: 3px solid var(--d-accent); border-radius: 4px; padding: 16px 18px; margin: 0 0 14px; }
+  .decision h3 { margin: 0 0 6px; }
+  .decision p { font-size: 14px; margin: 0 0 8px; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .9em; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--d-hair); vertical-align: top; }
+  th { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted); }
+  td.num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .pass { color: var(--d-good); font-weight: 600; }
+  .fail { color: var(--d-bad); font-weight: 600; }
+  .note { font-size: 13px; color: var(--d-muted); margin: 8px 0 0; }
+  .warn { background: var(--d-bad-soft); border-left: 3px solid var(--d-bad); border-radius: 4px; padding: 14px 16px; }
+  .warn p { color: var(--d-ink-2); }
+
+  /* ------------------------------------------------------------------
+     App frame. Tokens copied VERBATIM from app/src/theme/tokens.css;
+     every rule below is copied from app/src/index.css by class name
+     (.summary-*, .today-log-*, .log-*), values unchanged. Fixed light:
+     the app ships no dark theme.
+     ------------------------------------------------------------------ */
+  .e {
+    --page:#f4f1e8; --surface:#fffdf7; --surface-sunken:#efeade;
+    --ink:#1b1a17; --ink-2:#3f3c35; --ink-3:#57544c; --ink-4:#6f6a5f; --ink-5:#a09a8c;
+    --rule:#d8d3c4; --rule-2:#ded8c9; --rule-3:#c9c3b2;
+    --accent:#b5341f; --judge-faster:#1d4e89; --judge-slower:#962718;
+    --type-o2:#2a6275; --type-at:#8a5f18; --type-an:#5c4382; --type-tr:var(--ink);
+    --on-color:#fffdf7; --radius:2px; --tap:44px;
+    --font-serif:"Newsreader", Georgia, serif;
+    --font-sans:"Archivo", system-ui, sans-serif;
+    --font-mono:"IBM Plex Mono", ui-monospace, monospace;
+    background: var(--page); color: var(--ink); font-family: var(--font-sans);
+    border: 1px solid var(--d-hair); border-radius: 10px; overflow: hidden;
+    box-shadow: var(--d-shadow);
+  }
+  .e-portrait { width: 372px; height: 640px; }
+  .e-tall { width: 372px; height: 760px; }
+  .e-short { width: 372px; height: 280px; }
+  .e-list { width: 372px; height: 400px; }
+  .e-land { width: 720px; height: 340px; }
+
+  /* .screen — index.css:448 (safe-area terms resolve to 0 here). */
+  .e-screen { max-width: 480px; margin: 0 auto; padding: 6px 20px 20px; }
+
+  .e-eyebrow { margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; color: var(--ink-3); }
+  .e-back { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .08em; color: var(--ink); }
+  .e-title { font-family: var(--font-serif); font-weight: 500; font-size: 31px; margin: 4px 0 0; line-height: 1.15; }
+  .e-meta { margin: 6px 0 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; color: var(--ink-3); }
+  .e-hr { border: none; border-top: 2px solid var(--ink); margin: 14px 0 20px; }
+
+  .e-heroes { display: flex; align-items: flex-end; gap: 20px; margin: 0; }
+  .e-hero { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
+  .e-hero-lead { flex: 1.6; }
+  .e-hero-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; color: var(--ink-3); }
+  .e-hero-value { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 20px; }
+  .e-hero-lead .e-hero-value { font-size: 36px; }
+  .e-heroes-block { margin: 0 0 24px; }
+  .e-total { margin: 6px 0 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; color: var(--ink-3); }
+
+  .e-readback { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px dashed var(--rule-3); border-radius: var(--radius); margin: 16px 0 16px; }
+  .e-readback-seg { margin: 0; font-family: var(--font-mono); font-size: 13px; letter-spacing: .04em; color: var(--ink); }
+  .e-readback-note { margin: 0; font-family: var(--font-sans); font-size: 14px; line-height: 1.4; color: var(--ink-2); }
+  .e-btn-outline { min-height: 44px; padding: 0 16px; background: transparent; border: 1px solid var(--ink); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; font-size: 16px; margin: 16px 0 24px; }
+
+  .e-intervals { margin: 0 0 24px; }
+  .e-intervals-title { margin: 0 0 4px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--ink); }
+  .e-rowlist { list-style: none; margin: 0; padding: 0; }
+  .e-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; }
+  .e-row:not(:last-child) { border-bottom: 1px solid var(--rule-2); }
+  .e-row-index { flex: 0 0 20px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+  .e-row-time, .e-row-duration { flex: 0 0 44px; font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .e-row-pace, .e-row-target { flex: 0 0 52px; font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .e-row-spm { flex: 0 0 52px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .e-row-spm i { font-style: normal; font-weight: 400; color: var(--ink-3); }
+  .e-row-offset { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .e-row-dash { flex: 0 0 20px; text-align: right; font-family: var(--font-mono); font-size: 13px; color: var(--ink-4); }
+  .e-track { position: relative; flex: 1; height: 14px; min-width: 0; }
+  .e-tick { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--rule-3); }
+  .e-bar { position: absolute; top: 3px; height: 8px; border-radius: 1px; background: currentColor; }
+  .e-row-dev { flex: 0 0 44px; text-align: right; font-family: var(--font-mono); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .e-faster { color: var(--judge-faster); }
+  .e-slower { color: var(--judge-slower); }
+  .e-legend { margin: 10px 0 0; font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; color: var(--ink-3); text-align: center; }
+
+  .e-mc { margin: 20px 0 0; }
+  .e-mc-title { margin: 0 0 4px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--ink); }
+  .e-mc-value, .e-mc-code { margin: 0 0 4px; font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; color: var(--ink-2); }
+  .e-mc-value { font-size: 13px; }
+
+  /* History list — .today-log-list / .today-log-row / .type-badge /
+     .free-row-chip, all index.css verbatim. */
+  .e-screen-title { font-family: var(--font-serif); font-weight: 500; font-size: 31px; margin: 4px 0 0; }
+  .e-loglist { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .e-logrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 46px; border-top: 1px solid var(--rule-2); color: var(--ink); }
+  .e-badge { display: inline-block; font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--on-color); padding: 3px 7px; }
+  .e-chip { display: inline-block; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .06em; color: var(--ink-3); background: transparent; border: 1px solid var(--rule-3); border-radius: var(--radius); padding: 2px 6px; }
+  .e-logtitle { flex: 1; font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .e-logmeta { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--ink-3); white-space: nowrap; }
+  .e-loghero { flex: 1 0 100%; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--ink-3); }
+  .e-loghero-chipped { display: flex; align-items: center; gap: 8px; }
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Gate 0-A · Wave F door spec &sect;1&ndash;&sect;3 · PR A</p>
+  <h1>The saved row says what happened</h1>
+  <p>A rower plans five 500s, stops after two and a bit, and the log shows a row with three dashes and no sentence. Nothing on that screen says the rower stopped &mdash; and nothing separates &ldquo;I stopped&rdquo; from &ldquo;the app lost a boundary&rdquo;. This gate is the one line that fixes it, plus the two words the log has been getting wrong (<span class="mono">LOGGED BY HAND</span> for a connected session that measured nothing, <span class="mono">PM5</span> for an erg that never gave a name).</p>
+  <p class="note">Tokens are <span class="mono">app/src/theme/tokens.css</span> verbatim; every frame class is copied from <span class="mono">app/src/index.css</span> by name with unchanged values. Frames are 372&times;640 portrait and 720&times;340 landscape at real proportions, and clip where a real phone clips. Fixture is the seeded library workout <strong>Tropical Wave</strong> (TR, 5 &times; 500 m at 2k&#8239;+&#8239;2, 2:00 rest &mdash; <span class="mono">server/seed/library/tr.ts</span>), stopped mid-interval&nbsp;3. Every ratio below is computed with the WCAG relative-luminance formula, not eyeballed. <strong>Nothing is implemented.</strong></p>
+</header>
+
+<hr class="rule">
+
+<section>
+  <h2>What I am asking you to approve</h2>
+  <p>Five decisions. The frames below are the argument; these are the asks. <strong>Every word here is a draft you can reword</strong> &mdash; the shape is what needs your eyes.</p>
+
+  <div class="decision">
+    <h3>(a) The marker words, one per close reason</h3>
+    <p>One line beneath the meta, in the slot <span class="mono">LINK LOST</span> already uses. It renders <em>only</em> when the row is genuinely partial (connected, has a plan, at least one interval never measured, and a close reason that names who ended it).</p>
+    <table>
+      <thead><tr><th>Who ended it</th><th>The line</th></tr></thead>
+      <tbody>
+        <tr><td>The rower (End, or the monitor&rsquo;s own Terminate)</td><td class="mono">STOPPED EARLY &middot; 2 of 5 intervals measured</td></tr>
+        <tr><td>The app lost the monitor</td><td class="mono">LINK LOST &middot; the app lost the monitor &middot; 2 of 5 intervals measured</td></tr>
+        <tr><td>The erg discarded the program</td><td class="mono">THE MONITOR DROPPED THE PROGRAM &middot; 1 of 5 intervals measured</td></tr>
+        <tr><td>Our program call failed</td><td class="mono">THE PROGRAM DID NOT LOAD &middot; 1 of 5 intervals measured</td></tr>
+        <tr><td>Closed from Today with no wire evidence</td><td class="mono">LEFT UNFINISHED &middot; 1 of 5 intervals measured</td></tr>
+      </tbody>
+    </table>
+    <p class="note"><span class="mono">LINK LOST</span> keeps its existing sentence and its existing trigger untouched; it only gains the suffix. The other four words are new and render nowhere else.</p>
+  </div>
+
+  <div class="decision">
+    <h3>(b) &ldquo;Measured&rdquo;, not &ldquo;progress&rdquo;</h3>
+    <p>If a boundary is lost, a rower who did two and a bit reads <span class="mono">1 of 5 intervals measured</span>. That is true of what the machine reported and silent about what was rowed. The alternative &mdash; counting what was <em>rowed</em> &mdash; is a number we do not have. Frame&nbsp;2 shows it beside frame&nbsp;1 so you approve that reading on sight.</p>
+  </div>
+
+  <div class="decision">
+    <h3>(c) <span class="mono">NO MONITOR READING</span>, with a time</h3>
+    <p>A connected session that arrived at the log with no record reads <span class="mono">LOGGED BY HAND</span> today &mdash; the same fact the live screen calls <span class="mono">NO MONITOR READING</span>. One fact, two words. It also gains the wall-clock time, because the app <em>did</em> witness the moment; by-hand rows stay time-free.</p>
+  </div>
+
+  <div class="decision">
+    <h3>(d) <span class="mono">MONITOR</span> where <span class="mono">PM5</span> was invented</h3>
+    <p>An erg that advertises no name is stored as <span class="mono">PM5</span> &mdash; a model number we do not know. The neutral fallback is the literal <span class="mono">MONITOR</span>, uppercase because <span class="mono">TIMER</span> and <span class="mono">LOGGED BY HAND</span> are and a real erg supplies its own caps. An erg that <em>does</em> name itself is unchanged.</p>
+  </div>
+
+  <div class="decision">
+    <h3>(e) The chip in the list &mdash; which slot, and its short words</h3>
+    <p>The list row gets a chip reusing <span class="mono">.free-row-chip</span> (the shipped JR chip) with no new colour. Two things need your word.</p>
+    <p><strong>The slot.</strong> Section&nbsp;7 renders both candidates. Beside the type badge, the chip eats the title &mdash; <span class="mono">Tropical Wave</span> becomes <span class="mono">Tro&hellip;</span>, measured, not guessed. On the numbers line it costs nothing, but Today&rsquo;s LAST THREE rows render no numbers line, so they would carry no chip at all. <strong>My recommendation is the numbers line</strong>, accepting that Today shows no chip: Today is a three-row glance and the session is one tap from the sentence.</p>
+    <p><strong>The words.</strong> The full sentences do not fit a list row &mdash; <span class="mono">THE MONITOR DROPPED THE PROGRAM</span> is ~240&nbsp;px on a 332&nbsp;px row &mdash; so the chip carries a short form and the detail screen keeps the sentence:</p>
+    <table>
+      <thead><tr><th>Detail line</th><th>Chip</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">STOPPED EARLY</td><td class="mono">STOPPED EARLY</td></tr>
+        <tr><td class="mono">LINK LOST</td><td class="mono">LINK LOST</td></tr>
+        <tr><td class="mono">THE MONITOR DROPPED THE PROGRAM</td><td class="mono">PROGRAM DROPPED</td></tr>
+        <tr><td class="mono">THE PROGRAM DID NOT LOAD</td><td class="mono">PROGRAM NOT LOADED</td></tr>
+        <tr><td class="mono">LEFT UNFINISHED</td><td class="mono">UNFINISHED</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>1 &middot; The stop &mdash; portrait, before and after</h2>
+  <p>Stopped mid-interval&nbsp;3 of 5, both finished intervals measured. The only difference between the two frames is one line.</p>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col">
+        <div class="lab">Today <span class="tag tag-bad">no sentence</span></div>
+        <div class="e e-portrait">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">7:45</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">1230</span></div>
+              </div>
+              <p class="e-total">7:45 total</p>
+            </div>
+            <div class="e-readback">
+              <p class="e-readback-seg">HELD &middot; PAIN 3/5</p>
+            </div>
+            <div class="e-btn-outline">Edit</div>
+            <div class="e-intervals">
+              <p class="e-intervals-title">INTERVALS</p>
+              <ul class="e-rowlist">
+                <li class="e-row"><span class="e-row-index">1</span><span class="e-row-time">1:54</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-slower">1:54.0</span><span class="e-row-spm">26<i> / 26</i></span><span class="e-track e-slower"><span class="e-tick"></span><span class="e-bar" style="width:50%; left:50%"></span></span><span class="e-row-dev e-slower">+2.0</span></li>
+                <li class="e-row"><span class="e-row-index">2</span><span class="e-row-time">1:51</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-faster">1:51.0</span><span class="e-row-spm">27<i> / 26</i></span><span class="e-track e-faster"><span class="e-tick"></span><span class="e-bar" style="width:31.25%; right:50%"></span></span><span class="e-row-dev e-faster">&minus;1.0</span></li>
+                <li class="e-row"><span class="e-row-index">3</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">4</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">5</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <p class="cap">Three dashes and no explanation. This frame and frame&nbsp;2 below &mdash; a completely different session &mdash; are near-identical today.</p>
+      </div>
+
+      <div class="col">
+        <div class="lab">Proposed <span class="tag tag-rec">one line, existing slot</span></div>
+        <div class="e e-portrait">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">STOPPED EARLY &middot; 2 of 5 intervals measured</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">7:45</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">1230</span></div>
+              </div>
+              <p class="e-total">7:45 total</p>
+            </div>
+            <div class="e-readback">
+              <p class="e-readback-seg">HELD &middot; PAIN 3/5</p>
+            </div>
+            <div class="e-btn-outline">Edit</div>
+            <div class="e-intervals">
+              <p class="e-intervals-title">INTERVALS</p>
+              <ul class="e-rowlist">
+                <li class="e-row"><span class="e-row-index">1</span><span class="e-row-time">1:54</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-slower">1:54.0</span><span class="e-row-spm">26<i> / 26</i></span><span class="e-track e-slower"><span class="e-tick"></span><span class="e-bar" style="width:50%; left:50%"></span></span><span class="e-row-dev e-slower">+2.0</span></li>
+                <li class="e-row"><span class="e-row-index">2</span><span class="e-row-time">1:51</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-faster">1:51.0</span><span class="e-row-spm">27<i> / 26</i></span><span class="e-track e-faster"><span class="e-tick"></span><span class="e-bar" style="width:31.25%; right:50%"></span></span><span class="e-row-dev e-faster">&minus;1.0</span></li>
+                <li class="e-row"><span class="e-row-index">3</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">4</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">5</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <p class="cap">Interval&nbsp;3 still renders as today &mdash; the rower&rsquo;s part-rowed 250&nbsp;m is PR&nbsp;B, not this one. That is on purpose: this gate asks only whether the sentence is right.</p>
+      </div>
+
+    </div>
+  </div>
+  <p class="note"><strong>Where the line sits, and a spec correction.</strong> The spec &sect;1.3 says the marker goes &ldquo;beneath the heroes, where <span class="mono">LINK LOST</span> renders today&rdquo;. Those are two different places: <span class="mono">FromTheLog.tsx</span> renders <span class="mono">linkLostLine</span> <em>above</em> the heroes, between the black rule and <span class="mono">AVG SPLIT</span>. These frames put the marker where <span class="mono">LINK LOST</span> actually is (above the heroes), which is also what &ldquo;same slot&rdquo; means; the spec sentence needs fixing either way.</p>
+  <p class="note"><strong>One thing the frames expose that no capture has shown before.</strong> The marker sits directly on top of <span class="mono">AVG SPLIT</span> with <em>no</em> gap &mdash; <span class="mono">.summary-meta</span> has no bottom margin and <span class="mono">.summary-heroes-block</span> has no top margin. That is not new: today&rsquo;s <span class="mono">LINK LOST</span> line does the same, and this repo has never committed a capture of it. It reads tight. Adding 6&ndash;8&nbsp;px under the line would fix it for both, and is a one-line change &mdash; but it moves an existing shipped surface, so it is your call, not mine.</p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>2 &middot; &ldquo;Measured, not progress&rdquo; &mdash; the lost boundary</h2>
+  <p>Same rower, same five 500s, stopped at the same place. The difference: interval&nbsp;2&rsquo;s boundary never arrived, so the app has no reading for an interval that was fully rowed. <strong>This is the row you are approving on sight.</strong></p>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col">
+        <div class="lab">Today <span class="tag tag-bad">indistinguishable from frame 1</span></div>
+        <div class="e e-portrait">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:54.0</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">3:54</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">618</span></div>
+              </div>
+              <p class="e-total">3:54 total</p>
+            </div>
+            <div class="e-readback">
+              <p class="e-readback-seg">HELD &middot; PAIN 3/5</p>
+            </div>
+            <div class="e-btn-outline">Edit</div>
+            <div class="e-intervals">
+              <p class="e-intervals-title">INTERVALS</p>
+              <ul class="e-rowlist">
+                <li class="e-row"><span class="e-row-index">1</span><span class="e-row-time">1:54</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-slower">1:54.0</span><span class="e-row-spm">26<i> / 26</i></span><span class="e-track e-slower"><span class="e-tick"></span><span class="e-bar" style="width:50%; left:50%"></span></span><span class="e-row-dev e-slower">+2.0</span></li>
+                <li class="e-row"><span class="e-row-index">2</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">3</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">4</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">5</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Proposed <span class="tag tag-alt">1 of 5, on purpose</span></div>
+        <div class="e e-portrait">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">STOPPED EARLY &middot; 1 of 5 intervals measured</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:54.0</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">3:54</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">618</span></div>
+              </div>
+              <p class="e-total">3:54 total</p>
+            </div>
+            <div class="e-readback">
+              <p class="e-readback-seg">HELD &middot; PAIN 3/5</p>
+            </div>
+            <div class="e-btn-outline">Edit</div>
+            <div class="e-intervals">
+              <p class="e-intervals-title">INTERVALS</p>
+              <ul class="e-rowlist">
+                <li class="e-row"><span class="e-row-index">1</span><span class="e-row-time">1:54</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-slower">1:54.0</span><span class="e-row-spm">26<i> / 26</i></span><span class="e-track e-slower"><span class="e-tick"></span><span class="e-bar" style="width:50%; left:50%"></span></span><span class="e-row-dev e-slower">+2.0</span></li>
+                <li class="e-row"><span class="e-row-index">2</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">3</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">4</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">5</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="warn">
+    <p><strong>Read it as a rower would.</strong> He rowed two and a half intervals. The screen says <span class="mono">1 of 5 intervals measured</span> and shows 618&nbsp;m. Both are true statements about <em>measurement</em>, and neither is a claim about what he rowed. If that reads as the app under-selling his session rather than admitting a gap, the word is wrong and this is the frame that says so.</p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>3 &middot; Link lost &mdash; suffix, and no suffix</h2>
+  <p>The existing sentence and its existing trigger are untouched. It gains the suffix only when the row is genuinely partial; a link-lost row whose every interval <em>was</em> measured is unchanged from today.</p>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col">
+        <div class="lab">Today &middot; link lost, 2 of 5 measured</div>
+        <div class="e e-portrait" style="height:340px">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">LINK LOST &middot; the app lost the monitor</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">7:45</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">1230</span></div>
+              </div>
+              <p class="e-total">7:45 total</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Proposed &middot; suffix added <span class="tag tag-rec">wraps to 3 lines</span></div>
+        <div class="e e-portrait" style="height:340px">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">LINK LOST &middot; the app lost the monitor &middot; 2 of 5 intervals measured</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">7:45</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">1230</span></div>
+              </div>
+              <p class="e-total">7:45 total</p>
+            </div>
+          </div>
+        </div>
+        <p class="cap">The combined line is 82 characters at 12&nbsp;px mono &mdash; it wraps. If that is too much sentence, the fallback is to drop the existing clause and read <span class="mono">LINK LOST &middot; 2 of 5 intervals measured</span>, but that retires a release-noted promise.</p>
+      </div>
+
+      <div class="col">
+        <div class="lab">Proposed &middot; every interval measured <span class="tag tag-alt">unchanged</span></div>
+        <div class="e e-portrait" style="height:340px">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">LINK LOST &middot; the app lost the monitor</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.3</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">19:22</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">3078</span></div>
+              </div>
+              <p class="e-total">19:22 total</p>
+            </div>
+          </div>
+        </div>
+        <p class="cap">The machine finished all five boundaries; the app just never saw the End. No suffix &mdash; the row is not partial.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>4 &middot; The other three close reasons</h2>
+  <p>Same slot, same treatment, different story. Each renders only when the row is genuinely partial.</p>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col">
+        <div class="lab">The erg discarded the program</div>
+        <div class="e e-portrait" style="height:340px">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">THE MONITOR DROPPED THE PROGRAM &middot; 1 of 5 intervals measured</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:54.0</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">3:54</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">618</span></div>
+              </div>
+              <p class="e-total">3:54 total</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Closed from Today, no wire evidence</div>
+        <div class="e e-portrait" style="height:340px">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">LEFT UNFINISHED &middot; 1 of 5 intervals measured</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:54.0</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">3:54</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">618</span></div>
+              </div>
+              <p class="e-total">3:54 total</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Our program call failed <span class="tag tag-alt">rarest</span></div>
+        <div class="e e-portrait" style="height:340px">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">THE PROGRAM DID NOT LOAD &middot; 1 of 5 intervals measured</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:54.0</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">3:54</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">618</span></div>
+              </div>
+              <p class="e-total">3:54 total</p>
+            </div>
+          </div>
+        </div>
+        <p class="cap">Carries the <em>previous</em> program&rsquo;s steps, which is why it can be partial at all.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>5 &middot; The marker above <span class="mono">MACHINE CONFIRMED</span></h2>
+  <p>A terminated row whose machine burst arrived reads <span class="mono">MACHINE CONFIRMED &middot; WORK ONLY</span> today, over a partial number, with nothing saying it is partial. Both now render: the marker at the top from the view model, the block far below reading the row and nothing else, its text unchanged. Frame is 372&times;760 so the two are visible in one image; on a phone the block is one scroll down.</p>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col">
+        <div class="lab">Today <span class="tag tag-bad">confirmed, but partial</span></div>
+        <div class="e e-tall">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">3:45</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">1000</span></div>
+              </div>
+              <p class="e-total">3:45 total</p>
+            </div>
+            <div class="e-btn-outline">Add how it felt</div>
+            <div class="e-intervals">
+              <p class="e-intervals-title">INTERVALS</p>
+              <ul class="e-rowlist">
+                <li class="e-row"><span class="e-row-index">1</span><span class="e-row-time">1:54</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-slower">1:54.0</span><span class="e-row-spm">26<i> / 26</i></span><span class="e-track e-slower"><span class="e-tick"></span><span class="e-bar" style="width:50%; left:50%"></span></span><span class="e-row-dev e-slower">+2.0</span></li>
+                <li class="e-row"><span class="e-row-index">2</span><span class="e-row-time">1:51</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-faster">1:51.0</span><span class="e-row-spm">27<i> / 26</i></span><span class="e-track e-faster"><span class="e-tick"></span><span class="e-bar" style="width:31.25%; right:50%"></span></span><span class="e-row-dev e-faster">&minus;1.0</span></li>
+                <li class="e-row"><span class="e-row-index">3</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">4</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">5</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+              </ul>
+              <p class="e-legend">&larr; FASTER (BLUE) &middot; SLOWER (RED) &rarr;</p>
+            </div>
+            <div class="e-mc">
+              <p class="e-mc-title">MACHINE CONFIRMED &middot; WORK ONLY</p>
+              <p class="e-mc-value">3:45.0 work &middot; 1000m</p>
+              <p class="e-mc-code">CODE AF99-4706 C021-B054</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Proposed <span class="tag tag-rec">block text unchanged</span></div>
+        <div class="e e-tall">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">STOPPED EARLY &middot; 2 of 5 intervals measured</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">3:45</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">1000</span></div>
+              </div>
+              <p class="e-total">3:45 total</p>
+            </div>
+            <div class="e-btn-outline">Add how it felt</div>
+            <div class="e-intervals">
+              <p class="e-intervals-title">INTERVALS</p>
+              <ul class="e-rowlist">
+                <li class="e-row"><span class="e-row-index">1</span><span class="e-row-time">1:54</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-slower">1:54.0</span><span class="e-row-spm">26<i> / 26</i></span><span class="e-track e-slower"><span class="e-tick"></span><span class="e-bar" style="width:50%; left:50%"></span></span><span class="e-row-dev e-slower">+2.0</span></li>
+                <li class="e-row"><span class="e-row-index">2</span><span class="e-row-time">1:51</span><span class="e-row-target">1:52.0</span><span class="e-row-pace e-faster">1:51.0</span><span class="e-row-spm">27<i> / 26</i></span><span class="e-track e-faster"><span class="e-tick"></span><span class="e-bar" style="width:31.25%; right:50%"></span></span><span class="e-row-dev e-faster">&minus;1.0</span></li>
+                <li class="e-row"><span class="e-row-index">3</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">4</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+                <li class="e-row"><span class="e-row-index">5</span><span class="e-row-duration">500 m</span><span class="e-row-target">1:52.0</span><span class="e-row-offset">2k +2</span><span class="e-row-dash">&mdash;</span></li>
+              </ul>
+              <p class="e-legend">&larr; FASTER (BLUE) &middot; SLOWER (RED) &rarr;</p>
+            </div>
+            <div class="e-mc">
+              <p class="e-mc-title">MACHINE CONFIRMED &middot; WORK ONLY</p>
+              <p class="e-mc-value">3:45.0 work &middot; 1000m</p>
+              <p class="e-mc-code">CODE AF99-4706 C021-B054</p>
+            </div>
+          </div>
+        </div>
+        <p class="cap">The two sentences do not fight: the machine confirms the 1000&nbsp;m it measured; the marker says the plan asked for five intervals and two were measured.</p>
+      </div>
+
+    </div>
+  </div>
+  <p class="note">Verification code is the real one already committed in <span class="mono">docs/screenshots/log-detail-machine-confirmed.png</span>, reused as a fixture rather than invented.</p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>6 &middot; The two words the log gets wrong</h2>
+  <p>Top of the screen only &mdash; the meta line under the title is the whole change.</p>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col">
+        <div class="lab">Today &middot; connected, measured nothing <span class="tag tag-bad">wrong word, no time</span></div>
+        <div class="e e-short">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; LOGGED BY HAND</p>
+            <hr class="e-hr">
+            <div class="e-btn-outline" style="margin-top:0">Add how it felt</div>
+          </div>
+        </div>
+        <p class="cap">The rower connected, the erg gave nothing, and the log calls it by-hand &mdash; while the live screen called the same fact <span class="mono">NO MONITOR READING</span>.</p>
+      </div>
+
+      <div class="col">
+        <div class="lab">Proposed <span class="tag tag-rec">the live screen&rsquo;s own word</span></div>
+        <div class="e e-short">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; NO MONITOR READING</p>
+            <hr class="e-hr">
+            <div class="e-btn-outline" style="margin-top:0">Add how it felt</div>
+          </div>
+        </div>
+        <p class="cap">Gains the wall-clock time, because the app witnessed the session. A genuine by-hand row keeps no time.</p>
+      </div>
+
+      <div class="col">
+        <div class="lab">Today &middot; a nameless erg <span class="tag tag-bad">model number invented</span></div>
+        <div class="e e-short">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5</p>
+            <hr class="e-hr">
+            <div class="e-heroes">
+              <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+              <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">9:22</span></div>
+              <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">2500</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Proposed <span class="tag tag-rec">neutral</span></div>
+        <div class="e e-short">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; MONITOR</p>
+            <hr class="e-hr">
+            <div class="e-heroes">
+              <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+              <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">9:22</span></div>
+              <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">2500</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="lab">Unchanged &middot; an erg that names itself <span class="tag tag-alt">no change</span></div>
+        <div class="e e-short">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <div class="e-heroes">
+              <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+              <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">9:22</span></div>
+              <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">2500</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="cap">Existing rows already carrying the literal <span class="mono">PM5</span> are not backfilled &mdash; they are indistinguishable from ergs that genuinely advertise that name.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>7 &middot; The History list</h2>
+  <p>Row proportions are the real ones: <span class="mono">.today-log-row</span>, 46&nbsp;px minimum, badge / title / meta on line one, the numbers on line two. Two candidate slots for the chip, both rendered, with what each actually costs.</p>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col">
+        <div class="lab">Today</div>
+        <div class="e e-list">
+          <div class="e-screen">
+            <div class="e-back">&larr; TODAY</div>
+            <h1 class="e-screen-title">History</h1>
+            <ul class="e-loglist">
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-tr)">TR</span>
+                <span class="e-logtitle">Tropical Wave</span>
+                <span class="e-logmeta">SEP 2 &middot; HELD &middot; 3/5</span>
+                <span class="e-loghero">AVG 1:52.5 &middot; 1,230 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-tr)">TR</span>
+                <span class="e-logtitle">Sea Fret</span>
+                <span class="e-logmeta">SEP 1 &middot; UNDER &middot; 3/5</span>
+                <span class="e-loghero">AVG 2:04.0 &middot; 500 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-at)">AT</span>
+                <span class="e-logtitle">Occluded Front</span>
+                <span class="e-logmeta">AUG 31 &middot; HELD &middot; 2/5</span>
+                <span class="e-loghero">AVG 2:07.3 &middot; 2,000 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-an)">AN</span>
+                <span class="e-logtitle">Gulf Stream</span>
+                <span class="e-logmeta">AUG 30 &middot; OVER &middot; 4/5</span>
+                <span class="e-loghero">AVG 1:58.1 &middot; 4,400 m</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p class="cap">Three of these four are partial sessions and nothing says so.</p>
+      </div>
+
+      <div class="col">
+        <div class="lab">Slot A &middot; beside the badge <span class="tag tag-bad">eats the title</span></div>
+        <div class="e e-list">
+          <div class="e-screen">
+            <div class="e-back">&larr; TODAY</div>
+            <h1 class="e-screen-title">History</h1>
+            <ul class="e-loglist">
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-tr)">TR</span>
+                <span class="e-chip">STOPPED EARLY</span>
+                <span class="e-logtitle">Tropical Wave</span>
+                <span class="e-logmeta">SEP 2 &middot; HELD &middot; 3/5</span>
+                <span class="e-loghero">AVG 1:52.5 &middot; 1,230 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-tr)">TR</span>
+                <span class="e-chip">LINK LOST</span>
+                <span class="e-logtitle">Sea Fret</span>
+                <span class="e-logmeta">SEP 1 &middot; UNDER &middot; 3/5</span>
+                <span class="e-loghero">AVG 2:04.0 &middot; 500 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-at)">AT</span>
+                <span class="e-logtitle">Occluded Front</span>
+                <span class="e-logmeta">AUG 31 &middot; HELD &middot; 2/5</span>
+                <span class="e-loghero">AVG 2:07.3 &middot; 2,000 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-an)">AN</span>
+                <span class="e-chip">PROGRAM DROPPED</span>
+                <span class="e-logtitle">Gulf Stream</span>
+                <span class="e-logmeta">AUG 30 &middot; OVER &middot; 4/5</span>
+                <span class="e-loghero">AVG 1:58.1 &middot; 4,400 m</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p class="cap"><strong>Measured, not guessed:</strong> <span class="mono">Tropical Wave</span> renders as <span class="mono">Tro&hellip;</span> and <span class="mono">Gulf Stream</span> as <span class="mono">G&hellip;</span>. The chip wins the row and the workout&rsquo;s name loses it. Works on Today&rsquo;s rows too, at the same price.</p>
+      </div>
+
+      <div class="col">
+        <div class="lab">Slot B &middot; on the numbers line <span class="tag tag-rec">recommended</span></div>
+        <div class="e e-list">
+          <div class="e-screen">
+            <div class="e-back">&larr; TODAY</div>
+            <h1 class="e-screen-title">History</h1>
+            <ul class="e-loglist">
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-tr)">TR</span>
+                <span class="e-logtitle">Tropical Wave</span>
+                <span class="e-logmeta">SEP 2 &middot; HELD &middot; 3/5</span>
+                <span class="e-loghero e-loghero-chipped"><span class="e-chip">STOPPED EARLY</span>AVG 1:52.5 &middot; 1,230 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-tr)">TR</span>
+                <span class="e-logtitle">Sea Fret</span>
+                <span class="e-logmeta">SEP 1 &middot; UNDER &middot; 3/5</span>
+                <span class="e-loghero e-loghero-chipped"><span class="e-chip">LINK LOST</span>AVG 2:04.0 &middot; 500 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-at)">AT</span>
+                <span class="e-logtitle">Occluded Front</span>
+                <span class="e-logmeta">AUG 31 &middot; HELD &middot; 2/5</span>
+                <span class="e-loghero">AVG 2:07.3 &middot; 2,000 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-an)">AN</span>
+                <span class="e-logtitle">Gulf Stream</span>
+                <span class="e-logmeta">AUG 30 &middot; OVER &middot; 4/5</span>
+                <span class="e-loghero e-loghero-chipped"><span class="e-chip">PROGRAM DROPPED</span>AVG 1:58.1 &middot; 4,400 m</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p class="cap">Every title survives, and the chip sits beside the numbers it qualifies &mdash; which is what it is actually saying. Cost: Today&rsquo;s LAST THREE rows render no numbers line, so they would carry no chip.</p>
+      </div>
+
+      <div class="col">
+        <div class="lab">Slot B &middot; longest chip, longest title <span class="tag tag-alt">worst case</span></div>
+        <div class="e e-list" style="height:250px">
+          <div class="e-screen">
+            <ul class="e-loglist">
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-an)">AN</span>
+                <span class="e-logtitle">Southwesterly Monsoon Trough</span>
+                <span class="e-logmeta">AUG 29 &middot; OVER &middot; 4/5</span>
+                <span class="e-loghero e-loghero-chipped"><span class="e-chip">PROGRAM NOT LOADED</span>AVG 1:48.9 &middot; 900 m</span>
+              </li>
+              <li class="e-logrow">
+                <span class="e-badge" style="background:var(--type-tr)">TR</span>
+                <span class="e-logtitle">Tropical Wave</span>
+                <span class="e-logmeta">AUG 28 &middot; HELD &middot; 3/5</span>
+                <span class="e-loghero e-loghero-chipped"><span class="e-chip">UNFINISHED</span>AVG 1:53.0 &middot; 618 m</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p class="cap">The longest chip word beside a long title. Still fits; the title is untouched.</p>
+      </div>
+
+    </div>
+  </div>
+  <p class="note">Whole row is the tap target either way: <span class="mono">.today-log-row</span> is <span class="mono">min-height: 46px</span>, clear of the 44&nbsp;px floor, and the chip adds no new tappable element. Slot B is a two-line change to <span class="mono">.today-log-hero</span> (flex row, 8&nbsp;px gap); slot A is a new child in <span class="mono">LogRow</span>.</p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>8 &middot; Landscape</h2>
+  <p>The log screen has no landscape branch: <span class="mono">.screen</span> is a 480&nbsp;px column centred in whatever width it gets, so the marker sits in exactly the same place and less of the page is above the fold. Frames 1 and 5 at 720&times;340.</p>
+  <div class="strip">
+    <div class="frames">
+
+      <div class="col col-l">
+        <div class="lab">Landscape &middot; the stop</div>
+        <div class="e e-land">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">STOPPED EARLY &middot; 2 of 5 intervals measured</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">7:45</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">1230</span></div>
+              </div>
+              <p class="e-total">7:45 total</p>
+            </div>
+            <div class="e-readback">
+              <p class="e-readback-seg">HELD &middot; PAIN 3/5</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col col-l">
+        <div class="lab">Landscape &middot; with the machine burst</div>
+        <div class="e e-land">
+          <div class="e-screen">
+            <p class="e-eyebrow">FROM YOUR LOG</p>
+            <div class="e-back">&larr; LOG</div>
+            <h1 class="e-title">Tropical Wave</h1>
+            <p class="e-meta">SEP 2 &middot; 08:15 &middot; PM5 432331249</p>
+            <hr class="e-hr">
+            <p class="e-meta">STOPPED EARLY &middot; 2 of 5 intervals measured</p>
+            <div class="e-heroes-block">
+              <div class="e-heroes">
+                <div class="e-hero e-hero-lead"><span class="e-hero-label">AVG SPLIT</span><span class="e-hero-value">1:52.5</span></div>
+                <div class="e-hero"><span class="e-hero-label">TIME</span><span class="e-hero-value">3:45</span></div>
+                <div class="e-hero"><span class="e-hero-label">DISTANCE</span><span class="e-hero-value">1000</span></div>
+              </div>
+              <p class="e-total">3:45 total</p>
+            </div>
+            <div class="e-btn-outline">Add how it felt</div>
+          </div>
+        </div>
+        <p class="cap">The <span class="mono">MACHINE CONFIRMED</span> block is below the interval table in both orientations; landscape just puts it further down the same scroll.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>Contrast, computed</h2>
+  <p>Every pairing the new elements use, against the ground they actually sit on. WCAG 2.x relative luminance; the shared pairings reproduce the figures <span class="mono">index.css</span> already records for them, which is the check on the method. Floor is 4.5:1 for body text, 3:1 for &ge;18.66&nbsp;px bold or &ge;24&nbsp;px, and 3:1 for a non-text boundary that carries meaning.</p>
+  <table>
+    <thead><tr><th>Element</th><th>Pairing</th><th>Size</th><th>Ratio</th><th>Floor</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Marker line (all five reasons)</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">12px</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td><span class="mono">LINK LOST</span> line + suffix</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">12px</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td><span class="mono">NO MONITOR READING</span> / <span class="mono">MONITOR</span> (meta)</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">12px</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>List chip text</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">12px/600</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>List chip border</td><td class="mono">--rule-3 #c9c3b2 on --page #f4f1e8</td><td class="num">1px</td><td class="num">1.56:1</td><td class="num">3:1</td><td class="fail">BELOW &mdash; see note</td></tr>
+      <tr><td>List row title</td><td class="mono">--ink #1b1a17 on --page #f4f1e8</td><td class="num">14px</td><td class="num">15.41:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>List row meta / numbers line</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">11px</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Type badge TR (existing)</td><td class="mono">--on-color #fffdf7 on --type-tr #1b1a17</td><td class="num">12px/600</td><td class="num">17.11:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Type badge AT (existing)</td><td class="mono">--on-color #fffdf7 on --type-at #8a5f18</td><td class="num">12px/600</td><td class="num">5.53:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Type badge AN (existing)</td><td class="mono">--on-color #fffdf7 on --type-an #5c4382</td><td class="num">12px/600</td><td class="num">8.00:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Meta line, date + time (existing)</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">12px</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Workout title (existing)</td><td class="mono">--ink #1b1a17 on --page #f4f1e8</td><td class="num">31px</td><td class="num">15.41:1</td><td class="num">3:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Hero label / total line (existing)</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">10&ndash;12px</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Hero value (existing)</td><td class="mono">--ink #1b1a17 on --page #f4f1e8</td><td class="num">36px</td><td class="num">15.41:1</td><td class="num">3:1</td><td class="pass">PASS</td></tr>
+      <tr><td><span class="mono">MACHINE CONFIRMED</span> title (existing)</td><td class="mono">--ink #1b1a17 on --page #f4f1e8</td><td class="num">11px/600</td><td class="num">15.41:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Machine value / code (existing)</td><td class="mono">--ink-2 #3f3c35 on --page #f4f1e8</td><td class="num">12&ndash;13px</td><td class="num">9.74:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Judged pace, faster (existing)</td><td class="mono">--judge-faster #1d4e89 on --page #f4f1e8</td><td class="num">14px/600</td><td class="num">7.43:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Judged pace, slower (existing)</td><td class="mono">--judge-slower #962718 on --page #f4f1e8</td><td class="num">14px/600</td><td class="num">7.15:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Unmeasured row dash (existing)</td><td class="mono">--ink-4 #6f6a5f on --page #f4f1e8</td><td class="num">13px</td><td class="num">4.76:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+    </tbody>
+  </table>
+  <p class="note"><strong>The chip border, honestly.</strong> <span class="mono">--rule-3</span> on <span class="mono">--page</span> is <span class="mono">1.56:1</span>. It is inherited unchanged from the shipped JR chip (<span class="mono">.free-row-chip</span>, index.css:548) and is decorative: the chip&rsquo;s meaning is carried entirely by its text at 6.69:1, and removing the border would lose nothing an assistive reader relies on. If you want the outline to be a real boundary, <span class="mono">--ink-4 #6f6a5f</span> reaches <span class="mono">4.76:1</span> and would clear the 3:1 floor &mdash; but that would make the new chip louder than the shipped one, and the two would no longer match. Flagging it rather than silently deciding it.</p>
+  <p class="note"><strong>Hit targets.</strong> The list row is the only tappable element these changes touch: <span class="mono">.today-log-row</span>, <span class="mono">min-height: 46px</span>, whole row, unchanged. The chip is not itself tappable. The detail screen&rsquo;s marker is text, not a control. <span class="mono">.back-link</span> stays at <span class="mono">min-height/min-width: 44px</span>.</p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>Where these frames are approximations</h2>
+  <ul style="max-width:68ch; color:var(--d-ink-2); font-size:14px; line-height:1.6;">
+    <li><strong>Fonts.</strong> Newsreader / Archivo / IBM Plex Mono load from Google Fonts, the same three families the app names in <span class="mono">tokens.css</span>. Rendering will differ by a hair from the phone&rsquo;s own font stack.</li>
+    <li><strong>Safe areas.</strong> <span class="mono">.screen</span>&rsquo;s padding carries <span class="mono">env(safe-area-inset-*)</span> terms, which resolve to 0 in a desktop browser and to real values on a phone. The frames use the 0 case.</li>
+    <li><strong>Judgment bars.</strong> Widths are the real formula (<span class="mono">min(50, max(1.2, |dev|/1.6 &times; 50))</span>): +2.0&nbsp;s caps at 50%, &minus;1.0&nbsp;s is 31.25%.</li>
+    <li><strong>The trace chart and plan footer</strong> are omitted below the fold in every frame; neither changes.</li>
+    <li><strong>Numbers.</strong> The heroes for a stopped row are today&rsquo;s FALLBACK tier (the stored, fused totals) &mdash; that is why <span class="mono">TIME 7:45</span> sits beside <span class="mono">AVG SPLIT 1:52.5</span>: the time includes the programmed rest between intervals. Nothing in PR&nbsp;A changes those numbers.</li>
+  </ul>
+  <p class="note">This is the gate, not the presentation of a built thing. Nothing is implemented and no task starts until these five decisions have your word.</p>
+</section>
+
+</div>

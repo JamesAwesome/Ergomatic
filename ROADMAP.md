@@ -531,29 +531,48 @@ rower's work silently.
       current build; `2026-08-31-lifecycle-design.md` §6 ships a latch
       counter so ordinary use produces the number, and no threshold moves
       until it does.
-- [ ] **The `door` column.** One stored-shape change that discharges four
-      items which each say in their own text that they want the next
-      stored-shape change to the logs table: - **The PARTIAL complaint — an abandoned piece must say it was abandoned.**
-      **Folded in here by James, 2026-08-31**, from the decision table. Today a
-      500 m you bail on at 250 saves as a 250 m row with nothing marking it
-      short. His words: _"I want it to say I stopped, not silently show a
-      shorter piece that looks like I planned a 250 when I meant 500 and
-      bailed."_ The `door` column is the stored fact the summary copy needs, so
-      one migration carries both. **The rendered summary is a Gate 0** — it
-      changes what a saved row says. **A resend control on that screen was
-      considered and DECLINED by James on 2026-08-31** (_"Run it again"_,
-      2026-08-27); starting the workout again from Today is the path, and the
-      register row is retired. - **RC-18** — `device.name ?? "PM5"` bakes a model number into a stored,
-      rower-visible field (`webBluetooth.ts:296`, `capacitorBle.ts:465,494`).
-      James, 2026-08-25: _"We may one day support other rowers. Be careful
-      where we use 'PM5'."_ Standing rule from it: copy says "monitor". - **LM's `LOGGED BY HAND`** — a connected session that opened no record
-      stores that label permanently and unbackfillably, a knowing exception
-      to James's 2026-08-18 ruling that one fact must not read as two words
-      live versus from the log. - The stored-row analysis in `docs/history/phase-lm.md` — what option 2
-      costs, and the `timeLabel` gate in `buildMeta` that must be re-derived
-      positively rather than inherited.
+- [ ] **The `door` item — RE-SCOPED 2026-09-02, spec
+      `docs/superpowers/specs/2026-09-02-door-partial-design.md`.** The
+      column itself SHIPPED as `session_logs.source` (`pm5 | timer |
+      manual`) in #268 / migration 0020 on 2026-09-02, so "which door" is
+      delivered; what this item still owes is split into two PRs by risk
+      model, and the phase-open anchor pass (2026-09-02, ledger entry) broke
+      two of its four founding decisions before the spec was written:
+      - **PR A — the stored WORD (TRIAD).** PARTIAL as a stored-state read
+        (no new column): connected row, steps present, at least one step
+        never measured, and `endedBy` in the five-value allowlist (never
+        `!= finished`: legacy rows store `null` and would all read partial;
+        the steps-present clause is what excludes a connected Just Row); a
+        short step on a `finished` row is measurement loss, not a partial.
+        The count in the marker is intervals MEASURED, the lost banner's own
+        rule; the shipped `LINK LOST` line keeps its trigger and gains a
+        suffix; the other four words render only when PARTIAL holds. A fourth
+        `log_source` member `no-reading` (NO device name — the first draft
+        required one and reversed a recorded PM ruling), rendering
+        `NO MONITOR READING` in the log as on the live screen, with the
+        `timeLabel` gate re-derived as an allowlist. RC-18's fallback
+        becomes the literal `MONITOR` (nothing uppercases that line),
+        fix-forward only — and with it, the deviceName-band guard stops
+        storing a nameless erg's session as `manual`: it keeps `pm5` and
+        substitutes the caption. Carries the three riders below. **The
+        `source` SUNSET is NO LONGER PART OF PR A** — it shipped on its own
+        as #273 / v0.35.0 on 2026-09-02 (its own row above is reconciled).
+        **Gate 0-A** on the rendered saved row + list chip.
+      - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
+        in-flight interval's metres in NEW step keys (`partialMeters`/
+        `partialSeconds`), never `actualMeters` — an older server drops
+        unknown keys silently, so number-plus-marker in the old keys
+        would persist the number without the marker. Five invariants
+        (never on `finished`; never an `IntervalActual`; rowing-state only;
+        stale under-counts; no summing reader sees it). Owns the "N
+        intervals kept" vocabulary and the lost banner. **Gate 0-B**.
+      - The four sub-items this row used to list — PARTIAL, RC-18, LM's
+        `LOGGED BY HAND`, the `timeLabel` gate — are all in PR A; the
+        stored-row analysis in `docs/history/phase-lm.md` is discharged by
+        the spec's §1.1 authority statement.
 
-      **S/M, and it must land before any read surface renders it.**
+      **S/M each; A lands before B; B's plan gets a FULL antagonist pass
+      (novel stored shape + session-scoped ref).**
 
 - [ ] **The in-flight interval's metres are discarded on a mid-row link loss.**
       On a single-interval workout — the tester's own 2000 m "Beam Sea" — any
@@ -569,6 +588,11 @@ rower's work silently.
       "N intervals kept." That is the PARTIAL vocabulary's job, which is why
       this lands with or after that migration and its summary copy is part
       of that item's Gate 0, never before.
+      **SPECCED 2026-09-02 as door PR B**
+      (`2026-09-02-door-partial-design.md` §5): new step keys, five
+      invariants, a lifetime table for the in-flight reading, its own Gate
+      0-B, and one replay owed before its plan (when `IntervalActual` N
+      arrives — work→rest boundary or end of rest).
 - [ ] **`rowingActive` is falsified but not dangerous.** Owed: (a) one test
       pinning `surfaceModel.ts:915`'s `midSessionMirror` byte-half — measured,
       deleting it leaves 5,357 tests / 191 files green, so nothing gates it
@@ -717,7 +741,8 @@ rower's work silently.
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 
 **RULED by James, 2026-08-31: all three ride the `door` COLUMN's migration
-PR**, not a branch of their own and not the lifecycle spec's PRs. They carry
+PR** — which is **door PR A** (`2026-09-02-door-partial-design.md` §4) since
+the re-scope — not a branch of their own and not the lifecycle spec's PRs. They carry
 none of that migration's risk, so bundling them costs a reviewer nothing and
 saves three round trips.
 
@@ -727,12 +752,12 @@ saves three round trips.
       at "the first server-touching phase after TWO tags have shipped",
       deliberately countable. **Ten tags have shipped since.**
 - [ ] **Remove the legacy warm-up guards on the persisted `LogSeed.steps[].kind`
-      union.** `logDraft.ts:857` still carries `if (seedStep.kind === "warmup")
-return;` and the union at `:600` is still `"warmup" | "work"`. Binding
+      union.** `logDraft.ts:864` (was `:857`) still carries `if (seedStep.kind === "warmup")
+return;` and the union at `:607` (was `:600`) is still `"warmup" | "work"`. Binding
       sub-ruling from WU: `kind` stays the literal union, never widened to
       `string`. Same expired trigger as above.
 - [ ] **RC-12's last unreconciled comment.** Four of six sites are already
-      corrected; `domain/monitor/types.ts:607` still claims `onDisconnect`
+      corrected; `domain/monitor/types.ts:630-631` (was `:607`, now the `Transport` interface) still claims `onDisconnect`
       covers "the Bluetooth stack resetting" without qualification. The
       neighbouring iOS-backgrounding claim was already struck as false.
 
@@ -1220,6 +1245,19 @@ and unscheduled; it is not a wish.
 **How an entry leaves:** it rides the next PR that touches its area, it is
 promoted into a wave, or it is killed with a reason. "Rides the next PR touching
 X" is a real disposition — most of these are single files.
+
+- [ ] **A connected Just Row closed by End or TERMINATE cannot be sent to
+      Concept2.** Filed at the door anchor pass, 2026-09-02 (RF14), narrowed
+      at the spec pass. `server/concept2/mapping.ts:50` fences the export on
+      `endedBy === "finished"`; End and TERMINATE both close `rower`
+      (`monitorRun.ts:184-188`, `useMonitorSession.ts:5010`; `steps: []` at `JustRowLog.tsx:209`), which is every
+      ordinary Just Row. Whether the driver's terminal branch
+      (`driver.ts:2605-2622`, no free-row opt-out) can close a free row
+      `finished` when a piece is set up at the PM5 is SUSPECTED and
+      unsettled. Either way the v0.34.0 flagship is ineligible for the
+      export button in ordinary use until the fence admits a `rower` close
+      for free rows (`steps: []`). Needs a Wave E ruling: widen the fence
+      for free rows, or accept and say so in the button's copy. **S**
 
 ## Codebase-audit owners
 - **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02): on

@@ -5578,3 +5578,280 @@ same way.
   `advancesPlan`, and link fields are written inside the same `if` as the
   advance, so a non-opted-in free row cannot decrement; `advancesPlan:
   true` is accepted unchanged by an old server.
+
+## 2026-09-02 — Wave F `door` re-scope, phase-open anchor pass (D1-D4 pre-spec)
+
+- **CLAIM (D1): "PARTIAL is derivable — `endedBy` says I stopped, `steps[].meters`
+  vs `actualMeters` says how far."** FALSIFIED four ways in one pass, and the
+  technique for each is the cheap one. (a) **Read the door's ONLY exit copy**:
+  `Timer.tsx:815` says *"Abandon this session? Nothing will be saved: no log, no
+  actuals"* and `Timer.tsx:477` reaches `/session/log` only from
+  `isComplete(run)` — a timer row cannot BE partial, so the mapping is vacuous
+  there. (b) **grep the field's WRITERS, not its readers**: `actualMeters` is
+  written at exactly two lines, both inside `buildMonitorLogSteps` — the
+  comparison does not exist off the pm5 door. (c) **Run the predicate against
+  the feature that shipped this morning**: a connected Just Row always closes
+  `endedBy: "rower"` with `steps: []`, so `endedBy !== "finished"` marks every
+  successful Just Row PARTIAL. (d) **Count the union**: D1 listed five of six
+  `endedBy` members plus no `null`; the predicate owes seven states.
+- **ROOT LESSON: `endedBy` answers "how did the session end", never "did the
+  rower stop short of a plan".** Those coincide only when a plan exists. Before
+  keying a product word on a stored enum, ask what the enum's WRITERS actually
+  know — `monitorRun.ts:184-188` says `"rower"` means End-button OR machine
+  TERMINATE, and a Just Row has no other exit.
+- **The two inputs disagree in BOTH directions, and the codebase names both
+  producers in comments.** `logDraft.ts:805` ("a lost boundary whose pair never
+  both arrived") and `types.ts:62` ("an interval that produces ZERO frames is
+  lost entirely") give short actuals on a `finished` row. TECHNIQUE: **when a
+  predicate combines two stored inputs, grep the source for a comment naming a
+  producer of their disagreement** — this repo documents its own edge cases and
+  the spec had not read them.
+- **CLAIM (D2): "the in-flight interval lands in `steps` jsonb without a
+  migration and without changing what sums mean."** NARROWED to one safe shape
+  by reading the server's own validator comment: `routes/data.ts:594` —
+  *"Built from an explicit field list … any extra keys the client sent are
+  silently dropped, not persisted."* So a partial carried in `actualMeters` plus
+  a new `measured:false` marker reaches an older server as **the number without
+  the marker, 201, forever, in every sum** — while a new `actualSource` member
+  400s the whole save with no client retry. **TECHNIQUE: for any new field inside
+  an existing jsonb payload, run the additive matrix in BOTH directions and ask
+  what the old server does with each KEY SEPARATELY — a marker and its number in
+  different keys can be split by a validator's allowlist.** The fix is one line
+  of design: number and marker share new key names, so an old server drops both
+  together and the row degrades to today's behaviour.
+- **CLAIM (D3): "`no-reading` requires a `deviceName` like `pm5`."** FALSIFIED
+  against a ruling this repo had already written down twice — `storedSummary.ts:70`
+  (*"a best-effort LAST-USED name, so posting it would have the row assert that a
+  named erg supplied numbers that came off nothing"*) and `pm-ledger.md:2710`
+  (*"Prefer the false negative"*). TECHNIQUE: **before designing a stored field's
+  requirement, grep the tree for the field name plus the word the design needs —
+  a rejected option is usually documented AT the site that rejected it**, and a
+  spec that re-proposes it is reversing a ruling without quoting it.
+- **A fourth enum member is NOT additive the way its column was.** An old server
+  ignores an unknown BODY KEY (that is why `source` shipped safely) but 400s an
+  unknown ENUM MEMBER at `data.ts:1677` with no client retry. TECHNIQUE:
+  **"we added a field additively last time" is not evidence about adding a value
+  to that field.** Reachability is cited, not assumed: `RELEASING.md:95-97`
+  records six merges deploying nothing for eleven hours on 2026-09-01.
+- **A biconditional nobody wrote down had a shipped consumer.**
+  `deviceName ≠ null ⟺ source = 'pm5'` is enforced on every write by
+  `logSource.ts:54,63-75`, and `server/concept2/mapping.ts:49` already keys
+  "monitor provenance" on it. D3 breaks it; only the NEXT line of that predicate
+  (`endedBy !== 'finished'`) stops the leak. TECHNIQUE: **when a validator
+  enforces an if-and-only-if between two columns, grep for readers of EITHER
+  side — the invariant is load-bearing wherever it was convenient, not only
+  where it was stated.**
+- **CLAIM (D4): "renders `MONITOR`."** FALSE. `grep -c "text-transform"
+  app/src/index.css` returns **1**, and it is not on `.summary-meta` — every cap
+  on that line is a literal. `"monitor"` renders lowercase beside `TIMER` and
+  `LOGGED BY HAND`. TECHNIQUE: **a claim about rendered CASE is settled by
+  counting `text-transform` in the stylesheet, not by reading the string.**
+- **A fallback can be unreachable by construction and still get a test.**
+  `capacitorBle.ts:494`'s `device.name ?? "PM5"` sits behind a picker whose only
+  filter is `namePrefix: "PM5"` (`:481`) — the fallback cannot fire. Its two
+  siblings (`:465` held-device, `webBluetooth.ts:296` OR'd service filter) can.
+  TECHNIQUE (RF21): **before pinning a fallback, read the FILTER that produced
+  the value — a scan constraint upstream can make the `??` arm dead code, and a
+  green test on it is decoration.**
+- **A dated trigger fired while the spec was being written.** `git tag` showed
+  `v0.34.0` already cut at HEAD containing #268, so the `source` sunset's "next
+  tag" trigger is now due — and its blast radius is bigger than the ROADMAP row
+  says (`source` REQUIRED on POST means every pre-v0.34.0 install loses all
+  saving, not just the derive path). TECHNIQUE: **for any roadmap row whose
+  trigger is a tag, run `git tag --sort=-v:refname | head` and
+  `git log <prev>..<tag> --oneline` in the pass itself** — trigger rows expire
+  silently, and the pre-spec's own base SHA was one commit stale.
+- **VETTED GROUND (holds under attack):** `steps` needs no migration for a new
+  key; `ALTER TYPE ADD VALUE` is legal inside drizzle's transaction given no
+  backfill (PG18 docs, verbatim: *"the new value cannot be used until after the
+  transaction has been committed"*); an unmatched interval already carries no
+  `actualSource`, so the never-reached discriminator exists; the `?? "PM5"`
+  census is complete and collides with no identity read; `DROP COLUMN
+  preferences.warmup` has no reader in either direction; the C2 mapping reads no
+  step field; `from=monitor` is intent, not evidence.
+- **Filed, outside the pass (RF14): no connected Just Row can ever reach
+  Concept2** — `mapping.ts:50` requires `endedBy === 'finished'` and a JR always
+  closes `rower`. The v0.34.0 flagship is permanently ineligible for the Wave E
+  export button.
+
+## 2026-09-02 — Wave F `door` spec pass (written spec, post-anchor)
+
+- **CLAIM: "the existing `LINK LOST` line is subsumed by the PARTIAL marker."**
+  FALSIFIED by reading the OLD line's own trigger rather than the new one's.
+  `storedSummary.ts:960-962` renders it on `endedBy === "link-lost"` ALONE,
+  steps-independent and deliberately so; the new marker needs four clauses. So
+  "subsumed" silently deletes a shipped, release-noted line
+  (`releaseNotes.ts:351`) from every link-lost row the new predicate EXCLUDES —
+  a link-lost Just Row (`steps: []`) and a link-lost row with every step
+  measured. TECHNIQUE: **when a spec says a new marker "subsumes" an old line,
+  enumerate the rows the NEW predicate excludes and ask what renders there —
+  the old line's trigger is almost always broader, and the spec's own gate list
+  will be indexed on the new predicate, so nothing can go red.**
+- **CLAIM: "N = steps carrying `actualSource`" as the marker's number.**
+  FALSIFIED twice. (a) The spec's OWN cited producers of a short step
+  (`logDraft.ts:804-806`, `types.ts:62-63`) mean N under-counts what was ROWED
+  after a lost boundary — `1 of 5` for a rower who did two and a bit, on the
+  screen built to stop the app under-stating a session. (b) The repo already
+  computes this count, twice, under one shared rule: `isMeasuredReading`
+  (`summaryModel.ts:613-619`) via `readingOfLogStep`, whose adapter's doc
+  comment says outright *"so the connected surface's lost banner counts
+  intervals by the same rule this screen will judge them by."* The spec's N
+  drops that rule's elapsed clause, making a THIRD definition — while the same
+  spec's §5.4 argues at length that its number and the banner's cannot collide.
+  TECHNIQUE: **before accepting a new COUNT in a spec, grep for the count the
+  codebase already computes over the same objects and read its doc comment.
+  This repo writes "so X and Y agree" into the predicate itself; a spec that
+  redefines the quantity beside it has broken an agreement nobody restated.**
+- **RF24 AT SPEC STAGE, not review stage.** §5 designed new step keys
+  (`partialMeters`/`partialSeconds`) on the correct reasoning that the server's
+  explicit field list drops unknown keys — and then listed six client tasks and
+  a gate that reads back from localStorage. The NEW server drops them too.
+  TECHNIQUE: **for any new field inside an existing payload, find the server's
+  explicit field list and confirm a TASK adds it, then check that the named
+  gate STARTS upstream of the POST. A spec can quote the exact comment that
+  explains the hazard and still decompose past it.**
+- **LINE NUMBERS TRANSCRIBED FROM THE ROADMAP ARE STALE BY CONSTRUCTION.** Two
+  of three riders cited lines that no longer hold their subject:
+  `domain/monitor/types.ts:607` for an RC-12 comment (`grep -n RC-12` on that
+  file returns NOTHING; the comment is at `:630-631`), and `logDraft.ts:865-871`
+  / `:600` for a guard at `:864` and a union at `:607`. Both numbers came from
+  `ROADMAP.md:701-709` verbatim. TECHNIQUE: **verify a transcribed citation by
+  grepping the cited file for the SUBJECT (the ticket id, the string literal),
+  never by reading the cited line — a stale number often lands on plausible
+  code, and `607` appearing as both a true and a false citation in one spec is
+  how the file name got swapped.**
+- **BEFORE DELETING A FUNCTION AT A SUNSET, GREP ITS NON-ROUTE CALLERS.**
+  `deriveLogSource` is not only the route's derive path: it is the oracle in
+  `routes/source.integration.test.ts:447` ("the migration's own CASE and
+  deriveLogSource agree on every row"), and migration
+  `0020_wooden_millenium_guard.sql`'s own header cites that test by name.
+  Deleting it retires the only executable check on a shipped backfill and
+  falsifies a migration's documentation. TECHNIQUE: **a sunset's blast radius
+  includes every gate the symbol IS, not only every caller it has — grep the
+  migrations directory for the function name.**
+- **A CENSUS CLAIM IS A GREPPABLE CLAIM, AND TWO IN THIS SPEC WERE SHORT.** The
+  mirror set "eight" misses `routes/source.integration.test.ts:164` and `:252`
+  (the latter pins the exact 400 message and goes red); the biconditional-reader
+  census names `mapping.ts:49` and misses `storedSummary.ts:648`, whose own
+  comment claims it uses "the SAME signal `sourceLabel`/`buildMeta` above
+  already use" — which the same PR makes false. TECHNIQUE: **run the spec's own
+  census command. "The real set is eight" is the one kind of claim that costs
+  ten seconds to check and reads as authority forever.**
+- **VETTED GROUND (held under this pass, on top of the anchor's):** the
+  `source !== "pm5"` rewrite is a true no-op for every stored row (0020's
+  backfill CASE plus `logSourceContradiction` make the biconditional total in
+  both eras); the SQL key-presence test and the TS `undefined` test agree
+  exactly, because the route 400s `actualSource: null`; the RC-18 census is
+  line-exact; a stored `MONITOR` collides with nothing (every stored-row
+  `deviceName` consumer is a null check, never a value comparison); clause 4's
+  allowlist is exactly the server enum minus `finished`; `interrupted` has no
+  live frame; the additive matrix's old-client-reads-new-row row is correct.
+
+- **2026-09-02, `door` spec DELTA pass (the revision that applied the spec
+  pass).** The five blockers landed and 27 of 31 new citations were exact —
+  and the fix to the biggest one OVER-CORRECTED. "LINK LOST is subsumed" was
+  closed by widening `buildLinkLostLine`'s allowlist from one value to five,
+  keeping its steps-INDEPENDENT trigger — which prints `STOPPED EARLY` on
+  every connected Just Row (`steps: []`, `endedBy: "rower"`,
+  `useMonitorSession.ts:5010`), the population the spec's own clause 2 exists
+  to protect, and on a planned row Ended after its last interval. TECHNIQUE:
+  **when a fix widens a predicate to preserve something, enumerate the rows
+  the WIDENING newly admits, not the rows the old predicate excluded** — a
+  spec that fixes an under-render by loosening a trigger will exemplify only
+  the case where the loosening is harmless (here, link-lost, where the word is
+  true regardless of steps), and never state what the new population renders.
+- **A shared rule can have three spellings, and the spec will name the one
+  that cannot be called.** `N = steps.filter(isMonitorRowMeasurable)` — that
+  function is `function`, not `export function` (`summaryModel.ts:987`), takes
+  the LIVE door's `LogStep`, and the stored door where the marker renders
+  already carries the generalisation (`storedSummary.ts:801`), whose own doc
+  comment says it generalises exactly that check. TECHNIQUE: **before
+  accepting "the repo's ONE rule", grep the rule's name and read the comments
+  that CITE it — this repo documents its own generalisations at the
+  generalisation, and the sibling that names you is the one you should have
+  called.** Corollary: check `export` before citing a function as shared.
+- **A prescribed census command is a gate, and it can be unable to go red.**
+  The spec told the plan to trust `grep -rn '"pm5", "timer", "manual"' app`
+  over its own ten-item paragraph; the command returns THREE. Worse, the most
+  dangerous mirror is invisible to both compiler and grep: `LOG_SOURCES` is
+  `readonly LogSource[]` (`domain/types.ts:102`), so a short array compiles
+  clean and 400s every save of the new member. TECHNIQUE: **run any command a
+  spec prescribes, and count its hits against the list it replaces** — same
+  ten seconds as the previous pass's census check, one layer up.
+- **Corrected where argued, left where used — again, and in the same file
+  pair.** The revision fixed `logDraft.ts:857`→`:864`, `:600`→`:607`,
+  `types.ts:607`→`:630-631` in the spec and left all three in
+  `ROADMAP.md:702-707`, the document every one of them was transcribed FROM.
+  TECHNIQUE: after correcting a transcribed citation, grep the NUMBER in the
+  source document, not just the subject in the code.
+- **Attacked and HELD:** the SQL boolean needs no elapsed clause (the floor
+  lives in N, not the predicate) and `NOT (s ? 'actualSource') ≡ undefined`
+  because `data.ts:472-479` 400s an explicit null; `M` is work intervals, not
+  steps-plus-rests (`logDraft.ts:856`); the RC-12 rider really is ONE site —
+  `schema.ts:237-251` already carries the CORRECTED block the history doc
+  still lists as owed, so `docs/history/` was the stale record, not the
+  ROADMAP; the `driver.ts:2605-2622` free-row SUSPECTED claim is honest (no
+  `freeRow` opt-out there; the two that exist are `:2575`/`:4982`); the sunset
+  row already says "the route's `deriveLogSource` call", so it survived the
+  oracle correction untouched.
+
+## 2026-09-02 — Wave F `door` PR A plan, antagonist DELTA (post-spec, post-Gate-0-A)
+
+- **CLAIM: "clause 2 (`steps.length > 0`) is what stops every successful Just
+  Row reading STOPPED EARLY" — the spec's own most-emphasised clause, carried
+  into a code comment, two test comments and TWO named mutations.** FALSIFIED
+  by evaluating the predicate as WRITTEN rather than as ARGUED: clause 3
+  (`steps.some(s => s.actualSource === undefined)`) is already false for `[]`,
+  so clause 2 is redundant and both its mutations (`M3.1` delete clause 2;
+  `M4.1` drop `jsonb_array_length > 0`) leave every test green. Same in SQL:
+  `exists (select 1 from jsonb_array_elements('[]'::jsonb) …)` is false.
+  TECHNIQUE: **when a plan lands a defensive clause and a mutation that
+  "proves" it, run the SIBLING clauses against the same input first — a clause
+  added by an earlier pass to fix a THREE-clause predicate is often subsumed
+  by the fourth clause a later pass added, and the mutation inherits the
+  earlier pass's reasoning rather than the current code's.** The biting
+  mutation is the one that makes the empty case TRUE (`.every()` for `.some()`,
+  `not exists` for `exists`), never the one that deletes a redundant guard.
+- **A SUNSET'S BLAST RADIUS IS COUNTED IN CALL SITES AND MISSES THE FIXTURES
+  THAT EXIST TO BE OLD.** The plan's per-file table counted
+  `grep -c 'post("/api/logs")'` and reported "via helpers" for five e2e files.
+  Actual: `design.spec.ts` (5) and `today.spec.ts` (4) use NO helper, and
+  `screenshots.spec.ts` has two direct POSTs outside its `postLog`. Worse,
+  `data.test.ts` carries three `Object.freeze`d bodies named
+  `V0_11_0_LOG_BODY`/`V0_12_0_LOG_BODY`/(a third) whose tests assert an OLD
+  client "still 201s", plus `e2e/log.spec.ts`'s `postV0110Log` — the plan's
+  instruction ("add `source` to each file's shared body helper") would destroy
+  the exact fixtures that encode the contract the sunset breaks. TECHNIQUE:
+  **for any required-field sunset, grep the request VERB not the helper
+  (`grep -rn 'fetch("/api/logs"'` as well as `.post(`), and grep the test tree
+  for `Object.freeze` / "frozen" / a version number in a fixture NAME — a repo
+  that pins old wire shapes on purpose has tests that must INVERT, not be
+  swept.**
+- **CONVERTING A TEST'S ASSERTION SILENTLY REMOVES ITS ROWS.**
+  `source.integration.test.ts:135/144/150` are the only POSTs before `:157`'s
+  list-projection parity test, whose `arrayContaining` at `:164` the same plan
+  separately edits as "mirror 8". Making the three legs assert a 400 leaves
+  `:164` with no fixtures. TECHNIQUE: **in a shared-app integration file,
+  before changing a test from "creates a row" to "is rejected", grep the rest
+  of the file for readers of the collection it was seeding — vitest runs `it`s
+  in file order, so the coupling is positional and invisible to a per-test
+  review.**
+- **A LIST/DETAIL "agree by construction" CLAIM IS ABOUT ONE BOOLEAN, NEVER THE
+  WORD.** The chip is gated on `partial`, so a link-lost Just Row shows
+  `LINK LOST` on the detail screen and nothing in History — the divergence
+  class the spec's own agreement test was built for, one field to the left of
+  where it looks. TECHNIQUE: **when a surface derives BOTH a boolean and a
+  word from one predicate, check that the agreement test compares the word.**
+- **Attacked and HELD:** `LOG_SOURCES` really is `readonly LogSource[]`, so
+  `M1.1` is a genuine compiler-blindness probe; only two exhaustive switches
+  exist over `LogSource`; `interrupted` is in the `ended_by` pgEnum AND in
+  `data.ts`'s `ENDED_BY_VALUES`, so the SQL allowlist cannot throw;
+  `coalesce(…, false)` is load-bearing (`ended_by` nullable, `source`/`steps`
+  NOT NULL) and its mutation bites; `data.ts:472-475` really does 400 an
+  explicit `actualSource: null`, so `NOT (s ? 'actualSource')` ≡ `undefined`;
+  the partial chip really cannot reuse `.free-row-chip`
+  (`FreeRowChip.test.tsx:71-76` pins one rule, one selector);
+  `ROADMAP.md:701`'s `schema.ts:369` is stale and `:425` is right; the
+  shortened-literal grep returns exactly the 6 hits claimed; no `.summary-meta`
+  e2e locator can see a second element; and PR A introduces no session-scoped
+  state, so RF27 owes nothing.
