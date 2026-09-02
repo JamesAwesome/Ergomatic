@@ -556,6 +556,19 @@ button:disabled {
   border: 1px solid var(--rule-3);
   border-radius: var(--radius);
   padding: 2px 6px;
+  /* Centred in the badge slot at TypeBadge's own width (Gate 0, James,
+     2026-09-02: "make sure to still center the chips"). `.plan-row` and
+     `.today-log-row` are flex containers, where `justify-self` is inert,
+     so horizontal centring is a floor equal to `.type-badge`'s RENDERED
+     box plus `text-align: center`: two IBM Plex Mono glyphs at 12px
+     (600/1000 em advance = 7.2px each) inside `padding: 3px 7px` is
+     28.4px, measured 28.40625px in Chromium; border-box so the 1px border
+     counts inside it, the same outer-box arithmetic as the padding above.
+     The chip's own "JR" already exceeds it by its letter-spacing, so the
+     floor guards the geometry rather than changing it. */
+  box-sizing: border-box;
+  min-width: 28.4px;
+  text-align: center;
 }
 
 .pain-bar {
@@ -2758,6 +2771,13 @@ button.back-link:disabled,
 .plan-row-swapped {
   display: grid;
   grid-template-columns: 24px auto 1fr auto;
+  /* Two EXPLICIT rows, because the spanning rule below says `1 / -1` and
+     `-1` is the last line of the EXPLICIT grid — with no declared rows
+     that line is line 1 itself, the span collapses to one row, and the
+     badge quietly stays on the name line (measured: 9.5px off centre on
+     the first e2e run, with the rule served). `PlanRow.dc.html` declares
+     `grid-template-rows: auto auto` for the same reason. */
+  grid-template-rows: auto auto;
   column-gap: 10px;
   row-gap: 2px;
   align-items: center;
@@ -2765,8 +2785,52 @@ button.back-link:disabled,
   padding-bottom: 6px;
 }
 
+/* Gate 0 (James, 2026-09-02, "the chips are still not vertically
+   centered"): on the two-line row the badge slot — `TypeBadge` and the JR
+   chip alike — the number and the status glyph span BOTH grid rows, so
+   `align-items: center` centres them against name + mark rather than
+   within the name line alone. This moves EVERY swapped row's badge, not
+   only a Just Row's, on purpose (handoff README, substitution spec
+   §Mechanism 3). Measured in `e2e/design.spec.ts` (`boundingBox`: the
+   badge's centre within 1px of the name+mark block's), declared-pinned
+   in `Plan.test.tsx`; delete `grid-row: 1 / -1` and both go red. */
+.plan-row-swapped .plan-row-index,
+.plan-row-swapped .type-badge,
+.plan-row-swapped .free-row-chip,
+.plan-row-swapped .plan-row-status {
+  grid-row: 1 / -1;
+}
+
+/* Every cell placed EXPLICITLY once anything spans. Auto-placement puts
+   row-locked items first (CSS Grid §8.5 step 2), so with the three
+   spanners above placed before the name, the status glyph would take
+   column 3 and the name column 4 — the flex order the columns mirror
+   would silently invert. Columns as `.plan-row`'s flex order: index,
+   badge slot, name, status; the mark under the NAME (`PlanRow.dc.html`:
+   `.swap { grid-column: 3; grid-row: 2 }`), never from the badge column
+   on, since a mark starting at column 2 would share the spanning
+   badge's cell and paint under it. */
+.plan-row-swapped .plan-row-index {
+  grid-column: 1;
+}
+
+.plan-row-swapped .type-badge,
+.plan-row-swapped .free-row-chip {
+  grid-column: 2;
+}
+
+.plan-row-swapped .plan-row-name {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.plan-row-swapped .plan-row-status {
+  grid-column: 4;
+}
+
 .plan-row-swapped .plan-row-swap {
-  grid-column: 2 / -1;
+  grid-column: 3;
+  grid-row: 2;
 }
 
 /* The unknown-type box (edge-marks gate, James, 2026-08-31: "a shaded

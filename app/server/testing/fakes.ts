@@ -418,12 +418,12 @@ type FakeLogRow = Omit<LogInput, "advancesPlan"> & {
 // public API, so no contract case can pin `id DESC` without reaching past
 // the stores into raw SQL, which the shared suite does not do.
 /** The winning row per index, BEFORE provenance is resolved. `workoutId`
- *  is the fake's stand-in for the real store's LEFT JOIN: only
- *  `listPlanLinks` (which can reach the workouts store) turns it into
- *  `PlanLink.workoutIsGlobal`. `delete` reads nothing but `id`. */
-type FakeLinkWinner = Omit<PlanLink, "workoutIsGlobal" | "linkedTitle"> & {
-  workoutId: string | null;
-};
+ *  here is the row's STORED id, the fake's stand-in for the real store's
+ *  LEFT JOIN key: only `listPlanLinks` (which can reach the workouts
+ *  store) turns it into `PlanLink.workoutIsGlobal` — and into the
+ *  projected `PlanLink.workoutId`, which the FK would already have nulled
+ *  for a deleted workout in Postgres. `delete` reads nothing but `id`. */
+type FakeLinkWinner = Omit<PlanLink, "workoutIsGlobal" | "linkedTitle">;
 
 function resolveNewestFakeLink(
   rows: FakeLogRow[],
@@ -587,6 +587,13 @@ function makeFakeLogsStore(
           workoutId === null ? null : await workouts.get(userId, workoutId);
         resolved.push({
           ...link,
+          // `session_logs.workout_id` is ON DELETE SET NULL in Postgres;
+          // this fake's `workouts.remove` never reaches the log rows, so
+          // the FK is answered here instead: a stored id whose workout is
+          // gone reads back null, the way the real column already does.
+          // (`list`/`get` still hand back the stale id — a pre-existing
+          // gap this projection does not widen.)
+          workoutId: workout === null ? null : workoutId,
           // Both halves of identity move together — null with no joined
           // row, the row's own pair otherwise. Mirrors the real store's
           // `workoutRowId === null` guard.
@@ -666,13 +673,17 @@ function makeFakeLogsStore(
       // plan chosen (returned planKey null).
       let planKey: string | null = null;
       let planIndex: number | null = null;
-      // Phase JR PR 1: mirrors the real store's FREE-ROW refusal
-      // (`stores/logs.ts`) — a Just Row never advances a plan, whatever the
-      // caller asked for. Kept in step by the shared contract suite rather
-      // than by this comment: `storeContracts.ts` runs the predicate's truth
-      // table against BOTH implementations, which is the only thing that
-      // can catch this fake and the real store disagreeing.
-      if (advancesPlan && !isFreeRow(input.workoutId, input.workoutType)) {
+      // Substitution spec (2026-09-02): mirrors the real store's PLAN
+      // DEFAULT (`stores/logs.ts`'s `create`) — an absent flag resolves,
+      // once, to "advance unless this is a free row"; a free row advances
+      // only when asked. Kept in step by the shared contract suite rather
+      // than by this comment: `storeContracts.ts` runs the twelve-row
+      // truth table (four pairs × true/false/absent) against BOTH
+      // implementations, which is the only thing that can catch this fake
+      // and the real store disagreeing.
+      const advances =
+        advancesPlan ?? !isFreeRow(input.workoutId, input.workoutType);
+      if (advances) {
         const advanced = planState._advance(userId);
         if (advanced.planKey !== null) {
           planKey = advanced.planKey;

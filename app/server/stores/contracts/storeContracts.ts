@@ -513,27 +513,57 @@ export function describeStoreContracts(
       });
 
       // THE FREE-ROW PREDICATE'S TRUTH TABLE (Phase JR PR 1, review of
-      // 29e00561). Lives HERE rather than in either implementation's own
-      // suite because that is the only thing that can catch the fake and
-      // the real store disagreeing — which is exactly what happened: the
-      // fake checked `advancesPlan` alone and advanced a free row while
-      // Postgres refused it, so the same input moved `doneN` in one and
-      // not the other.
+      // 29e00561; widened by the substitution spec, 2026-09-02). Lives HERE
+      // rather than in either implementation's own suite because that is
+      // the only thing that can catch the fake and the real store
+      // disagreeing — which is exactly what happened: the fake checked
+      // `advancesPlan` alone and advanced a free row while Postgres refused
+      // it, so the same input moved `doneN` in one and not the other.
       //
-      // The pair matters, and row 2 is why. `LogSession.tsx:780-790`
-      // retries a save with `workoutId: null` when the server 400s
-      // specifically on `workoutId` (the workout was deleted between that
-      // door's mount and the Save click). That is a legitimate
-      // plan-advancing session posting a null id, and a predicate keyed on
-      // the id alone would stall its plan silently.
+      // Since the substitution spec the pair decides the DEFAULT, not a
+      // refusal: `advancesPlan ?? !isFreeRow(workoutId, workoutType)`,
+      // resolved ONCE in each store. So the table has three columns of
+      // flag — `true`, `false`, and ABSENT (the key deleted, not set to
+      // undefined, because that is what an older client's body looks like)
+      // — against the four pairs. A free row advances iff it asks; every
+      // other row advances unless it declines.
+      //
+      // The pair matters, and the "null id with a type" rows are why.
+      // `LogSession.tsx:780-790` retries a save with `workoutId: null` when
+      // the server 400s specifically on `workoutId` (the workout was
+      // deleted between that door's mount and the Save click). That is a
+      // legitimate plan-advancing session posting a null id, and a
+      // predicate keyed on the id alone would stall its plan silently.
+      // Twelve LITERAL rows, never a formula: an expected column derived
+      // from `isFreeRow` would retune itself with the code it gates (RF21).
+      const FREE = { pair: "a FREE ROW (both null)", id: null, type: null };
+      const NULL_ID = {
+        pair: "a null id that still carries a type",
+        id: null,
+        type: "O2",
+      };
+      const NO_TYPE = {
+        pair: "a named workout with no type",
+        id: "id",
+        type: null,
+      };
+      const ORDINARY = { pair: "an ordinary row", id: "id", type: "O2" };
       it.each([
-        ["a FREE ROW (both null)", null, null, 0],
-        ["a null id that still carries a type", null, "O2", 1],
-        ["a named workout with no type", "id", null, 1],
-        ["an ordinary row", "id", "O2", 1],
+        { ...FREE, flag: "true", expected: 1 },
+        { ...FREE, flag: "false", expected: 0 },
+        { ...FREE, flag: "absent", expected: 0 },
+        { ...NULL_ID, flag: "true", expected: 1 },
+        { ...NULL_ID, flag: "false", expected: 0 },
+        { ...NULL_ID, flag: "absent", expected: 1 },
+        { ...NO_TYPE, flag: "true", expected: 1 },
+        { ...NO_TYPE, flag: "false", expected: 0 },
+        { ...NO_TYPE, flag: "absent", expected: 1 },
+        { ...ORDINARY, flag: "true", expected: 1 },
+        { ...ORDINARY, flag: "false", expected: 0 },
+        { ...ORDINARY, flag: "absent", expected: 1 },
       ])(
-        "create: %s asking to advance leaves done_n at %s",
-        async (_label, id, type, expected) => {
+        "create: $pair with advancesPlan $flag leaves done_n at $expected",
+        async ({ id, type, flag, expected }) => {
           const stores = await makeStores();
           const userId = await stores.makeUser();
           const workoutId =
@@ -546,14 +576,14 @@ export function describeStoreContracts(
                   )
                 ).id;
 
-          await stores.logs.create(
-            userId,
-            logInput({
-              workoutId,
-              workoutType: type,
-              advancesPlan: true,
-            }),
-          );
+          const input = logInput({ workoutId, workoutType: type });
+          if (flag === "absent") {
+            delete (input as { advancesPlan?: boolean }).advancesPlan;
+            expect("advancesPlan" in input).toBe(false);
+          } else {
+            input.advancesPlan = flag === "true";
+          }
+          await stores.logs.create(userId, input);
 
           const state = await stores.planState.get(userId);
           expect(state?.doneN ?? 0).toBe(expected);
@@ -597,7 +627,7 @@ export function describeStoreContracts(
         });
       });
 
-      it("create with advancesPlan:true behaves exactly like the absent-field default", async () => {
+      it("create with advancesPlan:true on a workout row behaves exactly like the absent-field default", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
         await stores.logs.create(userId, logInput({ advancesPlan: true }));
@@ -1468,9 +1498,11 @@ export function describeStoreContracts(
               workoutTitle: "Slack Tide",
               workoutType: "O2",
               // `logInput` carries `workoutId: null` — an off-app row with
-              // no workout to resolve. Identity is UNKNOWN, and both
-              // halves are null TOGETHER; the cases below cover the two
-              // real answers.
+              // no workout to resolve. The id is projected as-is (the
+              // substitution spec's chip keys on the PAIR of it and
+              // `workoutType`); identity is UNKNOWN, and both halves are
+              // null TOGETHER; the cases below cover the two real answers.
+              workoutId: null,
               linkedTitle: null,
               workoutIsGlobal: null,
             },
@@ -1504,6 +1536,42 @@ export function describeStoreContracts(
               id: second.id,
               workoutTitle: "Dust Whirl",
               workoutType: "AN",
+              workoutId: null,
+              linkedTitle: null,
+              workoutIsGlobal: null,
+            },
+          ]);
+        });
+
+        // THE FREE PAIR ON THE WIRE (substitution spec, 2026-09-02,
+        // §Mechanism 1b). A Just Row that stood in for a session is a
+        // linked row whose `workoutId` AND `workoutType` are both null —
+        // that pair, with the id PRESENT, is what the Plan tab's chip keys
+        // on. Pinned as the full shape so a projection that dropped the
+        // id (or upgraded it to a missing key) goes red here, against both
+        // stores.
+        it("carries the free PAIR on a linked free row: workoutId null beside workoutType null", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const standIn = await stores.logs.create(
+            userId,
+            logInput({
+              workoutId: null,
+              workoutTitle: "Just Row",
+              workoutType: null,
+              advancesPlan: true,
+            }),
+          );
+
+          const links = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(links).toStrictEqual([
+            {
+              planIndex: 0,
+              id: standIn.id,
+              workoutTitle: "Just Row",
+              workoutType: null,
+              workoutId: null,
               linkedTitle: null,
               workoutIsGlobal: null,
             },
@@ -1539,6 +1607,9 @@ export function describeStoreContracts(
           const [link] = await stores.logs.listPlanLinks(userId, "sprint");
           expect(link!.workoutIsGlobal).toBe(true);
           expect(link!.linkedTitle).toBe("2K Test");
+          // And the id the row LINKS BY rides alongside, BY NAME off the
+          // log row — a workout row's link is never the free pair.
+          expect(link!.workoutId).toBe(global.id);
         });
 
         // Identity is a PAIR off one row, and the snapshot is not part of
@@ -1610,10 +1681,9 @@ export function describeStoreContracts(
               workoutType: "O2",
             }),
           );
-          expect(
-            (await stores.logs.listPlanLinks(userId, "sprint"))[0]!
-              .workoutIsGlobal,
-          ).toBe(false);
+          const [before] = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(before!.workoutIsGlobal).toBe(false);
+          expect(before!.workoutId).toBe(personal.id);
 
           await stores.workouts.remove(userId, personal.id);
 
@@ -1622,6 +1692,13 @@ export function describeStoreContracts(
           // pair a known title with an unknown ownership.
           expect(link!.workoutIsGlobal).toBeNull();
           expect(link!.linkedTitle).toBeNull();
+          // `session_logs.workout_id` is ON DELETE SET NULL, so the id the
+          // row links by is null too — the SAME value the join's own
+          // row-id guard reads, which is why the real store may project
+          // the column by name and the fake must answer the way the FK
+          // does. (Substitution spec §Mechanism 1b: with the snapshot type
+          // still "O2" this row is NOT the free pair, so no chip.)
+          expect(link!.workoutId).toBeNull();
           // The snapshot columns survive the delete — that is the whole
           // point of storing them rather than joining for them.
           expect(link!.workoutTitle).toBe("Sea Fret");

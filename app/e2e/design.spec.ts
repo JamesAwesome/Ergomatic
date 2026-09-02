@@ -2728,6 +2728,100 @@ test.describe("plan screen (a plan active)", () => {
       // The badge follows what was ROWED, not what the plan asked.
       await expect(page.locator(".plan-row-done .type-badge")).toHaveText("AT");
     });
+
+    // Substitution spec (2026-09-02) §Mechanism 3, exit criterion 3, Gate
+    // 0 (James: "make sure to still center the chips"; "the chips are
+    // still not vertically centered"). Two stand-ins seeded through the
+    // real POST — the supported producer — on top of the describe's own
+    // swapped AT row: a Just Row with `advancesPlan: true` lands on plan
+    // index 1 (an AT day) wearing the JR chip and `INSTEAD OF AT`. The
+    // layout claim lives HERE and not in jsdom, which returns zero rects
+    // for everything and would pass any CSS at all ⟨G1⟩: on every
+    // two-line row, the badge slot's vertical centre is within 1px of the
+    // name+mark block's centre, for the TypeBadge and the chip alike —
+    // the rule moves every swapped row's badge on purpose. Mutation:
+    // delete `grid-row: 1 / -1` from `.plan-row-swapped`'s slot rule and
+    // both rows fail by about half the mark line.
+    test.describe("with a Just Row that stood in for a session", () => {
+      test.beforeEach(async ({ page }) => {
+        const result = await page.evaluate(async () => {
+          const res = await fetch("/api/logs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              workoutId: null,
+              workoutTitle: "Just Row",
+              workoutType: null,
+              held: null,
+              pain: null,
+              notes: null,
+              steps: [],
+              source: "timer",
+              timeSeconds: 600,
+              advancesPlan: true,
+            }),
+          });
+          return { ok: res.ok, status: res.status, body: await res.text() };
+        });
+        if (!result.ok) {
+          throw new Error(
+            `stand-in seed failed: ${result.status} ${result.body}`,
+          );
+        }
+        await page.goto("/plan");
+        await expect(page.locator("a.plan-row-done")).toHaveCount(2);
+        await expect(page.locator(".free-row-chip")).toHaveCount(1);
+      });
+
+      test("the stand-in row wears the JR chip, names Just Row, and is marked INSTEAD OF AT — no type badge, no unknown box", async ({
+        page,
+      }) => {
+        const row = page.locator(".plan-row").nth(1);
+        await expect(row).toHaveClass(/plan-row-swapped/);
+        await expect(row.locator(".free-row-chip")).toHaveText("JR");
+        await expect(row.locator(".type-badge")).toHaveCount(0);
+        await expect(row.locator(".plan-row-badge-unknown")).toHaveCount(0);
+        await expect(row.locator(".plan-row-name")).toHaveText("Just Row");
+        await expect(row.locator(".plan-row-swap")).toHaveText("INSTEAD OF AT");
+      });
+
+      test("on every two-line row the badge slot, number and glyph centre against name + mark, and the mark starts in the name's column", async ({
+        page,
+      }) => {
+        const rows = page.locator(".plan-row-swapped");
+        await expect(rows).toHaveCount(2);
+        for (const [i, slot] of [
+          [0, ".type-badge"],
+          [1, ".free-row-chip"],
+        ] as const) {
+          const row = rows.nth(i);
+          const box = async (sel: string) => {
+            const b = await row.locator(sel).boundingBox();
+            if (b === null) throw new Error(`no box for ${sel} on row ${i}`);
+            return b;
+          };
+          const name = await box(".plan-row-name");
+          const mark = await box(".plan-row-swap");
+          // The block the badge must centre against: name on line one,
+          // mark on line two — measured as the union of both boxes.
+          const blockCentre =
+            (name.y + Math.max(name.y + name.height, mark.y + mark.height)) / 2;
+          for (const sel of [slot, ".plan-row-index", ".plan-row-status"]) {
+            const b = await box(sel);
+            expect(
+              Math.abs(b.y + b.height / 2 - blockCentre),
+              `${sel} on row ${i} is off the name+mark centre`,
+            ).toBeLessThanOrEqual(1);
+          }
+          // The mark aligns with the name's left edge (grid column 3),
+          // never with the badge's (column 2) — a mark that started under
+          // the spanning badge would share its cell.
+          expect(Math.abs(mark.x - name.x)).toBeLessThanOrEqual(1);
+          const badge = await box(slot);
+          expect(mark.x).toBeGreaterThanOrEqual(badge.x + badge.width);
+        }
+      });
+    });
   });
 });
 
