@@ -1,10 +1,26 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
 import BaselineEditor from "./you/BaselineEditor";
 import ResetBaselineSetup from "./you/ResetBaselineSetup";
 import RetestShortcut from "./you/RetestShortcut";
+
+// Wave E PR1.5 fix round 2 (P1a-device): same shape as `AppRoutes.tsx`'s
+// `monitorInstrumentEnabled`/`JustRowObserver` seam — a dynamic `import()`
+// behind a build-time-folded condition, so this card and its distinctive
+// `data-c2-link-probe` literal are absent from a production build with the
+// flag unset (dist-grep proof: `docs/superpowers/plans/2026-09-01-concept2-pr15-walk.md`).
+// Mounted on You rather than as its own route (unlike JustRowObserver):
+// JustRowObserver's own header notes it "has no in-app entry — it is
+// reached by typing its URL", which works for a laptop/web walk but not
+// for an on-device iOS check (no address bar) — this probe needs a
+// TAPPABLE entry point, and the You tab is already one.
+const c2LinkProbeEnabled =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_C2_LINK_PROBE === "1";
+const Concept2LinkProbe = c2LinkProbeEnabled
+  ? lazy(() => import("./monitor/Concept2LinkProbe"))
+  : null;
 
 function initials(name: string): string {
   return name
@@ -78,6 +94,11 @@ export default function You({
           WARM-UP by Phase WU (2026-08-21), and "Learning the app" by
           James's 2026-08-23 ruling (the teaching lives in News's pinned
           articles alone now). */}
+      {Concept2LinkProbe && (
+        <Suspense fallback={null}>
+          <Concept2LinkProbe />
+        </Suspense>
+      )}
       {/* Task 3 (Gate 0 rev 2/3, 2026-09-01): one quiet mono row, at the
           bottom of You, on purpose — the diagnostics ring is not a
           product feature a rower reaches for, it's a tool for the rare
@@ -85,7 +106,9 @@ export default function You({
           (`you/Diagnostics.tsx`), not Monitor logs directly — the menu is
           the extensible home for whatever diagnostic tools follow.
           `state={{ from: "/you" }}`: the same origin idiom RetestShortcut
-          above uses, so the menu's own BackLink returns HERE. */}
+          above uses, so the menu's own BackLink returns HERE. Stays the
+          LAST child (dev-only C2LinkProbe, present or absent, sits above
+          it) per this comment's own "at the bottom of You, on purpose". */}
       <Link to="/you/diagnostics" state={{ from: "/you" }} className="diag-row">
         <span>DIAGNOSTICS</span>
         <span aria-hidden="true">&rsaquo;</span>

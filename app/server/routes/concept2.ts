@@ -12,8 +12,9 @@ import { tzError } from "./data.js";
 
 // Wave E PR1 Task 6 (task-6-brief.md). This router NEVER carries its own
 // `router.use("/api", requireUser)` the way `routes/data.ts` does
-// (data.ts:773) — the callback route (spec §Architecture 3, the nonce IS
-// the user binding) is deliberately unauthenticated, so `requireUser` is
+// (data.ts:773) — the callback route (spec §Architecture 3; the nonce
+// CORRELATES the return to the attempt, it does not BIND a principal —
+// see PR1.75) is deliberately unauthenticated today, so `requireUser` is
 // applied per-route instead, on every route but that one. Mount order
 // (Task 7's job: beside `createAuthRouter`, before the data router) is what
 // keeps this router's own unauthenticated GET from ever reaching a
@@ -33,8 +34,10 @@ export interface Concept2RouterDeps {
 }
 
 // Spec §Architecture 3: the browser hop carries no credential; a
-// single-use, 15-minute attempt nonce is the user binding. Expiry/GC is
-// the server's own job, never a cron (mint's own GC calls below).
+// single-use, 15-minute attempt nonce correlates the browser's return to
+// this attempt — it does not bind the consenting principal's identity
+// (PR1.75 owns the identity check that would). Expiry/GC is the server's
+// own job, never a cron (mint's own GC calls below).
 const ATTEMPT_MAX_AGE_MS = 15 * 60 * 1000;
 // Plan deviation 4: refresh 60s ahead of the wire's own `expires_at`, so an
 // in-flight request never races a token that expires mid-call.
@@ -155,8 +158,16 @@ export function createConcept2Router({
     }
     const userId = req.user!.id;
     // GC is the server's, no cron (brief) — every mint sweeps stale
-    // attempts globally and this user's own before minting a fresh one,
-    // so a user can never hold more than one live attempt.
+    // attempts globally and this user's own before minting a fresh one.
+    // Corrected 2026-09-01: this is a sequential-replace guarantee, not a
+    // cardinality bound. SEQUENTIAL mints from one user each replace the
+    // prior attempt, so at most one survives a single-threaded mint
+    // history — but the delete/delete/insert sequence is untransacted and
+    // there is no UNIQUE(user_id) constraint, so CONCURRENT mints (two
+    // in-flight requests racing) can each pass their own delete before
+    // either inserts, leaving more than one live attempt for the same
+    // user. See ROADMAP.md's "C2 account injection" row and
+    // docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md §1.
     await store.deleteExpiredAttempts(ATTEMPT_MAX_AGE_MS);
     await store.deleteAttemptsFor(userId);
     const nonce = randomBytes(32).toString("hex");
@@ -168,7 +179,7 @@ export function createConcept2Router({
     res.json({ authorizeUrl: client.authorizeUrl(nonce) });
   });
 
-  // -- callback (NO requireUser — the nonce binds) -----------------------
+  // -- callback (NO requireUser — the nonce correlates, not binds) -------
 
   router.get("/api/concept2/callback", async (req, res) => {
     const state =

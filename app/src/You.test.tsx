@@ -4,6 +4,14 @@ import { vi, describe, it, expect, afterEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import You from "./You";
 
+// Fix round 2 (P1a-device): same idiom `AppRoutes.test.tsx` already uses
+// for `JustRowObserver` — `import.meta.env.DEV` is `true` under Vitest, so
+// You's own conditional `lazy()` import would otherwise really resolve
+// this dev-only card in every test here. It has its own dedicated test
+// file (`monitor/Concept2LinkProbe.test.tsx`); no test in this file cares
+// about its content.
+vi.mock("./monitor/Concept2LinkProbe", () => ({ default: () => null }));
+
 function renderYou(user = { id: "u1", email: "a@x.com", name: "Ada Rower" }) {
   return render(
     <MemoryRouter>

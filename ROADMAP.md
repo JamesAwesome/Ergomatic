@@ -953,16 +953,45 @@ closed with zero Concept2 contact.
       consequence a stated INFERENCE (direct two-app observation open);
       zero-rest interval post accepted; raw 0x003F bytes are not the
       verification format. Report: `docs/monitor/c2-crossconnect-2026-09/`.
-- [ ] **PR1 — the server broker.** `concept2_links` + auth attempts + four
+- [x] **PR1 — the server broker.** `concept2_links` + auth attempts + four
       `session_logs` columns (`c2_result_id`, `c2_user_id`, `completed_at`,
       `tz`), link/exchange routes, upload route, mapping module. TRIAD. **M**
       All 9 tasks committed on `wave-e-pr1-server-broker` (2026-08-31,
-      including the measured refresh-endpoint corrections); PR #249 open,
-      in James's review.
-- [ ] **PR1.5 — the native link flow**, on device: system-browser consent,
-      foreground re-fetch, and (branch B only) the URL scheme + `appUrlOpen`
-      handler. Split from PR1 so one reviewer never holds a token-broker
-      migration and an iOS deep-link contract in one pass. **S**
+      including the measured refresh-endpoint corrections); **PR #249
+      MERGED** 2026-09-01 (main `27fe6b4a`) — fixed here, fix round 5,
+      after this row was found still calling it open past its merge.
+- [ ] **PR1.5 — the native link flow**, on device: system-browser consent
+      (`@capacitor/browser`) and the return-to-app refresh seam
+      (`useReturnToApp` — renamed from the working title "foreground
+      re-fetch" once `browserFinished` proved an equally load-bearing,
+      non-foreground signal). **Narrowed at fix round 15's reconciliation: the
+      URL scheme + `appUrlOpen` handler moved to PR1.75** — PR1.5 ships the
+      dark, nonce-only plumbing (ACCEPTED as the interim implementation,
+      per the design-gate ruling), not the authenticated activation shape.
+      Split from PR1 so one reviewer never holds a token-broker migration
+      and an iOS deep-link contract in one pass. **S**
+- [ ] **PR1.75 — full option (g), the ruled activation shape, TRIAD
+      (AUTH).** Owns every piece the account-injection ruling's hard
+      precondition names: the `surface` column migration (`"native"` |
+      `"web"`) + enforcement at both mint/complete routes, **the surface
+      predicate's own authority (added at PR1.5's fix round 16 — today
+      `POST /connect` carries no `surface` field and `requireUser`
+      discards which credential, bearer or cookie, actually matched;
+      PR1.75 pins bearer→native, cookie→web, an explicit both-present
+      rule, and a disagreement test before the column above can be
+      populated correctly)**, per-surface redirect URIs, the authenticated
+      native exchange (URL scheme + `appUrlOpen`, moved from PR1.5), an
+      authenticated web callback (`attempt.userId === req.user.id` before
+      the token exchange — the identity check the current callback
+      lacks), Concept2's own approval of the new native `redirect_uri`
+      (external dependency), and dual-route identity tests. **Also owns**
+      (not optional — reassigned here at fix round 16 to match the gate
+      doc's own framing) the two soft bounds the C2 account-injection
+      register row names: `UNIQUE(user_id)` + a transaction around mint
+      (one-attempt is currently best-effort/raceable); `ALLOWED_EMAILS`-
+      as-revocation is a separate admission-model question, not bundled
+      here. Sequenced PR1.5 → PR1.75 → PR2; gates `C2_LINK_ENABLED=1` on
+      any real cohort (`2026-09-01-concept2-pr15-gate.md` §6). **M**
 - [ ] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
       (Connect + H/L ask + Unlink) and the log row's Send action with
       sent/duplicate/failed states and a View-on-Concept2 link-out. **M**
@@ -1225,18 +1254,28 @@ lifecycle spec and the `door` column respectively); RC-13/RC-14 dropped to the
 connected-surface table below with a fix-13-instrument-14 ruling; "Run it
 again" was declined; RC-38 was pulled forward and the rest of Phase PROTO
 held; the axis-quantity question opened the "say which number this is" design
-pass below; AUD-006 got its fix shape. **This table now holds two rows, and
-neither is a live question needing James's decision: RC-30 is closed
-(declined at the RC close), and the C2 account injection row already carries
-its ruling** (PR1.5's design gate decides the fix, on device evidence about
-system-browser cookie sharing; the row stays until that PR closes it, since
-it blocks `C2_LINK_ENABLED=1` in the meantime). A new row means a new
+pass below; AUD-006 got its fix shape. **This table now holds two rows, both
+closed as records rather than live questions: RC-30 (declined at the RC close)
+and the C2 account injection row — RULED by James at PR1.5's design gate
+(2026-09-01): ACCEPT the bounded residual for the dark plumbing; fully
+authenticated option (g) — attempt-surface binding AND identity-checked
+completion on BOTH surfaces — is a hard precondition for setting
+`C2_LINK_ENABLED=1` on any real cohort, absent an explicit re-ruling, and the
+detect-identity treatment ships with PR2's surface. **RULING REAFFIRMED
+(James, 2026-09-01), on corrected evidence:** the original census
+overstated two of its four bounds as unqualified (`ALLOWED_EMAILS` bounds
+NEW-account admission, not a current holder's standing to act; "one live
+attempt per user" is best-effort and raceable, not enforced) — shown the
+corrected two-firm/two-soft picture below, James reaffirmed the same
+decision; the correction narrows the evidence, not the ruling. Option (g)'s
+own delivery now has an owned unit, **PR1.75** (sequenced PR1.5 → PR1.75 →
+PR2, TRIAD — AUTH), tracked in Wave E below.** A new row means a new
 question, not a re-raised one.
 
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
-| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today only by `ALLOWED_EMAILS` (household allowlist). **Ruled at PR1.5's design gate, on device evidence about system-browser cookie sharing (the fix depends on it, and PR1.5 is where the change is still cheap); blocks `C2_LINK_ENABLED=1` regardless.** | `2026-08-31-concept2-logbook-design.md` |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by two FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is best-effort and RACEABLE, not enforced — mint is a delete/delete/insert sequence with no transaction and no `UNIQUE(user_id)` (`server/routes/concept2.ts:157-167`, `schema.ts:510-519`), so sequential mints replace the prior attempt but concurrent mints can leave several live at once (§1, corrected). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange; the web callback is unauthenticated today) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
