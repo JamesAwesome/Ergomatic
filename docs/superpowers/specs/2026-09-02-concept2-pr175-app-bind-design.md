@@ -1,6 +1,6 @@
 # Wave E PR1.75 — full option (g): the authenticated activation shape (design)
 
-**Date:** 2026-09-02 · **Status:** REV 5 — antagonist pass 2 (attacker / concurrency / SDK-header lenses, verdict REVISE) folded: code injection named OPEN and bounded, conditional-DELETE consume, native single-flight, capability-gated native mint, walk host + instrument, three decisions flagged for James (§Decisions). REV 4 — the PM shape pass (2026-09-02, verdict SPLIT) is folded: §0 PR shape, §1 narrowed, exit criteria 5/6/8 rewritten. REV 3 — rev 2 folded the antagonist's full TRIAD
+**Date:** 2026-09-02 · **Status:** REV 5.1 — plan-writer observations reconciled (see §Plan reconciliation). REV 5 — antagonist pass 2 (attacker / concurrency / SDK-header lenses, verdict REVISE) folded: code injection named OPEN and bounded, conditional-DELETE consume, native single-flight, capability-gated native mint, walk host + instrument, three decisions flagged for James (§Decisions). REV 4 — the PM shape pass (2026-09-02, verdict SPLIT) is folded: §0 PR shape, §1 narrowed, exit criteria 5/6/8 rewritten. REV 3 — rev 2 folded the antagonist's full TRIAD
 pass (verdict REVISE); rev 3 replaces the Apple-platform lines rev 2 carried on the
 antagonist's initial (later WITHDRAWN as unsourced) claims with facts fetched from
 Apple's documentation this session, each tagged. Superseded claims are gone, not
@@ -211,7 +211,7 @@ unrelated redesign in one pass → split — decides it.
   ladder with its route-local cookie resolver, `POST /exchange`, the route-level
   disagreement refusal, the six-page template); `concept2/client.ts`
   (`redirect_uri` as an argument, both call sites); `testing/fakes.ts`; tests;
-  ROADMAP's stale PR1.5 checkbox. **Gate: zero files under `app/src/` or
+  (ROADMAP's PR1.5 checkbox: already ticked at rev 4). **Gate: zero files under `app/src/` or
   `app/ios/`.** Antagonist: SKIP, spoken — the full TRIAD pass covered every
   server invariant here and the split adds none (§1's narrowing is a narrowing).
   PM: FULL final-PR gate. Walk: none (CI-provable).
@@ -500,13 +500,13 @@ Times on white). Now that the authenticated callback makes them reachable by a
 rower, PR1.75 replaces `page()` with ONE server template — inline CSS, system
 fonts, zero network — used by all six pages. Mechanical layout: a mono status
 label (`CONCEPT2 LINK · <LABEL> · HTTP <n>`), one bold statement, one action line;
-app ground `#f6f3ec`, ink `#1c1a17` (15.9:1), label `#5f5a50` (5.8:1), accent rule
+app ground `#f6f3ec`, ink `#1c1a17` (15.67:1 on ground, 17.08:1 on panel), label `#5f5a50` (6.18:1 on ground, 6.74:1 on panel — WCAG relative-luminance, recomputed at plan time; an earlier 15.9/5.8 was rounded), accent rule
 `#b5341f`. Approved rendered (both orientations, beside the current placeholders)
 at the Gate 0 artifact, 2026-09-02. The copy, verbatim:
 
 | status | label | statement | action |
 | --- | --- | --- | --- |
-| 200 | Linked | **Concept2 `<c2 username>` is now connected to Ergomatic `<email>`.** (D2 — both identities, HTML-escaped; the shared-browser residual's only mitigation) | Return to the app. |
+| 200 | Linked | **Concept2 `<c2 username>` is now connected to Ergomatic `<email>`.** (`username` MEASURED on log-dev `GET /api/users/me`, 2026-09-02, live response with the desk session — field names: age_restricted, country, dob, email, email_permission, first_name, gender, health_data_permission, id, last_name, logbook_privacy, max_heart_rate, profile_image, roles, username, weight; read as optional, `#<id>` if ever null) (D2 — both identities, HTML-escaped; the shared-browser residual's only mitigation) | Return to the app. |
 | 409 | Already linked | That Concept2 account is already connected to a different Ergomatic account. (D1 APPROVED) | Return to the app. |
 | 400 | Expired | This link has expired or was already used. | Return to the app and start again. |
 | 400 | Incomplete | This link is missing required parameters. | Return to the app and start again. |
@@ -609,13 +609,13 @@ button carries the `WebAuth` plugin — enforced by `linkClient`, not assumed.**
    RECORDED.
 5. **Reconciliation is a numbered TASK in each plan with a grep census as its
    exit gate**, pre-paid from the 17 sites the PM enumerated (server: `schema.ts:508-515`,
-   `routes/concept2.ts:14-19,37-41,160-171,182`, `routes/data.ts:820-826`, the
+   `routes/concept2.ts:14-19,37-41,160-171,182`, `app.ts:93-105` (the mount comment — `routes/data.ts:820-826` carries no Concept2 phrase; the plan corrected this), the
    five `deleteAttemptsFor` sites; client: `Concept2LinkProbe.tsx:5-10`,
    `useReturnToApp.ts:8-45`, the `onBrowserFinished` consumers; records:
    `ROADMAP.md:989,999-1020,1304`, parent spec `:429-441,568`, gate doc
    `:990-995` §3(g)/§4/§6 with a SUPERSESSION marker not a deletion, the design
    handoff README `:94-97`). The exit is the grep output pasted into the PR,
-   every phrase 0 hits or one accounted historical hit:
+   every phrase at its EXPECTED count per PR (the plan states one per phrase: several live in `app/src` until 1.75b, in the ledgers, or in the parent spec's Branch-B contingency, each named and owned):
    `"correlates, not binds"` `"No redirect_kind column"` `"not yet added here"`
    `"deliberately unauthenticated"` `"unauthenticated BY DESIGN"`
    `"sequential-replace guarantee"` `"best-effort and RACEABLE"`
@@ -653,6 +653,27 @@ phrase grep pasted, all zero/accounted; (4) the walk table: per-request
   rendered on the Gate 0 artifact; **APPROVED 2026-09-02.**
 - **D3 — the desk pre-check** (§GO/NO-GO): two URLs in
   `scratchpad/c2-desk-precheck.txt`, your logged-in browser, cancel at consent.
+
+## Plan reconciliation (1.75a plan, 2026-09-02 — rulings on the writer's observations)
+
+- The callback's `ambiguous_auth` refusal answers JSON, not a page: only a
+  non-browser caller can put a bearer on a top-level GET, and the approved page
+  set has no such page. The check sits as per-route middleware right after
+  `requireUser`, BEFORE availability — an auth-shape refusal like the 401, so an
+  ambiguous request gets 400 even while the flag is off (dark routes only).
+- `requireUser` performs a second session lookup only when BOTH credentials are
+  present (the only way to detect disagreement); the instrument measures how
+  often that is.
+- `consumeAttempt` retires with `deleteAttemptsFor` — zero callers after the two
+  ladders, and it was an unauthenticated consume primitive.
+- 401/403 copy "Sign in to Ergomatic here" renders as PLAIN TEXT, matching the
+  approved render — no anchor, even same-origin (a link is a PR2 amendment if
+  wanted).
+- Every nonce-shaped web 400 (unknown, wrong surface, lost race, expired) renders
+  the Expired page; Incomplete is for missing parameters only.
+- The concept2 store has no `describeStoreContracts` suite (PR1's shape: real-
+  Postgres integration + a fake exercised by route tests); the gap is named for
+  the PM, not hidden.
 
 ## Gates
 
