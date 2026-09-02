@@ -1395,7 +1395,8 @@ export function createDataRouter({
     // this PR's own migration; this is the write side of that.
     //
     // Admissibility only. Whether a null type also RELAXES a rule (empty
-    // `steps`, the plan refusal) is a separate question keyed on
+    // `steps`, the plan opt-in default — a free row advances only when its
+    // body says so, substitution spec 2026-09-02) is a separate question keyed on
     // `isFreeRow`'s pair, not on the type alone — see its doc comment for
     // why the id half is load-bearing.
     const typeAbsent =
@@ -1622,7 +1623,7 @@ export function createDataRouter({
     // summary block self-gates on zero rows, vetted at the antagonist
     // pass). Every other row still owes at least one step.
     //
-    // Keyed on the SAME `isFreeRow` pair the plan refusal uses, defined
+    // Keyed on the SAME `isFreeRow` pair the plan opt-in default uses, defined
     // once in `domain/types.ts` — two rules keyed on one fact and written
     // twice are two things to keep in step. A row that names a workout but
     // omits its type is NOT free and still owes steps.

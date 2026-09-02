@@ -227,7 +227,8 @@ describe("usePlanLinks", () => {
   // records for its own tri-state: null is "unknown", not malformed, and
   // rejecting the entry costs the row its name.
   //
-  // Reachable in its own right, NOT a backstop for the plan refusal: the
+  // Reachable in its own right, NOT a backstop for the plan opt-in rule
+  // (formerly "the plan refusal", retired 2026-09-02): the
   // shared store contract deliberately advances a row that names a workout
   // and omits its type, and such a row becomes a plan link carrying a null
   // `workoutType`. (An earlier version of this comment said it was

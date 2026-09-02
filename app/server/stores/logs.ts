@@ -412,7 +412,8 @@ const LOG_LIST_COLUMNS = {
  *  `usePlanLinks.parseLink` discards a whole entry when this is not a
  *  string (`src/plan/usePlanLinks.ts:81`) — so it now accepts null as
  *  ABSENT rather than malformed. **That path is reachable in its own
- *  right, not a backstop for the plan refusal:** the shared store contract
+ *  right, not a backstop for the plan opt-in rule (once "the plan
+ *  refusal", retired by the substitution spec, 2026-09-02):** the shared store contract
  *  deliberately ADVANCES a row that names a workout and omits its type, and
  *  such a row becomes a plan link carrying a null `workoutType`. (An
  *  earlier version of this comment said it was "unreachable only while the

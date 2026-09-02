@@ -87,6 +87,11 @@ function link(overrides: Partial<PlanLink> = {}): PlanLink {
     // without the other (`usePlanLinks` now rejects a half-pair outright).
     linkedTitle: workoutTitle,
     workoutIsGlobal: true,
+    // A NEW server always sends the id (substitution spec §1b); the
+    // older-server shape is the case a test has to ask for explicitly by
+    // deleting the key (see the ABSENT case below). RF3: without this
+    // default every pre-existing Plan test ran on the old-server shape.
+    workoutId: "w-sea-fret",
     ...overrides,
   };
 }
@@ -891,6 +896,32 @@ describe("Plan (done-row workout names and swap marks)", () => {
             workoutTitle: "Slack Tide",
             workoutType: "nonsense",
             workoutId: null,
+          }),
+        ],
+      ]),
+    );
+
+    const row = rowAt(3);
+    expect(row.querySelector(".plan-row-badge-unknown")).not.toBeNull();
+    expect(row.querySelector(".free-row-chip")).toBeNull();
+    expect(row.querySelector(".plan-row-swap")).toBeNull();
+  });
+
+  // The NO_TYPE pair — a NAMED workout whose stored type is null (the
+  // store contract's own row; it links and advances). It is NOT a free
+  // row: the pair is (id, null), not (null, null). Whole-branch review,
+  // 2026-09-02: a chip keyed on the type alone stays green on every other
+  // case here and, in production, renders NO badge at all (FreeRowChip
+  // returns null for a non-free pair) plus a spurious INSTEAD OF mark.
+  it("a NAMED workout with a null stored type (the NO_TYPE pair, id present) renders the unknown box — never the chip, never a mark", async () => {
+    await readyWithLinks(
+      new Map([
+        [
+          3,
+          link({
+            workoutTitle: "Slack Tide",
+            workoutType: null,
+            workoutId: "w-slack-tide",
           }),
         ],
       ]),

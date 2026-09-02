@@ -222,7 +222,8 @@ slate.
   ink-3 "still a bit close"; rides the unconnected PR.** **A DERIVED
   display concern, never stored:**
   `isFreeRow(workoutId, workoutType)` is load-bearing three times (the
-  server's plan refusal, its empty-`steps` allowance, the absent badge),
+  server's plan opt-in default — once a refusal, until item 5 — its
+  empty-`steps` allowance, the absent badge),
   so `"JR"` can never live in `workout_type`. Visual precedent exists —
   `.workout-row-custom`, the ink-outline metadata chip — since
   `TypeBadge.tsx` refuses to mint a fifth intensity colour. SHIPPED in
