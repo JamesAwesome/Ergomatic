@@ -1370,6 +1370,35 @@ in both orientations.**
   Evidence: the 2026-08-31 Log-detail photograph; `traceModel.ts`'s own
   header ("NEITHER `t` NOR `d` IS A WORK-ONLY QUANTITY").
 
+## The unlogged-session door (post-Wave F, unopened)
+
+**Status:** filed by James on 2026-09-01, on the phone; NOT in Wave F, which
+is in motion. Opens after Wave F, with a design gate (user-visible copy and
+layout). **S–M.** Not triad unless (b) below changes when a record retires.
+
+**What and why:** Connect showed "You have an unlogged session. Connecting
+discards it." and the dialog offered Cancel and Connect anyway — nothing to
+VIEW what the session holds, and no way to log it. A rower who does not want
+to lose the row has no move except to walk away.
+
+- [ ] **A rower with an unlogged session can only discard it.** What the
+      code offers today: the guard dialog (`ConnectAction.tsx:159`) never
+      says WHERE the session lives; Today renders a recovery row for a
+      finished `SessionRun` (`UnloggedRow`) and for an OPEN or Just Row
+      `MonitorRun` (`UnloggedMonitorRow`), but a COMPLETED, PROGRAMMED
+      `MonitorRun` is ruled out of that row on the theory that "7C's own log
+      path already owns" it (`Today.tsx:647-651`) — a path that exists only
+      on the arrival WorkoutDetail navigates to at finish, so after a reload
+      or a navigation away that record has no door at all (INFERENCE from
+      those comments; not reproduced on hardware). Owed: (a) establish which
+      record James's dialog was staged on — `connectGuardStage`
+      (`monitorRun.ts:1544`) stages the same sentence for three shapes;
+      (b) a way to see the unlogged session's contents and log it, from the
+      dialog or from Today, for every shape the guard can stage; (c) the
+      dialog names the way there instead of a bare Cancel.
+
+---
+
 ## Rides the next PR touching the connected surface
 
 | Item                                       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Evidence                     |
