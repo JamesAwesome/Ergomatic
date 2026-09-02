@@ -5009,3 +5009,36 @@ same way.
   gate it) is correct; I3 (pure predicate, stateful suppression) is
   satisfiable. Only the discriminator was broken. **Ruled (James, option 1):
   instrument arrival timing first, then design.**
+
+## 2026-09-02 — Wave F PR 3 §3 timing addendum (PR #267), pre-review pass 1
+
+- **Claim: "corpus regression over every committed recording asserting
+  identical `pause-declared` count and positions."** FALSE — no suite asserts
+  `pause-declared` at all. Technique: **grep the asserted STRING across
+  `app/src`, not the suite names.** `grep -rn "pause-declared" app/src`
+  returned one file; three corpus replay suites exist and none touch it. A
+  "regression over the corpus" claim is settled by grepping for the thing it
+  says it pins.
+- **Claim: "the corpus replay harness calls the predicate directly and is
+  structurally unable to see this change."** Half true, and the false half
+  was the stronger evidence: `lifecycleReplay.test.ts` drives the REAL hook
+  over a committed recording with a real lifecycle transition and reads the
+  ring — it can see the change and stayed green. **When a PR argues a gate is
+  blind, check whether a DIFFERENT gate is sighted.**
+- **Claim: a mirrored reset keeps two structures "in lockstep."** Real and
+  correct, but UNFALSIFIABLE: removing it left 165 client files / 4385 tests
+  green. **Mutate the defensive branch, not only the asserted one.** The
+  actual guarantee was a numeric relation nobody had written down —
+  `PULL_EVIDENCE_FRAMES` (5) > `PAUSED_FRAME_HOLD` (4) forces ≥7 window
+  appends before any declaration. A comment crediting the wrong mechanism
+  survives every test.
+- **Merge mechanics are a finding class, not a chore.** `gh pr view --json
+  mergeable,mergeStateStatus` said CONFLICTING/DIRTY and the head had ZERO
+  check-runs while the body reported gate results as final. **Run both as the
+  first step of any pre-merge pass.** `git merge-tree --write-tree
+  origin/main <head>` names the conflicting file before the reviewer does.
+- **Attacked and HELD:** predicate byte-identity (hashed the
+  `freezeKey`→`NO_FREEZE` region on both revs); `gapsMs` always the declaring
+  run's own four frames (proven from the two constants); edge-only; injected
+  clock throughout; counts and coverage reproduced to the digit; all three
+  named mutations reproduced red.

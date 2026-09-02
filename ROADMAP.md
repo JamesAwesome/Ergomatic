@@ -1075,7 +1075,6 @@ X" is a real disposition — most of these are single files.
   zero-kept banner says, one Gate 0 for the whole kept vocabulary. Evidence:
   `ConnectedSurface.tsx:848`.
 
-
 - **v0.32.0's notes owe the DIAGNOSTICS door its affordance sentence** (PM
   gate on #258, 2026-09-01): where it is (You → DIAGNOSTICS → Monitor logs),
   WHEN a rower would tap it (something went wrong in a connected session and

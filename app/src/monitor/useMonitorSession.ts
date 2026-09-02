@@ -1926,7 +1926,7 @@ export function useMonitorSession(
    *  (frame handler, above): a second resume must not silently discard the
    *  first window's partial evidence. Survives neither teardown, relaunch,
    *  nor re-arm. */
-  const postResumeGapsRef = useRef<number[] | null>(null);
+  const postResumeArrivalsRef = useRef<number[] | null>(null);
   // §6's latch counters and their once-per-session guard, and the logical
   // session's own identity, USED TO LIVE HERE as four standalone refs
   // (`resumeLatchCountRef`/`resumeCountRef`/`latchCountRecordedRef`/
@@ -2707,21 +2707,24 @@ export function useMonitorSession(
       }
       // §3 timing addendum: independent of whichever branch above ran (or
       // neither) this frame — a stale run and this window are governed by
-      // different rules, and `postResumeGapsRef` is seeded EMPTY at the
+      // different rules, and `postResumeArrivalsRef` is seeded EMPTY at the
       // foreground edge itself (below), so the very frame that consumed the
       // arm above is already this window's first entry, counted here like
       // every frame after it. Instrument-only: no predicate reads this (I3).
-      if (postResumeGapsRef.current !== null) {
-        const arrivals = [...postResumeGapsRef.current, nowDate().getTime()];
+      if (postResumeArrivalsRef.current !== null) {
+        const arrivals = [
+          ...postResumeArrivalsRef.current,
+          nowDate().getTime(),
+        ];
         if (arrivals.length >= PAUSED_FRAME_HOLD) {
           const nextGapsMs = arrivals.slice(1).map((t, i) => t - arrivals[i]!);
           sessionRef.current?.log.record(
             "resume-first-frame",
             `nextGapsMs=[${nextGapsMs.join(",")}]`,
           );
-          postResumeGapsRef.current = null;
+          postResumeArrivalsRef.current = null;
         } else {
-          postResumeGapsRef.current = arrivals;
+          postResumeArrivalsRef.current = arrivals;
         }
       }
       const phase = stateRef.current.phase;
@@ -3581,11 +3584,11 @@ export function useMonitorSession(
         // §3 timing addendum: silent per-run discard, same three sites as
         // `resumeEdgeArmedRef` — an open window from a run that just ended
         // is not a truncation of anything still live (that report belongs
-        // to `teardown()` alone — see `postResumeGapsRef`'s own doc
+        // to `teardown()` alone — see `postResumeArrivalsRef`'s own doc
         // comment).
         frameArrivalsRef.current = [];
         lastResumeAtMsRef.current = null;
-        postResumeGapsRef.current = null;
+        postResumeArrivalsRef.current = null;
         // Hand-off store design spec §1: same per-run reset `cancel()`
         // applies to this ref, for the identical reason — see that
         // function's own comment.
@@ -3953,17 +3956,17 @@ export function useMonitorSession(
         resumeStaleRunRef.current = null;
       }
       // §3 timing addendum: `teardown` is the one site that LOGS this
-      // window's close (`postResumeGapsRef`'s own doc comment) — "the
+      // window's close (`postResumeArrivalsRef`'s own doc comment) — "the
       // session ended before the fourth post-resume frame arrived" is
       // itself the finding, not silence. Same choke-point reasoning as the
       // `resume-stale-run` close immediately above, and it must run before
       // the same `stash()` below.
-      if (postResumeGapsRef.current !== null) {
+      if (postResumeArrivalsRef.current !== null) {
         sessionRef.current?.log.record(
           "resume-first-frame",
           "nextGapsMs=truncated",
         );
-        postResumeGapsRef.current = null;
+        postResumeArrivalsRef.current = null;
       }
       frameArrivalsRef.current = [];
       lastResumeAtMsRef.current = null;
@@ -4493,7 +4496,7 @@ export function useMonitorSession(
       // connection starts with no arrivals, no resume, no open window.
       frameArrivalsRef.current = [];
       lastResumeAtMsRef.current = null;
-      postResumeGapsRef.current = null;
+      postResumeArrivalsRef.current = null;
       // S6: once per ordinary product connect, straight into this session's
       // own ring — see `requestStoragePersistence`'s own doc comment for the
       // full reasoning.
@@ -4695,7 +4698,7 @@ export function useMonitorSession(
         };
         // §3 timing addendum: armed at this SAME foreground edge, beside
         // `resumeEdgeArmedRef` itself — see `lastResumeAtMsRef`'s and
-        // `postResumeGapsRef`'s own doc comments for why here (not the
+        // `postResumeArrivalsRef`'s own doc comments for why here (not the
         // arm-consume site in `handleFrame`) is the mint site for both.
         //
         // A SECOND foreground edge before the first window closes must not
@@ -4703,14 +4706,14 @@ export function useMonitorSession(
         // `endedBy=resumed` discipline (frame handler, above): record what
         // the still-open window had collected BEFORE this edge reassigns
         // it, never merge or lose it quietly.
-        if (postResumeGapsRef.current !== null) {
+        if (postResumeArrivalsRef.current !== null) {
           log.record(
             "resume-first-frame",
-            `nextGapsMs=superseded frames=${postResumeGapsRef.current.length}`,
+            `nextGapsMs=superseded frames=${postResumeArrivalsRef.current.length}`,
           );
         }
         lastResumeAtMsRef.current = nowDate().getTime();
-        postResumeGapsRef.current = [];
+        postResumeArrivalsRef.current = [];
         // Only when we latched — see this handler's own header for why
         // calling this on a non-latching resume would disarm the watchdog
         // and leave a genuinely silent stream showing nothing at all.
@@ -4836,10 +4839,10 @@ export function useMonitorSession(
     // `preBackgroundFreezeKeyRef`'s own doc comment.
     preBackgroundFreezeKeyRef.current = null;
     // §3 timing addendum: same per-run discard, silently — see
-    // `postResumeGapsRef`'s own doc comment for why this site never logs.
+    // `postResumeArrivalsRef`'s own doc comment for why this site never logs.
     frameArrivalsRef.current = [];
     lastResumeAtMsRef.current = null;
-    postResumeGapsRef.current = null;
+    postResumeArrivalsRef.current = null;
     identityRef.current = {
       program: { intervals: [] },
       workoutId: null,
@@ -4897,10 +4900,10 @@ export function useMonitorSession(
       // `preBackgroundFreezeKeyRef`'s own doc comment.
       preBackgroundFreezeKeyRef.current = null;
       // §3 timing addendum: same per-run discard, silently — see
-      // `postResumeGapsRef`'s own doc comment for why this site never logs.
+      // `postResumeArrivalsRef`'s own doc comment for why this site never logs.
       frameArrivalsRef.current = [];
       lastResumeAtMsRef.current = null;
-      postResumeGapsRef.current = null;
+      postResumeArrivalsRef.current = null;
       const driver = driverRef.current;
       if (driver === null) {
         fail({
