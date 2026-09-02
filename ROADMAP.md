@@ -961,8 +961,10 @@ closed with zero Concept2 contact.
       MERGED** 2026-09-01 (main `27fe6b4a`) — fixed here, fix round 5,
       after this row was found still calling it open past its merge.
 - [ ] **PR1.5 — the native link flow**, on device: system-browser consent
-      (`@capacitor/browser`) and the foreground re-fetch seam
-      (`useReturnToApp`). **Narrowed at fix round 15's reconciliation: the
+      (`@capacitor/browser`) and the return-to-app refresh seam
+      (`useReturnToApp` — renamed from the working title "foreground
+      re-fetch" once `browserFinished` proved an equally load-bearing,
+      non-foreground signal). **Narrowed at fix round 15's reconciliation: the
       URL scheme + `appUrlOpen` handler moved to PR1.75** — PR1.5 ships the
       dark, nonce-only plumbing (ACCEPTED as the interim implementation,
       per the design-gate ruling), not the authenticated activation shape.
@@ -971,19 +973,25 @@ closed with zero Concept2 contact.
 - [ ] **PR1.75 — full option (g), the ruled activation shape, TRIAD
       (AUTH).** Owns every piece the account-injection ruling's hard
       precondition names: the `surface` column migration (`"native"` |
-      `"web"`) + enforcement at both mint/complete routes, per-surface
-      redirect URIs, the authenticated native exchange (URL scheme +
-      `appUrlOpen`, moved from PR1.5), an authenticated web callback
-      (`attempt.userId === req.user.id` before the token exchange — the
-      identity check the current callback lacks), Concept2's own approval
-      of the new native `redirect_uri` (external dependency), and
-      dual-route identity tests. Also fixes the two soft bounds the C2
-      account-injection register row names, if wanted:
-      `UNIQUE(user_id)` + a transaction around mint (one-attempt is
-      currently best-effort/raceable); `ALLOWED_EMAILS`-as-revocation is a
-      separate admission-model question, not bundled here. Sequenced
-      PR1.5 → PR1.75 → PR2; gates `C2_LINK_ENABLED=1` on any real cohort
-      (`2026-09-01-concept2-pr15-gate.md` §6). **M**
+      `"web"`) + enforcement at both mint/complete routes, **the surface
+      predicate's own authority (added at PR1.5's fix round 16 — today
+      `POST /connect` carries no `surface` field and `requireUser`
+      discards which credential, bearer or cookie, actually matched;
+      PR1.75 pins bearer→native, cookie→web, an explicit both-present
+      rule, and a disagreement test before the column above can be
+      populated correctly)**, per-surface redirect URIs, the authenticated
+      native exchange (URL scheme + `appUrlOpen`, moved from PR1.5), an
+      authenticated web callback (`attempt.userId === req.user.id` before
+      the token exchange — the identity check the current callback
+      lacks), Concept2's own approval of the new native `redirect_uri`
+      (external dependency), and dual-route identity tests. **Also owns**
+      (not optional — reassigned here at fix round 16 to match the gate
+      doc's own framing) the two soft bounds the C2 account-injection
+      register row names: `UNIQUE(user_id)` + a transaction around mint
+      (one-attempt is currently best-effort/raceable); `ALLOWED_EMAILS`-
+      as-revocation is a separate admission-model question, not bundled
+      here. Sequenced PR1.5 → PR1.75 → PR2; gates `C2_LINK_ENABLED=1` on
+      any real cohort (`2026-09-01-concept2-pr15-gate.md` §6). **M**
 - [ ] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
       (Connect + H/L ask + Unlink) and the log row's Send action with
       sent/duplicate/failed states and a View-on-Concept2 link-out. **M**

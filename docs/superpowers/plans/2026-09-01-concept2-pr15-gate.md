@@ -132,6 +132,20 @@ drawn from.**
   web callback only, never the native private-use-scheme redirect, so the
   native echo is EXPECTED, not measured, until PR1.75 runs its own probe
   after C2 approves the redirect URI.
+- **Fix round 16 (docs-only, rebase + auth-contradiction sweep):**
+  reconciled the two firm-bounds/dark-flag miscount (§1 and its recombined
+  restatement further down both now read consistently: single-use nonce
+  + 15-minute expiry are the two firm bounds, the dark flag is a separate
+  posture, never a third "bound"). Added a THIRD precondition to (g),
+  alongside round 10's surface column and round 12's dual-route
+  authentication: the `surface` predicate itself has no named authority
+  today — `POST /connect` carries no `surface` field and `requireUser`
+  discards which credential (bearer vs. cookie) actually matched. Pinned
+  as a PR1.75 design requirement: bearer→native, cookie→web, an explicit
+  both-present rule, and a disagreement test — see the new paragraph
+  under §3(g) above. Also swept the retired "foreground re-fetch"/
+  "nothing in src consumes this adapter" phrasings from the touched
+  native-link/spec/ROADMAP docs (see those files' own dated notes).
 
 ## 1. The residual, restated — with its own bounds
 
@@ -150,16 +164,24 @@ bounds, the dark flag, and two SOFT/best-effort factors the acceptance
 does not lean on** — not four bounds of equal weight, and not the
 original two-item count either.
 
-**Firm:**
+**A separate posture, not a bound (corrected round 16 — the numbered list
+below used to open with this and get counted as one of the "two firm
+bounds," which contradicted the "two firm bounds, the dark flag" framing
+one paragraph up):**
 
-1. **The `C2_LINK_ENABLED` dark flag** (PR1's availability gate, spec
-   §Architecture 8) keeps the whole feature off until James turns it on —
-   the surface is unreachable in production regardless of the bounds
-   below.
-2. **The single-use nonce.** Each `concept2_auth_attempts` row is
+- **The `C2_LINK_ENABLED` dark flag** (PR1's availability gate, spec
+  §Architecture 8) keeps the whole feature off until James turns it on —
+  the surface is unreachable in production regardless of the bounds
+  below. This is a posture (feature-off), not a property of the residual
+  itself; the two firm bounds are what protects the surface once the flag
+  is ever turned on.
+
+**Firm (the two bounds referenced above):**
+
+1. **The single-use nonce.** Each `concept2_auth_attempts` row is
    consumed exactly once, atomically, at exchange
    (`server/stores/concept2.ts:181-196`).
-3. **The 15-minute attempt window**
+2. **The 15-minute attempt window**
    (`ATTEMPT_MAX_AGE_MS = 15 * 60 * 1000`, `server/routes/concept2.ts:38`,
    enforced in `consumeAttempt`'s own `fresh` column check,
    `server/stores/concept2.ts:191,194`). **What this kills:** delivery
@@ -391,15 +413,20 @@ options depend on them:
   (`server/routes/concept2.ts:139`, `router.post("/api/concept2/connect",
   requireUser, ...)`). This matters for (b)'s cost, below.
 
-**(a) Accept the residual, bounded by §1's picture: two firm bounds (the
-dark flag, the single-use/15-minute nonce) plus two soft factors this
-option does not lean on.**
+**(a) Accept the residual, bounded by §1's picture: the dark flag, plus
+two firm bounds (the nonce's single-use property AND its separate
+15-minute expiry), plus two soft factors this option does not lean on
+(corrected round 16 — "single-use/15-minute nonce" previously read as
+one bound; it is two, and the dark flag is a posture, not a third
+bound).**
 Zero code. The dark flag keeps the feature unreachable in production; the
-15-minute clock kills async delivery. `ALLOWED_EMAILS` keeps the
-population who can OBTAIN an account at "household" in practice, and one
-live attempt per user holds against sequential, non-concurrent mints —
-neither is load-bearing for the accept decision. Revisit before any
-public opening, or before `ALLOWED_EMAILS` widens.
+nonce's single-use property stops a captured attempt from being replayed
+after exchange, and its 15-minute clock kills async delivery
+independently of that. `ALLOWED_EMAILS` keeps the population who can
+OBTAIN an account at "household" in practice, and one live attempt per
+user holds against sequential, non-concurrent mints — neither is
+load-bearing for the accept decision. Revisit before any public opening,
+or before `ALLOWED_EMAILS` widens.
 
 **(b) Detection at the callback page: show the target identity BEFORE the
 consenting principal leaves that page.**
@@ -850,6 +877,31 @@ new redirect KIND, not just a different URL — **and, as of round 10, the
 only option besides (c) that needs a real migration — and, as of round
 12, the only option that requires retrofitting AUTHENTICATION onto an
 EXISTING route that has never needed it before.**
+
+**FIX ROUND 16 addition — the `surface` predicate itself has no named
+authority, and this is a THIRD gap in (g), on top of round 10's and round
+12's, not covered by either:** everything above assumes some mechanism
+correctly labels an attempt `native` or `web` at mint time. Read as of
+this round, nothing does. `POST /api/concept2/connect`
+(`server/routes/concept2.ts:139-169`) accepts only `{weightClass}` in its
+body — no `surface` field, named or implied. The only signal available at
+mint time is WHICH credential authenticated the request, and
+`requireUser` (`server/auth/middleware.ts:46-66`) resolves
+`bearer ?? cookie` and hands back only `req.user` — it never records
+which of the two actually matched, and both a native Keychain bearer AND
+a web session cookie can legally be present on the same request (a
+device that has both a phone app and a signed-in browser tab). Before any
+`surface`/`redirectKind` column can be populated correctly, this document
+needs to PIN, not assume, an authority rule: **bearer present → `native`;
+cookie present (no bearer) → `web`; both present → an explicit named
+resolution (e.g. bearer wins, since native is scoped to be the only
+consumer requiring a bearer at all) — and a test asserting the disagreement
+case (both present, or neither, which `requireUser` already 401s) behaves
+per the rule, not per implementation accident.** This is PR1.75 design
+work, not code today: recorded here as a §3(g) precondition alongside the
+round-10 surface column and the round-12 dual-route authentication, and
+carried into ROADMAP's PR1.75 line so the deliverable list names all
+three preconditions rather than the two rounds 10/12 already found.
 
 Not chosen — it joins the taxonomy as a fourth bucket, below.
 

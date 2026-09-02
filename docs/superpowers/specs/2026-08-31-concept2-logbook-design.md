@@ -218,13 +218,28 @@ so we build the RFC 8252 shape:
      origin), via a single-process re-auth against `log-dev`; it says
      nothing about whether C2 echoes `state` on a DIFFERENT `redirect_uri`
      registered as a private-use scheme, which has never been probed.
-     Native does not need the echo to disambiguate the return the way the
-     shared-nonce https callback does — the app itself received the
-     redirect directly — so this is not load-bearing for Branch B's own
-     design, but the claim of measurement was false and is corrected here.
-     **PR1.75 owns the real measurement**, once C2 approves the new
-     `redirect_uri` (gate doc §3(g), "still owed"), before promoting
-     "expected" back to "measured"); an `appUrlOpen` handler posts
+     Native does not need the echo to disambiguate WHICH redirect it
+     received — the app itself received it directly — but **corrected
+     2026-09-01: it is still load-bearing, for a different reason than the
+     one this paragraph previously argued away.** The only designed native
+     exchange call is `appUrlOpen` posting `{code, state}` to authed
+     `POST /api/concept2/exchange` (below), and that route has no other
+     way to LOCATE the attempt row to consume: `state` is the lookup key
+     (same as the https callback's `consumeAttempt(state, ...)`). If C2
+     does not echo `state` on the private-use-scheme redirect, the server
+     cannot find, single-use-consume, or weight-class-resolve the attempt
+     at all — the exchange has no route to succeed. So native `state` echo
+     is **EXPECTED but UNMEASURED, and load-bearing**, not a cosmetic
+     nicety this design can proceed without. **PR1.75's sequence:** probe
+     the real echo once C2 approves the new `redirect_uri` (gate doc
+     §3(g), "still owed"); if echoed, promote "expected" to "measured" and
+     ship as designed; if NOT echoed, this branch needs a retained-state
+     fallback (e.g. keying the attempt by something the app already holds
+     across the hop, such as a client-generated correlation value threaded
+     through the private-use-scheme URL some other way) — design that
+     fallback with an RF27 lifetime table (mint site, clear sites, what
+     survives relaunch) before shipping it, rather than assuming the https
+     callback's nonce shape ports unchanged. An `appUrlOpen` handler posts
      `{code, state}` to authed `POST /api/concept2/exchange`, **carrying
      the app's own Keychain bearer**, and the server checks the caller's
      id against the attempt's before exchanging.
@@ -575,7 +590,13 @@ safe; the flag, not PR ordering, is the safety mechanism.
 - **PR0 — the desk cross-connect** (discharges RC exit (d)). Dev-only
   script under `app/scripts/`, manual-paste OAuth against `log-dev`
   (operator steps above). Probes, each with its response pre-committed:
-  1. **`state` echo** → Branch A or Branch B of the return design.
+  1. **`state` echo** (web/https callback only) → measured Branch A;
+     **corrected 2026-09-01: this no longer chooses between Branch A and
+     Branch B** — the hybrid (Branch A for web, Branch B for native) is
+     now the mandatory design regardless of this result (§Architecture 3
+     anchor F4), not a fork this probe decided between. Native's OWN
+     `state` echo, on the private-use-scheme redirect, is a separate,
+     still-unmeasured question that PR1.75 owns (§Architecture 3, above).
   2. **Dedup `date` granularity** (post twice; same values different
      time-of-day; same day different seconds) → day-granular: ship as
      specced, an ErgData copy 409s and that protects the rower;
@@ -604,8 +625,10 @@ safe; the flag, not PR ordering, is the safety mechanism.
   link AND upload. TRIAD gates.
 - **PR1.5 — the native link flow** (PM condition 1's split: a reviewer
   should not hold a token-broker migration and an iOS deep-link contract
-  in one pass): `@capacitor/browser` dependency, the foreground re-fetch
-  seam (`useReturnToApp`). **Corrected fix round 15: the URL scheme +
+  in one pass): `@capacitor/browser` dependency, the return-to-app refresh
+  seam (`useReturnToApp` — renamed from the working title "foreground
+  re-fetch" at fix round 3 once `browserFinished` proved an equally
+  load-bearing, non-foreground signal). **Corrected fix round 15: the URL scheme +
   `appUrlOpen` handler, this bullet's original scope, moved to PR1.75** —
   PR1.5 ships the dark, nonce-only plumbing (the ACCEPTED implementation
   the design-gate ruling accepts a residual for), not any piece of the

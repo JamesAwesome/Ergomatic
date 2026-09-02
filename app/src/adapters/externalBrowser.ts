@@ -3,18 +3,24 @@
 // Same native-first idiom as `appLifecycle.ts`/`keepAwake.ts`: `isNative()`
 // picks the arm, and the native arm reaches its Capacitor plugin only
 // through a dynamic `import()` inside that branch. **Narrowed claim, fix
-// round 2 (P2ii — the original wording overclaimed):** while nothing in
-// `src/` imports this module, `@capacitor/browser` is genuinely absent from
-// `dist/client` — but that is because the modules are UNCONSUMED, not
-// because the dynamic import folds it out. Once a consumer exists (PR2's
-// card, or this fix round's own dev-only probe behind
-// `VITE_ENABLE_C2_LINK_PROBE`), the runtime-guarded `import()` below emits
-// its own lazy CHUNK that IS present in `dist/client` — it is simply never
-// LOADED by a web session, since `isNative()` is `false` there and that
-// branch never executes (RF12: `pnpm dist:grep`'s `C2_CLIENT_SECRET`-style
-// needles prove absence of unreachable dev-only code; a legitimately
-// SHIPPED, merely-unloaded chunk is a different claim and is not what that
-// gate checks).
+// round 2 (P2ii — the original wording overclaimed):** `@capacitor/browser`
+// being absent from a flag-off `dist/client` is because the flag-off build
+// has no reachable consumer of the native branch, not because the dynamic
+// import folds it out by itself. **Corrected 2026-09-01 (fix round 16):**
+// this module DOES have a real consumer today —
+// `src/monitor/Concept2LinkProbe.tsx` imports `openExternalUrl` directly,
+// behind `VITE_ENABLE_C2_LINK_PROBE`/`DEV` — so "nothing in `src/` imports
+// this module" is stale; the accurate claim is that the probe's own
+// dynamic `import()` still only emits its lazy CHUNK when built WITH the
+// flag, and that chunk is never loaded by a web session regardless
+// (`isNative()` is `false` there). Once PR2's real card exists, the same
+// shape holds. The runtime-guarded `import()` below emits its own lazy
+// CHUNK that IS present in `dist/client` whenever a consumer is compiled
+// in — it is simply never LOADED by a web session, since `isNative()` is
+// `false` there and that branch never executes (RF12: `pnpm dist:grep`'s
+// `C2_CLIENT_SECRET`-style needles prove absence of unreachable dev-only
+// code; a legitimately SHIPPED, merely-unloaded chunk is a different claim
+// and is not what that gate checks).
 //
 // WEB ARM: plain navigation (spec: "plain navigation on web" — the
 // callback page's own "return to the app" is the browser Back/close on

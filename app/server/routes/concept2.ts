@@ -158,8 +158,16 @@ export function createConcept2Router({
     }
     const userId = req.user!.id;
     // GC is the server's, no cron (brief) — every mint sweeps stale
-    // attempts globally and this user's own before minting a fresh one,
-    // so a user can never hold more than one live attempt.
+    // attempts globally and this user's own before minting a fresh one.
+    // Corrected 2026-09-01: this is a sequential-replace guarantee, not a
+    // cardinality bound. SEQUENTIAL mints from one user each replace the
+    // prior attempt, so at most one survives a single-threaded mint
+    // history — but the delete/delete/insert sequence is untransacted and
+    // there is no UNIQUE(user_id) constraint, so CONCURRENT mints (two
+    // in-flight requests racing) can each pass their own delete before
+    // either inserts, leaving more than one live attempt for the same
+    // user. See ROADMAP.md's "C2 account injection" row and
+    // docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md §1.
     await store.deleteExpiredAttempts(ATTEMPT_MAX_AGE_MS);
     await store.deleteAttemptsFor(userId);
     const nonce = randomBytes(32).toString("hex");
