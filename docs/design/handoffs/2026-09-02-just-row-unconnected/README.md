@@ -31,11 +31,14 @@ board is the corresponding capture with the fewest possible words changed.
 
 **One thing the reference exposed for the plan, not the design:** the
 shipped test-workout row read `LOGGED BY HAND` in its detail
-(`9-detail.png`) because a test phase's stopwatch actual is never
-recorded (`Timer.tsx`'s `applyDistanceActual` returns early with no
-metres). The free-row producer must store `timeSeconds` so the detail's
-provenance predicate says `TIMER`; that is an implementation invariant
-the plan carries, and the board shows the intended result.
+(`9-detail.png`) because a test phase's finish records no actual
+(`Timer.tsx`'s `handleConfirmFinish` takes its `advance` branch for a
+metre-less phase — corrected by the antagonist pass; an earlier version
+of this paragraph blamed `applyDistanceActual`, which is unreachable on
+that path). The detail's word comes from `storedSummary.ts`'s
+`sourceLabel`, which reads the steps' `actualSource` and never
+`timeSeconds`; the spec (rev 2 §Mechanism 6) adds the free-row clause
+that makes the board's `SEP 2 · 21:57 · TIMER` true.
 
 ## The JR chip (added rev 2c, James 2026-09-02: "it's just missing the JR chip")
 
