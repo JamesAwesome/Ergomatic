@@ -828,6 +828,36 @@ often they recur.
     earlier whether the underlying product work contains more than one safely
     deployable invariant.
 
+27. **Session-scoped state shipped without a lifetime table — and a spec
+    that names a mechanism where it owes an invariant.** PR #258 took nine
+    external review rounds; five of them were ONE design flaw discovered a
+    clause at a time. The plan specified the mechanism ("three rotated
+    localStorage keys, push on every teardown"); the invariant it actually
+    owed ("one entry per LOGICAL SESSION; an old log can never pair with a
+    new id; relaunch-safe; platform-floor-safe") was never written down, so
+    the reviewer derived it adversarially: per-teardown guard (round 1),
+    identity upsert (2), relaunch collision in the id mint (3), an API
+    below the deployment floor (4), and finally the cross-attempt alias
+    whose fix — one `LogicalSession` value minting id, ring, and every
+    per-session guard/counter at a single site — should have been the
+    day-one design (5). Three of the five were LIFETIME bugs: state minted
+    per-attempt, cleared per-teardown, compared per-document, all claiming
+    to be per-session. **Two rules, both cheap:** (a) a plan introducing
+    any session-scoped state carries a LIFETIME TABLE — every ref, guard,
+    and counter; its mint site; its clear sites; what survives teardown,
+    relaunch, and re-arm — and states invariants, never mechanisms;
+    (b) the antagonist skip rule's own text was violated to enable this:
+    the chunk "inherited the spec's vetted ground" was spoken for a PR that
+    INVENTED a new stored shape and identity lifetime the spec's pass never
+    saw. A novel mechanism gets the pass; a skip that waves one through
+    buys the review churn at ~one invariant clause per round. Corollaries
+    from the same PR's tail: adopt a reviewer's rule wording VERBATIM the
+    first time and grep-sweep every sibling phrasing in the same round
+    (three rounds were the same sentence restated too strongly); merge
+    main before every ready comment (a parallel PR cost a full round); and
+    a "CI green" claim requires the run to EXIST first — an empty check
+    rollup reads as green to a wait loop that only greps for "pending".
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;
