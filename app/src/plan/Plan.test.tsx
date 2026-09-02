@@ -942,11 +942,24 @@ describe("Plan (done-row workout names and swap marks)", () => {
         `expected a grid-row: 1 / -1 rule for ${sel}`,
       ).toContain(sel);
     }
+    // `-1` is the last line of the EXPLICIT grid: without two declared
+    // rows the span collapses to the name line and the served rule does
+    // nothing (measured 9.5px off on the first e2e run) — so the row
+    // declaration is part of the same invariant, not decoration.
+    const container = rules.filter((r) =>
+      r.selectors.includes(".plan-row-swapped"),
+    );
+    expect(
+      container,
+      "expected exactly one .plan-row-swapped rule",
+    ).toHaveLength(1);
+    expect(container[0]!.body).toContain("grid-template-rows: auto auto");
     const mark = rules.filter((r) =>
       r.selectors.includes(".plan-row-swapped .plan-row-swap"),
     );
     expect(mark, "expected exactly one swapped-mark rule").toHaveLength(1);
-    expect(mark[0]!.body).toContain("grid-column: 3 / -1");
+    expect(mark[0]!.body).toContain("grid-column: 3");
+    expect(mark[0]!.body).toContain("grid-row: 2");
   });
 
   // The box is only for a LINKED row whose stored type is unreadable. An

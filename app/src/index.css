@@ -2771,6 +2771,13 @@ button.back-link:disabled,
 .plan-row-swapped {
   display: grid;
   grid-template-columns: 24px auto 1fr auto;
+  /* Two EXPLICIT rows, because the spanning rule below says `1 / -1` and
+     `-1` is the last line of the EXPLICIT grid — with no declared rows
+     that line is line 1 itself, the span collapses to one row, and the
+     badge quietly stays on the name line (measured: 9.5px off centre on
+     the first e2e run, with the rule served). `PlanRow.dc.html` declares
+     `grid-template-rows: auto auto` for the same reason. */
+  grid-template-rows: auto auto;
   column-gap: 10px;
   row-gap: 2px;
   align-items: center;
@@ -2794,12 +2801,36 @@ button.back-link:disabled,
   grid-row: 1 / -1;
 }
 
-/* The mark sits in the NAME's column (`PlanRow.dc.html`: `.swap {
-   grid-column: 3 }`), not from the badge column on: with the badge now
-   spanning both rows, a mark starting at column 2 would share the
+/* Every cell placed EXPLICITLY once anything spans. Auto-placement puts
+   row-locked items first (CSS Grid §8.5 step 2), so with the three
+   spanners above placed before the name, the status glyph would take
+   column 3 and the name column 4 — the flex order the columns mirror
+   would silently invert. Columns as `.plan-row`'s flex order: index,
+   badge slot, name, status; the mark under the NAME (`PlanRow.dc.html`:
+   `.swap { grid-column: 3; grid-row: 2 }`), never from the badge column
+   on, since a mark starting at column 2 would share the spanning
    badge's cell and paint under it. */
+.plan-row-swapped .plan-row-index {
+  grid-column: 1;
+}
+
+.plan-row-swapped .type-badge,
+.plan-row-swapped .free-row-chip {
+  grid-column: 2;
+}
+
+.plan-row-swapped .plan-row-name {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.plan-row-swapped .plan-row-status {
+  grid-column: 4;
+}
+
 .plan-row-swapped .plan-row-swap {
-  grid-column: 3 / -1;
+  grid-column: 3;
+  grid-row: 2;
 }
 
 /* The unknown-type box (edge-marks gate, James, 2026-08-31: "a shaded
