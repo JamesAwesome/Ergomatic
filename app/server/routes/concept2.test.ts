@@ -1,23 +1,39 @@
 import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import { createApp } from "../app.js";
+import { SESSION_COOKIE } from "../auth/cookies.js";
 import { requireUser } from "../auth/middleware.js";
+import { baseDeps } from "../testDeps.js";
 import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import { makeFakeConcept2Store, makeFakeStores } from "../testing/fakes.js";
 import type { LogInput, LogsStore } from "../stores/logs.js";
 import type { C2Client } from "../concept2/client.js";
 import { formatC2Date } from "../concept2/mapping.js";
-import type { Concept2Store, WeightClass } from "../stores/concept2.js";
-import { createConcept2Router, type Concept2RouterDeps } from "./concept2.js";
+import {
+  AttemptNonceCollisionError,
+  type Concept2Store,
+  type WeightClass,
+} from "../stores/concept2.js";
+import {
+  createConcept2Router,
+  NATIVE_REDIRECT_URI,
+  type Concept2RouterDeps,
+} from "./concept2.js";
 
-// Wave E PR1 Task 6 (task-6-brief.md): supertest + fake session store, same
-// harness shape as `data.test.ts`'s own `appFor`. The concept2 store is the
-// Task 3 fake (`makeFakeConcept2Store`); `logs` is a fresh
-// `makeFakeStores().logs` per test (Task 1/6's fake, exercising the real
-// `LogInput`/`create()` contract rather than a hand-built row); `client` is
-// a hand-rolled stub of the four-method `C2Client` surface — never a real
-// fetch, per this task's "unit tests only" scope (the integration seam test
-// is Task 7's).
+// Wave E PR1 Task 6, rebuilt at PR1.75a (2026-09-02-concept2-pr175-app-bind-
+// design.md §5/§6): supertest + fake session store, same harness shape as
+// `data.test.ts`'s own `appFor`. The concept2 store is the Task 2 fake
+// (`makeFakeConcept2Store`); `logs` is a fresh per-test
+// `makeFakeStores().logs`, exercising the real `LogInput`/`create()`
+// contract rather than a hand-built row; `client` is a stub of the
+// `C2Client` surface — never a real fetch, per this task's "unit tests only"
+// scope (the integration seam test is Task 7's).
+//
+// The SAME fake session store backs both `requireUser` and the router's own
+// `sessions` dep, so a token presented as a bearer and as a cookie resolves
+// to the same user — that is what makes the two surfaces (and their
+// disagreement case) testable from one harness.
 
 const userA: SessionUser = { id: "user-a", email: "a@x.com", name: "A" };
 const userB: SessionUser = { id: "user-b", email: "b@x.com", name: "B" };
@@ -42,17 +58,27 @@ function fakeSessionStore(): SessionStore {
 
 const asA = (req: request.Test) => req.set("Authorization", "Bearer token-a");
 const asB = (req: request.Test) => req.set("Authorization", "Bearer token-b");
+// The web surface: the SAME fake session tokens, carried as the
+// `erg_session` cookie instead of a bearer.
+const asACookie = (req: request.Test) =>
+  req.set("Cookie", `${SESSION_COOKIE}=token-a`);
+const asBCookie = (req: request.Test) =>
+  req.set("Cookie", `${SESSION_COOKIE}=token-b`);
+
+const WEB_REDIRECT_URI = "https://ergomatic.example/api/concept2/callback";
 
 // Well-formed but guaranteed-absent from any fake store's map (data.test.ts
 // precedent).
 const NON_EXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
 
 // Every method throws until a test stubs it — an un-stubbed call is a test
-// bug, never a silent wrong-shape result.
+// bug, never a silent wrong-shape result. `authorizeUrl` echoes BOTH its
+// arguments so a test can read the surface's redirect back off the URL.
 function makeStubClient(): C2Client {
   return {
     authorizeUrl: vi.fn(
-      (state: string) => `https://c2.test/oauth/authorize?state=${state}`,
+      (state: string, redirectUri: string) =>
+        `https://c2.test/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
     ),
     exchangeCode: vi.fn(async () => {
       throw new Error("exchangeCode not stubbed for this test");
@@ -90,12 +116,15 @@ function buildApp(
   const logs = overrides.logs ?? makeFakeStores().logs;
   const client = overrides.client ?? makeStubClient();
   const state = { available: overrides.available ?? true };
+  const sessions = fakeSessionStore();
   const deps: Concept2RouterDeps = {
     available: () => state.available,
     store,
     logs,
     client,
-    requireUser: requireUser(fakeSessionStore()),
+    requireUser: requireUser(sessions),
+    sessions,
+    webRedirectUri: WEB_REDIRECT_URI,
     now: overrides.now,
   };
   const app = express();
@@ -176,15 +205,36 @@ function freshLink(
   };
 }
 
+// Web mint by default (cookie); pass `asA`/`asB` for a native mint, which
+// also needs the capability declaration (design §3).
 async function mintAndGetState(
   app: express.Express,
-  asUser: (req: request.Test) => request.Test = asA,
+  asUser: (req: request.Test) => request.Test = asACookie,
+  body: Record<string, unknown> = { weightClass: "H" },
 ): Promise<string> {
   const res = await asUser(
-    request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
+    request(app).post("/api/concept2/connect").send(body),
   );
-  const url = new URL(res.body.authorizeUrl as string);
-  return url.searchParams.get("state")!;
+  expect(res.status).toBe(200);
+  return res.body.state as string;
+}
+const NATIVE_MINT = { weightClass: "H", linkClient: "webauth-1" };
+
+// The two wire calls a successful completion makes, both stubbed happy.
+function stubHappyExchange(client: C2Client, c2UserId = 2211): void {
+  vi.mocked(client.exchangeCode).mockResolvedValue({
+    ok: true,
+    tokens: {
+      accessToken: "at-1",
+      refreshToken: "rt-1",
+      expiresAt: new Date(Date.now() + 3600_000),
+    },
+  });
+  vi.mocked(client.fetchMe).mockResolvedValue({
+    ok: true,
+    c2UserId,
+    username: "jmorelli",
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -192,6 +242,7 @@ async function mintAndGetState(
 describe("concept2 router: auth guard", () => {
   const routes: Array<[string, string]> = [
     ["post", "/api/concept2/connect"],
+    ["post", "/api/concept2/exchange"],
     ["get", "/api/concept2/link"],
     ["delete", "/api/concept2/link"],
     ["post", `/api/concept2/results/${NON_EXISTENT_UUID}`],
@@ -207,11 +258,128 @@ describe("concept2 router: auth guard", () => {
     expect(res.status).toBe(401);
   });
 
-  it("callback carries NO requireUser (the nonce correlates, not a session)", async () => {
+  it("callback: missing params answer 400 Incomplete BEFORE any session check (params precede identity)", async () => {
     const { app } = buildApp();
-    // No Authorization header at all; missing state/code -> 400, never 401.
     const res = await request(app).get("/api/concept2/callback");
     expect(res.status).toBe(400);
+    expect(res.type).toBe("text/html");
+    expect(res.text).toContain("CONCEPT2 LINK · INCOMPLETE · HTTP 400");
+  });
+
+  // Design §1(b): both credentials present and resolving to DIFFERENT
+  // users is a hard 400 on every /api/concept2/* route (scope (b)), where
+  // requireUser app-wide only LOGS it (scope (a)). Nothing consumed.
+  describe("ambiguous_auth: bearer A + cookie B", () => {
+    const ambiguous = (req: request.Test) => asBCookie(asA(req));
+
+    it("mint -> 400 {error:'ambiguous_auth'}, no attempt created", async () => {
+      const store = makeFakeConcept2Store();
+      const createSpy = vi.spyOn(store, "createAttempt");
+      const { app } = buildApp({ store });
+      const res = await ambiguous(
+        request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body).toStrictEqual({ error: "ambiguous_auth" });
+      expect(createSpy).not.toHaveBeenCalled();
+    });
+
+    it("exchange -> 400 ambiguous_auth, nothing peeked or consumed", async () => {
+      const store = makeFakeConcept2Store();
+      const { app } = buildApp({ store });
+      const state = await mintAndGetState(app, asA, NATIVE_MINT);
+      const consumeSpy = vi.spyOn(store, "consumeAttemptFor");
+      const res = await ambiguous(
+        request(app).post("/api/concept2/exchange").send({ code: "c", state }),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body).toStrictEqual({ error: "ambiguous_auth" });
+      expect(consumeSpy).not.toHaveBeenCalled();
+      expect(await store.peekAttempt(state)).not.toBeNull();
+    });
+
+    it("callback -> 400 JSON ambiguous_auth (no approved page exists; only a non-browser caller can bearer a top-level GET), attempt untouched", async () => {
+      const store = makeFakeConcept2Store();
+      const client = makeStubClient();
+      const { app } = buildApp({ store, client });
+      const state = await mintAndGetState(app);
+      const res = await ambiguous(
+        request(app).get(`/api/concept2/callback?state=${state}&code=abc`),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body).toStrictEqual({ error: "ambiguous_auth" });
+      // The JSON arm carries the same header the pages do — this response
+      // is still a reply to a URL holding `code` and `state` (design §5).
+      expect(res.headers["referrer-policy"]).toBe("no-referrer");
+      expect(await store.peekAttempt(state)).not.toBeNull();
+      expect(client.exchangeCode).not.toHaveBeenCalled();
+    });
+
+    // The refusal is required on ALL FIVE JSON routes, and the three tests
+    // above only reach two of them plus the callback: deleting
+    // `refuseAmbiguousAuth` from `GET /link`, `DELETE /link` or
+    // `POST /results/:logId` left every other assertion in this file green.
+    // The status/body assertion is the gate on every row (it alone catches
+    // `GET /api/concept2/link`, which never writes). The write assertions
+    // below add cover on the four routes that CAN write — each spy is
+    // load-bearing on at least one of those rows.
+    const jsonRoutes: Array<[string, string]> = [
+      ["post", "/api/concept2/connect"],
+      ["post", "/api/concept2/exchange"],
+      ["get", "/api/concept2/link"],
+      ["delete", "/api/concept2/link"],
+      ["post", `/api/concept2/results/${NON_EXISTENT_UUID}`],
+    ];
+
+    it.each(jsonRoutes)(
+      "%s %s -> 400 ambiguous_auth, and nothing is written",
+      async (method, path) => {
+        const store = makeFakeConcept2Store();
+        await store.upsertLink(userA.id, freshLink());
+        const { app, logs } = buildApp({ store });
+        const deleteSpy = vi.spyOn(store, "deleteLink");
+        const upsertSpy = vi.spyOn(store, "upsertLink");
+        const createSpy = vi.spyOn(store, "createAttempt");
+        const recordSpy = vi.spyOn(logs, "recordC2Result");
+        const agent = request(app) as unknown as Record<
+          string,
+          (p: string) => request.Test
+        >;
+        const res = await ambiguous(
+          agent[method](path).send({
+            weightClass: "H",
+            linkClient: "webauth-1",
+            code: "c",
+            state: "s",
+            tz: "America/New_York",
+          }),
+        );
+        expect(res.status).toBe(400);
+        expect(res.body).toStrictEqual({ error: "ambiguous_auth" });
+        expect(createSpy).not.toHaveBeenCalled();
+        expect(deleteSpy).not.toHaveBeenCalled();
+        expect(upsertSpy).not.toHaveBeenCalled();
+        expect(recordSpy).not.toHaveBeenCalled();
+        // userA's link is exactly as it was seeded — the DELETE route in
+        // particular must not have reached `deleteLink`.
+        expect((await store.getLink(userA.id))?.c2UserId).toBe(
+          LINK_INPUT.c2UserId,
+        );
+      },
+    );
+
+    it("bearer A + cookie A (same user) is NOT ambiguous: mint succeeds as native", async () => {
+      const { app } = buildApp();
+      const res = await asACookie(
+        asA(request(app).post("/api/concept2/connect").send(NATIVE_MINT)),
+      );
+      expect(res.status).toBe(200);
+      expect(
+        new URL(res.body.authorizeUrl as string).searchParams.get(
+          "redirect_uri",
+        ),
+      ).toBe(NATIVE_REDIRECT_URI);
+    });
   });
 });
 
@@ -287,38 +455,57 @@ describe("availability matrix (spec §Architecture 8)", () => {
     expect(createAttemptSpy).not.toHaveBeenCalled();
   });
 
-  it("callback: mid-hop unavailable -> 403, exchange never called, attempt consumed, no link created", async () => {
+  it("callback: mid-hop unavailable -> 403 Unavailable page, exchange never called, and the attempt SURVIVES (availability consumes nothing)", async () => {
     const store = makeFakeConcept2Store();
     const client = makeStubClient();
+    stubHappyExchange(client);
     const { app, setAvailable } = buildApp({ store, client });
     const state = await mintAndGetState(app);
 
     setAvailable(false);
-    const res = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
     expect(res.status).toBe(403);
     expect(res.type).toBe("text/html");
+    expect(res.text).toContain("CONCEPT2 LINK · UNAVAILABLE · HTTP 403");
     expect(client.exchangeCode).not.toHaveBeenCalled();
     expect(await store.getLink(userA.id)).toBeNull();
+    expect(await store.peekAttempt(state)).not.toBeNull();
 
-    // The attempt is gone even though it was never exchanged: replaying the
-    // same state once available again reports "unknown state", not success.
+    // PR1's flag-off consume is GONE: the same state completes once the
+    // flag is back, because the 403 above was a read-only refusal.
     setAvailable(true);
-    const retry = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+    const retry = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
-    expect(retry.status).toBe(400);
-    expect(await store.getLink(userA.id)).toBeNull();
+    expect(retry.status).toBe(200);
+    expect(await store.getLink(userA.id)).not.toBeNull();
   });
 
-  it("callback: unavailable with no state at all -> 403, no consumeAttempt call", async () => {
+  it("callback: unavailable -> 403 with no peek and no consume call at all", async () => {
     const store = makeFakeConcept2Store();
-    const consumeSpy = vi.spyOn(store, "consumeAttempt");
+    const peekSpy = vi.spyOn(store, "peekAttempt");
+    const consumeSpy = vi.spyOn(store, "consumeAttemptFor");
     const { app } = buildApp({ available: false, store });
-    const res = await request(app).get("/api/concept2/callback");
+    const res = await request(app).get("/api/concept2/callback?state=x&code=y");
     expect(res.status).toBe(403);
+    expect(peekSpy).not.toHaveBeenCalled();
     expect(consumeSpy).not.toHaveBeenCalled();
+  });
+
+  it("exchange: unavailable -> 403 before any store call", async () => {
+    const store = makeFakeConcept2Store();
+    const peekSpy = vi.spyOn(store, "peekAttempt");
+    const { app } = buildApp({ available: false, store });
+    const res = await asA(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "c", state: "s" }),
+    );
+    expect(res.status).toBe(403);
+    expect(res.body).toStrictEqual({ error: "unavailable" });
+    expect(peekSpy).not.toHaveBeenCalled();
   });
 
   it("link GET: unavailable -> {available:false} (200, not 4xx)", async () => {
@@ -357,16 +544,74 @@ describe("availability matrix (spec §Architecture 8)", () => {
 });
 
 describe("mint (POST /api/concept2/connect)", () => {
-  it("happy path returns an authorizeUrl and creates a single-use attempt", async () => {
+  it("cookie mint -> surface 'web', the WEB redirect in the URL, and the response carries state === the URL's state", async () => {
     const store = makeFakeConcept2Store();
-    const client = makeStubClient();
-    const { app } = buildApp({ store, client });
-    const res = await asA(
+    const { app } = buildApp({ store });
+    const res = await asACookie(
       request(app).post("/api/concept2/connect").send({ weightClass: "L" }),
     );
     expect(res.status).toBe(200);
-    expect(typeof res.body.authorizeUrl).toBe("string");
-    expect(client.authorizeUrl).toHaveBeenCalledTimes(1);
+    const url = new URL(res.body.authorizeUrl as string);
+    expect(url.searchParams.get("redirect_uri")).toBe(WEB_REDIRECT_URI);
+    expect(res.body.state).toBe(url.searchParams.get("state"));
+    expect(await store.peekAttempt(res.body.state as string)).toStrictEqual({
+      userId: userA.id,
+      weightClass: "L",
+      surface: "web",
+    });
+  });
+
+  it("bearer mint WITH linkClient 'webauth-1' -> surface 'native' and the NATIVE redirect", async () => {
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ store });
+    const res = await asA(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(res.status).toBe(200);
+    const url = new URL(res.body.authorizeUrl as string);
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "haus.waffle.ergomatic://oauth/callback",
+    );
+    expect((await store.peekAttempt(res.body.state as string))?.surface).toBe(
+      "native",
+    );
+  });
+
+  // Design §3: a bearer mint must DECLARE it can receive the native
+  // redirect — the capability precondition that makes the flag flip safe
+  // against an installed build predating the WebAuth plugin.
+  it("bearer mint WITHOUT linkClient -> 409 update_required, nothing minted", async () => {
+    const store = makeFakeConcept2Store();
+    const createSpy = vi.spyOn(store, "createAttempt");
+    const { app } = buildApp({ store });
+    const res = await asA(
+      request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "update_required" });
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it("bearer mint with a WRONG linkClient value -> 409 update_required", async () => {
+    const { app } = buildApp();
+    const res = await asA(
+      request(app)
+        .post("/api/concept2/connect")
+        .send({ weightClass: "H", linkClient: "webauth-0" }),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("a cookie mint ignores linkClient (web needs no declaration)", async () => {
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ store });
+    const res = await asACookie(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(res.status).toBe(200);
+    expect((await store.peekAttempt(res.body.state as string))?.surface).toBe(
+      "web",
+    );
   });
 
   // Nothing else asserts the nonce's actual shape or that two mints
@@ -382,13 +627,55 @@ describe("mint (POST /api/concept2/connect)", () => {
   it("two mints produce DIFFERENT nonces", async () => {
     const { app } = buildApp();
     const first = await mintAndGetState(app);
-    const second = await mintAndGetState(app, asB);
+    const second = await mintAndGetState(app, asBCookie);
     expect(first).not.toBe(second);
+  });
+
+  it("a re-mint REPLACES the user's live attempt: the old state is unknown afterwards", async () => {
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ store });
+    const first = await mintAndGetState(app);
+    const second = await mintAndGetState(app);
+    expect(await store.peekAttempt(first)).toBeNull();
+    expect(await store.peekAttempt(second)).not.toBeNull();
+  });
+
+  // Design §2: a new nonce colliding with another row's PK surfaces as a
+  // unique violation; the route retries ONCE with a fresh nonce, then 500s.
+  it("a PK collision on the first nonce retries once with a DIFFERENT nonce and succeeds", async () => {
+    const store = makeFakeConcept2Store();
+    const realCreate = store.createAttempt.bind(store);
+    const createSpy = vi
+      .spyOn(store, "createAttempt")
+      .mockRejectedValueOnce(new AttemptNonceCollisionError())
+      .mockImplementation(realCreate);
+    const { app } = buildApp({ store });
+    const res = await asACookie(
+      request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
+    );
+    expect(res.status).toBe(200);
+    expect(createSpy).toHaveBeenCalledTimes(2);
+    const [first, second] = createSpy.mock.calls.map((c) => c[0].nonce);
+    expect(first).not.toBe(second);
+    expect(res.body.state).toBe(second);
+  });
+
+  it("two consecutive PK collisions -> 500, no third try", async () => {
+    const store = makeFakeConcept2Store();
+    const createSpy = vi
+      .spyOn(store, "createAttempt")
+      .mockRejectedValue(new AttemptNonceCollisionError());
+    const { app } = buildApp({ store });
+    const res = await asACookie(
+      request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
+    );
+    expect(res.status).toBe(500);
+    expect(createSpy).toHaveBeenCalledTimes(2);
   });
 
   it("rejects a weightClass outside H|L, field-named", async () => {
     const { app } = buildApp();
-    const res = await asA(
+    const res = await asACookie(
       request(app).post("/api/concept2/connect").send({ weightClass: "X" }),
     );
     expect(res.status).toBe(400);
@@ -400,7 +687,7 @@ describe("mint (POST /api/concept2/connect)", () => {
     // Deliberately no `.send()`/Content-Type: `express.json()` only ever
     // sets `req.body` for a matching Content-Type, so this exercises the
     // `isRec` fallback for real, not a body-parser 400 of its own.
-    const res = await asA(request(app).post("/api/concept2/connect"));
+    const res = await asACookie(request(app).post("/api/concept2/connect"));
     expect(res.status).toBe(400);
     expect(res.body.field).toBe("weightClass");
   });
@@ -409,125 +696,233 @@ describe("mint (POST /api/concept2/connect)", () => {
   // the imported `ATTEMPT_MAX_AGE_MS` — retuning the production constant
   // would otherwise retune this assertion right along with it (RF21), so
   // the test could never catch a wrong value.
-  it("garbage-collects expired/own attempts before creating a new one (no cron)", async () => {
+  it("garbage-collects expired attempts before creating a new one (no cron); per-user replacement is the upsert's, not a delete", async () => {
     const store = makeFakeConcept2Store();
     const gcExpired = vi.spyOn(store, "deleteExpiredAttempts");
-    const gcOwn = vi.spyOn(store, "deleteAttemptsFor");
     const { app } = buildApp({ store });
-    await asA(
+    await asACookie(
       request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
     );
     expect(gcExpired).toHaveBeenCalledWith(900_000);
-    expect(gcOwn).toHaveBeenCalledWith(userA.id);
   });
 });
 
-describe("callback (GET /api/concept2/callback)", () => {
-  it("happy path links the ATTEMPT's user, with no session on the request at all", async () => {
+describe("callback (GET /api/concept2/callback) — the web ladder, design §5", () => {
+  it("happy path: the minting user's cookie -> 200 Linked page naming BOTH identities, link written, exchange used the WEB redirect", async () => {
     const store = makeFakeConcept2Store();
     const client = makeStubClient();
-    vi.mocked(client.exchangeCode).mockResolvedValue({
-      ok: true,
-      tokens: {
-        accessToken: "at-1",
-        refreshToken: "rt-1",
-        expiresAt: new Date(Date.now() + 3600_000),
-      },
-    });
-    vi.mocked(client.fetchMe).mockResolvedValue({ ok: true, c2UserId: 2211 });
+    stubHappyExchange(client);
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
 
-    const res = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
     expect(res.status).toBe(200);
     expect(res.type).toBe("text/html");
-    expect(res.text).toContain("Linked. Return to the app.");
+    expect(res.text).toContain("CONCEPT2 LINK · LINKED · HTTP 200");
+    expect(res.text.replace(/<[^>]+>/g, "")).toContain(
+      "Concept2 jmorelli is now connected to Ergomatic a@x.com.",
+    );
+    expect(client.exchangeCode).toHaveBeenCalledWith(
+      "abc123",
+      WEB_REDIRECT_URI,
+    );
 
     const link = await store.getLink(userA.id);
     expect(link?.weightClass).toBe("H");
     expect(link?.c2UserId).toBe(2211);
   });
 
-  it("missing state or code -> 400", async () => {
-    const { app } = buildApp();
-    const res1 = await request(app).get("/api/concept2/callback?code=abc");
-    expect(res1.status).toBe(400);
-    const res2 = await request(app).get("/api/concept2/callback?state=xyz");
-    expect(res2.status).toBe(400);
-  });
-
-  it("a second use of the same nonce -> 400 (single-use)", async () => {
+  it("no cookie session -> 401 Not signed in, attempt NOT consumed, exchange never called", async () => {
     const store = makeFakeConcept2Store();
     const client = makeStubClient();
-    vi.mocked(client.exchangeCode).mockResolvedValue({
-      ok: true,
-      tokens: {
-        accessToken: "at-1",
-        refreshToken: "rt-1",
-        expiresAt: new Date(Date.now() + 3600_000),
-      },
-    });
-    vi.mocked(client.fetchMe).mockResolvedValue({ ok: true, c2UserId: 2211 });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
 
-    const first = await request(app).get(
+    const res = await request(app).get(
       `/api/concept2/callback?state=${state}&code=abc123`,
     );
-    expect(first.status).toBe(200);
+    expect(res.status).toBe(401);
+    expect(res.text).toContain("CONCEPT2 LINK · NOT SIGNED IN · HTTP 401");
+    expect(await store.peekAttempt(state)).not.toBeNull();
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+  });
 
-    const second = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+  // Design §5 step 3: the web callback's principal is the erg_session
+  // COOKIE, never a bearer — a bearer on a top-level GET can only come from
+  // a non-browser caller, and accepting it would hand the browser-hop
+  // completion to whoever can set a header. Falling back to the bearer
+  // (`resolveCookieSession(req) ?? resolveBearerSession(req)`) passed every
+  // other test in this file, including the wrong-account one, because no
+  // other case presents a bearer alone.
+  it("the MINTING user's own bearer, with no cookie -> 401 Not signed in, attempt still present, exchange never called", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+
+    const res = await asA(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(401);
+    expect(res.text).toContain("CONCEPT2 LINK · NOT SIGNED IN · HTTP 401");
+    expect(await store.peekAttempt(state)).not.toBeNull();
+    expect(client.exchangeCode).toHaveBeenCalledTimes(0);
+    expect(await store.getLink(userA.id)).toBeNull();
+  });
+
+  it("an EMPTY-valued cookie is no session: 401, not consumed", async () => {
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ store });
+    const state = await mintAndGetState(app);
+    const res = await request(app)
+      .get(`/api/concept2/callback?state=${state}&code=abc123`)
+      .set("Cookie", `${SESSION_COOKIE}=`);
+    expect(res.status).toBe(401);
+    expect(await store.peekAttempt(state)).not.toBeNull();
+  });
+
+  // Exit criterion 1: the rightful user's attempt SURVIVES a wrong-principal
+  // presentation (the DoS leg), and the token exchange is never called.
+  it("a DIFFERENT user's cookie -> 403 Wrong account, attempt NOT consumed, exchange never called, no link for anyone", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+
+    const res = await asBCookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(403);
+    expect(res.text).toContain("CONCEPT2 LINK · WRONG ACCOUNT · HTTP 403");
+    expect(await store.peekAttempt(state)).not.toBeNull();
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+    expect(await store.getLink(userA.id)).toBeNull();
+    expect(await store.getLink(userB.id)).toBeNull();
+
+    // The rightful user can still complete afterwards.
+    const rightful = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(rightful.status).toBe(200);
+  });
+
+  // Exit criterion 2: a native-minted nonce cannot complete on the web
+  // surface, and is not consumed by the attempt.
+  it("a NATIVE-minted state on the web callback -> 400 Expired, NOT consumed, exchange never called", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app, asA, NATIVE_MINT);
+
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(400);
+    expect(res.text).toContain("CONCEPT2 LINK · EXPIRED · HTTP 400");
+    expect(await store.peekAttempt(state)).not.toBeNull();
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+  });
+
+  it("an unknown state -> 400 Expired, exchange never called", async () => {
+    const client = makeStubClient();
+    const { app } = buildApp({ client });
+    const res = await asACookie(
+      request(app).get("/api/concept2/callback?state=nope&code=abc123"),
+    );
+    expect(res.status).toBe(400);
+    expect(res.text).toContain("CONCEPT2 LINK · EXPIRED · HTTP 400");
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+  });
+
+  it("missing state or code -> 400 Incomplete", async () => {
+    const { app } = buildApp();
+    const res1 = await asACookie(
+      request(app).get("/api/concept2/callback?code=abc"),
+    );
+    expect(res1.status).toBe(400);
+    expect(res1.text).toContain("CONCEPT2 LINK · INCOMPLETE · HTTP 400");
+    const res2 = await asACookie(
+      request(app).get("/api/concept2/callback?state=xyz"),
+    );
+    expect(res2.status).toBe(400);
+    expect(res2.text).toContain("CONCEPT2 LINK · INCOMPLETE · HTTP 400");
+  });
+
+  it("a second use of the same nonce -> 400 Expired (single-use)", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+
+    const first = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(first.status).toBe(200);
+    const second = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
     expect(second.status).toBe(400);
     expect(client.exchangeCode).toHaveBeenCalledTimes(1);
   });
 
+  // Design §5 step 7: consumeAttemptFor is the AUTHORITY; a null between
+  // peek and consume (a concurrent completion or a re-mint won) is 400
+  // without any exchange.
+  it("a concurrent consume between peek and consume -> 400 Expired, exchange never called", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    vi.spyOn(store, "consumeAttemptFor").mockResolvedValueOnce(null);
+
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(400);
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+  });
+
   // Pinned with INDEPENDENT literal ms values (14:59 = 899_000, 15:01 =
-  // 901_000), never the imported `ATTEMPT_MAX_AGE_MS` — the same RF21
-  // reasoning as the GC test above, applied to the boundary itself
-  // rather than just "eventually expires".
+  // 901_000), never the imported `ATTEMPT_MAX_AGE_MS` (RF21).
   it("an attempt 14:59 old is still fresh (literal ms)", async () => {
     let t = 0;
     const clock = () => new Date(t);
     const store = makeFakeConcept2Store(clock);
     const client = makeStubClient();
-    vi.mocked(client.exchangeCode).mockResolvedValue({
-      ok: true,
-      tokens: {
-        accessToken: "at-1",
-        refreshToken: "rt-1",
-        expiresAt: new Date(Date.now() + 3600_000),
-      },
-    });
-    vi.mocked(client.fetchMe).mockResolvedValue({ ok: true, c2UserId: 2211 });
+    stubHappyExchange(client);
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
-
     t += 899_000;
-    const res = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
     expect(res.status).toBe(200);
   });
 
-  it("an attempt 15:01 old is expired (literal ms)", async () => {
+  it("an attempt 15:01 old -> 400 Expired, the row deleted (right principal, stale), exchange never called", async () => {
     let t = 0;
     const clock = () => new Date(t);
     const store = makeFakeConcept2Store(clock);
-    const { app } = buildApp({ store });
+    const client = makeStubClient();
+    const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
-
     t += 901_000;
-    const res = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
     expect(res.status).toBe(400);
+    expect(res.text).toContain("CONCEPT2 LINK · EXPIRED · HTTP 400");
+    expect(await store.peekAttempt(state)).toBeNull();
+    expect(client.exchangeCode).not.toHaveBeenCalled();
   });
 
-  it("exchange failure -> 502, and the nonce is not reusable", async () => {
+  it("exchange failure -> 502 Failed, and the nonce is not reusable", async () => {
     const store = makeFakeConcept2Store();
     const client = makeStubClient();
     vi.mocked(client.exchangeCode).mockResolvedValue({
@@ -536,39 +931,68 @@ describe("callback (GET /api/concept2/callback)", () => {
     });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
-
-    const res = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
     expect(res.status).toBe(502);
-
-    const retry = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+    expect(res.text).toContain("CONCEPT2 LINK · FAILED · HTTP 502");
+    const retry = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
     expect(retry.status).toBe(400);
     expect(await store.getLink(userA.id)).toBeNull();
   });
 
-  it("fetchMe failure -> 502", async () => {
+  it("fetchMe failure -> 502 Failed", async () => {
     const store = makeFakeConcept2Store();
     const client = makeStubClient();
-    vi.mocked(client.exchangeCode).mockResolvedValue({
-      ok: true,
-      tokens: {
-        accessToken: "at-1",
-        refreshToken: "rt-1",
-        expiresAt: new Date(Date.now() + 3600_000),
-      },
-    });
+    stubHappyExchange(client);
     vi.mocked(client.fetchMe).mockResolvedValue({ ok: false });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
-
-    const res = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
     expect(res.status).toBe(502);
     expect(await store.getLink(userA.id)).toBeNull();
+  });
+
+  // D1 (APPROVED): the Concept2 account is already connected to a DIFFERENT
+  // Ergomatic user -> 409 page, tokens discarded, no link for the presenter.
+  it("D1: a Concept2 account already linked to another user -> 409 Already linked, no link written for the presenter", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink({ c2UserId: 2211 }));
+    const client = makeStubClient();
+    stubHappyExchange(client, 2211);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(409);
+    expect(res.text).toContain("CONCEPT2 LINK · ALREADY LINKED · HTTP 409");
+    expect(await store.getLink(userA.id)).toBeNull();
+    expect((await store.getLink(userB.id))?.c2UserId).toBe(2211);
+  });
+
+  it("a username-less fetchMe falls back to the numeric id on the Linked page (observation 3)", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: null,
+    });
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(200);
+    expect(res.text.replace(/<[^>]+>/g, "")).toContain(
+      "Concept2 #2211 is now connected to Ergomatic a@x.com.",
+    );
   });
 
   it("relinking clears a previously-set needsReauthAt", async () => {
@@ -579,41 +1003,377 @@ describe("callback (GET /api/concept2/callback)", () => {
       result: undefined,
     }));
     expect((await store.getLink(userA.id))?.needsReauthAt).not.toBeNull();
-
     const client = makeStubClient();
-    vi.mocked(client.exchangeCode).mockResolvedValue({
-      ok: true,
-      tokens: {
-        accessToken: "at-2",
-        refreshToken: "rt-2",
-        expiresAt: new Date(Date.now() + 3600_000),
-      },
-    });
-    vi.mocked(client.fetchMe).mockResolvedValue({
-      ok: true,
-      c2UserId: LINK_INPUT.c2UserId,
-    });
+    stubHappyExchange(client, LINK_INPUT.c2UserId);
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
-
-    const res = await request(app).get(
-      `/api/concept2/callback?state=${state}&code=abc123`,
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
     );
     expect(res.status).toBe(200);
     expect((await store.getLink(userA.id))?.needsReauthAt).toBeNull();
   });
 
-  // A two-line gate against future reflection — today's callback pages
-  // are STATIC constants (`page()`'s own comment) that never interpolate
-  // `state`/`code`, so this passes trivially now, but it reddens the
-  // moment anyone starts building a page from request input.
-  it("never reflects state/code into the HTML response (static pages only)", async () => {
+  // Design §5: every response sets Referrer-Policy: no-referrer — the URL
+  // carries `code` and `state` (RFC 9700 §4.2).
+  it("sets Referrer-Policy: no-referrer on EVERY callback response (403/400/401/403/200/502)", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app, setAvailable } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    const responses: request.Response[] = [];
+    setAvailable(false);
+    responses.push(
+      await request(app).get("/api/concept2/callback?state=x&code=y"),
+    );
+    setAvailable(true);
+    responses.push(await request(app).get("/api/concept2/callback"));
+    responses.push(
+      await request(app).get(`/api/concept2/callback?state=${state}&code=c`),
+    );
+    responses.push(
+      await asBCookie(
+        request(app).get(`/api/concept2/callback?state=${state}&code=c`),
+      ),
+    );
+    responses.push(
+      await asACookie(
+        request(app).get(`/api/concept2/callback?state=${state}&code=c`),
+      ),
+    );
+    vi.mocked(client.exchangeCode).mockResolvedValue({
+      ok: false,
+      grantDead: false,
+    });
+    const again = await mintAndGetState(app);
+    responses.push(
+      await asACookie(
+        request(app).get(`/api/concept2/callback?state=${again}&code=c`),
+      ),
+    );
+    expect(responses.map((r) => r.status)).toStrictEqual([
+      403, 400, 401, 403, 200, 502,
+    ]);
+    for (const r of responses) {
+      expect(r.headers["referrer-policy"]).toBe("no-referrer");
+    }
+  });
+
+  // The header must also survive the exits this handler does not write: a
+  // store method that REJECTS unwinds past every `sendPage` call and lands
+  // on Express's default error handler, which writes its own 500 body.
+  // `finalhandler` removes only the Content-* headers before doing so, so a
+  // header set at the top of the handler survives — asserted, not assumed.
+  it("a rejected store call -> 500 from Express's own handler, still Referrer-Policy: no-referrer", async () => {
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ store });
+    const state = await mintAndGetState(app);
+    vi.spyOn(store, "peekAttempt").mockRejectedValueOnce(
+      new Error("peek exploded"),
+    );
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(500);
+    expect(res.headers["referrer-policy"]).toBe("no-referrer");
+  });
+
+  // A standing-constraint regression gate, same class as the no-anchor and
+  // Referrer-Policy assertions above: an unminted `state` falls through the
+  // callback ladder to the Expired page, and interpolating `state` (or
+  // `code`) into that page's HTML — instead of using it only to look up the
+  // attempt — reddens this test.
+  it("never reflects state/code into the HTML response", async () => {
     const { app } = buildApp();
-    const res = await request(app).get(
-      `/api/concept2/callback?state=${encodeURIComponent("<script>alert(1)</script>")}&code=${encodeURIComponent("<img src=x onerror=alert(2)>")}`,
+    const res = await asACookie(
+      request(app).get(
+        `/api/concept2/callback?state=${encodeURIComponent("<script>alert(1)</script>")}&code=${encodeURIComponent("<img src=x onerror=alert(2)>")}`,
+      ),
     );
     expect(res.text).not.toContain("<script>alert(1)</script>");
     expect(res.text).not.toContain("<img src=x onerror=alert(2)>");
+  });
+
+  it("the Linked page escapes a hostile Concept2 username end-to-end", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "<script>alert(1)</script>",
+    });
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(200);
+    expect(res.text).not.toContain("<script>alert(1)</script>");
+    expect(res.text).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  });
+});
+
+describe("exchange (POST /api/concept2/exchange) — the native ladder, design §6", () => {
+  it("happy path: same bearer -> 200 {linked:true, c2UserId, weightClass}, exchange used the NATIVE redirect, link written", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app, asA, NATIVE_MINT);
+    const res = await asA(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "abc123", state }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toStrictEqual({
+      linked: true,
+      c2UserId: 2211,
+      weightClass: "H",
+    });
+    expect(client.exchangeCode).toHaveBeenCalledWith(
+      "abc123",
+      "haus.waffle.ergomatic://oauth/callback",
+    );
+    expect((await store.getLink(userA.id))?.c2UserId).toBe(2211);
+    expect(JSON.stringify(res.body)).not.toContain("at-1");
+  });
+
+  // The echo-independence test (design §Testing): the attempt is located by
+  // the BODY's state alone — nothing else on the request names it.
+  it("locates the attempt from body.state only (no query, no header)", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app, asA, NATIVE_MINT);
+    const wrong = await asA(
+      request(app)
+        .post(`/api/concept2/exchange?state=${state}`)
+        .send({ code: "abc123", state: "not-the-state" }),
+    );
+    expect(wrong.status).toBe(400);
+    expect(wrong.body).toStrictEqual({ error: "invalid_state" });
+    const right = await asA(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "abc123", state }),
+    );
+    expect(right.status).toBe(200);
+  });
+
+  it("body shape: missing code or state -> 400 field-named, nothing peeked", async () => {
+    const store = makeFakeConcept2Store();
+    const peekSpy = vi.spyOn(store, "peekAttempt");
+    const { app } = buildApp({ store });
+    const noCode = await asA(
+      request(app).post("/api/concept2/exchange").send({ state: "s" }),
+    );
+    expect(noCode.status).toBe(400);
+    expect(noCode.body.field).toBe("code");
+    const noState = await asA(
+      request(app).post("/api/concept2/exchange").send({ code: "c" }),
+    );
+    expect(noState.status).toBe(400);
+    expect(noState.body.field).toBe("state");
+    expect(peekSpy).not.toHaveBeenCalled();
+  });
+
+  // Step 2b: the request states its own credential class before anything
+  // is peeked.
+  it("a COOKIE caller -> 400 wrong_surface before any peek", async () => {
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ store });
+    const state = await mintAndGetState(app, asA, NATIVE_MINT);
+    const peekSpy = vi.spyOn(store, "peekAttempt");
+    const res = await asACookie(
+      request(app).post("/api/concept2/exchange").send({ code: "c", state }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({ error: "wrong_surface" });
+    expect(peekSpy).not.toHaveBeenCalled();
+    expect(await store.peekAttempt(state)).not.toBeNull();
+  });
+
+  it("an unknown state -> 400 invalid_state", async () => {
+    const { app } = buildApp();
+    const res = await asA(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "c", state: "nope" }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({ error: "invalid_state" });
+  });
+
+  // Exit criterion 2, the other direction.
+  it("a WEB-minted state -> 400 wrong_surface, NOT consumed, exchange never called", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    const res = await asA(
+      request(app).post("/api/concept2/exchange").send({ code: "c", state }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({ error: "wrong_surface" });
+    expect(await store.peekAttempt(state)).not.toBeNull();
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+  });
+
+  // Exit criterion 1, native.
+  it("a DIFFERENT user's bearer -> 403 principal_mismatch, NOT consumed, exchange never called, no link", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app, asA, NATIVE_MINT);
+    const res = await asB(
+      request(app).post("/api/concept2/exchange").send({ code: "c", state }),
+    );
+    expect(res.status).toBe(403);
+    expect(res.body).toStrictEqual({ error: "principal_mismatch" });
+    expect(await store.peekAttempt(state)).not.toBeNull();
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+    expect(await store.getLink(userB.id)).toBeNull();
+    expect(await store.getLink(userA.id)).toBeNull();
+  });
+
+  it("a concurrent consume between peek and consume -> 400 invalid_state, exchange never called", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app, asA, NATIVE_MINT);
+    vi.spyOn(store, "consumeAttemptFor").mockResolvedValueOnce(null);
+    const res = await asA(
+      request(app).post("/api/concept2/exchange").send({ code: "c", state }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({ error: "invalid_state" });
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+  });
+
+  it("an attempt 15:01 old -> 400 expired (row deleted), 14:59 -> 200 (literal ms)", async () => {
+    let t = 0;
+    const clock = () => new Date(t);
+    const store = makeFakeConcept2Store(clock);
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ store, client });
+    const stale = await mintAndGetState(app, asA, NATIVE_MINT);
+    t += 901_000;
+    const expired = await asA(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "c", state: stale }),
+    );
+    expect(expired.status).toBe(400);
+    expect(expired.body).toStrictEqual({ error: "expired" });
+    expect(await store.peekAttempt(stale)).toBeNull();
+
+    const fresh = await mintAndGetState(app, asA, NATIVE_MINT);
+    t += 899_000;
+    const ok = await asA(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "c", state: fresh }),
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  it("exchange failure -> 502 c2_error; fetchMe failure -> 502 c2_error", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    vi.mocked(client.exchangeCode).mockResolvedValue({
+      ok: false,
+      grantDead: false,
+    });
+    const { app } = buildApp({ store, client });
+    const s1 = await mintAndGetState(app, asA, NATIVE_MINT);
+    const r1 = await asA(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "c", state: s1 }),
+    );
+    expect(r1.status).toBe(502);
+    expect(r1.body).toStrictEqual({ error: "c2_error" });
+
+    stubHappyExchange(client);
+    vi.mocked(client.fetchMe).mockResolvedValue({ ok: false });
+    const s2 = await mintAndGetState(app, asA, NATIVE_MINT);
+    const r2 = await asA(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "c", state: s2 }),
+    );
+    expect(r2.status).toBe(502);
+    expect(r2.body).toStrictEqual({ error: "c2_error" });
+    expect(await store.getLink(userA.id)).toBeNull();
+  });
+
+  it("D1: the Concept2 account already belongs to another user -> 409 already_linked_elsewhere, no link written", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink({ c2UserId: 2211 }));
+    const client = makeStubClient();
+    stubHappyExchange(client, 2211);
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app, asA, NATIVE_MINT);
+    const res = await asA(
+      request(app).post("/api/concept2/exchange").send({ code: "c", state }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "already_linked_elsewhere" });
+    expect(await store.getLink(userA.id)).toBeNull();
+  });
+});
+
+// RF24: every other test in this file constructs the router DIRECTLY, so
+// nothing here starts upstream of `app.ts`'s own wiring — and the web
+// ladder's identity check reads a dep (`sessions`) that only `app.ts`
+// supplies. `baseDeps`'s default `sessions` is literally
+// `{ resolveSession: async () => null }`, i.e. the exact mutation, so a
+// wiring line that stopped passing `deps.sessions` would leave every
+// assertion above green while no rower could ever complete a link. This
+// describe enters through `createApp` instead. (Task 7's integration rows
+// cover the same seam against real Postgres; this is the cheap unit-layer
+// half, and it also pins the mount order — the concept2 router must be
+// reached before `routes/data.ts`'s app-wide `requireUser`, which would
+// answer the cookie callback with a bare JSON 401.)
+describe("createApp wiring (RF24: the seam the router-level tests skip)", () => {
+  it("a cookie mint and cookie callback complete end-to-end through createApp", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const app = createApp(
+      baseDeps({
+        sessions: fakeSessionStore(),
+        stores: makeFakeStores(),
+        concept2: {
+          available: () => true,
+          store,
+          client,
+          webRedirectUri: WEB_REDIRECT_URI,
+        },
+      }),
+    );
+
+    const state = await mintAndGetState(app);
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(200);
+    // `text/html`, not JSON: proof the request never fell through to the
+    // data router's own gate.
+    expect(res.type).toBe("text/html");
+    expect(res.text).toContain("CONCEPT2 LINK · LINKED · HTTP 200");
+    expect(client.exchangeCode).toHaveBeenCalledWith(
+      "abc123",
+      WEB_REDIRECT_URI,
+    );
+    expect((await store.getLink(userA.id))?.c2UserId).toBe(2211);
   });
 });
 

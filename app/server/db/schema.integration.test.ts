@@ -1537,3 +1537,215 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
     expect(attempt.weightClass).toBe("L");
   });
 });
+
+// Wave E PR1.75a (2026-09-02-concept2-pr175-app-bind-design.md §2, TRIAD):
+// migration 0021 (was 0020 until #268 merged first and took that index) —
+// `concept2_auth_attempts` gains `surface` (enum link_surface, NOT NULL
+// DEFAULT 'web') and UNIQUE(user_id); `concept2_links` gains
+// UNIQUE(c2_user_id) (D1, approved); every pre-existing attempt row is
+// DELETED first (15-minute disposable rows — an in-flight link at deploy
+// restarts at mint, already the retry story). Same pre/post-migration
+// harness as the 0018 block above: rows are seeded against a folder capped
+// at 0020, then the real folder applies 0021 ALONE — the staging assertion
+// below pins that, so a future renumbering that leaves this block behind
+// goes red here instead of silently testing someone else's migration.
+describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_user_id), attempts wiped", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+  let seededUserId: string;
+  // Captured in beforeAll, asserted in the first `it` — the staging is only
+  // a proof about THIS migration if these hold. Literals, never derived
+  // from the arrays below (a test that computes its expectation from the
+  // thing it gates cannot go red on it).
+  const staging = { appliedBefore: -1, appliedAfter: -1, newestTag: "" };
+
+  const PRE_0021_TAGS = [
+    "0000_skinny_silver_fox",
+    "0001_tan_thunderball",
+    "0002_rare_khan",
+    "0003_spicy_firedrake",
+    "0004_slippery_starjammers",
+    "0005_fine_radioactive_man",
+    "0006_windy_wendell_vaughn",
+    "0007_shallow_kang",
+    "0008_strip_wu_steps",
+    "0009_brief_kingpin",
+    "0010_familiar_maddog",
+    "0011_futuristic_roxanne_simpson",
+    "0012_amused_wild_child",
+    "0013_melodic_sphinx",
+    "0014_graceful_microchip",
+    "0015_gorgeous_black_queen",
+    "0016_fancy_quentin_quire",
+    "0017_fair_whizzer",
+    "0018_natural_chronomancer",
+    "0019_happy_virginia_dare",
+    "0020_wooden_millenium_guard",
+  ];
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0021-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const [i, tag] of PRE_0021_TAGS.entries()) {
+      const idx = String(i).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDir, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number; tag: string }[] };
+    staging.newestTag = journal.entries[journal.entries.length - 1].tag;
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 20),
+      }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "pre-0021-user",
+        email: "pre-0021@migrate.test",
+        name: "Pre 0021",
+      })
+      .returning();
+    seededUserId = u.id;
+
+    // TWO live attempts for ONE user, seeded against the pre-0021 schema —
+    // legal there (no UNIQUE(user_id) yet, the exact "raceable" state the
+    // ruling named). Raw SQL because the typed builder already declares
+    // `surface`, which this table does not have yet.
+    await db.execute(
+      sql`insert into "concept2_auth_attempts" ("nonce", "user_id", "weight_class")
+          values ('pre-0021-a', ${u.id}, 'H'), ('pre-0021-b', ${u.id}, 'L')`,
+    );
+
+    const applied = async () =>
+      Number(
+        (
+          await pool.query<{ n: string }>(
+            "select count(*)::text as n from drizzle.__drizzle_migrations",
+          )
+        ).rows[0].n,
+      );
+    staging.appliedBefore = await applied();
+    await migrate(db, { migrationsFolder: "drizzle" });
+    staging.appliedAfter = await applied();
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("staged 0000..0020, then applied 0021 alone", () => {
+    expect(staging).toStrictEqual({
+      appliedBefore: 21,
+      appliedAfter: 22,
+      newestTag: "0021_crazy_gamma_corps",
+    });
+  });
+
+  it("wipes every pre-existing attempt (the 15-minute rows restart at mint)", async () => {
+    const rows = await db.execute(
+      sql`select count(*)::int as n from concept2_auth_attempts`,
+    );
+    expect((rows.rows[0] as { n: number }).n).toBe(0);
+  });
+
+  it("adds surface as NOT NULL DEFAULT 'web' — a rollback-image insert without surface still succeeds and reads 'web'", async () => {
+    // The PR1.5 image's createAttempt inserts no `surface` (design §2's
+    // rollback argument); this raw insert IS that image's statement.
+    await pool.query(
+      `insert into "concept2_auth_attempts" ("nonce", "user_id", "weight_class") values ('rollback-shape', $1, 'H')`,
+      [seededUserId],
+    );
+    const [row] = await db
+      .select({ surface: concept2AuthAttempts.surface })
+      .from(concept2AuthAttempts)
+      .where(eq(concept2AuthAttempts.nonce, "rollback-shape"));
+    expect(row.surface).toBe("web");
+    await db
+      .delete(concept2AuthAttempts)
+      .where(eq(concept2AuthAttempts.nonce, "rollback-shape"));
+  });
+
+  it("rejects a surface value outside the enum at the DB layer", async () => {
+    await expect(
+      pool.query(
+        `insert into "concept2_auth_attempts" ("nonce", "user_id", "weight_class", "surface") values ('bad-surface', $1, 'H', 'ios')`,
+        [seededUserId],
+      ),
+    ).rejects.toThrow(/invalid input value for enum link_surface/);
+  });
+
+  it("enforces one live attempt per user: a second row for the same user_id is a unique violation", async () => {
+    await pool.query(
+      `insert into "concept2_auth_attempts" ("nonce", "user_id", "weight_class", "surface") values ('uniq-1', $1, 'H', 'web')`,
+      [seededUserId],
+    );
+    await expect(
+      pool.query(
+        `insert into "concept2_auth_attempts" ("nonce", "user_id", "weight_class", "surface") values ('uniq-2', $1, 'H', 'web')`,
+        [seededUserId],
+      ),
+    ).rejects.toThrow(/concept2_auth_attempts_user_id_unique/);
+    await db
+      .delete(concept2AuthAttempts)
+      .where(eq(concept2AuthAttempts.nonce, "uniq-1"));
+  });
+
+  it("D1: two Ergomatic users cannot hold the same Concept2 account (UNIQUE c2_user_id)", async () => {
+    const [other] = await db
+      .insert(users)
+      .values({
+        googleSub: "post-0021-other",
+        email: "post-0021-other@migrate.test",
+        name: "Other",
+      })
+      .returning();
+    await db.insert(concept2Links).values({
+      userId: seededUserId,
+      c2UserId: 2211,
+      accessToken: "at",
+      refreshToken: "rt",
+      expiresAt: new Date("2026-10-01T00:00:00Z"),
+      weightClass: "H",
+    });
+    // The typed query builder wraps the underlying pg error in a
+    // `DrizzleQueryError` whose OWN `.message` is just "Failed query: ..."
+    // (drizzle-orm/errors.js) — the real Postgres text, which names the
+    // violated constraint, is on `.cause`, not `.message`. `toThrow(regex)`
+    // only reads `.message`, so it cannot see the constraint name here (the
+    // brief's original assertion form was written for the raw `pool.query`
+    // calls above, where pg's own error IS the top-level `.message`).
+    await expect(
+      db.insert(concept2Links).values({
+        userId: other.id,
+        c2UserId: 2211,
+        accessToken: "at2",
+        refreshToken: "rt2",
+        expiresAt: new Date("2026-10-01T00:00:00Z"),
+        weightClass: "L",
+      }),
+    ).rejects.toMatchObject({
+      cause: {
+        message: expect.stringMatching(/concept2_links_c2_user_id_unique/),
+      },
+    });
+  });
+});

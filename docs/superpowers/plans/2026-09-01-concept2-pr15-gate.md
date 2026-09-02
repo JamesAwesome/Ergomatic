@@ -668,6 +668,21 @@ principal binding" — round 10 (F1) found the SAME class of downgrade
 that broke (d)'s original claim also breaks this one, absent a fix.
 See the correction immediately below before reading the rest of this
 option as settled.**
+
+> **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#269):** the server half of
+> option (g) is BUILT: migration 0021 (`surface`, `UNIQUE(user_id)`, D1's
+> `UNIQUE(c2_user_id)`), `attempt.userId === req.user.id` BEFORE consume
+> and BEFORE exchange on BOTH the web callback (cookie, route-local
+> resolver) and `POST /api/concept2/exchange` (bearer), and the surface
+> predicate's authority (`req.authVia`, bearer wins, disagreement logged
+> app-wide and refused on `/api/concept2/*`). Every sentence below
+> describing the callback as unauthenticated, the attempts table as
+> lacking a surface column, or mint as raceable describes the PRE-1.75a
+> code and is kept as the record the ruling was drawn from. The native
+> return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's;
+> the activation gate stays closed until it ships. Current design:
+> `docs/superpowers/specs/2026-09-02-concept2-pr175-app-bind-design.md`.
+
 Every option (a)-(f) above operates entirely INSIDE THE BROWSER, where
 §2 already establishes no Ergomatic-issued credential reaches native.
 (g) moves the check to the APP instead, where a real credential (the
@@ -949,6 +964,20 @@ alone.**
 
 ## 4. The device-check card
 
+> **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#269):** the server half of
+> option (g) is BUILT: migration 0021 (`surface`, `UNIQUE(user_id)`, D1's
+> `UNIQUE(c2_user_id)`), `attempt.userId === req.user.id` BEFORE consume
+> and BEFORE exchange on BOTH the web callback (cookie, route-local
+> resolver) and `POST /api/concept2/exchange` (bearer), and the surface
+> predicate's authority (`req.authVia`, bearer wins, disagreement logged
+> app-wide and refused on `/api/concept2/*`). Every sentence below
+> describing the callback as unauthenticated, the attempts table as
+> lacking a surface column, or mint as raceable describes the PRE-1.75a
+> code and is kept as the record the ruling was drawn from. The native
+> return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's;
+> the activation gate stays closed until it ships. Current design:
+> `docs/superpowers/specs/2026-09-02-concept2-pr175-app-bind-design.md`.
+
 PR1.5 no longer ships NO surface of its own — the P1a-device fix round
 added a dev-only, build-time-flag-gated probe card
 (`src/monitor/Concept2LinkProbe.tsx`, `VITE_ENABLE_C2_LINK_PROBE`, folded
@@ -981,14 +1010,12 @@ now build items against a picked shape, not open questions:**
 - The callback's "Linked"/"Continue" page renders as designed after a
   REAL consent grant (both surfaces, now authenticated per §3(g)), not
   the dev probe's fake URL.
-- (g)'s own three preconditions, none built yet: the `surface` column
-  and migration (round 10), the dual-route
-  `attempt.userId === req.user.id` check BEFORE token exchange on both
-  `/api/concept2/callback` and the new `/api/concept2/exchange` (round
-  12), and Concept2's own approval of a new native `redirect_uri`. **All
-  three now have an owned delivery unit: PR1.75** (ROADMAP's Wave E,
-  sequenced PR1.5 → PR1.75 → PR2), which also owns the URL-scheme +
-  `appUrlOpen` handler moved off PR1.5's own scope (fix round 15).
+- (g)'s own three preconditions: the `surface` column and migration
+  (BUILT, 0021 at PR1.75a), the dual-route identity check (BUILT at
+  PR1.75a — `attempt.userId === req.user.id` before token exchange on
+  both the web callback and `/api/concept2/exchange`), Concept2's
+  approval of the native `redirect_uri` (log-dev DONE 2026-09-02; live
+  portal owed at cutover). The device-side return is PR1.75b's.
 - PR2's detect-identity treatment (§6: option (b), shipping alongside)
   — the callback/linked card naming which Ergomatic account the link
   goes to. **This is an OWED Gate 0 AMENDMENT, not yet rendered or
@@ -1044,6 +1071,20 @@ informed physical confirmation, never authentication of the consenting
 principal, matching what it actually proves.
 
 ## 6. Ruling
+
+> **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#269):** the server half of
+> option (g) is BUILT: migration 0021 (`surface`, `UNIQUE(user_id)`, D1's
+> `UNIQUE(c2_user_id)`), `attempt.userId === req.user.id` BEFORE consume
+> and BEFORE exchange on BOTH the web callback (cookie, route-local
+> resolver) and `POST /api/concept2/exchange` (bearer), and the surface
+> predicate's authority (`req.authVia`, bearer wins, disagreement logged
+> app-wide and refused on `/api/concept2/*`). Every sentence below
+> describing the callback as unauthenticated, the attempts table as
+> lacking a surface column, or mint as raceable describes the PRE-1.75a
+> code and is kept as the record the ruling was drawn from. The native
+> return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's;
+> the activation gate stays closed until it ships. Current design:
+> `docs/superpowers/specs/2026-09-02-concept2-pr175-app-bind-design.md`.
 
 **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded
 residual (option (a)) for the dark plumbing.** Rationale: the surface is

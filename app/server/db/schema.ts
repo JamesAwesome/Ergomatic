@@ -487,10 +487,16 @@ export const articleReads = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.slug] })],
 );
 
-// --- Wave E PR1: Concept2 stored shapes ---------------------------------
+// --- Wave E PR1 / PR1.75a: Concept2 stored shapes ------------------------
 
 // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD).
 export const weightClassEnum = pgEnum("weight_class", ["H", "L"]);
+
+// Wave E PR1.75a (2026-09-02-concept2-pr175-app-bind-design.md §1-§3, TRIAD):
+// which surface MINTED an attempt, derived server-side from which credential
+// `requireUser` resolved (bearer -> native, cookie -> web) — never a
+// client-asserted value, so there is nothing for an attacker to choose.
+export const linkSurfaceEnum = pgEnum("link_surface", ["native", "web"]);
 
 // One row per linked user. Tokens are plain columns behind the same trust
 // boundary every credential this app holds already lives behind (spec:
@@ -503,7 +509,15 @@ export const concept2Links = pgTable("concept2_links", {
   userId: uuid("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
-  c2UserId: integer("c2_user_id").notNull(),
+  // PR1.75a D1 (APPROVED, James 2026-09-02): one Concept2 account can be
+  // linked to at most ONE Ergomatic user per database. A detective control
+  // against RFC 9700 §4.5 code injection (the common case: the victim is
+  // already linked) and against two Ergomatic accounts writing one
+  // logbook. Cost, named in the design: a shared household Concept2 login
+  // can never sit behind two Ergomatic accounts. `upsertLink` maps the
+  // violation to `Concept2LinkConflictError`; both completion routes answer
+  // 409.
+  c2UserId: integer("c2_user_id").notNull().unique(),
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -526,22 +540,42 @@ export const concept2Links = pgTable("concept2_links", {
     .defaultNow(),
 });
 
-// Single-use, 15-minute link attempts: the browser hop carries no
-// credential, so the nonce CORRELATES the browser's return to this
-// attempt (spec §Architecture 1) — it does not by itself BIND the
-// consenting principal's identity; nothing here checks WHO completes it.
-// That identity check is the ruled activation shape's job (PR1.75,
-// gate doc 2026-09-01-concept2-pr15-gate.md §6), not this table.
-// No redirect_kind column — Branch A is chosen and the redirect URI is one
-// env-derived constant (plan deviation 1, superseded by the ruled hybrid —
-// see the design spec's Stored-Shapes section for the target `surface`
-// column, not yet added here).
+// Single-use, 15-minute link attempts. The nonce (`state`) CORRELATES a
+// completion request to its mint attempt; the completing PRINCIPAL is
+// authenticated separately on both completion routes (a cookie session on
+// the web callback, a bearer on `POST /exchange`) and must equal `user_id`
+// BEFORE the row is consumed and BEFORE any Concept2 call — PR1.75a,
+// design §5/§6. `surface` says which route may complete the row; the
+// `(nonce, user_id, surface)` predicate lives IN `consumeAttemptFor`'s
+// DELETE statement (stores/concept2.ts), so a wrong principal or wrong
+// surface consumes nothing by construction.
+//
+// UNIQUE(user_id): one live attempt per user, ENFORCED — mint is one
+// `INSERT ... ON CONFLICT (user_id) DO UPDATE` (design §2). PROVEN by
+// `concept2.integration.test.ts`'s deterministic race test ("createAttempt
+// genuinely BLOCKS on an uncommitted conflicting row") that two concurrent
+// mints serialize on this index and exactly one row survives. The old
+// delete-then-insert image does NOT yield two rows on this schema: measured
+// against real Postgres (Task 2 fix round 2), it dies with
+// `concept2_auth_attempts_user_id_unique` propagating unmapped — "two rows"
+// was the PRE-0021 behaviour, before that index existed.
+//
+// Migration 0021 rollback, both halves (design §2): (1) `surface` carries
+// DEFAULT 'web' for ROLLBACK, not for writes — the PR1.5 image's
+// `createAttempt` inserts no `surface`, and a plain NOT NULL would make
+// every mint 500 after a rollback; new code always writes it explicitly.
+// (2) The surviving UNIQUE(user_id) turns the rollback image's concurrent
+// double-mint (delete-then-insert) into a unique violation (500) rather
+// than two rows — accepted: a rare self-race, strictly smaller blast radius
+// than the unbounded attempts the index prevents.
 export const concept2AuthAttempts = pgTable("concept2_auth_attempts", {
   nonce: text("nonce").primaryKey(),
   userId: uuid("user_id")
     .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
+    .references(() => users.id, { onDelete: "cascade" })
+    .unique(),
   weightClass: weightClassEnum("weight_class").notNull(),
+  surface: linkSurfaceEnum("surface").notNull().default("web"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

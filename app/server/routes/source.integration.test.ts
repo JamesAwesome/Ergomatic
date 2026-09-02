@@ -262,20 +262,28 @@ describe("POST/GET /api/logs: source is derived when absent, refused when it con
 // (`node_modules/drizzle-orm/pg-core/dialect.js`, `migrate()`), so a copy
 // of `drizzle/` with the journal truncated at 0019 stages the exact
 // pre-0020 schema; rows are inserted there — no `source` column exists to
-// fill — and the real folder then applies 0020 alone. This is a genuine
-// pre-migration state, not a re-run of the CASE against post-migration
-// rows.
+// fill — and a SECOND copy truncated at 0020 then applies 0020 alone. This
+// is a genuine pre-migration state, not a re-run of the CASE against
+// post-migration rows.
+//
+// The second step used to migrate from the real `drizzle/` folder, which
+// applied 0020 alone only for as long as 0020 was the newest migration in
+// the repo. PR1.75a's 0021 (2026-09-02) made that false and turned this
+// into a failing test about someone else's migration; capping the second
+// folder at 0020 restores "0020 alone" as a property of THIS test rather
+// than of the repo's migration count.
 describe("migration 0020 backfills every pre-existing row and leaves the column NOT NULL (criterion 3c)", () => {
   let container: StartedPostgreSqlContainer;
   let pool: pg.Pool;
   let db: Db;
   let staged: string;
+  let stagedThrough20: string;
   let userId: string;
   // Facts captured in beforeAll and asserted in the first `it` below — the
   // staging is only a proof if these hold.
   const staging = {
     lastStagedTag: "",
-    lastJournalTag: "",
+    appliedTag: "",
     sourceColumnsBefore: -1,
     appliedBefore: -1,
     appliedAfter: -1,
@@ -299,21 +307,24 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
     const journal = JSON.parse(
       fs.readFileSync("drizzle/meta/_journal.json", "utf8"),
     ) as { entries: { idx: number; tag: string }[] };
-    const before = journal.entries.filter((e) => e.idx <= 19);
-    staging.lastStagedTag = before.at(-1)?.tag ?? "";
-    staging.lastJournalTag = journal.entries.at(-1)?.tag ?? "";
-    staged = fs.mkdtempSync(path.join(os.tmpdir(), "ergomatic-0019-"));
-    fs.mkdirSync(path.join(staged, "meta"));
-    fs.writeFileSync(
-      path.join(staged, "meta", "_journal.json"),
-      JSON.stringify({ ...journal, entries: before }),
-    );
-    for (const e of before) {
-      fs.copyFileSync(
-        `drizzle/${e.tag}.sql`,
-        path.join(staged, `${e.tag}.sql`),
+    const stage = (prefix: string, entries: { idx: number; tag: string }[]) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+      fs.mkdirSync(path.join(dir, "meta"));
+      fs.writeFileSync(
+        path.join(dir, "meta", "_journal.json"),
+        JSON.stringify({ ...journal, entries }),
       );
-    }
+      for (const e of entries) {
+        fs.copyFileSync(`drizzle/${e.tag}.sql`, path.join(dir, `${e.tag}.sql`));
+      }
+      return dir;
+    };
+    const before = journal.entries.filter((e) => e.idx <= 19);
+    const through20 = journal.entries.filter((e) => e.idx <= 20);
+    staging.lastStagedTag = before.at(-1)?.tag ?? "";
+    staging.appliedTag = through20.at(-1)?.tag ?? "";
+    staged = stage("ergomatic-0019-", before);
+    stagedThrough20 = stage("ergomatic-0020-", through20);
     await migrate(db, { migrationsFolder: staged });
 
     const columnsBefore = await pool.query<{ column_name: string }>(
@@ -350,7 +361,8 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
     // row, `steps: []` and no device.
     ids.free = await insert(null, []);
 
-    // Now 0020, and only 0020.
+    // Now 0020, and only 0020 — from the folder capped at 0020, so a
+    // later migration in `drizzle/` cannot join this step.
     const applied = async () =>
       Number(
         (
@@ -360,7 +372,7 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
         ).rows[0].n,
       );
     staging.appliedBefore = await applied();
-    await migrate(db, { migrationsFolder: "drizzle" });
+    await migrate(db, { migrationsFolder: stagedThrough20 });
     staging.appliedAfter = await applied();
   });
 
@@ -368,6 +380,7 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
     await pool.end().catch(() => {});
     await container.stop().catch(() => {});
     fs.rmSync(staged, { recursive: true, force: true });
+    fs.rmSync(stagedThrough20, { recursive: true, force: true });
   });
 
   async function sourceOf(id: string): Promise<string> {
@@ -381,7 +394,7 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
   it("staged exactly 0000..0019 (no source column), then applied 0020 alone", () => {
     expect(staging).toStrictEqual({
       lastStagedTag: "0019_happy_virginia_dare",
-      lastJournalTag: "0020_wooden_millenium_guard",
+      appliedTag: "0020_wooden_millenium_guard",
       sourceColumnsBefore: 0,
       appliedBefore: 20,
       appliedAfter: 21,

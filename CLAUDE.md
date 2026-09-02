@@ -198,8 +198,11 @@ requirements).
     verdicts. Present PM verdicts with the artifact they judge; never
     merge on green CI alone where a PM gate applies.
   - **They PROPOSE ledger entries; the controller lands them.** Neither
-    agent writes to the repo, including its own ledger — they are usually
-    dispatched against the main checkout, and main is PR-only. The
+    agent writes to the repo — its own ledger, a spec, or a plan — in ANY
+    checkout. The worktree is not an exception: the rule is about who owns
+    the commit, not which directory it lands in (an agent committed design
+    rev 3 of PR1.75 inside its worktree on 2026-09-02, and the old wording
+    here read as inapplicable there). The
     definitions originally said "append", three engagements did exactly
     that, and 94 good lines sat uncommitted in the main checkout until
     someone noticed. The entry comes back in the report as ready-to-paste
@@ -708,6 +711,16 @@ often they recur.
     the layer that can reach it** — and a green assertion you could not make
     fail is decoration, so delete it or move it rather than keeping it for
     the coverage.
+    **A concurrency gate proved by RACING is RF21 by construction (PR #269,
+    2026-09-02).** "Two concurrent mints leave one row" was specified with a
+    `Promise.all` race; the named mutation (atomic upsert → delete + insert)
+    stayed green three runs running because two promises do not reliably
+    interleave on a fast local Postgres. What bit was DETERMINISTIC: hold an
+    uncommitted conflicting row inside an open transaction on one connection
+    while the code under test runs on another — the upsert blocks and then
+    resolves, the mutant blocks and then dies on the unique index. Prefer one
+    arranged race to any number of parallel attempts, and verify the pool has
+    ≥2 connections or the test hangs instead of failing.
 
 22. **`git checkout -- <file>` to revert a mutation probe, on a file that
     also holds uncommitted work.** Queued as a lesson by James on
@@ -724,6 +737,12 @@ often they recur.
     probe's revert is a no-op against a clean file, and the probe can never
     take anything with it. `git stash` is not the alternative here — the
     stash stack is shared with other sessions (agent briefing).
+    **And anchor the mutation on a UNIQUE string (PR #269, 2026-09-02).**
+    Task 6's round-0 probe edited the first match of a `sessions:` line —
+    the unmounted test-signin router, not the concept2 mount it meant to
+    break — and read green as evidence. A probe that lands on a duplicate
+    line is RF21 with extra steps: grep the anchor first and confirm it
+    returns ONE hit, or anchor on surrounding context that does.
 
 23. **Adding an affordance to a surface that already offers the same
     thing, and killing the better offer with it.** Queued as a lesson by

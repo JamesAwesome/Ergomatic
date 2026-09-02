@@ -15,7 +15,6 @@ const cfg: C2ClientConfig = {
   baseUrl: "https://log-dev.concept2.com",
   clientId: "test-client-id",
   clientSecret: "test-client-secret",
-  redirectUri: "https://app.test/c2/callback",
 };
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -99,9 +98,11 @@ describe("createC2Client", () => {
   });
 
   describe("authorizeUrl", () => {
-    it("builds /oauth/authorize with the results:write scope", () => {
+    it("builds /oauth/authorize with the results:write scope and the CALLER's redirect_uri", () => {
       const client = createC2Client(cfg, vi.fn());
-      const url = new URL(client.authorizeUrl("nonce-123"));
+      const url = new URL(
+        client.authorizeUrl("nonce-123", "https://app.test/c2/callback"),
+      );
       expect(url.origin + url.pathname).toBe(
         "https://log-dev.concept2.com/oauth/authorize",
       );
@@ -113,15 +114,37 @@ describe("createC2Client", () => {
       );
       expect(url.searchParams.get("state")).toBe("nonce-123");
     });
+
+    // PR1.75a §3: the redirect is chosen PER SURFACE at mint, so two calls
+    // with different redirects must produce different URLs — a client that
+    // still closed over one boot constant would pass the test above.
+    it("two calls with different redirect URIs carry each its own (a private-use scheme survives URL encoding)", () => {
+      const client = createC2Client(cfg, vi.fn());
+      const web = new URL(
+        client.authorizeUrl("n", "https://app.test/api/concept2/callback"),
+      );
+      const native = new URL(
+        client.authorizeUrl("n", "haus.waffle.ergomatic://oauth/callback"),
+      );
+      expect(web.searchParams.get("redirect_uri")).toBe(
+        "https://app.test/api/concept2/callback",
+      );
+      expect(native.searchParams.get("redirect_uri")).toBe(
+        "haus.waffle.ergomatic://oauth/callback",
+      );
+    });
   });
 
   describe("exchangeCode", () => {
-    it("POSTs form-encoded with the exact six-key set including scope", async () => {
+    it("POSTs form-encoded with the exact six-key set including scope, redirect_uri = the CALLER's", async () => {
       const fetchImpl = vi
         .fn()
         .mockResolvedValue(jsonResponse(200, PROBE_200_BODY));
       const client = createC2Client(cfg, fetchImpl);
-      await client.exchangeCode("auth-code-xyz");
+      await client.exchangeCode(
+        "auth-code-xyz",
+        "haus.waffle.ergomatic://oauth/callback",
+      );
 
       expect(fetchImpl).toHaveBeenCalledTimes(1);
       const [url, init] = fetchImpl.mock.calls[0] as [URL, RequestInit];
@@ -147,7 +170,9 @@ describe("createC2Client", () => {
       expect(body.get("client_secret")).toBe("test-client-secret");
       expect(body.get("grant_type")).toBe("authorization_code");
       expect(body.get("code")).toBe("auth-code-xyz");
-      expect(body.get("redirect_uri")).toBe("https://app.test/c2/callback");
+      expect(body.get("redirect_uri")).toBe(
+        "haus.waffle.ergomatic://oauth/callback",
+      );
       expect(body.get("scope")).toBe("user:read,results:write");
     });
 
@@ -156,7 +181,10 @@ describe("createC2Client", () => {
         .fn()
         .mockResolvedValue(jsonResponse(200, PROBE_200_BODY));
       const client = createC2Client(cfg, fetchImpl);
-      const result = await client.exchangeCode("auth-code-xyz");
+      const result = await client.exchangeCode(
+        "auth-code-xyz",
+        "https://app.test/c2/callback",
+      );
       expect(result).toStrictEqual({
         ok: true,
         tokens: {
@@ -280,19 +308,41 @@ describe("createC2Client", () => {
   });
 
   describe("fetchMe", () => {
-    it("200 {data:{id}} -> c2UserId", async () => {
+    it("200 {data:{id, username}} -> c2UserId + username", async () => {
       const fetchImpl = vi
         .fn()
-        .mockResolvedValue(jsonResponse(200, { data: { id: 2211 } }));
+        .mockResolvedValue(
+          jsonResponse(200, { data: { id: 2211, username: "jmorelli" } }),
+        );
       const client = createC2Client(cfg, fetchImpl);
       const result = await client.fetchMe("some-access-token");
-      expect(result).toStrictEqual({ ok: true, c2UserId: 2211 });
+      expect(result).toStrictEqual({
+        ok: true,
+        c2UserId: 2211,
+        username: "jmorelli",
+      });
 
       const [url, init] = fetchImpl.mock.calls[0] as [URL, RequestInit];
       expect(String(url)).toBe("https://log-dev.concept2.com/api/users/me");
       expect((init.headers as Record<string, string>).authorization).toBe(
         "Bearer some-access-token",
       );
+    });
+
+    // No committed capture carries `username` (plan observation 3): the
+    // field is read as OPTIONAL and a non-string reads as absent.
+    it("200 {data:{id}} without a username -> username null, still ok", async () => {
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(200, { data: { id: 2211, username: 7 } }),
+        );
+      const client = createC2Client(cfg, fetchImpl);
+      expect(await client.fetchMe("t")).toStrictEqual({
+        ok: true,
+        c2UserId: 2211,
+        username: null,
+      });
     });
 
     it("PROBE 401 invalid-access-token body -> {ok:false}, never throws", async () => {
