@@ -2641,6 +2641,17 @@ async function postLog(
     // a fixture omitting it is not a smaller row — it is an impossible one.
     restSeconds?: number | null;
     restMeters?: number | null;
+    // Door PR A (2026-09-02) §1.1: the honest close reason, so a capture can
+    // seed a genuinely PARTIAL row. Mirrors `schema.ts`'s `endedByEnum` at
+    // the same hand-copied-literal-union fidelity `source` above uses.
+    endedBy?:
+      | "finished"
+      | "rower"
+      | "link-lost"
+      | "program-failed"
+      | "program-dropped"
+      | "interrupted"
+      | null;
   },
 ): Promise<void> {
   const result = await page.evaluate(async (b) => {
@@ -3125,6 +3136,271 @@ test("log-detail", async ({ page }) => {
   await scrollTraceChartIntoFrame(page);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-detail.png"),
+  });
+});
+
+// Door PR A (2026-09-02) §1.3 — Gate 0-A's own composition, captured: the
+// PARTIAL marker in slot A (ABOVE the heroes, between the black rule and
+// AVG SPLIT) with a `MACHINE CONFIRMED · WORK ONLY` block further down, the
+// pairing Gate 0-A rendered and James approved on 2026-09-02.
+//
+// EVERY NUMBER IS HAND-CHECKABLE IN THE FRAME (recurring failure #7,
+// sharpened). Five planned 500m intervals; the rower stopped after two.
+// The two rowed ones carry `actualSource: "pm5"` WITH an `actualSeconds`
+// at/above the 1s floor, so `measuredElapsedSeconds` counts them —
+// `N = 2`. The other three carry no `actualSource` at all (clause 3's own
+// "never reached" shape), so `M - N = 3` are unmeasured and the marker
+// reads `STOPPED EARLY · 2 of 5 intervals measured`. Count the rows with
+// numbers in them: exactly two.
+// Heroes are TIER A, so they render the MACHINE's own pair verbatim:
+// 108.4 + 115.6 = 224.0 s = TIME 3:44, 500 + 500 = DISTANCE 1000, and
+// AVG SPLIT 1:52.0 is the machine's own `avgPaceSecondsPer500m` — which
+// is also 500 x 224.0 / 1000 = 112.0 s, so the hero and the two rows agree
+// in one frame rather than needing to be taken on trust.
+// NO `restSeconds`/`restMeters` ON PURPOSE (RF3, realistic fixtures): a
+// TERMINATED row's RC-1 rest pair is genuinely null — `computeWorkRestSums`
+// runs only for a `"finished"` close (`storedSummary.ts`'s own tier-A
+// comment says so), so seeding one here would be an impossible row.
+// The 0x003F verification payload is the SAME real 19 bytes as
+// `log-detail`'s (`docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.json`,
+// seq 64) — reused rather than invented, because the replay corpus holds
+// no TERMINATED machine-confirmed capture of its own, and real bytes with
+// a stated provenance beat a hand-picked code.
+async function seedPartialLogDetail(page: Page): Promise<void> {
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    held: "held",
+    pain: 3,
+    thumbs: "up",
+    notes: "Cut it short. Legs had nothing left after the second one.",
+    // The legacy stored-fallback trio — never read on a tier-A row, kept
+    // for realism exactly as `log-detail`'s own fixture keeps them.
+    avgSplitSeconds: 112.0,
+    timeSeconds: 224,
+    distanceMeters: 1000,
+    machineWorkSeconds: 224.0,
+    machineWorkMeters: 1000,
+    machineSummary: {
+      avgPaceSecondsPer500m: 112.0,
+      verificationBytes: [
+        0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01, 0x00,
+        0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      ],
+    },
+    steps: [
+      {
+        label: "500m @ 1:52.0",
+        targetSplit: 112.0,
+        actualSplit: 108.4,
+        actualSeconds: 108.4,
+        actualSource: "pm5",
+        meters: 500,
+        actualMeters: 500,
+        actualSpm: 28,
+      },
+      {
+        label: "500m @ 1:52.0",
+        targetSplit: 112.0,
+        actualSplit: 115.6,
+        actualSeconds: 115.6,
+        actualSource: "pm5",
+        meters: 500,
+        actualMeters: 500,
+        actualSpm: 26,
+      },
+      { label: "500m @ 1:52.0", targetSplit: 112.0, meters: 500 },
+      { label: "500m @ 1:52.0", targetSplit: 112.0, meters: 500 },
+      { label: "500m @ 1:52.0", targetSplit: 112.0, meters: 500 },
+    ],
+  });
+}
+
+/** Opens the seeded partial row from History and asserts every element the
+ *  capture is supposed to show, BEFORE the shot (recurring failure #7:
+ *  prove the state, then shoot). Shared by the portrait and landscape
+ *  captures so the two can never drift apart in what they assert. */
+async function openAndVerifyPartialLogDetail(page: Page): Promise<void> {
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: "Sea Fret" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+
+  // Slot A: the marker, ABOVE the heroes.
+  await expect(
+    page.locator("p.summary-meta", { hasText: "STOPPED EARLY" }),
+  ).toHaveText("STOPPED EARLY · 2 of 5 intervals measured");
+  const markerPrecedesHeroes = await page.evaluate(() => {
+    const marker = [...document.querySelectorAll("p.summary-meta")].find((el) =>
+      el.textContent?.includes("STOPPED EARLY"),
+    );
+    const heroes = document.querySelector(".summary-heroes-block");
+    if (marker === undefined || heroes === null) return null;
+    return (marker.compareDocumentPosition(heroes) & 4) !== 0;
+  });
+  expect(markerPrecedesHeroes).toBe(true);
+
+  // The heroes, structurally (DOM order: avgSplit, time, distance) — real
+  // numbers, never fallback dashes.
+  const heroValues = page.locator(".summary-hero-value");
+  await expect(heroValues.nth(0)).toHaveText("1:52.0");
+  await expect(heroValues.nth(1)).toHaveText("3:44");
+  // `1000`, NOT `1,000`: the DETAIL hero renders the raw metre count while
+  // the History row's own hero groups thousands (`log-history-partial`
+  // below asserts `AVG 1:52.0 · 1,000 m` on the same row). Measured, not
+  // assumed — the first version of this assertion said `1,000` and went
+  // red. An observation about two surfaces formatting one number two ways,
+  // recorded here rather than changed: it predates this PR and belongs to
+  // whoever owns the hero block.
+  await expect(heroValues.nth(2)).toHaveText("1000");
+
+  // Five rows, two of them measured — the count the marker names, visible
+  // in the same frame.
+  const rows = page.locator(".summary-row");
+  await expect(rows).toHaveCount(5);
+  await expect(rows.nth(0).locator(".summary-row-pace")).toHaveText("1:48.4");
+  await expect(rows.nth(1).locator(".summary-row-pace")).toHaveText("1:55.6");
+  await expect(page.locator(".summary-row-pace")).toHaveCount(2);
+
+  // Gate 0-A's own pairing: the marker sits ABOVE a MACHINE CONFIRMED ·
+  // WORK ONLY block, and both are on screen at once.
+  await expect(
+    page.getByRole("group", { name: "MACHINE CONFIRMED · WORK ONLY" }),
+  ).toBeVisible();
+  // `fmtSplit`, WITH tenths (`FromTheLog.tsx`'s `machineConfirmedValueLine`
+  // uses `fmtSplit`, not `fmtDuration`, on purpose) — so `3:44.0`, and the
+  // TIME hero above reads a tenth-less `3:44` off `fmtDuration`. Both are
+  // 224.0 s, the machine's own work pair, and both are on screen at once.
+  await expect(page.getByText("3:44.0 work · 1000m")).toBeVisible();
+}
+
+test("log-detail-partial", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-detail-partial@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedPartialLogDetail(page);
+  await openAndVerifyPartialLogDetail(page);
+  // Viewport-only, same reason `log-monitor-dropped` states: the marker
+  // sits at the very top of the document, so there is nothing to scroll
+  // into frame, and a `fullPage` shot on this route would re-paint the
+  // fixed tab bar at every stitched segment.
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-partial.png"),
+  });
+});
+
+// The LANDSCAPE half of the pair above — same seed, same route, same
+// assertions, only the viewport differs. The repo's design-gate rule
+// (CLAUDE.md, "A SPEC THAT CHANGES WHAT A ROWER READS OR SEES") requires
+// the rendered thing in BOTH orientations, and landscape is where the
+// combined `WORD · N of M intervals measured` line is most at risk of
+// wrapping or clipping: `log-monitor-dropped-landscape`'s own idiom.
+test("log-detail-partial-landscape", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-detail-partial-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedPartialLogDetail(page);
+  await openAndVerifyPartialLogDetail(page);
+  await page.setViewportSize({ width: 844, height: 390 });
+  // NO `neutralizeFixedTabBarForFullPageCapture` here, unlike
+  // `log-monitor-dropped-landscape`: this route renders inside
+  // `.overlay-screen` (`position: fixed`, its own scroller), so making the
+  // tab bar static hoists it to the DOCUMENT's top — which on a viewport
+  // shot of a fixed overlay is the top of the FRAME. Measured: the first
+  // version of this capture put a stray `TODAY … YOU` strip across the top
+  // of the image. The marker sits at the top of the overlay anyway, so
+  // there is nothing to scroll into frame and nothing to free.
+  // The marker must still be one unwrapped line at 844px wide, not a
+  // clipped or two-line one — measured, never judged by eye. `.summary-meta`
+  // is a block, so `scrollWidth`/`clientWidth` are real here (RF21's own
+  // inline-element smell does not apply).
+  const markerBox = await page
+    .locator("p.summary-meta", { hasText: "STOPPED EARLY" })
+    .evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      // ONE RECT PER LINE BOX. Not `height / lineHeight`: this rule's
+      // computed `line-height` is `normal`, so `parseFloat` gives `NaN`
+      // and the comparison silently passes nothing (measured — the first
+      // version of this assertion read `expected 1, received NaN`). A
+      // Range over the element's contents yields one client rect per line
+      // the text actually occupies.
+      lines: (() => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return range.getClientRects().length;
+      })(),
+    }));
+  expect(markerBox.scrollWidth).toBeLessThanOrEqual(markerBox.clientWidth);
+  expect(markerBox.lines).toBe(1);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-partial-landscape.png"),
+  });
+});
+
+// Door PR A §1.3, list half — Gate 0-A slot B: the chip on the History
+// row's own numbers line, beside the numbers it qualifies. A PARTIAL row
+// ABOVE a complete one, so the capture shows the contrast rather than
+// asserting it in prose: the same door, the same shape of row, and only
+// `endedBy` differing.
+test("log-history-partial", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-history-partial@e2e.test",
+    name: "Screenshot Tester",
+  });
+  // The COMPLETE row first, so it sits BENEATH (History is newest-first —
+  // `justrow-history-chip`'s own stated ordering trick).
+  await postLog(page, {
+    workoutTitle: "Occluded Front",
+    workoutType: "AT",
+    deviceName: "PM5 432331249",
+    endedBy: "finished",
+    held: "held",
+    pain: 2,
+    avgSplitSeconds: 118.0,
+    timeSeconds: 1416,
+    distanceMeters: 6000,
+    steps: [
+      {
+        label: "6000m @ 1:58.0",
+        targetSplit: 118.0,
+        actualSplit: 118.0,
+        actualSeconds: 1416,
+        actualSource: "pm5",
+        meters: 6000,
+        actualMeters: 6000,
+      },
+    ],
+  });
+  await seedPartialLogDetail(page);
+
+  await page.goto("/today/log");
+  await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
+  const rows = page.locator(".today-log-row");
+  await expect(rows).toHaveCount(2);
+  // Top row: partial, chip first on the hero line, then the numbers.
+  await expect(rows.nth(0).locator(".log-partial-chip")).toHaveText(
+    "STOPPED EARLY",
+  );
+  await expect(rows.nth(0).locator(".today-log-hero")).toHaveText(
+    "STOPPED EARLYAVG 1:52.0 · 1,000 m",
+  );
+  // Bottom row: the control. Same door, same erg, finished — no chip.
+  await expect(rows.nth(1).locator(".log-partial-chip")).toHaveCount(0);
+  await expect(rows.nth(1).locator(".today-log-hero")).toHaveText(
+    "AVG 1:58.0 · 6,000 m",
+  );
+  // Never the Just Row chip: a different class, so the seven shipped
+  // `.free-row-chip` assertions cannot see it.
+  await expect(page.locator(".free-row-chip")).toHaveCount(0);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-history-partial.png"),
   });
 });
 
