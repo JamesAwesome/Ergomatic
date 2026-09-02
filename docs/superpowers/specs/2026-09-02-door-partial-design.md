@@ -2,8 +2,9 @@
 
 **Date:** 2026-09-02 · **Wave:** F · **Class:** TRIAD (a stored word's meaning
 in PR A; a stored number's meaning in PR B) · **Status:** DRAFT, awaiting
-James's review; anchor pass RUN 2026-09-02 (ledger entry landed with this
-spec) · **Gate 0:** two, one per PR, rendered before any implementation task.
+James's review; anchor pass RUN 2026-09-02 and a spec pass RUN the same day on the
+written text (five blockers, all applied below; both ledger entries landed
+with this spec) · **Gate 0:** two, one per PR, rendered before any implementation task.
 
 ## What and why
 
@@ -52,18 +53,27 @@ written. Each section names what held and what was corrected.
    row cannot be partial in stored data at all: `/session/log` is reached only
    from `isComplete(run)` (`Timer.tsx:477-483`), and the abandon path's own
    copy is _"Nothing will be saved: no log, no actuals."_ (`Timer.tsx:815`).
-2. `steps.length > 0` — a connected Just Row stores `steps: []` and always
-   closes `endedBy: "rower"` (its only exit is TERMINATE, `monitorRun.ts:184-188`;
-   `JustRowLog.tsx:243`). Without this clause every successful Just Row is
-   PARTIAL. This is the clause the first draft of this spec lacked.
+2. `steps.length > 0` — a connected Just Row stores `steps: []`
+   (`JustRowLog.tsx:244`) and ordinarily closes `endedBy: "rower"` (End or
+   TERMINATE, `monitorRun.ts:184-188`); it can also close `link-lost`
+   (`useMonitorSession.ts:665`) or `interrupted` (Today's row), and the
+   driver's terminal branch (`driver.ts:2605-2622`) has no free-row opt-out, so
+   a piece set up at the PM5 while the app watches in Just Row could close
+   `finished` (SUSPECTED, no capture). Whatever the close, a free row has no
+   plan to be partial against; without this clause every successful Just Row
+   is PARTIAL. This is the clause the first draft of this spec lacked.
 3. At least one step carries no `actualSource` — an interval never reached
-   already stores no `actualSource` (`logDraft.ts:917-923`, _"Unambiguous
+   already stores no `actualSource` (`logDraft.ts:913-917`, _"Unambiguous
    against the row-local discriminant"_). This discriminator exists today; the
    spec adds no field for it.
 4. `endedBy ∈ {rower, link-lost, program-failed, program-dropped, interrupted}`
-   — the six-member server enum (`schema.ts:76-83`) minus `finished`, and
-   never `null` (`timer`/`manual` rows post no `endedBy`; `routes/data.ts:1740`
-   stores `?? null`).
+   — the six-member server enum (`schema.ts:76-83`) minus `finished`. `null`
+   is NOT in the set and it DOES occur on `pm5` rows: `timer`/`manual` rows
+   post no `endedBy`, and so does a legacy v1/v2 `MonitorRun` logged from
+   Today (`monitorRun.ts:228-233`, `JustRowLog.tsx:244` spreads it
+   conditionally; `routes/data.ts:1738` stores `?? null`). A `null` close is
+   NOT partial. This is why the clause is an ALLOWLIST of five and never
+   `endedBy !== "finished"`, which would mark every legacy row partial.
 
 **Authority.** `endedBy` owns HOW THE SESSION ENDED — End button or machine
 TERMINATE both write `rower`, so venue is lost by design and this spec does
@@ -89,17 +99,35 @@ the rower produced; there is no threshold.
 
 | `endedBy` | who ended it | marker (draft, Gate 0-A decides the words) |
 |---|---|---|
-| `rower` | the rower (End, or the monitor's TERMINATE) | `STOPPED EARLY · N of M intervals` |
-| `link-lost` | the app lost the monitor | existing `LINK LOST · the app lost the monitor before the end` line, plus `N of M intervals` |
-| `program-dropped` | the erg discarded the program | `THE MONITOR DROPPED THE PROGRAM · N of M intervals` |
-| `program-failed` | our `program()` call failed | `THE PROGRAM DID NOT LOAD · N of M intervals` |
-| `interrupted` | the record was closed from Today's unlogged row, no close event | `LEFT UNFINISHED · N of M intervals` |
+| `rower` | the rower (End, or the monitor's TERMINATE) | `STOPPED EARLY · N of M intervals measured` |
+| `link-lost` | the app lost the monitor | existing `LINK LOST · the app lost the monitor before the end`, plus the suffix when PARTIAL |
+| `program-dropped` | the erg discarded the program | `THE MONITOR DROPPED THE PROGRAM · N of M intervals measured` |
+| `program-failed` | our `program()` call failed against an already-open run (`useMonitorSession.ts:4946`); reaches the log only via Today's unlogged row, carrying the previous program's steps | `THE PROGRAM DID NOT LOAD · N of M intervals measured` |
+| `interrupted` | the record was closed from Today's unlogged row with no wire evidence (`monitorRun.ts:1108-1119`) | `LEFT UNFINISHED · N of M intervals measured` |
 
-`N` = steps carrying `actualSource`; `M` = `steps.length`. The marker follows
-`LINK_LOST_LINE`'s structural rule (`storedSummary.ts:953-962`): an ALLOWLIST
-on the value, never a negation, so a future sixth close reason renders nothing
-rather than a wrong word. The existing `LINK LOST` line is subsumed (one line
-per row, never two).
+**`N` = `steps.filter(isMonitorRowMeasurable).length`** — the repo's ONE
+counting rule, `isMeasuredReading` (`summaryModel.ts:613-619`: from the
+monitor AND `elapsedSeconds >= 1`) through its `LogStep` adapter
+(`summaryModel.ts:987-989`), whose own comment says _"so the connected
+surface's lost banner counts intervals by the same rule this screen will judge
+them by."_ `N` therefore counts intervals MEASURED, the same quantity as "N
+intervals kept" on the live surface — one number, two surfaces, never a
+third rule. `M` = `steps.length`. **`N` is not progress:** after a lost
+boundary (`logDraft.ts:804-806`) a rower who did two and a bit reads
+`1 of 5 intervals measured`, which is true of what was measured and silent
+about what was rowed; the copy says "measured", and that row (a stop after a
+lost boundary) is IN Gate 0-A so James approves it rendered, not described.
+
+**The close-reason line keeps its own trigger.** `LINK_LOST_LINE` renders on
+`endedBy === "link-lost"` ALONE, steps-independent by design
+(`storedSummary.ts:955-962`), and it is a release-noted promise
+(`releaseNotes.ts:351`). It is NOT replaced: the line's allowlist widens to
+the five close reasons above (its own word per reason), and
+`· N of M intervals measured` is a SUFFIX appended only when all four
+PARTIAL clauses hold. A link-lost Just Row and a link-lost row with every step
+measured keep their `LINK LOST` line, suffix-free. The allowlist is never a
+negation, so a future sixth close reason renders nothing rather than a wrong
+word.
 
 ### 1.3 Where it renders
 
@@ -115,9 +143,14 @@ per row, never two).
   model, so the block's own text does not change. Gate 0-A shows that pairing.
 - **History / Today list rows.** `LOG_LIST_COLUMNS` carries `source` and
   `endedBy` but not `steps`, so the list cannot evaluate clause 3. The list
-  projection gains a SQL-derived boolean `partial` over `steps` (the
-  `machineAvgPaceSecondsPer500m` idiom, `stores/logs.ts:342-344`) evaluating
-  the same four clauses server-side, so list and detail agree by construction
+  projection gains a SQL-derived boolean `partial` over `steps` — the shape is
+  migration 0020's own `EXISTS (SELECT 1 FROM jsonb_array_elements("steps") AS
+  s WHERE …)` (a set predicate over the array; `stores/logs.ts:342-344`'s
+  scalar path cast is the wrong idiom) evaluating the same four clauses
+  server-side. Key absence in SQL (`NOT (s ? 'actualSource')`) equals
+  `undefined` in TS because the route 400s `actualSource: null`
+  (`routes/data.ts:472-479`) — attacked and held. List and detail agree by
+  construction
   — the divergence class that burned at `HistoryList.test.tsx:459`. The list
   row renders a short `STOPPED EARLY` / `LINK LOST` / etc. chip from the same
   allowlist. No new column.
@@ -150,10 +183,16 @@ row lost on the exact arrival the member exists to serve (RF25's shape).
 
 So the biconditional `deviceName ≠ null ⟺ source = 'pm5'` SURVIVES: `pm5`
 requires a name, the other three forbid one. `logSource.ts:60-75` widens to
-four cases. `server/concept2/mapping.ts:49` keys monitor provenance on
-`deviceName === null` today and stays correct without change; the spec still
-rewrites it to `row.source !== "pm5"` in PR A, because provenance is what the
-column is FOR and the null check was convenient, not stated.
+four cases. Two readers key provenance on `deviceName === null` today and both stay
+correct without change (0020's backfill CASE was `WHEN device_name IS NOT NULL
+THEN 'pm5'`, and the contradiction rule has enforced the biconditional on
+every write since — the rewrite is a true no-op, attacked and held):
+`server/concept2/mapping.ts:49` and `storedSummary.ts:648`
+(`buildStoredTotalLine`, whose comment at `:638-641` calls it _"the SAME
+signal `sourceLabel`/`buildMeta` above already use"_ — a sentence PR A makes
+false). PR A rewrites BOTH to `row.source !== "pm5"` and reconciles that
+comment, because provenance is what the column is FOR and the null check was
+convenient, not stated.
 
 ### 2.3 `timeLabel`, re-derived positively
 
@@ -163,8 +202,10 @@ word. A fourth member added without touching it silently gains a time the
 live screen never shows (phase-lm.md:314-318 predicted exactly this). PR A
 replaces it with an allowlist: `timeLabel` renders for `pm5`, `timer` and
 `no-reading` (the session happened at a clock time the app witnessed), never
-for `manual`. `sourceLabel` gains the fourth arm and a `default` that returns
-the column value verbatim rather than `undefined`.
+for `manual`. `sourceLabel`'s switch stays TOTAL over `LogSource` with the
+repo's `assertNever` (`connectedAxes.ts:153`), so the compiler is what forces
+this mirror to move; the additive matrix's blank-word row below is an OLD
+build's behaviour, which no arm in this PR can change.
 
 ### 2.4 The migration, and why it is not additive the way the column was
 
@@ -190,16 +231,19 @@ was additive and the member's is NOT:**
 | old client reads new row | `sourceLabel`'s switch has no `default` → blank source word, plus a `timeLabel` | cosmetic; stated in the release note |
 | new client reads old row | unchanged | — |
 
-**Rollback floor:** `docs/RELEASING.md`'s table gains a row for the tag that
+**Rollback floor:** `docs/RELEASING.md`'s rollback table (`:164-166`) gains a row for the tag that
 ships PR A: rolling the API back past it 400s every `no-reading` save.
 
-**Mirror census (the schema comment says three; the real set is eight and
-two are not compile-enforced):** the pgEnum (`schema.ts:152`),
+**Mirror census (the schema comment says three; the real set is ten, and
+three are not compile-enforced):** the pgEnum (`schema.ts:152`),
 `domain/types.ts:101-102` `LOG_SOURCES`, the 400 message literal
 (`data.ts:1678`, user-facing), `logSource.ts`'s switch, `storedSummary.ts:299`'s
 switch, `e2e/screenshots.spec.ts:2470`'s type, `summaryModel.ts`'s live word,
-and the migration. All move in one commit; the schema comment is corrected to
-count them.
+`routes/source.integration.test.ts:164` and `:252` (the latter pins the exact
+400 message and goes red on day one), and the migration. All move in one
+commit; the schema comment is corrected to count them — and the plan runs the
+census command (`grep -rn '"pm5", "timer", "manual"' app`) rather than
+trusting this paragraph.
 
 ---
 
@@ -230,7 +274,17 @@ copy, and do not change.
   indistinguishable from ergs that genuinely advertised "PM5" (the common
   case). A backfill would corrupt correct data to fix a rare one.
 - `useMonitorSession.ts:1100`'s claim _"no screen ever renders the `"PM5"`
-  placeholder"_ is false beside `JustRow.tsx:301`; reconciled in PR A.
+  placeholder"_ is contradicted by `surfaceModel.ts:1890` (reachable);
+  `JustRow.tsx:301` sits behind an arm that required `deviceName !== null`
+  (`:112`) and may be as dead as `capacitorBle.ts:494` — the plan applies the
+  reachability test before pinning it. The comment sweep also covers
+  `LogSession.tsx:723` and `storedSummary.ts:295-298`, both describing the
+  old fallback.
+- **Why `MONITOR` is what makes a nameless erg's save LEGAL:** a `pm5` row
+  must carry a name (the biconditional), so the fallback is not decoration —
+  without one, a nameless erg's row would 400. A stored `MONITOR` is a caption
+  in the device-name column and reads as one; no consumer compares the value
+  (attacked and held) and the C2 payload carries no device name.
 - No identity collision: every stored-row consumer of `deviceName` is a null
   check, never a value comparison (attacked and held).
 
@@ -249,16 +303,37 @@ PR A is that migration.
    practical risk nil, and the rollback-floor row records it. Drizzle's
    generated `DROP COLUMN` carries no data-loss guard; the census above is the
    guard.
-2. **Legacy warm-up guards on `LogSeed.steps[].kind`** — `logDraft.ts:865-871`
-   and the union at `:600` (`kind` stays the literal union, never `string`,
-   per the sub-ruling). `storedSummary.ts:427-433` cites the warm-up skip as a
-   live cause of a Σ-steps gap; that comment is reconciled in the same commit.
-3. **RC-12's last unreconciled comment** at `domain/monitor/types.ts:607`.
+2. **Legacy warm-up guards on `LogSeed.steps[].kind`** — the guard
+   `if (seedStep.kind === "warmup") return;` at `logDraft.ts:864` and the
+   union `kind: "warmup" | "work"` at `logDraft.ts:607` (`kind` stays the
+   literal union, never `string`, per the sub-ruling; the ROADMAP's `:857`/
+   `:600` are stale). The guard's own comment (`logDraft.ts:860-861`) names the
+   consequence — _"Removing this guard adds a phantom warm-up row to what gets
+   SAVED"_ — for the residual population: an unlogged pre-warm-up-removal
+   `MonitorRun` still on a phone. That population is accepted in writing here
+   (ten tags old, the Today door names such rows as stale). No reader re-runs
+   `buildMonitorLogSteps` over STORED rows, so saved data is untouched.
+   `storedSummary.ts:427-433` cites the warm-up skip as a live cause of a
+   Σ-steps gap; that comment is reconciled in the same commit.
+3. **RC-12's last unreconciled comment** — `onDisconnect`'s doc block at
+   `domain/monitor/types.ts:630-631` (_"the phone's Bluetooth stack
+   resetting"_ beside a `CORRECTED (Phase LL Task 2)` strike of the iOS
+   backgrounding claim). `grep -n RC-12 domain/monitor/types.ts` returns
+   nothing and the ROADMAP's `:607` is the `Transport` interface; the plan
+   verifies by subject, not line. Reconciliation: the sentence states what the
+   walks established (RC-12's finding), and the strike block is folded into
+   it rather than left as a contradiction beneath it.
 4. **The `source` derive-when-absent SUNSET — DUE.** `v0.34.0` is tagged at
    `138dbe8c` and contains #268, so the sunset's trigger ("the tag after the
    one that ships #268") is the tag that ships PR A. `source` becomes REQUIRED
-   on `POST /api/logs`; `deriveLogSource` and the `source=derived` log line
-   are deleted; `RELEASING.md`'s API note records the break. **Blast radius,
+   on `POST /api/logs`; the ROUTE stops calling `deriveLogSource` and its
+   `source=derived` log line goes. **`deriveLogSource` itself SURVIVES** as
+   migration 0020's parity oracle: `routes/source.integration.test.ts:447`
+   (_"the migration's own CASE and deriveLogSource agree on every row"_) is
+   the only executable check on that backfill and 0020's header cites it by
+   name; the function's comment is rewritten to say it is the backfill's
+   oracle and has no production caller. `RELEASING.md`'s API note records the
+   break. **Blast radius,
    larger than the ROADMAP row said:** every install older than v0.34.0 loses
    the ability to save ANY log, not just the derive path. **James (2026-09-02):
    "i can make sure they are by merge. remind me before we do."** PR A's
@@ -282,12 +357,26 @@ reaches an OLDER server as the number without the marker, 201, in every sum
 forever; a new `actualSource` member 400s the whole save with no retry. New
 key names make the old-server degradation identical to not shipping §5:
 both keys dropped together, the row reads as it does today. `steps` is
-untyped `jsonb` (`schema.ts:195`); no migration.
+untyped `jsonb` (`schema.ts:195`); no migration. **But the NEW server drops
+them too until its explicit field list grows** (`routes/data.ts:593-604`, ten
+`if (x !== undefined) step.x = x` lines): PR B's task (0) widens `LogStep`,
+the route's field list and its bounds, and the headline gate starts at
+`POST /api/logs` and reads the row back through `GET` (RF24).
+
+**The pair is elapsed, not rowing time.** `domain/monitor/types.ts:189-190`:
+_"There is NO paused state on the wire — mid-workout the clock runs whether
+or not the rower pulls."_ A rower who stops pulling and then presses End
+banks a `partialSeconds` that includes idle time. **No split, pace or rate is
+ever derived from the partial pair**; the step row shows the two numbers as
+what they are (metres so far, interval clock so far). A `rowing` frame with
+`intervalIndex: null` (the D3 divergence, `types.ts:151-159`) writes no
+partial — absence over invention, the rule `logDraft` already applies to
+null-index actuals.
 
 ### 5.2 Invariants (stated as invariants, not mechanisms — RF27)
 
 - **I-B1** A partial is written only on a close with `endedBy ≠ finished`.
-  Tier B2 (`isReconstructableClose` = `finished | null`) therefore never sees
+  Tier B2 (`isReconstructableClose` = `finished | null | undefined`) therefore never sees
   one, and its "provably historical, non-growing" population
   (`storedSummary.ts:390-400`) stays true.
 - **I-B2** A partial is never an `IntervalActual`. `measuredIntervalCount`
@@ -313,7 +402,7 @@ untyped `jsonb` (`schema.ts:195`); no migration.
 
 | state | mint | clear | survives teardown / relaunch / re-arm |
 |---|---|---|---|
-| in-flight interval reading (`lastRowingFrameRef`: `{ intervalIndex, meters, seconds }`) | every `state === "rowing"` frame of the live run | each boundary actual for that interval (the in-flight interval advanced); per-run resets; teardown | no / no / no |
+| in-flight interval reading (`lastRowingFrameRef`: `{ intervalIndex, meters, seconds }`) | every `state === "rowing"` frame of the live run with a non-null `intervalIndex` | each boundary actual for that interval (the in-flight interval advanced); the FOUR per-run reset sites `rowingStreakRef` uses (`useMonitorSession.ts:3536` RC-37 exit, `:4810` `beginFreeRow`, `:4886` `program`, `:5169` cancel) plus `connect()` and `teardown()` — six, enumerated by line in the plan (the `beginFreeRow` copy was missed once before, its own comment says so) | no / no / no |
 
 The close arms that write a partial: the user End arm, the live-drop arm
 (`program-dropped`), and the link-lost arm — each reads the ref once at close
@@ -338,7 +427,10 @@ saved row together, one vocabulary.
   orientations, against the current screen: the PARTIAL marker for each of
   the five close reasons, `NO MONITOR READING` in place of `LOGGED BY HAND`
   with its time, `MONITOR` where `PM5` sat, the marker above
-  `MACHINE CONFIRMED · WORK ONLY`, and the History list chip. Every colour
+  `MACHINE CONFIRMED · WORK ONLY`, a stop AFTER a lost boundary (the
+  `1 of 5 intervals measured` row, so the "measured, not progress" reading is
+  approved on sight), a link-lost row with every step measured (line, no
+  suffix), and the History list chip. Every colour
   pairing's contrast ratio stated.
 - **Gate 0-B (before PR B's tasks):** the step row carrying a partial (how a
   250 of 500 reads beside a measured 500), the saved-row heroes unchanged by
@@ -356,8 +448,10 @@ saved row together, one vocabulary.
   `workout_type`'s enumeration has no such member). PARTIAL is asserted
   entirely on our own behalf; the C2 fence (`mapping.ts:50`, `endedBy ===
   "finished"`) excludes every partial, so a PARTIAL row can never appear on C2
-  as an unmarked short row. Filed alongside (RF14): **no connected Just Row can
-  ever reach Concept2** under that fence, since a JR always closes `rower`.
+  as an unmarked short row. Filed alongside (RF14): **a connected Just Row closed by End or
+  TERMINATE cannot reach Concept2** under that fence (`rower`); whether the
+  driver's terminal branch can close a free row `finished` is SUSPECTED and
+  unsettled (§1.1 clause 2).
 - **The PM5 has the concept**: WORKOUTSTATE distinguishes WORKOUTEND from
   TERMINATE (`domain/monitor/types.ts:186-192`); we store the derivative
   (`endedBy`), and our End button also writes `terminated`, so venue is lost
@@ -402,9 +496,11 @@ Gates: a replay over a committed multi-interval capture closed by End
 mid-interval (the real driver, the real hook, storage read back — RF24's
 "start upstream of the producer") asserting the partial keys on the in-flight
 step and NO change to `actuals`, heroes, or `measuredIntervalCount`; a
-resting-state close asserting no partial (mutate I-B3); an old-server
-simulation (validator allowlist without the keys) asserting the row equals
-today's (this is the additive matrix as a test).
+resting-state close asserting no partial (mutate I-B3); the field-list task
+(0) gated by the POST→GET read-back (mutate: remove the two `if` lines → the
+keys vanish → red). The old-server direction of the additive matrix is NOT
+tested — a hand-written copy of the old allowlist would be a mirror (RF11) —
+it is argued in §5.1 from the validator's own comment and stated as such.
 
 ### 8.3 Owed before PR B's plan, no hardware
 
@@ -435,9 +531,9 @@ evidence (the predicate requires an empty store).
 
 ## §10 — Filed outside this spec (RF14)
 
-- ROADMAP register: **no connected Just Row can ever be sent to Concept2**
-  (`mapping.ts:50`).
+- ROADMAP register: **a connected Just Row closed by End/TERMINATE cannot be
+  sent to Concept2** (`mapping.ts:50`); the `finished` path is unsettled.
 - ROADMAP sunset row: blast radius corrected (all saving, not the derive
   path); rides PR A; James confirms the tester floor at merge.
-- `storedSummary.ts:80-82` points at a `## Phase LM` ROADMAP heading that no
-  longer exists; PR A repoints it at this spec.
+- `storedSummary.ts:74` and `:81` both point at a `## Phase LM` ROADMAP heading
+  that no longer exists; PR A repoints both at this spec.

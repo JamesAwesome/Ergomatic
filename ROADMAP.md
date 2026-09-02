@@ -1193,15 +1193,18 @@ and unscheduled; it is not a wish.
 promoted into a wave, or it is killed with a reason. "Rides the next PR touching
 X" is a real disposition — most of these are single files.
 
-- [ ] **No connected Just Row can ever be sent to Concept2.** Filed at the
-      door anchor pass, 2026-09-02 (RF14). `server/concept2/mapping.ts:50`
-      fences the export on `endedBy === "finished"`, and a connected Just
-      Row's only exit is TERMINATE, so it always closes `rower`
-      (`monitorRun.ts:184-188`, `JustRowLog.tsx:243`). The v0.34.0 flagship
-      is permanently ineligible for the export button until the fence
-      admits a `rower` close for free rows (`steps: []`). Needs a Wave E
-      ruling: widen the fence for free rows, or accept and say so in the
-      button's copy. **S**
+- [ ] **A connected Just Row closed by End or TERMINATE cannot be sent to
+      Concept2.** Filed at the door anchor pass, 2026-09-02 (RF14), narrowed
+      at the spec pass. `server/concept2/mapping.ts:50` fences the export on
+      `endedBy === "finished"`; End and TERMINATE both close `rower`
+      (`monitorRun.ts:184-188`, `JustRowLog.tsx:244`), which is every
+      ordinary Just Row. Whether the driver's terminal branch
+      (`driver.ts:2605-2622`, no free-row opt-out) can close a free row
+      `finished` when a piece is set up at the PM5 is SUSPECTED and
+      unsettled. Either way the v0.34.0 flagship is ineligible for the
+      export button in ordinary use until the fence admits a `rower` close
+      for free rows (`steps: []`). Needs a Wave E ruling: widen the fence
+      for free rows, or accept and say so in the button's copy. **S**
 
 ## Codebase-audit owners
 - **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02): on

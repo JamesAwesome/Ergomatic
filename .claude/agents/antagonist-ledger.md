@@ -5597,3 +5597,76 @@ same way.
   Concept2** — `mapping.ts:50` requires `endedBy === 'finished'` and a JR always
   closes `rower`. The v0.34.0 flagship is permanently ineligible for the Wave E
   export button.
+
+## 2026-09-02 — Wave F `door` spec pass (written spec, post-anchor)
+
+- **CLAIM: "the existing `LINK LOST` line is subsumed by the PARTIAL marker."**
+  FALSIFIED by reading the OLD line's own trigger rather than the new one's.
+  `storedSummary.ts:960-962` renders it on `endedBy === "link-lost"` ALONE,
+  steps-independent and deliberately so; the new marker needs four clauses. So
+  "subsumed" silently deletes a shipped, release-noted line
+  (`releaseNotes.ts:351`) from every link-lost row the new predicate EXCLUDES —
+  a link-lost Just Row (`steps: []`) and a link-lost row with every step
+  measured. TECHNIQUE: **when a spec says a new marker "subsumes" an old line,
+  enumerate the rows the NEW predicate excludes and ask what renders there —
+  the old line's trigger is almost always broader, and the spec's own gate list
+  will be indexed on the new predicate, so nothing can go red.**
+- **CLAIM: "N = steps carrying `actualSource`" as the marker's number.**
+  FALSIFIED twice. (a) The spec's OWN cited producers of a short step
+  (`logDraft.ts:804-806`, `types.ts:62-63`) mean N under-counts what was ROWED
+  after a lost boundary — `1 of 5` for a rower who did two and a bit, on the
+  screen built to stop the app under-stating a session. (b) The repo already
+  computes this count, twice, under one shared rule: `isMeasuredReading`
+  (`summaryModel.ts:613-619`) via `readingOfLogStep`, whose adapter's doc
+  comment says outright *"so the connected surface's lost banner counts
+  intervals by the same rule this screen will judge them by."* The spec's N
+  drops that rule's elapsed clause, making a THIRD definition — while the same
+  spec's §5.4 argues at length that its number and the banner's cannot collide.
+  TECHNIQUE: **before accepting a new COUNT in a spec, grep for the count the
+  codebase already computes over the same objects and read its doc comment.
+  This repo writes "so X and Y agree" into the predicate itself; a spec that
+  redefines the quantity beside it has broken an agreement nobody restated.**
+- **RF24 AT SPEC STAGE, not review stage.** §5 designed new step keys
+  (`partialMeters`/`partialSeconds`) on the correct reasoning that the server's
+  explicit field list drops unknown keys — and then listed six client tasks and
+  a gate that reads back from localStorage. The NEW server drops them too.
+  TECHNIQUE: **for any new field inside an existing payload, find the server's
+  explicit field list and confirm a TASK adds it, then check that the named
+  gate STARTS upstream of the POST. A spec can quote the exact comment that
+  explains the hazard and still decompose past it.**
+- **LINE NUMBERS TRANSCRIBED FROM THE ROADMAP ARE STALE BY CONSTRUCTION.** Two
+  of three riders cited lines that no longer hold their subject:
+  `domain/monitor/types.ts:607` for an RC-12 comment (`grep -n RC-12` on that
+  file returns NOTHING; the comment is at `:630-631`), and `logDraft.ts:865-871`
+  / `:600` for a guard at `:864` and a union at `:607`. Both numbers came from
+  `ROADMAP.md:701-709` verbatim. TECHNIQUE: **verify a transcribed citation by
+  grepping the cited file for the SUBJECT (the ticket id, the string literal),
+  never by reading the cited line — a stale number often lands on plausible
+  code, and `607` appearing as both a true and a false citation in one spec is
+  how the file name got swapped.**
+- **BEFORE DELETING A FUNCTION AT A SUNSET, GREP ITS NON-ROUTE CALLERS.**
+  `deriveLogSource` is not only the route's derive path: it is the oracle in
+  `routes/source.integration.test.ts:447` ("the migration's own CASE and
+  deriveLogSource agree on every row"), and migration
+  `0020_wooden_millenium_guard.sql`'s own header cites that test by name.
+  Deleting it retires the only executable check on a shipped backfill and
+  falsifies a migration's documentation. TECHNIQUE: **a sunset's blast radius
+  includes every gate the symbol IS, not only every caller it has — grep the
+  migrations directory for the function name.**
+- **A CENSUS CLAIM IS A GREPPABLE CLAIM, AND TWO IN THIS SPEC WERE SHORT.** The
+  mirror set "eight" misses `routes/source.integration.test.ts:164` and `:252`
+  (the latter pins the exact 400 message and goes red); the biconditional-reader
+  census names `mapping.ts:49` and misses `storedSummary.ts:648`, whose own
+  comment claims it uses "the SAME signal `sourceLabel`/`buildMeta` above
+  already use" — which the same PR makes false. TECHNIQUE: **run the spec's own
+  census command. "The real set is eight" is the one kind of claim that costs
+  ten seconds to check and reads as authority forever.**
+- **VETTED GROUND (held under this pass, on top of the anchor's):** the
+  `source !== "pm5"` rewrite is a true no-op for every stored row (0020's
+  backfill CASE plus `logSourceContradiction` make the biconditional total in
+  both eras); the SQL key-presence test and the TS `undefined` test agree
+  exactly, because the route 400s `actualSource: null`; the RC-18 census is
+  line-exact; a stored `MONITOR` collides with nothing (every stored-row
+  `deviceName` consumer is a null check, never a value comparison); clause 4's
+  allowlist is exactly the server enum minus `finished`; `interrupted` has no
+  live frame; the additive matrix's old-client-reads-new-row row is correct.
