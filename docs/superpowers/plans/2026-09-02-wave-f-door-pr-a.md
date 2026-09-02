@@ -581,8 +581,14 @@ build's behaviour no arm in this PR can change, stated in the release note.
       --    ROLLBACK POSTURE: `docs/RELEASING.md`'s rollback table gains a row
       --    for the tag that ships this. A server older than this migration
       --    400s every `no-reading` save (`domain/types.ts`'s LOG_SOURCES,
-      --    checked at `routes/data.ts`), and the client's only 400 retry
-      --    strips `workoutId` — the save is LOST, not degraded.
+      --    checked at `routes/data.ts`) on field `source`. The client's
+      --    only 400 retry is scoped to `field === "workoutId"`
+      --    (`src/session/LogSession.tsx:773-783`), so this 400 does not
+      --    retry — it shows its save failure and holds the record
+      --    (`:806-808`), the same shape as the 0020 row above. A write
+      --    outage, not data loss (CORRECTED — task-1 fix round 1; the
+      --    file this template produced originally said "the save is LOST,
+      --    not degraded", which the code does not do).
       --
       -- 2. `preferences.warmup` is DROPPED (spec §4 rider 1). No reader in
       --    either direction: `routes/data.ts:1862-1863` already 400s the

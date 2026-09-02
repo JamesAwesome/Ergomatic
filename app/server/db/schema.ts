@@ -439,9 +439,12 @@ export const preferences = pgTable("preferences", {
   // surfaces (Today's START HERE block, You › Learning the app, News's
   // dismissed-only pin) — the client no longer reads or writes this
   // column, and the pinned News articles carry the teaching alone. LEFT
-  // IN PLACE ON PURPOSE, dormant not load-bearing — same rollback
-  // reasoning as `warmup` above (the API stays additive-only between
-  // tags, and the server route still accepts/returns the field).
+  // IN PLACE ON PURPOSE, dormant not load-bearing — the API stays
+  // additive-only between tags, and the server route still
+  // accepts/returns the field. Unlike `warmup` above (DROPPED in
+  // migration 0022, once its own rollback exposure was mapped — see
+  // `docs/RELEASING.md`'s rollback table for what a drop actually
+  // costs), no rider has queued this column's removal.
   startHereDismissed: boolean("start_here_dismissed").notNull().default(false),
 });
 

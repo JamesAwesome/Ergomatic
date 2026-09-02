@@ -11,6 +11,7 @@ import {
   copyFile,
   readFile,
   writeFile,
+  rm,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1682,6 +1683,7 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
   afterAll(async () => {
     await pool.end().catch(() => {});
     await container.stop().catch(() => {});
+    await rm(tempDirThrough21, { recursive: true, force: true });
   });
 
   it("staged 0000..0020, then applied 0021 alone", () => {

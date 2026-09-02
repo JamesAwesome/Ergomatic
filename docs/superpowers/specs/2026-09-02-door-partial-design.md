@@ -248,7 +248,7 @@ was additive and the member's is NOT:**
 | direction | outcome | mitigation |
 |---|---|---|
 | old client → new server | posts `manual` as today. **Since #273 / v0.35.0 an old client that posts NO `source` is already a 400**, whatever PR A does | none needed |
-| **new client → old server** (deploy lag; `RELEASING.md:99-103` records six merges deploying nothing for eleven hours on 2026-09-01) | `LOG_SOURCES.includes` 400s `no-reading` on field `source`; the client retries only `workoutId` → **save lost** | server deploys on merge and the client reaches phones by TestFlight later, so the window is the deploy lag only; the rollback floor row (below) forbids rolling the API back past this tag |
+| **new client → old server** (deploy lag; `RELEASING.md:99-103` records six merges deploying nothing for eleven hours on 2026-09-01) | `LOG_SOURCES.includes` 400s `no-reading` on field `source`; the client's retry is scoped to `field === "workoutId"` (`LogSession.tsx:773-783`), so this 400 does not retry → **save fails, record held on the phone, the rower retries; a write outage, not data loss — `LogSession.tsx:806-808`** | server deploys on merge and the client reaches phones by TestFlight later, so the window is the deploy lag only; the rollback floor row (below) forbids rolling the API back past this tag |
 | old client reads new row | `sourceLabel`'s switch has no `default` → blank source word, plus a `timeLabel` | cosmetic; stated in the release note |
 | new client reads old row | unchanged | — |
 
