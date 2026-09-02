@@ -411,8 +411,15 @@ const LOG_LIST_COLUMNS = {
   // `[].some(...)` is in TS — and is kept as a documented short-circuit and
   // as an explicit statement of clause 2, mirroring the TS predicate's own
   // clause-2 comment. MEASURED, not asserted: deleting this line alone
-  // leaves the agreement test green (mutation M4.1a); the mutation that
-  // bites the Just Row row is flipping `exists` to `not exists` (M4.1).
+  // leaves the agreement test green (mutation M4.1a).
+  //
+  // The EXISTS is what enforces clause 3, and flipping it to `not exists`
+  // is what proves so (M4.1): with this length clause PRESENT the bite
+  // lands on the PARTIAL row (`true` -> `false`, and its chip word with
+  // it), because a Just Row's `[]` is already short-circuited here. Only
+  // with BOTH mutations does the Just Row itself flip `false` -> `true` —
+  // measured, not assumed, because this comment's first draft claimed the
+  // Just Row bite for the single mutation and that is not what happens.
   //
   // COALESCE IS LOAD-BEARING: `ended_by` is nullable (`source` and `steps`
   // are NOT NULL), and SQL's `true and null` is NULL, not false. Without
