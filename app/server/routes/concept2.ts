@@ -311,7 +311,11 @@ export function createConcept2Router({
     if (bearerToken(req) !== undefined) {
       const viaBearer = await resolveBearerSession(req);
       if (viaBearer && user && viaBearer.id !== user.id) {
-        noReferrer(res);
+        // No `noReferrer(res)` here: step 0 above already set it for every
+        // exit from this handler, and a second call could not be observed
+        // to matter — a gate that cannot go red is worse than none (RF21).
+        // The header is asserted on THIS response by the ambiguous-callback
+        // test; step 0's call is what makes that assertion pass.
         res.status(400).json({ error: "ambiguous_auth" });
         return;
       }
