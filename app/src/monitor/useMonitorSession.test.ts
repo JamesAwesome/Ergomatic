@@ -12291,6 +12291,357 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Wave F PR 3, §3 timing addendum (lifecycle design spec 2026-08-31 §3):
+// `pause-declared` gains `gapsMs`/`sinceResumeMs`, `resume-first-frame`
+// gains a second entry's `nextGapsMs`. Instrument-only — I3 (the pure
+// predicate) is untouched, and every existing leg in the describe block
+// above stays green unmodified (none of them delivers a fourth post-resume
+// frame, the threshold this addendum's own collection needs — see
+// `setupTimingSession`'s own header for why a fresh composition was needed
+// rather than reusing `setupResumeInstrumentSession`).
+// ---------------------------------------------------------------------------
+
+describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeMs, resume-first-frame's nextGapsMs", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/monitorTransport");
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  /** Same mocked-adapter composition `setupResumeInstrumentSession` (§3's
+   *  own describe block, above) uses — duplicated locally per this file's
+   *  established practice, not reused across blocks — but ALSO drives a
+   *  full `program()`/arm handshake (`programAndArm`'s own body, inlined:
+   *  the shared helper's `Session`/`FakeControls` types are structural, but
+   *  this composition's `result`/`fake` come from a dynamically re-imported
+   *  module, so inlining avoids any cross-import type friction). Needed
+   *  because `gapsMs`/`frameArrivalsRef` only ever populate inside the
+   *  `phase === "live"` branch (`isPausedRun`'s own consumer) — every leg in
+   *  the sibling describe block stays at `pairing`/`ready`, which is enough
+   *  for `resume-first-frame`/`resume-stale-run` (unconditional on phase)
+   *  but not for this addendum. */
+  async function setupTimingSession(events: FakeTimelineEvent[]): Promise<{
+    fake: FakeControls;
+    result: Session;
+    lifecycleCb: (event: "background" | "foreground") => void;
+    exportLog: () => string;
+    unmount: () => void;
+  }> {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({
+        // Same timer-hygiene defaults `harness()` uses (this file's own
+        // top-level composition) — without them the arm handshake below
+        // waits on REAL `setTimeout`s that `vi.useFakeTimers()` never fires
+        // on its own.
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(lifecycleCb).toBeDefined();
+
+    // `programAndArm`'s own body (top of file), inlined — see this
+    // function's own header for why.
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+
+    return {
+      fake,
+      result,
+      lifecycleCb: lifecycleCb!,
+      exportLog: () => result.current.exportLog(),
+      unmount,
+    };
+  }
+
+  /** Same fixed split/spm idiom `setupResumeInstrumentSession`'s own local
+   *  `frame` uses, one block over — a distance override is enough to key
+   *  `freezeKey`. */
+  const SPLIT0 = 120;
+  const SPM0 = 22;
+  function frame(atMs: number, distanceMeters: number): FakeTimelineEvent {
+    return status(atMs, { distanceMeters, currentSplit: SPLIT0, spm: SPM0 });
+  }
+
+  /** Five strictly-increasing frames, 100ms apart — `PULL_EVIDENCE_FRAMES`
+   *  (5)'s own evidence, the same shape the RC-25 pause fixture uses one
+   *  block up in this file, needed before anything may freeze into a
+   *  pause. Also what carries `phase` from `ready` to `live`: the first of
+   *  these is the flywheel-evidence frame `handleFrame`'s own `"ready"`
+   *  branch opens the record on. */
+  function rowedFrames(
+    startAtMs: number,
+    startDistance: number,
+  ): FakeTimelineEvent[] {
+    return [0, 1, 2, 3, 4].map((i) =>
+      frame(startAtMs + i * 100, startDistance + i),
+    );
+  }
+
+  /** A batch of frames scheduled to land exactly on a test's own upcoming
+   *  `tick(fake, gapMs)` calls — the fake's `virtualClock` only advances on
+   *  a real `tick()` (`tick()`'s own doc comment, `transports/fake.ts`), so
+   *  a batch that FOLLOWS `rowedFrames` (or an earlier `seqFrames` call)
+   *  must start its own first `atMs` one `gapMs` PAST wherever the
+   *  preceding ticks left the virtual clock — `afterMs` is that value,
+   *  named at each call site rather than tracked implicitly. */
+  function seqFrames(
+    afterMs: number,
+    gapMs: number,
+    count: number,
+    distanceAt: (i: number) => number,
+  ): FakeTimelineEvent[] {
+    return Array.from({ length: count }, (_, i) =>
+      frame(afterMs + (i + 1) * gapMs, distanceAt(i)),
+    );
+  }
+
+  it("gate (a): a bunched post-resume stall records pause-declared's gapsMs and a measured sinceResumeMs — the field's own founding-capture shape", async () => {
+    vi.useFakeTimers();
+    const rowed = rowedFrames(100, 101); // atMs 100..500, distance 101..105
+    const stall = seqFrames(500, 40, 4, () => 106); // bunched: 40ms apart
+    const { fake, result, lifecycleCb, exportLog } = await setupTimingSession([
+      ...rowed,
+      ...stall,
+    ]);
+
+    for (let i = 0; i < 5; i += 1) {
+      act(() => {
+        fake.tick(100);
+        vi.advanceTimersByTime(100);
+      });
+    }
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 4; i += 1) {
+      act(() => {
+        fake.tick(40);
+        vi.advanceTimersByTime(40);
+      });
+    }
+    expect(result.current.frozen).toBe(true);
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const declared = exported.filter((e) => e.kind === "pause-declared");
+    expect(declared).toHaveLength(1);
+    expect(declared[0]!.detail).toContain("gapsMs=[40,40,40]");
+    // 3×40ms, not 4×: each `act(() => { fake.tick(ms); vi.advanceTimersByTime(ms); })`
+    // pair delivers its frame from the SYNCHRONOUS `fake.tick()` call before
+    // `vi.advanceTimersByTime` moves the clock forward, so `nowDate()` inside
+    // `handleFrame` always reads one tick BEHIND its own frame's `atMs` — a
+    // constant lag that cancels out of `gapsMs` (a difference between two
+    // equally-lagged readings) but not out of `sinceResumeMs` (measured
+    // against `lastResumeAtMsRef`, captured in its own `act()` with no
+    // `vi.advanceTimersByTime` call, hence unlagged): the pause-closing
+    // frame (the 4th stall tick) is read at resume+3×40ms, not +4×40ms.
+    expect(declared[0]!.detail).toContain("sinceResumeMs=120");
+  });
+
+  /** A hand-advanced ms clock for `MonitorSessionDeps.now` — decoupled from
+   *  both wall time and `vi`'s fake timers, so a real cadence (450ms, this
+   *  addendum's own ~2.2Hz baseline) can be asserted exactly. Redeclared
+   *  locally per this file's own "no cross-block shared helper" convention
+   *  (`applyContinuityCheck`'s own describe block's `manualClock`, one
+   *  block over, is the sibling this mirrors). */
+  function manualClock(startMs = 0): {
+    now: () => Date;
+    advance(by: number): void;
+  } {
+    let ms = startMs;
+    return {
+      now: () => new Date(ms),
+      advance(by: number): void {
+        ms += by;
+      },
+    };
+  }
+
+  it("gate (b): a cadence stall with no resume yet this session records sinceResumeMs=none — the counter-example the field data needed", async () => {
+    // No lifecycle mocking needed: this session never resumes, so this leg
+    // uses the file's own top-level `harness()` (the real, web-arm
+    // app-lifecycle adapter is a genuine no-op in jsdom — never calls back
+    // — so `lastResumeAtMsRef` simply never arms, which is exactly what
+    // `sinceResumeMs=none` requires) with a manual clock in place of the
+    // default fixed `now: () => t0` (`harness`'s own doc comment), so a
+    // real, non-bunched ~2.2Hz cadence is exactly assertable.
+    const clock = manualClock();
+    const rowed = rowedFrames(100, 101); // distance 101..105
+    const stall = seqFrames(500, 450, 4, () => 106); // ~2.2Hz cadence: 450ms apart
+    const { result, fake } = harness(
+      { program: TWO_INTERVALS, events: [...rowed, ...stall] },
+      { now: clock.now },
+    );
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    for (let i = 0; i < 5; i += 1) {
+      tick(fake, 100);
+      clock.advance(100);
+    }
+    expect(result.current.phase).toBe("live");
+
+    for (let i = 0; i < 4; i += 1) {
+      tick(fake, 450);
+      clock.advance(450);
+    }
+    expect(result.current.frozen).toBe(true);
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const declared = exported.filter((e) => e.kind === "pause-declared");
+    expect(declared).toHaveLength(1);
+    expect(declared[0]!.detail).toContain("gapsMs=[450,450,450]");
+    expect(declared[0]!.detail).toContain("sinceResumeMs=none");
+  });
+
+  it("gate (c): resume-first-frame's nextGapsMs is recorded once, after the fourth post-resume frame, even when no pause is ever declared", async () => {
+    vi.useFakeTimers();
+    const rowed = rowedFrames(100, 101); // atMs 100..500, distance 101..105
+    // Strictly increasing post-resume distance — the stream never freezes,
+    // so `pause-declared` never fires; the baseline this addendum's own
+    // header promises for a no-false-positive session.
+    const postResume = seqFrames(500, 70, 4, (i) => 110 + i * 10);
+    const { fake, result, lifecycleCb, exportLog } = await setupTimingSession([
+      ...rowed,
+      ...postResume,
+    ]);
+
+    for (let i = 0; i < 5; i += 1) {
+      act(() => {
+        fake.tick(100);
+        vi.advanceTimersByTime(100);
+      });
+    }
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 4; i += 1) {
+      act(() => {
+        fake.tick(70);
+        vi.advanceTimersByTime(70);
+      });
+    }
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntries = exported.filter(
+      (e) => e.kind === "resume-first-frame",
+    );
+    // Two entries per resume now: the immediate gapMs/stale one (consumed
+    // by the very first post-resume frame) and this addendum's own
+    // nextGapsMs one, recorded once the fourth arrives.
+    expect(firstFrameEntries).toHaveLength(2);
+    expect(firstFrameEntries[0]!.detail).toContain("stale=false");
+    expect(firstFrameEntries[1]!.detail).toBe("nextGapsMs=[70,70,70]");
+    expect(exported.some((e) => e.kind === "pause-declared")).toBe(false);
+  });
+
+  it("gate (c) truncation: an early teardown before the fourth post-resume frame closes the window with nextGapsMs=truncated, on the stashed export", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    vi.useFakeTimers();
+    const rowed = rowedFrames(100, 101);
+    const postResume = seqFrames(500, 70, 2, (i) => 110 + i * 10); // only two — never reaches the fourth
+    const { fake, result, lifecycleCb, unmount } = await setupTimingSession([
+      ...rowed,
+      ...postResume,
+    ]);
+
+    for (let i = 0; i < 5; i += 1) {
+      act(() => {
+        fake.tick(100);
+        vi.advanceTimersByTime(100);
+      });
+    }
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(70);
+        vi.advanceTimersByTime(70);
+      });
+    }
+
+    unmount();
+
+    const stash = sessionStorage.getItem("ergomatic:last-monitor-log");
+    const exported = JSON.parse(stash ?? "[]") as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntries = exported.filter(
+      (e) => e.kind === "resume-first-frame",
+    );
+    expect(firstFrameEntries).toHaveLength(2);
+    expect(firstFrameEntries[1]!.detail).toBe("nextGapsMs=truncated");
+  });
+});
+
 describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
   afterEach(() => {
     vi.doUnmock("../adapters/monitorTransport");
