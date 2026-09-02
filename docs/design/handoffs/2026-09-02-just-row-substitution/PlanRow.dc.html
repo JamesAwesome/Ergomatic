@@ -36,15 +36,22 @@
     .badge { display: inline-flex; justify-self: center; min-width: 30px; box-sizing: border-box; align-items: center; justify-content: center; padding: 3px 7px; border-radius: 2px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--on-color); }
     .jr { display: inline-flex; align-items: center; justify-content: center; justify-self: center; min-width: 30px; box-sizing: border-box; padding: 2px 6px; border-radius: 2px; border: 1px solid var(--rule-3); background: transparent; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-3); }
     .name { font-family: var(--font-sans); font-size: 14px; color: var(--ink); }
-    .swap { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--ink-3); grid-column: 3; margin-top: -6px; padding-bottom: 6px; }
+    .swap { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--ink-3); grid-column: 3; grid-row: 2; margin-top: -4px; padding-bottom: 8px; }
+    .row-two { grid-template-rows: auto auto; padding-top: 6px; }
+    .row-two .num, .row-two .badge, .row-two .jr, .row-two .check { grid-row: 1 / span 2; align-self: center; }
+    .row-two .name { grid-row: 1; align-self: end; padding-top: 6px; }
     .check { color: var(--accent); font-size: 16px; text-align: center; }
     .play { color: var(--accent); font-size: 14px; text-align: center; }
   </style>
 </helmet>
 <!-- James (Gate 0, 2026-09-02): "make sure to still center the chips" —
-     the JR chip sits centred in the badge column at TypeBadge's own width
-     (min-width 30 px, justify-self: center), so a column of JR / O2 / AT
-     chips lines up on one axis. Same rule for the History row's slot.
+     the chip sits centred on BOTH axes: horizontally in the badge column
+     at TypeBadge's own width (min-width 30 px, justify-self: center), and
+     vertically against the name + mark pair on a two-line row (the badge
+     slot spans both lines: grid-row 1 / span 2, align-self: center) — rev
+     1c, after "the chips are still not vertically centered". This applies
+     to EVERY chip on a swapped row, O2 included: the shipped plan row
+     top-aligns its badge to the name line, and this board changes that.
      MECHANICAL: plan-linked.png with two rows changed. Row 4 is the
      shipped swap (Slack Tide INSTEAD OF TR). Row 5 is a Just Row that stood
      in for an AT day: the JR chip in the badge slot (today a free row would
@@ -60,10 +67,10 @@
     <div class="row"><span class="num">1</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name">Sea Fret</span><span class="check">&#10003;</span></div>
     <div class="row"><span class="num">2</span><span class="badge" style="background: var(--type-at);">AT</span><span class="name">Occluded Front</span><span class="check">&#10003;</span></div>
     <div class="row"><span class="num">3</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name">Horse Latitudes</span><span class="check">&#10003;</span></div>
-    <div class="row" style="grid-template-rows: auto auto;"><span class="num">4</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name">Slack Tide</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF TR</span></div>
-    <div class="row" style="grid-template-rows: auto auto;"><span class="num">5</span><span class="jr">JR</span><span class="name">Just Row</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF AT</span></div>
+    <div class="row row-two"><span class="num">4</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name">Slack Tide</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF TR</span></div>
+    <div class="row row-two"><span class="num">5</span><span class="jr">JR</span><span class="name">Just Row</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF AT</span></div>
     <div class="row"><span class="num">6</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name">Sea Fret</span><span class="check">&#10003;</span></div>
-    <div class="row" style="grid-template-rows: auto auto;"><span class="num">7</span><span class="jr">JR</span><span class="name">Just Row</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF 2K TEST</span></div>
+    <div class="row row-two"><span class="num">7</span><span class="jr">JR</span><span class="name">Just Row</span><span class="check">&#10003;</span><span class="swap">INSTEAD OF 2K TEST</span></div>
     <div class="row row-today"><span class="num" style="font-weight: 600; color: var(--ink);">8</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name"></span><span class="play">&#9654;</span></div>
     <div class="row"><span class="num">9</span><span class="badge" style="background: var(--type-at);">AT</span><span class="name"></span><span></span></div>
     <div class="row"><span class="num">10</span><span class="badge" style="background: var(--type-o2);">O2</span><span class="name"></span><span></span></div>
