@@ -1,8 +1,10 @@
 # Wave E PR1.75 — full option (g): the authenticated activation shape (design)
 
-**Date:** 2026-09-02 · **Status:** REV 2 — the antagonist's full TRIAD pass
-(verdict REVISE, 2026-09-02) is folded in as a rewrite, not as layered
-corrections; rev 1's superseded claims are gone, not annotated. Awaiting James's
+**Date:** 2026-09-02 · **Status:** REV 3 — rev 2 folded the antagonist's full TRIAD
+pass (verdict REVISE); rev 3 replaces the Apple-platform lines rev 2 carried on the
+antagonist's initial (later WITHDRAWN as unsourced) claims with facts fetched from
+Apple's documentation this session, each tagged. Superseded claims are gone, not
+annotated. Awaiting James's
 approval BEFORE any implementation (the PR1.5 lesson). **Wave:** E · **Risk
 class:** TRIAD — AUTH (the principal-binding routes) + a STORED SHAPE (`surface`
 column, `UNIQUE(user_id)`, **migration 0020** — 0019 is Phase JR's on main).
@@ -51,24 +53,44 @@ operator confirms both rows exist before the walk.)
   register the same scheme, which makes it indeterminate as to which app will
   receive the authorization code."* §8.1: PKCE *"MUST"* for **public** native
   clients. §8.12: no embedded user-agents. §8.9: `state` RECOMMENDED.
-- **Apple, `ASWebAuthenticationSession`:** *"ASWebAuthenticationSession ensures
-  that only the calling app's session receives the authentication callback, even
-  when more than one app registers the same callback URL scheme."* Requires a
-  **`presentationContextProvider`** (iOS 13+) — `ASWebAuthenticationSessionError`
-  carries a dedicated `presentationContextNotProvided` case: *"A context wasn't
-  provided."* The session object must be **retained** for the flow's duration or
-  its completion never fires. `prefersEphemeralWebBrowserSession` (iOS 13+):
-  *"When not using an ephemeral session, all cookies except session cookies are
-  available to the browser."* Availability floor: `IPHONEOS_DEPLOYMENT_TARGET =
-  15.0` (`project.pbxproj:239`); the class is iOS 12, both properties iOS 13 —
-  safe. The newer `Callback`/`Callback.https` API is iOS 17.4 and is NOT used;
-  the string `callbackURLScheme` initializer is deprecated at iOS 27 (forward
-  note, not a floor issue). Info.plist `CFBundleURLTypes` is NOT required for the
-  session to capture its callback scheme — SECONDARY: Apple's "Authenticating a
-  User Through a Web Service" walkthrough never mentions it, and an Apple Systems
-  Engineer states it on the developer forums (thread 679251); registering the
-  scheme anyway is the recorded no-cost fallback if the walk shows the redirect
-  escaping the session.
+- **Apple, `ASWebAuthenticationSession`** (developer.apple.com, all fetched this
+  session via the documentation JSON API — PRIMARY): class available **iOS 12.0+**.
+  *"ASWebAuthenticationSession ensures that only the calling app's session receives
+  the authentication callback, even when more than one app registers the same
+  callback URL scheme."* `presentationContextProvider` — **iOS 13.0+**, declared
+  OPTIONAL in the type (`(any ASWebAuthenticationPresentationContextProviding)?`),
+  but Apple's own walkthrough ("Authenticating a User Through a Web Service")
+  instructs: *"After creating the session, set an appropriate context provider
+  instance as the session's `presentationContextProvider` delegate"*, and
+  `ASWebAuthenticationSessionError` carries `presentationContextNotProvided` —
+  *"A context wasn't provided."* (iOS 12.0+) — so the plugin sets it. **Retention:**
+  the same walkthrough — *"if you have a deployment target of iOS 13 or later, the
+  session keeps a strong reference to itself until the authentication process
+  completes"*; our floor is `IPHONEOS_DEPLOYMENT_TARGET = 15.0`
+  (`project.pbxproj:239`), so self-retention applies and the plugin's own reference
+  is belt-and-braces, not load-bearing. `prefersEphemeralWebBrowserSession` —
+  **iOS 13.0+**: *"request that the browser doesn't share cookies or other browsing
+  data between the authentication session and the user's normal browser session.
+  Safari always respects the request. … `false` by default. Set this property
+  before you call `start()`."* **Initializer:** `init(url:callbackURLScheme:
+  completionHandler:)` is listed DEPRECATED in favour of
+  `init(url:callback:completionHandler:)`, whose `ASWebAuthenticationSession.Callback`
+  type (`.customScheme(_:)` / `.https(host:path:)`) is **iOS 17.4+** — above our
+  15.0 floor, so the plugin uses the deprecated-but-available string initializer
+  (a warning, not a removal), with an `#available(iOS 17.4, *)` branch onto
+  `.customScheme` recorded as optional polish. `callbackURLScheme` is the BARE
+  scheme — *"A scheme should not include special characters such as ':' or '/'"*
+  (Apple Systems Engineer, developer forums thread 679251, SECONDARY) — i.e.
+  `"haus.waffle.ergomatic"`, never `"haus.waffle.ergomatic://"`. **Info.plist:** the
+  walkthrough never mentions `CFBundleURLTypes`; the same engineer states
+  *"ASWebAuthenticationSession does not require any modification in your
+  Info.plist"* while a community reply in the thread says the opposite — SECONDARY
+  and contested, so the walk RECORDS which is true and registering the scheme is
+  the no-cost fallback. **The OS consent sheet:** Apple's class overview says the
+  system *"shows a modal view telling them which domain the app is authenticating
+  with"*; NO Apple page fetched this session states that an ephemeral session
+  suppresses it — that widely-reported behaviour is UNSOURCED here and is an
+  observation the walk records, not a design input.
 - **Cookies on a cross-site top-level GET** (rfc6265bis §5.8.3): a `Lax` cookie is
   sent when the request *"uses a 'safe' method"* and the target *"is a top-level
   traversable"*; §5.6.7.1 evaluates safeness per redirect hop. A C2 302 → our GET
@@ -176,7 +198,7 @@ once with a fresh nonce, then 500s. `deleteAttemptsFor` retires;
 | attempt row (server; `surface`, one per user) | mint (upsert) | consume on EITHER route — only AFTER the identity/surface checks pass (§5/§6); 15-min sweep at the next mint; user cascade | yes (server); a relaunched app re-mints and the upsert replaces the row | yes — an abandoned consent leaves a row that expires or is replaced |
 | `state` held by the native app for the hop | returned by mint beside `authorizeUrl` | completion of `startNativeLink` (success, cancel, decline, error) | NO — in-memory; kill → gone → re-mint | n/a: nothing persisted |
 | **`linkInFlight` guard (client)** — at most ONE link attempt in flight per app instance | `startNativeLink` entry (refuses a second call with a typed `busy` result rather than minting again, which would replace the live attempt's nonce and orphan its session) | the same completion | NO | NO |
-| the `ASWebAuthenticationSession` object — **retained by the plugin** (a strong reference held until its completion handler runs; an unretained session deallocates and never calls back) | `start()` | its completion handler | no (OS) | no |
+| the `ASWebAuthenticationSession` object — self-retained until completion on a ≥iOS 13 deployment target (Apple's walkthrough; ours is 15.0); the plugin ALSO holds a reference, belt-and-braces | `start()` | its completion handler | no (OS) | no |
 | `req.authVia` | `requireUser` | end of request | n/a | n/a |
 
 Invariants: one live attempt per user at any instant; an attempt is consumed at
@@ -205,8 +227,10 @@ vendor recipe; storyboard class + `project.pbxproj` reference updated) exposing
 `start({ url, callbackScheme, ephemeral }) → { callbackUrl }`, rejecting with a
 typed `cancelled` when the rower dismisses. It **sets
 `presentationContextProvider`** (the bridge's view controller's window as the
-anchor), **retains the session** until completion, and passes `ephemeral`
-through. JS mirror `src/native/webAuth.ts` via `registerPlugin("WebAuth")`,
+anchor), holds a reference to the session until completion (belt-and-braces — on our
+iOS 15.0 floor the session self-retains per Apple's walkthrough), and passes
+`ephemeral` through; it uses the string `callbackURLScheme` initializer because
+the non-deprecated `Callback` type is iOS 17.4+. JS mirror `src/native/webAuth.ts` via `registerPlugin("WebAuth")`,
 reached only by dynamic import from a new adapter `src/adapters/linkFlow.ts`:
 
 - `startNativeLink({ authorizeUrl, state })`: refuses if a link is already in
@@ -225,8 +249,9 @@ reached only by dynamic import from a new adapter `src/adapters/linkFlow.ts`:
   image of the gap this PR closes on the Ergomatic side. Ephemeral forces the C2
   login screen every time, so the rower always sees which Concept2 account they
   are linking; linking is a once-per-account event, so the re-login cost is
-  small. The cost named: ephemeral suppresses the OS "wants to use concept2.com"
-  consent modal (it is a consequence of non-ephemeral sessions). PR2's identity
+  small. The cost commonly reported (UNSOURCED in Apple's docs — the walk records it):
+  an ephemeral session may skip the OS "wants to use concept2.com" consent
+  sheet. PR2's identity
   line (`c2UserId` is already served by `GET /link`) is the second half of this
   mitigation. James may overrule to non-ephemeral at approval.
 - Web arm of the same adapter: `openExternalUrl(authorizeUrl)` — a full-page
