@@ -5042,3 +5042,38 @@ same way.
   run's own four frames (proven from the two constants); edge-only; injected
   clock throughout; counts and coverage reproduced to the digit; all three
   named mutations reproduced red.
+
+## 2026-09-02 — Wave F PR 3 §3 timing addendum (PR #267), pre-review pass 2
+
+- **The fix wave introduced no defect; every finding was the fix wave's own
+  reconciliation debt.** Nothing in the code broke under attack (predicate
+  byte-identity re-proved by hunk positions; `gapsMs`'s three-entry
+  guarantee attacked through four independent clear sites and held; the M3
+  `frames=<n>` count correct at all four window depths).
+- **Claim: pass 1's M2 "lockstep" comment was fixed.** HALF FIXED. The
+  append-site comment was rewritten to credit the append count; the ref's
+  OWN doc comment 1,230 lines earlier still credited the mirrored reset
+  ("no other reset is needed to keep the two in lockstep"). Technique:
+  **after a comment fix, grep the ref's IDENTIFIER, not the fixed phrase** —
+  a mechanism is usually described twice, once where it is argued and once
+  where it is declared, and a fix lands on one.
+- **Claim: pass 1's B3 removed the false "corpus regression" claim from the
+  plan.** HALF FIXED, in the SAME FILE: the Gates paragraph was corrected
+  and the INVARIANTS section's I1 kept the identical parenthetical.
+  Technique: **when withdrawing a claim, grep the phrase inside the file you
+  just edited before grepping the tree** — invariant/requirement sections
+  restate gates in the future tense and read as forward-looking, so a
+  phrase-sweep aimed at "claims" skips them.
+- **A comment's replacement attribution deserves the same attack as the one
+  it replaced.** The new "REAL GUARANTEE is `PULL_EVIDENCE_FRAMES (5) >
+  PAUSED_FRAME_HOLD (4)`" is true but not load-bearing — set PULL=3 and the
+  guarantee still holds on locality alone (every frame that increments
+  `freeze.frames` appends in the same straight-line block; the window cap IS
+  the hold). Technique: **falsify a numeric attribution by changing the
+  numbers on paper** — if the conclusion survives the constants moving, the
+  constants are not the reason.
+- **Cheap census that found three items at once:** `gh pr diff --name-only`
+  against the PR body (ROADMAP.md unaccounted for), leg count in the test
+  file against the plan's "four new legs" (five), and named mutations
+  against new record sites (four vs five). All three are counts, all three
+  are one command each, and all three were review rounds waiting to happen.
