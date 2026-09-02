@@ -4903,7 +4903,20 @@ button.back-link:disabled,
        ◀ ▶ pair sits UNDER Pause beside TOTAL LEFT rather than on a row of
        its own below it. Every full-width row spans `2 / -1`; only TOTAL
        LEFT (column 2) and the controls (column 3) split the last band. */
-    grid-template-columns: 44px 1fr 200px;
+    /* Desk walk, 2026-09-02 ("the end button is partially obscured, and the
+       notch is in the way"): the gutter column is 44px PLUS the landscape
+       edge inset, so its controls sit inside the safe area while its
+       sunken background still reaches the physical edge — the connected
+       surface's own rule (`--edge-inset` there too). Symmetric on purpose:
+       Apple's landscape inset protects the rounded corners as well as the
+       housing (Phase CR2, Tech Talk 801; HIG Layout: "accommodating the
+       corner radius, sensor housing, and features like Dynamic Island"),
+       so the OTHER corner needs it as much as the notch side. */
+    --edge-inset: max(
+      env(safe-area-inset-left, 0px),
+      env(safe-area-inset-right, 0px)
+    );
+    grid-template-columns: calc(44px + var(--edge-inset)) 1fr 200px;
     /* Row 4 (the hero) is the one `1fr` track, and it always was — the
        band James saw under the controls (build 823) was never the rows
        refusing to grow, it was the `min-height` below stopping 70px short
@@ -4942,7 +4955,7 @@ button.back-link:disabled,
        connected surface broke out of the cap first. */
     max-width: none;
     margin: 0;
-    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    padding: env(safe-area-inset-top, 0px) var(--edge-inset)
       env(safe-area-inset-bottom, 0px) 0;
   }
 
@@ -4960,7 +4973,8 @@ button.back-link:disabled,
     justify-content: space-between;
     grid-column: 1;
     grid-row: 1 / -1;
-    padding: 12px 0;
+    /* Controls inside the inset; background to the edge (desk walk fix). */
+    padding: 12px 0 12px var(--edge-inset);
     background: var(--surface-sunken);
     border-right: 1px solid var(--rule);
   }

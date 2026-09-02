@@ -2018,6 +2018,46 @@ describe("index.css: one END and no dead band, both ways up (timer-mode spec 202
     expect(baseRuleBody(".timer-controls")).not.toContain("margin-top: auto");
   });
 
+  // Desk walk (James, 2026-09-02, build 834 on the phone): "the end button
+  // is partially obscured, and the notch is in the way." The landscape frame
+  // padded top/right/bottom with the safe-area insets and the LEFT with a
+  // hard 0 "so the gutter reaches the physical edge" — which put the
+  // gutter's CONTROLS under the rounded corner (both sides) and the sensor
+  // housing (one side). Apple: safe areas exist for "avoiding a device's
+  // interactive and display features, like Dynamic Island", and layouts
+  // must accommodate "the corner radius, sensor housing" (HIG, Layout);
+  // WebKit: `env(safe-area-inset-left)` grows in landscape "due to the
+  // sensor housing" (webkit.org/blog/7929); this repo's own finding (Phase
+  // CR2, Tech Talk 801): the landscape inset protects the rounded corners
+  // too, and iOS reports it on BOTH sides. The connected surface already
+  // encodes that as `--edge-inset: max(left, right)` with its gutter at
+  // `calc(44px + var(--edge-inset))`: the sunken background still reaches
+  // the edge, the controls sit inside the inset. The timer mirrors it.
+  it("landscape: the frame defines --edge-inset as max(left, right) and the gutter column is 44px PLUS it, with the gutter's controls padded inside the inset — the connected surface's own rule", () => {
+    const rules = timerLandscapeRules();
+    const screen = rules.find((r) => r.selectors.includes(".timer-screen"));
+    expect(screen, "landscape .timer-screen rule").toBeDefined();
+    const flat = screen!.body.replace(/\s+/g, " ");
+    expect(flat).toContain(
+      "--edge-inset: max( env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px) )",
+    );
+    expect(flat).toContain(
+      "grid-template-columns: calc(44px + var(--edge-inset)) 1fr 200px",
+    );
+    // Symmetric: the right edge takes the same inset, so RUNNING and the
+    // arrows clear the other corner (and the housing, whichever side).
+    expect(flat).toContain(
+      "padding: env(safe-area-inset-top, 0px) var(--edge-inset) env(safe-area-inset-bottom, 0px) 0",
+    );
+    const gutter = rules.find((r) =>
+      r.selectors.includes(".timer-screen .timer-header .timer-gutter"),
+    );
+    expect(gutter, "landscape gutter rule").toBeDefined();
+    expect(gutter!.body.replace(/\s+/g, " ")).toContain(
+      "padding: 12px 0 12px var(--edge-inset)",
+    );
+  });
+
   it("landscape: the hero row is the grid's one 1fr track and the grid fills the viewport — no reserved tab-bar strip in its min-height", () => {
     // Ruling 2, landscape. The middle (hero) row already grew — row 4 was
     // `1fr` before this spec — so the dead band was never the rows: it was
