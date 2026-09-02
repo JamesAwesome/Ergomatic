@@ -1,6 +1,7 @@
 # Just Row without the monitor (time only) — design
 
-**Status: Gate 0 PASSED (rev 2e, James, 2026-09-02). Spec REV 5.** Rev 5
+**Status: Gate 0 PASSED (rev 2e, James, 2026-09-02). Spec REV 5.1** (two
+implementation-time corrections, both marked "rev 5.1" inline). Rev 5
 answers "Can it be harder" (James, 2026-09-02): every remaining place a
 reader could meet an ABSENT value and guess is closed — `mode` is
 required in the type (legacy records upgraded once, at load), the
@@ -135,8 +136,14 @@ member is also written to the ring as `source: derived` so an old build
 posting through it is visible in diagnostics; when present the
 server checks it against the body and refuses a contradiction with a 400
 naming the field: `pm5` requires a non-null `deviceName`; `timer` and
-`manual` require `deviceName` null; `timer` additionally requires either
-a stopwatch step or an empty `steps` (the free-row shape). **Every log
+`manual` require `deviceName` null. **Nothing about steps** (rev 5.1,
+found at implementation by the Task 4 agent, RF10): a time-only timer
+workout logs every TIME phase as `actualSource: "assumed"`
+(`logDraft.ts:471-478` — `nextDistance` never touches time phases), so
+"`timer` requires a stopwatch step" would 400 every ordinary timer save;
+it did, in four e2e flows, before the clause was dropped. The steps
+shape is a fact about what was MEASURED, not about which DOOR — and the
+column records the door. **Every log
 door writes it from now on**: the connected Just Row door posts `pm5`,
 this timer door posts `timer`, `LogSession` posts `timer` when it is
 closing a `SessionRun` and `manual` from `Log it after`. The client's
@@ -314,9 +321,12 @@ which record each branch holds). Every reader below branches on
    back `pm5` / `timer` / `manual` after it, and the column is NOT NULL
    (an insert without `source` is refused by the database, not only by
    the route).
-3d. The client never infers: `grep -n "actualSource === \"stopwatch\"" src/log/storedSummary.ts`
-   returns nothing after this PR, and `StoredLog.source` is the non-null
-   enum.
+3d. The client never infers: `sourceLabel`'s body in
+   `src/log/storedSummary.ts` reads `row.source` and nothing else (the
+   file's other `actualSource === "stopwatch"` read, in
+   `measuredElapsedSeconds`, is a per-STEP measurement rule, not a door
+   inference — rev 5.1 narrows the criterion to the function), and
+   `StoredLog.source` is the non-null enum.
 4. History renders the row with no second line and a `.free-row-chip`,
    and no `.type-badge` (criterion 2 of the parent spec, still true).
 5. Backgrounding: a run whose `phaseStartedAt` is 10 minutes in the past
