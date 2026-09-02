@@ -669,7 +669,7 @@ that broke (d)'s original claim also breaks this one, absent a fix.
 See the correction immediately below before reading the rest of this
 option as settled.**
 
-> **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#<n>):** the server half of
+> **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#269):** the server half of
 > option (g) is BUILT: migration 0020 (`surface`, `UNIQUE(user_id)`, D1's
 > `UNIQUE(c2_user_id)`), `attempt.userId === req.user.id` BEFORE consume
 > and BEFORE exchange on BOTH the web callback (cookie, route-local
@@ -964,7 +964,7 @@ alone.**
 
 ## 4. The device-check card
 
-> **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#<n>):** the server half of
+> **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#269):** the server half of
 > option (g) is BUILT: migration 0020 (`surface`, `UNIQUE(user_id)`, D1's
 > `UNIQUE(c2_user_id)`), `attempt.userId === req.user.id` BEFORE consume
 > and BEFORE exchange on BOTH the web callback (cookie, route-local
@@ -1072,7 +1072,7 @@ principal, matching what it actually proves.
 
 ## 6. Ruling
 
-> **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#<n>):** the server half of
+> **SUPERSEDED IN PART — 2026-09-02, PR1.75a (#269):** the server half of
 > option (g) is BUILT: migration 0020 (`surface`, `UNIQUE(user_id)`, D1's
 > `UNIQUE(c2_user_id)`), `attempt.userId === req.user.id` BEFORE consume
 > and BEFORE exchange on BOTH the web callback (cookie, route-local
