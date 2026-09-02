@@ -1,6 +1,6 @@
 # Wave E PR1.75 — full option (g): the authenticated activation shape (design)
 
-**Date:** 2026-09-02 · **Status:** REV 4 — the PM shape pass (2026-09-02, verdict SPLIT) is folded: §0 PR shape, §1 narrowed, exit criteria 5/6/8 rewritten. REV 3 — rev 2 folded the antagonist's full TRIAD
+**Date:** 2026-09-02 · **Status:** REV 5 — antagonist pass 2 (attacker / concurrency / SDK-header lenses, verdict REVISE) folded: code injection named OPEN and bounded, conditional-DELETE consume, native single-flight, capability-gated native mint, walk host + instrument, three decisions flagged for James (§Decisions). REV 4 — the PM shape pass (2026-09-02, verdict SPLIT) is folded: §0 PR shape, §1 narrowed, exit criteria 5/6/8 rewritten. REV 3 — rev 2 folded the antagonist's full TRIAD
 pass (verdict REVISE); rev 3 replaces the Apple-platform lines rev 2 carried on the
 antagonist's initial (later WITHDRAWN as unsourced) claims with facts fetched from
 Apple's documentation this session, each tagged. Superseded claims are gone, not
@@ -42,6 +42,16 @@ beside the existing https callback — multiple endpoints per application are
 supported. GO. (The https web callback must remain registered alongside it; the
 operator confirms both rows exist before the walk.)
 
+**Desk pre-check — a gate BEFORE implementation (antagonist pass 2, F3):** a
+portal accepting a redirect row is not the authorization server honouring it.
+Unauthenticated `GET /oauth/authorize` with the native redirect returns `302 →
+/login` — and so does a bogus unregistered scheme (measured 2026-09-02, curl),
+so validation happens after login and the check needs a logged-in browser:
+open the authorize URL for `haus.waffle.ergomatic://oauth/callback` → PASS = the
+consent screen renders; open the same URL with an unregistered scheme → must
+error (the red control). Result recorded here: **PENDING James.** A FAIL is
+NO-GO for the whole per-surface design before any Swift is written.
+
 ## Research record (PRIMARY unless tagged)
 
 - **Concept2 OAuth reference** (`log.concept2.com/developers/documentation`):
@@ -77,7 +87,10 @@ operator confirms both rows exist before the walk.)
   data between the authentication session and the user's normal browser session.
   Safari always respects the request. … `false` by default. Set this property
   before you call `start()`."* **Initializer:** `init(url:callbackURLScheme:
-  completionHandler:)` is listed DEPRECATED in favour of
+  completionHandler:)` is marked `API_DEPRECATED(..., ios(12.0,
+  API_TO_BE_DEPRECATED), ...)` in the SDK header — Apple's "unspecified future
+  release" sentinel; it compiles today and no removal version exists (an earlier
+  rev's "deprecated at iOS 27" was an invented number). Deprecated in favour of
   `init(url:callback:completionHandler:)`, whose `ASWebAuthenticationSession.Callback`
   type (`.customScheme(_:)` / `.https(host:path:)`) is **iOS 17.4+** — above our
   15.0 floor, so the plugin uses the deprecated-but-available string initializer
@@ -85,12 +98,12 @@ operator confirms both rows exist before the walk.)
   `.customScheme` recorded as optional polish. `callbackURLScheme` is the BARE
   scheme — *"A scheme should not include special characters such as ':' or '/'"*
   (Apple Systems Engineer, developer forums thread 679251, SECONDARY) — i.e.
-  `"haus.waffle.ergomatic"`, never `"haus.waffle.ergomatic://"`. **Info.plist:** the
-  walkthrough never mentions `CFBundleURLTypes`; the same engineer states
-  *"ASWebAuthenticationSession does not require any modification in your
-  Info.plist"* while a community reply in the thread says the opposite — SECONDARY
-  and contested, so the walk RECORDS which is true and registering the scheme is
-  the no-cost fallback. **The OS consent sheet:** Apple's class overview says the
+  `"haus.waffle.ergomatic"`, never `"haus.waffle.ergomatic://"`. **Info.plist — PRIMARY, from the SDK header
+  (`iPhoneOS26.5.sdk/…/ASWebAuthenticationSession.h`):** *"For the app to receive
+  the callback URL, it needs to either register the custom URL scheme in its
+  Info.plist, or set the scheme to callbackURLScheme argument in the
+  initializer."* Not required, therefore; 1.75b registers it anyway (§0) and the
+  walk records nothing about it beyond confirming delivery. **The OS consent sheet:** Apple's class overview says the
   system *"shows a modal view telling them which domain the app is authenticating
   with"*; NO Apple page fetched this session states that an ephemeral session
   suppresses it — that widely-reported behaviour is UNSOURCED here and is an
@@ -139,14 +152,40 @@ operator confirms both rows exist before the walk.)
   it is mounted over the WHOLE API (`routes/data.ts` `router.use("/api",
   requireUser)`) and on `/api/me` — any refusal added there is app-wide.
 
-**Interception, three legs (PRIMARY):** a third app registering our scheme can
-receive `(code, state)`. It cannot **redeem** the code — Concept2's exchange needs
-`client_secret` (server only) and our `/exchange` needs the victim's bearer. It
-CAN, if it also holds any Ergomatic session, **deny** the victim: presenting the
-pair to either completion route with the wrong identity. §5/§6 therefore check
-identity BEFORE consuming the attempt, so a wrong-principal presentation burns
-nothing and the rightful user's attempt survives. Unredeemable is not harmless;
-the design names the second leg and closes it.
+**Interception, three legs (corrected at antagonist pass 2):** a holder of a
+leaked `(code, state)` (1) cannot redeem it *into the victim's link* — that needs
+the victim's bearer or cookie; (2) cannot *deny* the victim — §5/§6 refuse a wrong
+principal without consuming; (3) **CAN redeem it into their OWN link**: presenting
+the victim's code with their own attempt's `state` and their own bearer passes
+every check in §6 and attaches the victim's Concept2 grant (`results:write`) to
+the attacker's Ergomatic account. This is **RFC 9700 §4.5 authorization code
+injection** (*"An attacker who has gained access to an authorization code … can
+try to redeem the authorization code for an access token"*), and it is **OPEN
+and structurally unclosable at this authorization server**: §2.1.1 mandates
+PKCE (*"Public clients MUST use PKCE … For confidential clients … RECOMMENDED"*)
+or an OIDC `nonce`; Concept2 documents neither (PKCE: zero occurrences; not an
+OIDC provider) and §4.5.3 lists no third countermeasure. `state` is a §4.7 CSRF
+control, client-supplied at `/exchange`, and is not a control here.
+**Bounded by:** the attacker must hold a live, unredeemed code issued for the
+victim's Concept2 account against the SAME surface's `redirect_uri` —
+cross-surface injection is blocked by Concept2's own exact-match rule (*"This
+must match the value sent in the call to oauth/authorize"*, RFC 9700 §4.5.2:
+*"exact redirect URI matching would detect such attacks"*). On native,
+same-surface capture is closed against a third app by `ASWebAuthenticationSession`'s
+calling-app guarantee and against the shared-phone path by `ephemeral: true`
+(§4 — a CONTROL, not a preference). On web the code travels only over TLS to our
+own callback. Whether Concept2 codes are single-use is UNMEASURED (RFC 9700
+§4.5.2 is conditional: *"…and was one-time use only"*) and is not asserted.
+Optional detective control (§Decisions D1): refuse a link whose `c2UserId`
+already belongs to a different Ergomatic user.
+**Shared-browser fixation (RFC 9700 §4.7 family, PROVEN unclosable by identity):**
+attacker signs into Ergomatic on a shared browser, mints, leaves the authorize URL
+up; the victim logs into Concept2 and consents; the callback carries the
+attacker's session, `attempt.userId === user.id` passes CORRECTLY, and the
+victim's Concept2 links to the attacker's Ergomatic account. Identical on native
+with the attacker's bearer. The only mitigation is making the pairing visible at
+the moment of success — the Linked page names BOTH identities (§7, §Decisions
+D2).
 
 **Does the underlying system have the concept?** Yes for every piece: "which
 credential authenticated this request" is a property of every request;
@@ -206,7 +245,11 @@ unrelated redesign in one pass → split — decides it.
 
 `requireUser` sets `req.authVia = "bearer" | "cookie"` — request-lifetime, never
 persisted — according to which credential it resolved. A cookie whose value is
-the empty string (what `clearSessionCookie()` leaves behind) counts as ABSENT.
+the empty string — however produced; `clearSessionCookie()` sets `maxAge: 0` so a
+compliant browser DELETES rather than empties it (`cookies.ts:32-42`), and the
+shared native jar is UNMEASURED — counts as ABSENT. Already true for auth today
+(`getCookie` → `""` → falsy → 401, `middleware.ts:50`); load-bearing only for the
+NEW `authVia` derivation, which must not be written `cookie !== undefined`.
 **Both-present rule (the gate doc's own named resolution, §3(g) round 16):
 bearer wins** — native is the only consumer that carries one, and an attacker who
 supplies their own bearer gains nothing by also supplying a cookie. **Disagreement (both
@@ -238,6 +281,12 @@ the test list.
 Migration 0020 first `DELETE`s every existing attempt (15-minute disposable rows;
 an in-flight link at deploy restarts at mint, already the retry story), then adds
 the enum, the column, and the unique index. Additive to every other table.
+**Rollback, second half (pass 2):** the surviving `UNIQUE(user_id)` turns the
+rollback image's concurrent double-mint (delete-then-insert, `stores/concept2.ts:159-165`)
+into a unique violation (500) rather than two rows. Accepted — a rare self-race,
+strictly smaller blast radius than the unbounded attempts the index prevents.
+**If §Decisions D1 is YES, 0020 also adds `UNIQUE (c2_user_id)` on
+`concept2_links`** — the cheap moment (`schema.ts:483` has no index today).
 
 **Mint is one atomic statement:** `INSERT … ON CONFLICT (user_id) DO UPDATE SET
 nonce = excluded.nonce, surface = excluded.surface, weight_class =
@@ -248,7 +297,19 @@ nonce colliding with another row's PK (32 random bytes — not worth designing
 around) surfaces as a unique violation on `attempts_pkey`: the route retries
 once with a fresh nonce, then 500s. `deleteAttemptsFor` retires;
 `deleteExpiredAttempts` stays as the sweep; the store gains `peekAttempt(nonce)`
-(read, no delete) beside `consumeAttempt`, and both return `surface`.
+(read, no delete, NO freshness predicate — advisory only, it decides which page
+or error a presenter gets) and `consumeAttemptFor(nonce, userId, surface)`:
+**one conditional statement** `DELETE FROM concept2_auth_attempts WHERE nonce=$1
+AND user_id=$2 AND surface=$3 RETURNING weight_class, created_at >= now() -
+make_interval(secs => $4) AS fresh`. The identity/surface predicate lives IN the
+statement, so a wrong principal or wrong surface consumes nothing by
+construction, not by step order; freshness rides as a computed column exactly as
+`consumeAttempt` documents today (a right-principal expired row is still deleted;
+a wrong-principal one is left for the sweep). **There is no post-consume
+re-verify:** a writer census (mint upsert always rewrites `nonce`; consume and
+sweep delete; the user cascade deletes) shows that for a FIXED nonce
+`(user_id, surface)` are immutable for the row's lifetime, so a re-check could
+never fail — a green gate that cannot go red (RF21), deleted at design time.
 
 **RF27 lifetime table — every state this PR introduces, as invariants:**
 
@@ -256,14 +317,16 @@ once with a fresh nonce, then 500s. `deleteAttemptsFor` retires;
 | --- | --- | --- | --- | --- |
 | attempt row (server; `surface`, one per user) | mint (upsert) | consume on EITHER route — only AFTER the identity/surface checks pass (§5/§6); 15-min sweep at the next mint; user cascade | yes (server); a relaunched app re-mints and the upsert replaces the row | yes — an abandoned consent leaves a row that expires or is replaced |
 | `state` held by the native app for the hop | returned by mint beside `authorizeUrl` | completion of `startNativeLink` (success, cancel, decline, error) | NO — in-memory; kill → gone → re-mint | n/a: nothing persisted |
-| **`linkInFlight` guard (client)** — at most ONE link attempt in flight per app instance | `startNativeLink` entry (refuses a second call with a typed `busy` result rather than minting again, which would replace the live attempt's nonce and orphan its session) | the same completion | NO | NO |
-| the `ASWebAuthenticationSession` object — self-retained until completion on a ≥iOS 13 deployment target (Apple's walkthrough; ours is 15.0); the plugin ALSO holds a reference, belt-and-braces | `start()` | its completion handler | no (OS) | no |
+| **the in-flight link claim** — INVARIANT: at most one link session per APP PROCESS, enforced NATIVELY. The plugin holds `activeSession` + `activeCall`; a second `start()` rejects `busy` in Swift, so the guard survives a WebView reload that destroys every JS value (a reload mid-session would otherwise drop the code into a call with no receiver and let a second sheet start). `linkInFlight` in `linkFlow.ts` is a UX convenience, never the authority | `start()` in Swift | the session's completion; AND plugin `load()` on a fresh document over a live session rejects the pending call `abandoned` and cancels the session, so no orphaned sheet outlives its receiver | NO | NO |
+| the `ASWebAuthenticationSession` object AND its `presentationContextProvider` (a `weak` property per the SDK header — the plugin instance is the provider, retained by the bridge) — the session self-retains until completion on a ≥iOS 13 target (ours 15.0); the plugin also holds it | `start()` (never reused: *"start can only be called once for an ASWebAuthenticationSession instance"*) | its completion handler | no (OS) | no |
 | `req.authVia` | `requireUser` | end of request | n/a | n/a |
 
 Invariants: one live attempt per user at any instant; an attempt is consumed at
 most once, only on its own surface, only by its own user, and never by a wrong
-principal's presentation; at most one link in flight per app instance; no
-client-side state outlives the promise that holds it.
+principal's presentation; at most one link session per app PROCESS (native authority); no
+client-side state outlives the promise that holds it. **Web has no in-flight
+guard** — a second tab or a second tap re-mints, the first tab's callback lands
+on the Expired page (§7); named residual, the copy covers it.
 
 ### 3. Per-surface redirect, chosen at mint
 
@@ -272,7 +335,15 @@ client-side state outlives the promise that holds it.
 | web | `https://<SITE_URL>/api/concept2/callback` | since PR1 (keep it registered beside the new one) |
 | native | `haus.waffle.ergomatic://oauth/callback` | log-dev: DONE 2026-09-02 (James); live portal: a cutover step beside write approval |
 
-Mint returns `{ authorizeUrl, state }` — `state` explicit — so the native app holds
+**A bearer mint must DECLARE it can receive the native redirect:** the request
+body carries `linkClient: "webauth-1"`; a bearer mint without it returns `409
+{error:"update_required"}` and issues nothing. The client states a capability
+(only ever narrows; deterministic where a build-number inference is a
+heuristic), and it makes the flag flip safe by construction against an installed
+build predating the `WebAuth` plugin: no such build can ever be handed a
+`haus.waffle.ergomatic://` URL. Cookie mints carry no declaration. The app copy
+for the 409 ("Update Ergomatic to link your Concept2 account.") is PR2's card
+and rides its owed Gate 0 amendment. Mint returns `{ authorizeUrl, state }` — `state` explicit — so the native app holds
 the correlation value it will present at exchange (§6) without depending on an
 undocumented echo. `client.authorizeUrl` and `client.exchangeCode` both take the
 surface's `redirect_uri` (Concept2 requires the exchange's to match the
@@ -283,10 +354,17 @@ authorize call's; today the client hardcodes the web one).
 A Swift plugin in the app target (`WebAuthPlugin`, `jsName "WebAuth"`, registered
 in a new `MyViewController.swift` subclass of `CAPBridgeViewController` per the
 vendor recipe; storyboard class + `project.pbxproj` reference updated) exposing
-`start({ url, callbackScheme, ephemeral }) → { callbackUrl }`, rejecting with a
-typed `cancelled` when the rower dismisses. It **sets
-`presentationContextProvider`** (the bridge's view controller's window as the
-anchor), holds a reference to the session until completion (belt-and-braces — on our
+`start({ url, callbackScheme, ephemeral }) → { callbackUrl }`, rejecting with
+TYPED outcomes from the SDK header's full error enum: `cancelled` (code 1 —
+the same code for the page's Cancel and for dismissing the OS consent alert, so
+the two are indistinguishable by design), `noContext` (2), `contextInvalid` (3 —
+*"validate that the UIWindow is in a foreground scene"*; real on iPad,
+`TARGETED_DEVICE_FAMILY = "1,2"`), `noWindow` (the plugin REJECTS when
+`bridge?.viewController?.view.window` is nil rather than synthesising a bare
+`ASPresentationAnchor()`, which is exactly what produces error 3 opaquely), and
+`busy` (§2 lifetime table). `canStart` (iOS 13.4) is checked before `start()`.
+It **sets `presentationContextProvider`** (the plugin instance, returning the
+bridge's window), holds a reference to the session until completion (belt-and-braces — on our
 iOS 15.0 floor the session self-retains per Apple's walkthrough), and passes
 `ephemeral` through; it uses the string `callbackURLScheme` initializer because
 the non-deprecated `Callback` type is iOS 17.4+. JS mirror `src/native/webAuth.ts` via `registerPlugin("WebAuth")`,
@@ -297,22 +375,31 @@ reached only by dynamic import from a new adapter `src/adapters/linkFlow.ts`:
   "haus.waffle.ergomatic"`, **`ephemeral: true`** (rationale below); on
   completion parses the callback: `error=access_denied` (the rower declined at
   Concept2's screen — a success callback with no `code`) → typed `declined`, no
-  exchange, the attempt is left to expire; otherwise `code` (and `state` if
+  exchange, the attempt is left to expire; neither `code` nor a recognised
+  `error` → typed `malformed`, never treated as cancel; a non-2xx from
+  `/exchange` whose body is not `{error}` JSON (an old server image's Express
+  404 HTML during a rolling deploy) → typed `server_error`; otherwise `code` (and `state` if
   present — asserted equal to the held `state` when carried, refuse + log on
   mismatch; when C2 omits it this check is a no-op and is documented as
   defence-in-depth, not a control) → `POST /api/concept2/exchange { code, state }`
   through `api()` (bearer attached) → typed result.
-- **`ephemeral: true` by default.** Non-ephemeral shares Safari's persistent
+- **`ephemeral: true` — a CONTROL against code injection (research
+  §Interception leg 3), not a UX preference.** Non-ephemeral shares Safari's persistent
   cookies, so on a shared phone the next link can silently complete against
   whoever last logged into Concept2 in Safari with no visible login — the mirror
   image of the gap this PR closes on the Ergomatic side. Ephemeral forces the C2
   login screen every time, so the rower always sees which Concept2 account they
   are linking; linking is a once-per-account event, so the re-login cost is
-  small. The cost commonly reported (UNSOURCED in Apple's docs — the walk records it):
-  an ephemeral session may skip the OS "wants to use concept2.com" consent
-  sheet. PR2's identity
-  line (`c2UserId` is already served by `GET /link`) is the second half of this
-  mitigation. James may overrule to non-ephemeral at approval.
+  small. The cost, PRIMARY from the SDK header: *"If the user has already logged into
+  the web service in Safari or other apps via ASWebAuthenticationSession, it is
+  possible to share the existing login information. An alert will be presented
+  to get the user's consent for sharing"*; ephemeral sessions *"do not share
+  cookies or other browsing data with a user's normal browser session"* — so no
+  alert, and a fresh Concept2 login every link. James approved ephemeral named
+  (Gate 0, 2026-09-02); **overruling it re-opens the shared-phone leg of
+  RFC 9700 §4.5 and that residual would be named in the ruling.** PR2's identity
+  line (`c2UserId` is already served by `GET /link`) is the app-side half of the
+  disclosure; the web Linked page's both-identities line (§7) is the other.
 - Web arm of the same adapter: `openExternalUrl(authorizeUrl)` — a full-page
   navigation that unloads the SPA; the outcome is learned on the fresh mount
   after the Linked page, NOT via `useReturnToApp` (rev 1 got this wrong).
@@ -344,18 +431,29 @@ NOT the `requireUser` middleware (it answers bare JSON 401 and would run before
 the pinned order). The router gets `resolveCookieSession(req)` → user or null,
 and the callback keeps its HTML responses and this order:
 
-1. availability re-check (403 HTML; attempt consumed only here, flag-off path);
+1. availability re-check (403 HTML) — **consumes NOTHING** (PR1's flag-off
+   consume, `routes/concept2.ts:193-199`, is deleted: it was the route's last
+   unauthenticated write, an attempt-destruction primitive that bought nothing);
 2. `state`/`code` present, else 400 HTML;
 3. **no cookie session → 401 HTML** — attempt NOT consumed;
-4. **`peekAttempt(state)`** → null (unknown/expired) → 400 HTML;
+4. **`peekAttempt(state)`** (advisory) → null (unknown) → 400 HTML;
 5. **`attempt.surface === "web"`**, else 400 HTML — attempt NOT consumed;
 6. **`attempt.userId === user.id`**, else 403 HTML — attempt NOT consumed (the
    rightful user's attempt survives a wrong-principal presentation — the DoS
    leg), and **the token exchange is never called**;
-7. `consumeAttempt(state)` (atomic single-use; null here means a concurrent
-   consume won — 400 HTML) and re-verify surface/user on the consumed row;
-8. `exchangeCode(code, webRedirectUri)` → `fetchMe` → `upsertLink` → Linked
-   page.
+7. `consumeAttemptFor(state, user.id, "web")` — the conditional DELETE (§2) is
+   the AUTHORITY; null means a concurrent completion or a re-mint won → 400
+   HTML (Expired); `fresh === false` → 400 HTML (Expired);
+8. `exchangeCode(code, webRedirectUri)` → `fetchMe` → `upsertLink` (D1: a
+   `c2_user_id` already linked to a DIFFERENT user → 409 page, tokens
+   discarded) → Linked page naming both identities (§7).
+
+Every response sets `Referrer-Policy: no-referrer` (the URL carries `code` and
+`state`; RFC 9700 §4.2), and callback HTML carries **no subresource and no
+outbound link** — a standing constraint, since the first external stylesheet or
+anchor would leak the code in `Referer`. Callback HTML interpolates request- or
+DB-derived values ONLY through an HTML escaper (the Linked page's two identities
+are the first such values; `page()` today interpolates literals only).
 
 The 400/400/403 ladder tells a state-holder only what an interceptor already
 knows, never an account — acceptable because `state` is a 256-bit secret. This
@@ -367,18 +465,34 @@ the victim's browser here dies at step 6.
 
 `POST /api/concept2/exchange { code, state }`, `requireUser` (bearer; JSON):
 
-1. availability (403); 2. body shape (400 field-named);
-3. `peekAttempt(state)` → null → `400 {error:"invalid_state"}`;
+1. availability (403); 2. body shape (400 field-named); **2b. `req.authVia ===
+"bearer"` else `400 {error:"wrong_surface"}`** — the request states its own
+credential class before anything is peeked (a cookie browser passes
+`originCheck` only for bearer-carrying requests, but a stored column is not the
+place to route a property of the request);
+3. `peekAttempt(state)` (advisory) → null → `400 {error:"invalid_state"}`;
 4. `attempt.surface === "native"` else `400 {error:"wrong_surface"}` — not
    consumed;
 5. `attempt.userId === req.user.id` else `403 {error:"principal_mismatch"}` —
    not consumed, **exchange never called**;
-6. `consumeAttempt(state)` → null (concurrent consume) → 400; re-verify;
+6. `consumeAttemptFor(state, req.user.id, "native")` → null (concurrent
+   completion / re-mint) → 400 `invalid_state`; `fresh === false` → 400
+   `expired`. (Declined: returning `200 {linked:true}` when a link now exists
+   for the presenter would also mask a benign replay — the two-device race
+   surfaces as a 400 after a success, named residual.)
 7. `exchangeCode(code, nativeRedirectUri)` → fail → 502 `{error:"c2_error"}`;
-   `fetchMe` → fail → 502; `upsertLink` → `200 { linked: true, c2UserId,
+   `fetchMe` → fail → 502; `upsertLink` (D1: → `409
+   {error:"already_linked_elsewhere"}`) → `200 { linked: true, c2UserId,
    weightClass }`.
 
-Steps 4-5 refuse BEFORE any wire call and BEFORE consuming, on both routes.
+Steps 4-5 refuse BEFORE any wire call and BEFORE consuming, on both routes, and
+step 6's statement makes the refusal structural. The 400/403 ladder gives an
+authenticated holder of a `state` an unlimited nonce-existence oracle bounded
+by `randomBytes(32)` (2^256) with no timing separation (both cost one read;
+`exchangeCode` is reached only on full success) — no rate limit, bound stated.
+Mix-up (RFC 9700 §4.4) is N/A: one authorization server, `c2BaseUrl` a
+boot-time constant, no AS identifier read from any response. Open redirect and
+reflected XSS: closed by construction (no `res.redirect`; literal pages).
 
 ### 7. Rower-visible pages — one shared styled template, all six pages (Gate 0 APPROVED)
 
@@ -393,7 +507,8 @@ at the Gate 0 artifact, 2026-09-02. The copy, verbatim:
 
 | status | label | statement | action |
 | --- | --- | --- | --- |
-| 200 | Linked | Concept2 account linked. | Return to the app. |
+| 200 | Linked | **Concept2 `<c2 username>` is now connected to Ergomatic `<email>`.** (D2 — both identities, HTML-escaped; the shared-browser residual's only mitigation) | Return to the app. |
+| 409 | Already linked | That Concept2 account is already connected to a different Ergomatic account. (D1 only) | Return to the app. |
 | 400 | Expired | This link has expired or was already used. | Return to the app and start again. |
 | 400 | Incomplete | This link is missing required parameters. | Return to the app and start again. |
 | 401 | Not signed in | No Ergomatic session in this browser. | Sign in to Ergomatic here, then start the link again from the app. |
@@ -407,8 +522,11 @@ The probe card gains a "real link" button behind its existing build flag
 ### 8. What does NOT change
 
 Availability gating, the dark flag, `GET/DELETE /link`, the upload route, refresh
-serialization, PR1's Linked page copy. Activation still waits on Concept2 write
-approval + PR2.
+serialization (`upsertLink` clearing `needsReauthAt` on every upsert is noted:
+an injected link would look pristine — no new risk). Activation still waits on
+Concept2 write approval + PR2, **plus the capability precondition (§3): the flag
+may only be flipped once every installed native build that can reach a mint
+button carries the `WebAuth` plugin — enforced by `linkClient`, not assumed.**
 
 ## Testing (TRIAD — every assertion gets a committed-then-probed mutation)
 
@@ -448,7 +566,16 @@ approval + PR2.
   Native (bearer): same bearer → link row; different bearer → 403, no exchange,
   attempt still present. Cross-surface both directions → 400. The "neither"
   case → 401.
-- **Device walk (James, log-dev — the gates CI cannot reach, RF19):** (a) with
+- **Device walk (James, log-dev — the gates CI cannot reach, RF19). HOST,
+  stated (RF13 — the earlier card had none):** an HTTPS tunnel to the laptop dev
+  server (`cloudflared` or equivalent), `C2_LINK_ENABLED=1` with the log-dev
+  credentials, the app built with `ERGOMATIC_API_BASE=https://<tunnel-host>`.
+  Plain `http://` to a LAN address is blocked by App Transport Security —
+  `Info.plist` carries no `NSAppTransportSecurity` key and `CapacitorHttp` puts
+  every request on native `URLSession`; adding the key is a shipping change, so
+  the tunnel is the route. The tunnel host needs no Concept2 registration (the
+  native leg's `redirect_uri` is the app scheme). Also walked: a WebView reload
+  mid-session (the native single-flight + `abandoned` path). (a) with
   both redirects registered, start the native flow from the probe's real-link
   button → the session presents (ephemeral: a fresh C2 login screen; note whether
   any OS modal appears) → complete a real log-dev consent → the session dismisses
@@ -456,11 +583,13 @@ approval + PR2.
   did the callback carry `state`? did the scheme need an Info.plist entry (i.e.
   did anything escape the session)? (b) cancel the modal → typed `cancelled`, the
   attempt untouched server-side. (c) decline at Concept2's screen → typed
-  `declined`. (d) **the credential instrument for §1's UNMEASURED premise:** the
-  local dev server logs, for every request during the walk, `authVia` and whether
-  a cookie AND a bearer were both present; the walk report states the observed
-  values for every native request — this is the only layer that can see the real
-  native header set.
+  `declined`. (d) **the credential instrument for §1's UNMEASURED premise, and it is
+  COMMITTED code (1.75a), not a local edit:** `requireUser` logs
+  `{authVia, bearerPresent, cookiePresent, path}` — never a token value — when
+  `AUTH_VIA_LOG=1` (an env flag, never `NODE_ENV`, so the walk runs the PR's own
+  build); the walk card names the export and the report states the observed
+  values for every native request — the only layer that can see the real native
+  header set.
 - **Bundle claim, stated correctly:** the native module ships as a lazy chunk in
   `dist/client` and is never LOADED on web (`adapters/externalBrowser.ts:4-23`
   already records this retraction); `dist:grep` checks dev-only needles and says
@@ -510,8 +639,25 @@ phrase grep pasted, all zero/accounted; (4) the walk table: per-request
 `authVia` + both-present, `state` echoed y/n, Info.plist needed y/n; (5)
 `ROADMAP.md` PR1.75 `[x]` with the still-owed line.
 
+## Decisions for James (from antagonist pass 2 — presented, not assumed)
+
+- **D1 — detective control against code injection (stored shape, 0020).** Add
+  `UNIQUE (c2_user_id)` on `concept2_links`; a link whose Concept2 account is
+  already connected to a DIFFERENT Ergomatic user → `409 already_linked_elsewhere`
+  (web: a 409 page). Stops the common injection case (victim already linked) and
+  stops two Ergomatic accounts writing one logbook. **Cost:** one Concept2
+  account can never be linked to two Ergomatic accounts in one database.
+  Recommendation: YES.
+- **D2 — the Linked page names both identities** (Concept2 username + Ergomatic
+  email, escaped). The shared-browser fixation residual passes every server
+  check correctly; copy is its only mitigation. Changes an approved page →
+  rendered on the Gate 0 artifact for re-approval. Recommendation: YES.
+- **D3 — the desk pre-check** (§GO/NO-GO): two URLs in
+  `scratchpad/c2-desk-precheck.txt`, your logged-in browser, cancel at consent.
+
 ## Gates
 
+Antagonist pass 2 (attacker lens): DONE 2026-09-02 (REVISE → this rev 5).
 Antagonist full pass: DONE 2026-09-02 (REVISE → rev 2). Attacker-lens pass:
 2026-09-02 (folded per its report). PM shape pass: DONE 2026-09-02 (SPLIT →
 this rev 4). James approved the design + pages 2026-09-02. → plan 1.75a → premise

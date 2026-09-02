@@ -5203,3 +5203,102 @@ same way.
   DENY it to the victim (yes, here: consume preceded the identity check on
   both routes), and does the design NAME the second. Unredeemable is not
   harmless. Rev 2 moved identity/surface checks BEFORE consume on both routes.
+
+### 2026-09-02 — Wave E PR1.75 design REV 2, second pass (attacker/concurrency/platform lenses)
+
+- **CLAIM (PRIMARY-tagged, load-bearing):** an intercepted code "cannot be
+  redeemed — our `/exchange` needs the victim's bearer." **FALSE.** It needs
+  *an* Ergomatic bearer; the attacker uses their OWN. Presenting the victim's
+  code with the attacker's own attempt `state` and own bearer passes every
+  check in the design's §6 and links the victim's Concept2 grant
+  (`results:write`) to the attacker's account — RFC 9700 §4.5 authorization
+  code injection, verbatim. The identity check binds the ATTEMPT to the
+  presenter; nothing binds the CODE to the attempt, and §2.1.1's mandated
+  mitigations (PKCE, OIDC `nonce`) are both unavailable at Concept2.
+  **TECHNIQUE: for every "the attacker cannot use X" claim, ask who the
+  attacker is in the sentence — a control naming the VICTIM's credential is
+  not a control, because the attacker supplies their own.** Corollary: the
+  three-legs rule from pass 1 was itself under-enumerated — the third leg is
+  "redeem it INTO THEIR OWN ACCOUNT", which is neither deny nor
+  redeem-as-the-victim.
+- **CLAIM (implicit):** the post-consume re-verify of `user_id`/`surface`
+  guards the peek→consume race. **CANNOT GO RED (RF21, caught in the DESIGN).**
+  Census of every writer: the mint upsert's `DO UPDATE SET nonce =
+  excluded.nonce` always rewrites the nonce, so for a FIXED nonce
+  `(user_id, surface)` are immutable for the row's lifetime — a concurrent
+  re-mint makes the row vanish (consume → null → 400) rather than change.
+  **TECHNIQUE: to test whether a TOCTOU re-check can ever fire, enumerate the
+  writers and ask which one mutates the checked columns WITHOUT changing the
+  key you re-read by. If none does, the re-check is theater — replace the
+  two-step with a conditional `DELETE … WHERE key AND predicate RETURNING`,
+  which makes the check unseparable from the consume by construction.**
+- **CLAIM:** the device walk's step (a) is executable. **FALSE — no host
+  exists.** It needs a server with log-dev creds and `C2_LINK_ENABLED=1` that
+  the phone can reach; `ios:build` defaults to prod (`package.json:29`), and
+  the `ERGOMATIC_API_BASE` override to a LAN `http://` is blocked by ATS —
+  `Info.plist` carries NO `NSAppTransportSecurity` key and `CapacitorHttp` puts
+  every request on native `URLSession`. **TECHNIQUE (RF13): follow a walk step
+  to the TRANSPORT, not just to the feature. "Point the build at your dev
+  server" is a claim about ATS, and the plist settles it in one grep.**
+- **CLAIM:** the vendor API needs `presentationContextProvider` (pass 1's
+  finding). **INCOMPLETE — there is a THIRD error case.** The SDK header
+  carries `ASWebAuthenticationSessionErrorCodePresentationContextInvalid = 3`:
+  *"For iOS, validate that the UIWindow is in a foreground scene."*
+  `TARGETED_DEVICE_FAMILY = "1,2"` makes multi-scene real. **TECHNIQUE: read
+  the SDK HEADER, not the doc site — `xcrun --sdk iphoneos --show-sdk-path`
+  gives verbatim availability annotations, deprecation sentinels, property
+  ownership (`presentationContextProvider` is `weak`) and the full error enum,
+  and it answered five questions the documentation site could not be fetched
+  for at all.**
+- **CLAIM:** "the `callbackURLScheme` initializer is deprecated at iOS 27."
+  **FALSE — an invented version.** The header says
+  `API_DEPRECATED(..., ios(12.0, API_TO_BE_DEPRECATED), ...)`, Apple's
+  "unspecified future release" sentinel. RF16's shape: a sourced-sounding
+  specific inside an otherwise correct, genuinely-sourced paragraph.
+- **CLAIM (SECONDARY, forum thread 679251):** Info.plist `CFBundleURLTypes` is
+  not required. **TRUE, and a PRIMARY source existed all along** — the SDK
+  header: *"it needs to either register the custom URL scheme in its
+  Info.plist, or set the scheme to callbackURLScheme argument in the
+  initializer."* **TECHNIQUE: before settling for a forum post, check whether
+  the framework HEADER states the same fact — a SECONDARY tag on a
+  PRIMARY-available claim understates evidence we already have on disk.**
+- **CLAIM:** the design's rollback analysis is complete after the `NOT NULL`
+  fix. **INCOMPLETE.** Pass 1's own technique (run the previous image's writers
+  against the new schema) has a second hit nobody followed: the surviving
+  `UNIQUE(user_id)` turns the rollback image's concurrent double-mint into a
+  500. Acceptable, but unnamed. **TECHNIQUE: apply a rollback technique to
+  EVERY object the migration adds, not just the one that produced the first
+  finding — a fix round tends to stop at the first hit.**
+- **HELD under attack, and worth recording as ground:** CSRF on the web
+  callback is closed in BOTH directions by the identity check; open redirect
+  and reflected XSS are closed by construction (no `res.redirect`, `page()`
+  interpolates only literals); mix-up is N/A for a stated reason (one AS, a
+  boot-time constant endpoint, no AS identifier read from the response);
+  the empty-cookie rule is already true for auth today (`getCookie` → `""` →
+  falsy → 401) and is load-bearing only for the NEW `authVia` derivation; the
+  400/403 ladder discloses only what a state-holder knows, bounded by a
+  256-bit nonce; and the mixed-version window is closed because NOTHING in
+  `src/` posts to `/api/concept2/connect` — the whole link plumbing's only
+  consumer is a dev-flag-gated probe that posts nothing.
+- **NEW GENERAL RULE:** **a residual an identity check cannot close must be
+  closed by COPY, and that makes it a Gate 0 item, not a footnote.** The
+  shared-browser fixation case (victim consents at the AS while the browser
+  holds the ATTACKER's session) passes every server-side check correctly,
+  because the Ergomatic principal genuinely IS the attacker. The only
+  mitigation is rendering BOTH identities on the success page — which means
+  the security finding lands in the design's copy section. Look for this
+  whenever a control answers "who is our principal" against a threat whose
+  premise is that our principal is wrong.
+- **Controller's addendum — the desk pre-check the pass asked for was run and
+  is INCONCLUSIVE at the unauthenticated layer:** log-dev answers `302 →
+  /login` for the registered native scheme AND for a bogus unregistered one
+  (curl, 2026-09-02), so `redirect_uri` validation happens after login. A
+  probe that returns the same answer for the registered and the bogus scheme
+  has not measured anything; the check moved to a logged-in browser with the
+  bogus scheme kept as the red control. **TECHNIQUE: every pre-check carries
+  its own red control, run in the same breath — a green without a red is a
+  guess.**
+- **Process, recorded:** an agent COMMITTED design rev 3 (`0c2063ce`) to the
+  worktree branch despite the read-only brief. Content was reviewed and kept;
+  the breach stands as the reason "agents propose, the controller lands" is in
+  CLAUDE.md and not only in the dispatch text.
