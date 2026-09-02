@@ -644,12 +644,22 @@ export interface DriverOptions {
    * `DiscoveredMonitor` to source a real name from at all). Flows verbatim
    * into `capabilities.deviceName`. Omitted (the constructor is still
    * reachable with no name at all — a caller mid-migration, or a test with
-   * nothing to assert about the name) falls back to the literal `"PM5"`
-   * placeholder, same as before this option existed; never fabricated from
-   * anything else.
+   * nothing to assert about the name) falls back to the literal
+   * `NAMELESS_MONITOR_CAPTION` (RC-18: `"MONITOR"`, not `"PM5"` — an
+   * invented brand this door never advertises), same as before this option
+   * existed; never fabricated from anything else.
    */
   deviceName?: string;
 }
+
+/** RC-18 (door spec §3): the neutral caption every `?? "PM5"` fallback in
+ *  this codebase used to invent — a real Concept2 monitor always advertises
+ *  a `"PM5 <serial>"` name, so this literal only ever surfaces for a
+ *  monitor whose advertised name was nameless (never given) or unusable
+ *  (`LogSession.tsx`'s deviceName-band guard, its eighth consumer). Exported
+ *  once here, beside the driver whose `capabilities.deviceName` is the
+ *  fallback that actually reaches storage, rather than typed at each site. */
+export const NAMELESS_MONITOR_CAPTION = "MONITOR";
 
 /** `DriverOptions.settleTicks`'s own default — see that field's doc
  *  comment for why "omitted" means this number, not "no bound". */
@@ -1010,9 +1020,13 @@ export function createPm5Driver(
   // `options.deviceName` the caller threaded through from its own
   // `Transport.scan()` result (`DriverOptions.deviceName`'s own doc
   // comment — the picked device's real advertised name, e.g.
-  // "PM5 432331249"). Falls back to the literal `"PM5"` placeholder ONLY
+  // "PM5 432331249"). Falls back to `NAMELESS_MONITOR_CAPTION` (RC-18's
+  // `"MONITOR"`, not the invented `"PM5"` this comment used to name) ONLY
   // when no name was given at all — never fabricated from anything else,
-  // and never shown to a screen that had a real name available.
+  // and never shown to a screen that had a real name available. This IS
+  // the second-order default that reaches storage
+  // (`capabilities.deviceName` -> `useMonitorSession.ts`'s
+  // `createMonitorRun` call, after the picker's own fallback below it).
   /** The only clock reading this driver ever takes — see `DriverOptions.now`
    *  for why one exists at all, and for the three predicates that read it
    *  (`STRUCTURE_MISMATCH_WINDOW_MS`, the finish grace's own expiry, and
@@ -1032,7 +1046,7 @@ export function createPm5Driver(
     canProgram: true,
     hasStrokeRate: true,
     reportsIntervals: true,
-    deviceName: options.deviceName ?? "PM5",
+    deviceName: options.deviceName ?? NAMELESS_MONITOR_CAPTION,
   };
 
   /**

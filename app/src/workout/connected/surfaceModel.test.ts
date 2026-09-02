@@ -2346,15 +2346,17 @@ describe("degenerate inputs", () => {
     expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WORK");
   });
 
-  it("never renders the `PM5` placeholder unless the picker gave us nothing", () => {
+  it("never renders the `MONITOR` placeholder unless the picker gave us nothing", () => {
     // Spec I5: no screen renders the placeholder when a real advertised
     // name exists. `null` only happens if the hook reached a live phase
     // without a picker result, which is a caller bug — but it renders a
-    // word, not `undefined`.
-    expect(model({ deviceName: null }).deviceCaption).toBe("PM5");
+    // word, not `undefined`. RC-18 (door spec §3): the literal is
+    // `MONITOR`, not `PM5` — an invented-brand word this reader never
+    // advertises.
+    expect(model({ deviceName: null }).deviceCaption).toBe("MONITOR");
     expect(
       model({ deviceName: null, status: "live", linkLost: true }).deviceCaption,
-    ).toBe("PM5 · LOST");
+    ).toBe("MONITOR · LOST");
   });
 
   it("renders an empty phase list without inventing a phase", () => {

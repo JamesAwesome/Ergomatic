@@ -32,6 +32,7 @@ import {
   type LogStep,
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
+import { NAMELESS_MONITOR_CAPTION } from "../monitor/driver";
 import {
   type MachineSummaryDetail,
   type MonitorRun,
@@ -729,29 +730,49 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
     if (opts.advancesPlan !== undefined) body.advancesPlan = opts.advancesPlan;
     // Branch review Minor: the server's own `deviceName` band is 1..64
     // chars (`data.ts`), but `webBluetooth.ts`/`capacitorBle.ts` both use
-    // `device.name ?? "PM5"` (nullish, not `||`) — an empty advertised GATT
-    // name (`""`) or one past 64 chars reaches `createMonitorRun` and this
-    // body unguarded, and would otherwise 400 the WHOLE save with no
-    // recoverable retry (the 400-retry above only ever strips `workoutId`).
-    // Same "drop the field, never block the save" rule this branch already
-    // applies to avgHr/actualSplit/spm (`logDraft.ts`'s `buildMonitorLogSteps`)
-    // — the save always goes through; the server reads `deviceName` back as
-    // null, same as any pre-7C row.
+    // `device.name ?? NAMELESS_MONITOR_CAPTION` (nullish, not `||`) — an
+    // empty advertised GATT name (`""`) or one past 64 chars reaches
+    // `createMonitorRun` and this body unguarded, and would otherwise 400
+    // the WHOLE save with no recoverable retry (the 400-retry above only
+    // ever strips `workoutId`). Same "the save always goes through" rule
+    // this branch already applies to avgHr/actualSplit/spm
+    // (`logDraft.ts`'s `buildMonitorLogSteps`) — RC-18's fallback already
+    // keeps this UNREACHABLE for a live connect (both transports substitute
+    // the caption before it ever reaches here), so this guard is
+    // UNOBSERVED HARDENING against a name that arrives some other way (a
+    // stale `MonitorRun` from before RC-18 shipped, or a future producer
+    // this file cannot see) — see step 6 below for what it does now.
     if (
       typeof body.deviceName === "string" &&
       (body.deviceName.length === 0 || body.deviceName.length > 64)
     ) {
-      delete body.deviceName;
-      // Just Row unconnected spec (2026-09-02): the monitor door's `pm5`
-      // is a contradiction without a `deviceName` (`server/logSource.ts`
-      // 400s it, which would block the WHOLE save this guard exists to
-      // let through), so the door claim goes with the name. Since the
-      // v0.35.0 sunset `source` is REQUIRED on the wire (an absent one is
-      // its own 400), so this body states `manual` itself — the member
-      // the server derived for it while it still could (no device name,
-      // no stopwatch step). It renders `LOGGED BY HAND`, which is what
-      // the same row rendered before the column existed.
-      if (body.source === "pm5") body.source = "manual";
+      // Door PR A (spec §3 + §4): the advertised name is unusable, but the
+      // DOOR is still the connected one, and `pm5` REQUIRES a name (the
+      // biconditional, `server/logSource.ts`). Before the v0.35.0 sunset
+      // this branch deleted the door claim and let the server derive;
+      // #273 changed that to stating `manual`, because an absent `source`
+      // is now its own 400. Both stored a connected session as by-hand.
+      // RC-18's neutral literal is what the row actually needs: the door
+      // stays `pm5` and the device-name column reads as the caption it is.
+      //
+      // THE `pm5` NARROWING IS KEPT (L5): the biconditional forbids a name
+      // on `timer`, `manual` and `no-reading`, so substituting one on a
+      // non-pm5 body would manufacture the very contradiction the server
+      // 400s. Only the connected door gets a substituted caption; every
+      // other door drops the field, exactly as today.
+      //
+      // THE TRADE, STATED (L7): a name longer than 64 characters is real
+      // and gets REPLACED by a caption, so its tail is not stored. That is
+      // the same posture the empty-name case has always had (nothing was
+      // stored at all), and it is preferred to losing the door. Both arms
+      // are UNOBSERVED HARDENING — no capture in `docs/monitor/sessions/`
+      // has ever shown a PM5 advertising an empty or 65+-character name —
+      // not a defect being fixed.
+      if (body.source === "pm5") {
+        body.deviceName = NAMELESS_MONITOR_CAPTION;
+      } else {
+        delete body.deviceName;
+      }
     }
     try {
       // Fix round (MED-1): every retry below rebuilds from `currentBody`

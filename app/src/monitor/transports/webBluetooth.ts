@@ -40,6 +40,7 @@ import type {
   DiscoveredMonitor,
   Transport,
 } from "../../../domain/monitor/types.js";
+import { NAMELESS_MONITOR_CAPTION } from "../driver.js";
 
 interface BluetoothRemoteGATTCharacteristic extends EventTarget {
   readonly value?: DataView;
@@ -293,7 +294,10 @@ export function createWebBluetoothTransport(): Transport & {
           ROWING_SERVICE_UUID,
         ],
       });
-      return [{ id: device.id, name: device.name ?? "PM5" }];
+      // RC-18 (door spec §3): REACHABLE, unlike `capacitorBle.ts`'s picker
+      // arm — the two filters here are OR'd, so a device can match on
+      // `DEVICE_INFO_SERVICE_UUID` alone with no advertised name at all.
+      return [{ id: device.id, name: device.name ?? NAMELESS_MONITOR_CAPTION }];
     },
 
     async connect(id: string): Promise<void> {

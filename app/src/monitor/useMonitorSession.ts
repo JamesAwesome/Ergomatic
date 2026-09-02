@@ -1096,8 +1096,15 @@ export interface MonitorSessionDeps {
    *  to `setTimeout`/`clearTimeout`. */
   burstLingerSchedule?: (cb: () => void, ms: number) => () => void;
   /** Passed to `createPm5Driver`. `deviceName` is NOT accepted here — it
-   *  comes from the picker result, never from a caller's guess (spec's I5
-   *  ruling: no screen ever renders the `"PM5"` placeholder). */
+   *  comes from the picker result, never from a caller's guess. Spec I5's
+   *  own "no screen ever renders the placeholder" ruling does NOT hold as
+   *  written: `surfaceModel.ts`'s `deviceCaptionFor` DOES reach it —
+   *  `ConnectedSurface.tsx` renders across every phase, including before
+   *  the picker resolves, unlike `JustRow.tsx`'s caption, which is gated
+   *  behind `ready` and never sees a null name (RC-18, verified by reading
+   *  every `beginFreeRow` call site). RC-18's fix is what makes I5's INTENT
+   *  true rather than its letter: the literal is `NAMELESS_MONITOR_CAPTION`
+   *  (`"MONITOR"`), not the invented `"PM5"` this comment used to name. */
   driverOptions?: Omit<DriverOptions, "deviceName">;
 }
 
@@ -2822,11 +2829,14 @@ export function useMonitorSession(
               // The program we actually sent, not one re-derived from the
               // wire (spec §4: "nothing re-derived from bytes").
               program: identity.program,
-              // The REAL advertised name the picker returned, threaded
-              // through `createPm5Driver` by Task 1 — never the `"PM5"`
-              // placeholder (spec's I5 ruling). Read off the driver that
-              // delivered this very frame, so there is no "which driver?"
-              // question to answer here.
+              // The name the picker returned, threaded through
+              // `createPm5Driver` by Task 1 — real whenever the erg
+              // advertised one, and RC-18's `NAMELESS_MONITOR_CAPTION`
+              // (`"MONITOR"`) when it did not (an already-held device with
+              // no name, `capacitorBle.ts`'s `getConnectedDevices` arm —
+              // never invented from anything else). Read off the driver
+              // that delivered this very frame, so there is no "which
+              // driver?" question to answer here.
               deviceName: driver.capabilities.deviceName,
               // The frozen log identity `program()`'s caller built alongside
               // `identity.program` (7C Task 1) — threaded straight through,

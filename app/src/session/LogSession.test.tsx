@@ -38,6 +38,7 @@ import {
 } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder";
 import type { MonitorLogEntry } from "../monitor/eventLog";
+import { NAMELESS_MONITOR_CAPTION } from "../monitor/driver";
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
@@ -3912,7 +3913,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(body.machineWorkSeconds).toBe(199.9);
   });
 
-  it("an empty or >64-char deviceName is omitted from the POST body — the save still succeeds (branch review Minor)", async () => {
+  it("an empty deviceName is substituted with MONITOR, and the pm5 door survives (Door PR A, step 6)", async () => {
     const { run: emptyRun, workout } = buildMonitorFixture({ deviceName: "" });
     saveMonitorRun(emptyRun);
     mockWorkouts([workout]);
@@ -3932,13 +3933,42 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     const body = parsedBodies(apiFn)[0]!;
-    expect("deviceName" in body).toBe(false);
-    // Just Row unconnected spec (2026-09-02): `pm5` without a `deviceName`
-    // is a contradiction the server 400s (`server/logSource.ts`), and since
-    // the v0.35.0 sunset an ABSENT `source` is a 400 too — so the guard that
-    // drops the name restates the door as `manual` (the member the server
-    // used to derive for this body) and the save still goes through.
-    expect(body.source).toBe("manual");
+    // Door spec §3 + §4: the advertised name was unusable, but the session
+    // WAS a connected one — the door stays `pm5` and the device-name column
+    // reads the neutral caption rather than lying `manual` about a row the
+    // monitor produced (#273's interim fix, superseded by this test).
+    expect(body.source).toBe("pm5");
+    expect(body.deviceName).toBe(NAMELESS_MONITOR_CAPTION);
+  });
+
+  it("a >64-char deviceName is substituted with MONITOR too, and the pm5 door survives (Door PR A, step 6)", async () => {
+    // The trade this leg gates (step 6's own comment, L7): a name over 64
+    // characters is REAL and gets replaced wholesale by the caption, so its
+    // tail is never stored — the same posture the empty-name case has
+    // always had, preferred to losing the door claim.
+    const { run: longRun, workout } = buildMonitorFixture({
+      deviceName: "PM5 " + "9".repeat(61),
+    });
+    saveMonitorRun(longRun);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-monitor-long" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.source).toBe("pm5");
+    expect(body.deviceName).toBe(NAMELESS_MONITOR_CAPTION);
   });
 
   // Series capture spec (2026-08-19), §3: the POST body attaches `series`

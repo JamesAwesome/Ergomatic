@@ -53,6 +53,7 @@ import type {
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
 import { phaseSeconds } from "../../../domain/expand.js";
+import { NAMELESS_MONITOR_CAPTION } from "../../monitor/driver.js";
 import type { EnginePhase } from "../../session/engine";
 import {
   intervalBoundaries,
@@ -1882,11 +1883,17 @@ export function splitHero(display: string): [string, string] {
 /** Handoff §4's lost-link caption, with the spec's descope framing rather
  *  than the handoff's `· TRYING`: nothing IS trying. Auto-reconnect is a
  *  named follow-on (design spec §C5 — "7B ships lose-and-degrade"), so the
- *  caption states the fact, `LOST`, and promises nothing. */
+ *  caption states the fact, `LOST`, and promises nothing.
+ *
+ *  RC-18 (door spec §3): REACHABLE, unlike `JustRow.tsx`'s own caption —
+ *  `ConnectedSurface.tsx` calls this every render, including before the
+ *  picker has resolved (`session.deviceName` is `null` in `INITIAL_STATE`),
+ *  so `NAMELESS_MONITOR_CAPTION` genuinely surfaces here, not only as a
+ *  hypothetical caller-bug fallback. */
 function deviceCaptionFor(
   deviceName: string | null,
   linkLost: boolean,
 ): string {
-  const name = deviceName ?? "PM5";
+  const name = deviceName ?? NAMELESS_MONITOR_CAPTION;
   return linkLost ? `${name} · LOST` : name;
 }

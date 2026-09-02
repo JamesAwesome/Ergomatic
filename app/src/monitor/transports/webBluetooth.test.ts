@@ -254,6 +254,22 @@ describe("createWebBluetoothTransport: the discovery filter (fixed live at the e
     expect(options.optionalServices).toContain(ROWING_SERVICE_UUID);
     expect(options.optionalServices).toContain(CONTROL_SERVICE_UUID);
   });
+
+  it("a device matched by the service filter (not the name prefix) with no advertised name falls back to 'MONITOR'", async () => {
+    // RC-18 (door spec §3): the two filters are OR'd, so a device can match
+    // on `DEVICE_INFO_SERVICE_UUID` alone with a `name` Chrome never
+    // populated — `namePrefix: "PM5"` is a DISCOVERY constraint on the
+    // OTHER arm of the OR, not a guarantee about this one. `undefined`, not
+    // `""`: `BluetoothDevice.name` is `string | undefined` in the Web
+    // Bluetooth API, never empty-string for "no name".
+    const device = new FakeDevice("pm5-6", undefined as unknown as string);
+    installFakeBluetooth(device);
+    const transport = createWebBluetoothTransport();
+
+    const found = await transport.scan();
+
+    expect(found).toStrictEqual([{ id: "pm5-6", name: "MONITOR" }]);
+  });
 });
 
 describe("createWebBluetoothTransport: D6 — the characteristic cache is cleared on connect", () => {

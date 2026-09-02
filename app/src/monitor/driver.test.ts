@@ -56,6 +56,7 @@ import {
   computeIntervalAccrued,
   computeIntervalRemaining,
   createPm5Driver,
+  NAMELESS_MONITOR_CAPTION,
   ProgramBusyError,
   ProgramRejectionError,
   restPairComplete,
@@ -649,20 +650,20 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe("createPm5Driver: capabilities", () => {
-  it("reports fixed PM5 capabilities, falling back to the 'PM5' placeholder when no device name was given", () => {
+  it("reports fixed PM5 capabilities, falling back to the 'MONITOR' placeholder when no device name was given (RC-18 retarget: this pin was 'PM5')", () => {
     const { driver } = harness({ program: MINIMAL_PROGRAM });
     expect(driver.capabilities).toStrictEqual({
       canProgram: true,
       hasStrokeRate: true,
       reportsIntervals: true,
-      deviceName: "PM5",
+      deviceName: NAMELESS_MONITOR_CAPTION,
     });
   });
 
   // The realistic fixture (briefing: "at least one test per client task
   // starts from a real library workout"): Sea Fret, the same compiled
   // program `seaFretProgram()` builds for the busy-error tests below.
-  it("carries the picked device's own name (options.deviceName) in capabilities — never the placeholder — when one was provided (today: always reports the 'PM5' placeholder, ignoring any name given)", () => {
+  it("carries the picked device's own name (options.deviceName) in capabilities — never the placeholder — when one was provided (today: always reports the 'MONITOR' placeholder, ignoring any name given)", () => {
     const { driver } = harness(
       { program: seaFretProgram() },
       { deviceName: "PM5 432331249" },

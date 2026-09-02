@@ -86,6 +86,7 @@ import { fmtSplit } from "../../domain/format.js";
 import { PLANS } from "../../domain/plans.js";
 import type { LogSource, WorkoutType } from "../../domain/types.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
+import { NAMELESS_MONITOR_CAPTION } from "../monitor/driver.js";
 import type { CloseReason } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { formatLogDate } from "../session/logDraft";
@@ -302,14 +303,23 @@ export interface StoredSummaryView {
 // named as its own trigger.
 // `steps` are never consulted: a time-only Just Row is `timer` with NO
 // steps, which the old fingerprint could only ever have called by-hand.
-// The `?? "PM5"` arm is the type's, not the wire's: the server refuses
-// `pm5` without a `deviceName` (`server/logSource.ts`), so a stored `pm5`
-// row always carries a name; the fallback only keeps the function total
-// over `deviceName: string | null`.
+// The `?? NAMELESS_MONITOR_CAPTION` arm is the type's, not the wire's: the
+// server refuses `pm5` without a `deviceName` (`server/logSource.ts`), so a
+// stored `pm5` row always carries a name; the fallback only keeps the
+// function total over `deviceName: string | null` — RC-18 (door spec §3),
+// same as before, DEAD by the biconditional's own guarantee and
+// deliberately untested here for that reason. What RC-18 changes is
+// upstream, not this arm's reachability: a `pm5` row MUST carry a name
+// (the biconditional, `server/logSource.ts`), so without a neutral
+// fallback a nameless erg's row would 400 the whole save — `LogSession.tsx`
+// (`:730-755`) is the site that actually substitutes
+// `NAMELESS_MONITOR_CAPTION` for the unusable advertised name, which is
+// what makes the word load-bearing rather than decorative: a real saved
+// row can genuinely read `MONITOR` here, just never via THIS `??`.
 function sourceLabel(row: StoredLog): string {
   switch (row.source) {
     case "pm5":
-      return row.deviceName ?? "PM5";
+      return row.deviceName ?? NAMELESS_MONITOR_CAPTION;
     case "timer":
       return "TIMER";
     case "manual":
