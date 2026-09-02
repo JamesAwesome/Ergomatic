@@ -3,7 +3,7 @@
 **Origin:** James's phone findings on build 823 (2026-09-02, "Timer mode is
 really fucked up": END differs between orientations; a giant gap at the
 bottom) and the three copy notes batched at #268's and #272's PM gates.
-**Status: PRESENTED for Gate 0, 2026-09-02.**
+**Status: GATE 0 PASSED — James, 2026-09-02, on rev 1c ("Approved").**
 
 ## Mechanical ground
 
