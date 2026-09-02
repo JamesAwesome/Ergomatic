@@ -94,11 +94,13 @@ export function createApp(deps: AppDeps) {
   // (above), BEFORE the `if (deps.stores)` data-router block below —
   // `routes/data.ts`'s own `router.use("/api", requireUser)` 401s every
   // /api/* request that enters the data router first, and the concept2
-  // callback route is deliberately unauthenticated (the nonce binds, not a
-  // session; `routes/concept2.ts`'s own comment). Mounting here, after this
-  // file's own `originCheck` above but ahead of the data router, keeps the
-  // authed POST/DELETE concept2 routes under CSRF cover while the callback
-  // never reaches a gate meant for the rest of the API. Requires BOTH
+  // callback route is deliberately unauthenticated today (the nonce only
+  // correlates the return; it does not bind a principal, and there is no
+  // session check here either — `routes/concept2.ts`'s own comment).
+  // Mounting here, after this file's own `originCheck` above but ahead of
+  // the data router, keeps the authed POST/DELETE concept2 routes under
+  // CSRF cover while the callback never reaches a gate meant for the rest
+  // of the API. Requires BOTH
   // `deps.concept2` and `deps.stores` (the router needs `stores.logs`) —
   // `deps.concept2 ?? null` per the AppDeps field's own comment.
   const concept2Deps = deps.concept2 ?? null;

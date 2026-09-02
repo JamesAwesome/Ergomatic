@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The native half of the Concept2 link hop: open the authorize URL in the system browser, and give PR2 a foreground re-fetch seam so the app learns the link outcome when the rower returns. Branch A only — no URL scheme, no `appUrlOpen` handler. Plus the evidence package for the account-injection ruling — RULED at this PR's design gate (James, 2026-09-01): ACCEPT the bounded residual for the dark plumbing; fully authenticated option (g) gates `C2_LINK_ENABLED=1` (ROADMAP register + gate doc §6).
+**Goal:** The native half of the Concept2 link hop: open the authorize URL in the system browser, and give PR2 a foreground re-fetch seam so the app learns the link outcome when the rower returns. Branch A only — no URL scheme, no `appUrlOpen` handler (that leg is **PR1.75**, fix round 15 — see below). Plus the evidence package for the account-injection ruling — RULED at this PR's design gate (James, 2026-09-01): ACCEPT the bounded residual for the dark plumbing; **REAFFIRMED (James, 2026-09-01) on fix round 15's corrected bound census** — fully authenticated option (g), now PR1.75's owned scope, gates `C2_LINK_ENABLED=1` (ROADMAP register + gate doc §6).
 
 **Architecture:** Two small adapter-layer additions following the house native-first idiom (`isNative()` picks the arm; the native arm reaches its Capacitor plugin only through a dynamic `import()`). **Narrowed, fix round 2 (P2ii — the original wording overclaimed):** while nothing in `src/` consumes these modules today, `@capacitor/browser` is absent from `dist/client` because the modules are UNCONSUMED, not because the dynamic import folds it out on its own; once a consumer exists, that `import()` emits its own lazy chunk that IS present in `dist/client`, simply never LOADED on web since `isNative()` is `false` there (`adapters/appLifecycle.ts` / `keepAwake.ts` are the precedents for the dispatch shape, not for a bundle-absence claim). Everything ships dark: nothing renders until PR2 (plus fix round 2's own dev-only, flag-gated probe card — see below), and the server refuses while `C2_LINK_ENABLED` is off.
 
@@ -83,8 +83,12 @@ re-describing it here a second time is exactly what went stale each
 prior round, and even this POINTER paragraph itself went stale between
 rounds 5 and 9 by trying to summarize content rather than only pointing
 at it. `docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md` is the
-current, single source of truth: §1/§1a (the residual, its four bounds,
-and the blast radius — round 7 corrected the blast radius itself: no
+current, single source of truth: §1/§1a (the residual, corrected fix
+round 15 to two firm bounds — the nonce's single-use + 15-minute expiry —
+plus the dark flag, and two soft/best-effort factors the acceptance does
+not lean on, replacing an earlier "four real bounds" framing that
+overstated `ALLOWED_EMAILS` and "one live attempt per user", and the
+blast radius — round 7 corrected the blast radius itself: no
 tokens leak, only a server-mediated capability to see/replace/unlink the
 association or post the attacker's own rows into the victim's logbook),
 §2 (the credential fact — round 7 fetched Apple's own
@@ -107,9 +111,14 @@ Assembled from evidence, no invention. **Ruling MADE, 2026-09-01
 on any real cohort is GATED on the fully authenticated form of (g) —
 surface binding AND identity-checked completion on BOTH web and native
 before the token exchange, or an explicit re-ruling — `ROADMAP.md`'s C2
-account injection row, `2026-09-01-concept2-pr15-gate.md` §6).** The
-package's seven-option, four-bucket survey stands as the evidence the
-ruling was made against, not as a still-open menu.
+account injection row, `2026-09-01-concept2-pr15-gate.md` §6). RULING
+REAFFIRMED, 2026-09-01 (fix round 15) on the corrected two-firm/two-soft
+bound picture above — the correction narrowed the evidence, not the
+decision.** The package's seven-option, four-bucket survey stands as the
+evidence the ruling was made against, not as a still-open menu. **Option
+(g)'s delivery now has an owned unit, PR1.75** (ROADMAP's Wave E,
+sequenced PR1.5 → PR1.75 → PR2, TRIAD/AUTH) — this PR (PR1.5) ships only
+the dark, nonce-only plumbing above.
 
 - [ ] **Step 1:** Write both docs. **Step 2:** `pnpm format:check` untouched-by-prettier rule for root docs does not apply (these live under docs/superpowers — still never Prettier root markdown). **Step 3: Commit.**
 

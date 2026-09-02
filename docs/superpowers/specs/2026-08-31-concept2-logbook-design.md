@@ -208,18 +208,31 @@ so we build the RFC 8252 shape:
    the Keychain bearer at an authenticated exchange call:
    - **Native (Branch B)** completes through a private-use scheme
      (Info.plist): C2 redirects to
-     `haus.waffle.ergomatic://oauth/callback?code=…&state=…` (state IS
-     present, per the measured wire fact, even though native does not
-     need it to disambiguate the return the way the shared-nonce https
-     callback does — the app itself received the redirect directly);
-     an `appUrlOpen` handler posts `{code, state}` to authed `POST
-     /api/concept2/exchange`, **carrying the app's own Keychain
-     bearer**, and the server checks the caller's id against the
-     attempt's before exchanging.
+     `haus.waffle.ergomatic://oauth/callback?code=…&state=…` (state is
+     EXPECTED but UNMEASURED on this redirect kind — **corrected fix
+     round 15: the "per the measured wire fact" wording here promoted
+     PR0's web-callback receipt to a redirect it never touched.** The
+     committed receipt
+     (`docs/monitor/c2-crossconnect-2026-09/README.md:29-49`) measured
+     ONE mechanism, the HTTPS web callback (`redirect_uri` = our own
+     origin), via a single-process re-auth against `log-dev`; it says
+     nothing about whether C2 echoes `state` on a DIFFERENT `redirect_uri`
+     registered as a private-use scheme, which has never been probed.
+     Native does not need the echo to disambiguate the return the way the
+     shared-nonce https callback does — the app itself received the
+     redirect directly — so this is not load-bearing for Branch B's own
+     design, but the claim of measurement was false and is corrected here.
+     **PR1.75 owns the real measurement**, once C2 approves the new
+     `redirect_uri` (gate doc §3(g), "still owed"), before promoting
+     "expected" back to "measured"); an `appUrlOpen` handler posts
+     `{code, state}` to authed `POST /api/concept2/exchange`, **carrying
+     the app's own Keychain bearer**, and the server checks the caller's
+     id against the attempt's before exchanging.
    - **Web (Branch A)** completes through the EXISTING `/api/concept2/callback` —
-     unauthenticated today, per `server/routes/concept2.ts:171`'s own
-     "NO requireUser — the nonce binds" comment, which describes the
-     PRE-RULING shape, not the target — gaining the same
+     unauthenticated today, per `server/routes/concept2.ts:174`'s own
+     "NO requireUser — the nonce correlates, not binds" comment (corrected
+     fix round 15), which describes the PRE-RULING shape, not the
+     target — gaining the same
      caller-identity check via the `erg_session` cookie that already
      exists for web sessions (`server/auth/cookies.ts`) and is already
      delivered on C2's redirect back to our own first-party origin: "a
@@ -262,13 +275,22 @@ so we build the RFC 8252 shape:
      collection is the server's, not a cron.
 
    **RULED (James, 2026-09-01, PR1.5 design gate — `2026-09-01-concept2-pr15-gate.md`):
-   ACCEPT the bounded residual for the dark plumbing today (four real
-   bounds — `ALLOWED_EMAILS`, the `C2_LINK_ENABLED` dark flag, one live
-   attempt per user, the 15-minute window — not the two the original
-   "SUSPECTED" framing named).** `C2_LINK_ENABLED=1` on any REAL cohort
+   ACCEPT the bounded residual for the dark plumbing today — two FIRM
+   bounds (the nonce's single-use + 15-minute expiry) plus the
+   `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors this
+   acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a
+   new Ergomatic account, not a current holder's standing to act
+   (`signin.ts:30-42`), and "one live attempt per user" is best-effort
+   and raceable under concurrent mints, not enforced (gate doc §1,
+   corrected fix round 15) — not the "four real bounds" of equal weight
+   an earlier revision of this bullet claimed, and not the two the
+   original "SUSPECTED" framing named either.** **REAFFIRMED (James,
+   2026-09-01) on this corrected picture** — the correction narrowed the
+   evidence, not the decision. `C2_LINK_ENABLED=1` on any REAL cohort
    is GATED, not free, on the fully authenticated completion shape above
-   (surface binding + both-path identity check) being built end-to-end:
-   the nonce alone binding the exchange, as an earlier revision of this
+   (surface binding + both-path identity check) being built end-to-end —
+   **PR1.75, sequenced PR1.5 → PR1.75 → PR2 (ROADMAP's Wave E)**: the
+   nonce alone binding the exchange, as an earlier revision of this
    section described, is the failure mode the ruling closes before flag
    flip, not a standing design. Seven options across four buckets
    (accept, detect, physically-confirm, app-bind) are catalogued in the
@@ -381,21 +403,31 @@ so we build the RFC 8252 shape:
 | `needs_reauth_at` | timestamptz, nullable | set when a refresh 400/401s (§Architecture 6); link and `weight_class` survive, the surface prompts re-consent, and a successful relink clears it |
 | `created_at` / `updated_at` | timestamptz | house pattern |
 
-**`concept2_auth_attempts`** — `{nonce (pk), user_id FK, weight_class,
-surface, created_at}`; single-use, 15-minute expiry, consumed at
-exchange. Exists because the browser hop carries no credential; the
-nonce correlates the return, and (per the ruled activation shape,
-§Architecture 3) `attempt.userId === req.user.id` at an authenticated
-completion is what actually binds it. **`surface` column** (`"native"` |
-`"web"`, added PR1.5 fix round 13, superseding this row's original "no
-`redirect_kind` column ... one env-derived boot constant" claim — that
-held only while the design was Branch-A-only web completion; the ruled
-hybrid needs a per-surface redirect URI chosen at mint time, since
-native completes through a private-use scheme and web through the
-existing https callback, and the column is what lets both completion
-routes enforce that a nonce minted for one surface cannot complete on
-the other, gate doc §3(g) round 10) — plan deviation 1 is therefore
-superseded, not standing.
+**`concept2_auth_attempts`** — **CURRENT (shipped, PR1):**
+`{nonce (pk), user_id FK, weight_class, created_at}`
+(`server/db/schema.ts:510-519`) — single-use, 15-minute expiry, consumed
+at exchange. Exists because the browser hop carries no credential; the
+nonce correlates the return to the attempt, and — this is the ACCEPTED
+DARK IMPLEMENTATION, not the ruled target — nothing today checks WHO is
+completing it, which is exactly the account-injection residual the
+design-gate ruling accepts for the dark plumbing. **TARGET (UNBUILT
+ACTIVATION SHAPE — PR1.75's job, no migration exists yet for any of
+this): add a `surface` column** (`"native"` | `"web"`, corrected fix
+round 15 — an earlier revision of this row said the column was "added
+PR1.5 fix round 13"; round 13 was a docs-only reconciliation pass, and no
+drizzle migration on this branch has ever touched `app/drizzle`
+— superseding this row's original "no `redirect_kind` column ... one
+env-derived boot constant" claim — that held only while the design was
+Branch-A-only web completion; the ruled hybrid needs a per-surface
+redirect URI chosen at mint time, since native completes through a
+private-use scheme and web through the existing https callback, and the
+column is what lets both completion routes enforce that a nonce minted
+for one surface cannot complete on the other, gate doc §3(g) round 10)
+— plan deviation 1 is therefore superseded, not standing, once PR1.75
+ships it. Until then, `attempt.userId === req.user.id` at an
+authenticated completion — the thing that actually BINDS the principal,
+as opposed to the nonce, which only CORRELATES the return — does not
+exist on either completion route.
 
 **`session_logs` additions**, all additive-optional, no default, no
 backfill (house pattern):
@@ -516,14 +548,26 @@ rather than inferred:**
   (`c2ResultId`, `c2UserId`, `completedAt`, `tz`); one new unauthenticated
   route (`GET /api/concept2/callback`) answers 403 dark rather than not
   existing.
-- **After PR1.5:** native browser plumbing exists but is reachable only
-  from a surface that does not render while `available:false`. Deployed
-  prod behavior: unchanged.
+- **After PR1.5:** the system-browser consent hop and the foreground
+  re-fetch seam exist (**corrected fix round 15 — PR1.5 does NOT ship the
+  URL scheme or `appUrlOpen` handler; see PR1.75 below**), reachable only
+  from a surface that does not render while `available:false`. This is
+  the ACCEPTED DARK IMPLEMENTATION the design-gate ruling accepts the
+  residual for — nonce-only, no principal-binding identity check on
+  either completion route. Deployed prod behavior: unchanged.
+- **After PR1.75:** the ruled activation shape exists end-to-end — the
+  `surface` column and migration, the native URL scheme + `appUrlOpen`
+  handler and its authenticated exchange route, and the identity check
+  (`attempt.userId === req.user.id` before token exchange) retrofitted
+  onto the existing web callback. This is option (g), fully implemented;
+  it is what the design-gate ruling's hard precondition names, and it is
+  what makes `C2_LINK_ENABLED=1` on a real cohort even possible to
+  consider. Deployed prod behavior: unchanged (still flag-off).
 - **After PR2:** the surface renders ONLY when the server reports
   `available:true`; prod stays dark until BOTH write approval is
-  confirmed AND option (g) is fully implemented (§Architecture 7, 9).
-  Deployed prod behavior: unchanged until that deliberate flag flip,
-  which is the release act — an env change alone does not suffice.
+  confirmed AND PR1.75's option (g) is fully implemented (§Architecture
+  7, 9). Deployed prod behavior: unchanged until that deliberate flag
+  flip, which is the release act — an env change alone does not suffice.
 
 **Atomicity ruling:** no PR in this wave depends on a later one to be
 safe; the flag, not PR ordering, is the safety mechanism.
@@ -560,19 +604,40 @@ safe; the flag, not PR ordering, is the safety mechanism.
   link AND upload. TRIAD gates.
 - **PR1.5 — the native link flow** (PM condition 1's split: a reviewer
   should not hold a token-broker migration and an iOS deep-link contract
-  in one pass): `@capacitor/browser` dependency, foreground re-fetch
-  wiring, and — the native completion leg only (§Architecture 3) — the
-  URL scheme + `appUrlOpen` handler. Verified ON DEVICE, not by reading
-  Capacitor docs (RF13/RF19: our e2e is web; the native arm is exactly
-  where our instruments are blind).
+  in one pass): `@capacitor/browser` dependency, the foreground re-fetch
+  seam (`useReturnToApp`). **Corrected fix round 15: the URL scheme +
+  `appUrlOpen` handler, this bullet's original scope, moved to PR1.75** —
+  PR1.5 ships the dark, nonce-only plumbing (the ACCEPTED implementation
+  the design-gate ruling accepts a residual for), not any piece of the
+  authenticated activation shape. `browserFinished` return-signal
+  verified ON DEVICE, not by reading Capacitor docs (RF13/RF19: our e2e
+  is web; the native arm is exactly where our instruments are blind).
+- **PR1.75 — full option (g), the ruled activation shape (TRIAD: AUTH).**
+  Owns every piece the design-gate ruling's hard precondition names: the
+  `surface` column migration (`"native"` | `"web"`) and its enforcement
+  at both mint and completion routes, the native URL scheme +
+  `appUrlOpen` handler moved from PR1.5, the authenticated native
+  exchange route, an identity check
+  (`attempt.userId === req.user.id`, run BEFORE the token exchange, never
+  merely before the link write) retrofitted onto the existing,
+  currently-unauthenticated web callback, Concept2's own approval of the
+  new native `redirect_uri` (external dependency), and dual-route
+  identity tests. The native completion leg's own `state`-echo claim gets
+  its real on-device measurement here too, once C2 approves the redirect
+  (gate doc, corrected fix round 15 — PR0's receipt measured the web
+  callback only). Sequenced PR1.5 → PR1.75 → PR2. Gates
+  `C2_LINK_ENABLED=1` on any real cohort (gate doc §6).
 - **PR2 — client (after Gate 0):** You card, send affordance and states,
   api client additions. `pnpm e2e` + screenshots (RF1); per-file coverage
   (RF2); realistic fixtures (RF3).
 - **Gates:** anchor pass DONE (this revision is its output); PM open
   DONE (GO-WITH-CONDITIONS, folded); PR1 gets the triad PM final-PR
-  gate; PR2 sits behind Gate 0. Antagonist mid-phase: delta pass only if
-  PR0's probes force a design not written here; otherwise skips inherit
-  this anchor's vetted ground, said aloud at each PR.
+  gate; PR2 sits behind Gate 0. **PR1.75 is TRIAD (AUTH) regardless of
+  phase position — full antagonist pass on its spec, PM final-PR gate on
+  its PR, no skip available (added fix round 15).** Antagonist mid-phase
+  otherwise: delta pass only if PR0's probes force a design not written
+  here; otherwise skips inherit this anchor's vetted ground, said aloud
+  at each PR.
 
 ## Testing
 

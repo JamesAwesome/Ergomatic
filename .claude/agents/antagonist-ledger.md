@@ -4942,3 +4942,27 @@ pass did not:
   `erg_session` cookie, for WEB sessions (`server/auth/cookies.ts:6,20-29`)
   — only the native app itself never carries one. Neither correction
   changes this pass's verdict (REVISE) or any of its other five findings.
+
+**SECOND CORRECTION (2026-09-01, fix round 15, reviewer finding — this
+entry's own finding 3 is itself now further refined, not reversed):**
+finding 3's "two more real bounds" (one live attempt per user, the
+15-minute window) grew the census from two to four, and every later
+round through 14 carried that four-bound framing forward as though all
+four held equal weight. A reviewer re-read the same two cited files and
+found two of the four weaker than the doc claimed: `ALLOWED_EMAILS`
+(`signin.ts:30-42`) gates NEW-account admission only — an
+already-admitted account is never re-checked — not a current holder's
+standing to act; and "one live attempt per user" is a three-call,
+untransacted mint sequence with no `UNIQUE(user_id)`
+(`server/routes/concept2.ts:157-167`, `schema.ts:510-519`), raceable
+under CONCURRENT mints even though a sequential second mint does replace
+the first, as originally claimed. The gate doc's §1 now reads two firm
+bounds (the nonce's single-use + 15-minute expiry) plus the dark flag,
+and two soft/best-effort factors the acceptance does not lean on.
+**Shown this corrected picture, James REAFFIRMED the same ACCEPT
+ruling** — the correction narrowed the evidence, not the decision.
+Technique, same shape as this entry's own finding 3: **re-read a ruling
+doc's cited code against the doc's OWN prose, not just against the
+threat sentence** — a census can be under-stated in one direction and
+over-stated in another within the same revision, and both are found the
+same way.

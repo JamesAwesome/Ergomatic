@@ -73,7 +73,8 @@ drawn from.**
   `{userId, weightClass}` (`server/stores/concept2.ts:181-196`), so an
   attacker can simply mint for the WEB surface and complete via the
   EXISTING, unauthenticated `/api/concept2/callback`
-  ("NO requireUser — the nonce binds," `server/routes/concept2.ts:171`)
+  ("NO requireUser — the nonce correlates, not binds," corrected fix round
+  15, `server/routes/concept2.ts:174`)
   — (g)'s own check, living entirely in the NEW native exchange route,
   is never reached. Restated (WRONGLY, see round 12): (g) is the only
   option that CAN bind the
@@ -109,6 +110,28 @@ drawn from.**
   "FURTHER REFUTED" one, and its cost/honest-limit sections), the
   taxonomy, §6, and both of round 11's forward-references all corrected
   to require BOTH preconditions, not the surface column alone.
+- **Fix round 15 (P0 + P1×2, controller-dispatched, docs-only):** the
+  "four real bounds" census (§1) overstated two of its four items — found
+  by re-reading the cited code rather than the doc's own prose:
+  `ALLOWED_EMAILS` gates NEW-account admission only (`signin.ts:30-42`),
+  never re-checked against an existing account, and "one live attempt per
+  user" is a three-call, untransacted, no-`UNIQUE(user_id)` sequence
+  (`server/routes/concept2.ts:157-167`) — raceable under concurrent
+  mints, not enforced. §1 rewritten as two firm bounds (the nonce's
+  single-use + 15-minute expiry) plus the dark flag, with those two
+  demoted to soft/best-effort factors the acceptance does not lean on;
+  §3(a) and §6 reworded to match. **Shown the corrected picture, James
+  REAFFIRMED the same ACCEPT ruling (2026-09-01)** — §6 records this as
+  its own dated line, not folded into the original ruling paragraph.
+  Also: option (g)'s delivery now has an owned unit, **PR1.75**
+  (ROADMAP's Wave E and the native-link plan both name it, sequenced
+  PR1.5 → PR1.75 → PR2); and the native-link plan's own "state IS
+  present, per the measured wire fact" line for the NATIVE completion leg
+  was corrected — the committed receipt
+  (`docs/monitor/c2-crossconnect-2026-09/README.md`) measured the HTTPS
+  web callback only, never the native private-use-scheme redirect, so the
+  native echo is EXPECTED, not measured, until PR1.75 runs its own probe
+  after C2 approves the redirect URI.
 
 ## 1. The residual, restated — with its own bounds
 
@@ -121,20 +144,22 @@ victim (any channel — a link, a QR code, a shared device), the victim's
 Concept2 login ends up linking the ATTACKER's Ergomatic account, not the
 victim's own.
 
-**Bounded today by FOUR things, not two — the fix round 2 revision named
-only the first two:**
+**CORRECTED, fix round 15 (P0 — reviewer finding: the "four real bounds"
+census overstated two of the four):** the honest picture is **two FIRM
+bounds, the dark flag, and two SOFT/best-effort factors the acceptance
+does not lean on** — not four bounds of equal weight, and not the
+original two-item count either.
 
-1. `ALLOWED_EMAILS` (the household allowlist gating who can hold an
-   Ergomatic account at all).
-2. The `C2_LINK_ENABLED` dark flag (PR1's availability gate, spec
-   §Architecture 8) keeping the whole feature off until James turns it on.
-3. **One live attempt per user** (`server/routes/concept2.ts:159-161`, the
-   route's own comment: "every mint sweeps stale attempts globally and
-   this user's own before minting a fresh one, so a user can never hold
-   more than one live attempt" — enforced by `deleteAttemptsFor(userId)`
-   at mint time). An attacker cannot pre-mint a stockpile of authorize
-   URLs; each fresh mint invalidates their own previous one.
-4. **The 15-minute attempt window**
+**Firm:**
+
+1. **The `C2_LINK_ENABLED` dark flag** (PR1's availability gate, spec
+   §Architecture 8) keeps the whole feature off until James turns it on —
+   the surface is unreachable in production regardless of the bounds
+   below.
+2. **The single-use nonce.** Each `concept2_auth_attempts` row is
+   consumed exactly once, atomically, at exchange
+   (`server/stores/concept2.ts:181-196`).
+3. **The 15-minute attempt window**
    (`ATTEMPT_MAX_AGE_MS = 15 * 60 * 1000`, `server/routes/concept2.ts:38`,
    enforced in `consumeAttempt`'s own `fresh` column check,
    `server/stores/concept2.ts:191,194`). **What this kills:** delivery
@@ -144,6 +169,35 @@ only the first two:**
    against FAST, synchronous delivery: a shared device handed over in
    person, a link sent over a live chat the victim opens within minutes,
    or an attacker standing next to the victim.
+
+**Soft — real today, but weaker than every prior revision of this
+document claimed, and the acceptance below does not depend on either:**
+
+4. **`ALLOWED_EMAILS` bounds NEW-ACCOUNT ADMISSION, not current-account
+   standing to act — it is not a revocation check.** `signInWithClaims`
+   (`server/auth/signin.ts:30-42`) only consults the allowlist on the
+   `else` branch, when NO existing user row matches the Google subject
+   (`isAllowed(deps.allowlist, claims.email)` gates `createUser` alone);
+   an already-admitted account's every later sign-in takes the `if (user)`
+   branch and is never re-checked against the list
+   (`docs/deploy.md:108-112` describes the same gate the same way). For
+   the household threat model the effective attacker population is still
+   "household" in practice, but state the mechanism precisely: it bounds
+   who can OBTAIN an Ergomatic account, not who currently may act with
+   one already held (including one whose email is later removed from the
+   list).
+5. **"One live attempt per user" is BEST-EFFORT and RACEABLE, not
+   enforced.** The mint route runs three separate, unwrapped calls —
+   `deleteExpiredAttempts`, then `deleteAttemptsFor(userId)`, then
+   `createAttempt` (`server/routes/concept2.ts:157-167`) — with no
+   `db.transaction` around them and no `UNIQUE(user_id)` constraint on
+   `concept2_auth_attempts` (`server/db/schema.ts:510-519`: only `nonce`
+   is a primary key). A SEQUENTIAL second mint does replace the first, as
+   the route's own comment claims — but two CONCURRENT mint requests can
+   both pass the delete step before either inserts, leaving multiple live
+   attempts for one user at once. An attacker cannot pre-mint a durable
+   stockpile across time, but the "never more than one live attempt"
+   claim does not hold under concurrency.
 
 ## 1a. The blast radius — what James is actually weighing — CORRECTED
 round 7 (finding 4)
@@ -337,12 +391,15 @@ options depend on them:
   (`server/routes/concept2.ts:139`, `router.post("/api/concept2/connect",
   requireUser, ...)`). This matters for (b)'s cost, below.
 
-**(a) Accept the residual, bounded by the four facts in §1.**
-Zero code. The population that can hold an Ergomatic account today is the
-household allowlist (`server/auth/allowlist.ts`), the feature is dark
-behind `C2_LINK_ENABLED`, one live attempt per user, and a 15-minute
-clock. Revisit before any public opening, or before `ALLOWED_EMAILS`
-widens.
+**(a) Accept the residual, bounded by §1's picture: two firm bounds (the
+dark flag, the single-use/15-minute nonce) plus two soft factors this
+option does not lean on.**
+Zero code. The dark flag keeps the feature unreachable in production; the
+15-minute clock kills async delivery. `ALLOWED_EMAILS` keeps the
+population who can OBTAIN an account at "household" in practice, and one
+live attempt per user holds against sequential, non-concurrent mints —
+neither is load-bearing for the accept decision. Revisit before any
+public opening, or before `ALLOWED_EMAILS` widens.
 
 **(b) Detection at the callback page: show the target identity BEFORE the
 consenting principal leaves that page.**
@@ -612,8 +669,9 @@ says plainly "No redirect_kind column — Branch A is chosen and the
 redirect URI is one env-derived constant" — and `consumeAttempt`'s
 `RETURNING` clause (`server/stores/concept2.ts:181-196`) hands back only
 `{userId, weightClass}`. The EXISTING `/api/concept2/callback` route is
-unauthenticated BY DESIGN ("NO requireUser — the nonce binds,"
-`server/routes/concept2.ts:171`'s own comment) and is UNCHANGED by (g) —
+unauthenticated BY DESIGN ("NO requireUser — the nonce correlates, not
+binds," corrected fix round 15, `server/routes/concept2.ts:174`'s own
+comment) and is UNCHANGED by (g) —
 round 9 added a NEW route for native, it did not touch or gate the old
 one. So an attacker mints an attempt (the SAME mint route,
 `POST /api/concept2/connect`, `server/routes/concept2.ts:139`, serves
@@ -875,7 +933,10 @@ now build items against a picked shape, not open questions:**
   and migration (round 10), the dual-route
   `attempt.userId === req.user.id` check BEFORE token exchange on both
   `/api/concept2/callback` and the new `/api/concept2/exchange` (round
-  12), and Concept2's own approval of a new native `redirect_uri`.
+  12), and Concept2's own approval of a new native `redirect_uri`. **All
+  three now have an owned delivery unit: PR1.75** (ROADMAP's Wave E,
+  sequenced PR1.5 → PR1.75 → PR2), which also owns the URL-scheme +
+  `appUrlOpen` handler moved off PR1.5's own scope (fix round 15).
 - PR2's detect-identity treatment (§6: option (b), shipping alongside)
   — the callback/linked card naming which Ergomatic account the link
   goes to. **This is an OWED Gate 0 AMENDMENT, not yet rendered or
@@ -936,9 +997,24 @@ principal, matching what it actually proves.
 residual (option (a)) for the dark plumbing.** Rationale: the surface is
 unreachable in production (dark behind `C2_LINK_ENABLED`; no client
 surface until PR2; prod stays flag-off until Concept2 write approval is
-confirmed), the attacker population is bounded to `ALLOWED_EMAILS` plus
-the one-attempt/15-minute limits, and the blast radius is a
-server-mediated capability, not token exfiltration.
+confirmed), the single-use/15-minute nonce bounds the residual's own
+reach, and the blast radius is a server-mediated capability, not token
+exfiltration.
+
+**RULING REAFFIRMED (James, 2026-09-01), on corrected evidence.** §1's
+census originally named this rationale's population bound as
+`ALLOWED_EMAILS` plus "one live attempt per user" alongside the
+single-use/15-minute limits, as if all four carried equal weight. Fix
+round 15 (P0) found two of those four were weaker than claimed —
+`ALLOWED_EMAILS` bounds new-account admission, not a current holder's
+standing to act, and "one live attempt per user" is best-effort and
+raceable, not enforced (§1, corrected) — and reframed §1 as two firm
+bounds plus the dark flag, with those two demoted to soft factors the
+acceptance does not lean on. Shown this corrected picture, James
+reaffirmed the same ACCEPT decision: the correction narrows the evidence
+supporting the ruling, not the ruling itself — the residual stays
+unreachable while `C2_LINK_ENABLED` is off, and full option (g) still
+gates any flag flip.
 
 **Hard precondition (recorded in ROADMAP's open-item register):** setting
 `C2_LINK_ENABLED=1` on any real cohort requires option (g) FULLY
