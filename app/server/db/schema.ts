@@ -551,9 +551,14 @@ export const concept2Links = pgTable("concept2_links", {
 // surface consumes nothing by construction.
 //
 // UNIQUE(user_id): one live attempt per user, ENFORCED — mint is one
-// `INSERT ... ON CONFLICT (user_id) DO UPDATE` (design §2; PROVEN on real
-// Postgres that two concurrent mints serialize on this index and exactly
-// one row survives, where the old delete-then-insert yielded two).
+// `INSERT ... ON CONFLICT (user_id) DO UPDATE` (design §2). PROVEN by
+// `concept2.integration.test.ts`'s deterministic race test ("createAttempt
+// genuinely BLOCKS on an uncommitted conflicting row") that two concurrent
+// mints serialize on this index and exactly one row survives. The old
+// delete-then-insert image does NOT yield two rows on this schema: measured
+// against real Postgres (Task 2 fix round 2), it dies with
+// `concept2_auth_attempts_user_id_unique` propagating unmapped — "two rows"
+// was the PRE-0020 behaviour, before that index existed.
 //
 // Migration 0020 rollback, both halves (design §2): (1) `surface` carries
 // DEFAULT 'web' for ROLLBACK, not for writes — the PR1.5 image's

@@ -233,9 +233,16 @@ export function createConcept2Store(db: Db) {
     // (user_id) DO UPDATE SET nonce, surface, weight_class, created_at`.
     // Updating the PK in DO UPDATE is legal; two concurrent mints serialize
     // on `concept2_auth_attempts_user_id_unique` and exactly one row
-    // survives (PROVEN on real Postgres — the integration test's concurrent
-    // case; the old delete-then-insert yielded two). After that arm the
-    // unique violation this is meant to catch is the PRIMARY KEY
+    // survives — PROVEN by `concept2.integration.test.ts`'s deterministic
+    // race test ("createAttempt genuinely BLOCKS on an uncommitted
+    // conflicting row"), which holds a row open on one connection and shows
+    // the concurrent insert blocks on the index rather than racing past it.
+    // The old delete-then-insert image does NOT yield two rows on this
+    // schema: measured against real Postgres (Task 2 fix round 2), it dies
+    // with `concept2_auth_attempts_user_id_unique` propagating unmapped —
+    // "two rows" was the PRE-0020 behaviour, before that index existed.
+    // After that arm the unique violation this is meant to catch is the
+    // PRIMARY KEY
     // (`concept2_auth_attempts_pkey`): the new nonce collided with another
     // row's (32 random bytes — the route retries once).
     //

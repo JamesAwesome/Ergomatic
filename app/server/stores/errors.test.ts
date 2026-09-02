@@ -60,7 +60,18 @@ function classify(
   err: unknown,
   expectedConstraint: string,
 ): "matched" | "rethrow" {
-  // Mirrors concept2.ts's own two catch blocks exactly.
+  // Mirrors concept2.ts's own two catch blocks exactly. Being a mirror
+  // means it is a PATTERN test, not a production one (RF11): a regression
+  // in `stores/concept2.ts` back to a bare `isUniqueViolation(err)` check
+  // (dropping the constraint-name comparison) would NOT redden this file —
+  // this `classify` would regress in lockstep with the production code it
+  // mirrors. The production sites' own evidence is Task 2's real-Postgres
+  // mutation testing (`task-2-report.md:609-633`): mutating `createAttempt`
+  // to a delete-then-insert produced a `concept2_auth_attempts_user_id_
+  // unique` violation that, with the real (unmutated) constraint-name
+  // check, propagated unmapped rather than being misclassified as the
+  // expected nonce-PK collision — that real-Postgres run is the actual
+  // proof this pattern matters, not this file.
   if (isUniqueViolation(err) && pgConstraint(err) === expectedConstraint) {
     return "matched";
   }

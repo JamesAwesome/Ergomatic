@@ -209,7 +209,7 @@ unrelated redesign in one pass → split — decides it.
   empty-cookie-is-absent, the disagreement log); `routes/concept2.ts` (surface at
   mint, per-surface `redirect_uri`, `state` in the mint response, the callback
   ladder with its route-local cookie resolver, `POST /exchange`, the route-level
-  disagreement refusal, the six-page template); `concept2/client.ts`
+  disagreement refusal, the eight-page template); `concept2/client.ts`
   (`redirect_uri` as an argument, both call sites); `testing/fakes.ts`; tests;
   (ROADMAP's PR1.5 checkbox: already ticked at rev 4). **Gate: zero files under `app/src/` or
   `app/ios/`.** Antagonist: SKIP, spoken — the full TRIAD pass covered every
@@ -285,13 +285,19 @@ the enum, the column, and the unique index. Additive to every other table.
 rollback image's concurrent double-mint (delete-then-insert, `stores/concept2.ts:159-165`)
 into a unique violation (500) rather than two rows. Accepted — a rare self-race,
 strictly smaller blast radius than the unbounded attempts the index prevents.
-**D1 APPROVED: 0020 also adds `UNIQUE (c2_user_id)` on `concept2_links`** — the cheap moment (`schema.ts:483` has no index today).
+**D1 APPROVED: 0020 also adds `UNIQUE (c2_user_id)` on `concept2_links`** — the cheap moment (`schema.ts:483` has no index today). It also survives a code rollback: the PR1.5 image's `upsertLink` has no mapping for this constraint, so after rollback a conflict on it answers with an unhandled 500 rather than this PR's 409 — immaterial while the table is empty and the flag is dark.
 
 **Mint is one atomic statement:** `INSERT … ON CONFLICT (user_id) DO UPDATE SET
 nonce = excluded.nonce, surface = excluded.surface, weight_class =
 excluded.weight_class, created_at = now()`. Updating the PK in `DO UPDATE` is
 legal; two concurrent mints serialize on the unique index and exactly one row
-survives (PROVEN on real Postgres; the old delete-then-insert yields two). A new
+survives — PROVEN by `concept2.integration.test.ts`'s deterministic race test
+("createAttempt genuinely BLOCKS on an uncommitted conflicting row"), which
+holds a row open on one connection and shows the concurrent insert blocks on
+the index rather than racing past it. The old delete-then-insert image does
+NOT yield two rows on this schema: measured against real Postgres (Task 2 fix
+round 2), it dies with `concept2_auth_attempts_user_id_unique` propagating
+unmapped — "two rows" was the PRE-0020 behaviour, before that index existed. A new
 nonce colliding with another row's PK (32 random bytes — not worth designing
 around) surfaces as a unique violation on `attempts_pkey`: the route retries
 once with a fresh nonce, then 500s. `deleteAttemptsFor` retires;
@@ -493,12 +499,12 @@ Mix-up (RFC 9700 §4.4) is N/A: one authorization server, `c2BaseUrl` a
 boot-time constant, no AS identifier read from any response. Open redirect and
 reflected XSS: closed by construction (no `res.redirect`; literal pages).
 
-### 7. Rower-visible pages — one shared styled template, all six pages (Gate 0 APPROVED)
+### 7. Rower-visible pages — one shared styled template, all eight pages (Gate 0 APPROVED)
 
 The callback pages shipped in PR1 as unstyled placeholder HTML (browser-default
 Times on white). Now that the authenticated callback makes them reachable by a
 rower, PR1.75 replaces `page()` with ONE server template — inline CSS, system
-fonts, zero network — used by all six pages. Mechanical layout: a mono status
+fonts, zero network — used by all eight pages. Mechanical layout: a mono status
 label (`CONCEPT2 LINK · <LABEL> · HTTP <n>`), one bold statement, one action line;
 app ground `#f6f3ec`, ink `#1c1a17` (15.67:1 on ground, 17.08:1 on panel), label `#5f5a50` (6.18:1 on ground, 6.74:1 on panel — WCAG relative-luminance, recomputed at plan time; an earlier 15.9/5.8 was rounded), accent rule
 `#b5341f`. Approved rendered (both orientations, beside the current placeholders)
@@ -625,7 +631,9 @@ button carries the `WebAuth` plugin — enforced by `linkClient`, not assumed.**
 6. (a) Both redirect URIs registered at log-dev — DONE for native, confirm web;
    1.75b's walk prerequisite. (b) Live-portal registration is NOT PR1.75's exit:
    owner = the ROADMAP C2 register row + the flag-flip runbook.
-7. The six callback pages (§7) approved rendered by James — DONE 2026-09-02.
+7. The eight callback pages (§7) approved rendered by James — DONE 2026-09-02
+   (the 409 Already-linked frame and the both-identities Linked frame were on
+   the artifact when D1/D2 were approved).
 8. **What is NOT discharged, written down:** the ROADMAP PR1.75 row carries a
    one-line disposition per clause of `ROADMAP.md:999-1020` at 1.75b's merge, and
    an explicit still-owed line: flag flip, live-portal registration, PR2's

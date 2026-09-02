@@ -127,13 +127,27 @@ function shell(spec: PageSpec): string {
   );
 }
 
+// Overloaded rather than `identities?: …` on one signature (I3, final
+// review): an optional third parameter let `renderCallbackPage("linked")`
+// compile and render the D2 disclosure page with both identities blank —
+// the one page whose entire purpose is showing them. Splitting the "linked"
+// kind into its own signature that REQUIRES `identities` makes that gap
+// unrepresentable instead of relying on a test of the `?? ""` fallback.
+export function renderCallbackPage(kind: Exclude<CallbackPageKind, "linked">): {
+  status: number;
+  html: string;
+};
+export function renderCallbackPage(
+  kind: "linked",
+  identities: { c2Username: string; email: string },
+): { status: number; html: string };
 export function renderCallbackPage(
   kind: CallbackPageKind,
   identities?: { c2Username: string; email: string },
 ): { status: number; html: string } {
   if (kind === "linked") {
-    const c2 = escapeHtml(identities?.c2Username ?? "");
-    const email = escapeHtml(identities?.email ?? "");
+    const c2 = escapeHtml(identities!.c2Username);
+    const email = escapeHtml(identities!.email);
     const spec: PageSpec = {
       status: 200,
       label: "LINKED",

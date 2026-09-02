@@ -319,9 +319,10 @@ describe("concept2 router: auth guard", () => {
     // above only reach two of them plus the callback: deleting
     // `refuseAmbiguousAuth` from `GET /link`, `DELETE /link` or
     // `POST /results/:logId` left every other assertion in this file green.
-    // Every route here is driven with one body carrying each route's own
-    // required fields, so a route that WRONGLY proceeds gets far enough to
-    // write something — which is what the write assertions below catch.
+    // The status/body assertion is the gate on every row (it alone catches
+    // `GET /api/concept2/link`, which never writes). The write assertions
+    // below add cover on the four routes that CAN write — each spy is
+    // load-bearing on at least one of those rows.
     const jsonRoutes: Array<[string, string]> = [
       ["post", "/api/concept2/connect"],
       ["post", "/api/concept2/exchange"],
@@ -1078,6 +1079,11 @@ describe("callback (GET /api/concept2/callback) — the web ladder, design §5",
     expect(res.headers["referrer-policy"]).toBe("no-referrer");
   });
 
+  // A standing-constraint regression gate, same class as the no-anchor and
+  // Referrer-Policy assertions above: an unminted `state` falls through the
+  // callback ladder to the Expired page, and interpolating `state` (or
+  // `code`) into that page's HTML — instead of using it only to look up the
+  // attempt — reddens this test.
   it("never reflects state/code into the HTML response", async () => {
     const { app } = buildApp();
     const res = await asACookie(

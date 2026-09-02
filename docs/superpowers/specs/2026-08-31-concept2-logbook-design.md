@@ -244,9 +244,9 @@ so we build the RFC 8252 shape:
      the app's own Keychain bearer**, and the server checks the caller's
      id against the attempt's before exchanging.
    - **Web (Branch A)** completes through the EXISTING `/api/concept2/callback` —
-     unauthenticated today, per `server/routes/concept2.ts:174`'s own
-     "NO requireUser — the nonce correlates, not binds" comment (corrected
-     fix round 15), which describes the PRE-RULING shape, not the
+     unauthenticated today, per the "NO requireUser — the nonce correlates,
+     not binds" comment then at `:174` (corrected fix round 15), which
+     describes the PRE-RULING shape, not the
      target (comment retired at PR1.75a; the callback is now
      cookie-authenticated) — gaining the same
      caller-identity check via the `erg_session` cookie that already

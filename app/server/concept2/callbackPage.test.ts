@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { escapeHtml, renderCallbackPage } from "./callbackPage.js";
+import {
+  escapeHtml,
+  renderCallbackPage,
+  type CallbackPageKind,
+} from "./callbackPage.js";
 
 // Wave E PR1.75a (2026-09-02-concept2-pr175-app-bind-design.md §7): ONE
 // server template, inline CSS, system fonts, zero network, used by every
@@ -7,7 +11,7 @@ import { escapeHtml, renderCallbackPage } from "./callbackPage.js";
 // change here is a design-gate question, not a test fix.
 describe("renderCallbackPage", () => {
   const cases: Array<
-    [Parameters<typeof renderCallbackPage>[0], number, string, string, string]
+    [Exclude<CallbackPageKind, "linked">, number, string, string, string]
   > = [
     [
       "alreadyLinked",
@@ -86,6 +90,16 @@ describe("renderCallbackPage", () => {
     expect(page.html.replace(/<[^>]+>/g, "")).toContain("Return to the app.");
   });
 
+  it("rejects linked without identities at compile time (@ts-expect-error) and throws at runtime rather than rendering empty (I3)", () => {
+    // @ts-expect-error — the "linked" overload requires `identities`; only
+    // the literal-kind overload may omit the second argument. This is the
+    // biting mutation for I3: reverting to the old single signature with
+    // `identities?: …` makes this call compile again, which makes the
+    // `@ts-expect-error` directive itself unused — `pnpm typecheck` reddens
+    // on "Unused '@ts-expect-error' directive" rather than this assertion.
+    expect(() => renderCallbackPage("linked")).toThrow();
+  });
+
   it("escapes both identities: a <script> username never reaches the page raw", () => {
     const page = renderCallbackPage("linked", {
       c2Username: "<script>alert(1)</script>",
@@ -101,7 +115,6 @@ describe("renderCallbackPage", () => {
   // in Referer. There are no anchors on any page, including "here": it is
   // plain text, not a link.
   it.each([
-    "linked",
     "alreadyLinked",
     "expired",
     "incomplete",
@@ -110,7 +123,20 @@ describe("renderCallbackPage", () => {
     "unavailable",
     "failed",
   ] as const)("%s carries no subresource and no outbound link", (kind) => {
-    const { html } = renderCallbackPage(kind, {
+    const { html } = renderCallbackPage(kind);
+    expect(html).not.toMatch(
+      /<(link|script|img|iframe|object|embed|video|audio|source)\b/i,
+    );
+    expect(html).not.toMatch(/<a\b/i);
+    expect(html).not.toMatch(/\bsrc=/i);
+    expect(html).not.toMatch(/@import|url\(/i);
+    for (const m of html.matchAll(/href="([^"]*)"/g)) {
+      expect(m[1]).toMatch(/^\/(?!\/)/);
+    }
+  });
+
+  it("linked carries no subresource and no outbound link", () => {
+    const { html } = renderCallbackPage("linked", {
       c2Username: "u",
       email: "e@x.test",
     });
