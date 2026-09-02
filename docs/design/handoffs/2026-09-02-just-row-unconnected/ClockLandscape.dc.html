@@ -80,7 +80,10 @@
 <div class="screen" style="width: 844px; height: 390px; background: var(--page); position: relative; overflow: hidden; box-sizing: border-box; display: grid; grid-template-columns: 44px 1fr;">
   <div style="border-right: 1px solid var(--rule); display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 12px 0;">
     <span class="back">&larr;</span>
-    <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--accent); border: 1px solid var(--accent); padding: 12px 5px;">END &rarr;</span>
+    <!-- MECHANICAL: index.css's landscape `.timer-end` — 44×44, mono 11px/600,
+         0.06em, accent text + border, radius 2, centred. One line, as
+         shipped; `white-space: nowrap` pins it. -->
+    <span style="display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; height: 44px; box-sizing: border-box; font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; white-space: nowrap; color: var(--accent); border: 1px solid var(--accent); border-radius: 2px;">END &rarr;</span>
   </div>
   <div style="padding: 6px 0 0 14px; display: grid; grid-template-rows: auto auto 1fr; ">
     <div style="display: flex; justify-content: space-between; align-items: baseline; padding-right: 0;">
