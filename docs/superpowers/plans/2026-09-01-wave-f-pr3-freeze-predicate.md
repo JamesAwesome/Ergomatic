@@ -80,7 +80,37 @@ mechanisms only after the data.
   recordings-vs-lifecycle deferral — so the gate story must say what is
   constructed vs real, the PR 1 seam-test precedent).
 
-## Data (empty until the first field rings arrive)
+## Data
 
-_None yet. v0.33.0 released 2026-09-01; awaiting James's first
-post-background log via the door._
+### Reading 1 — two rings, 2026-09-02 (v0.33.0 build 814, via the door)
+
+**Acceptance pass: PASS.** Ring 2 (programmed 2×, terminated mid-work at
+72 s / 214 m) carries two full lifecycle episodes:
+`resume-first-frame gapMs=8357 stale=false rawRowingState=1
+framesWhileHidden=1` (seq 29) and `gapMs=13893 stale=false
+rawRowingState=1 framesWhileHidden=1` (seq 35); `latch-count latches=2
+resumes=2` (seq 71) matches and rides the export. Ring 1 (free row, no
+backgrounds) reads `latches=0 resumes=0` (seq 43). Gaps plausible for
+hand-locks; framesWhileHidden=1 consistent with suspension.
+
+**Data pass (n=2 backgrounds, 1 session — below protocol threshold):**
+
+- BOTH resumes: `stale=false` — the first post-resume frame was fresh.
+- `pause-declared` ×2 in ring 2 (seq 37 at d=162.4 split=143.34 spm=28,
+  ~1.1 s after resume #2; seq 41 at d=214.4, ~2 s before End) and ×1 in
+  ring 1 (seq 15, 2.5 s before End). **Confound, named:** the capture
+  method (hand-locking) required stopping to handle the phone, so every
+  pause-adjacent-to-resume here is plausibly a GENUINE stop. These
+  sessions cannot separate the two hypotheses.
+- TWD non-monotonic dip seen again (162→0→214, seq 38) — recorded;
+  matches the register-row's known F2a-false-kill shape; no action.
+- `storage-persist denied (tolerated)` opens both rings — known S6
+  posture, not a finding.
+
+**Discriminating capture requested:** the true pocket case — piece
+started, phone face-down/pocketed WITHOUT hand-locking, rowing continuous
+through auto-lock, retrieved 2-3 min later while still rowing, ended
+normally, log copied. A `pause-declared` in that window with the rower
+never stopping = §4's defect observed under instruments; none, with
+`stale=false` again = the predicate may already be sound and §4 narrows
+to (at most) the resume-adjacent guard.
