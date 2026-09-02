@@ -6323,3 +6323,54 @@ universal rather than the two claims that triggered the previous pass.
   prescribed text leaves three grep lines in two files (plan `:1674`, `:1678`,
   `:1705`). The allowlist is defined by provenance, not the numeral, so nothing
   is wrongly deleted — but it is the same off-by-one class as passes 6 and 7.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 10, verifying pass 9's fixes)
+
+Tenth consecutive verification pass. One REVISE, found by running the previous
+pass's own token list against the sources it never re-measured.
+
+- **CLAIM (pass 9's fix): the RF5 sweep now names its three surviving hit lines
+  exactly.** FALSE — there are FIVE. Pass 9 corrected "two" to "three" by
+  re-counting inside Task 3's own two files (`externalBrowser.ts`,
+  `appLifecycle.ts`) and never ran the four-token list against the OTHER
+  prescribed sources: Task 2 step 4's `linkFlow.ts` header and Task 4 step 3's
+  `Concept2LinkProbe.tsx` doc comment each carry `useReturnToApp`. Since the
+  step's escalation clause is absolute ("Any other hit is dead prose or a dead
+  import: fix it here"), the sweep as written directs the implementer to strip
+  two sentences the plan deliberately prescribes — including its own stated
+  justification for the retirement. Settled by extracting every prescribed
+  `app/src` fence to files and running the sweep command verbatim against them:
+  5 lines, not 3.
+  **Technique: a phrase list gets a "new prose must not reintroduce this token"
+  GUARD at every site that writes prose, or its expected set goes stale at the
+  next fold. The census phrases in this same plan carry that guard at three
+  sites and never drifted; the RF5 token list carries none and drifted twice
+  (passes 9 and 10). When a pass corrects a count, re-run the FULL token list
+  against the FULL prescribed corpus — a count corrected in one file is not a
+  count corrected.**
+- **Technique added: plan-internal line citations cannot survive their own
+  fold.** REV 10 cited the Global Constraint as `:41` and the Swift header as
+  `:292-296`; prepending the REV 10 paragraph moved both by +2 in the same
+  commit. Cite by provenance (Task/step/symbol), never by the plan's own line
+  number.
+- **Attacked and HELD:** the whole thread-confinement chain re-read in the
+  iOS 26.5 SDK — `WKNavigationDelegate.h:69-70` (`WK_SWIFT_UI_ACTOR` on the
+  protocol), `WKFoundation.h:59-60` (the `#ifdef` branch is live;
+  `NS_SWIFT_UI_ACTOR` is defined at `NSObjCRuntime.h:253`), and
+  `WebViewDelegationHandler.swift:7` conforming to `WKNavigationDelegate`, `:67`
+  the `decidePolicyFor` handler, `:82` the `shouldOverrideLoad` call — every
+  clause of the new comment accurate, including the framework attribution the
+  previous version got wrong. Global Constraint and Swift header enumerate the
+  SAME four source categories. Ten citations spot-checked verbatim:
+  `ASWebAuthenticationSession.h:50-53,71,73-77,79-82,89-92,94-99` (typo "do
+  not not share" reproduced faithfully), `CapacitorBridge.swift:348-365`
+  (`plugins[…] = pluginInstance` at `:361`) and `:295-298`,
+  `CAPPlugin+LoadInstance.swift:10-19`, `CAPBridgeViewController.swift:48-53`,
+  `project.pbxproj:239,314,336`. `pnpm format` measured: `prettier --write .`
+  over the whole `app/` tree, but `.prettierignore` excludes
+  `ios`/`dist`/`drizzle` and `pnpm format:check` is green at `cdcfee41`, so the
+  write cannot reach the scope gate. Pass count NINE / REV 2–10 consistent at
+  both live sites. Design↔plan seam closed in both directions: every
+  §0/§2/§4/§Testing/exit-4/6(a)/8 requirement mapped to a task (including §0's
+  "one sentence" and its STOP branch, and all six §Testing `linkFlow`
+  assertions), and all three scope-creep items carry a named rule.
