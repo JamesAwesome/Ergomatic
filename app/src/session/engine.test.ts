@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { buildDraft, withNudge, type SessionDraft } from "./draft";
+import { phases } from "../../domain/expand.js";
+import { bigNumberSeconds } from "./Timer";
 import {
   buildRun,
+  buildFreeRowRun,
   remainingSeconds,
   elapsedSeconds,
   tick,
@@ -238,6 +241,67 @@ describe("buildRun", () => {
 // went with the code it tested. The one thing left after that — a
 // TYPE-level assertion about the `WarmupSetting` preference shape itself —
 // went with Task 3's removal of the type.
+
+// Just Row without the monitor (spec 2026-09-02, §Mechanism piece 1): a
+// free-row timer run is ONE `SessionRun` whose `mode` is `"justrow"`,
+// `workoutId` is `null`, and whose single phase is an open-ended `test`.
+// Built directly — no synthetic `SessionDraft` (its `type: WorkoutType` is
+// required and a free row has none).
+describe("buildFreeRowRun", () => {
+  const started = new Date("2026-09-02T07:15:00.000Z");
+
+  it("builds a justrow run: mode 'justrow', workoutId null, title 'Just Row', one open-ended test phase labelled 'Just Row', clocks seeded at now", () => {
+    const run = buildFreeRowRun(started);
+    expect(run).toStrictEqual({
+      v: 1,
+      mode: "justrow",
+      workoutId: null,
+      title: "Just Row",
+      phases: [
+        { type: "test", label: "Just Row", set: undefined, originalIndex: 0 },
+      ],
+      index: 0,
+      phaseStartedAt: "2026-09-02T07:15:00.000Z",
+      pausedAt: null,
+      pausedTotalMs: 0,
+      actuals: {},
+      startedAt: "2026-09-02T07:15:00.000Z",
+      completedAt: null,
+    });
+    expect(run.phases[0]!.seconds).toBeUndefined();
+    expect(run.phases[0]!.meters).toBeUndefined();
+  });
+
+  it("its phase is the domain's own test phase (the mechanical reference: a one-step test workout's), differing only in the label", () => {
+    // `phases()` freezes EVERY `test` step's label as "All out" regardless
+    // of the authored text (domain/expand.ts, `case "test"`); the free row
+    // names itself instead, and everything else is byte-identical.
+    const reference = phases([{ k: "test", label: "Just Row" }], null)[0]!;
+    const { originalStepIndex, ...rest } = reference;
+    expect(originalStepIndex).toBe(0);
+    expect(rest.label).toBe("All out");
+    expect(buildFreeRowRun(started).phases[0]).toStrictEqual({
+      ...rest,
+      label: "Just Row",
+      originalIndex: 0,
+    });
+  });
+
+  it("counts UP: the big number 12.34 s after start is the floored elapsed 12, never a countdown", () => {
+    const run = buildFreeRowRun(started);
+    const later = new Date(started.getTime() + 12_340);
+    expect(bigNumberSeconds(run, run.phases[0]!, later)).toBe(12);
+    expect(elapsedSeconds(run, later)).toBe(12);
+    expect(remainingSeconds(run, later)).toBe(0);
+    expect(totalRemainingSeconds(run, later)).toBe(0);
+  });
+
+  it("is byte-stable across two calls with the same instant, and tick never auto-advances it (an open-ended phase has no boundary)", () => {
+    const a = buildFreeRowRun(started);
+    expect(a).toStrictEqual(buildFreeRowRun(started));
+    expect(tick(a, new Date(started.getTime() + 3_600_000))).toBe(a);
+  });
+});
 
 describe("remainingSeconds", () => {
   it("returns the full phase duration at the instant a phase starts", () => {

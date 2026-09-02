@@ -95,6 +95,48 @@ export function buildRun(
   };
 }
 
+/** The free-row timer run (Just Row without the monitor, spec 2026-09-02,
+ *  §Mechanism piece 1): ONE `SessionRun` whose `mode` is `"justrow"`,
+ *  `workoutId` is `null`, and whose single phase is an open-ended `test` —
+ *  no `seconds`, no `meters`, so every reader that already handles a test
+ *  phase (count-UP big number, `tick` halting at it, `totalRemainingSeconds`
+ *  pricing it at nothing) handles this run with no new branch. Built
+ *  directly rather than through `buildRun`: a synthetic `SessionDraft`
+ *  would need a `type: WorkoutType`, and a free row has none.
+ *
+ *  The phase comes from the domain's own `phases()` for a one-step `test`
+ *  workout (the mechanical reference — same shape a `{ k: "test" }` step
+ *  freezes to, minus `originalStepIndex`, plus `originalIndex: 0`), with
+ *  one difference: `phases()` labels EVERY test phase "All out" regardless
+ *  of its authored text, and a free row names itself. Pure given `now`,
+ *  same as `buildRun`. */
+export function buildFreeRowRun(now: Date): SessionRun {
+  const { originalStepIndex, ...reference } = phases(
+    [{ k: "test", label: "Just Row" }],
+    null,
+  )[0]!;
+  const phase: EnginePhase = {
+    ...reference,
+    label: "Just Row",
+    originalIndex: originalStepIndex,
+  };
+  const nowIso = now.toISOString();
+  return {
+    v: 1,
+    mode: "justrow",
+    workoutId: null,
+    title: "Just Row",
+    phases: [phase],
+    index: 0,
+    phaseStartedAt: nowIso,
+    pausedAt: null,
+    pausedTotalMs: 0,
+    actuals: {},
+    startedAt: nowIso,
+    completedAt: null,
+  };
+}
+
 /** Milliseconds elapsed in the CURRENT phase (`run.index`), pause-adjusted:
  *  while paused, `pausedAt` — not `now` — is the clock's right edge, which
  *  is what makes elapsed FREEZE across however much wall time passes before
