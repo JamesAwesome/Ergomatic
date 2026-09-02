@@ -229,7 +229,16 @@ slate.
   #268 with item 3 (hollow `.free-row-chip` on the door and every free
   row in History/Today), so item 5's plan-linked free row will already
   carry it. **S**
-- **Logging a Just Row against a plan — as SUBSTITUTION** (James,
+- **Logging a Just Row against a plan — as SUBSTITUTION** — **IN
+  PROGRESS 2026-09-02 on branch `jr-substitution`:** Gate 0 PASSED rev 1d
+  (`docs/design/handoffs/2026-09-02-just-row-substitution/`), spec rev 3
+  after two antagonist passes
+  (`docs/superpowers/specs/2026-09-02-just-row-substitution-design.md`),
+  plan in execution. No new stored shape: the link is the stand-in
+  record; the store resolves `advancesPlan ?? !isFreeRow`. Deleting a
+  stood-in Just Row un-ticks the session (stated, not overruled). The
+  original row follows:
+- **(original)** Logging a Just Row against a plan — as SUBSTITUTION (James,
   2026-09-01: "advances the record, records the stand-in"): the rower
   may say "this free row stands in for session N"; it advances the plan
   AND the row records that it stood in. Default stays off-plan. **TRIAD**
@@ -259,6 +268,11 @@ slate.
       deleted, and `docs/RELEASING.md`'s API note records the break. The
       0020 BACKFILL rule stays (it is history, not a live inference).
       Filed here per RF14 and the spec's exit criterion 8b. **XS**
+- [ ] **v0.35.0's release notes must RETIRE "A Just Row never advances
+      your plan" (v0.32.0) — trigger: the v0.35.0 notes PR, once the
+      substitution PR ships.** One sentence in the notes' own voice: a Just
+      Row can now stand in for a plan session, and the Plan tab says so.
+      Filed at the substitution spec (RF14). **XS**
 - [ ] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
       told testers — trigger: the v0.34.0 notes PR.** v0.32.0 said
       "connect to the erg" (there is now a Start Timer with no erg) and

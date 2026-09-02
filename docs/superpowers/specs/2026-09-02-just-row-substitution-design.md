@@ -94,9 +94,11 @@ Row stood in for session `plan_index`". No column, no migration.
    exit criterion 1 amended: `done_n` unchanged across a Just Row save
    *that does not opt in*.
 1b. **The wire carries `workoutId` on a plan link** ⟨F1, corrected G4⟩:
-   `resolveNewestPlanLink` projects `sessionLogs.workoutId` BY NAME (not
-   the LEFT JOIN's `workoutRowId`, which is null for a DELETED workout and
-   is kept distinct on purpose, `logs.ts:486-489`); no route change —
+   `resolveNewestPlanLink` projects `sessionLogs.workoutId` BY NAME (a
+   clarity choice, not a correctness one — rev 3 claimed the LEFT JOIN's
+   `workoutRowId` differs for a deleted workout; the Task 2 agent proved
+   it cannot: the FK is `ON DELETE SET NULL`, so the two are always equal
+   in Postgres, and the plan's probe on that line could not bite); no route change —
    `GET /api/logs?plan=` returns `{ links }` straight from the store
    (`data.ts:1207-1216`); `parseLink` accepts `string | null | undefined`,
    because an OLD server omits the key and the same function's
