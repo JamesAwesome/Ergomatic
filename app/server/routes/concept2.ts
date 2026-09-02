@@ -171,10 +171,14 @@ export function createConcept2Router({
     await store.deleteExpiredAttempts(ATTEMPT_MAX_AGE_MS);
     await store.deleteAttemptsFor(userId);
     const nonce = randomBytes(32).toString("hex");
+    // Fix round 1 controller ruling A: `surface` hardcoded to "web" — this
+    // route has no `authVia` yet (Task 6 replaces this call with the real
+    // derivation from the resolved credential).
     await store.createAttempt({
       nonce,
       userId,
       weightClass: weightClass as WeightClass,
+      surface: "web",
     });
     res.json({ authorizeUrl: client.authorizeUrl(nonce) });
   });

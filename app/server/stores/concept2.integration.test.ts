@@ -8,7 +8,13 @@ import { sql } from "drizzle-orm";
 import type pg from "pg";
 import { createDb, type Db } from "../db/index.js";
 import { createUserStore } from "../auth/users.js";
-import { createConcept2Store, type Concept2Link } from "./concept2.js";
+import { concept2AuthAttempts } from "../db/schema.js";
+import {
+  createConcept2Store,
+  AttemptNonceCollisionError,
+  Concept2LinkConflictError,
+  type Concept2Link,
+} from "./concept2.js";
 
 // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD):
 // the store's own contract, against real Postgres. `withLinkLock`'s
@@ -121,7 +127,7 @@ describe("concept2 store against real Postgres", () => {
         email: "delete@c2-store.test",
         name: "D",
       });
-      await store.upsertLink(fresh.id, link());
+      await store.upsertLink(fresh.id, link({ c2UserId: 601 }));
       await store.deleteLink(fresh.id);
       expect(await store.getLink(fresh.id)).toBeNull();
       // Second delete: idempotent no-op, no throw.
@@ -138,7 +144,7 @@ describe("concept2 store against real Postgres", () => {
         email: "lock-store@c2-store.test",
         name: "LS",
       });
-      await store.upsertLink(fresh.id, link());
+      await store.upsertLink(fresh.id, link({ c2UserId: 602 }));
       const before = await store.getLink(fresh.id);
 
       // Real Postgres timestamp resolution is sub-millisecond; a synchronous
@@ -180,7 +186,7 @@ describe("concept2 store against real Postgres", () => {
         email: "lock-flag@c2-store.test",
         name: "LF",
       });
-      await store.upsertLink(fresh.id, link());
+      await store.upsertLink(fresh.id, link({ c2UserId: 603 }));
 
       const result = await store.withLinkLock(fresh.id, async () => ({
         action: "flagReauth" as const,
@@ -209,7 +215,7 @@ describe("concept2 store against real Postgres", () => {
         email: "lock-store-clears-flag@c2-store.test",
         name: "LSF",
       });
-      await store.upsertLink(fresh.id, link());
+      await store.upsertLink(fresh.id, link({ c2UserId: 604 }));
       await store.withLinkLock(fresh.id, async () => ({
         action: "flagReauth" as const,
         result: "flagged",
@@ -259,7 +265,7 @@ describe("concept2 store against real Postgres", () => {
         email: "lock-none@c2-store.test",
         name: "LN",
       });
-      await store.upsertLink(fresh.id, link());
+      await store.upsertLink(fresh.id, link({ c2UserId: 605 }));
       const before = await store.getLink(fresh.id);
 
       await store.withLinkLock(fresh.id, async () => ({
@@ -284,7 +290,10 @@ describe("concept2 store against real Postgres", () => {
         email: "race@c2-store.test",
         name: "R",
       });
-      await store.upsertLink(fresh.id, link({ accessToken: "at-original" }));
+      await store.upsertLink(
+        fresh.id,
+        link({ accessToken: "at-original", c2UserId: 606 }),
+      );
 
       let releaseFirst: () => void = () => {};
       const firstMayProceed = new Promise<void>((resolve) => {
@@ -334,109 +343,332 @@ describe("concept2 store against real Postgres", () => {
     });
   });
 
-  describe("createAttempt / consumeAttempt / deleteExpiredAttempts / deleteAttemptsFor", () => {
-    it("consumeAttempt returns the row once and null the second time", async () => {
+  describe("createAttempt (atomic upsert) / peekAttempt / consumeAttemptFor / deleteExpiredAttempts", () => {
+    const attemptCount = async (userId: string) => {
+      const rows = await db.execute(
+        sql`select count(*)::int as n from concept2_auth_attempts where user_id = ${userId}`,
+      );
+      return (rows.rows[0] as { n: number }).n;
+    };
+
+    it("a second mint for the same user REPLACES the first: one row, the new nonce, the old nonce gone", async () => {
       const store = createConcept2Store(db);
-      await store.createAttempt({
-        nonce: "nonce-once",
-        userId: userA,
-        weightClass: "L",
+      const fresh = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-replace",
+        email: "replace@c2-store.test",
+        name: "RP",
       });
-
-      const first = await store.consumeAttempt("nonce-once", 15 * 60_000);
-      expect(first).toStrictEqual({ userId: userA, weightClass: "L" });
-
-      const second = await store.consumeAttempt("nonce-once", 15 * 60_000);
-      expect(second).toBeNull();
+      await store.createAttempt({
+        nonce: "replace-1",
+        userId: fresh.id,
+        weightClass: "H",
+        surface: "web",
+      });
+      await store.createAttempt({
+        nonce: "replace-2",
+        userId: fresh.id,
+        weightClass: "L",
+        surface: "native",
+      });
+      expect(await attemptCount(fresh.id)).toBe(1);
+      expect(await store.peekAttempt("replace-1")).toBeNull();
+      expect(await store.peekAttempt("replace-2")).toStrictEqual({
+        userId: fresh.id,
+        weightClass: "L",
+        surface: "native",
+      });
     });
 
-    it("consumeAttempt past maxAgeMs returns null AND deletes the row", async () => {
+    // Design §2 / exit criterion 3: two CONCURRENT mints serialize on the
+    // unique index and exactly one row survives. The biting mutation is on
+    // the STATEMENT (delete + plain insert), never on the index alone —
+    // dropping the index only breaks ON CONFLICT's parse.
+    it("two CONCURRENT mints for one user leave exactly one live attempt", async () => {
       const store = createConcept2Store(db);
-      await store.createAttempt({
-        nonce: "nonce-expired",
-        userId: userA,
-        weightClass: "H",
+      const fresh = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-concurrent",
+        email: "concurrent@c2-store.test",
+        name: "CC",
+      });
+      await Promise.all([
+        store.createAttempt({
+          nonce: "concurrent-a",
+          userId: fresh.id,
+          weightClass: "H",
+          surface: "web",
+        }),
+        store.createAttempt({
+          nonce: "concurrent-b",
+          userId: fresh.id,
+          weightClass: "H",
+          surface: "web",
+        }),
+      ]);
+      expect(await attemptCount(fresh.id)).toBe(1);
+    });
+
+    // Fix round 1 controller ruling B: the test above is a real race
+    // (`Promise.all`) but NOT a deterministic one — it depends on the two
+    // calls' timing actually overlapping, and mutation testing showed the
+    // statement-level delete+insert mutation does not reliably lose that
+    // race on fast local Postgres (see task-2-report.md). This test forces
+    // the overlap deterministically: hold an UNCOMMITTED row for the same
+    // `user_id` open on one connection (an explicit, un-awaited
+    // transaction) and prove the store's own `createAttempt`, issued
+    // concurrently on the pool's normal path, genuinely BLOCKS on the
+    // unique index rather than racing past it — then resolves correctly
+    // once the first transaction commits. The pool
+    // (`server/db/pool.ts:4`, `new pg.Pool({...})` with no `max` override)
+    // uses node-postgres's default max of 10 connections, so the held
+    // transaction and the store's own query get two separate connections
+    // rather than serializing on connection acquisition itself.
+    it("createAttempt genuinely BLOCKS on an uncommitted conflicting row, then resolves once it commits (deterministic race)", async () => {
+      const store = createConcept2Store(db);
+      const fresh = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-deterministic-race",
+        email: "deterministic-race@c2-store.test",
+        name: "DR",
       });
 
-      // maxAgeMs of 0: any row created even microseconds ago is already
-      // past it, without needing a real sleep or a fake clock (this store
-      // has none — expiry is computed in SQL against `now()`).
-      const consumed = await store.consumeAttempt("nonce-expired", 0);
-      expect(consumed).toBeNull();
+      let releaseHeldTx: () => void = () => {};
+      const heldTxMayCommit = new Promise<void>((resolve) => {
+        releaseHeldTx = resolve;
+      });
+      let signalHolderInserted: () => void = () => {};
+      const holderInserted = new Promise<void>((resolve) => {
+        signalHolderInserted = resolve;
+      });
 
-      const rows = await db.execute(
-        sql`select count(*)::int as n from concept2_auth_attempts where nonce = 'nonce-expired'`,
+      // Connection 1: an explicit transaction that inserts a row for
+      // `fresh.id` and deliberately does NOT commit until released below —
+      // it holds the unique(user_id) index entry open.
+      const heldTx = db.transaction(async (tx) => {
+        await tx.insert(concept2AuthAttempts).values({
+          nonce: "held-by-tx",
+          userId: fresh.id,
+          weightClass: "H",
+          surface: "web",
+        });
+        signalHolderInserted();
+        await heldTxMayCommit;
+      });
+
+      await holderInserted;
+
+      // Connection 2 (the store's own normal, non-transactional path):
+      // mint for the SAME user while the first transaction's row is still
+      // uncommitted.
+      let mintSettled = false;
+      const mintPromise = store.createAttempt({
+        nonce: "second-mint",
+        userId: fresh.id,
+        weightClass: "L",
+        surface: "native",
+      });
+      void mintPromise.then(
+        () => {
+          mintSettled = true;
+        },
+        () => {
+          mintSettled = true;
+        },
       );
-      expect((rows.rows[0] as { n: number }).n).toBe(0);
+
+      // Give the mint every chance to have reached Postgres and be
+      // blocking on the uncommitted row's unique-index entry.
+      await new Promise((r) => setTimeout(r, 50));
+      expect(mintSettled).toBe(false);
+
+      releaseHeldTx();
+      await heldTx;
+      await mintPromise;
+
+      expect(await attemptCount(fresh.id)).toBe(1);
+      expect(await store.peekAttempt("second-mint")).toStrictEqual({
+        userId: fresh.id,
+        weightClass: "L",
+        surface: "native",
+      });
+    });
+
+    it("a nonce colliding with ANOTHER user's row throws AttemptNonceCollisionError and leaves that row intact", async () => {
+      const store = createConcept2Store(db);
+      const owner = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-collide-owner",
+        email: "collide-owner@c2-store.test",
+        name: "CO",
+      });
+      const other = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-collide-other",
+        email: "collide-other@c2-store.test",
+        name: "CX",
+      });
+      await store.createAttempt({
+        nonce: "shared-nonce",
+        userId: owner.id,
+        weightClass: "H",
+        surface: "web",
+      });
+      await expect(
+        store.createAttempt({
+          nonce: "shared-nonce",
+          userId: other.id,
+          weightClass: "L",
+          surface: "native",
+        }),
+      ).rejects.toBeInstanceOf(AttemptNonceCollisionError);
+      expect(await store.peekAttempt("shared-nonce")).toStrictEqual({
+        userId: owner.id,
+        weightClass: "H",
+        surface: "web",
+      });
+      expect(await attemptCount(other.id)).toBe(0);
+    });
+
+    it("peekAttempt is advisory: it returns {userId, weightClass, surface} and does NOT delete", async () => {
+      const store = createConcept2Store(db);
+      await store.createAttempt({
+        nonce: "peek-me",
+        userId: userA,
+        weightClass: "L",
+        surface: "native",
+      });
+      expect(await store.peekAttempt("peek-me")).toStrictEqual({
+        userId: userA,
+        weightClass: "L",
+        surface: "native",
+      });
+      expect(await store.peekAttempt("peek-me")).not.toBeNull();
+      expect(await store.peekAttempt("never-minted")).toBeNull();
+    });
+
+    it("consumeAttemptFor with the WRONG user consumes nothing (returns null, row survives)", async () => {
+      const store = createConcept2Store(db);
+      await store.createAttempt({
+        nonce: "wrong-user",
+        userId: userA,
+        weightClass: "H",
+        surface: "web",
+      });
+      expect(
+        await store.consumeAttemptFor("wrong-user", userB, "web", 15 * 60_000),
+      ).toBeNull();
+      expect(await store.peekAttempt("wrong-user")).not.toBeNull();
+    });
+
+    it("consumeAttemptFor with the WRONG surface consumes nothing (returns null, row survives)", async () => {
+      const store = createConcept2Store(db);
+      await store.createAttempt({
+        nonce: "wrong-surface",
+        userId: userA,
+        weightClass: "H",
+        surface: "native",
+      });
+      expect(
+        await store.consumeAttemptFor(
+          "wrong-surface",
+          userA,
+          "web",
+          15 * 60_000,
+        ),
+      ).toBeNull();
+      expect(await store.peekAttempt("wrong-surface")).not.toBeNull();
+    });
+
+    it("consumeAttemptFor with the right (user, surface) returns {weightClass, fresh:true} once and null the second time", async () => {
+      const store = createConcept2Store(db);
+      await store.createAttempt({
+        nonce: "right-once",
+        userId: userA,
+        weightClass: "L",
+        surface: "web",
+      });
+      expect(
+        await store.consumeAttemptFor("right-once", userA, "web", 15 * 60_000),
+      ).toStrictEqual({ weightClass: "L", fresh: true });
+      expect(
+        await store.consumeAttemptFor("right-once", userA, "web", 15 * 60_000),
+      ).toBeNull();
+      expect(await store.peekAttempt("right-once")).toBeNull();
+    });
+
+    it("a right-principal EXPIRED row is still deleted and reports fresh:false (the caller decides Expired)", async () => {
+      const store = createConcept2Store(db);
+      await store.createAttempt({
+        nonce: "stale-right",
+        userId: userA,
+        weightClass: "H",
+        surface: "web",
+      });
+      // maxAgeMs 0: any row created even microseconds ago is past it.
+      expect(
+        await store.consumeAttemptFor("stale-right", userA, "web", 0),
+      ).toStrictEqual({ weightClass: "H", fresh: false });
+      expect(await store.peekAttempt("stale-right")).toBeNull();
     });
 
     it("deleteExpiredAttempts removes only stale rows", async () => {
       const store = createConcept2Store(db);
+      const stale = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-stale",
+        email: "stale@c2-store.test",
+        name: "ST",
+      });
       await store.createAttempt({
         nonce: "nonce-stale",
-        userId: userA,
+        userId: stale.id,
         weightClass: "H",
+        surface: "web",
       });
       await store.createAttempt({
         nonce: "nonce-fresh",
         userId: userA,
         weightClass: "H",
+        surface: "web",
       });
-
-      // Age "nonce-stale" by rewriting its createdAt directly — the store
-      // itself has no way to backdate a row, and this is the one place in
-      // the suite that needs a genuinely stale row without a real sleep.
       await db.execute(
         sql`update concept2_auth_attempts set created_at = now() - interval '1 hour' where nonce = 'nonce-stale'`,
       );
-
       await store.deleteExpiredAttempts(15 * 60_000);
+      expect(await store.peekAttempt("nonce-stale")).toBeNull();
+      expect(await store.peekAttempt("nonce-fresh")).not.toBeNull();
+    });
+  });
 
-      const staleRows = await db.execute(
-        sql`select count(*)::int as n from concept2_auth_attempts where nonce = 'nonce-stale'`,
-      );
-      expect((staleRows.rows[0] as { n: number }).n).toBe(0);
-
-      const freshRows = await db.execute(
-        sql`select count(*)::int as n from concept2_auth_attempts where nonce = 'nonce-fresh'`,
-      );
-      expect((freshRows.rows[0] as { n: number }).n).toBe(1);
+  describe("upsertLink under UNIQUE(c2_user_id) (D1)", () => {
+    it("a DIFFERENT user linking an already-linked Concept2 account throws Concept2LinkConflictError; both rows untouched", async () => {
+      const store = createConcept2Store(db);
+      const a = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-d1-a",
+        email: "d1-a@c2-store.test",
+        name: "D1A",
+      });
+      const b = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-d1-b",
+        email: "d1-b@c2-store.test",
+        name: "D1B",
+      });
+      await store.upsertLink(a.id, link({ c2UserId: 9001 }));
+      await expect(
+        store.upsertLink(b.id, link({ c2UserId: 9001, accessToken: "at-b" })),
+      ).rejects.toBeInstanceOf(Concept2LinkConflictError);
+      expect((await store.getLink(a.id))?.accessToken).toBe("at-1");
+      expect(await store.getLink(b.id)).toBeNull();
     });
 
-    it("deleteAttemptsFor removes every attempt for that user only", async () => {
+    it("the SAME user relinking the SAME Concept2 account is a plain replace, not a conflict", async () => {
       const store = createConcept2Store(db);
-      const fresh = await createUserStore(db).createUser({
-        googleSub: "c2-store-user-attempts",
-        email: "attempts@c2-store.test",
-        name: "AT",
+      const a = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-d1-same",
+        email: "d1-same@c2-store.test",
+        name: "D1S",
       });
-      await store.createAttempt({
-        nonce: "nonce-for-fresh-1",
-        userId: fresh.id,
-        weightClass: "H",
-      });
-      await store.createAttempt({
-        nonce: "nonce-for-fresh-2",
-        userId: fresh.id,
-        weightClass: "H",
-      });
-      await store.createAttempt({
-        nonce: "nonce-for-userA",
-        userId: userA,
-        weightClass: "H",
-      });
-
-      await store.deleteAttemptsFor(fresh.id);
-
-      const freshRows = await db.execute(
-        sql`select count(*)::int as n from concept2_auth_attempts where user_id = ${fresh.id}`,
+      await store.upsertLink(a.id, link({ c2UserId: 9002 }));
+      await store.upsertLink(
+        a.id,
+        link({ c2UserId: 9002, accessToken: "at-2" }),
       );
-      expect((freshRows.rows[0] as { n: number }).n).toBe(0);
-
-      const userARows = await db.execute(
-        sql`select count(*)::int as n from concept2_auth_attempts where nonce = 'nonce-for-userA'`,
-      );
-      expect((userARows.rows[0] as { n: number }).n).toBe(1);
+      expect((await store.getLink(a.id))?.accessToken).toBe("at-2");
     });
   });
 
@@ -449,11 +681,12 @@ describe("concept2 store against real Postgres", () => {
         email: "cascade@c2-store.test",
         name: "C",
       });
-      await store.upsertLink(fresh.id, link());
+      await store.upsertLink(fresh.id, link({ c2UserId: 607 }));
       await store.createAttempt({
         nonce: "nonce-cascade",
         userId: fresh.id,
         weightClass: "H",
+        surface: "web",
       });
 
       await db.execute(sql`delete from users where id = ${fresh.id}`);
