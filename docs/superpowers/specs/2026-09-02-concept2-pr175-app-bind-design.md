@@ -50,7 +50,7 @@ Unauthenticated `GET /oauth/authorize` with the native redirect returns `302 →
 so validation happens after login and the check needs a logged-in browser:
 open the authorize URL for `haus.waffle.ergomatic://oauth/callback` → PASS = the
 consent screen renders; open the same URL with an unregistered scheme → must
-error (the red control). Result recorded here: **PENDING James.** A FAIL is
+error (the red control). Result: **PASS (James, 2026-09-02 ~12:00Z)** — the registered scheme rendered the consent screen (both scopes listed); the bogus scheme rendered "Application Authorization: There was an error…", so the red control bit. The AS honours the private-use redirect. Cutover note: log-dev shows "Authorize **James Morelli** to use your account?" — the application is registered under James's name; the live-portal registration must name it Ergomatic (rowers see this screen on every ephemeral link). A FAIL is
 NO-GO for the whole per-surface design before any Swift is written.
 
 ## Research record (PRIMARY unless tagged)
@@ -647,7 +647,7 @@ phrase grep pasted, all zero/accounted; (4) the walk table: per-request
 `authVia` + both-present, `state` echoed y/n, Info.plist needed y/n; (5)
 `ROADMAP.md` PR1.75 `[x]` with the still-owed line.
 
-## Decisions for James (from antagonist pass 2) — **D1 YES, D2 YES (James, 2026-09-02 "Approved"); D3 PENDING**
+## Decisions for James (from antagonist pass 2) — **D1 YES, D2 YES (James, 2026-09-02 "Approved"); D3 PASS (2026-09-02)**
 
 - **D1 — detective control against code injection (stored shape, 0021).** Add
   `UNIQUE (c2_user_id)` on `concept2_links`; a link whose Concept2 account is
@@ -660,8 +660,8 @@ phrase grep pasted, all zero/accounted; (4) the walk table: per-request
   email, escaped). The shared-browser fixation residual passes every server
   check correctly; copy is its only mitigation. Changes an approved page →
   rendered on the Gate 0 artifact; **APPROVED 2026-09-02.**
-- **D3 — the desk pre-check** (§GO/NO-GO): two URLs in
-  `scratchpad/c2-desk-precheck.txt`, your logged-in browser, cancel at consent.
+- **D3 — the desk pre-check** (§GO/NO-GO): **PASS, 2026-09-02** (see the
+  GO/NO-GO line for the two observations).
 
 ## Plan reconciliation (1.75a plan, 2026-09-02 — rulings on the writer's observations)
 
