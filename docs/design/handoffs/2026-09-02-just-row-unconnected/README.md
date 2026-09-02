@@ -6,7 +6,7 @@ with TIME ONLY. James's rulings (2026-09-02): time only, distance never
 typed or fabricated; the door's action is `Start Timer`; **every label is
 lifted from a shipped screen, mechanically.**
 
-**Status: REV 2 PRESENTED for Gate 0, 2026-09-02.** Not yet approved.
+**Status: REV 2c PRESENTED for Gate 0, 2026-09-02.** Not yet approved.
 Rev 1 invented three labels (`Done`, `PHONE CLOCK`, `Time it without the
 monitor`); James: "Match the prose to the other screens. Again make it
 all mechanical." Rev 2 replaces every invented word with the shipped one.
@@ -37,10 +37,25 @@ metres). The free-row producer must store `timeSeconds` so the detail's
 provenance predicate says `TIMER`; that is an implementation invariant
 the plan carries, and the board shows the intended result.
 
+## The JR chip (added rev 2c, James 2026-09-02: "it's just missing the JR chip")
+
+Follow-on item 4 rides this board. The chip appears where type chips
+appear: the door's badge row above the title (the workout detail's own
+slot) and the History rows' badge slot — on BOTH free rows, connected and
+phone-timed. It is `TypeBadge`'s 30×22 mono shape, **filled ink, not a
+fifth colour**: the four colours mean intensities and a free row has
+none (`TypeBadge.tsx` refuses to mint a fifth). It is DERIVED from
+`workout_type: null` + `workout_id: null`, never stored — `"JR"` can
+never live in `workout_type` (the PM close gate: `isFreeRow` is
+load-bearing three times). Not on the detail screen or the log door,
+because no type chip appears there for any row (`9-detail.png`,
+`6-log-door.png`).
+
 ## Contrast (computed, WCAG AA floor 4.5:1)
 
 | pairing | ratio |
 | --- | --- |
+| on-color on ink (the JR chip) | 17.11:1 |
 | ink on page | 15.41:1 |
 | ink-2 on page | 9.74:1 |
 | ink-3 on page | 6.69:1 |
