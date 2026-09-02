@@ -146,6 +146,11 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     expect(record?.mode).toBe("justrow");
     expect(record?.completedAt).not.toBeNull();
     expect(record?.actuals).toStrictEqual([]);
+    // Exit criterion 5 on a PRODUCED value: the capture's Menu end closes
+    // the free row as `rower`. Before this line every free-row `endedBy`
+    // assertion echoed a literal the fixture had seeded (phase-close exit
+    // pass, 2026-09-01) — no test went red on a wrong stamp.
+    expect(record?.endedBy).toBe("rower");
 
     // The machine's own summary, filed — the thing "nothing filed"
     // discarded before the free row owned a driver run. TRANSCRIPTION

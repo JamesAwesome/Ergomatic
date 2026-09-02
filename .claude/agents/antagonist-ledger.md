@@ -4966,3 +4966,75 @@ doc's cited code against the doc's OWN prose, not just against the
 threat sentence** — a census can be under-stated in one direction and
 over-stated in another within the same revision, and both are found the
 same way.
+
+## 2026-09-01 — Phase JR exit pass (walk record + eight criteria)
+
+- **CLAIM:** "Both endings store the machine's row — Done-ended and Menu-ended
+  free rows both landed in the log." **FALSE AS EVIDENCED.** Believed because
+  the walk record's provenance table listed an app capture for each piece.
+  **TECHNIQUE: open the image.** `piece1-app-log.png` is the log DOOR carrying
+  `Couldn't save this session. Try again.` — the failure screen, not a saved
+  row. The Done ending's landing is testimony (James's operator report, now
+  recorded as such); only the Menu ending has an artifact. Corollary now
+  standing: **a provenance table entry names a FILE, not a fact — read the
+  file and say what it shows, not what it was taken for.**
+- **CLAIM (spec + `totals.ts:8-12`):** "Both supported endings produce the
+  machine's 0x0039." **UNGATED INFERENCE.** Believed because the burst path is
+  shared with programmed rows and the sentence carries a citation. **TECHNIQUE:
+  read the cited capture's own header for which ending it contains.**
+  `justRowReplay.test.ts:15-17` says "Menu end"; the e2e fake script attaches no
+  `burst`; so no test or capture covers the app-End arm — and the one hardware
+  instance (walk piece 1) was performed with its discriminating artifact
+  unphotographed. **A citation that proves one arm of an "either way" claim
+  proves the claim for that arm only.** Still open after the close-out PR.
+- **CLAIM:** "The PM entry is expected LONGER on a Done-ended row (coast-down);
+  the observed delta is ≤0.3 s." **NON-OBSERVATION.** Believed because the spec
+  said so at design time. **TECHNIQUE: follow the END control into the hook.**
+  `useMonitorSession.ts`'s `endSession` awaits `driver.terminate()` and
+  `ConnectedSurface.tsx:34` states it in prose — an app End ends the MACHINE's
+  workout at the same instant, so a ~0 delta is structural and measures nothing.
+  **Before recording a delta as a result, ask what would have made it non-zero.**
+- **CLAIM:** "The hold-and-retry path proved itself live — AUD-015/016's
+  invariant, observed on prod." **MIS-CITED.** Both findings concern LOCAL
+  durability (Countdown's `saveRun`; `saveMonitorRun`); the walk observed a
+  SERVER 400 surfaced by `LogSession.tsx:846`, which emits one string for every
+  non-ok status and every exception. AUD-015 is still OPEN, so the sentence
+  read as field-validation of an unimplemented fix. **TECHNIQUE: grep the
+  finding id in ROADMAP and read its checkbox before citing it as discharged.**
+  Withdrawn in the walk README and ROADMAP in the close-out PR.
+- **CLAIM (`HistoryList.test.tsx:308-311`):** "The mutation the criterion asks
+  for is built in… two independently-written literals would let one screen
+  drift." **FALSE, and self-refuting.** There WERE two independently-written
+  `140.9` literals (`:318` and `:337`) in two different fixture objects, and
+  `:324`'s hard `expect(avgSplit).toBe("2:20.9")` failed before the list
+  rendered. **TECHNIQUE: when a test comment claims a mutation is built in,
+  perform the mutation in your head against BOTH fixtures and name the line
+  that goes red first.** Fixed: one stored-row object now feeds both.
+- **CLAIM (implicit):** "The exit criteria are discharged because the PRs
+  merged." **PARTLY FALSE.** Criterion 5 (`ended_by` on a free row) had no
+  assertion of any PRODUCED value: `link-lost` had no free-row test at all,
+  `rower` was echoed from a seeded literal, `interrupted` was executed and
+  unasserted. **TECHNIQUE for any enum criterion: grep each member's literal and
+  classify every hit as SEEDED or PRODUCED.** A member that only ever appears
+  as a fixture value is unpinned, however many tests mention it. `rower` and
+  `interrupted` now asserted on produced values; `link-lost` on a free row
+  remains untested.
+- **PROCESS, PROVEN:** main's CI `deploy` job failed on SIX consecutive pushes
+  (runs 33513607396 → 33576692923, 13:37Z–00:46Z), including the phase's own
+  PR 1, PR 2, the tag's notes PR and the release-capture PR, with
+  `deploy: refusing — host checkout is dirty` / exit 3 — and it was found by a
+  hardware walk, not by anyone reading main. **TECHNIQUE: `gh run list --branch
+  main` before any phase-close or release gate.** The pre-merge PR check being
+  green says nothing about the post-merge run. Root cause was RF20's class
+  (shell redirects into a checkout) on the PRODUCTION host. Now RF28.
+- **HELD under attack, and how:** the version skew (`git diff --name-only
+  v0.32.0..d0af9022` → zero `app/server/` and zero `drizzle/` paths, so the
+  server was byte-identical to the tag under test); the "recordings are
+  impossible on native" claim (`adapters/monitorTransport.ts`'s own header:
+  the byte recorder "stays behind its own build-time-foldable gate… reached
+  only on the web arm's dev/e2e path"); the deploy.sh root cause (`git status
+  --porcelain` lists untracked files, so four empty droppings really do block
+  it); criterion 1's integration test (it observes `GET /api/plan`'s `doneN`,
+  a quantity that genuinely moves, after its predecessor was caught unable to
+  fail); and the 4-hour truncation cap (`SERIES_SAMPLE_CAP = 14_400` at ~1
+  sample/s while rowing).

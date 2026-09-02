@@ -3600,6 +3600,14 @@ describe("Today (JR): the free row's recovery row", () => {
       await screen.findByRole("button", { name: "Log it" }),
     );
     expect(await screen.findByText("JUSTROW LOG DOOR")).toBeInTheDocument();
+    // Exit criterion 5's third member, asserted on the FREE row rather
+    // than on its programmed twin above: Log it on an open free row
+    // stamps `interrupted` — the documented "closed later with no
+    // evidence" value — before it routes.
+    const { loadMonitorRun } = await import("../monitor/monitorRun");
+    const stamped = loadMonitorRun();
+    expect(stamped?.completedAt).not.toBeNull();
+    expect(stamped?.endedBy).toBe("interrupted");
   });
 
   it("a CLOSED free row still renders the row — the link-drop close must not go invisible", async () => {

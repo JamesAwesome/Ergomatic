@@ -305,37 +305,38 @@ describe("HistoryList hero snippet — tier parity with the detail screen (RC-5 
   // always read. Before the fallback, this row rendered a figure in the
   // list and NOTHING on the detail screen.
   //
-  // The mutation the criterion asks for is built in: both expectations are
-  // derived from `detail.heroes`, so changing the stored `avgSplitSeconds`
-  // moves BOTH or the test fails. Two independently-written literals would
-  // let one screen drift.
+  // ONE stored row feeds BOTH screens. An earlier version of this test
+  // claimed its mutation was "built in" while carrying `140.9` twice, in
+  // two fixture objects — mutating the detail's copy failed on the detail
+  // literal before the list ever rendered, and the list's copy never
+  // moved (phase-close exit pass, 2026-09-01). The criterion's risk is the
+  // two projections reading DIFFERENT columns for one row (the RC-5
+  // shape), so the list fixture's fields are read off the same `stored`
+  // object the detail was built from; the only literal is the expected
+  // rendering.
   it("TIER B1, FREE ROW (steps: []): the list and the detail screen show the SAME avg split, read from the stored column", () => {
-    const detail = buildStoredSummary(
-      baseStoredRow({
-        steps: [],
-        workSeconds: 393.58,
-        workMeters: 1396.6,
-        avgSplitSeconds: 140.9,
-        machineWorkSeconds: null,
-        machineWorkMeters: null,
-      }),
-    );
+    const stored = baseStoredRow({
+      steps: [],
+      workSeconds: 393.58,
+      workMeters: 1396.6,
+      avgSplitSeconds: 140.9,
+      machineWorkSeconds: null,
+      machineWorkMeters: null,
+    });
+    const detail = buildStoredSummary(stored);
     const { avgSplit, distanceMeters } = detail.heroes;
     expect(avgSplit).toBe("2:20.9");
     expect(distanceMeters).toBe(1397);
-    // Narrowing for the snippet below, which must stay DERIVED from
-    // `detail` rather than re-stating a literal — that coupling is what
-    // makes a change to the stored value move both screens or fail.
     if (distanceMeters === undefined) throw new Error("no distance hero");
 
     mockUseLogHistory.mockReturnValue(
       readyState([
         makeLog("log-free-row", {
-          machineWorkSeconds: null,
-          machineWorkMeters: null,
+          machineWorkSeconds: stored.machineWorkSeconds,
+          machineWorkMeters: stored.machineWorkMeters,
           machineAvgPaceSecondsPer500m: null,
-          avgSplitSeconds: 140.9,
-          distanceMeters: 1397,
+          avgSplitSeconds: stored.avgSplitSeconds,
+          distanceMeters,
         }),
       ]),
     );
