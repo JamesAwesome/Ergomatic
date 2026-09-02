@@ -324,6 +324,40 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(view.heroes.totalLine).toBeUndefined();
   });
 
+  // Door PR A (2026-09-02) §2.2: `buildStoredTotalLine`'s gate is rewritten
+  // from `row.deviceName === null` to `row.source !== "pm5"`. A `pm5` row
+  // with a null `deviceName` cannot exist on the wire (the biconditional
+  // forbids it), so the two predicates cannot be told apart by any
+  // reachable `pm5` fixture — this fixture is the mirror case instead: a
+  // `timer` row carrying a NON-null `deviceName`. That shape is
+  // UNREACHABLE in production (`logSourceContradiction` 400s it on save)
+  // but legal in the `StoredLog` type, and it is the exact input the two
+  // predicates disagree on: the retired `deviceName === null` check would
+  // have let this row through to a total line (deviceName is non-null);
+  // the new `source !== "pm5"` check excludes it (source is "timer").
+  // Exists only to prove which field the gate actually reads.
+  it("a `timer` row with a (production-impossible) non-null deviceName still renders NO total line — the discriminator between the retired deviceName check and the new source check", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        source: "timer",
+        steps: [
+          {
+            label: "6:00 @ 6k",
+            actualSplit: 130,
+            actualSource: "stopwatch",
+            meters: 1500,
+          },
+        ],
+        avgSplitSeconds: 130,
+        timeSeconds: 780,
+        distanceMeters: 6000,
+      }),
+    );
+    expect(view.heroes.timeSeconds).toBe(780);
+    expect(view.heroes.totalLine).toBeUndefined();
+  });
+
   it("TIER B2: a pm5-sourced step carrying only ONE of actualSeconds/actualMeters, and a stopwatch-sourced step carrying BOTH — neither shape `buildMonitorLogSteps` writes today, but `routes/data.ts`'s own validator accepts each field independently, so a stored row CAN carry them. Both are excluded from the AVG SPLIT quotient (it needs the pm5 pair together); DISTANCE/TIME still sum whichever half each one has, unconditionally", () => {
     const steps: StoredLog["steps"] = [
       ...EXIT7_STEPS,
@@ -817,6 +851,37 @@ describe("buildStoredSummary — §5A source derivation", () => {
     expect(timer.meta.timeLabel).toBeDefined();
     const byHand = buildStoredSummary(baseRow());
     expect(byHand.meta.timeLabel).toBeUndefined();
+  });
+
+  // Door PR A (2026-09-02) §2.1/§2.3: the fourth `LogSource` member. Built
+  // from the file's fullest existing fixture (`baseRow`, not a hand-rolled
+  // minimum — RF3) with only `source`/`deviceName` overridden, the same
+  // idiom every fixture in this describe block already uses.
+  it("a no-reading row reads NO MONITOR READING and DOES carry a wall-clock time", () => {
+    const view = buildStoredSummary(
+      baseRow({ source: "no-reading", deviceName: null }),
+    );
+    expect(view.meta.sourceLabel).toBe("NO MONITOR READING");
+    expect(view.meta.timeLabel).toBeDefined();
+  });
+
+  // §2.3: the allowlist, over the column — the three members whose moment
+  // the APP WITNESSED (the connected door, the phone clock, and a
+  // connected arrival that measured nothing) all carry a timeLabel.
+  it.each([["pm5"], ["timer"], ["no-reading"]] as const)(
+    "%s carries a timeLabel (the app witnessed the moment)",
+    (source) => {
+      const row = baseRow({
+        source,
+        deviceName: source === "pm5" ? "PM5 432331249" : null,
+      });
+      expect(buildStoredSummary(row).meta.timeLabel).toBeDefined();
+    },
+  );
+
+  it("manual carries NO timeLabel (an off-app session has no moment the app knows)", () => {
+    const row = baseRow({ source: "manual", deviceName: null });
+    expect(buildStoredSummary(row).meta.timeLabel).toBeUndefined();
   });
 });
 

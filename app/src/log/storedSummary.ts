@@ -70,15 +70,16 @@
 // that never existed; `deviceName` — reachable via `loadLastDevice()` — is
 // a best-effort LAST-USED name, so posting it would have the row assert
 // that a named erg supplied numbers that came off nothing), and the
-// conclusion was "a new stored field plus a migration", queued at ROADMAP
-// `## Phase LM`. THAT FIELD IS THIS COLUMN. What the no-reading row does
-// NOW: it posts `manual` (it goes through the manual door's `handleSave`,
-// `LogSession.tsx`) and migration 0020 backfilled its earlier instances to
-// `manual` — so it renders `LOGGED BY HAND`, exactly what it rendered
-// before, and the divergence from the live screen's word remains. The
-// column gives it somewhere to be honest; WHICH word it should carry (a
-// fourth member, or `manual` as the truthful "no reading was stored")
-// is Phase LM's call, not this spec's — see ROADMAP `## Phase LM`.
+// conclusion was "a new stored field plus a migration", queued at the time
+// under a ROADMAP heading that no longer exists (formalized since as
+// `docs/superpowers/specs/2026-09-02-door-partial-design.md` §2). THAT
+// FIELD IS THIS COLUMN. Door PR A (2026-09-02) closes the divergence: a
+// connected arrival with no record now posts `source: "no-reading"`
+// (`LogSession.tsx`'s manual door), never `manual`, and this switch's
+// fourth arm renders it as `NO_MONITOR_READING_SOURCE` — the same word
+// the live screen already used. A row saved before this PR shipped still
+// carries `manual` (no backfill — §2.4) and still renders `LOGGED BY
+// HAND`; only a row saved after this PR can be honest.
 
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
@@ -328,24 +329,28 @@ function sourceLabel(row: StoredLog): string {
 // `loggedAt` (`session_logs.logged_at` is `NOT NULL`), even for a by-hand
 // save — but showing a wall-clock reading next to "LOGGED BY HAND" would
 // fill in a moment the original screen never claimed to know, the exact
-// fabrication §2B's own absence idiom forbids elsewhere. Gated on the
-// SAME resolved word, not a separate flag: `sourceLabel(row) ===
-// "LOGGED BY HAND"` is precisely the `manual` column value (the by-hand
-// door, and — until Phase LM rules on its own word — the no-reading row
-// the module header describes) — symmetric with the two doors that DO
-// get a timeLabel live, and BYTE-IDENTICAL to what `buildManualModel`
-// itself does (no `timeLabel` field at all) — fix round's own 5A
-// resolution: consistency with the live door's manual-summary meta wins
-// over table-literalism. A `timer` row therefore shows its clock time,
-// including the time-only Just Row (the handoff board's `SEP · hh:mm ·
-// TIMER` line — Just Row unconnected spec, exit criterion 3).
+// fabrication §2B's own absence idiom forbids elsewhere.
+//
+// Door PR A (2026-09-02) §2.3. Re-derived POSITIVELY, over the column,
+// after the negation this replaced (`sourceLabel(row) !== "LOGGED BY
+// HAND"`) was found to hand a fourth member a wall-clock time by
+// accident — phase-lm.md:314-318 predicted exactly this. The three
+// members that carry a time are the three whose moment the APP WITNESSED:
+// the connected door, the phone clock, and a connected arrival that
+// measured nothing (Gate 0-A decision (c) — it gains the time BECAUSE the
+// app was there). `manual` is an off-app session and shows none, which is
+// byte-identical to what `buildManualModel` does live. An ALLOWLIST,
+// never a negation: a future fifth member shows no time rather than
+// silently gaining one.
+const TIME_LABEL_SOURCES: readonly LogSource[] = ["pm5", "timer", "no-reading"];
+
 function buildMeta(row: StoredLog): SummaryMeta {
   const source = sourceLabel(row);
   const meta: SummaryMeta = {
     dateLabel: formatLogDate(row.loggedAt),
     sourceLabel: source,
   };
-  if (source !== "LOGGED BY HAND") {
+  if (TIME_LABEL_SOURCES.includes(row.source)) {
     meta.timeLabel = formatTimeOfDay(row.loggedAt);
   }
   return meta;
@@ -642,23 +647,30 @@ function buildStoredRest(
 // (`buildStoredRest` above plus the monitor-row gate below), never a
 // second copy of the formatting.
 //
-// `isMonitorRow` gates this OFF for the timer/manual doors, mirroring
+// Gates this OFF for the timer/manual/no-reading doors, mirroring
 // `SummaryHeroes.totalLine`'s own doc comment ("the manual/timer doors
-// never set it — no rest concept applies to either"): every timer/manual
-// row lands in `buildHeroes`' FALLBACK branch (neither door writes
+// never set it — no rest concept applies to either"): every non-pm5 row
+// lands in `buildHeroes`' FALLBACK branch (neither door writes
 // `actualMeters`), which is otherwise ambiguous between "a genuinely
 // door-agnostic fallback row" and "a legacy monitor row predating
-// actualMeters" — `row.deviceName !== null` is the SAME signal
-// `sourceLabel`/`buildMeta` above already use to tell a PM5 row from a
-// TIMER/LOGGED-BY-HAND one. Without this gate, every stored timer/manual
-// row in the database would suddenly grow a spurious "X:XX total" line
-// it never had before and the live door still never renders.
+// actualMeters". Without this gate, every stored timer/manual/no-reading
+// row in the database would suddenly grow a spurious "X:XX total" line it
+// never had before and the live door still never renders.
+//
+// Door PR A (2026-09-02) §2.2: reads `row.source !== "pm5"`, not
+// `row.deviceName === null`. Provenance is what the column is FOR — the
+// deviceName check was convenient (it happened to agree with `source` on
+// every stored row, never itself the stated signal for "which door") —
+// and the rewrite is a true no-op: 0020's backfill CASE was `WHEN
+// device_name IS NOT NULL THEN 'pm5'`, and `logSourceContradiction` has
+// enforced the biconditional `deviceName ≠ null ⟺ source = 'pm5'` on
+// every write since, attacked and held (spec §9).
 function buildStoredTotalLine(
   row: StoredLog,
   workSeconds: number | undefined,
   stepSums: { meters?: number; seconds?: number },
 ): string | undefined {
-  if (workSeconds === undefined || row.deviceName === null) return undefined;
+  if (workSeconds === undefined || row.source !== "pm5") return undefined;
   const rest = buildStoredRest(row, stepSums);
   const totalSeconds = workSeconds + (rest.seconds ?? 0);
   return buildTotalLine(totalSeconds, rest.meters);

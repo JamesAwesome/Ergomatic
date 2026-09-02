@@ -556,10 +556,13 @@ export interface LogFormFields {
    *  promise. The session door closing a `SessionRun` says `timer`; the
    *  monitor-mode branch says `pm5` (beside the `deviceName` the server's
    *  contradiction check requires for it); the Log-it-after door says
-   *  `manual` — including the no-reading arrival (`connectedNoRecord`),
-   *  whose own word is Phase LM's call. The server derives the member only
-   *  for a body that omits it (an installed build predating the column —
-   *  `server/logSource.ts`), a path with a sunset. */
+   *  `manual`, EXCEPT the no-reading arrival (`connectedNoRecord`), which
+   *  says `no-reading` (Door PR A, 2026-09-02, §2.1) — the fourth member
+   *  named for a connected session the app never heard a pull from. The
+   *  server still derives the member for a body that omits it entirely
+   *  (an installed build predating the column — `server/logSource.ts`),
+   *  but ONLY that path: `source` has been required on the wire since
+   *  v0.35.0 (#273's sunset), so this door's own body always carries one. */
   source: LogSource;
   // 7C spec §6: the monitor mode's ONLY addition to the shared body shape —
   // `run.deviceName`, spread straight onto the wire body below (`{
@@ -2123,7 +2126,16 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         workoutTitle: activeWorkout.title,
         workoutType: activeWorkout.type,
         steps: logSteps,
-        source: "manual",
+        // Door spec (2026-09-02) §2.1: a connected arrival with no record
+        // (`connectedNoRecord`, computed once at mount at :1585 for the
+        // same reason it is read at :2099 — a later render must not
+        // change what the screen already told the rower) names its own
+        // door. No `deviceName` rides with it: the biconditional forbids
+        // one on every member but `pm5`, and the only name reachable here
+        // is a best-effort LAST-USED name (see this file's :559 comment
+        // and `storedSummary.ts`'s SOURCE header, "SOURCE — A COLUMN, NOT
+        // AN INFERENCE").
+        source: connectedNoRecord ? "no-reading" : "manual",
       },
       opts,
     );

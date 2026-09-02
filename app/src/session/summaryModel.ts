@@ -1201,12 +1201,16 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
  *  sharing a string, because they answer different questions on different
  *  screens.
  *
- *  KNOWN AND ACCEPTED DIVERGENCE (Task 4 option 2, stated in the PR): the
- *  STORED row for this same session still reads `LOGGED BY HAND` —
- *  `storedSummary.ts`'s `sourceLabel` infers the source from stored
- *  columns, and nothing the manual door posts distinguishes this case from
- *  a genuine by-hand entry. Making the stored row honest needs a new
- *  stored field and a migration; see ROADMAP Phase LM. */
+ *  RETIRED DIVERGENCE (Task 4 option 2 named it; Door PR A, 2026-09-02,
+ *  §2.1 closes it): the STORED row for this same session used to read
+ *  `LOGGED BY HAND` regardless, because `storedSummary.ts`'s `sourceLabel`
+ *  had only three columns to infer from and nothing the manual door posted
+ *  distinguished this case from a genuine by-hand entry. `session_logs`
+ *  now carries a fourth `source` member, `no-reading`, and the manual
+ *  door's `handleSave` posts it for exactly this arrival
+ *  (`LogSession.tsx`) — the stored row reads this SAME word from that
+ *  column now. A row saved BEFORE this PR shipped still reads `LOGGED BY
+ *  HAND` (no backfill — spec §2.4); only a row saved after it is honest. */
 export const NO_MONITOR_READING_SOURCE = "NO MONITOR READING";
 
 function buildManualModel(
@@ -1233,9 +1237,13 @@ function buildManualModel(
 
   // Task 4: the SOURCE slot only. `timeLabel` stays absent either way —
   // §2B's own date-only fallback for a door with no wall-clock moment of
-  // its own, and the stored screen gates its own `timeLabel` on the same
-  // bucket (`storedSummary.ts`'s `buildMeta`), so adding one here would
-  // put a reading on the live screen that the log screen never shows.
+  // its own. This is now an ACCEPTED DIVERGENCE from the stored screen,
+  // not a mirrored gate: the STORED no-reading row carries a `timeLabel`
+  // by Gate 0-A decision (c) — the app witnessed the connected arrival
+  // even though it measured nothing — but this LIVE screen keeps none.
+  // Whether the live screen should gain one too is out of Door PR A's
+  // scope (`storedSummary.ts`'s `buildMeta`, §2.3, is where the stored
+  // side's own allowlist lives).
   const meta: SummaryMeta = {
     dateLabel: formatLogDate(dateIso),
     sourceLabel: connectedNoRecord

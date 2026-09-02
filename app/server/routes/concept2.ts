@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Router, type Request, type RequestHandler } from "express";
+import type { LogSource } from "../../domain/types.js";
 import { bearerToken, cookieToken } from "../auth/middleware.js";
 import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import { renderCallbackPage } from "../concept2/callbackPage.js";
@@ -133,6 +134,11 @@ function sendPage(
 // Drizzle-inferred type is not `Record<string, unknown> | null` by
 // construction, only by the same "sanity, not truth" trust boundary this
 // module's `buildC2Payload` already documents.
+//
+// Door PR A (2026-09-02) §2.2: `deviceName` -> `source`, matching
+// `SessionLogRow`'s own swap. `LogsStore.get()` selects every column
+// (`db.select().from(sessionLogs)`), so `source` is present on every row
+// this function receives — confirmed by typecheck, not by inspection.
 function toMappingRow(row: {
   loggedAt: Date;
   completedAt: Date | null;
@@ -142,7 +148,7 @@ function toMappingRow(row: {
   restSeconds: number | null;
   restMeters: number | null;
   machineSummary: unknown;
-  deviceName: string | null;
+  source: LogSource;
   endedBy: string | null;
 }): SessionLogRow {
   return {
@@ -154,7 +160,7 @@ function toMappingRow(row: {
     restSeconds: row.restSeconds,
     restMeters: row.restMeters,
     machineSummary: row.machineSummary as Record<string, unknown> | null,
-    deviceName: row.deviceName,
+    source: row.source,
     endedBy: row.endedBy,
   };
 }

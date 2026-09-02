@@ -2542,6 +2542,34 @@ describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () 
     expect(screen.queryByText(/LOGGED BY HAND/)).not.toBeInTheDocument();
   });
 
+  // Door PR A (2026-09-02) §2.1: the wire write itself — this arrival
+  // posts the new `no-reading` member, not `manual`, and carries no
+  // `deviceName` (§2.2's corrected decision: the only name reachable here
+  // is a best-effort LAST-USED name, rejected in writing at
+  // `storedSummary.ts:66-73` and by PM ruling `pm-ledger.md:2710-2716`).
+  it("posts source: no-reading, with no deviceName key at all", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-no-reading-1" }), {
+          status: 201,
+        }),
+      ),
+    );
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    const posted = parsedBodies(apiFn)[0]!;
+    expect(posted.source).toBe("no-reading");
+    expect(posted).not.toHaveProperty("deviceName");
+  });
+
   it("does not claim the row was rowed BY FEEL — it shows the workout's own single target", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
