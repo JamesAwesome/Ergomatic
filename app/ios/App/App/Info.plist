@@ -28,6 +28,14 @@
 				<string>com.googleusercontent.apps.896004543555-9m5cf46vdgf57dv1r68u7stad6ngi304</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Concept2Link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>haus.waffle.ergomatic</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleShortVersionString</key>
 	<string>0.23.0</string>
