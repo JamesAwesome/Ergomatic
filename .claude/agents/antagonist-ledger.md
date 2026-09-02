@@ -5502,3 +5502,98 @@ same way.
   `ci-changes.sh` the PR BASE sha, so it diffs the whole range; "docs-only
   push, expect a skip" is only true of a bare `push` event, and expecting a
   skip will make a reviewer read a legitimately-running gate as stuck.
+
+## 2026-09-02 — Wave F `door` re-scope, phase-open anchor pass (D1-D4 pre-spec)
+
+- **CLAIM (D1): "PARTIAL is derivable — `endedBy` says I stopped, `steps[].meters`
+  vs `actualMeters` says how far."** FALSIFIED four ways in one pass, and the
+  technique for each is the cheap one. (a) **Read the door's ONLY exit copy**:
+  `Timer.tsx:815` says *"Abandon this session? Nothing will be saved: no log, no
+  actuals"* and `Timer.tsx:477` reaches `/session/log` only from
+  `isComplete(run)` — a timer row cannot BE partial, so the mapping is vacuous
+  there. (b) **grep the field's WRITERS, not its readers**: `actualMeters` is
+  written at exactly two lines, both inside `buildMonitorLogSteps` — the
+  comparison does not exist off the pm5 door. (c) **Run the predicate against
+  the feature that shipped this morning**: a connected Just Row always closes
+  `endedBy: "rower"` with `steps: []`, so `endedBy !== "finished"` marks every
+  successful Just Row PARTIAL. (d) **Count the union**: D1 listed five of six
+  `endedBy` members plus no `null`; the predicate owes seven states.
+- **ROOT LESSON: `endedBy` answers "how did the session end", never "did the
+  rower stop short of a plan".** Those coincide only when a plan exists. Before
+  keying a product word on a stored enum, ask what the enum's WRITERS actually
+  know — `monitorRun.ts:184-188` says `"rower"` means End-button OR machine
+  TERMINATE, and a Just Row has no other exit.
+- **The two inputs disagree in BOTH directions, and the codebase names both
+  producers in comments.** `logDraft.ts:805` ("a lost boundary whose pair never
+  both arrived") and `types.ts:62` ("an interval that produces ZERO frames is
+  lost entirely") give short actuals on a `finished` row. TECHNIQUE: **when a
+  predicate combines two stored inputs, grep the source for a comment naming a
+  producer of their disagreement** — this repo documents its own edge cases and
+  the spec had not read them.
+- **CLAIM (D2): "the in-flight interval lands in `steps` jsonb without a
+  migration and without changing what sums mean."** NARROWED to one safe shape
+  by reading the server's own validator comment: `routes/data.ts:594` —
+  *"Built from an explicit field list … any extra keys the client sent are
+  silently dropped, not persisted."* So a partial carried in `actualMeters` plus
+  a new `measured:false` marker reaches an older server as **the number without
+  the marker, 201, forever, in every sum** — while a new `actualSource` member
+  400s the whole save with no client retry. **TECHNIQUE: for any new field inside
+  an existing jsonb payload, run the additive matrix in BOTH directions and ask
+  what the old server does with each KEY SEPARATELY — a marker and its number in
+  different keys can be split by a validator's allowlist.** The fix is one line
+  of design: number and marker share new key names, so an old server drops both
+  together and the row degrades to today's behaviour.
+- **CLAIM (D3): "`no-reading` requires a `deviceName` like `pm5`."** FALSIFIED
+  against a ruling this repo had already written down twice — `storedSummary.ts:70`
+  (*"a best-effort LAST-USED name, so posting it would have the row assert that a
+  named erg supplied numbers that came off nothing"*) and `pm-ledger.md:2710`
+  (*"Prefer the false negative"*). TECHNIQUE: **before designing a stored field's
+  requirement, grep the tree for the field name plus the word the design needs —
+  a rejected option is usually documented AT the site that rejected it**, and a
+  spec that re-proposes it is reversing a ruling without quoting it.
+- **A fourth enum member is NOT additive the way its column was.** An old server
+  ignores an unknown BODY KEY (that is why `source` shipped safely) but 400s an
+  unknown ENUM MEMBER at `data.ts:1677` with no client retry. TECHNIQUE:
+  **"we added a field additively last time" is not evidence about adding a value
+  to that field.** Reachability is cited, not assumed: `RELEASING.md:95-97`
+  records six merges deploying nothing for eleven hours on 2026-09-01.
+- **A biconditional nobody wrote down had a shipped consumer.**
+  `deviceName ≠ null ⟺ source = 'pm5'` is enforced on every write by
+  `logSource.ts:54,63-75`, and `server/concept2/mapping.ts:49` already keys
+  "monitor provenance" on it. D3 breaks it; only the NEXT line of that predicate
+  (`endedBy !== 'finished'`) stops the leak. TECHNIQUE: **when a validator
+  enforces an if-and-only-if between two columns, grep for readers of EITHER
+  side — the invariant is load-bearing wherever it was convenient, not only
+  where it was stated.**
+- **CLAIM (D4): "renders `MONITOR`."** FALSE. `grep -c "text-transform"
+  app/src/index.css` returns **1**, and it is not on `.summary-meta` — every cap
+  on that line is a literal. `"monitor"` renders lowercase beside `TIMER` and
+  `LOGGED BY HAND`. TECHNIQUE: **a claim about rendered CASE is settled by
+  counting `text-transform` in the stylesheet, not by reading the string.**
+- **A fallback can be unreachable by construction and still get a test.**
+  `capacitorBle.ts:494`'s `device.name ?? "PM5"` sits behind a picker whose only
+  filter is `namePrefix: "PM5"` (`:481`) — the fallback cannot fire. Its two
+  siblings (`:465` held-device, `webBluetooth.ts:296` OR'd service filter) can.
+  TECHNIQUE (RF21): **before pinning a fallback, read the FILTER that produced
+  the value — a scan constraint upstream can make the `??` arm dead code, and a
+  green test on it is decoration.**
+- **A dated trigger fired while the spec was being written.** `git tag` showed
+  `v0.34.0` already cut at HEAD containing #268, so the `source` sunset's "next
+  tag" trigger is now due — and its blast radius is bigger than the ROADMAP row
+  says (`source` REQUIRED on POST means every pre-v0.34.0 install loses all
+  saving, not just the derive path). TECHNIQUE: **for any roadmap row whose
+  trigger is a tag, run `git tag --sort=-v:refname | head` and
+  `git log <prev>..<tag> --oneline` in the pass itself** — trigger rows expire
+  silently, and the pre-spec's own base SHA was one commit stale.
+- **VETTED GROUND (holds under attack):** `steps` needs no migration for a new
+  key; `ALTER TYPE ADD VALUE` is legal inside drizzle's transaction given no
+  backfill (PG18 docs, verbatim: *"the new value cannot be used until after the
+  transaction has been committed"*); an unmatched interval already carries no
+  `actualSource`, so the never-reached discriminator exists; the `?? "PM5"`
+  census is complete and collides with no identity read; `DROP COLUMN
+  preferences.warmup` has no reader in either direction; the C2 mapping reads no
+  step field; `from=monitor` is intent, not evidence.
+- **Filed, outside the pass (RF14): no connected Just Row can ever reach
+  Concept2** — `mapping.ts:50` requires `endedBy === 'finished'` and a JR always
+  closes `rower`. The v0.34.0 flagship is permanently ineligible for the Wave E
+  export button.
