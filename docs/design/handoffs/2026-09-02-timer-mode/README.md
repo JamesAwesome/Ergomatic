@@ -87,6 +87,15 @@ screen"* — backgrounds to the edges; controls inset). Mechanism: the
 landscape frame pads no bottom inset; the gutter and the controls row
 each carry `env(safe-area-inset-bottom)` themselves. Build 837.
 
+## Desk walk 2, second finding: "what is this arrow"
+
+The ← at the top of the landscape gutter was a decorative `aria-hidden`
+span with no handler — a back button that was not one, left from the
+connected-revamp gutter spec. James: delete it. Gone in both
+orientations; END is the one way out. Portrait's name keeps its centred
+position (it takes the row's slack and matches END's 44px on the left);
+landscape's gutter has one child and END sits at its foot. Build 839.
+
 ## Not changed
 
 Every other string and slot on the timer; the connected surface; the
