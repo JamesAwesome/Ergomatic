@@ -258,9 +258,9 @@ slate.
       0020 BACKFILL rule stays (it is history, not a live inference).
       Filed here per RF14 and the spec's exit criterion 8b. **XS**
 - [ ] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
-      told testers — trigger: the v0.34.0 notes PR.** v0.32.0 said "connect
-      to the erg" (there is now a Start Timer with no erg) and "no targets
-      and no type chip, on purpose" (free rows now carry the JR chip). One
+      told testers — trigger: the v0.34.0 notes PR.** v0.32.0 said
+      "connect to the erg" (there is now a Start Timer with no erg) and
+      "no type chip, on purpose" (free rows now carry the JR chip). One
       sentence each, in the notes' own voice, or the News tab contradicts
       itself two entries apart. Filed at #268's PM gate (RF14, and the PR
       body had claimed this row already existed). **XS**
