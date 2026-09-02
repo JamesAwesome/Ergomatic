@@ -5,6 +5,24 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.33.0 (2026-09-01): range v0.32.0..main = #258 alone, accounted per
+    // RF15 (`git log v0.32.0..origin/main --oneline`); #262 (process docs)
+    // needs no note if it lands in range. The PM TRIAD gate on #258 ruled
+    // the note is THE AFFORDANCE, not an announcement: the row says
+    // DIAGNOSTICS and nothing about when to tap it, so this item says WHEN
+    // (something went wrong, someone asks for the log) — never a feature
+    // tour. The resume instruments and latch counter are deliberately not
+    // noted: nothing a rower can see reads them yet (§4 waits on their
+    // field numbers), and noting invisible plumbing is the over-claim
+    // v0.24.0's correction exists to stop.
+    version: "v0.33.0",
+    date: "2026-09-01",
+    items: [
+      "If a connected session goes wrong and someone asks you for the log, you can now get it without rowing again: You, then DIAGNOSTICS, then Monitor logs. The app keeps the last three connected sessions' logs; COPY puts one on the clipboard, ready to paste into a message.",
+      "Before, those logs lived one session deep: finishing a new session was the only way in, and doing that overwrote the very log you came for.",
+    ],
+  },
+  {
     // v0.32.0 (2026-09-01): range v0.31.0..main = 2 merges, accounted per
     // RF15 (`git log v0.31.0..origin/main --oneline`, no --merges). #259
     // is all three items — Phase JR's PR 2, the whole Just Row feature.
