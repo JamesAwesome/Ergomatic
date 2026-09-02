@@ -5,6 +5,28 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.34.0 (2026-09-02): range v0.33.0..main = 8 commits, accounted per
+    // RF15 (`git log v0.33.0..origin/main --oneline`, no --merges). Noted:
+    // #268 (items 1 and 2, the phone-timed Just Row and the JR chip — and
+    // inside them the two sentences ROADMAP owed, retiring v0.32.0's
+    // "connect to the erg" and "no type chip, on purpose") and #265 (item
+    // 3, the ready screen's strip, a visible fix). No note: #267 (Wave F
+    // PR 3a, instrument-only — "tester impact: none" in its own fold),
+    // #269 (Wave E PR1.75a, server half, dark), #257 (Wave E PR1.5, dark by
+    // its own fold), #266/#264/#262 (docs). Deliberately NOT noted: the
+    // stored provenance column (#268) — every row a rower can see already
+    // read PM5 / TIMER / LOGGED BY HAND, and no word changed. "A Just Row
+    // never advances your plan" (v0.32.0) still stands; substitution is a
+    // later PR and its note retires that line when it ships.
+    version: "v0.34.0",
+    date: "2026-09-02",
+    items: [
+      "Just Row without the erg. The Just Row door has a second button, Start Timer: the phone keeps the time, and when you finish, the log door shows that time alone and saves it. No distance and no split, because the phone did not measure them and will not invent them. v0.32.0 said connect to the erg; that is now one of two ways in.",
+      "Free rows carry a JR chip in the badge slot the other kinds use. It is hollow on purpose: the four colours mean intensities, and a Just Row has none. v0.32.0 said no type chip, on purpose; in practice the row was too easy to lose in History, so it has one now.",
+      "The Just Row ready screen's KEEP YOUR PHONE SCREEN ON strip looks like the rest of the app again. It had shipped without its styling.",
+    ],
+  },
+  {
     // v0.33.0 (2026-09-01): range v0.32.0..main = #258 alone, accounted per
     // RF15 (`git log v0.32.0..origin/main --oneline`); #262 (process docs)
     // needs no note if it lands in range. The PM TRIAD gate on #258 ruled
