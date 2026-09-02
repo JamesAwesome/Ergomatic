@@ -2,8 +2,10 @@
 
 **Status: spec REV 2, 2026-09-02 — the antagonist's full pass (TRIAD
 anchor) is folded: four falsifications ⟨F#⟩, all on mechanism; the product
-shape stands. Gate 0 rev 1d presented (chips centred on both axes; the
-checkpoint mark cased as shipped), awaiting James.** Phase JR
+shape stands. Gate 0 PASSED on rev 1d (James, 2026-09-02, "design
+approved") — chips centred on both axes, the checkpoint mark cased as
+shipped. A second antagonist pass on rev 2's fixes is in flight; the plan
+follows it.** Phase JR
 follow-on item 5. Handoff: `docs/design/handoffs/2026-09-02-just-row-substitution/`.
 
 ## What and why

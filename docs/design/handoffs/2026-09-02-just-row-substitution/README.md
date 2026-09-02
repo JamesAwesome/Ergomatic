@@ -2,7 +2,8 @@
 
 **Origin:** Gate 0 for Phase JR follow-on item 5 (James, 2026-09-01:
 "advances the record, records the stand-in"; 2026-09-02: checkpoint days
-included). **Status: REV 1d PRESENTED 2026-09-02 (chips centred both axes per James; `2K Test` cased as shipped per the antagonist), awaiting approval.**
+included). **Status: GATE 0 PASSED — James, 2026-09-02, on rev 1d ("design approved").
+Board final; chips centred on both axes, the checkpoint mark cased as shipped.**
 
 ## Boards, and where each label comes from
 
