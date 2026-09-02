@@ -37,6 +37,11 @@ function makeLog(id: string, overrides: Partial<RecentLog> = {}): RecentLog {
     machineWorkSeconds: null,
     machineWorkMeters: null,
     machineAvgPaceSecondsPer500m: null,
+    // Door spec (2026-09-02) §1.3: a complete row (`false`) with no close
+    // reason is the default here — the chip cases below override both
+    // explicitly.
+    endedBy: null,
+    partial: false,
     ...overrides,
   };
 }

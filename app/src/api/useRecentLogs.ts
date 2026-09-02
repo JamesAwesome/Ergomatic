@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { WorkoutType } from "../../domain/types.js";
+import type { CloseReason } from "../monitor/monitorRun";
 
 // Declared locally rather than imported from server/stores/logs.ts: client
 // hooks in this codebase type their own view of a server response
@@ -74,6 +75,34 @@ export interface RecentLog {
   // round, and printing our own quotient beside what the detail screen
   // would show as absent is the exact defect this task exists to kill).
   machineAvgPaceSecondsPer500m: number | null;
+  // Door spec (2026-09-02) §1.3: the honest close reason, required-and-
+  // nullable — the same convention every hero field above uses, because
+  // `LOG_LIST_COLUMNS` (`server/stores/logs.ts`) ALWAYS selects the
+  // column and `null` is the common case (a phone-timer/manual log, or
+  // any row predating Phase LL Task 4). The column has been projected
+  // into this response since Phase LL Task 4; only the client-side
+  // declaration is new, and only because `LogRow` now reads it — the
+  // `link-lost` chip renders on rows the PARTIAL predicate EXCLUDES, so
+  // the word cannot be derived from `partial` alone.
+  //
+  // Mirrors `StoredLog.endedBy`'s widened union rather than a fourth
+  // hand-copied literal list, minus that field's optionality: the detail
+  // row tolerates a response that never carried the key at all, while
+  // this projection cannot omit it.
+  endedBy: (CloseReason | "interrupted") | null;
+  // Door spec (2026-09-02) §1.3: DERIVED at read time, not stored — no
+  // column, no migration, nothing to roll back. `LOG_LIST_COLUMNS`
+  // evaluates §1.1's four PARTIAL clauses in SQL because this projection
+  // deliberately drops `steps`, which clause 3 needs; the detail screen
+  // evaluates the identical clauses in TypeScript
+  // (`src/log/storedSummary.ts`'s `partialCloseReason`), and
+  // `server/routes/partial.integration.test.ts` holds the two equal row
+  // for row.
+  //
+  // Required BOOLEAN, never nullable: the server wraps the whole
+  // predicate in `coalesce(..., false)` precisely so a legacy row with a
+  // null `ended_by` reads `false` here rather than `null`.
+  partial: boolean;
 }
 
 export type RecentLogsState =

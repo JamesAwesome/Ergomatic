@@ -571,6 +571,37 @@ button:disabled {
   text-align: center;
 }
 
+/* Door spec (2026-09-02) §1.3, Gate 0-A decision (e), APPROVED by James:
+   the History list's partial chip ("STOPPED EARLY", "LINK LOST", ...) on the
+   numbers line. Its declarations are `.free-row-chip`'s above VERBATIM,
+   including #272's badge-column centring block — same 12px mono, --ink-3 on
+   --page at 6.69:1 (floor 4.5:1, PASS) and on --surface at 7.43:1, same 1px
+   --rule-3 hollow border at 1.56:1, inherited unchanged and DECORATIVE (the
+   chip's meaning is entirely its text, so the border carries no information
+   and needs no 3:1 non-text contrast; flagged and accepted at Gate 0-A
+   rather than silently decided).
+
+   A SEPARATE RULE, never a grouped selector: `FreeRowChip.test.tsx:68` pins
+   `.free-row-chip` to exactly ONE rule and `:70` pins its selector list to
+   exactly [".free-row-chip"], and SEVEN e2e assertions count or read the
+   text of that class. `src/log/partialChip.test.ts` pins the two rules'
+   declaration SETS equal so the copy cannot drift. */
+.log-partial-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  padding: 2px 6px;
+  box-sizing: border-box;
+  min-width: 28.4px;
+  text-align: center;
+}
+
 .pain-bar {
   display: flex;
   gap: 2px;
@@ -2449,6 +2480,17 @@ button.back-link:disabled,
   font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--ink-3);
+}
+
+/* Door spec (2026-09-02) §1.3, Gate 0-A slot B: the numbers line becomes a
+   two-item row when a partial chip rides on it, so the chip's 12px box and
+   the 11px numbers share one baseline with a real gap instead of running
+   together. Applied by `LogRow.tsx` only when a chip is present, so the
+   line's ordinary one-child layout is untouched everywhere else. */
+.today-log-hero-chipped {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* -- History list (from-the-log spec, 2026-08-18, /today/log) ----------

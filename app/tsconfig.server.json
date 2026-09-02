@@ -18,5 +18,5 @@
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },
-  "include": ["server", "domain"]
+  "include": ["server", "domain", "src/vite-env.d.ts"]
 }

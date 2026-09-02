@@ -45,6 +45,11 @@ function makeLog(id: string, overrides: Partial<RecentLog> = {}): RecentLog {
     machineWorkSeconds: null,
     machineWorkMeters: null,
     machineAvgPaceSecondsPer500m: null,
+    // Door spec (2026-09-02) §1.3: a complete row (`false`) with no close
+    // reason is the default here — the chip cases below override both
+    // explicitly.
+    endedBy: null,
+    partial: false,
     ...overrides,
   };
 }
@@ -591,6 +596,130 @@ describe("HistoryList hero snippet — tier parity with the detail screen (RC-5 
     // The list's own FALLBACK renders the SAME fused numbers the detail
     // screen now also declines to — no divergence, byte-identical.
     expect(screen.getByText("AVG 2:18.8 · 742 m")).toBeVisible();
+  });
+});
+
+// Door spec (2026-09-02) §1.3 / Gate 0-A (e), APPROVED by James: the
+// History row's short chip. `historyChipWord` (`storedSummary.ts`) is the
+// ONE place the word is decided, shared with the detail screen's own close
+// line, so these cases pin the two things a list row can get wrong: WHICH
+// rows speak, and WHERE the chip lands.
+//
+// The list/detail agreement itself — the SQL `partial` against the
+// TypeScript predicate over the same stored row — is gated on real
+// Postgres, over rows POSTed through the real route, in
+// `server/routes/partial.integration.test.ts` (RF24: that test starts
+// upstream of the producer; these start from the projection it produces).
+describe("HistoryList partial chip (door spec §1.3, Gate 0-A slot B)", () => {
+  it("a partial row wears its short word on the numbers line, in .log-partial-chip — never .type-badge or .free-row-chip", () => {
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-partial", {
+          partial: true,
+          endedBy: "rower",
+          avgSplitSeconds: 124,
+          distanceMeters: 2000,
+        }),
+      ]),
+    );
+    const { container } = renderHistoryList();
+    const chip = container.querySelector(".log-partial-chip");
+    expect(chip).not.toBeNull();
+    expect(chip!.textContent).toBe("STOPPED EARLY");
+    // Gate 0-A slot B: BESIDE the numbers it qualifies, not in the badge
+    // slot. `.today-log-hero` is the numbers line.
+    expect(chip!.closest(".today-log-hero")).not.toBeNull();
+    expect(container.querySelector(".free-row-chip")).toBeNull();
+    expect(chip!.className).not.toContain("type-badge");
+  });
+
+  // One row per allowlist member, so a wrong `CLOSE_REASON_WORDS` row
+  // cannot hide behind `rower` alone.
+  it.each([
+    ["rower", "STOPPED EARLY"],
+    ["link-lost", "LINK LOST"],
+    ["program-dropped", "PROGRAM DROPPED"],
+    ["program-failed", "PROGRAM NOT LOADED"],
+    ["interrupted", "UNFINISHED"],
+  ] as const)("a partial row closed by %s wears %s", (endedBy, word) => {
+    mockUseLogHistory.mockReturnValue(
+      readyState([makeLog("log-word", { partial: true, endedBy })]),
+    );
+    const { container } = renderHistoryList();
+    expect(container.querySelector(".log-partial-chip")!.textContent).toBe(
+      word,
+    );
+  });
+
+  it("a complete row wears no chip", () => {
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-complete", {
+          partial: false,
+          endedBy: "finished",
+          avgSplitSeconds: 124,
+          distanceMeters: 2000,
+        }),
+      ]),
+    );
+    const { container } = renderHistoryList();
+    expect(container.querySelector(".log-partial-chip")).toBeNull();
+    expect(screen.getByText("AVG 2:04.0 · 2,000 m")).toBeVisible();
+  });
+
+  // DELTA verdict M-3, the divergence class this chip exists to close:
+  // `link-lost` is UNGATED on `partial`, exactly as the detail screen's
+  // close line is. A link-lost Just Row is NOT partial (clause 3 finds no
+  // unmeasured step in `[]`) and the detail screen still shouts LINK
+  // LOST, so History must too.
+  it("a NON-partial link-lost row still wears LINK LOST — in lockstep with the detail screen's own ungated line", () => {
+    const stored = baseStoredRow({ steps: [], endedBy: "link-lost" });
+    const detail = buildStoredSummary(stored);
+    expect(detail.closeLine).toBe("LINK LOST · the app lost the monitor");
+
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-link-lost-free", { partial: false, endedBy: "link-lost" }),
+      ]),
+    );
+    const { container } = renderHistoryList();
+    expect(container.querySelector(".log-partial-chip")!.textContent).toBe(
+      "LINK LOST",
+    );
+  });
+
+  // The other half of M-3: every OTHER close reason IS gated. A row the
+  // predicate excluded says nothing, however it ended.
+  it("a NON-partial row closed by the rower wears nothing", () => {
+    const stored = baseStoredRow({ steps: [], endedBy: "rower" });
+    expect(buildStoredSummary(stored).closeLine).toBeUndefined();
+
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-jr-rower", { partial: false, endedBy: "rower" }),
+      ]),
+    );
+    const { container } = renderHistoryList();
+    expect(container.querySelector(".log-partial-chip")).toBeNull();
+  });
+
+  // The widened render gate (`snippet !== "" || chip !== undefined`): a
+  // partial row with NO hero numbers would otherwise say nothing at all in
+  // History, which is the exact silence this spec exists to break. Not on
+  // Gate 0-A's artboard — flagged in the PR's risk note.
+  it("a partial row with no hero numbers still shows its chip, alone on the line", () => {
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-partial-no-heroes", {
+          partial: true,
+          endedBy: "program-dropped",
+        }),
+      ]),
+    );
+    const { container } = renderHistoryList();
+    const hero = container.querySelector(".today-log-hero");
+    expect(hero).not.toBeNull();
+    expect(hero!.textContent).toBe("PROGRAM DROPPED");
   });
 });
 

@@ -1,6 +1,7 @@
 import TypeBadge from "../components/TypeBadge";
 import FreeRowChip from "../workout/FreeRowChip";
 import { fmtSplit } from "../../domain/format.js";
+import { historyChipWord } from "./storedSummary";
 import type { RecentLog } from "../api/useRecentLogs";
 
 // From-the-log spec (2026-08-18), §1: "one row component, not two" — the
@@ -206,6 +207,18 @@ export function LogRow({
   hero?: boolean;
 }) {
   const snippet = hero ? heroSnippet(log) : "";
+  // Door spec (2026-09-02) §1.3: the short word for a session that
+  // stopped early, decided ONCE in `storedSummary.ts` and shared with the
+  // detail screen's own close line, so the two surfaces cannot name one
+  // close two ways. `link-lost` is ungated on `partial` there for the same
+  // reason it is ungated on the detail screen.
+  //
+  // `hero`-gated, and Today's rows never set `hero`: Gate 0-A slot B put
+  // the chip BESIDE THE NUMBERS it qualifies, and Today's LAST THREE rows
+  // render no numbers line at all. James approved that slot knowing Today
+  // stays silent; `Today.test.tsx` pins the cost so it cannot drift in by
+  // accident.
+  const chip = hero ? historyChipWord(log) : undefined;
   return (
     <>
       <TypeBadge type={log.workoutType} />
@@ -227,7 +240,23 @@ export function LogRow({
           .filter((segment) => segment !== null)
           .join(" · ")}
       </span>
-      {snippet !== "" && <span className="today-log-hero">{snippet}</span>}
+      {/* A DELIBERATE WIDENING of this line's old `snippet !== ""` gate: a
+          partial row with no hero numbers would otherwise say NOTHING in
+          History, which is the exact silence this spec exists to break.
+          That one shape (chip alone on the line) is not on Gate 0-A's
+          artboard and is named in the PR's risk note. */}
+      {(snippet !== "" || chip !== undefined) && (
+        <span
+          className={`today-log-hero${
+            chip !== undefined ? " today-log-hero-chipped" : ""
+          }`}
+        >
+          {chip !== undefined && (
+            <span className="log-partial-chip">{chip}</span>
+          )}
+          {snippet}
+        </span>
+      )}
     </>
   );
 }
