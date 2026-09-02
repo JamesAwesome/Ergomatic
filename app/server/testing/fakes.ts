@@ -30,11 +30,15 @@ import {
 } from "../stores/preferences.js";
 import type { TestHistoryStore } from "../stores/testHistory.js";
 import type { NewWorkoutInput, WorkoutsStore } from "../stores/workouts.js";
-import type {
-  Concept2Link,
-  Concept2Store,
-  ConsumedConcept2Attempt,
-  NewConcept2Attempt,
+import {
+  AttemptNonceCollisionError,
+  Concept2LinkConflictError,
+  type Concept2Link,
+  type Concept2Store,
+  type ConsumedConcept2Attempt,
+  type LinkSurface,
+  type NewConcept2Attempt,
+  type PeekedConcept2Attempt,
 } from "../stores/concept2.js";
 
 // ---------------------------------------------------------------------------
@@ -882,9 +886,8 @@ function makeFakeArticleReadsStore(): ArticleReadsStore {
 
 // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD):
 // mirrors `stores/concept2.ts`'s `createConcept2Store` signature EXACTLY
-// (Task 6's router unit tests consume this fake). Not wired into
-// `makeFakeStores`/`Stores` yet — that's a later task's job, once
-// `routes/concept2.ts` exists to need it.
+// (`routes/concept2.test.ts` consumes this fake). Deliberately NOT part of
+// `makeFakeStores`/`Stores` — the concept2 router takes its own store dep.
 //
 // `withLinkLock`'s serialization is a per-user promise-chain gate, not a
 // real lock: each call first awaits the PREVIOUS call's gate for the same
@@ -896,7 +899,15 @@ function makeFakeArticleReadsStore(): ArticleReadsStore {
 // `FOR UPDATE` case does; that test exists precisely because no fake can
 // stand in for it.
 //
-// `clock` is injectable so a caller can control `consumeAttempt`'s and
+// PR1.75a: the two unique constraints migration 0021 added are mirrored
+// here as the same typed errors the real store throws
+// (`AttemptNonceCollisionError` on a nonce held by another user's row,
+// `Concept2LinkConflictError` on a c2UserId held by another user's link),
+// and `createAttempt` is the same one-row-per-user REPLACE the real upsert
+// is. The concurrent-mint invariant itself is only provable on real
+// Postgres (the integration test) — a Map cannot race.
+//
+// `clock` is injectable so a caller can control `consumeAttemptFor`'s and
 // `deleteExpiredAttempts`' notion of "now" without a real sleep — the real
 // store instead computes elapsed time in SQL against Postgres's own
 // `now()`, which a unit test has no equivalent lever for.
@@ -914,8 +925,15 @@ export function makeFakeConcept2Store(
 
     // Same posture as the real store: `needsReauthAt` is cleared on EVERY
     // upsert, insert or replace alike — a successful relink IS the
-    // recovery (schema.ts's own `needsReauthAt` comment).
+    // recovery (schema.ts's own `needsReauthAt` comment). D1: a c2UserId
+    // already held by a DIFFERENT user is the real store's unique
+    // violation, thrown as the same typed error.
     async upsertLink(userId, link) {
+      for (const [otherUserId, other] of links) {
+        if (otherUserId !== userId && other.c2UserId === link.c2UserId) {
+          throw new Concept2LinkConflictError();
+        }
+      }
       const existing = links.get(userId);
       const now = clock();
       links.set(userId, {
@@ -977,24 +995,46 @@ export function makeFakeConcept2Store(
       }
     },
 
+    // One row per user, REPLACED on every mint (the real store's ON
+    // CONFLICT (user_id) DO UPDATE). A nonce already held by ANOTHER
+    // user's row is the real store's PK violation.
     async createAttempt(a: NewConcept2Attempt) {
+      const holder = attempts.get(a.nonce);
+      if (holder && holder.userId !== a.userId) {
+        throw new AttemptNonceCollisionError();
+      }
+      for (const [nonce, row] of attempts) {
+        if (row.userId === a.userId) attempts.delete(nonce);
+      }
       attempts.set(a.nonce, { ...a, createdAt: clock() });
     },
 
-    // Single-use, unconditional delete first — mirrors the real store's
-    // "delete every nonce exactly once, expired or not" contract (see
-    // `concept2.ts`'s own `consumeAttempt` comment for why the delete
-    // cannot be gated on age).
-    async consumeAttempt(
+    async peekAttempt(nonce: string): Promise<PeekedConcept2Attempt | null> {
+      const row = attempts.get(nonce);
+      if (!row) return null;
+      return {
+        userId: row.userId,
+        weightClass: row.weightClass,
+        surface: row.surface,
+      };
+    },
+
+    // The real store's single conditional DELETE: the row is removed ONLY
+    // when all three predicates hold; freshness is reported, never gated
+    // on (see `concept2.ts`'s own `consumeAttemptFor` comment).
+    async consumeAttemptFor(
       nonce: string,
+      userId: string,
+      surface: LinkSurface,
       maxAgeMs: number,
     ): Promise<ConsumedConcept2Attempt | null> {
       const row = attempts.get(nonce);
+      if (!row || row.userId !== userId || row.surface !== surface) {
+        return null;
+      }
       attempts.delete(nonce);
-      if (!row) return null;
       const ageMs = clock().getTime() - row.createdAt.getTime();
-      if (ageMs > maxAgeMs) return null;
-      return { userId: row.userId, weightClass: row.weightClass };
+      return { weightClass: row.weightClass, fresh: ageMs <= maxAgeMs };
     },
 
     async deleteExpiredAttempts(maxAgeMs: number) {
@@ -1003,12 +1043,6 @@ export function makeFakeConcept2Store(
         if (now - row.createdAt.getTime() > maxAgeMs) {
           attempts.delete(nonce);
         }
-      }
-    },
-
-    async deleteAttemptsFor(userId: string) {
-      for (const [nonce, row] of attempts) {
-        if (row.userId === userId) attempts.delete(nonce);
       }
     },
   };

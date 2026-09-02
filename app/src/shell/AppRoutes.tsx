@@ -111,10 +111,22 @@ function ConfirmRedirect() {
  *  complete — the same guard `LogSession.tsx`'s own session door applies) ->
  *  `/today`, the same fallback every other dead deep link in this file's
  *  own catch-all uses. */
-function CompleteRedirect() {
+// A completed FREE-ROW run (`mode: "justrow"`, Just Row without the
+// monitor, spec 2026-09-02 ⟨F9⟩) belongs to the Just Row log door, not the
+// workout summary — the same branch `Timer.tsx`'s own completion effect
+// takes, on the same discriminant. Exported (only) so the test can pin the
+// branch in isolation: until the log door takes a timer entry, a full-shell
+// render of `/session/complete` with a free-row run would bounce from the
+// door to Today, indistinguishable from this shim's own no-run arm.
+export function CompleteRedirect() {
   const run = loadRun();
   if (run !== null && isComplete(run)) {
-    return <Navigate to="/session/log" replace />;
+    return (
+      <Navigate
+        to={run.mode === "justrow" ? "/justrow/log" : "/session/log"}
+        replace
+      />
+    );
   }
   return <Navigate to="/today" replace />;
 }

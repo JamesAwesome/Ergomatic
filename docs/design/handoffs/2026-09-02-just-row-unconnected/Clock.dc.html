@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root {
+      --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade;
+      --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c; --ink-4: #6f6a5f;
+      --rule: #d8d3c4; --rule-3: #c9c3b2; --accent: #b5341f;
+      --action-connect: #2a6275; --on-color: #fffdf7;
+      --radius: 2px; --tap: 44px;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    .back { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-2); }
+    .h1 { font-family: var(--font-serif); font-size: 34px; font-weight: 500; margin: 0; letter-spacing: -0.01em; line-height: 1.08; }
+    .meta { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-3); margin: 0; }
+    .band { background: var(--surface-sunken); padding: 12px 14px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; color: var(--ink-2); }
+    .connect { display: flex; align-items: center; justify-content: center; min-height: 56px; background: var(--action-connect); border: none; border-radius: var(--radius); color: var(--on-color); font-family: var(--font-sans); font-size: 16px; font-weight: 600; }
+    .l1 { display: flex; align-items: center; justify-content: center; min-height: 56px; background: var(--accent); border: none; border-radius: var(--radius); color: var(--on-color); font-family: var(--font-sans); font-size: 16px; font-weight: 600; }
+    .l2 { display: flex; align-items: center; justify-content: center; min-height: 52px; background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); color: var(--ink); font-family: var(--font-sans); font-size: 16px; font-weight: 600; }
+    .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; border-top: 1px solid var(--rule); background: var(--page); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; }
+    .tab { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); text-align: center; }
+    .tab-on { color: var(--ink); }
+    .seclabel { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; color: var(--ink-3); margin: 0; }
+    .card { background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); padding: 16px; }
+    .numlabel { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); margin: 0 0 4px; }
+    .numvalue { font-family: var(--font-mono); font-size: 26px; color: var(--ink); margin: 0; letter-spacing: -0.01em; }
+    .pain { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    .paincell { display: flex; align-items: center; justify-content: center; min-height: var(--tap); background: var(--surface-sunken); border: 1px solid var(--rule-3); border-radius: var(--radius); font-family: var(--font-sans); font-size: 15px; color: var(--ink-2); }
+    .notes { min-height: 84px; background: var(--surface); border: 1px dashed var(--rule-3); border-radius: var(--radius); padding: 12px; font-family: var(--font-mono); font-size: 14px; color: var(--ink-4); }
+    /* Timer chrome, lifted from the shipped timer.png / index.css .timer-* */
+    .thead { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; min-height: 44px; }
+    .tname { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; color: var(--ink-3); text-align: center; }
+    .tend { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-2); }
+    .tlabel { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; color: var(--ink-3); margin: 0; }
+    .tstate { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; color: var(--ink); font-weight: 600; margin: 0; }
+    .tclock { font-family: var(--font-mono); font-size: 108px; font-weight: 500; line-height: 0.9; letter-spacing: -0.05em; color: var(--ink); margin: 0; }
+    .hrule { height: 1px; background: var(--rule); }
+    .pause { display: flex; align-items: center; justify-content: center; min-height: 56px; background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); font-family: var(--font-sans); font-size: 16px; font-weight: 600; color: var(--ink); }
+    .row { display: flex; align-items: center; justify-content: space-between; }
+    .rname { font-family: var(--font-sans); font-size: 16px; color: var(--ink); }
+    .rmeta { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); }
+    .rline { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink-3); padding: 6px 0 8px; border-bottom: 1px solid var(--rule); }
+    .badge { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 22px; border-radius: 2px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--on-color); margin-right: 10px; }
+    .hero-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink-3); margin: 0 0 6px; }
+    .hero-big { font-family: var(--font-mono); font-size: 54px; font-weight: 500; letter-spacing: -0.03em; line-height: 1; color: var(--ink); margin: 0; }
+    .hero-sub { font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); margin: 8px 0 0; }
+    .btn-outline { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); font-family: var(--font-sans); font-size: 16px; color: var(--ink); }
+    .danger { display: flex; align-items: center; justify-content: center; min-height: 56px; background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); color: var(--accent); font-family: var(--font-sans); font-size: 18px; font-weight: 600; }
+      .strip { height: 4px; background: var(--ink); }
+    .tface { font-family: var(--font-mono); font-size: 96px; font-weight: 500; line-height: 0.9; letter-spacing: -0.05em; color: var(--ink); margin: 0; }
+    .tel { display: flex; align-items: baseline; gap: 10px; font-family: var(--font-mono); }
+    .tel-l { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-3); }
+    .tel-v { font-size: 26px; color: var(--ink); }
+    .tt-l { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink-3); margin: 0 0 2px; }
+    .tt-v { font-family: var(--font-mono); font-size: 44px; line-height: 1.05; color: var(--ink); margin: 0; letter-spacing: -0.02em; }
+    .upnext { background: var(--surface-sunken); display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; font-family: var(--font-mono); }
+    .upnext-l { font-size: 10px; letter-spacing: 0.16em; color: var(--ink-3); }
+    .upnext-v { font-size: 13px; letter-spacing: 0.06em; color: var(--ink); }
+    .arrows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .arrow { display: flex; align-items: center; justify-content: center; min-height: 52px; background: var(--surface); border: 1px solid var(--rule-3); border-radius: var(--radius); font-size: 12px; color: var(--ink); }
+    .confirm { background: var(--surface-sunken); padding: 14px 12px; display: flex; flex-direction: column; gap: 12px; }
+    .confirm-q { font-family: var(--font-sans); font-size: 15px; color: var(--ink); margin: 0; }
+    .keep { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 20px; background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); font-family: var(--font-sans); font-size: 16px; font-weight: 600; color: var(--ink); }
+    .fin { display: flex; flex: 1; align-items: center; justify-content: center; min-height: 52px; background: var(--accent); border-radius: var(--radius); font-family: var(--font-sans); font-size: 16px; font-weight: 600; color: var(--on-color); }
+    .dt-l { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em; color: var(--ink-3); margin: 0 0 4px; }
+    .dt-v { font-family: var(--font-mono); font-size: 20px; font-weight: 600; color: var(--ink); margin: 0; }
+  </style>
+</helmet>
+
+<!-- MECHANICAL: this is the shipped Timer for a one-step test workout
+     (captured 2026-09-02 through the real app: import "test Just Row",
+     Start Timer, SKIP the countdown), with exactly two words changed —
+     the STEP slot and the TARGET SPLIT slot. Everything else, including
+     the ▶ arrow as the way to finish, is the shipped screen. -->
+<div class="screen" style="width: 390px; height: 844px; background: var(--page); position: relative; overflow: hidden; box-sizing: border-box; padding: 8px 20px 0;">
+  <div class="thead">
+    <span class="back">&larr;</span>
+    <span class="tname">Just Row</span>
+    <span class="tend">END &rarr;</span>
+  </div>
+  <div class="strip" style="margin-top: 10px;"></div>
+  <div style="display: flex; justify-content: space-between; margin-top: 26px;">
+    <!-- MECHANICAL: the shipped label row. The STEP slot reads JUST ROW,
+         the same word the approved connected surface puts where a
+         programmed row reads "2 OF 5 / WORK". -->
+    <p class="tlabel">JUST ROW</p>
+    <p class="tstate">RUNNING</p>
+  </div>
+  <p class="tface" style="margin-top: 10px;">12:34</p>
+  <div class="tel" style="margin-top: 12px;"><span class="tel-l">ELAPSED</span><span class="tel-v">12:34</span></div>
+  <div class="hrule" style="margin-top: 10px;"></div>
+  <!-- MECHANICAL: the shipped TARGET SPLIT / RATE panel. A one-step test
+       workout prints "All out" / "Free"; the approved connected Just Row
+       prints "Free" in both slots. Both slots read Free here. -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; margin-top: 14px;">
+    <div><p class="tt-l">TARGET SPLIT</p><p class="tt-v">Free</p></div>
+    <div><p class="tt-l">RATE</p><p class="tt-v">Free</p></div>
+  </div>
+  <!-- MECHANICAL: UP NEXT · FINISH is what the shipped Timer prints on a
+       last phase. Unchanged. -->
+  <div class="upnext" style="margin-top: 18px;"><span class="upnext-l">UP NEXT</span><span class="upnext-v">FINISH</span></div>
+
+  <div class="pause" style="margin-top: 12px;">Pause</div>
+  <div class="arrows" style="position: absolute; left: 20px; right: 20px; bottom: 72px;"><div class="arrow">&#9664;</div><div class="arrow">&#9654;</div></div>
+</div>
+</x-dc>
+</body>
+</html>

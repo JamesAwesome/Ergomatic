@@ -8,6 +8,8 @@ import {
   type HandoffEntry,
 } from "../monitor/handoffStore";
 import { useLogForm } from "../session/LogSession";
+import { recordLogDoorEntry } from "../session/logDoorDiagnostics";
+import { clearRun, loadRun, type SessionRun } from "../session/run";
 import { freeRowTotals } from "./totals";
 
 /**
@@ -35,18 +37,92 @@ import { freeRowTotals } from "./totals";
  * whether the session counts toward the plan; a free row can never count
  * (the server's own `isFreeRow` refusal is the enforcement), so this door
  * posts `advancesPlan: false` unconditionally and says so with one button.
+ *
+ * **Two entry kinds, one door** (Just Row without the monitor, spec
+ * 2026-09-02, §Mechanism piece 4). The MONITOR entry is a closed free-row
+ * `MonitorRun` on the hand-off store; the TIMER entry is a finished
+ * free-row `SessionRun` (`mode: "justrow"`) on `RUN_KEY`, the phone's own
+ * clock. They differ in exactly what the timer never had: no device, no
+ * distance, no split, no machine block — the card renders TIME alone, the
+ * device slot reads `TIMER`, and the posted body carries no metre key at
+ * all (absence, never a zero or a dash: Global Constraints).
  */
 
-/** The record this door can serve: a CLOSED free row on the hand-off
- *  store. Anything else — no entry, an open run, a programmed record — is
- *  not this door's to touch and falls through to Today, the same
- *  any-miss-falls-through posture `monitorModeEntry` takes. */
-function freeRowEntry(): HandoffEntry | null {
+/** The monitor kind: a CLOSED free row on the hand-off store. Anything
+ *  else — no entry, an open run, a programmed record — is not this door's
+ *  to touch, the same any-miss-falls-through posture `monitorModeEntry`
+ *  takes. */
+function monitorFreeRowEntry(): HandoffEntry | null {
   const entry = readHandoff();
   if (entry === null) return null;
   if (entry.run.mode !== "justrow") return null;
   if (entry.run.completedAt === null) return null;
   return entry;
+}
+
+/** The timer kind: a FINISHED free-row `SessionRun`. A live one is the
+ *  Timer's to drive, and a workout's run belongs to `/session/log`. */
+function timerFreeRowRun(): SessionRun | null {
+  const run = loadRun();
+  if (run === null) return null;
+  if (run.mode !== "justrow") return null;
+  if (run.completedAt === null) return null;
+  return run;
+}
+
+type DoorEntry =
+  { kind: "monitor"; entry: HandoffEntry } | { kind: "timer"; run: SessionRun };
+
+/** The ring `kind` filed when both records exist at once — greppable in a
+ *  MONITOR LOG paste, and pinned by name in this door's tests. */
+const CONFLICT_KIND = "justrow-log-door-conflict";
+
+/** The last conflict message filed by this module. `doorEntry` runs inside
+ *  a `useState` initializer, which React's StrictMode invokes twice in dev
+ *  builds; without this the same violated-invariant entry would be filed
+ *  twice for one mount (whole-branch review, 2026-09-02, NIT 4). One entry
+ *  per distinct pair is the honest count. */
+let lastConflictFiled: string | null = null;
+
+/** **Precedence, stated (exit criterion 7c): the monitor hand-off first,
+ *  then the timer run.** Both present at once is a VIOLATED invariant —
+ *  the coexistence guard at both doors (`ConnectAction`, the Just Row
+ *  door's own Start Timer) exists to prevent it — and when it happens
+ *  anyway this renders the NEWER `completedAt` (a tie keeps the stated
+ *  order, monitor first) and files a ring entry naming the other, never a
+ *  silent pick. The loser is left on disk untouched: this door destroys
+ *  only what it saves. */
+function doorEntry(): DoorEntry | null {
+  const monitor = monitorFreeRowEntry();
+  const timer = timerFreeRowRun();
+  if (monitor !== null && timer !== null) {
+    const monitorClosed = monitor.run.completedAt!;
+    const timerClosed = timer.completedAt!;
+    const timerNewer = Date.parse(timerClosed) > Date.parse(monitorClosed);
+    const message = timerNewer
+      ? `rendered=timer completedAt=${timerClosed}; other=monitor sessionKey=${monitor.sessionKey} completedAt=${monitorClosed}`
+      : `rendered=monitor sessionKey=${monitor.sessionKey} completedAt=${monitorClosed}; other=timer completedAt=${timerClosed}`;
+    if (message !== lastConflictFiled) {
+      lastConflictFiled = message;
+      recordLogDoorEntry(CONFLICT_KIND, message);
+    }
+    return timerNewer
+      ? { kind: "timer", run: timer }
+      : { kind: "monitor", entry: monitor };
+  }
+  if (monitor !== null) return { kind: "monitor", entry: monitor };
+  if (timer !== null) return { kind: "timer", run: timer };
+  return null;
+}
+
+/** The timer entry's seconds: the run's one actual, derived AT THE DOOR
+ *  (`freeRowTotals` is `(run: MonitorRun)` and stays that way — spec ⟨F6⟩).
+ *  `null` when the run carries no actual — a record that reached
+ *  `completedAt` without the finish ever recording, which the Timer's own
+ *  finish makes unreachable, so the honest state is a disabled save. */
+function timerElapsedSeconds(run: SessionRun): number | null {
+  const actual = run.actuals[0];
+  return actual === undefined ? null : actual.elapsedSeconds;
 }
 
 const PAIN_LEVELS = [1, 2, 3, 4, 5];
@@ -57,23 +133,65 @@ export default function JustRowLog() {
   // is closed, so nothing enriches it after mount, and re-reading on every
   // render would make a mid-save retire yank the form out from under the
   // rower.
-  const [entry] = useState(freeRowEntry);
+  const [door] = useState(doorEntry);
   const { held, pain, setPain, notes, setNotes, saving, saveError, submit } =
     useLogForm(() => {
-      if (entry !== null) {
+      // Each kind clears ITS OWN record and only that one (the lifetime
+      // table's "successful save" clear site for the timer run).
+      if (door?.kind === "monitor") {
         retireHandoff(
-          [{ sessionKey: entry.sessionKey, revision: entry.revision }],
+          [
+            {
+              sessionKey: door.entry.sessionKey,
+              revision: door.entry.revision,
+            },
+          ],
           "save-success",
         );
+      } else if (door?.kind === "timer") {
+        clearRun();
       }
       void navigate("/today/log");
     });
   void held; // the targets question does not exist here; see the header.
 
-  if (entry === null) {
+  if (door === null) {
     return <Navigate to="/today" replace />;
   }
 
+  if (door.kind === "timer") {
+    return (
+      <TimerDoor
+        run={door.run}
+        pain={pain}
+        setPain={setPain}
+        notes={notes}
+        setNotes={setNotes}
+        saving={saving}
+        saveError={saveError}
+        onSave={(elapsed) =>
+          void submit(
+            {
+              workoutId: null,
+              workoutTitle: "Just Row",
+              workoutType: null,
+              steps: [],
+              // Exit criterion 3b: the timer entry names its door — and
+              // carries no `deviceName`, which is the server's own
+              // consistency condition for `timer`. NO `distanceMeters`, NO
+              // `avgSplitSeconds`, no work pair, no machine fields: the key
+              // is absent from the wire, not zero (spec ⟨F2⟩).
+              source: "timer",
+              timeSeconds: elapsed,
+            },
+            { advancesPlan: false },
+          )
+        }
+      />
+    );
+  }
+
+  const { entry } = door;
   const totals = freeRowTotals(entry.run);
   const avgSplitSeconds =
     totals !== null && totals.meters > 0
@@ -81,7 +199,7 @@ export default function JustRowLog() {
       : null;
 
   function handleSave() {
-    if (entry === null || totals === null) return;
+    if (totals === null) return;
     const { run } = entry;
     void submit(
       {
@@ -90,6 +208,10 @@ export default function JustRowLog() {
         workoutType: null,
         steps: [],
         deviceName: run.deviceName,
+        // Just Row unconnected spec (2026-09-02), exit criterion 3b: the
+        // monitor entry names its door. (The timer entry, `source:
+        // "timer"` with no `deviceName`, is `TimerDoor` above.)
+        source: "pm5",
         timeSeconds: totals.seconds,
         // ROUNDED at the payload boundary (review #1, finding 3): 0x0039's
         // distance is tenths-precision and can legitimately end on a
@@ -174,6 +296,111 @@ export default function JustRowLog() {
         </p>
       )}
 
+      <Reflection
+        pain={pain}
+        setPain={setPain}
+        notes={notes}
+        setNotes={setNotes}
+      />
+
+      {saveError !== null && <p className="form-error">{saveError}</p>}
+      <div className="action-stack">
+        <button
+          type="button"
+          className="button-l1"
+          disabled={saving || totals === null}
+          onClick={handleSave}
+        >
+          Save this row
+        </button>
+      </div>
+    </main>
+  );
+}
+
+/** The timer entry's screen: the same door with the parts a phone-timed
+ *  row never had simply missing. `run.startedAt` gives the date, `TIMER`
+ *  fills the device slot (handoff `LogDoor.dc.html`), and the card is TIME
+ *  alone — no DISTANCE cell, no AVG SPLIT cell, and no dash standing in for
+ *  either. Save is disabled only when the run carries no actual. */
+function TimerDoor({
+  run,
+  pain,
+  setPain,
+  notes,
+  setNotes,
+  saving,
+  saveError,
+  onSave,
+}: {
+  run: SessionRun;
+  pain: number | null;
+  setPain: (pain: number | null) => void;
+  notes: string;
+  setNotes: (notes: string) => void;
+  saving: boolean;
+  saveError: string | null;
+  onSave: (elapsedSeconds: number) => void;
+}) {
+  const elapsed = timerElapsedSeconds(run);
+  return (
+    <main className="screen">
+      <h1 className="screen-title">Just Row</h1>
+      <p className="justrow-meta">
+        {new Date(run.startedAt)
+          .toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          .toUpperCase()}
+        {" · "}
+        TIMER
+      </p>
+
+      {elapsed !== null && (
+        <div className="justrow-log-numbers">
+          <div>
+            <p className="justrow-log-numlabel">TIME</p>
+            <p className="justrow-log-numvalue">{fmtDuration(elapsed / 60)}</p>
+          </div>
+        </div>
+      )}
+
+      <Reflection
+        pain={pain}
+        setPain={setPain}
+        notes={notes}
+        setNotes={setNotes}
+      />
+
+      {saveError !== null && <p className="form-error">{saveError}</p>}
+      <div className="action-stack">
+        <button
+          type="button"
+          className="button-l1"
+          disabled={saving || elapsed === null}
+          onClick={() => {
+            if (elapsed !== null) onSave(elapsed);
+          }}
+        >
+          Save this row
+        </button>
+      </div>
+    </main>
+  );
+}
+
+/** PAIN + NOTES, shared by both kinds — one markup, one set of labels. */
+function Reflection({
+  pain,
+  setPain,
+  notes,
+  setNotes,
+}: {
+  pain: number | null;
+  setPain: (pain: number | null) => void;
+  notes: string;
+  setNotes: (notes: string) => void;
+}) {
+  return (
+    <>
       <div className="summary-reflection-group">
         <div className="summary-reflection-label-row">
           <p className="summary-reflection-label">PAIN</p>
@@ -206,18 +433,6 @@ export default function JustRowLog() {
           onChange={(e) => setNotes(e.target.value)}
         />
       </div>
-
-      {saveError !== null && <p className="form-error">{saveError}</p>}
-      <div className="action-stack">
-        <button
-          type="button"
-          className="button-l1"
-          disabled={saving || totals === null}
-          onClick={handleSave}
-        >
-          Save this row
-        </button>
-      </div>
-    </main>
+    </>
   );
 }

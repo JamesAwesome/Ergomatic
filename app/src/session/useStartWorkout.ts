@@ -40,9 +40,9 @@ export interface UseStartWorkoutResult {
    *  surfaced inline rather than navigating to the countdown with nothing
    *  behind it. */
   startError: string | null;
-  /** Start's own click handler: checks for a stale record (an unlogged
-   *  `SessionRun`, an unlogged or live `MonitorRun`, or a started-but-not-
-   *  finished draft) and stages a replace confirmation instead of
+  /** Start's own click handler: checks for a stale record (an unlogged or
+   *  LIVE `SessionRun`, an unlogged or live `MonitorRun`, or a started-but-
+   *  not-finished draft) and stages a replace confirmation instead of
    *  overwriting it outright; otherwise commits immediately. */
   handleStart: () => void;
   /** The "Replace session" press: builds and saves a fresh draft, cross-
@@ -162,8 +162,21 @@ export function useStartWorkout(
       setReplaceStage("unlogged");
       return;
     }
+    // A LIVE `SessionRun` (past the first check, `existingRun !== null`
+    // means `completedAt === null`) stages "in-progress" on its own, not
+    // only through its draft (Just Row without the monitor, spec
+    // 2026-09-02, lifetime table ⟨F8⟩; exit criterion 6): a free-row run
+    // (`mode: "justrow"`) has NO draft, so the started-draft check alone
+    // let Start reach `confirmReplace()`'s `clearRun()` mid-row — the 6B
+    // F5 data-loss shape, closed here at the guard rather than at one
+    // caller. A workout's live run always has its started draft too, so
+    // for it this clause changes nothing; it is checked at THIS rank (below
+    // both "unlogged" arms) so the severity order above stays byte-for-byte.
     const existingDraft = loadDraft();
-    if (existingDraft !== null && existingDraft.startedAt !== null) {
+    if (
+      existingRun !== null ||
+      (existingDraft !== null && existingDraft.startedAt !== null)
+    ) {
       setReplaceStage("in-progress");
       return;
     }

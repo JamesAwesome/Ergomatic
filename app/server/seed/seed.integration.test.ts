@@ -46,6 +46,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       pain: 2,
       notes: null,
       steps: [],
+      source: "manual",
       advancesPlan: false,
     });
     return id;
@@ -190,6 +191,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       pain: 2,
       notes: null,
       steps: [],
+      source: "manual",
       advancesPlan: false,
     });
 

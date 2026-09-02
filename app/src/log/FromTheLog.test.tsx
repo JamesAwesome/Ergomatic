@@ -39,6 +39,7 @@ function storedRow(overrides: Partial<StoredLog> = {}): StoredLog {
     notes: null,
     thumbs: null,
     deviceName: "PM5 432331249",
+    source: "pm5",
     steps: [
       {
         label: "6:00 @ 6k",
@@ -726,6 +727,7 @@ describe("FromTheLog — criterion 2 (a v0.11.0, all-null-hero row)", () => {
           JSON.stringify(
             storedRow({
               deviceName: null,
+              source: "timer",
               avgSplitSeconds: null,
               timeSeconds: null,
               distanceMeters: null,
@@ -756,6 +758,43 @@ describe("FromTheLog — criterion 2 (a v0.11.0, all-null-hero row)", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     // The read-back still renders from the two answered fields.
     expect(screen.getByText("HELD · PAIN 2/5")).toBeVisible();
+  });
+
+  // Just Row unconnected spec (2026-09-02), §Mechanism 6 / handoff board
+  // "log-timer": a time-only Just Row is `source: "timer"` with NO steps.
+  // The meta line reads `<date> · <hh:mm> · TIMER` — the time-of-day
+  // segment is PRESENT (the board's line), which the deleted step-based
+  // inference could never produce for an empty `steps` — and the hero
+  // block is TIME alone. 754 s → 12:34, an independent literal.
+  it("a source:timer row with empty steps renders `<date> · hh:mm · TIMER` in the meta line and TIME alone (the board's meta line)", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              workoutId: null,
+              workoutTitle: "Just Row",
+              workoutType: null,
+              deviceName: null,
+              source: "timer",
+              steps: [],
+              avgSplitSeconds: null,
+              timeSeconds: 754,
+              distanceMeters: null,
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Just Row" });
+
+    expect(screen.getByText(/^AUG 18 · \d{2}:\d{2} · TIMER$/)).toBeVisible();
+    expect(screen.getByText("TIME")).toBeVisible();
+    expect(screen.getByText("12:34")).toBeVisible();
+    expect(screen.queryByText("AVG SPLIT")).not.toBeInTheDocument();
+    expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
   });
 });
 
@@ -1351,9 +1390,11 @@ describe("FromTheLog — a free row's MACHINE CONFIRMED block", () => {
 
     expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
     expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
-    // The phase's own absences hold alongside the block: no type chip and
-    // no steps widget (exit criteria 2 and 3), never an empty version.
-    expect(container.querySelector(".type-badge")).toBeNull();
+    // Exit criterion 3's absence holds alongside the block: no steps
+    // widget, never an empty one. (A `.type-badge` null check used to sit
+    // here too — vacuous, since this screen never renders `TypeBadge` for
+    // ANY row; criterion 2 is pinned where a badge can exist:
+    // `TypeBadge.test.tsx` and the history list in `e2e/justrow.spec.ts`.)
     expect(container.querySelector(".summary-intervals")).toBeNull();
   });
 });

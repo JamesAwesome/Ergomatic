@@ -17,7 +17,7 @@ import type { RecentLog } from "../api/useRecentLogs";
 import type { WorkoutType } from "../../domain/types.js";
 import { phases } from "../../domain/expand.js";
 import { buildDraft, type SessionDraft, DRAFT_KEY } from "../session/draft";
-import { buildRun } from "../session/engine";
+import { advance, buildFreeRowRun, buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../monitor/monitorRun";
 import { elapsedSinceStart } from "./Today";
@@ -1997,6 +1997,7 @@ describe("Today (stale draft discard on mount)", () => {
   function makeRun(overrides: Partial<SessionRun>): SessionRun {
     return {
       v: 1,
+      mode: "workout",
       workoutId: "w-warmfront",
       title: "Stationary Front",
       phases: [],
@@ -2368,6 +2369,31 @@ describe("Today (F2: session resume / unlogged)", () => {
     expect(
       screen.queryByRole("link", { name: "Resume session" }),
     ).not.toBeInTheDocument();
+  });
+
+  // Just Row without the monitor (spec 2026-09-02, §Mechanism piece 5):
+  // the SAME row, reading the SAME `SessionRun` record, sends a free row to
+  // its own log door — `/session/log` reads the workout DRAFT a free row
+  // never had. (Today's OTHER justrow branch, in `UnloggedMonitorRow`,
+  // routes a `MonitorRun`; this one routes the phone-timer record.)
+  it("a completed-but-unlogged free-row timer run's Log it goes to /justrow/log", async () => {
+    const run = advance(
+      {
+        ...buildFreeRowRun(new Date("2026-09-02T21:40:00.000Z")),
+        actuals: {
+          0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 754 },
+        },
+      },
+      new Date("2026-09-02T21:52:34.000Z"),
+    );
+    localStorage.setItem(RUN_KEY, JSON.stringify(run));
+    mockReady();
+    await renderToday();
+
+    expect(screen.getByText(/unlogged session/i)).toBeVisible();
+    expect(screen.getByText("Just Row")).toBeVisible();
+    const logLink = screen.getByRole("link", { name: "Log it" });
+    expect(logLink).toHaveAttribute("href", "/justrow/log");
   });
 
   it("renders neither the resume card nor the unlogged line when there is no run record at all", async () => {
@@ -3600,6 +3626,14 @@ describe("Today (JR): the free row's recovery row", () => {
       await screen.findByRole("button", { name: "Log it" }),
     );
     expect(await screen.findByText("JUSTROW LOG DOOR")).toBeInTheDocument();
+    // Exit criterion 5's third member, asserted on the FREE row rather
+    // than on its programmed twin above: Log it on an open free row
+    // stamps `interrupted` — the documented "closed later with no
+    // evidence" value — before it routes.
+    const { loadMonitorRun } = await import("../monitor/monitorRun");
+    const stamped = loadMonitorRun();
+    expect(stamped?.completedAt).not.toBeNull();
+    expect(stamped?.endedBy).toBe("interrupted");
   });
 
   it("a CLOSED free row still renders the row — the link-drop close must not go invisible", async () => {

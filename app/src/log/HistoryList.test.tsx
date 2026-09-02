@@ -92,6 +92,7 @@ function baseStoredRow(overrides: Partial<StoredLog> = {}): StoredLog {
     notes: null,
     thumbs: null,
     deviceName: "PM5 432331249",
+    source: "pm5",
     steps: [],
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -305,37 +306,38 @@ describe("HistoryList hero snippet — tier parity with the detail screen (RC-5 
   // always read. Before the fallback, this row rendered a figure in the
   // list and NOTHING on the detail screen.
   //
-  // The mutation the criterion asks for is built in: both expectations are
-  // derived from `detail.heroes`, so changing the stored `avgSplitSeconds`
-  // moves BOTH or the test fails. Two independently-written literals would
-  // let one screen drift.
+  // ONE stored row feeds BOTH screens. An earlier version of this test
+  // claimed its mutation was "built in" while carrying `140.9` twice, in
+  // two fixture objects — mutating the detail's copy failed on the detail
+  // literal before the list ever rendered, and the list's copy never
+  // moved (phase-close exit pass, 2026-09-01). The criterion's risk is the
+  // two projections reading DIFFERENT columns for one row (the RC-5
+  // shape), so the list fixture's fields are read off the same `stored`
+  // object the detail was built from; the only literal is the expected
+  // rendering.
   it("TIER B1, FREE ROW (steps: []): the list and the detail screen show the SAME avg split, read from the stored column", () => {
-    const detail = buildStoredSummary(
-      baseStoredRow({
-        steps: [],
-        workSeconds: 393.58,
-        workMeters: 1396.6,
-        avgSplitSeconds: 140.9,
-        machineWorkSeconds: null,
-        machineWorkMeters: null,
-      }),
-    );
+    const stored = baseStoredRow({
+      steps: [],
+      workSeconds: 393.58,
+      workMeters: 1396.6,
+      avgSplitSeconds: 140.9,
+      machineWorkSeconds: null,
+      machineWorkMeters: null,
+    });
+    const detail = buildStoredSummary(stored);
     const { avgSplit, distanceMeters } = detail.heroes;
     expect(avgSplit).toBe("2:20.9");
     expect(distanceMeters).toBe(1397);
-    // Narrowing for the snippet below, which must stay DERIVED from
-    // `detail` rather than re-stating a literal — that coupling is what
-    // makes a change to the stored value move both screens or fail.
     if (distanceMeters === undefined) throw new Error("no distance hero");
 
     mockUseLogHistory.mockReturnValue(
       readyState([
         makeLog("log-free-row", {
-          machineWorkSeconds: null,
-          machineWorkMeters: null,
+          machineWorkSeconds: stored.machineWorkSeconds,
+          machineWorkMeters: stored.machineWorkMeters,
           machineAvgPaceSecondsPer500m: null,
-          avgSplitSeconds: 140.9,
-          distanceMeters: 1397,
+          avgSplitSeconds: stored.avgSplitSeconds,
+          distanceMeters,
         }),
       ]),
     );
@@ -345,6 +347,47 @@ describe("HistoryList hero snippet — tier parity with the detail screen (RC-5 
         `AVG ${avgSplit} · ${distanceMeters.toLocaleString()} m`,
       ),
     ).toBeVisible();
+  });
+
+  // Just Row unconnected spec (2026-09-02), §Mechanism piece 7: the JR chip
+  // rides the row's badge slot, derived from the PAIR (`workoutId` and
+  // `workoutType` both null), with its own class — exit criterion 2's "no
+  // `.type-badge` for a free row" stays literally true beside it. The
+  // deleted-workout retry row (null id, surviving type) is the discriminating
+  // neighbour: it keeps its type badge and gets NO chip.
+  it("FREE ROW (null id, null type): the JR chip sits in the badge slot and no .type-badge renders; a null-id row WITH a type keeps its badge and no chip", () => {
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-free-row", {
+          workoutId: null,
+          workoutTitle: "Just Row",
+          workoutType: null,
+        }),
+        makeLog("log-deleted-workout", {
+          workoutId: null,
+          workoutTitle: OCCLUDED_FRONT.title,
+          workoutType: OCCLUDED_FRONT.type,
+        }),
+      ]),
+    );
+    renderHistoryList();
+
+    const freeRow = screen.getByText("Just Row").closest("li")!;
+    const chip = freeRow.querySelector(".free-row-chip")!;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toBe("JR");
+    expect(freeRow.querySelector(".type-badge")).toBeNull();
+    // The badge SLOT: the chip precedes the title, where TypeBadge sits.
+    expect(
+      chip.compareDocumentPosition(screen.getByText("Just Row")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const retryRow = screen.getByText(OCCLUDED_FRONT.title).closest("li")!;
+    expect(retryRow.querySelector(".free-row-chip")).toBeNull();
+    expect(retryRow.querySelector(".type-badge")!.textContent).toBe(
+      OCCLUDED_FRONT.type,
+    );
   });
 
   it("TIER A, build-738-era row (machine totals present, the scalar absent): renders DISTANCE alone, no AVG segment — never a fallback quotient off the OLD stored column, matching buildStoredSummary's own 'no avg-split hero' rule", () => {

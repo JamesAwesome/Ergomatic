@@ -3997,3 +3997,254 @@ does not match these numbers._
   rebuilds, not inherits" — superseded by James's share-the-hook ruling, never
   reconciled. **When a spec already demonstrates a supersession convention,
   the gate checks whether the newest ruling used it.**
+
+## Phase-close gate, 2026-09-01 (Phase JR — closed; plus its follow-on slate)
+
+- **A criterion can be pinned three times and proven once.** Exit criterion 2
+  ("no `.type-badge` element in the DOM at all") had three assertions.
+  `TypeBadge.test.tsx:25` is real; `FromTheLog.test.tsx:1356` and
+  `JustRowLog.test.tsx:121` were VACUOUS — neither screen imports `TypeBadge`
+  or emits `.type-badge`, so both passed for a TYPED row too. Both carried
+  comments naming the criterion, which is what made them read as evidence.
+  Meanwhile the criterion's actual subject — a HISTORY LIST holding a
+  null-type row — had no fixture anywhere (now pinned in `e2e/justrow.spec.ts`;
+  the two vacuous lines are deleted). **At a close gate, for every "renders no
+  X" criterion, check that the asserting screen can render X at all.** RF21,
+  committed twice in the round that closed the phase.
+- **The evidence FORMAT can foreclose a written criterion before the walk
+  starts.** The spec said "both screens in one photograph." The walk shipped
+  a PNG app SCREENSHOT beside a JPEG PM5 PHOTO — same-frame was impossible by
+  construction, and nobody noticed because both artifacts are "captures."
+  Accepted here (the spec's own B11 makes this a TRANSCRIPTION check, and
+  digit-identity across independent captures carries that). **Generalise: when
+  a criterion says one frame, say which artifact type each side is, or write
+  "correlated, with named correlators" from the start.**
+- **The capture set covered 4 of 10 approved artboards, and the defect landed
+  in the uncovered six.** Gate 0 approved Main/JustRowDoor/Connecting/Ready/
+  Live/LiveLandscape/Ended/Lost/TodayRecovery/LogDoor; `pnpm screenshots`
+  committed `justrow-door`, `-live`, `-live-landscape`, `-log`. The Ready
+  screen shipped with `className="connected-ready-warning"` — a class with
+  ZERO rules in `index.css`, while every other class on that screen resolves —
+  so the approved `.warn` treatment rendered as a bare sans paragraph. James
+  found it at the erg. **A Gate-0 artboard with no committed capture of the
+  BUILT screen is an unchecked approval: at the close gate, count artboards
+  against captures and name the gap.** Sibling of the #258 chrome-diff lesson —
+  there the artifact was wrong, here there was nothing to diff against.
+- **A phase's exit walk is scoped to the BUILD it ran on, and this one aged
+  in hours.** The walk passed on build 811 (v0.32.0); #258 then landed +753
+  lines in `useMonitorSession.ts` — the hook a free row SHARES — inside
+  v0.33.0 the same day. Not a blocker (#258 had its own TRIAD gate), but a
+  phase may not claim "walked on current main" without saying so. **Name the
+  build in the close verdict, and diff the shared files since.**
+- **"Research owed" in a ROADMAP entry is a claim, and this one was false.**
+  The JR follow-on slate said driving the PM5 into a Just Row "gets the
+  research pass and antagonist treatment before any mechanism is invented."
+  Concept2's own doc p.80 is transcribed in-repo at
+  `docs/monitor/pm5-interface-notes.md:204` —
+  `F1 76 07 01 01 01 13 02 01 01 61 F2` = `SET_WORKOUTTYPE(0x01)` +
+  `SET_SCREENSTATE(WORKOUT, PREPARETOROWWORKOUT)` — with its ack at `:249`
+  and a cross-check at `:966`; `SET_SCREENSTATE` is already emitted by
+  `buildProgrammingSequence`. The residual gap is two bytes (`0x01`'s enum
+  row, which IS the already-scheduled RC-38) plus one walk. **Before endorsing
+  a research pass, grep `docs/monitor/pm5-interface-notes.md` — the CSAFE
+  corpus does NOT live under `docs/superpowers/research/`, which is where
+  RF18's remedy sends you.**
+- **A walk finding can be a REASSURANCE complaint wearing a capability
+  complaint's clothes.** "Connect leaves the PM5 on its main menu" reads as a
+  missing mechanism; the 08-31 walk had already answered OPEN 5 — pulling from
+  the menu auto-enters Just Row, observed by James at the erg. The erg WORKS;
+  it just does not acknowledge the link before the first stroke. **Ask what
+  the rower could not DO before spending a walk on what they could not SEE** —
+  the cheaper fix is usually the screen already in front of them.
+- **Two of five "follow-on items" reversed claims the app had already told
+  testers, in shipped release notes, days earlier** (v0.32.0 items 2 and 3:
+  "A Just Row never advances your plan" and "no targets and no type chip, on
+  purpose"). Fine to reverse; not free. **A reversing note acknowledges the
+  earlier one, or the News tab contradicts itself.** Price this at the slate
+  gate, not at the notes PR.
+- **`isFreeRow(workoutId, workoutType)` is load-bearing THREE times** — the
+  server plan refusal, the empty-`steps` allowance, and (by its null) the
+  absent type badge. Any future "JR badge" is a DERIVED display concern;
+  `"JR"` can never be stored in `workout_type`. Precedent for the chip already
+  exists: `.workout-row-custom`, the ink-outline metadata chip, since
+  `TypeBadge.tsx:11-30` refuses to mint a fifth intensity colour.
+- **"Let a Just Row count toward the plan" — RULED: SUBSTITUTION** (James,
+  2026-09-01: "advances the record, records the stand-in"). The gate had
+  offered a second reading, "volume" (count the metres, never touch `done_n`),
+  and James rejected it on sight as something the app does not even support.
+  **Lesson for the PM, not for the product: do not manufacture an alternative
+  the product has no concept of in order to make a question look open.** What
+  stands from the analysis: `plan_index` is a position in a FIXED PRESCRIBED
+  sequence, so a stand-in must be an explicit stored fact the server checks
+  (deleting `!isFreeRow(...)` at `logs.ts:763` removes the only server-side
+  enforcement there is), and the change amends frozen exit criterion 1 with
+  its own TRIAD gate.
+- **Second household exception, counted.** JR was sanctioned as "a deliberate
+  household exception to the stranger-first ordering" (James, 2026-08-31). Its
+  five-item follow-on slate is a second one, with 40 unchecked items outside
+  JR across six waves and Wave F's headline row — the only defect in the file
+  that destroys a rower's work silently — still unchecked. Said at the gate;
+  James chose the slate. **Filing-as-deferral's mirror image: not filing
+  instead of doing, but doing instead of doing the ranked thing. Count the
+  queue before endorsing a second exception to the same ordering — then let
+  the owner rule.**
+- **Release: v0.32.0 MINOR was RIGHT** (three merges accounted, R-A relaxation
+  vindicated — the exit walk needed PR 2 on a device). The ready-screen fix
+  rides the next tag; it does not earn one. **But the R-A analysis named the
+  wrong skew axis:** it argued client-bundle-versus-client-bundle and was
+  silent on native-client-versus-SERVER — the axis that structurally exists (a
+  TestFlight build outlives any deploy) and the one that bit when main's
+  deploy job sat red for eleven hours. RF28 now.
+
+## TRIAD final-PR gate, 2026-09-02 (JR follow-on items 3+4, #268)
+
+- **A deprecation trigger written as "the next tag" is ambiguous between
+  the tag that SHIPS the change and the one after — and the wrong reading
+  closes the compatibility window at birth.** #268 added
+  `session_logs.source` derive-when-absent purely so build-811 clients keep
+  saving, then filed its sunset as "the first tag cut AFTER the PR merges"
+  (= the tag carrying it) while the spec said "the first tag after this
+  ships" (= one later). Firing the ROADMAP's version 400s every installed
+  build on the release that introduces the field. **A sunset row names a
+  VERSION, not a relative clause, and the gate checks it against the tag
+  the PR will ride.** (Fixed at the gate: v0.35.0, named in both.)
+- **A PR stacked on an unmerged PR presents a diff that is not its own.**
+  #268's base is `main` but #265's head is its ancestor, so `gh pr diff`
+  showed 85 files / 8278 additions for 79 files / 7860 of its own work —
+  and the whole-branch review reviewed both. **Check
+  `git merge-base --is-ancestor <other-open-head> HEAD` at every final
+  gate; if it holds, the merge order and the re-merge are conditions.**
+- **RF14, eighth: "ROADMAP carries it" is a claim to grep, not to read.**
+  The body said the ROADMAP carried the obligation to acknowledge
+  v0.32.0's two reversals; it carried neither. Cost of the check: one
+  grep. The reversals are permanent News-tab text a tester can re-read.
+  (Row filed at the gate.)
+- **A checkbox item appended to a slate can splice into the previous
+  bullet's sentence.** #268's sunset row landed mid-clause, leaving item 3
+  reading `**XS** \`Step\`'s { k: "test" } member yields…`. Cheap, invisible
+  in rendered markdown diffs, and it corrupts the register the next gate
+  quotes. **After adding a ROADMAP row, read the two bullets around it.**
+- Fold-word series: #228 ~270, #230 266, #239 148, #248 274, #249 225,
+  #258 134, **#268 186 → trimmed to budget at the gate**. The regression
+  was a 53-word arrow-diagram bullet ("door → Start Timer → ▶ → Finish →
+  door"). **A route is not an outcome.**
+
+## Phase-open/shape gate, 2026-09-02 (Wave E PR1.75 — the ruled activation shape, design rev 2)
+
+- **A wave's own split rule is a precedent, and the next spec re-bundled exactly
+  what it split.** `ROADMAP.md:997-998` records why PR1/PR1.5 divided: "so one
+  reviewer never holds a token-broker migration and an iOS deep-link contract in
+  one pass." Rev 2 then bundled migration 0020 (renumbered 0021 at rebase
+  — #268 merged first), an app-wide auth change, a
+  two-route identity ladder, the repo's first in-tree Swift plugin, Xcode project
+  surgery, and the retirement of a three-day-old shipped mechanism — five risk
+  models. **RULED: split into 1.75a (server, TRIAD, PM final gate) and 1.75b
+  (native, antagonist DELTA, carries the walk).** The split's own gate is one
+  command: `gh pr view <n> --json files | grep server` returns empty on 1.75b.
+  **At every shape gate, grep the ROADMAP for a recorded split rule on the same
+  wave before endorsing a bundle** — the rule outlives the session that wrote it
+  and nothing else re-reads it.
+- **"Behind the flag" is a claim about a route, not about a PR, and one piece
+  usually isn't.** Rev 2's `authVia` change lands in `requireUser`, mounted
+  `router.use("/api", requireUser)` (`routes/data.ts:826`) — app-wide, deploying
+  to prod web on merge — and added a new `400 ambiguous_auth` there on a premise
+  the spec itself labels UNMEASURED, whose measuring instrument runs on the NEXT
+  PR's walk. **Ask of every dark PR: which file in this diff is NOT behind the
+  flag, and does anything in it rest on an unmeasured premise?** Ruling: the
+  app-wide path gets an INSTRUMENT (bearer-wins plus a structured log), the dark
+  routes get the hard refusal, and the refusal is promoted after the walk
+  measures it. This is the #249 residual-deadline rule applied to a NEW risk
+  rather than an inherited one: the deadline is the earlier of "evidence first
+  exists" and "the fix stops being cheap", and rev 2 had them the wrong way round.
+- **A comment whose own words the PR falsifies is the cheapest census item there
+  is, and this wave has now produced three.** `Concept2LinkProbe.tsx:5-10` says
+  "never a real link… this card posts nothing and carries no client id or state"
+  — 1.75b adds the real-link button. `routes/concept2.ts:182` says "the nonce
+  correlates, not binds". `schema.ts:512` says the surface column is "not yet
+  added here". **A reconciliation TASK with a grep census of the WITHDRAWN
+  PHRASES as its exit gate is now standing for any PR in this wave**; 17 sites
+  and 15 phrases were enumerable from the spec alone, before a line was written.
+  PR1.5 spent ~16 rounds discovering this list one clause at a time.
+- **Half-discharged external dependencies need a named owner at the shape gate,
+  not at the exit.** ROADMAP's PR1.75 line names "Concept2's own approval of the
+  new native `redirect_uri`"; rev 2 measured it on log-dev and left the live
+  portal as an unowned "cutover step". Assigned to the C2 register row.
+  Generalise: **when a criterion is satisfied on a staging authority, say which
+  half remains and who holds it — a measured half reads as a discharged whole.**
+- **A stale ROADMAP checkbox recurred in the same wave that already fixed one.**
+  `ROADMAP.md:989` still shows PR1.5 as `[ ]` with #257 merged into main as
+  `027e987f`; PR1's identical bug was caught at its own fix round 5. The wave's
+  merge step does not tick its own box. Cheap fix, but the pattern is that the
+  ROADMAP is edited by the PR that PLANS work and not by the one that FINISHES
+  it.
+- **`ephemeral: true` is a product decision the ruling never asked for, and it is
+  right.** Non-ephemeral shares Safari's cookie jar, so on a shared phone the next
+  link silently completes against whoever last signed into Concept2 — the mirror
+  of the residual this PR exists to close — and PR2's identity line, the only
+  other thing that would disclose it, is not built. Cost stated in rower words:
+  a fresh Concept2 login every link, and no OS "wants to use concept2.com"
+  prompt. **Recommend ship; put it to James as a named binary at the design
+  gate, never as a spec default with a footnote.** (James approved it named on
+  the Gate 0 artifact, 2026-09-02.)
+- **Release: none, and the wave's reserved version is stale twice.** v0.31.0 went
+  to #248, v0.32.0 to #258, v0.33.0 to the diagnostics notes. Wave E's PR2
+  re-checks at ITS merge — the #248 rule ("a reservation is a claim, not an
+  allocation") has now been vindicated three gates running and should stop being
+  restated as news.
+
+## Wave E PR1.75a final gate, 2026-09-02 (#269, TRIAD — auth + stored shape)
+
+- **The split I ruled at the shape gate held on its first live test, and its
+  gate is one command.** `git diff main...HEAD --stat -- app/src app/ios`
+  returned empty on a 10,034-line branch. Worth naming as the standard: a
+  split is only real if a single command can falsify it, and this one can.
+- **A phrase census by line-based grep has a wrap-shaped blind spot.** #269's
+  reconciliation task pasted fifteen phrases; three sites read as ZERO purely
+  because the phrase breaks across a comment line — one of them
+  `Concept2LinkProbe.tsx`, a live source file, for the exact phrase
+  `"posts nothing and carries no client id"`. Harmless here (a sibling phrase
+  caught the same file), but **1.75b is the PR that actually withdraws those
+  `app/src` phrases and will run the same blind grep on the same wrapped
+  comment.** The census I invented at the shape gate needs a whitespace-
+  normalising pass, not `grep -rlF`. A census is an instrument and gets the
+  same "prove it can go red" treatment as any gate.
+- **A Gate 0 approval with no addressable artifact cannot be re-checked at any
+  later gate.** Criterion 7 says "eight pages approved rendered by James"; the
+  spec records the copy verbatim (verified against `callbackPage.ts:58-100`
+  statement-for-statement) but records no artifact URL or file, so two of the
+  eight frames rest on the controller's memory of what was on screen when he
+  said "Approved". **A design gate's approval line should carry the
+  artifact's address the way a citation carries its sentence.** The verbatim
+  copy table is what saved this one; keep writing it.
+- **"Before deploying" and "before merging" are the same moment in this repo,
+  and a pre-deploy check written the first way has no place to run.** #269's
+  migration is guarded by a prod query for duplicate `c2_user_id`, framed as
+  a pre-deploy step — but `ci.yml:181` deploys on push to main and
+  `server/index.ts:32` migrates at boot, so a failing 0020 (renumbered 0021
+  at rebase) is a prod boot failure with no gap in between. **Any pre-deploy operator check on this repo
+  is a pre-MERGE check; say so, or it is decoration.**
+- **The migration-collision ruling is right, and its tie-break is "the dark PR
+  pays."** #268 and #269 both mint 0020. Only one branch renumbers either
+  way, so the question is who pays the cycle: the older, tester-visible,
+  fully-green PR (#268, e2e included) or the dark one whose regenerate costs
+  a server-only rerun. **Merge the tester-visible one first; the dark branch
+  regenerates.** Generalises past this pair. **Settled 2026-09-02:** #268
+  merged first and took 0020; #269 rebased and regenerated as 0021, with the
+  five SQL statements proved byte-identical to the reviewed file, so the
+  renumber cost a rerun and nothing else — the tie-break held.
+- **A fold amended for facts must be re-counted, and the counter should not be
+  its own author.** #269's fold is mine from the shape gate with one bullet
+  amended and the try-it command changed; the amendments took it from budget
+  to 137 words. Second gate running where the residual is the TOTAL and no
+  single bullet breaks 25 — six bullets at the 25-word cap plus a lead cannot
+  fit ~120, so the two halves of the rule are in tension. **Treat ~120 as the
+  binding number and 6 bullets as a ceiling reached only at ~18 words each.**
+- **I verified the try-it by running it, and it was worth the two minutes.**
+  `pnpm exec vitest run --project integration <file>` is the shape CLAUDE.md
+  warns about for `--project client`; on the node-environment integration
+  project it is correct, genuinely scoped (1 file, 15 tests, 2.45s) and backed
+  by real testcontainers Postgres with no `skipIf`. **RF13's check is cheap
+  enough to run at every gate that carries a Try-it line.**
+- **Release: not needed.** Zero `app/src` files, flag dark, nothing a rower can
+  reach. The wave's next tag belongs to PR2 or to #268, re-checked at its own
+  merge.

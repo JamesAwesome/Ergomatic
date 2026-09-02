@@ -1,5 +1,5 @@
 import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
-import { isFreeRow } from "../../domain/types.js";
+import { isFreeRow, type LogSource } from "../../domain/types.js";
 import type { Db } from "../db/index.js";
 import { planState, sessionLogs, workouts } from "../db/schema.js";
 import type { PlanKey } from "./planState.js";
@@ -157,6 +157,13 @@ export interface LogInput {
   // of `steps`: see `db/schema.ts`'s `sessionLogs.deviceName` doc comment
   // for why this is its own column, not a `steps` jsonb field.
   deviceName?: string | null;
+  // Just Row unconnected spec (2026-09-02, §Mechanism stored shape (c),
+  // TRIAD): REQUIRED here, unlike every optional field around it — the
+  // column is NOT NULL and the route always has a value to give (the
+  // client's, or `server/logSource.ts`'s derivation for a build that
+  // predates the field). Optional-with-a-default at this layer would put
+  // the inference in two places; it lives at the route, once.
+  source: LogSource;
   // From-the-log spec (2026-08-18), §2/§3: the three hero numbers the
   // summary showed at save time — the MODEL's numbers, not its
   // pre-formatted display strings (SummaryHeroes deliberately carries
@@ -283,6 +290,12 @@ const LOG_LIST_COLUMNS = {
   pain: sessionLogs.pain,
   notes: sessionLogs.notes,
   deviceName: sessionLogs.deviceName,
+  // Just Row unconnected spec (2026-09-02): a small scalar, same idiom as
+  // `deviceName`/`endedBy` — carried in the list projection for parity
+  // with the detail row. No list consumer reads it yet (History's rows
+  // render no door word; `sourceLabel` lives on the DETAIL path,
+  // `src/log/storedSummary.ts`). Whole-branch review, 2026-09-02.
+  source: sessionLogs.source,
   thumbs: sessionLogs.thumbs,
   avgSplitSeconds: sessionLogs.avgSplitSeconds,
   distanceMeters: sessionLogs.distanceMeters,
@@ -793,6 +806,7 @@ export function createLogsStore(db: Db) {
             notes: input.notes,
             steps: input.steps,
             deviceName: input.deviceName ?? null,
+            source: input.source,
             thumbs: input.thumbs ?? null,
             avgSplitSeconds: input.avgSplitSeconds ?? null,
             timeSeconds: input.timeSeconds ?? null,

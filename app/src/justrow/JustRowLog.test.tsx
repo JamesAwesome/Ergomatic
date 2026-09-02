@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { api } from "../api";
 import { createMonitorRun, type MonitorRun } from "../monitor/monitorRun";
+import { advance, buildFreeRowRun } from "../session/engine";
+import { loadRun, saveRun, type SessionRun } from "../session/run";
 import {
   commit as commitHandoff,
   resetForTests as resetHandoffStoreForTests,
@@ -66,6 +68,27 @@ function closedFreeRow(over: Partial<MonitorRun> = {}): MonitorRun {
   };
 }
 
+/** A FINISHED free-row TIMER run, built through the real assembly
+ *  (`buildFreeRowRun` → the Timer's own finish shape: the one
+ *  `"stopwatch-elapsed"` actual keyed by position, then `advance`) and
+ *  round-tripped through JSON the way storage does — never a hand-rolled
+ *  shape (recurring failure 3). 754 s = 12:34, an independent literal. */
+function completedTimerRun(
+  startedAt = "2026-09-02T21:40:00.000Z",
+  completedAt = "2026-09-02T21:52:34.000Z",
+  elapsedSeconds = 754,
+): SessionRun {
+  const run = buildFreeRowRun(new Date(startedAt));
+  const finished = advance(
+    {
+      ...run,
+      actuals: { 0: { actualSource: "stopwatch-elapsed", elapsedSeconds } },
+    },
+    new Date(completedAt),
+  );
+  return JSON.parse(JSON.stringify(finished)) as SessionRun;
+}
+
 async function renderDoor() {
   const { default: JustRowLog } = await import("./JustRowLog");
   return render(
@@ -117,8 +140,11 @@ describe("JustRowLog (the workout-less log door)", () => {
     expect(screen.getByText("10:20")).toBeInTheDocument();
     expect(screen.getByText("2,480 m")).toBeInTheDocument();
     expect(screen.getByText("2:05.0")).toBeInTheDocument();
-    // Absences, not empty widgets (exit criteria 2 and 3's shape).
-    expect(document.querySelector(".type-badge")).toBeNull();
+    // Absence, not an empty widget (exit criterion 3's shape). The
+    // `.type-badge` null check that used to sit beside it was vacuous —
+    // this door never renders `TypeBadge` for any row — and is pinned
+    // where a badge can exist instead (`TypeBadge.test.tsx`, the history
+    // list in `e2e/justrow.spec.ts`).
     expect(screen.queryByText(/INTERVALS/)).not.toBeInTheDocument();
   });
 
@@ -138,6 +164,9 @@ describe("JustRowLog (the workout-less log door)", () => {
       expect(body.workoutType).toBeNull();
       expect(body.workoutTitle).toBe("Just Row");
       expect(body.steps).toStrictEqual([]);
+      // Just Row unconnected spec (2026-09-02), exit criterion 3b: the
+      // monitor entry names its door — `pm5`.
+      expect(body.source).toBe("pm5");
       expect(body.timeSeconds).toBe(620);
       expect(body.distanceMeters).toBe(2480);
       // The stored derivation, against its own literal — never against the
@@ -271,5 +300,205 @@ describe("JustRowLog reflection", () => {
       expect(body.pain).toBe(2);
       expect(body.notes).toBe("Steady pull.");
     });
+  });
+});
+
+/**
+ * The TIMER entry (Just Row without the monitor, spec 2026-09-02, §Mechanism
+ * piece 4; exit criteria 1 and 3): a finished `SessionRun` with
+ * `mode: "justrow"` on `RUN_KEY`, no monitor record anywhere.
+ */
+describe("JustRowLog: the timer entry", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+  afterEach(() => {
+    vi.doUnmock("../api");
+    vi.resetModules();
+  });
+
+  it("renders TIME alone under a SEP 2 · TIMER meta line — no DISTANCE, no AVG SPLIT, no dash", async () => {
+    mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    saveRun(completedTimerRun());
+    await renderDoor();
+
+    expect(
+      screen.getByRole("heading", { name: "Just Row" }),
+    ).toBeInTheDocument();
+    // The device slot reads TIMER (handoff `LogDoor.dc.html`).
+    expect(screen.getByText("SEP 2 · TIMER")).toBeInTheDocument();
+    expect(screen.getByText("TIME")).toBeInTheDocument();
+    expect(screen.getByText("12:34")).toBeInTheDocument();
+    // Absence only (Global Constraints: never a `0 m` or a `—` for a
+    // timer row) — no cell, no label, no placeholder.
+    expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
+    expect(screen.queryByText("AVG SPLIT")).not.toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d m$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/INTERVALS/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save this row" })).toBeEnabled();
+  });
+
+  it("Save posts the time-only body with source timer and NO distance, split, device or machine keys; success clears the run", async () => {
+    const fn = mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    saveRun(completedTimerRun());
+    await renderDoor();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save this row" }),
+    );
+
+    await waitFor(() => {
+      const body = savedBody(fn);
+      expect(body.workoutId).toBeNull();
+      expect(body.workoutType).toBeNull();
+      expect(body.workoutTitle).toBe("Just Row");
+      expect(body.steps).toStrictEqual([]);
+      expect(body.timeSeconds).toBe(754);
+      expect(body.advancesPlan).toBe(false);
+      // Exit criterion 3b: the timer entry names its door.
+      expect(body.source).toBe("timer");
+      expect(body.pain).toBe(2);
+      // KEY ABSENCE, not `undefined`: `"k" in body` is false only when the
+      // key never went on the wire — a `distanceMeters: undefined` would
+      // be dropped by JSON either way, but a `distanceMeters: 0` would not,
+      // and the server would store a wrong number.
+      expect("distanceMeters" in body).toBe(false);
+      expect("avgSplitSeconds" in body).toBe(false);
+      expect("deviceName" in body).toBe(false);
+      expect("workSeconds" in body).toBe(false);
+      expect("workMeters" in body).toBe(false);
+      expect("machineWorkSeconds" in body).toBe(false);
+      expect("machineSummary" in body).toBe(false);
+      expect("series" in body).toBe(false);
+    });
+    // Lifetime table: a successful save is a clear site for the run.
+    await waitFor(() => expect(loadRun()).toBeNull());
+    expect(await screen.findByText("ELSEWHERE")).toBeInTheDocument();
+  });
+
+  it("a failed save shows the error and leaves the run on disk to retry", async () => {
+    mockApi(() => new Response("nope", { status: 500 }));
+    saveRun(completedTimerRun());
+    await renderDoor();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save this row" }),
+    );
+
+    expect(await screen.findByText(/Couldn't save/i)).toBeInTheDocument();
+    // RF25: the record outlives a failed write — nothing was cleared.
+    expect(loadRun()?.completedAt).toBe("2026-09-02T21:52:34.000Z");
+    expect(screen.queryByText("ELSEWHERE")).not.toBeInTheDocument();
+  });
+
+  it("a finished run with no actual disables the save", async () => {
+    mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    const noActual = { ...completedTimerRun(), actuals: {} };
+    saveRun(noActual);
+    await renderDoor();
+
+    expect(screen.getByText("SEP 2 · TIMER")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save this row" }),
+    ).toBeDisabled();
+    expect(screen.queryByText("12:34")).not.toBeInTheDocument();
+  });
+
+  it("a LIVE timer run (not finished) is not this door's to log", async () => {
+    mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    saveRun(buildFreeRowRun(new Date("2026-09-02T21:40:00.000Z")));
+    await renderDoor();
+
+    expect(await screen.findByText("ELSEWHERE")).toBeInTheDocument();
+    // Falls through UNTOUCHED — the Timer is still driving that record.
+    expect(loadRun()?.completedAt).toBeNull();
+  });
+});
+
+/**
+ * EXIT CRITERION 7c — precedence, stated: the monitor hand-off first, then
+ * the timer run; BOTH present is the invariant the coexistence guards exist
+ * to prevent, and when it is violated anyway the door renders the NEWER
+ * `completedAt` and files a ring entry naming the other — never a silent
+ * pick. Both orderings are pinned so a swapped precedence goes red.
+ */
+describe("JustRowLog: precedence when both records exist", () => {
+  const RING_KEY = "ergomatic:log-door-misses";
+
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+  afterEach(() => {
+    vi.doUnmock("../api");
+    vi.resetModules();
+  });
+
+  function ringEntries(): { kind: string; detail: string }[] {
+    return JSON.parse(localStorage.getItem(RING_KEY) ?? "[]") as {
+      kind: string;
+      detail: string;
+    }[];
+  }
+
+  it("the newer TIMER run wins over an older monitor hand-off, and the ring names the monitor record", async () => {
+    mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    // Monitor closed 2026-09-01T09:10:20Z (closedFreeRow's own literal);
+    // timer finished a day later.
+    commitHandoff(closedFreeRow().startedAt, null, closedFreeRow());
+    saveRun(completedTimerRun());
+    await renderDoor();
+
+    expect(screen.getByText("SEP 2 · TIMER")).toBeInTheDocument();
+    expect(screen.getByText("12:34")).toBeInTheDocument();
+    expect(screen.queryByText(/PM5 432331249/)).not.toBeInTheDocument();
+    expect(screen.queryByText("2,480 m")).not.toBeInTheDocument();
+
+    const conflict = ringEntries().filter(
+      (e) => e.kind === "justrow-log-door-conflict",
+    );
+    expect(conflict).toHaveLength(1);
+    expect(conflict[0]!.detail).toContain("rendered=timer");
+    expect(conflict[0]!.detail).toContain("other=monitor");
+    // Names the other record: its session key and its close.
+    expect(conflict[0]!.detail).toContain("2026-09-01T09:00:00.000Z");
+    expect(conflict[0]!.detail).toContain("2026-09-01T09:10:20.000Z");
+  });
+
+  it("the newer MONITOR hand-off wins over an older timer run, and the ring names the timer record", async () => {
+    mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    commitHandoff(closedFreeRow().startedAt, null, closedFreeRow());
+    // Timer finished the day BEFORE the monitor row closed.
+    saveRun(
+      completedTimerRun("2026-08-31T09:00:00.000Z", "2026-08-31T09:12:34.000Z"),
+    );
+    await renderDoor();
+
+    expect(screen.getByText("SEP 1 · PM5 432331249")).toBeInTheDocument();
+    expect(screen.getByText("2,480 m")).toBeInTheDocument();
+    expect(screen.queryByText("TIMER")).not.toBeInTheDocument();
+    expect(screen.queryByText("12:34")).not.toBeInTheDocument();
+
+    const conflict = ringEntries().filter(
+      (e) => e.kind === "justrow-log-door-conflict",
+    );
+    expect(conflict).toHaveLength(1);
+    expect(conflict[0]!.detail).toContain("rendered=monitor");
+    expect(conflict[0]!.detail).toContain("other=timer");
+    expect(conflict[0]!.detail).toContain("2026-08-31T09:12:34.000Z");
+  });
+
+  it("with only one record, the ring stays silent", async () => {
+    mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    saveRun(completedTimerRun());
+    await renderDoor();
+
+    expect(screen.getByText("SEP 2 · TIMER")).toBeInTheDocument();
+    expect(
+      ringEntries().filter((e) => e.kind === "justrow-log-door-conflict"),
+    ).toHaveLength(0);
   });
 });

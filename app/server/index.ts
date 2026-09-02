@@ -130,9 +130,12 @@ if (c2LinkEnabled === "1" && !c2Available) {
     "WARNING: C2_CLIENT_ID / C2_CLIENT_SECRET are set but C2_LINK_ENABLED is not '1' — Concept2 linking stays DISABLED",
   );
 }
-// Google precedent (index.ts:69, above): the callback path is fixed and
-// derived from the same siteUrl every other redirect uses.
-const c2RedirectUri = new URL("/api/concept2/callback", siteUrl).href;
+// Google precedent (index.ts:69, above): the WEB callback path is fixed and
+// derived from the same siteUrl every other redirect uses. The NATIVE
+// redirect is `routes/concept2.ts`'s `NATIVE_REDIRECT_URI` (PR1.75a §3);
+// both must be registered at Concept2 (log-dev: done 2026-09-02; live
+// portal: a cutover step beside write approval).
+const c2WebRedirectUri = new URL("/api/concept2/callback", siteUrl).href;
 const concept2 = {
   available: () => c2Available,
   store: createConcept2Store(db),
@@ -140,8 +143,8 @@ const concept2 = {
     baseUrl: c2BaseUrl,
     clientId: c2ClientId,
     clientSecret: c2ClientSecret,
-    redirectUri: c2RedirectUri,
   }),
+  webRedirectUri: c2WebRedirectUri,
 };
 
 const port = Number(process.env.PORT ?? 8080);

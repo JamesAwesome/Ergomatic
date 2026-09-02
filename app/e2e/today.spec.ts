@@ -1248,11 +1248,20 @@ test.describe("Just Row door", () => {
     await expect(page).toHaveURL(/\/justrow$/);
     await expect(page.getByRole("heading", { name: "Just Row" })).toBeVisible();
 
-    // Connected-only is a ruling, and its evidence is an absence: the door
-    // offers exactly one action.
+    // Two actions, the detail's own order (Just Row without the monitor,
+    // spec 2026-09-02 §Mechanism piece 2): Connect first, Start Timer under
+    // it. The connected-only absence this used to pin was Phase JR's ruling
+    // 2, reversed by that spec. Both clear the 44px floor for the same
+    // reason the door control above is measured here rather than in jsdom.
     await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+    const startTimer = page.getByRole("button", { name: "Start Timer" });
+    await expect(startTimer).toHaveCount(1);
+    const startBox = await startTimer.boundingBox();
+    expect(startBox).not.toBeNull();
+    expect(startBox!.height).toBeGreaterThanOrEqual(44);
+    await expect(page.getByText("NO TARGETS · NO PLAN")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /start timer/i }),
+      page.getByRole("button", { name: /log it after/i }),
     ).toHaveCount(0);
   });
 });

@@ -4967,6 +4967,342 @@ threat sentence** — a census can be under-stated in one direction and
 over-stated in another within the same revision, and both are found the
 same way.
 
+## 2026-09-01 — Phase JR exit pass (walk record + eight criteria)
+
+- **CLAIM:** "Both endings store the machine's row — Done-ended and Menu-ended
+  free rows both landed in the log." **FALSE AS EVIDENCED.** Believed because
+  the walk record's provenance table listed an app capture for each piece.
+  **TECHNIQUE: open the image.** `piece1-app-log.png` is the log DOOR carrying
+  `Couldn't save this session. Try again.` — the failure screen, not a saved
+  row. The Done ending's landing is testimony (James's operator report, now
+  recorded as such); only the Menu ending has an artifact. Corollary now
+  standing: **a provenance table entry names a FILE, not a fact — read the
+  file and say what it shows, not what it was taken for.**
+- **CLAIM (spec + `totals.ts:8-12`):** "Both supported endings produce the
+  machine's 0x0039." **UNGATED INFERENCE.** Believed because the burst path is
+  shared with programmed rows and the sentence carries a citation. **TECHNIQUE:
+  read the cited capture's own header for which ending it contains.**
+  `justRowReplay.test.ts:15-17` says "Menu end"; the e2e fake script attaches no
+  `burst`; so no test or capture covers the app-End arm — and the one hardware
+  instance (walk piece 1) was performed with its discriminating artifact
+  unphotographed. **A citation that proves one arm of an "either way" claim
+  proves the claim for that arm only.** Still open after the close-out PR.
+- **CLAIM:** "The PM entry is expected LONGER on a Done-ended row (coast-down);
+  the observed delta is ≤0.3 s." **NON-OBSERVATION.** Believed because the spec
+  said so at design time. **TECHNIQUE: follow the END control into the hook.**
+  `useMonitorSession.ts`'s `endSession` awaits `driver.terminate()` and
+  `ConnectedSurface.tsx:34` states it in prose — an app End ends the MACHINE's
+  workout at the same instant, so a ~0 delta is structural and measures nothing.
+  **Before recording a delta as a result, ask what would have made it non-zero.**
+- **CLAIM:** "The hold-and-retry path proved itself live — AUD-015/016's
+  invariant, observed on prod." **MIS-CITED.** Both findings concern LOCAL
+  durability (Countdown's `saveRun`; `saveMonitorRun`); the walk observed a
+  SERVER 400 surfaced by `LogSession.tsx:846`, which emits one string for every
+  non-ok status and every exception. AUD-015 is still OPEN, so the sentence
+  read as field-validation of an unimplemented fix. **TECHNIQUE: grep the
+  finding id in ROADMAP and read its checkbox before citing it as discharged.**
+  Withdrawn in the walk README and ROADMAP in the close-out PR.
+- **CLAIM (`HistoryList.test.tsx:308-311`):** "The mutation the criterion asks
+  for is built in… two independently-written literals would let one screen
+  drift." **FALSE, and self-refuting.** There WERE two independently-written
+  `140.9` literals (`:318` and `:337`) in two different fixture objects, and
+  `:324`'s hard `expect(avgSplit).toBe("2:20.9")` failed before the list
+  rendered. **TECHNIQUE: when a test comment claims a mutation is built in,
+  perform the mutation in your head against BOTH fixtures and name the line
+  that goes red first.** Fixed: one stored-row object now feeds both.
+- **CLAIM (implicit):** "The exit criteria are discharged because the PRs
+  merged." **PARTLY FALSE.** Criterion 5 (`ended_by` on a free row) had no
+  assertion of any PRODUCED value: `link-lost` had no free-row test at all,
+  `rower` was echoed from a seeded literal, `interrupted` was executed and
+  unasserted. **TECHNIQUE for any enum criterion: grep each member's literal and
+  classify every hit as SEEDED or PRODUCED.** A member that only ever appears
+  as a fixture value is unpinned, however many tests mention it. `rower` and
+  `interrupted` now asserted on produced values; `link-lost` on a free row
+  remains untested.
+- **PROCESS, PROVEN:** main's CI `deploy` job failed on SIX consecutive pushes
+  (runs 33513607396 → 33576692923, 13:37Z–00:46Z), including the phase's own
+  PR 1, PR 2, the tag's notes PR and the release-capture PR, with
+  `deploy: refusing — host checkout is dirty` / exit 3 — and it was found by a
+  hardware walk, not by anyone reading main. **TECHNIQUE: `gh run list --branch
+  main` before any phase-close or release gate.** The pre-merge PR check being
+  green says nothing about the post-merge run. Root cause was RF20's class
+  (shell redirects into a checkout) on the PRODUCTION host. Now RF28.
+- **HELD under attack, and how:** the version skew (`git diff --name-only
+  v0.32.0..d0af9022` → zero `app/server/` and zero `drizzle/` paths, so the
+  server was byte-identical to the tag under test); the "recordings are
+  impossible on native" claim (`adapters/monitorTransport.ts`'s own header:
+  the byte recorder "stays behind its own build-time-foldable gate… reached
+  only on the web arm's dev/e2e path"); the deploy.sh root cause (`git status
+  --porcelain` lists untracked files, so four empty droppings really do block
+  it); criterion 1's integration test (it observes `GET /api/plan`'s `doneN`,
+  a quantity that genuinely moves, after its predecessor was caught unable to
+  fail); and the 4-hour truncation cap (`SERIES_SAMPLE_CAP = 14_400` at ~1
+  sample/s while rowing).
+
+### 2026-09-02 — Phase JR follow-on, "Just Row without the monitor": delta pass (TRIAD, stored field)
+
+- **CLAIM:** "The Just Row timer mints only a `SessionRun` — no synthetic
+  `SessionDraft`, since `SessionDraft.type` is required." FALSE as a shippable
+  mechanism. `Timer.tsx:456` early-returns `<Navigate to="/today">` when
+  `draft === null`, and `:478` reads the on-screen name from `draft.title`, not
+  the run's own. A draft-less run cannot render the screen it exists for.
+  **Technique:** for any record a screen loads, read the screen's OWN null
+  guard and its field reads before believing the record is sufficient — grep
+  the component for every `loadX()` in its lazy initializers, not just the one
+  the spec names. The spec cited the record it was adding; the falsifying line
+  was about the record it wasn't.
+- **CLAIM (spec + Gate-0 handoff, twice): "storing `timeSeconds` makes the
+  detail's provenance predicate say `TIMER`."** FALSE, and it invalidated an
+  approved board. The predicate is `storedSummary.ts:272-276` —
+  `row.steps.some((s) => s.actualSource === "stopwatch")` — which never reads
+  `timeSeconds`; with `steps: []` it returns `LOGGED BY HAND`, and
+  `buildMeta:300` then also suppresses the time-of-day segment, so the approved
+  `SEP 2 · 21:57 · TIMER` renders `SEP 2 · LOGGED BY HAND`: three tokens wrong
+  out of three. The spec named `summaryModel.ts` instead, whose timer model
+  hardcodes `"TIMER"` (`:1177`) and is not what the detail reads.
+  **Technique:** grep the STRING the board displays, not the module the spec
+  names, and follow the screen's import chain to the function that produces it.
+  A board approved on a screen nobody traced is a Gate 0 that approved fiction.
+- **CLAIM: "`applyDistanceActual` returns early with no metres, which is why
+  the test row read LOGGED BY HAND (`Timer.tsx:575-578`)."** Right conclusion,
+  wrong mechanism, wrong lines — repeated verbatim into the design handoff.
+  `isDistance = phase.meters !== undefined` (`Timer.tsx:481`) and a `test`
+  phase has no `meters` (`domain/expand.ts:149`), so `applyDistanceActual` is
+  unreachable on that path; `handleConfirmFinish`'s `else` branch (`:566`)
+  records nothing. `575-578` is a doc comment; the early return is `:587`.
+  **Technique:** when a spec explains a symptom by a function's early return,
+  check the CALLER's guard first — an unreachable early return explains nothing,
+  and the real fix site is a different branch. A cited line range landing inside
+  a comment is the tell.
+- **CLAIM: "loose `isSessionRun`, expand-only"** — reintroduced, on the twin
+  record, the exact defect Phase JR PR 1's own review had already fixed:
+  `monitorRun.ts:483-489` carries a comment saying declaring `mode?: "justrow"`
+  and never checking it let `mode: "corrupt"` load as valid.
+  **Technique:** when a spec adds a field to record A "the same word record B
+  already uses", open B's validator and its review comments. A sibling record
+  that already survived a review of this exact field is a free checklist, and
+  RF18's tripwire phrasing applies to code comments that record a FIX, not only
+  ones that record a precondition.
+- **CLAIM: the posted free-row body.** Omitted `workoutTitle`, required
+  non-empty at `data.ts:1369-1372`; every existing free-row body carries it
+  (`JustRowLog.tsx:89`, `freeRow.integration.test.ts:89`). **Technique:** don't
+  read the validator for the fields the spec lists — diff the spec's body
+  against the nearest SHIPPING body for the same endpoint. The missing key is
+  never one the spec thought about.
+- **CLAIM: the RF27 lifetime table is complete.** It named two clear sites and
+  missed six. The live one: `useStartWorkout.ts:149` stages a replace-confirm
+  only for a COMPLETED `SessionRun`; a live run is protected solely by the
+  started-draft check at `:166`, which a draft-less Just Row does not trip — so
+  Start on any workout reaches `confirmReplace()`'s unguarded `clearRun()`
+  (`:114`) mid-row. **Technique:** build the lifetime table by grepping
+  `clearX|saveX|buildX` across `src/` and forcing a row per hit, rather than by
+  enumerating the flows you can picture. Then, for each guard you find, read the
+  CONDITION — a guard that exists is not a guard that fires.
+- **CLAIM: "`freeRowTotals` widens its `meters` to `number | null`."** The
+  function is typed `(run: MonitorRun)` (`totals.ts:35`) and cannot accept the
+  new `SessionRun` at all. **Technique:** when a spec proposes widening a
+  helper's RETURN type for a new caller, check the PARAMETER type first — a
+  helper that cannot accept the new input is the wrong helper, and widening it
+  hides that.
+- **Brittleness axis (§1b):** the proposed provenance rule ("`steps: []` + no
+  `deviceName` ⇒ TIMER") is a HEURISTIC — provenance inferred from an absence.
+  Safe today (`MonitorRun.deviceName: string` non-null, `monitorRun.ts:167`;
+  one free-row producer in `src/`). False positive named: follow-on item 5's
+  plan-visible free row, or any manual free-row door, reads TIMER silently.
+  This is verbatim the objection the same spec used to REJECT `workoutId ===
+  null` as its mode marker. **Technique:** when a spec rejects marker A for
+  being "free today, silent tomorrow", check whether it then adopts marker A's
+  logic somewhere downstream. Specs are internally inconsistent about their own
+  best arguments. **Controller's disposition:** rev 2 adopted it as a
+  closed-world rule with the false positive named; James read that and said
+  "Harden it" — rev 3 stores provenance as a nullable `session_logs.source`
+  enum written by every door, which is the field `storedSummary.ts:36-66` had
+  already queued under Phase LM. The finding stands as written: the fix was
+  the column, not a better comment.
+- **HELD under attack:** `mode` survives every engine transition (all eight
+  spread `...run` — `engine.ts:170/179/192/203/220/229/243/278`; no field-by-
+  field reconstruction exists). Connect IS guarded for a live Just Row
+  (`connectGuardStage`, `monitorRun.ts:1544-1550`, stages for any `SessionRun`).
+  The server accepts `timeSeconds` with `distanceMeters` absent
+  (`data.ts:1512-1514`; `freeRow.integration.test.ts:86-106` posts neither and
+  gets 201). Exit criterion 2's `.type-badge` pin is class-scoped
+  (`e2e/justrow.spec.ts:153`) and a `.free-row-chip` cannot break it; no
+  child-count assertion on `.today-log-row` exists in any of the six e2e specs.
+  The wall-clock claim is deterministic and correct (`engine.ts:104-110`,
+  `Timer.tsx:420-423`).
+
+### 2026-09-02 — Wave E PR1.75 design (full option (g)), anchor-class TRIAD pass
+
+- **CLAIM:** "native fetches are cross-origin with default credentials, so the
+  WebView's cookie jar never rides" — used to justify a `400 ambiguous_auth`
+  in `requireUser`. **FALSE AS REASONED.** `capacitor.config.ts` enables
+  `CapacitorHttp`, so `native-bridge.js:454-475` replaces `window.fetch`:
+  POST goes to native `URLSession` (`CapacitorUrlRequest.swift:239-245`), GET
+  to a proxy also on `URLSession.shared` (`WebViewAssetHandler.swift:142`).
+  Both use `HTTPCookieStorage.shared` with `httpShouldHandleCookies` true;
+  `credentials` and origin are never consulted. **TECHNIQUE: when a claim
+  names a WEB API's behaviour inside a native shell, read the shell's own
+  bridge source for a patch of that API before believing the web semantics.**
+  Corollary: the conclusion may still hold while the mechanism is wrong —
+  which is worse, because the invariant is then held up by nothing anyone
+  wrote down.
+- **CLAIM:** the same rule is a safe loud-failure. **FALSE.** The 400 lives in
+  `requireUser`, mounted `router.use("/api", requireUser)` at
+  `routes/data.ts:826` and on `/api/me` — so an unreachable-state refusal is a
+  TOTAL native lockout with no in-app recovery, for zero security gain
+  ("bearer wins" is safe: an attacker supplying a bearer is already themselves).
+  **TECHNIQUE: for any new refusal added to shared middleware, grep every
+  `router.use` of it and price the blast radius before pricing the case.**
+- **CLAIM:** "mutation: drop the unique index → the race test shows two rows."
+  **CANNOT BITE (RF21).** Proven on real Postgres: without the index the upsert
+  raises `there is no unique or exclusion constraint matching the ON CONFLICT
+  specification` — every mint dies trivially and the test proves only that the
+  index exists. The biting mutation is on the STATEMENT (upsert → delete+insert),
+  measured at 2 rows. **TECHNIQUE: for a mutation on a DB constraint, run it —
+  a constraint an ON CONFLICT clause NAMES is a syntax dependency, not just a
+  behavioural one.**
+- **CLAIM (implicit):** `NOT NULL surface` is a safe additive migration.
+  **FALSE.** Proven: the rollback image's `createAttempt`
+  (`stores/concept2.ts:159-165`) omits the column → `null value in column
+  "surface" … violates not-null constraint`; every mint 500s after a rollback.
+  **TECHNIQUE: run the PREVIOUS image's exact INSERT against the NEW schema.
+  "Additive" is about readers; rollback is about writers.**
+- **CLAIM:** the native mechanism is "~60 lines". **INCOMPLETE.**
+  `presentationContextProvider` (iOS 13+) is required —
+  `ASWebAuthenticationSessionError.presentationContextNotProvided` is a
+  documented case — and the design named it zero times, while the plugin
+  already in `node_modules` sets it twice. **TECHNIQUE: for a new OS API, read
+  its ERROR ENUM, not just its initializer; a dedicated error case is the
+  vendor telling you which step is mandatory.**
+- **CLAIM:** no existing plugin offers this. **UNDER-CHECKED, conclusion
+  survived.** `@capgo/capacitor-social-login@8.4.4` — already a dependency —
+  exposes `provider:'oauth2'` on `ASWebAuthenticationSession`, but its
+  `OAuth2LoginResponse` has no `code` field and it exchanges in-app with PKCE
+  on. **TECHNIQUE: run the does-it-exist question against `package.json`
+  FIRST, not just against npm; the design evaluated an uninstalled package and
+  missed the installed one.**
+- **CORPUS FACT WITH AN EXPIRY DATE, again:** "migration 0019" was free when
+  the number was chosen and taken by the time it was written
+  (`drizzle/0019_happy_virginia_dare.sql`, Phase JR, on main). **TECHNIQUE:
+  `ls` the migration directory in the same pass that writes the index.**
+- **TRIPWIRE STEPPED OVER, third instance:** the `dist:grep` bullet reinstated
+  the exact "the native module folds out" overclaim that
+  `adapters/externalBrowser.ts:4-23` retracts in its own header, in the file
+  the bullet is about. **TECHNIQUE: before writing a claim about a module,
+  read that module's own header comment — this repo's retractions live there.**
+- **HELD, and worth recording as ground:** C2's token endpoint requires
+  `client_secret` (PRIMARY, their parameter table) and documents no PKCE, so an
+  intercepted code is unredeemable without our server or the victim's bearer;
+  `SameSite=Lax` IS sent on a cross-site top-level GET redirect
+  (rfc6265bis §5.8.3's four conditions, all satisfied); the upsert serializes
+  concurrent mints to exactly one row (PROVEN); and posting the mint's own
+  `state` genuinely dissolves the native echo dependency — which matters more
+  than the design knew, since Concept2 documents `state` NOWHERE.
+- **NEW GENERAL RULE FROM THIS PASS:** an interception INFERENCE should be
+  attacked in three legs, not one — can the holder REDEEM it (no), can they
+  DENY it to the victim (yes, here: consume preceded the identity check on
+  both routes), and does the design NAME the second. Unredeemable is not
+  harmless. Rev 2 moved identity/surface checks BEFORE consume on both routes.
+
+### 2026-09-02 — Wave E PR1.75 design REV 2, second pass (attacker/concurrency/platform lenses)
+
+- **CLAIM (PRIMARY-tagged, load-bearing):** an intercepted code "cannot be
+  redeemed — our `/exchange` needs the victim's bearer." **FALSE.** It needs
+  *an* Ergomatic bearer; the attacker uses their OWN. Presenting the victim's
+  code with the attacker's own attempt `state` and own bearer passes every
+  check in the design's §6 and links the victim's Concept2 grant
+  (`results:write`) to the attacker's account — RFC 9700 §4.5 authorization
+  code injection, verbatim. The identity check binds the ATTEMPT to the
+  presenter; nothing binds the CODE to the attempt, and §2.1.1's mandated
+  mitigations (PKCE, OIDC `nonce`) are both unavailable at Concept2.
+  **TECHNIQUE: for every "the attacker cannot use X" claim, ask who the
+  attacker is in the sentence — a control naming the VICTIM's credential is
+  not a control, because the attacker supplies their own.** Corollary: the
+  three-legs rule from pass 1 was itself under-enumerated — the third leg is
+  "redeem it INTO THEIR OWN ACCOUNT", which is neither deny nor
+  redeem-as-the-victim.
+- **CLAIM (implicit):** the post-consume re-verify of `user_id`/`surface`
+  guards the peek→consume race. **CANNOT GO RED (RF21, caught in the DESIGN).**
+  Census of every writer: the mint upsert's `DO UPDATE SET nonce =
+  excluded.nonce` always rewrites the nonce, so for a FIXED nonce
+  `(user_id, surface)` are immutable for the row's lifetime — a concurrent
+  re-mint makes the row vanish (consume → null → 400) rather than change.
+  **TECHNIQUE: to test whether a TOCTOU re-check can ever fire, enumerate the
+  writers and ask which one mutates the checked columns WITHOUT changing the
+  key you re-read by. If none does, the re-check is theater — replace the
+  two-step with a conditional `DELETE … WHERE key AND predicate RETURNING`,
+  which makes the check unseparable from the consume by construction.**
+- **CLAIM:** the device walk's step (a) is executable. **FALSE — no host
+  exists.** It needs a server with log-dev creds and `C2_LINK_ENABLED=1` that
+  the phone can reach; `ios:build` defaults to prod (`package.json:29`), and
+  the `ERGOMATIC_API_BASE` override to a LAN `http://` is blocked by ATS —
+  `Info.plist` carries NO `NSAppTransportSecurity` key and `CapacitorHttp` puts
+  every request on native `URLSession`. **TECHNIQUE (RF13): follow a walk step
+  to the TRANSPORT, not just to the feature. "Point the build at your dev
+  server" is a claim about ATS, and the plist settles it in one grep.**
+- **CLAIM:** the vendor API needs `presentationContextProvider` (pass 1's
+  finding). **INCOMPLETE — there is a THIRD error case.** The SDK header
+  carries `ASWebAuthenticationSessionErrorCodePresentationContextInvalid = 3`:
+  *"For iOS, validate that the UIWindow is in a foreground scene."*
+  `TARGETED_DEVICE_FAMILY = "1,2"` makes multi-scene real. **TECHNIQUE: read
+  the SDK HEADER, not the doc site — `xcrun --sdk iphoneos --show-sdk-path`
+  gives verbatim availability annotations, deprecation sentinels, property
+  ownership (`presentationContextProvider` is `weak`) and the full error enum,
+  and it answered five questions the documentation site could not be fetched
+  for at all.**
+- **CLAIM:** "the `callbackURLScheme` initializer is deprecated at iOS 27."
+  **FALSE — an invented version.** The header says
+  `API_DEPRECATED(..., ios(12.0, API_TO_BE_DEPRECATED), ...)`, Apple's
+  "unspecified future release" sentinel. RF16's shape: a sourced-sounding
+  specific inside an otherwise correct, genuinely-sourced paragraph.
+- **CLAIM (SECONDARY, forum thread 679251):** Info.plist `CFBundleURLTypes` is
+  not required. **TRUE, and a PRIMARY source existed all along** — the SDK
+  header: *"it needs to either register the custom URL scheme in its
+  Info.plist, or set the scheme to callbackURLScheme argument in the
+  initializer."* **TECHNIQUE: before settling for a forum post, check whether
+  the framework HEADER states the same fact — a SECONDARY tag on a
+  PRIMARY-available claim understates evidence we already have on disk.**
+- **CLAIM:** the design's rollback analysis is complete after the `NOT NULL`
+  fix. **INCOMPLETE.** Pass 1's own technique (run the previous image's writers
+  against the new schema) has a second hit nobody followed: the surviving
+  `UNIQUE(user_id)` turns the rollback image's concurrent double-mint into a
+  500. Acceptable, but unnamed. **TECHNIQUE: apply a rollback technique to
+  EVERY object the migration adds, not just the one that produced the first
+  finding — a fix round tends to stop at the first hit.**
+- **HELD under attack, and worth recording as ground:** CSRF on the web
+  callback is closed in BOTH directions by the identity check; open redirect
+  and reflected XSS are closed by construction (no `res.redirect`, `page()`
+  interpolates only literals); mix-up is N/A for a stated reason (one AS, a
+  boot-time constant endpoint, no AS identifier read from the response);
+  the empty-cookie rule is already true for auth today (`getCookie` → `""` →
+  falsy → 401) and is load-bearing only for the NEW `authVia` derivation; the
+  400/403 ladder discloses only what a state-holder knows, bounded by a
+  256-bit nonce; and the mixed-version window is closed because NOTHING in
+  `src/` posts to `/api/concept2/connect` — the whole link plumbing's only
+  consumer is a dev-flag-gated probe that posts nothing.
+- **NEW GENERAL RULE:** **a residual an identity check cannot close must be
+  closed by COPY, and that makes it a Gate 0 item, not a footnote.** The
+  shared-browser fixation case (victim consents at the AS while the browser
+  holds the ATTACKER's session) passes every server-side check correctly,
+  because the Ergomatic principal genuinely IS the attacker. The only
+  mitigation is rendering BOTH identities on the success page — which means
+  the security finding lands in the design's copy section. Look for this
+  whenever a control answers "who is our principal" against a threat whose
+  premise is that our principal is wrong.
+- **Controller's addendum — the desk pre-check the pass asked for was run and
+  is INCONCLUSIVE at the unauthenticated layer:** log-dev answers `302 →
+  /login` for the registered native scheme AND for a bogus unregistered one
+  (curl, 2026-09-02), so `redirect_uri` validation happens after login. A
+  probe that returns the same answer for the registered and the bogus scheme
+  has not measured anything; the check moved to a logged-in browser with the
+  bogus scheme kept as the red control. **TECHNIQUE: every pre-check carries
+  its own red control, run in the same breath — a green without a red is a
+  guess.**
+- **Process, recorded:** an agent COMMITTED design rev 3 (`0c2063ce`) to the
+  worktree branch despite the read-only brief. Content was reviewed and kept;
+  the breach stands as the reason "agents propose, the controller lands" is in
+  CLAUDE.md and not only in the dispatch text.
+
 ## 2026-09-02 — Wave F PR 3 §4 freeze-predicate design: the fix that ignored its own capture
 
 - **Claim (plan §4 Design, first draft):** "a pause may not be declared until

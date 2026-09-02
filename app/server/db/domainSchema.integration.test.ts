@@ -132,6 +132,7 @@ describe("domain schema against real Postgres", () => {
         held: "held",
         pain: 0,
         steps: [],
+        source: "manual",
       }),
     ).rejects.toThrow();
   });
@@ -167,6 +168,7 @@ describe("domain schema against real Postgres", () => {
       held: "held",
       pain: 3,
       steps: [],
+      source: "manual",
     });
 
     await db.insert(preferences).values({ userId: u.id });
@@ -231,6 +233,7 @@ describe("domain schema against real Postgres", () => {
         held: "under",
         pain: 2,
         steps: [],
+        source: "manual",
       })
       .returning();
 

@@ -91,6 +91,13 @@ Regenerating anywhere else produces a 90-file diff that means nothing.
 
 ## Cutting a release (~10 min, on the build Mac, fully CLI)
 
+0. **`gh run list --branch main --limit 5` — main's last run, INCLUDING its
+   `deploy` job, is green.** A PR's checks are not this run. On 2026-09-01
+   six consecutive merges deployed nothing for eleven hours (the host
+   checkout was dirty and `deploy.sh` refused), v0.32.0 went to TestFlight
+   against a server still on v0.31.0, and the tag's own feature failed to
+   save at the erg. Prod's `/api/health` version is the cheap cross-check:
+   `curl -s https://ergomatic.waffle.haus/api/health`.
 1. `git checkout main && git pull`
 2. **Account for every commit since the last tag** before writing the notes —
    `git log $(git tag --list --sort=-v:refname | head -1)..main --oneline` —
@@ -156,3 +163,4 @@ not a redeploy.
 | Floor | Why |
 | ----- | --- |
 | v0.16.0 (PR #156) | First version whose seed renames global rows in place (`First 6k`/`First 2k` → `6K Test`/`2K Test` via `LEGACY_TITLE_RENAMES`). Rolling the API back past it against a post-rename DB is unrecoverable log-link loss. |
+| the tag carrying migration 0020 (`session_logs.source`, unconnected-JR PR) | 0020 adds `source` NOT NULL with a backfill. A server older than it does not write the column, so rolling the API back past it makes every new save fail the NOT NULL constraint (no row is written, the app shows its save failure and holds the record). Not data loss, but a total write outage until rolled forward. |

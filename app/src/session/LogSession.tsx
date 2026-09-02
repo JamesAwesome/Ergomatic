@@ -19,6 +19,7 @@ import type {
   Baselines,
   PaceBase,
   Step,
+  LogSource,
   WorkoutType,
 } from "../../domain/types.js";
 import { clearDraft, loadDraft, type SessionDraft } from "./draft";
@@ -45,6 +46,7 @@ import {
 } from "../monitor/handoffStore";
 import type { SeriesData } from "../monitor/seriesRecorder";
 import type { MonitorLogEntry } from "../monitor/eventLog";
+import { LOG_DOOR_MISS_KEY, recordLogDoorMiss } from "./logDoorDiagnostics";
 import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import PostWorkoutSummary, { singleTargetHint } from "./PostWorkoutSummary";
@@ -237,62 +239,10 @@ function manualLockedBaseline(
     : null;
 }
 
-// Task 1 (lost-monitor design spec): mirrors `recordPostSacrifice`'s own
-// append idiom (below, module scope), recording WHICH gate a `from=monitor`
-// arrival missed on. Best-effort and silent on any failure (missing or
-// malformed stash, localStorage disabled) — diagnostics never block this
-// screen's render.
-//
-// **ITS OWN KEY, AND THE PREMISE THAT SENT IT SOMEWHERE ELSE WAS FALSE**
-// (fix round, whole-branch review MEDIUM). Task 1 appended these entries
-// straight onto `ergomatic:last-session-log`, on the stated premise that a
-// `from=monitor` arrival "just finished tearing down the connected session
-// that sent it here, so this key is very likely to already hold that
-// session's own exported ring". It does not — it holds the PREVIOUS
-// session's ring, and it is about to be overwritten:
-//
-//  - this append runs during `ManualDoorLog`'s RENDER (a lazy `useState`
-//    initializer, below), and
-//  - `useMonitorSession.ts`'s `teardown` is a PASSIVE effect cleanup
-//    (`useEffect(() => teardown, [teardown])`) whose stash does a full
-//    `localStorage.setItem` of that same key.
-//
-// React runs the new route's render before the old subtree's passive
-// unmount, so on the flagship `?from=monitor` arrival the entry was written
-// and clobbered milliseconds later — destroyed on the one path it was built
-// for, with every unit test green because they called `monitorModeRun`
-// directly and never navigated.
-//
-// A separate key, rather than teaching `teardown` to merge: the two writers
-// are on opposite sides of a navigation, neither can see the other's
-// timing, and a merge would have to distinguish "entries from the session
-// I am closing" from "entries from the session before it" using data
-// neither side carries. The single-artifact intent survives in the READ:
-// `readMonitorLogStash` merges the misses onto the ring, so `MONITOR LOG ·
-// COPY` still yields one story in one paste.
-const LOG_DOOR_MISS_KEY = "ergomatic:log-door-misses";
-const LOG_DOOR_MISS_CAPACITY = 500;
-
-function recordLogDoorMiss(condition: string): void {
-  try {
-    const raw = localStorage.getItem(LOG_DOOR_MISS_KEY);
-    let entries = raw !== null ? (JSON.parse(raw) as MonitorLogEntry[]) : [];
-    const nextSeq =
-      entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
-    entries.push({
-      seq: nextSeq,
-      atMs: Date.now(),
-      kind: "log-door-miss",
-      detail: condition,
-    });
-    if (entries.length > LOG_DOOR_MISS_CAPACITY) {
-      entries = entries.slice(entries.length - LOG_DOOR_MISS_CAPACITY);
-    }
-    localStorage.setItem(LOG_DOOR_MISS_KEY, JSON.stringify(entries));
-  } catch {
-    // Best-effort diagnostics; never block or complicate this screen's render.
-  }
-}
+// The log doors' diagnostics side-channel — `recordLogDoorMiss`, the key
+// and its capacity — lives in `./logDoorDiagnostics.ts` (moved there when
+// the Just Row door needed to write to it; the full account of WHY it is
+// its own key rather than the session stash travelled with it).
 
 /** The monitor mode gate (7C spec §4) — the manual door's route
  *  (`/library/:id/log`) is ALSO where `WorkoutDetail.tsx`'s
@@ -416,8 +366,9 @@ export function monitorModeRun(
  *  record) proves we hold nothing: a record that is merely unfinished, for
  *  another workout, or one whose `logSeed` no longer aligns can carry real
  *  PM5 readings we simply cannot render here. Saying "no reading" over
- *  those would be a claim we have not earned, so they keep the
- *  door-ambiguous `LOGGED BY HAND` they render today.
+ *  those would be a claim we have not earned, so they keep the `manual`
+ *  door (`LOGGED BY HAND`) they render today — stored as such since the
+ *  Just Row unconnected spec (2026-09-02) made the door a column.
  *
  *  **Hand-off store design spec (rev 4), plan Task 4: reads via the store's
  *  `read()`, never `loadMonitorRun()` and never a state var** — the same
@@ -596,6 +547,20 @@ export interface LogFormFields {
    *  concrete type; the free-row door is the one caller of the null. */
   workoutType: WorkoutType | null;
   steps: LogStep[];
+  /** Just Row unconnected spec (2026-09-02), §Mechanism stored shape (c):
+   *  which door this row is being saved through — `session_logs.source`,
+   *  a stored fact from this PR on, never inferred client-side again.
+   *  REQUIRED here (not optional like every other addition below) on
+   *  purpose: the type system is what makes "every door posts its member"
+   *  (exit criterion 3b) a compile-time property rather than a per-door
+   *  promise. The session door closing a `SessionRun` says `timer`; the
+   *  monitor-mode branch says `pm5` (beside the `deviceName` the server's
+   *  contradiction check requires for it); the Log-it-after door says
+   *  `manual` — including the no-reading arrival (`connectedNoRecord`),
+   *  whose own word is Phase LM's call. The server derives the member only
+   *  for a body that omits it (an installed build predating the column —
+   *  `server/logSource.ts`), a path with a sunset. */
+  source: LogSource;
   // 7C spec §6: the monitor mode's ONLY addition to the shared body shape —
   // `run.deviceName`, spread straight onto the wire body below (`{
   // ...fields }`) the same way every other `LogFormFields` key already is.
@@ -768,6 +733,15 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
       (body.deviceName.length === 0 || body.deviceName.length > 64)
     ) {
       delete body.deviceName;
+      // Just Row unconnected spec (2026-09-02): the monitor door's `pm5`
+      // is a contradiction without a `deviceName` (`server/logSource.ts`
+      // 400s it, which would block the WHOLE save this guard exists to
+      // let through), so the door claim goes with the name and the server
+      // derives the member for this one body — logged there as
+      // `source=derived`, so the row is visible in diagnostics rather
+      // than silently mis-doored. It renders `LOGGED BY HAND`, which is
+      // what the same row rendered before the column existed.
+      if (body.source === "pm5") delete body.source;
     }
     try {
       // Fix round (MED-1): every retry below rebuilds from `currentBody`
@@ -1444,6 +1418,7 @@ function SessionDoorLog() {
         workoutTitle: activeRun.title,
         workoutType,
         steps: logSteps,
+        source: "timer",
         avgSplitSeconds: model.heroes.avgSplitSeconds,
         timeSeconds: model.heroes.timeSeconds,
         distanceMeters: model.heroes.distanceMeters,
@@ -1892,6 +1867,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           workoutType: activeWorkout.type,
           steps: logSteps,
           deviceName: monitorRun.deviceName,
+          source: "pm5",
           avgSplitSeconds: model.heroes.avgSplitSeconds,
           timeSeconds: model.heroes.timeSeconds,
           distanceMeters: model.heroes.distanceMeters,
@@ -2139,6 +2115,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         workoutTitle: activeWorkout.title,
         workoutType: activeWorkout.type,
         steps: logSteps,
+        source: "manual",
       },
       opts,
     );

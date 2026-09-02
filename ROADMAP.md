@@ -129,17 +129,30 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 ## Phase JR — Just Row
 
-**Status: RELEASED v0.32.0 (build 811) + exit walk PASSED — phase close
-owed.** PR 0a instrument + PR 0b capture DONE 2026-08-31 (#246); PR 1
+**Status: CLOSED 2026-09-01 — released v0.32.0 (build 811), exit walk
+PASSED, both close gates run; the follow-on slate below is the live
+work.** PR 0a instrument + PR 0b capture DONE 2026-08-31 (#246); PR 1
 MERGED as #255; PR 2 MERGED as #259 (2026-09-01, 3-round review loop,
 accepted with no findings); James relaxed R-A so v0.32.0 tags both PRs
 together; notes #260, release-capture reup #261, TestFlight upload
 0.32.0 (811) all landed 2026-09-01. The exit walk ran the same evening
 on build 811 against prod and PASSED — record at
-`docs/monitor/sessions/walk-2026-09-01-jr-exit/` (its first save failed
-because prod was FROZEN at v0.31.0 behind a dirty deploy-host checkout;
-cleaned, redeployed, retry saved — the hold-and-retry path proved itself
-live). Remaining: the antagonist exit pass + PM close gate.
+`docs/monitor/sessions/walk-2026-09-01-jr-exit/`. Its first save failed
+because prod was FROZEN at v0.31.0: main's `deploy` job had been red for
+eleven hours across six merges (a dirty deploy-host checkout — four
+empty shell-redirect droppings), and nobody read main's CI; cleaned,
+redeployed, the retry saved. The app held the record and retried
+correctly; what it could not do is tell a permanent 400 from a transient
+one. Both close gates (antagonist exit pass, PM close) said CLOSE, with
+the evidence gaps landed in the close-out PR: the ready screen's keep-on
+strip wore a class with zero CSS rules (James found it at the erg — of
+ten approved Gate 0 artboards only four had captures of the BUILT
+screen; `justrow-ready` is now captured), exit criterion 5 (`ended_by`)
+is now asserted on PRODUCED free-row values, criterion 2 on an actual
+history list, criterion 7 from one stored row, and two vacuous
+`.type-badge` assertions are gone. Still ungated: the app-End arm of
+criterion 8 (the replay capture is a Menu end; the walk's Done-ended
+row is accepted on James's operator report).
 
 - [x] PR 0a — the observe-only instrument (#246)
 - [x] PR 0b — the capture walk (walk-2026-08-31-justrow)
@@ -147,30 +160,110 @@ live). Remaining: the antagonist exit pass + PM close gate.
 - [x] PR 2 — surface + session + log door (#259, released v0.32.0)
 - [x] Exit walk — PASSED 2026-09-01 (both endings; Menu-ended row
       digit-identical with the machine-confirmed stamp on a free row)
-- [ ] Phase close — antagonist exit pass + PM close gate, carrying the
-      follow-on slate below
+- [x] Phase close — antagonist exit pass + PM close gate (2026-09-01);
+      close-out PR carries the evidence fixes and this slate's shaping
+- [x] Ready screen defect — `connected-keep-on` restored, `justrow-ready`
+      captured (close-out PR)
 
-**Follow-on slate (2026-09-01 — two exit-walk findings, a tester
-request, and two James directives; queued for the close to shape):**
+**Follow-on slate — shaped at the close (2026-09-01), James's build order:
+item 3 first, then item 2 if still wanted once the ready fix is in hand,
+then items 4+5 as one TRIAD PR — AMENDED at Gate 0 (James, 2026-09-02:
+"it's just missing the JR chip"): item 4 shipped WITH item 3 in #268, so
+item 5 ships alone.** The PM's counsel that Wave F's
+pocketed-phone row outranks this slate against the north star is on the
+record (this would be a second household exception); James chose the
+slate.
 
-- **The Just Row ready screen should BE the programmed ready view** (or
-  match it identically) — walk finding; today it is its own layout.
-- **Connect should put the erg into a Just Row session** — today the app
-  connects and the PM5 stays on its main menu, so to the rower the
-  connection did nothing. Wire-semantics work: whether a central can
-  drive the PM5 onto its Just Row screen (ErgData appears to) gets the
-  research pass and antagonist treatment before any mechanism is
-  invented.
-- **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, just
-  an infinite timer and the ability to log what you did.
+- **Ready screen should BE the programmed ready view** — walk finding,
+  resolved as a DEFECT: the built screen wore `connected-ready-warning`,
+  a class with zero CSS rules, where the approved artboard was "the
+  shipped interstitial, one word changed". Fixed in the close-out PR by
+  using the shipped `connected-keep-on` class. The remaining delta
+  between the two ready screens is four lines of copy; look again once
+  James has the fix on a phone before unifying components.
+- **Connect should put the erg into a Just Row session** — walk finding,
+  reframed by the close: an ACKNOWLEDGMENT gap, not a capability gap.
+  The 08-31 walk already observed that pulling from the main menu with
+  the app connected auto-enters Just Row (OPEN 5, James at the erg).
+  The wire frame to drive the screen is Concept2 p.80, transcribed at
+  `docs/monitor/pm5-interface-notes.md:204` (`SET_WORKOUTTYPE(0x01)` +
+  `SET_SCREENSTATE(PREPARETOROWWORKOUT)`), and `SET_SCREENSTATE` is
+  already built and emitted. **No research pass — the earlier line here
+  saying one was owed was wrong (RF18).** Cost if built: `beginFreeRow()`
+  stops being "sends no bytes" and gains a reject path and an ack gate;
+  carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
+  `OBJ_WORKOUTTYPE_T` entry). One driver change plus one walk leg. **M**
+- **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
+  infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
+  James ruled TIME ONLY; Gate 0 PASSED on rev 2e
+  (`docs/design/handoffs/2026-09-02-just-row-unconnected/`, every label
+  lifted from a captured shipped screen); spec at
+  `docs/superpowers/specs/2026-09-02-just-row-unconnected-design.md`,
+  antagonist delta pass RAN (BLOCK on rev 1's mechanism, folded), James
+  hardened it twice → spec rev 5.1; IMPLEMENTING on branch
+  `jr-unconnected`; ships in ONE PR with the JR chip below, TRIAD: `mode`
+  required on `SessionRun`, a `stopwatch-elapsed` `PhaseActual` variant,
+  and `session_logs.source` (pm5 | timer | manual, NOT NULL, backfilled
+  by migration 0020 — every log door now writes which door the row came
+  in by; the client's provenance inference is deleted).** The close found
+  most of it built: `Step`'s `{ k: "test" }` member yields a phase with no seconds
+  and no metres, `Timer.tsx` counts UP for exactly that case
+  (`Timer.test.tsx` pins it), and `SessionRun` with `workoutId: null`
+  stores it with no `v` bump — **no new stored shape**; PR 1's server row
+  takes it as-is. So: a producer, a route, a door. The one ruling that was
+  James's — type the distance off the monitor, or time only? — is RULED:
+  **time only** (2026-09-02); no distance is typed or invented. The only
+  item with an outside voice; built first. **S/M**
 - **"JR" badge on Just Row sessions**, in the manner of the other type
   chips (James, 2026-09-01 — supersedes the shipped "no type chip on
-  purpose" stance; v0.32.0's notes describe that release, not this
-  direction).
-- **Optional logging against plans** — a Just Row should be loggable
-  against a plan when the rower so wishes (James, 2026-09-01 —
-  supersedes "never advances your plan" as the ONLY mode; the default
-  stays off-plan, the option is the new work).
+  purpose" stance). **DESIGNED 2026-09-02 on the unconnected board
+  above: a HOLLOW chip (the CUSTOM tag's treatment, `.free-row-chip`,
+  never `.type-badge`) — a filled ink chip was literally `--type-tr`,
+  ink-3 "still a bit close"; rides the unconnected PR.** **A DERIVED
+  display concern, never stored:**
+  `isFreeRow(workoutId, workoutType)` is load-bearing three times (the
+  server's plan refusal, its empty-`steps` allowance, the absent badge),
+  so `"JR"` can never live in `workout_type`. Visual precedent exists —
+  `.workout-row-custom`, the ink-outline metadata chip — since
+  `TypeBadge.tsx` refuses to mint a fifth intensity colour. SHIPPED in
+  #268 with item 3 (hollow `.free-row-chip` on the door and every free
+  row in History/Today), so item 5's plan-linked free row will already
+  carry it. **S**
+- **Logging a Just Row against a plan — as SUBSTITUTION** (James,
+  2026-09-01: "advances the record, records the stand-in"): the rower
+  may say "this free row stands in for session N"; it advances the plan
+  AND the row records that it stood in. Default stays off-plan. **TRIAD**
+  — it changes what SESSION n OF 84 means and amends frozen exit
+  criterion 1 (`done_n` unchanged across a Just Row save) with its own
+  gate; it removes the server's ONLY free-row plan enforcement
+  (`logs.ts`'s `!isFreeRow(...)`), so the substitution must be an
+  explicit stored fact the server checks, not a client promise; and the
+  reversing release note must acknowledge v0.32.0's "A Just Row never
+  advances your plan" or the News tab contradicts itself. Ships ALONE
+  (the badge went with item 3 in #268). **S code / L ruling**
+- **Fidelity note, from the walk:** the app ROUNDS 93.7 s to `1:34` where
+  the PM5 truncates to `1:33` — one quantity, four renderings across the
+  two screens. For a phase whose promise is "the machine's own numbers
+  land in your log", showing a figure the erg never displays deserves a
+  line at the next design pass. **XS**
+- [ ] **`source` derive-when-absent SUNSET — trigger: v0.35.0, the tag
+      AFTER the one that ships #268 (expected v0.34.0). NOT v0.34.0:
+      firing it on the tag that introduces the field 400s every save from
+      every build still installed.** The server derives `source`
+      for a POST that omits it only so build 811-era TestFlight clients
+      keep saving (additive-only between tags). At that tag: `source`
+      becomes REQUIRED on `POST /api/logs` (400 when absent), the route's
+      `deriveLogSource` call and its `source=derived` log line are
+      deleted, and `docs/RELEASING.md`'s API note records the break. The
+      0020 BACKFILL rule stays (it is history, not a live inference).
+      Filed here per RF14 and the spec's exit criterion 8b. **XS**
+- [ ] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
+      told testers — trigger: the v0.34.0 notes PR.** v0.32.0 said
+      "connect to the erg" (there is now a Start Timer with no erg) and
+      "no type chip, on purpose" (free rows now carry the JR chip). One
+      sentence each, in the notes' own voice, or the News tab contradicts
+      itself two entries apart. Filed at #268's PM gate (RF14, and the PR
+      body had claimed this row already existed). **XS**
 
 **Owed within PR 2's own scope, recorded here so phase close can quote
 it:** a free row recovered with a `truncated` series trace (>4 h of rowing,
@@ -593,7 +686,11 @@ return;` and the union at `:600` is still `"warmup" | "work"`. Binding
 
 **Exit:** a phone locked before the first pull, a phone backgrounded mid-piece,
 and a link dropped mid-piece each produce a stored row that matches what the
-machine did, and the row says which door it came in by. **Fourth clause, added
+machine did, and the row says which door it came in by **(the door clause is
+DELIVERED by `session_logs.source` — pm5 | timer | manual, NOT NULL,
+backfilled — landing in the unconnected-JR PR, 2026-09-02; what remains of
+it for this wave is the no-reading row's own WORD, which posts and
+backfills `manual` today: `storedSummary.ts`'s header carries the history).** **Fourth clause, added
 at the phase-open gate (2026-08-28) so the durability chunks are inside the
 exit they build toward:** a connected row carries the erg's own summary
 numbers whenever the erg spoke them, and a storage failure never silently
@@ -986,7 +1083,7 @@ closed with zero Concept2 contact.
       including the measured refresh-endpoint corrections); **PR #249
       MERGED** 2026-09-01 (main `27fe6b4a`) — fixed here, fix round 5,
       after this row was found still calling it open past its merge.
-- [ ] **PR1.5 — the native link flow**, on device: system-browser consent
+- [x] **PR1.5 — the native link flow**, on device: system-browser consent
       (`@capacitor/browser`) and the return-to-app refresh seam
       (`useReturnToApp` — renamed from the working title "foreground
       re-fetch" once `browserFinished` proved an equally load-bearing,
@@ -1006,18 +1103,28 @@ closed with zero Concept2 contact.
       PR1.75 pins bearer→native, cookie→web, an explicit both-present
       rule, and a disagreement test before the column above can be
       populated correctly)**, per-surface redirect URIs, the authenticated
-      native exchange (URL scheme + `appUrlOpen`, moved from PR1.5), an
-      authenticated web callback (`attempt.userId === req.user.id` before
-      the token exchange — the identity check the current callback
-      lacks), Concept2's own approval of the new native `redirect_uri`
-      (external dependency), and dual-route identity tests. **Also owns**
-      (not optional — reassigned here at fix round 16 to match the gate
-      doc's own framing) the two soft bounds the C2 account-injection
-      register row names: `UNIQUE(user_id)` + a transaction around mint
-      (one-attempt is currently best-effort/raceable); `ALLOWED_EMAILS`-
-      as-revocation is a separate admission-model question, not bundled
-      here. Sequenced PR1.5 → PR1.75 → PR2; gates `C2_LINK_ENABLED=1` on
-      any real cohort (`2026-09-01-concept2-pr15-gate.md` §6). **M**
+      native exchange (`POST /api/concept2/exchange`, server side; the
+      device return rides `ASWebAuthenticationSession`, not a URL scheme
+      + `appUrlOpen` — design §4), an authenticated web callback
+      (`attempt.userId === req.user.id` before the token exchange — the
+      identity check the current callback lacks), Concept2's own approval
+      of the new native `redirect_uri` (external dependency), and
+      dual-route identity tests. **Also owns** (not optional — reassigned
+      here at fix round 16 to match the gate doc's own framing) the two
+      soft bounds the C2 account-injection register row names:
+      `UNIQUE(user_id)` + one atomic upsert at mint (one live attempt per
+      user, ENFORCED at 1.75a); `ALLOWED_EMAILS`-as-revocation is a
+      separate admission-model question, not bundled here. Sequenced
+      PR1.5 → PR1.75 → PR2; gates `C2_LINK_ENABLED=1` on any real cohort
+      (`2026-09-01-concept2-pr15-gate.md` §6). **M**
+      **Status 2026-09-02: server half BUILT (PR1.75a, #269) — migration
+      0021 (#268 took 0020 first), both identity ladders, `authVia`, the
+      styled pages; native half is PR1.75b (`WebAuthPlugin`, `linkFlow`,
+      the return-arm census, the walk). The per-clause disposition of this
+      row lands at 1.75b's merge (design exit criterion 8); still owed
+      after both: the flag flip, live-portal registration of the native
+      redirect, PR2's surface + identity line, promotion of the app-wide
+      disagreement refusal.**
 - [ ] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
       (Connect + H/L ask + Unlink) and the log row's Send action with
       sent/duplicate/failed states and a View-on-Concept2 link-out. **M**
@@ -1312,7 +1419,7 @@ question, not a re-raised one.
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
-| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by two FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is best-effort and RACEABLE, not enforced — mint is a delete/delete/insert sequence with no transaction and no `UNIQUE(user_id)` (`server/routes/concept2.ts:157-167`, `schema.ts:510-519`), so sequential mints replace the prior attempt but concurrent mints can leave several live at once (§1, corrected). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange; the web callback is unauthenticated today) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by two FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is PR1.75b's, and the gate stays closed until it ships and walks) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 

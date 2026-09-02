@@ -463,8 +463,15 @@ export function buildLogSteps(
     // time phase) logs nothing at all, same as before this task.
     const actual = run.actuals[i];
     if (actual !== undefined) {
-      step.actualSplit = actual.splitSeconds;
-      step.actualSource = "stopwatch";
+      // Stored shape (b): only the `"stopwatch"` member HAS a split. A
+      // `"stopwatch-elapsed"` actual belongs to a metre-less phase (the
+      // free-row timer's single `test` phase, which returned above before
+      // reaching here) — on a work phase it could only be a record no
+      // writer produces, and it logs no split rather than a fabricated one.
+      if (actual.actualSource === "stopwatch") {
+        step.actualSplit = actual.splitSeconds;
+        step.actualSource = "stopwatch";
+      }
     } else if (!isEffort && phase.seconds !== undefined) {
       step.actualSplit = phase.targetSplit!;
       step.actualSource = "assumed";

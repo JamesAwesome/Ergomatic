@@ -142,8 +142,111 @@ test.describe("Just Row: the whole flow", () => {
 
     await page.getByRole("button", { name: "Save this row" }).click();
 
-    // History, with the free row named and unbadged.
+    // History, with the free row named and wearing the JR chip in the
+    // badge slot — and NO type badge. The `.type-badge` absence is exit
+    // criterion 2's LITERAL subject — a history list holding the null-type
+    // row renders no `.type-badge` at all — and this is the one place a
+    // null-type row from the supported producer reaches a list. A fresh
+    // backdoor user's history holds only this row, so a badge on it is the
+    // only badge there could be: the probe bites. The chip is the
+    // unconnected spec's criterion 4, derived from the PAIR
+    // (`FreeRowChip.tsx`), on its OWN class — never `type-badge`.
     await expect(page).toHaveURL(/\/today\/log$/);
     await expect(page.getByText("Just Row").first()).toBeVisible();
+    await expect(page.locator(".type-badge")).toHaveCount(0);
+    await expect(page.locator(".free-row-chip")).toHaveText("JR");
+  });
+});
+
+// Just Row WITHOUT the monitor (spec 2026-09-02, exit criteria 1, 3, 4,
+// 8): the phone's own clock times the row, the row saves with TIME ONLY,
+// and the record reads `TIMER` everywhere it names its door. Entered at
+// the door and walked to the detail through the real POST validator and a
+// real GET (RF24: the one test that STARTS upstream of every producer —
+// the SessionRun the door mints, the actual ▶ freezes, the body Save
+// posts — and asserts downstream of every reader).
+//
+// The wait after Start Timer is REAL time, not a fake clock: the Timer's
+// count-up is wall-clock based (criterion 5's invariant), so the recorded
+// TIME must be at least the seconds this test genuinely stood on the
+// screen — `0:00` there would mean ▶ recorded nothing.
+test.describe("Just Row: without the monitor", () => {
+  test("Today → Start Timer → count-up → ▶ → Finish session → time-only log door → history chip → TIMER detail", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: `justrow-timer-${RUN_ID}@e2e.test`,
+      name: "Just Row Timer Walker",
+    });
+
+    await page.goto("/today");
+    await page.getByRole("link", { name: "JUST ROW" }).click();
+    await expect(page).toHaveURL(/\/justrow$/);
+
+    // The door's second action, under Connect (handoff `Main.dc.html`).
+    await page.getByRole("button", { name: "Start Timer" }).click();
+    await expect(page).toHaveURL(/\/session\/run$/);
+
+    // The shipped Timer wearing the free-row words (handoff
+    // `Clock.dc.html`): the STEP slot reads `JUST ROW`, both target slots
+    // read `Free`, and UP NEXT reads FINISH — nothing follows a free row.
+    await expect(page.getByText("JUST ROW", { exact: true })).toBeVisible();
+    await expect(page.getByText("Free", { exact: true })).toHaveCount(2);
+    await expect(page.getByText("FINISH", { exact: true })).toBeVisible();
+
+    // Stand on the screen for real seconds, then pin that the clock moved:
+    // `0:03` is the count-up's own rendering three seconds in (the big
+    // number and the ELAPSED cell both carry it, hence `.first()`).
+    await expect(page.getByText("0:03").first()).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // ▶ stages the finish (handoff `ClockFinish.dc.html`, verbatim from the
+    // shipped Timer) rather than advancing: a free row has no next phase.
+    await page.getByRole("button", { name: "Next phase" }).click();
+    await expect(page.getByText("Finish this session?")).toBeVisible();
+    await page.getByRole("button", { name: "Finish session" }).click();
+
+    // The time-only log door (handoff `LogDoor.dc.html`): `Just Row`, a
+    // meta line naming the TIMER door, TIME alone — no DISTANCE cell, no
+    // AVG SPLIT cell, no dash standing in for either. The TIME figure is at
+    // least the three seconds stood on the clock above: `0:00` here would
+    // mean ▶ froze nothing (criterion 1's shape at this layer).
+    await expect(page).toHaveURL(/\/justrow\/log$/);
+    await expect(page.getByRole("heading", { name: "Just Row" })).toBeVisible();
+    await expect(page.locator(".justrow-meta")).toContainText("TIMER");
+    await expect(page.getByText("TIME", { exact: true })).toBeVisible();
+    await expect(page.locator(".justrow-log-numvalue")).toHaveText(
+      /^0:(0[3-9]|[1-5]\d)$/,
+    );
+    await expect(page.getByText("DISTANCE")).toHaveCount(0);
+    await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
+    await expect(page.getByText("—")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Save this row" }).click();
+
+    // History (handoff `History.dc.html`, criterion 4): the row wears the
+    // JR chip on its own class, no `.type-badge`, and NO second line — a
+    // row with no avg split and no distance gets no hero snippet
+    // (`LogRow.heroSnippet` returns ""). A fresh backdoor user's history
+    // holds only this row, so every count below is about it.
+    await expect(page).toHaveURL(/\/today\/log$/);
+    const row = page.locator(".today-log-row", { hasText: "Just Row" });
+    await expect(row).toHaveCount(1);
+    await expect(row.locator(".free-row-chip")).toHaveText("JR");
+    await expect(row.locator(".type-badge")).toHaveCount(0);
+    await expect(row.locator(".today-log-hero")).toHaveCount(0);
+
+    // The detail (handoff `Detail.dc.html`, criterion 3): the meta line
+    // reads `SEP 2 · hh:mm · TIMER` from the stored `source` column (never
+    // inferred from steps — criterion 3d), and the heroes are TIME alone:
+    // no AVG SPLIT, no DISTANCE, and no INTERVALS because `steps` is `[]`.
+    await row.click();
+    await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+    await expect(page.locator(".summary-meta")).toContainText("· TIMER");
+    await expect(page.locator(".summary-hero-label")).toHaveText(["TIME"]);
+    await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
+    await expect(page.getByText("DISTANCE")).toHaveCount(0);
+    await expect(page.getByText("INTERVALS")).toHaveCount(0);
   });
 });

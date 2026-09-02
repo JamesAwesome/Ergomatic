@@ -90,6 +90,9 @@ function logInput(overrides: Partial<LogInput> = {}): LogInput {
     pain: 2,
     notes: null,
     steps: [],
+    // Just Row unconnected spec (2026-09-02): NOT NULL on the row, so the
+    // helper states it; `[]` steps and no device is a by-hand row.
+    source: "manual",
     // Task 3: true is the pre-Task-3 behavior every existing case in this
     // suite already assumes (every log here bumps done_n) — cases that
     // exercise the new `false` arm override it explicitly.

@@ -244,10 +244,11 @@ so we build the RFC 8252 shape:
      the app's own Keychain bearer**, and the server checks the caller's
      id against the attempt's before exchanging.
    - **Web (Branch A)** completes through the EXISTING `/api/concept2/callback` —
-     unauthenticated today, per `server/routes/concept2.ts:174`'s own
-     "NO requireUser — the nonce correlates, not binds" comment (corrected
-     fix round 15), which describes the PRE-RULING shape, not the
-     target — gaining the same
+     unauthenticated today, per the "NO requireUser — the nonce correlates,
+     not binds" comment then at `:174` (corrected fix round 15), which
+     describes the PRE-RULING shape, not the
+     target (comment retired at PR1.75a; the callback is now
+     cookie-authenticated) — gaining the same
      caller-identity check via the `erg_session` cookie that already
      exists for web sessions (`server/auth/cookies.ts`) and is already
      delivered on C2's redirect back to our own first-party origin: "a
@@ -297,7 +298,8 @@ so we build the RFC 8252 shape:
    new Ergomatic account, not a current holder's standing to act
    (`signin.ts:30-42`), and "one live attempt per user" is best-effort
    and raceable under concurrent mints, not enforced (gate doc §1,
-   corrected fix round 15) — not the "four real bounds" of equal weight
+   corrected fix round 15 — now ENFORCED at PR1.75a, migration 0021) —
+   not the "four real bounds" of equal weight
    an earlier revision of this bullet claimed, and not the two the
    original "SUSPECTED" framing named either.** **REAFFIRMED (James,
    2026-09-01) on this corrected picture** — the correction narrowed the
@@ -425,9 +427,10 @@ at exchange. Exists because the browser hop carries no credential; the
 nonce correlates the return to the attempt, and — this is the ACCEPTED
 DARK IMPLEMENTATION, not the ruled target — nothing today checks WHO is
 completing it, which is exactly the account-injection residual the
-design-gate ruling accepts for the dark plumbing. **TARGET (UNBUILT
-ACTIVATION SHAPE — PR1.75's job, no migration exists yet for any of
-this): add a `surface` column** (`"native"` | `"web"`, corrected fix
+design-gate ruling accepts for the dark plumbing. **TARGET, server half
+BUILT at PR1.75a (migration 0021,
+`2026-09-02-concept2-pr175-app-bind-design.md` §2): the `surface`
+column** (`"native"` | `"web"`, corrected fix
 round 15 — an earlier revision of this row said the column was "added
 PR1.5 fix round 13"; round 13 was a docs-only reconciliation pass, and no
 drizzle migration on this branch has ever touched `app/drizzle`
@@ -442,7 +445,9 @@ for one surface cannot complete on the other, gate doc §3(g) round 10)
 ships it. Until then, `attempt.userId === req.user.id` at an
 authenticated completion — the thing that actually BINDS the principal,
 as opposed to the nonce, which only CORRELATES the return — does not
-exist on either completion route.
+exist on either completion route — **as of PR1.75a it exists on both**
+(route-local cookie resolver on the web callback; bearer on
+`POST /exchange`); what remains is the native return (PR1.75b).
 
 **`session_logs` additions**, all additive-optional, no default, no
 backfill (house pattern):
@@ -570,14 +575,15 @@ rather than inferred:**
   the ACCEPTED DARK IMPLEMENTATION the design-gate ruling accepts the
   residual for — nonce-only, no principal-binding identity check on
   either completion route. Deployed prod behavior: unchanged.
-- **After PR1.75:** the ruled activation shape exists end-to-end — the
-  `surface` column and migration, the native URL scheme + `appUrlOpen`
-  handler and its authenticated exchange route, and the identity check
-  (`attempt.userId === req.user.id` before token exchange) retrofitted
-  onto the existing web callback. This is option (g), fully implemented;
-  it is what the design-gate ruling's hard precondition names, and it is
-  what makes `C2_LINK_ENABLED=1` on a real cohort even possible to
-  consider. Deployed prod behavior: unchanged (still flag-off).
+- **After PR1.75a:** the server side of the ruled activation shape —
+  migration 0021 (`surface`, `UNIQUE(user_id)`, `UNIQUE(c2_user_id)`),
+  the cookie-authenticated web callback and the bearer-authenticated
+  `POST /api/concept2/exchange`, `authVia`, the styled pages. **After
+  PR1.75b:** the native return via `ASWebAuthenticationSession`
+  (design §4 — not a URL scheme + `appUrlOpen` handler, which stays
+  recorded as the Branch-B contingency), the PR1.5 return-arm
+  retirement, the device walk. Deployed prod behavior after both:
+  unchanged while dark.
 - **After PR2:** the surface renders ONLY when the server reports
   `available:true`; prod stays dark until BOTH write approval is
   confirmed AND PR1.75's option (g) is fully implemented (§Architecture
@@ -650,6 +656,12 @@ safe; the flag, not PR ordering, is the safety mechanism.
   (gate doc, corrected fix round 15 — PR0's receipt measured the web
   callback only). Sequenced PR1.5 → PR1.75 → PR2. Gates
   `C2_LINK_ENABLED=1` on any real cohort (gate doc §6).
+  **Superseded 2026-09-02 (`2026-09-02-concept2-pr175-app-bind-design.md`):
+  this bullet's "native URL scheme + `appUrlOpen` handler" is NOT PR1.75's
+  mechanism — the native return rides `ASWebAuthenticationSession`
+  instead (design §4; the scheme-handler shape is kept on record as the
+  Branch-B contingency). PR1.75 also split into PR1.75a (server, BUILT)
+  and PR1.75b (native, not yet built).**
 - **PR2 — client (after Gate 0):** You card, send affordance and states,
   api client additions. `pnpm e2e` + screenshots (RF1); per-file coverage
   (RF2); realistic fixtures (RF3).

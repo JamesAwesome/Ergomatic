@@ -1,9 +1,9 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import AppRoutes, { hidesTabBar } from "./AppRoutes";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import AppRoutes, { CompleteRedirect, hidesTabBar } from "./AppRoutes";
 import { buildDraft, saveDraft, startDraft } from "../session/draft";
-import { buildRun } from "../session/engine";
+import { buildFreeRowRun, buildRun } from "../session/engine";
 import { saveRun } from "../session/run";
 
 vi.mock("../library/Library", () => ({
@@ -428,6 +428,50 @@ describe("/session/complete redirect shim", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
+  });
+
+  // Just Row without the monitor (spec 2026-09-02 ⟨F9⟩): a completed
+  // free-row run belongs to the Just Row log door. Rendered in ISOLATION
+  // with stub routes — see the export's own comment for why the full
+  // shell cannot tell this arm from the no-run arm yet.
+  describe("a completed mode-justrow run (no draft)", () => {
+    function renderShim() {
+      return render(
+        <MemoryRouter initialEntries={["/session/complete"]}>
+          <Routes>
+            <Route path="/session/complete" element={<CompleteRedirect />} />
+            <Route path="/session/log" element={<p>SUMMARY SCREEN</p>} />
+            <Route path="/justrow/log" element={<p>JUST ROW LOG SCREEN</p>} />
+            <Route path="/today" element={<p>TODAY SCREEN</p>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    }
+
+    it("redirects to /justrow/log, never the workout summary", async () => {
+      const run = buildFreeRowRun(new Date("2026-09-02T12:00:00.000Z"));
+      saveRun({
+        ...run,
+        index: 1,
+        actuals: {
+          0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 754 },
+        },
+        completedAt: "2026-09-02T12:12:34.000Z",
+      });
+
+      renderShim();
+
+      expect(await screen.findByText("JUST ROW LOG SCREEN")).toBeVisible();
+      expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
+    });
+
+    it("a LIVE free-row run (mid-row deep link) still redirects to /today", async () => {
+      saveRun(buildFreeRowRun(new Date("2026-09-02T12:00:00.000Z")));
+
+      renderShim();
+
+      expect(await screen.findByText("TODAY SCREEN")).toBeVisible();
+    });
   });
 });
 

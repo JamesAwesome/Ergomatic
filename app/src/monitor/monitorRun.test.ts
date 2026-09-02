@@ -139,6 +139,7 @@ function decodeActual(
 function fakeSessionRun(completedAt: string | null): SessionRun {
   return {
     v: 1,
+    mode: "workout",
     workoutId: "sr-workout-id",
     title: "Some Session",
     phases: [],

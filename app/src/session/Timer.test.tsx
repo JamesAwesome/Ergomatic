@@ -12,7 +12,7 @@ import {
   startDraft,
   type SessionDraft,
 } from "./draft";
-import { buildRun, type EnginePhase } from "./engine";
+import { buildFreeRowRun, buildRun, type EnginePhase } from "./engine";
 import { loadRun, saveRun, type SessionRun } from "./run";
 import {
   atRuleBodies,
@@ -216,6 +216,7 @@ async function renderTimer(initialPath = "/session/run") {
         <Route path="/session/run" element={<Timer />} />
         <Route path="/today" element={<p>TODAY SCREEN</p>} />
         <Route path="/session/log" element={<p>SUMMARY SCREEN</p>} />
+        <Route path="/justrow/log" element={<p>JUST ROW LOG SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -1122,10 +1123,11 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
     expect(screen.getByText("STEP 5 OF 5 · WORK")).toBeInTheDocument();
     expect(screen.queryByText(/Keep split/)).not.toBeInTheDocument();
     const saved = loadRun()!;
-    expect(saved.actuals[3]).toBeDefined();
-    expect(saved.actuals[3]!.elapsedSeconds).toBe(150);
-    expect(saved.actuals[3]!.splitSeconds).toBe(150); // (150/500)*500
-    expect(saved.actuals[3]!.actualSource).toBe("stopwatch");
+    expect(saved.actuals[3]).toStrictEqual({
+      actualSource: "stopwatch",
+      elapsedSeconds: 150,
+      splitSeconds: 150, // (150/500)*500
+    });
   });
 
   it("stages a Keep/Discard choice past 2x the estimate; Keep records the (suspect) actual and advances", async () => {
@@ -1146,9 +1148,11 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
 
     expect(screen.getByText("STEP 5 OF 5 · WORK")).toBeInTheDocument();
     const saved = loadRun()!;
-    expect(saved.actuals[3]).toBeDefined();
-    expect(saved.actuals[3]!.elapsedSeconds).toBe(250);
-    expect(saved.actuals[3]!.splitSeconds).toBe(250);
+    expect(saved.actuals[3]).toStrictEqual({
+      actualSource: "stopwatch",
+      elapsedSeconds: 250,
+      splitSeconds: 250,
+    });
   });
 
   // Fix round (spec review F3): staging the choice must FREEZE the
@@ -1173,8 +1177,11 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
     expect(screen.getByText("STEP 5 OF 5 · WORK")).toBeInTheDocument();
     const saved = loadRun()!;
     // The staged value (250s), NOT 250 + 30 = 280s.
-    expect(saved.actuals[3]!.elapsedSeconds).toBe(250);
-    expect(saved.actuals[3]!.splitSeconds).toBe(250);
+    expect(saved.actuals[3]).toStrictEqual({
+      actualSource: "stopwatch",
+      elapsedSeconds: 250,
+      splitSeconds: 250,
+    });
   });
 
   it("Discard records NO actual but still advances", async () => {
@@ -1281,8 +1288,11 @@ describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
 
     expect(screen.getByText("SUMMARY SCREEN")).toBeInTheDocument();
     const saved = loadRun()!;
-    expect(saved.actuals[1]!.elapsedSeconds).toBe(80);
-    expect(saved.actuals[1]!.splitSeconds).toBe(80); // (80/500)*500
+    expect(saved.actuals[1]).toStrictEqual({
+      actualSource: "stopwatch",
+      elapsedSeconds: 80,
+      splitSeconds: 80, // (80/500)*500
+    });
     expect(saved.completedAt).not.toBeNull();
   });
 
@@ -1965,5 +1975,231 @@ describe("index.css: the landscape leak is closed (spec §7, adversarial finding
         ]);
       }
     }
+  });
+});
+
+// Just Row without the monitor (spec 2026-09-02, §Mechanism piece 3; plan
+// Task 5). A `mode: "justrow"` run has NO draft behind it — the door saves
+// `buildFreeRowRun` and navigates straight here, skipping the Countdown —
+// so every branch this block pins is one the shipped workout path never
+// reaches: the draft-less guard, the run-named header, the `JUST ROW` step
+// slot, the `Free` target, the recorded actual, and the log-door route.
+describe("Timer — Just Row without the monitor (mode justrow, no draft)", () => {
+  // `toFake: ["Date"]` only — see "Timer — controls" above for why faking
+  // setInterval too hangs userEvent in this repo. Every clock reading below
+  // comes from `vi.setSystemTime` + a `visibilitychange` repaint, never
+  // from a timer advance: criterion 5's whole point is that the display is
+  // wall-clock arithmetic, not accumulated ticks.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  function heroText(): string {
+    return document.querySelector(".timer-time")?.textContent ?? "";
+  }
+
+  function targetSplitValue(): string {
+    // The TARGET SPLIT card is the first `.timer-card`; RATE is the second.
+    const cards = document.querySelectorAll(".timer-card");
+    return cards[0]?.querySelector(".timer-card-value")?.textContent ?? "";
+  }
+
+  function rateValue(): string {
+    const cards = document.querySelectorAll(".timer-card");
+    return cards[1]?.querySelector(".timer-card-value")?.textContent ?? "";
+  }
+
+  async function repaintAt(offsetMs: number) {
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + offsetMs));
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  }
+
+  it("renders with no draft at all (criterion 8, the handoff's strings): name Just Row, STEP slot exactly JUST ROW, TARGET SPLIT and RATE both Free, UP NEXT FINISH, no dash, no phase bar, no TOTAL LEFT", async () => {
+    mockKeepAwake();
+    saveRun(buildFreeRowRun(FIXED_NOW));
+    expect(loadDraft()).toBeNull();
+    await renderTimer();
+
+    expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
+    expect(document.querySelector(".timer-name")).toHaveTextContent(
+      /^Just Row$/,
+    );
+    // The step slot is the whole label — not "STEP 1 OF 1 · TEST", not
+    // "JUST ROW · TEST": the handoff's board draws the one word pair alone.
+    expect(document.querySelector(".timer-phase-label")?.textContent).toBe(
+      "JUST ROW",
+    );
+    expect(screen.queryByText(/STEP 1 OF 1/)).not.toBeInTheDocument();
+    expect(targetSplitValue()).toBe("Free");
+    expect(rateValue()).toBe("Free");
+    // The phase's own label ("Just Row") must not leak into the TARGET
+    // SPLIT card the way a test phase's "All out" does for a workout.
+    expect(screen.getAllByText("Free")).toHaveLength(2);
+    expect(upNextFullText()).toBe("FINISH");
+    expect(heroText()).toBe("0:00");
+    expect(screen.getByText("RUNNING")).toBeInTheDocument();
+    expect(document.querySelector(".timer-total")).not.toBeInTheDocument();
+    expect(document.querySelector(".timer-phase-bar")).not.toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Next phase" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "NEXT →" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("a WORKOUT run with no draft still redirects to /today — the draft-less guard opens only for mode justrow", async () => {
+    mockKeepAwake();
+    const run = buildRun(testKindDraft(), BASELINES, FIXED_NOW);
+    saveRun(run);
+    expect(loadDraft()).toBeNull();
+    await renderTimer();
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
+  // Exit criterion 5 (backgrounding): the display is wall-clock
+  // arithmetic against `phaseStartedAt`, never accumulated ticks — a run
+  // started ten minutes ago reads 10:00 on its FIRST paint, with no timer
+  // ever advanced (the interval is real and never fires in this test).
+  it("criterion 5: a run whose phaseStartedAt is 10 minutes in the past renders 10:00 on mount with zero ticks", async () => {
+    mockKeepAwake();
+    saveRun(buildFreeRowRun(new Date(FIXED_NOW.getTime() - 600_000)));
+    await renderTimer();
+
+    expect(heroText()).toBe("10:00");
+    expect(document.querySelector(".timer-elapsed-value")).toHaveTextContent(
+      "10:00",
+    );
+  });
+
+  // Exit criterion 1 / ⟨F10⟩: ▶ FREEZES the clock when it stages the
+  // finish confirm, so deliberating over "Finish this session?" cannot
+  // bank into the row. The recorded actual is the elapsed AT ▶ (12 s, an
+  // independent literal), not the elapsed at Finish (42 s).
+  it("▶ pauses the clock and stages Finish; 30 s later Finish session records { stopwatch-elapsed, 12 } (the elapsed at ▶), completes, and lands on /justrow/log", async () => {
+    mockKeepAwake();
+    saveRun(buildFreeRowRun(FIXED_NOW));
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 12_000));
+    await renderTimer();
+    expect(heroText()).toBe("0:12");
+
+    await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
+
+    expect(screen.getByText("Finish this session?")).toBeInTheDocument();
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+    expect(screen.queryByText("JUST ROW LOG SCREEN")).not.toBeInTheDocument();
+
+    // 30 s of deliberation: the display must not move.
+    await repaintAt(42_000);
+    expect(heroText()).toBe("0:12");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish session" }),
+    );
+
+    expect(screen.getByText("JUST ROW LOG SCREEN")).toBeInTheDocument();
+    expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
+    const stored = loadRun();
+    expect(stored?.completedAt).toBe(
+      new Date(FIXED_NOW.getTime() + 42_000).toISOString(),
+    );
+    expect(stored?.actuals).toStrictEqual({
+      0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 12 },
+    });
+  });
+
+  it("Keep going after ▶ resumes the clock it paused: elapsed advances again from where ▶ froze it", async () => {
+    mockKeepAwake();
+    saveRun(buildFreeRowRun(FIXED_NOW));
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 12_000));
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+    await repaintAt(42_000);
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+
+    expect(screen.queryByText("Finish this session?")).not.toBeInTheDocument();
+    expect(screen.getByText("RUNNING")).toBeInTheDocument();
+    expect(heroText()).toBe("0:12");
+    // 8 s more of rowing: 12 + 8, the 30 s of deliberation excluded.
+    await repaintAt(50_000);
+    expect(heroText()).toBe("0:20");
+    expect(loadRun()?.completedAt).toBeNull();
+    expect(loadRun()?.actuals).toStrictEqual({});
+  });
+
+  it("Keep going leaves a pause the ROWER chose before ▶ alone (the exact inverse of what ▶ did, same rule as END's)", async () => {
+    mockKeepAwake();
+    saveRun(buildFreeRowRun(FIXED_NOW));
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 12_000));
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+    await repaintAt(20_000);
+    await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
+    expect(screen.getByText("Finish this session?")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+    await repaintAt(30_000);
+    expect(heroText()).toBe("0:12");
+  });
+
+  it("Finish on a run the rower paused themselves records the elapsed at THAT pause, not at ▶", async () => {
+    mockKeepAwake();
+    saveRun(buildFreeRowRun(FIXED_NOW));
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 7_000));
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await repaintAt(25_000);
+    await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
+    await repaintAt(60_000);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish session" }),
+    );
+
+    expect(screen.getByText("JUST ROW LOG SCREEN")).toBeInTheDocument();
+    expect(loadRun()?.actuals).toStrictEqual({
+      0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 7 },
+    });
+  });
+
+  it("a completed justrow run on mount goes to /justrow/log, never the workout summary", async () => {
+    mockKeepAwake();
+    const run = buildFreeRowRun(FIXED_NOW);
+    saveRun({
+      ...run,
+      index: 1,
+      actuals: { 0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 9 } },
+      completedAt: new Date(FIXED_NOW.getTime() + 9_000).toISOString(),
+    });
+    await renderTimer();
+
+    expect(await screen.findByText("JUST ROW LOG SCREEN")).toBeInTheDocument();
+    expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
+  });
+
+  it("END → Abandon session clears the run and lands on Today (no log, no actual)", async () => {
+    mockKeepAwake();
+    saveRun(buildFreeRowRun(FIXED_NOW));
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Abandon session" }),
+    );
+
+    expect(screen.getByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(loadRun()).toBeNull();
   });
 });
