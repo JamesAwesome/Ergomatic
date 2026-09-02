@@ -5130,3 +5130,76 @@ same way.
   child-count assertion on `.today-log-row` exists in any of the six e2e specs.
   The wall-clock claim is deterministic and correct (`engine.ts:104-110`,
   `Timer.tsx:420-423`).
+
+### 2026-09-02 — Wave E PR1.75 design (full option (g)), anchor-class TRIAD pass
+
+- **CLAIM:** "native fetches are cross-origin with default credentials, so the
+  WebView's cookie jar never rides" — used to justify a `400 ambiguous_auth`
+  in `requireUser`. **FALSE AS REASONED.** `capacitor.config.ts` enables
+  `CapacitorHttp`, so `native-bridge.js:454-475` replaces `window.fetch`:
+  POST goes to native `URLSession` (`CapacitorUrlRequest.swift:239-245`), GET
+  to a proxy also on `URLSession.shared` (`WebViewAssetHandler.swift:142`).
+  Both use `HTTPCookieStorage.shared` with `httpShouldHandleCookies` true;
+  `credentials` and origin are never consulted. **TECHNIQUE: when a claim
+  names a WEB API's behaviour inside a native shell, read the shell's own
+  bridge source for a patch of that API before believing the web semantics.**
+  Corollary: the conclusion may still hold while the mechanism is wrong —
+  which is worse, because the invariant is then held up by nothing anyone
+  wrote down.
+- **CLAIM:** the same rule is a safe loud-failure. **FALSE.** The 400 lives in
+  `requireUser`, mounted `router.use("/api", requireUser)` at
+  `routes/data.ts:826` and on `/api/me` — so an unreachable-state refusal is a
+  TOTAL native lockout with no in-app recovery, for zero security gain
+  ("bearer wins" is safe: an attacker supplying a bearer is already themselves).
+  **TECHNIQUE: for any new refusal added to shared middleware, grep every
+  `router.use` of it and price the blast radius before pricing the case.**
+- **CLAIM:** "mutation: drop the unique index → the race test shows two rows."
+  **CANNOT BITE (RF21).** Proven on real Postgres: without the index the upsert
+  raises `there is no unique or exclusion constraint matching the ON CONFLICT
+  specification` — every mint dies trivially and the test proves only that the
+  index exists. The biting mutation is on the STATEMENT (upsert → delete+insert),
+  measured at 2 rows. **TECHNIQUE: for a mutation on a DB constraint, run it —
+  a constraint an ON CONFLICT clause NAMES is a syntax dependency, not just a
+  behavioural one.**
+- **CLAIM (implicit):** `NOT NULL surface` is a safe additive migration.
+  **FALSE.** Proven: the rollback image's `createAttempt`
+  (`stores/concept2.ts:159-165`) omits the column → `null value in column
+  "surface" … violates not-null constraint`; every mint 500s after a rollback.
+  **TECHNIQUE: run the PREVIOUS image's exact INSERT against the NEW schema.
+  "Additive" is about readers; rollback is about writers.**
+- **CLAIM:** the native mechanism is "~60 lines". **INCOMPLETE.**
+  `presentationContextProvider` (iOS 13+) is required —
+  `ASWebAuthenticationSessionError.presentationContextNotProvided` is a
+  documented case — and the design named it zero times, while the plugin
+  already in `node_modules` sets it twice. **TECHNIQUE: for a new OS API, read
+  its ERROR ENUM, not just its initializer; a dedicated error case is the
+  vendor telling you which step is mandatory.**
+- **CLAIM:** no existing plugin offers this. **UNDER-CHECKED, conclusion
+  survived.** `@capgo/capacitor-social-login@8.4.4` — already a dependency —
+  exposes `provider:'oauth2'` on `ASWebAuthenticationSession`, but its
+  `OAuth2LoginResponse` has no `code` field and it exchanges in-app with PKCE
+  on. **TECHNIQUE: run the does-it-exist question against `package.json`
+  FIRST, not just against npm; the design evaluated an uninstalled package and
+  missed the installed one.**
+- **CORPUS FACT WITH AN EXPIRY DATE, again:** "migration 0019" was free when
+  the number was chosen and taken by the time it was written
+  (`drizzle/0019_happy_virginia_dare.sql`, Phase JR, on main). **TECHNIQUE:
+  `ls` the migration directory in the same pass that writes the index.**
+- **TRIPWIRE STEPPED OVER, third instance:** the `dist:grep` bullet reinstated
+  the exact "the native module folds out" overclaim that
+  `adapters/externalBrowser.ts:4-23` retracts in its own header, in the file
+  the bullet is about. **TECHNIQUE: before writing a claim about a module,
+  read that module's own header comment — this repo's retractions live there.**
+- **HELD, and worth recording as ground:** C2's token endpoint requires
+  `client_secret` (PRIMARY, their parameter table) and documents no PKCE, so an
+  intercepted code is unredeemable without our server or the victim's bearer;
+  `SameSite=Lax` IS sent on a cross-site top-level GET redirect
+  (rfc6265bis §5.8.3's four conditions, all satisfied); the upsert serializes
+  concurrent mints to exactly one row (PROVEN); and posting the mint's own
+  `state` genuinely dissolves the native echo dependency — which matters more
+  than the design knew, since Concept2 documents `state` NOWHERE.
+- **NEW GENERAL RULE FROM THIS PASS:** an interception INFERENCE should be
+  attacked in three legs, not one — can the holder REDEEM it (no), can they
+  DENY it to the victim (yes, here: consume preceded the identity check on
+  both routes), and does the design NAME the second. Unredeemable is not
+  harmless. Rev 2 moved identity/surface checks BEFORE consume on both routes.

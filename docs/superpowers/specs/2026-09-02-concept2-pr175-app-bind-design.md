@@ -1,13 +1,14 @@
 # Wave E PR1.75 — full option (g): the authenticated activation shape (design)
 
-**Date:** 2026-09-02 · **Status:** DRAFT — settled for the antagonist pass and
-James's approval BEFORE any implementation (the PR1.5 lesson: 16 review rounds,
-almost all docs chasing a ruling that moved mid-flight; this time the design is
-final first). **Wave:** E · **Risk class:** TRIAD — AUTH (the principal-binding
-routes) + a STORED SHAPE (`surface` column, `UNIQUE(user_id)`, migration 0019).
-**Parent:** `2026-08-31-concept2-logbook-design.md` §Architecture 1-3 (ruled
-activation contract) and `2026-09-01-concept2-pr15-gate.md` §3(g)/§6 (the ruling
-this PR discharges). Sequenced PR1.5 → **PR1.75** → PR2.
+**Date:** 2026-09-02 · **Status:** REV 2 — the antagonist's full TRIAD pass
+(verdict REVISE, 2026-09-02) is folded in as a rewrite, not as layered
+corrections; rev 1's superseded claims are gone, not annotated. Awaiting James's
+approval BEFORE any implementation (the PR1.5 lesson). **Wave:** E · **Risk
+class:** TRIAD — AUTH (the principal-binding routes) + a STORED SHAPE (`surface`
+column, `UNIQUE(user_id)`, **migration 0020** — 0019 is Phase JR's on main).
+**Parent:** `2026-08-31-concept2-logbook-design.md` §Architecture 1-3 and
+`2026-09-01-concept2-pr15-gate.md` §3(g)/§6 (the ruling this PR discharges).
+Sequenced PR1.5 → **PR1.75** → PR2.
 
 ## What and why
 
@@ -21,299 +22,388 @@ Concept2 account attached to the attacker's Ergomatic user. This PR builds the
 ruled fix — both completion paths authenticate the completing principal and refuse
 to exchange the code unless `attempt.userId === req.user.id`; every attempt
 records which surface minted it and can only complete on that surface; and mint
-becomes atomic and one-per-user. When it merges, the ruling's hard precondition is
-met on the code side; the flag flip still waits on Concept2's write approval and
+becomes atomic and one-per-user. When it merges the ruling's code-side
+precondition is met; the flag flip still waits on Concept2's write approval and
 PR2's surface.
+
+## GO/NO-GO, settled first
+
+The whole per-surface design needs Concept2 to accept TWO redirect URIs on one
+application. Their docs say "your redirection endpoint", singular. **MEASURED
+2026-09-02 (James, log-dev portal):** the Callback-endpoints page carries an
+"Add Endpoint +" control and accepted `haus.waffle.ergomatic://oauth/callback`
+beside the existing https callback — multiple endpoints per application are
+supported. GO. (The https web callback must remain registered alongside it; the
+operator confirms both rows exist before the walk.)
 
 ## Research record (PRIMARY unless tagged)
 
-- **RFC 8252 §7.1** (private-use schemes): apps *"MUST use a URI scheme based on a
-  domain name under their control, expressed in reverse order"*; and the
-  limitation — *"multiple apps can typically register the same scheme, which makes
-  it indeterminate as to which app will receive the authorization code."*
-  **§8.1:** *"Public native app clients MUST implement the Proof Key for Code
-  Exchange (PKCE)."* **§8.12:** native apps *"MUST NOT use embedded user-agents to
-  perform authorization requests."* **§8.9:** `state` RECOMMENDED against
-  cross-app request forgery.
-- **Apple, `ASWebAuthenticationSession`** (developer.apple.com, fetched via the
-  docs JSON API): *"ASWebAuthenticationSession ensures that only the calling app's
-  session receives the authentication callback, even when more than one app
-  registers the same callback URL scheme."* On iOS *"the browser is a secure,
-  embedded web view"* presented after *"a modal view telling them which domain the
-  app is authenticating with."* `prefersEphemeralWebBrowserSession` — *"whether
-  the session should ask the browser for a private authentication session."*
-- **Capacitor App plugin:** `appUrlOpen` — *"Listen for url open events for the
-  app. This handles both custom URL scheme links…"*; custom schemes require
-  `CFBundleURLTypes` in Info.plist (the Google reversed-client-ID scheme already
-  registered there is the in-repo precedent).
+- **Concept2 OAuth reference** (`log.concept2.com/developers/documentation`):
+  `POST /oauth/access_token` parameter table — **`client_secret` Required: Yes**
+  for `authorization_code`; `redirect_uri` — *"This must match the value sent in
+  the call to oauth/authorize."*; **`PKCE` / `code_challenge`: zero occurrences**
+  in the whole document; **`state`: zero occurrences** — it is an undocumented
+  pass-through. PR0 measured `state` echoed on the HTTPS callback; on a
+  private-use-scheme redirect it is UNMEASURED. This design depends on neither
+  (§6).
+- **RFC 8252** §7.1: apps *"MUST use a URI scheme based on a domain name under
+  their control, expressed in reverse order"*; *"multiple apps can typically
+  register the same scheme, which makes it indeterminate as to which app will
+  receive the authorization code."* §8.1: PKCE *"MUST"* for **public** native
+  clients. §8.12: no embedded user-agents. §8.9: `state` RECOMMENDED.
+- **Apple, `ASWebAuthenticationSession`:** *"ASWebAuthenticationSession ensures
+  that only the calling app's session receives the authentication callback, even
+  when more than one app registers the same callback URL scheme."* Requires a
+  **`presentationContextProvider`** (iOS 13+) — `ASWebAuthenticationSessionError`
+  carries a dedicated `presentationContextNotProvided` case: *"A context wasn't
+  provided."* The session object must be **retained** for the flow's duration or
+  its completion never fires. `prefersEphemeralWebBrowserSession` (iOS 13+):
+  *"When not using an ephemeral session, all cookies except session cookies are
+  available to the browser."* Availability floor: `IPHONEOS_DEPLOYMENT_TARGET =
+  15.0` (`project.pbxproj:239`); the class is iOS 12, both properties iOS 13 —
+  safe. The newer `Callback`/`Callback.https` API is iOS 17.4 and is NOT used;
+  the string `callbackURLScheme` initializer is deprecated at iOS 27 (forward
+  note, not a floor issue). Info.plist `CFBundleURLTypes` is NOT required for the
+  session to capture its callback scheme — SECONDARY: Apple's "Authenticating a
+  User Through a Web Service" walkthrough never mentions it, and an Apple Systems
+  Engineer states it on the developer forums (thread 679251); registering the
+  scheme anyway is the recorded no-cost fallback if the walk shows the redirect
+  escaping the session.
+- **Cookies on a cross-site top-level GET** (rfc6265bis §5.8.3): a `Lax` cookie is
+  sent when the request *"uses a 'safe' method"* and the target *"is a top-level
+  traversable"*; §5.6.7.1 evaluates safeness per redirect hop. A C2 302 → our GET
+  callback satisfies all conditions in Safari/iOS and Firefox. Brave: no primary
+  source found; not asserted.
+- **Capacitor, native networking — the mechanism the both-present rule rests on:**
+  `capacitor.config.ts` enables `CapacitorHttp`, so on iOS `native-bridge.js`
+  replaces `window.fetch`: POST/PUT/PATCH/DELETE go through the native
+  `URLSession` (`CapacitorUrlRequest.swift`), GET/HEAD through a proxy also on
+  `URLSession.shared` (`WebViewAssetHandler.swift`). `URLSession` reads and
+  writes **`HTTPCookieStorage.shared`** with `httpShouldHandleCookies` true — the
+  WebView's origin and `fetch`'s `credentials` mode are never consulted. Cookie
+  attachment on native is governed by the shared native jar, and whether
+  `erg_session` for the API origin can ever land in it is **UNMEASURED** (no
+  supported producer found: `/api/auth/native` sets no cookie; signout's
+  `clearSessionCookie()` is the only `Set-Cookie` a native client receives). The
+  walk instruments it (§Testing).
 - **Capacitor custom native code** (capacitorjs.com/docs/ios/custom-code): a
-  Swift `CAPPlugin, CAPBridgedPlugin` class with `@objc` methods taking
-  `CAPPluginCall`, registered in a view-controller subclass's
-  `capacitorDidLoad()` via `bridge?.registerPluginInstance(...)`, called from JS
-  through `registerPlugin('<jsName>')`. No npm package needed.
-- **`@capacitor-community/generic-oauth2`** (7.1.0, a `capacitor8` dist-tag
-  exists, peer `@capacitor/core >=8.0.0`): its iOS presenter is
-  `SafariURLHandler` (`GenericOAuth2Plugin.swift:289`) + an
-  `SFSafariViewControllerDelegate` — i.e. SFSafariViewController plus a custom
-  scheme, NOT `ASWebAuthenticationSession`. It supports code-only return
-  (`responseType=code`, no `accessTokenEndpoint`), but it does not provide the
-  calling-session guarantee. **Ruled out** for that reason (see Native return).
-- **Concept2 (anchor ground, PR0 measured):** `client_secret` is required at the
-  token endpoint (our server holds it — a CONFIDENTIAL client); **no PKCE is
-  documented** (nothing found on the official page); `redirect_uri` must match the
-  authorize call; their own token-endpoint example uses
-  `myiphoneapp://oauth/callback`, so a private-use scheme is an accepted
-  `redirect_uri` shape; `state` is echoed on the HTTPS callback (measured).
-  Native-scheme echo: UNMEASURED (below, made non-load-bearing).
+  Swift `CAPPlugin, CAPBridgedPlugin` with `@objc` methods, registered in a
+  view-controller subclass's `capacitorDidLoad()` via
+  `bridge?.registerPluginInstance(...)`; the storyboard's controller is
+  `CAPBridgeViewController` (`Base.lproj/Main.storyboard:14`), so the subclass
+  route applies. SPM project (no Podfile): the new Swift file also needs a
+  `project.pbxproj` file reference — manual, conflict-prone, named as a cost.
+- **Does an existing plugin already do this?** Two checked, both ruled out:
+  `@capacitor-community/generic-oauth2` (7.1.0, `capacitor8` tag exists) presents
+  through `SafariURLHandler` — SFSafariViewController + scheme, no
+  calling-session guarantee (`GenericOAuth2Plugin.swift:289`).
+  **`@capgo/capacitor-social-login@8.4.4` — ALREADY A DEPENDENCY** — exposes
+  `provider:'oauth2'` on `ASWebAuthenticationSession` (its `OAuth2Provider.swift`
+  sets `presentationContextProvider`, twice), but its `OAuth2LoginResponse` has
+  no `code` field, `responseType:'code'` requires an in-app `accessTokenEndpoint`
+  (the secret would live in the app), and `pkceEnabled` defaults on against a
+  server with no PKCE. Unusable for a server-side confidential exchange. Build a
+  local plugin.
 - **In-repo:** bundle id `haus.waffle.ergomatic` (`project.pbxproj:321`), prod
-  origin `https://ergomatic.waffle.haus` (`docs/deploy.md:96`) — so the RFC 8252
-  reverse-domain scheme is exactly `haus.waffle.ergomatic`. `api.ts:14-17`: native
-  attaches ONLY an `Authorization: Bearer` header; web relies ONLY on the
-  same-origin `erg_session` cookie (`SameSite=lax`, `cookies.ts:20-29`);
-  `requireUser` (`middleware.ts:46-69`) resolves `bearer ?? cookie` and today
-  discards which one matched.
+  origin `https://ergomatic.waffle.haus` (`docs/deploy.md:96`) — the RFC 8252
+  reverse-domain scheme is exactly `haus.waffle.ergomatic`. `api.ts:14-17`:
+  native attaches an `Authorization: Bearer` header; web relies on the same-origin
+  `erg_session` cookie (`SameSite=lax`, `cookies.ts:20-29`). `requireUser`
+  (`middleware.ts:46-69`) resolves `bearer ?? cookie` and discards which matched;
+  it is mounted over the WHOLE API (`routes/data.ts` `router.use("/api",
+  requireUser)`) and on `/api/me` — any refusal added there is app-wide.
 
-**One INFERENCE, labelled, that the antagonist should attack:** because the
-server is the confidential client and the app never redeems a code, an
-authorization code intercepted by another app registering our scheme is
-UNREDEEMABLE by that app — Concept2's token endpoint needs `client_secret` (server
-only) and our `/exchange` needs the victim's Keychain bearer. Interception is
-therefore a privacy leak of `(code, state)`, not a principal-binding break. RFC
-8252's PKCE mandate targets PUBLIC clients that redeem their own codes; it does
-not describe our topology. This is why the native return mechanism is chosen on
-UX/robustness grounds below, with the calling-session guarantee as
-defence-in-depth rather than the load-bearing control.
+**Interception, three legs (PRIMARY):** a third app registering our scheme can
+receive `(code, state)`. It cannot **redeem** the code — Concept2's exchange needs
+`client_secret` (server only) and our `/exchange` needs the victim's bearer. It
+CAN, if it also holds any Ergomatic session, **deny** the victim: presenting the
+pair to either completion route with the wrong identity. §5/§6 therefore check
+identity BEFORE consuming the attempt, so a wrong-principal presentation burns
+nothing and the rightful user's attempt survives. Unredeemable is not harmless;
+the design names the second leg and closes it.
 
 **Does the underlying system have the concept?** Yes for every piece: "which
-credential authenticated this request" is a real property of every request
-(bearer vs cookie); "callback delivered only to the calling app" is an iOS
-primitive (`ASWebAuthenticationSession`); "one attempt per user" is a database
-invariant (`UNIQUE`). Nothing is invented on the system's behalf.
+credential authenticated this request" is a property of every request;
+"callback delivered only to the calling app" is an iOS primitive; "one attempt per
+user" is a database invariant. Nothing is invented on the system's behalf.
 
 ## The design
 
-### 1. Surface authority is SERVER-DERIVED — the client never says which surface it is
+### 1. Surface authority is SERVER-DERIVED; both-present is resolved, not refused
 
-`requireUser` gains one line of memory: it sets `req.authVia = "bearer" | "cookie"`
-according to which credential it actually resolved. **Both-present rule:** if a
-request carries BOTH a bearer and an `erg_session` cookie, `requireUser` answers
-`400 {error: "ambiguous_auth"}` and resolves nothing — a well-behaved client
-never sends both (native fetches are cross-origin with default credentials, so
-the WebView's cookie jar never rides; web never holds a bearer), so both-present
-is a forged or broken request, refused loudly rather than silently preferring one.
-Mint records `surface = authVia === "bearer" ? "native" : "web"`. No new request
-field, no client-asserted surface, nothing for an attacker to choose.
+`requireUser` sets `req.authVia = "bearer" | "cookie"` — request-lifetime, never
+persisted — according to which credential it resolved. A cookie whose value is
+the empty string (what `clearSessionCookie()` leaves behind) counts as ABSENT.
+**Both-present rule (the gate doc's own named resolution, §3(g) round 16):
+bearer wins** — native is the only consumer that carries one, and an attacker who
+supplies their own bearer gains nothing by also supplying a cookie. **Refusal is
+reserved for genuine DISAGREEMENT:** both credentials present AND resolving to
+DIFFERENT users → `400 {error:"ambiguous_auth"}`. Two valid sessions for two
+people on one request is a broken or forged client, refused loudly; the
+common "both present, same user" case cannot lock anyone out. Mint records
+`surface = authVia === "bearer" ? "native" : "web"`; no client-asserted surface
+exists for an attacker to choose. `neither present → 401` is unchanged and is in
+the test list.
 
-### 2. Stored shape (TRIAD) — migration 0019
+### 2. Stored shape (TRIAD) — migration 0020
 
 `concept2_auth_attempts` gains:
 
 | column | type | notes |
 | --- | --- | --- |
-| `surface` | `pgEnum link_surface ('native','web')`, NOT NULL | which caller minted the attempt; enforced at BOTH completion routes |
-| — | `UNIQUE (user_id)` | one live attempt per user, ENFORCED (the PR1.5 ruling's "best-effort/raceable" bound becomes real) |
+| `surface` | `pgEnum link_surface ('native','web')`, **NOT NULL DEFAULT 'web'** | the default exists for ROLLBACK, not for writes: the PR1.5 image's `createAttempt` inserts no `surface`, and a plain `NOT NULL` would make every mint 500 after a rollback (proven against real Postgres at the antagonist pass). New code always writes it explicitly. |
+| — | `UNIQUE (user_id)` | one live attempt per user, ENFORCED — the bound the PR1.5 ruling called "best-effort/raceable" becomes real |
 
-Migration: attempts are disposable 15-minute rows, so 0019 first `DELETE`s every
-existing attempt (never a backfill — any in-flight link at deploy time restarts at
-mint, which is already the retry story), then adds the enum, the NOT NULL column,
-and the unique index. Additive to every other table; nothing reads attempts but
-these two routes.
+Migration 0020 first `DELETE`s every existing attempt (15-minute disposable rows;
+an in-flight link at deploy restarts at mint, already the retry story), then adds
+the enum, the column, and the unique index. Additive to every other table.
 
-**Mint becomes one atomic statement:** `INSERT … ON CONFLICT (user_id) DO UPDATE
-SET nonce = excluded.nonce, surface = excluded.surface, weight_class =
-excluded.weight_class, created_at = now()`. Two concurrent mints serialize on the
-unique index — one inserts, the other updates — and exactly one attempt survives.
-`deleteAttemptsFor(userId)` retires; `deleteExpiredAttempts` stays as the sweep.
-`consumeAttempt` returns `surface` beside `userId`/`weightClass`.
+**Mint is one atomic statement:** `INSERT … ON CONFLICT (user_id) DO UPDATE SET
+nonce = excluded.nonce, surface = excluded.surface, weight_class =
+excluded.weight_class, created_at = now()`. Updating the PK in `DO UPDATE` is
+legal; two concurrent mints serialize on the unique index and exactly one row
+survives (PROVEN on real Postgres; the old delete-then-insert yields two). A new
+nonce colliding with another row's PK (32 random bytes — not worth designing
+around) surfaces as a unique violation on `attempts_pkey`: the route retries
+once with a fresh nonce, then 500s. `deleteAttemptsFor` retires;
+`deleteExpiredAttempts` stays as the sweep; the store gains `peekAttempt(nonce)`
+(read, no delete) beside `consumeAttempt`, and both return `surface`.
 
-**RF27 lifetime table — every session-scoped state this PR introduces:**
+**RF27 lifetime table — every state this PR introduces, as invariants:**
 
-| state | minted at | cleared at | survives app relaunch? | survives teardown/kill mid-hop? |
+| state | minted at | cleared at | survives relaunch? | survives kill mid-hop? |
 | --- | --- | --- | --- | --- |
-| attempt row (server, now with `surface`) | mint (upsert) | consume on EITHER route (single-use, before any identity check — a failed check burns it, retry restarts at mint); 15-min expiry sweep at the next mint; user delete cascade | yes (server-side); a relaunched app simply re-mints, the old row is replaced by the upsert | yes — an abandoned native consent leaves a row that expires or is replaced; nothing to clean client-side |
-| `state` held by the native app for the hop (§4) | returned by mint alongside `authorizeUrl` | completion (success, cancel, or error) of the `startNativeLink` promise | NO — in-memory only; kill → gone → user re-mints | n/a: nothing persisted, nothing to reconcile |
-| the `ASWebAuthenticationSession` itself | `startNativeLink` | its completion handler | no (OS tears it down with the app) | no |
+| attempt row (server; `surface`, one per user) | mint (upsert) | consume on EITHER route — only AFTER the identity/surface checks pass (§5/§6); 15-min sweep at the next mint; user cascade | yes (server); a relaunched app re-mints and the upsert replaces the row | yes — an abandoned consent leaves a row that expires or is replaced |
+| `state` held by the native app for the hop | returned by mint beside `authorizeUrl` | completion of `startNativeLink` (success, cancel, decline, error) | NO — in-memory; kill → gone → re-mint | n/a: nothing persisted |
+| **`linkInFlight` guard (client)** — at most ONE link attempt in flight per app instance | `startNativeLink` entry (refuses a second call with a typed `busy` result rather than minting again, which would replace the live attempt's nonce and orphan its session) | the same completion | NO | NO |
+| the `ASWebAuthenticationSession` object — **retained by the plugin** (a strong reference held until its completion handler runs; an unretained session deallocates and never calls back) | `start()` | its completion handler | no (OS) | no |
+| `req.authVia` | `requireUser` | end of request | n/a | n/a |
 
-Invariants, not mechanisms: one live attempt per user at any instant; an attempt
-completes at most once, and only on the surface that minted it, and only for the
-user that minted it; no client-side state outlives the promise that holds it.
+Invariants: one live attempt per user at any instant; an attempt is consumed at
+most once, only on its own surface, only by its own user, and never by a wrong
+principal's presentation; at most one link in flight per app instance; no
+client-side state outlives the promise that holds it.
 
 ### 3. Per-surface redirect, chosen at mint
 
 | surface | `redirect_uri` | registered at Concept2 |
 | --- | --- | --- |
-| web | `https://<SITE_URL>/api/concept2/callback` (existing) | already (PR1) |
-| native | `haus.waffle.ergomatic://oauth/callback` (RFC 8252 reverse-domain of `ergomatic.waffle.haus`) | **operator step:** register in the log-dev portal before the device walk, and in the live portal at cutover |
+| web | `https://<SITE_URL>/api/concept2/callback` | since PR1 (keep it registered beside the new one) |
+| native | `haus.waffle.ergomatic://oauth/callback` | log-dev: DONE 2026-09-02 (James); live portal: a cutover step beside write approval |
 
-Mint returns `{ authorizeUrl, state }` — `state` explicitly, not only embedded in
-the URL — so the native app holds the correlation value it will need at exchange
-without depending on Concept2 echoing it (§4). `client.authorizeUrl` and
-`client.exchangeCode` both take the surface's `redirect_uri` (Concept2 requires the
-exchange's `redirect_uri` to match the authorize call's; today the client hardcodes
-the web one).
+Mint returns `{ authorizeUrl, state }` — `state` explicit — so the native app holds
+the correlation value it will present at exchange (§6) without depending on an
+undocumented echo. `client.authorizeUrl` and `client.exchangeCode` both take the
+surface's `redirect_uri` (Concept2 requires the exchange's to match the
+authorize call's; today the client hardcodes the web one).
 
-### 4. Native completion — a local `ASWebAuthenticationSession` plugin, no scheme handler
+### 4. Native return — a local `ASWebAuthenticationSession` plugin
 
-**Chosen: option A.** A ~60-line Swift plugin in the app target (`WebAuthPlugin`,
-`jsName "WebAuth"`, registered in a new `MyViewController.swift` per the vendor
-recipe — the app currently has only `AppDelegate.swift`), exposing
-`start({ url, callbackScheme, ephemeral? }) → { callbackUrl }` (rejects
-`{ code: "cancelled" }` when the rower dismisses the system modal). JS mirror in
-`src/native/webAuth.ts` via `registerPlugin("WebAuth")`, reached only through a
-dynamic import in a new adapter `src/adapters/linkFlow.ts`:
+A Swift plugin in the app target (`WebAuthPlugin`, `jsName "WebAuth"`, registered
+in a new `MyViewController.swift` subclass of `CAPBridgeViewController` per the
+vendor recipe; storyboard class + `project.pbxproj` reference updated) exposing
+`start({ url, callbackScheme, ephemeral }) → { callbackUrl }`, rejecting with a
+typed `cancelled` when the rower dismisses. It **sets
+`presentationContextProvider`** (the bridge's view controller's window as the
+anchor), **retains the session** until completion, and passes `ephemeral`
+through. JS mirror `src/native/webAuth.ts` via `registerPlugin("WebAuth")`,
+reached only by dynamic import from a new adapter `src/adapters/linkFlow.ts`:
 
-- `startNativeLink({ authorizeUrl, state })`: opens the session with
-  `callbackScheme: "haus.waffle.ergomatic"`; on completion parses `code` (and
-  `state`, if present) from `callbackUrl`; **asserts callback `state === state`
-  when the callback carries one** (defence-in-depth, mismatch → refuse + log);
-  then `POST /api/concept2/exchange { code, state }` via `api()` (bearer attached)
-  and returns the JSON. The app posts the `state` IT HOLDS from mint, so the
-  server can locate the attempt whether or not Concept2 echoed `state` on the
-  scheme redirect — **native echo is EXPECTED, will be MEASURED at the walk, and is
-  no longer load-bearing** (the parent spec's "load-bearing" concern is resolved by
-  construction, not by a fallback design). `ephemeral: false` by default — the
-  rower may reuse a Safari Concept2 login; the parent spec's `/start`-cookie
-  question is moot because this design has no `/start` route.
-- Web arm of the same adapter: existing `openExternalUrl(authorizeUrl)` (plain
-  navigation); completion is the authenticated callback (§5); the app learns the
-  outcome via `useReturnToApp` (PR1.5).
+- `startNativeLink({ authorizeUrl, state })`: refuses if a link is already in
+  flight (`busy`); opens the session with `callbackScheme:
+  "haus.waffle.ergomatic"`, **`ephemeral: true`** (rationale below); on
+  completion parses the callback: `error=access_denied` (the rower declined at
+  Concept2's screen — a success callback with no `code`) → typed `declined`, no
+  exchange, the attempt is left to expire; otherwise `code` (and `state` if
+  present — asserted equal to the held `state` when carried, refuse + log on
+  mismatch; when C2 omits it this check is a no-op and is documented as
+  defence-in-depth, not a control) → `POST /api/concept2/exchange { code, state }`
+  through `api()` (bearer attached) → typed result.
+- **`ephemeral: true` by default.** Non-ephemeral shares Safari's persistent
+  cookies, so on a shared phone the next link can silently complete against
+  whoever last logged into Concept2 in Safari with no visible login — the mirror
+  image of the gap this PR closes on the Ergomatic side. Ephemeral forces the C2
+  login screen every time, so the rower always sees which Concept2 account they
+  are linking; linking is a once-per-account event, so the re-login cost is
+  small. The cost named: ephemeral suppresses the OS "wants to use concept2.com"
+  consent modal (it is a consequence of non-ephemeral sessions). PR2's identity
+  line (`c2UserId` is already served by `GET /link`) is the second half of this
+  mitigation. James may overrule to non-ephemeral at approval.
+- Web arm of the same adapter: `openExternalUrl(authorizeUrl)` — a full-page
+  navigation that unloads the SPA; the outcome is learned on the fresh mount
+  after the Linked page, NOT via `useReturnToApp` (rev 1 got this wrong).
 
-Why A over B (private-use scheme + `@capacitor/app` `appUrlOpen`, the parent
-spec's Branch-B sketch): (i) Apple's calling-session guarantee (quoted above)
-closes the RFC 8252 shared-scheme ambiguity that PKCE would otherwise address and
-Concept2 does not offer; (ii) the callback arrives in a promise, in-flow — no
-listener registration, no readiness barrier, no re-render lifetime hazard, the
-entire class PR1.5 spent four review rounds on; (iii) the OS presents the
-"Ergomatic wants to use concept2.com to sign in" modal and dismisses the browser
-itself. Costs, named: the repo's first in-tree Swift plugin (~60 lines, coverage
-exempt like all `src/native/**`, device-verified only — RF19); a view-controller
-subclass + storyboard class change; and one INFERENCE to verify on device —
-`ASWebAuthenticationSession` captures its `callbackURLScheme` inside the session
-without an Info.plist `CFBundleURLTypes` entry (Apple's API takes the scheme as a
-parameter). **If the walk shows the redirect escaping to the system, the recorded
-fallback is registering the scheme in Info.plist** (the Google precedent),
-which changes nothing else in this design. Option B stays recorded as the
-contingency: same server contract, `appUrlOpen` + `getLaunchUrl` instead of the
-promise, with the listener-lifetime hazards PR1.5 documented.
+**What this retires from PR1.5 (RF5/RF23):** with the link flow on
+`ASWebAuthenticationSession`, `Browser.open` + `onNativeBrowserFinished` and
+`useReturnToApp`'s `browserFinished` arm have no consumer. This PR REMOVES that
+native arm and its tests (`useReturnToApp` becomes the web-visibility hook it
+still is for tab-return; its native `resume` arm stays for the web-in-WebView
+edge only if a consumer exists — otherwise removed too, decided at plan time by
+grep), and the probe card's counter is repointed at the new flow. **The
+`@capacitor/browser` dependency STAYS** — PR2's "View on Concept2" link-out is
+its consumer. Two mechanisms for one return must not survive on one surface.
 
-### 5. Web completion — the existing callback, now authenticated
+Why this over a private-use scheme + `appUrlOpen` (the parent's Branch-B sketch):
+(i) Apple's calling-session guarantee closes the RFC 8252 shared-scheme
+ambiguity that PKCE would otherwise cover and Concept2 does not offer — for the
+DENIAL leg, since the redemption leg is already closed by the confidential
+client; (ii) the callback arrives in a promise, in-flow — no listener
+registration, no readiness barrier, none of the lifetime hazards PR1.5 spent four
+rounds on; (iii) the OS dismisses the browser itself. Costs: the repo's first
+in-tree Swift (~80 lines with the context provider and retention), a
+view-controller subclass + storyboard + pbxproj edits, device-only verification
+(RF19). Branch B stays recorded as the contingency with the same server contract.
 
-`GET /api/concept2/callback` gains `requireUser` (the cookie arm: a top-level GET
-from concept2.com carries `erg_session` — `SameSite=lax` permits it; the response
-stays HTML). Pinned order, extending PR1's matrix:
+### 5. Web completion — the existing callback, authenticated by a route-local resolver
 
-1. availability re-check (403, attempt consumed if `state` present) — unchanged;
-2. `state`/`code` present (400) — unchanged;
-3. **authenticated?** no session → `401` HTML *"Sign in to Ergomatic in this
-   browser first, then start the link again."* (attempt NOT consumed — the rower
-   hasn't spent it; it expires or is replaced);
-4. `consumeAttempt(state)` (single-use, unchanged) → null → 400;
-5. **`attempt.surface === "web"`** else `400` HTML (a native-minted nonce cannot
-   complete here);
-6. **`attempt.userId === req.user.id`** else `403` HTML *"This link was started
-   from a different Ergomatic account."* — **and the token exchange is never
-   called** (the deciding invariant; its mutation is the check moved after
-   `exchangeCode`);
-7. `exchangeCode(code, webRedirectUri)` → `fetchMe` → `upsertLink` → the Linked
-   page (copy unchanged this PR; the identity line is PR2's owed Gate 0
-   amendment).
+NOT the `requireUser` middleware (it answers bare JSON 401 and would run before
+the pinned order). The router gets `resolveCookieSession(req)` → user or null,
+and the callback keeps its HTML responses and this order:
+
+1. availability re-check (403 HTML; attempt consumed only here, flag-off path);
+2. `state`/`code` present, else 400 HTML;
+3. **no cookie session → 401 HTML** — attempt NOT consumed;
+4. **`peekAttempt(state)`** → null (unknown/expired) → 400 HTML;
+5. **`attempt.surface === "web"`**, else 400 HTML — attempt NOT consumed;
+6. **`attempt.userId === user.id`**, else 403 HTML — attempt NOT consumed (the
+   rightful user's attempt survives a wrong-principal presentation — the DoS
+   leg), and **the token exchange is never called**;
+7. `consumeAttempt(state)` (atomic single-use; null here means a concurrent
+   consume won — 400 HTML) and re-verify surface/user on the consumed row;
+8. `exchangeCode(code, webRedirectUri)` → `fetchMe` → `upsertLink` → Linked
+   page.
+
+The 400/400/403 ladder tells a state-holder only what an interceptor already
+knows, never an account — acceptable because `state` is a 256-bit secret. This
+step also closes the callback's own CSRF shape (an ambient-cookie GET that
+`originCheck` does not guard): an attacker minting on their own account and luring
+the victim's browser here dies at step 6.
 
 ### 6. Native completion — the new authenticated exchange
 
-`POST /api/concept2/exchange { code, state }`, `requireUser` (bearer arm), JSON:
+`POST /api/concept2/exchange { code, state }`, `requireUser` (bearer; JSON):
 
-1. availability (403 `{error:"unavailable"}`); 2. body shape (400 field-named);
-3. `consumeAttempt(state)` → null → `400 {error:"invalid_state"}`;
-4. `attempt.surface === "native"` else `400 {error:"wrong_surface"}`;
+1. availability (403); 2. body shape (400 field-named);
+3. `peekAttempt(state)` → null → `400 {error:"invalid_state"}`;
+4. `attempt.surface === "native"` else `400 {error:"wrong_surface"}` — not
+   consumed;
 5. `attempt.userId === req.user.id` else `403 {error:"principal_mismatch"}` —
-   **exchange never called**; 6. `exchangeCode(code, nativeRedirectUri)` → fail →
-   502 `{error:"c2_error"}`; `fetchMe` → fail → 502; `upsertLink` → `200 { linked:
-   true, c2UserId, weightClass }`.
+   not consumed, **exchange never called**;
+6. `consumeAttempt(state)` → null (concurrent consume) → 400; re-verify;
+7. `exchangeCode(code, nativeRedirectUri)` → fail → 502 `{error:"c2_error"}`;
+   `fetchMe` → fail → 502; `upsertLink` → `200 { linked: true, c2UserId,
+   weightClass }`.
 
-Steps 4-5 refuse BEFORE any wire call on both routes — that is the whole point of
-the PR, and both routes are tested with a stub that asserts `exchangeCode` was
-never invoked.
+Steps 4-5 refuse BEFORE any wire call and BEFORE consuming, on both routes.
 
-### 7. What does NOT change
+### 7. Rower-visible copy introduced (Gate 0 — rendered for James at approval)
+
+Two HTML pages the web callback can now show, and they are user-visible copy, so
+they are presented rendered, not described:
+
+- 401: **"Sign in to Ergomatic in this browser first, then start the Concept2
+  link again from the app."**
+- 403: **"This Concept2 link was started from a different Ergomatic account.
+  Sign in as that account in this browser, or start a new link from the account
+  you're using."**
+
+Both use the existing callback page styling; no other copy changes. The probe
+card gains a "real link" button behind its existing build flag (dev-only, not
+rower-visible in any release build).
+
+### 8. What does NOT change
 
 Availability gating, the dark flag, `GET/DELETE /link`, the upload route, refresh
-serialization, the probe card, PR1's callback page copy. Activation
-(`C2_LINK_ENABLED=1` on a real cohort) still waits on Concept2 write approval and
-PR2 — this PR makes the ruling's code-side precondition true; it does not flip
-anything.
+serialization, PR1's Linked page copy. Activation still waits on Concept2 write
+approval + PR2.
 
 ## Testing (TRIAD — every assertion gets a committed-then-probed mutation)
 
-- **Unit, `requireUser`:** bearer → `authVia:"bearer"`; cookie → `"cookie"`; both →
-  400 `ambiguous_auth`, no session resolved (mutation: prefer-bearer instead of
-  refuse → red).
-- **Unit, mint:** bearer request records `surface:"native"` + native
-  `redirect_uri` in the returned URL; cookie request records `"web"` + web
-  redirect; response carries `state`; a second mint for the same user replaces
-  (store returns one row).
-- **Store, real Postgres:** two CONCURRENT mints for one user → exactly one
-  attempt row (the invariant the ruling called raceable — mutation: drop the
-  unique index → the race test must show two rows or a violation; record which);
-  `consumeAttempt` returns `surface`.
-- **Unit, web callback:** unauthenticated → 401 and attempt NOT consumed; wrong
-  user → 403 and **`exchangeCode` never called** (mutation: move the identity
-  check after the exchange → red); native-minted nonce → 400; happy path exchanges
-  with the WEB redirect (assert the argument).
-- **Unit, native exchange:** wrong user → 403, `exchangeCode` never called;
-  web-minted nonce → 400; happy path exchanges with the NATIVE redirect; `state`
-  from the body locates the attempt even when the (stubbed) callback URL carries no
-  `state` — the echo-independence test.
-- **Adapter, `linkFlow`:** native arm passes `callbackScheme:
-  "haus.waffle.ergomatic"`, parses `code`, refuses on `state` mismatch when the
-  callback carries one, posts `{code, state}` with the mint's `state`; cancel
-  rejection surfaces as a typed result, never a throw.
-- **Integration (RF24, both surfaces):** real routes + real Postgres + real client
-  with only `fetch` stubbed — web: `testSignin` cookie session, mint, callback
-  with the SAME cookie → link row; callback with a DIFFERENT user's cookie → 403,
-  no exchange, no link. Native: bearer mint, `POST /exchange` with the SAME bearer
-  → link row; DIFFERENT bearer → 403, no exchange, no link. Cross-surface: a
-  bearer-minted nonce presented to the callback → 400.
-- **Device walk (James, log-dev, the ONE gate CI cannot reach — RF19):** with the
-  native redirect registered at log-dev: from a probe entry (the PR1.5 probe card
-  gains a "real link" button behind the same build flag), start the native flow →
-  observe the OS modal names concept2.com → complete a real consent with the
-  log-dev account → the session dismisses itself and the app receives the
-  callback (not Safari) → `GET /link` shows `linked:true` for user 2211 → record
-  whether the callback URL carried `state` (promotes EXPECTED to MEASURED either
-  way) and whether the scheme needed an Info.plist entry. Also: cancel the modal →
-  typed cancel, no attempt consumed server-side (it expires).
-- `dist:grep`: the new native module folds like every other `src/native/**`
-  (assert by build, both directions, per RF12).
+- **`requireUser`:** bearer → `authVia:"bearer"`; cookie → `"cookie"`; empty-value
+  cookie → absent; both, SAME user → bearer wins, `authVia:"bearer"`; both,
+  DIFFERENT users → 400 `ambiguous_auth`, no session resolved (mutation: resolve
+  bearer regardless → red); neither → 401.
+- **Mint:** bearer → `surface:"native"` + native `redirect_uri` in the URL; cookie
+  → `"web"` + web redirect; response carries `state`; the PK-collision retry.
+- **Store, real Postgres:** two CONCURRENT mints for one user → exactly one row.
+  **The biting mutation is on the STATEMENT, not the index:** replace the upsert
+  with delete + plain insert → two rows (index dropped) or a unique violation
+  (index kept) — record which; dropping the index alone only breaks `ON
+  CONFLICT`'s parse, proving nothing about the invariant. `peekAttempt` does not
+  delete; `consumeAttempt` returns `surface`.
+- **Web callback (route-local resolver):** no session → 401 HTML and attempt NOT
+  consumed (`peek` afterwards still finds it); wrong user → 403 HTML, attempt NOT
+  consumed, **`exchangeCode` never called** (mutation: move the identity check
+  after `exchangeCode` → red; mutation: consume before the check → the
+  attempt-survives assertion red); native-minted nonce → 400, not consumed;
+  happy path exchanges with the WEB redirect (argument asserted); a concurrent
+  consume between peek and consume → 400 without exchange.
+- **Native exchange:** wrong user → 403, not consumed, exchange never called;
+  web-minted nonce → 400; happy path with the NATIVE redirect; body `state`
+  locates the attempt when the (stubbed) callback carried no `state` — the
+  echo-independence test.
+- **Adapter `linkFlow`:** `busy` on a second in-flight call; `declined` on
+  `error=access_denied` with no exchange; `cancelled` typed; `state` mismatch
+  refused when carried; posts `{code, state}` with the mint's `state`;
+  `callbackScheme` and `ephemeral:true` asserted.
+- **Integration (RF24, both surfaces):** real routes + Postgres + client, only
+  `fetch` stubbed. Web (testSignin cookie): same-user callback → link row;
+  different user's cookie → 403, no exchange, no link, attempt still present.
+  Native (bearer): same bearer → link row; different bearer → 403, no exchange,
+  attempt still present. Cross-surface both directions → 400. The "neither"
+  case → 401.
+- **Device walk (James, log-dev — the gates CI cannot reach, RF19):** (a) with
+  both redirects registered, start the native flow from the probe's real-link
+  button → the session presents (ephemeral: a fresh C2 login screen; note whether
+  any OS modal appears) → complete a real log-dev consent → the session dismisses
+  and the app receives the callback → `GET /link` shows `linked:true` → RECORD:
+  did the callback carry `state`? did the scheme need an Info.plist entry (i.e.
+  did anything escape the session)? (b) cancel the modal → typed `cancelled`, the
+  attempt untouched server-side. (c) decline at Concept2's screen → typed
+  `declined`. (d) **the credential instrument for §1's UNMEASURED premise:** the
+  local dev server logs, for every request during the walk, `authVia` and whether
+  a cookie AND a bearer were both present; the walk report states the observed
+  values for every native request — this is the only layer that can see the real
+  native header set.
+- **Bundle claim, stated correctly:** the native module ships as a lazy chunk in
+  `dist/client` and is never LOADED on web (`adapters/externalBrowser.ts:4-23`
+  already records this retraction); `dist:grep` checks dev-only needles and says
+  nothing about native chunks. No "folds out" claim is made.
 
 ## Exit criteria
 
-1. Both completion routes refuse a foreign principal BEFORE any Concept2 call,
-   proven by stubs asserting `exchangeCode` uncalled, with the moved-check mutation
-   recorded red.
-2. A nonce minted on one surface cannot complete on the other (both directions).
-3. Concurrent mint leaves exactly one live attempt, against real Postgres.
+1. Both completion routes refuse a foreign principal BEFORE consuming the
+   attempt and BEFORE any Concept2 call, proven by stubs asserting `exchangeCode`
+   uncalled and the attempt surviving, with both mutations recorded red.
+2. A nonce minted on one surface cannot complete on the other, both directions,
+   without consuming it.
+3. Concurrent mint leaves exactly one live attempt against real Postgres, gated by
+   the statement-level mutation.
 4. The native flow completes end-to-end on a phone against log-dev with a real
-   consent, the callback delivered to the app, and the `state`-echo fact
-   RECORDED (measured, either way).
+   consent, the callback delivered to the app; the `state`-echo and Info.plist
+   facts RECORDED; the walk's per-request `authVia`/both-present readings
+   RECORDED.
 5. The record is reconciled BEFORE the PR opens: parent spec §Architecture 1-3
-   and Stored Shapes say `surface` EXISTS (not "target"); ROADMAP's PR1.75 line
-   and the C2 register row say the activation precondition is code-complete
-   pending C2 write approval + PR2; the gate doc §6 gains a one-line "built in
-   PR1.75" note; `schema.ts`/`stores/concept2.ts`/`routes/concept2.ts` comments
-   state the CURRENT contract only.
-6. Native redirect registered at log-dev (walk prerequisite); live-portal
-   registration recorded as a cutover step beside write approval.
+   and Stored Shapes say `surface` EXISTS; ROADMAP's PR1.75 line ("a transaction
+   around mint" → "one atomic upsert", equivalent) and the C2 register row say the
+   activation precondition is code-complete pending write approval + PR2; the
+   gate doc §6 gains a one-line "built in PR1.75" note; all live comments state
+   the CURRENT contract; PR1.5's retired native return arm is gone, not
+   commented out.
+6. Both redirect URIs registered at log-dev (walk prerequisite — DONE for native,
+   confirm web); live-portal registration recorded as a cutover step.
+7. The two callback pages (§7) approved rendered by James at this design's gate.
 
 ## Gates
 
-Antagonist FULL pass on THIS document (TRIAD: AUTH + stored shape) → James
-approves the design → plan → implementation (worktree
+Antagonist full pass: DONE 2026-09-02 (REVISE → this rev 2). → **James approves
+the design + the two rendered pages** → plan → implementation (worktree
 `Ergomatic-wt-c2pr175`, branch `wave-e-pr175-app-bind`) → per-task review →
-device walk → PM final-PR gate (TRIAD) → James merges. **No implementation before
-the design approval** — that ordering is this PR's first deliverable.
+device walk → PM final-PR gate (TRIAD) → James merges. No implementation before
+the approval.
 
 ## Out of scope, named
 
 PR2's surface and its Gate 0 identity-copy amendment; the `ALLOWED_EMAILS`
-revocation model (a separate admission question); PKCE (Concept2 does not offer
-it); Android; any change to the upload/refresh paths; flipping the flag.
+revocation model; PKCE (Concept2 does not offer it); Android; the upload/refresh
+paths; flipping the flag.
