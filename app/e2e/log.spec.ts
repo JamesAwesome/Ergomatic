@@ -87,6 +87,18 @@ async function postLog(
     // other seed gets the member the server used to derive for it, so
     // no fixture's provenance moved at the sunset.
     source?: "pm5" | "timer" | "manual";
+    // Door spec (2026-09-02) §1.3: the honest close reason, so a seed can
+    // be a genuinely PARTIAL row. Mirrors `schema.ts`'s `endedByEnum` at
+    // the same "hand-copied literal union" fidelity `source` above already
+    // uses in this helper.
+    endedBy?:
+      | "finished"
+      | "rower"
+      | "link-lost"
+      | "program-failed"
+      | "program-dropped"
+      | "interrupted"
+      | null;
   },
 ): Promise<{ id: string }> {
   const result = await page.evaluate(async (b) => {
@@ -235,6 +247,77 @@ test("Today's LAST THREE heading is the ALL SESSIONS link, and the history list 
     .filter({ hasText: "Steady State" });
   await expect(oldRow).toBeVisible();
   await expect(oldRow.locator(".today-log-hero")).toHaveCount(0);
+});
+
+// Door spec (2026-09-02) §1.3, and the RF24 seam this task creates: the
+// server DERIVES `partial` in SQL and the client READS it as
+// `RecentLog.partial`. Every other gate on this feature enters the pipe on
+// one side of that seam — the integration suite stops at the JSON, and the
+// client suite starts from a mocked `useLogHistory`. Nothing else mounts
+// History over a REAL response, so a renamed key or a shape mismatch
+// (`res.json() as RecentLog[]` is an unchecked cast) would leave every
+// project green with the chip never once reaching a screen.
+//
+// This test starts upstream of the producer: it POSTs the rows, then reads
+// them through the real list route into the real component.
+test("a stopped connected session wears its chip in History, over a REAL list response (the SQL-derived boolean reaching the client)", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `log-partial-${RUN_ID}@e2e.test`,
+    name: "Log Partial",
+  });
+
+  // PARTIAL: connected, closed by the rower, with an interval never
+  // reached (no `actualSource` — clause 3).
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    steps: [{ label: "Work", actualSource: "pm5" }, { label: "Work" }],
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+  // The control: the SAME steps and the SAME door, finished. Only
+  // `endedBy` differs, so a chip on this row would convict clause 4
+  // rather than anything about rendering.
+  await postLog(page, {
+    workoutTitle: "Occluded Front",
+    workoutType: "AT",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "finished",
+    steps: [{ label: "Work", actualSource: "pm5" }, { label: "Work" }],
+    avgSplitSeconds: 118,
+    distanceMeters: 6200,
+  });
+
+  await page.goto("/today/log");
+  await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
+
+  const stopped = page
+    .locator(".today-log-row")
+    .filter({ hasText: "Sea Fret" });
+  await expect(stopped.locator(".log-partial-chip")).toHaveText(
+    "STOPPED EARLY",
+  );
+  // Gate 0-A slot B: on the numbers line, beside the numbers it qualifies.
+  await expect(stopped.locator(".today-log-hero")).toHaveText(
+    "STOPPED EARLYAVG 2:04.5 · 5,000 m",
+  );
+  // Its own class, never the JR chip's — seven assertions elsewhere count
+  // `.free-row-chip`, and this row is not a free row.
+  await expect(stopped.locator(".free-row-chip")).toHaveCount(0);
+
+  const finished = page
+    .locator(".today-log-row")
+    .filter({ hasText: "Occluded Front" });
+  await expect(finished.locator(".today-log-hero")).toHaveText(
+    "AVG 1:58.0 · 6,200 m",
+  );
+  await expect(finished.locator(".log-partial-chip")).toHaveCount(0);
 });
 
 test("a fresh account sees the exact empty-state string on /today/log", async ({
