@@ -156,3 +156,75 @@ this one). TWD 0-dips again (seq 34), the known F2a shape.
 lock, row through, unlock, keep rowing) showing another resume-adjacent
 `pause-declared` with distance advancing closes the data phase; then the
 task sections + antagonist pass (no skip).
+
+---
+
+## §4 Design (from Reading 2; DATA PHASE CLOSED — James, 2026-09-02: "no
+more captures now, capture at close if demanded")
+
+**The defect, exactly.** After a resume edge, the BLE frame stream delivers
+~`PAUSED_FRAME_HOLD` frames carrying an IDENTICAL `distanceMeters|currentSplit
+|spm` triple (a stall on the last pre-suspend value re-emitted) while the
+flywheel keeps turning. `nextFreezeRun` counts those identical frames;
+`isPausedRun` fires. Reading 2: 4 identical frames at `d=115.3` ~2 s after a
+resume, distance advancing 110.8→193.9 throughout, spm 28 — a pause declared
+on a rowing rower.
+
+**Why `stale` can't gate it.** `resume-first-frame`'s `stale` compares the
+first post-resume frame against the last PRE-background frame; those differ
+(distance jumped across the lock), so `stale=false`. The defect is a stall
+AMONG post-resume frames, a different window. The `stale` flag is not the
+discriminator.
+
+**The discriminator (n=1, Reading 2 — antagonist carries this risk):** a
+resume-stall's identical frames are the IMMEDIATE post-resume tail and are
+followed by fresh movement within ~1-2 s; a genuine stop's identical frames
+follow a distance-advancing stretch. So: **a pause may not be declared until
+at least one frame has ADVANCED distance since the resume edge** — proving
+the resumed stream freshened, so any subsequent stall is a real stop.
+
+**Mechanism (preserves I3 — `nextFreezeRun`/`isPausedRun` stay pure):**
+- A stateful ref `postResumeSettleRef: boolean` — the "needs a fresh advance"
+  latch. SET at the resume edge (same site the `resume-first-frame` record
+  fires). CLEARED by the first rowing frame whose `distanceMeters` exceeds
+  the resume's first frame's distance (the stream advanced).
+- The pause gate becomes `isPausedRun(freeze) && !postResumeSettleRef.current`
+  at the stateful `nowPaused` site (`useMonitorSession.ts:3016`). Pure
+  predicate unchanged; the SUPPRESSION is stateful and recorded.
+- I5: when the gate suppresses a would-be pause, a ring entry
+  `pause-suppressed-post-resume` records `frames=<n> d=<m> gapMs=<resume gap>`
+  — measure, assert no cause.
+
+**Lifetime table addition (RF27):**
+
+| State | Mint (set) | Clear | Survives teardown/relaunch/re-arm |
+| --- | --- | --- | --- |
+| `postResumeSettleRef` | resume/foreground edge (beside `resume-first-frame`) | first distance-advancing rowing frame after resume; per-run resets (program/beginFreeRow/RC-37); connect; teardown | no / no / no |
+
+**Invariant check against the design:**
+- I1 (genuine pause still declares): a rower who resumes, rows (distance
+  advances → latch clears), THEN stops → declares normally. HOLDS.
+- I2 (staleness alone never declares): the resume-stall (no advance) is
+  suppressed. HOLDS — this IS the fix.
+- I3 (pure predicate): `nextFreezeRun`/`isPausedRun` untouched. HOLDS.
+- I4 (no number's meaning moves): only WHEN PULL TO RESUME/frozen-hero engage
+  changes; the numbers are unchanged. HOLDS — NOT triad, but the antagonist
+  confirms the frozen-hero mirror timing is cosmetic, not a stored-number
+  change.
+
+**Antagonist targets (the pass runs on THIS design, no skip):**
+1. The n=1 risk: does "one advancing frame clears the latch" over-fit Reading
+   2? What if the resume-stall itself contains a spurious advance (a single
+   fresh frame then re-stall)? Consider requiring the advance to persist, or a
+   frame count, vs a single advance.
+2. Interaction with the real pocketed-phone stop: a rower who pockets, rows,
+   and genuinely stops WHILE still pocketed — does the latch clear (distance
+   advanced during rowing) so the later real stop still declares? Trace it.
+3. The `beginFreeRow` third arm and the resume edge co-occurring.
+4. Whether a committed capture can exercise the fix (Reading 2's ring is
+   RECORDS, not a replayable `pm5-recording` — §0.4). The gate story: a
+   constructed post-resume stall over the real hook (the PR 1 seam-test
+   precedent), stated as constructed-input/real-producer.
+5. RF21: the mutation for the suppression (remove the `!postResumeSettleRef`
+   guard → a constructed resume-stall re-declares) and for the clear (never
+   clear the latch → a genuine post-row stop never declares).
