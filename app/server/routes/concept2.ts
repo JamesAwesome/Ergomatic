@@ -115,18 +115,13 @@ function noReferrer(res: Parameters<RequestHandler>[1]): void {
 // itself carries no subresource and no outbound link
 // (concept2/callbackPage.ts).
 //
-// HONEST NOTE on the `noReferrer(res)` below: today it is UNBITTEN. All
-// eleven `sendPage` call sites live inside the callback handler, which
-// already set the header at step 0, so removing this line alone leaves the
-// whole suite green (probe I5b, fix round 1). It is retained on the
-// reviewer's explicit instruction ("keep it in `sendPage`") as
-// defence-in-depth for a FUTURE caller outside that handler — it is not a
-// gated invariant, and no test should be read as proving it.
+// Sets no `Referrer-Policy` of its own: it relies on the callback handler's
+// step 0 having already set it for every exit (a second call here could not
+// be observed to fail — RF21).
 function sendPage(
   res: Parameters<RequestHandler>[1],
   page: { status: number; html: string },
 ): void {
-  noReferrer(res);
   res.status(page.status).type("html").send(page.html);
 }
 
@@ -284,19 +279,19 @@ export function createConcept2Router({
   // -- web callback (design §5 — the ladder, in this exact order) --------
 
   router.get("/api/concept2/callback", async (req, res) => {
-    // 0. `Referrer-Policy` BEFORE the ladder, not only inside `sendPage`.
-    //    The URL carries `code` and `state` (RFC 9700 §4.2) and must not
-    //    leak them on ANY exit from this handler — including the ones no
-    //    line of this function writes: a rejected `peekAttempt` /
-    //    `consumeAttemptFor`, or a non-conflict `upsertLink` error
-    //    re-thrown, all land on Express's default error handler. Setting
-    //    it here is what covers EVERY exit — the pages, the JSON refusal
-    //    and the 500 alike (`sendPage`'s own call is now defence-in-depth
-    //    for a future caller; see its comment). Verified against the real
-    //    handler rather than assumed: `finalhandler` removes only the
-    //    Content-* headers before writing its 500, so a header set here
-    //    survives — the rejected-`peekAttempt` test in concept2.test.ts
-    //    asserts exactly that, and goes red if this line is removed.
+    // 0. CONSTRAINT: this is the ONLY place the header is set; every
+    //    callback response path passes through here, including the
+    //    throw/500 path — "a rejected store call -> 500 from Express's own
+    //    handler, still Referrer-Policy: no-referrer" (concept2.test.ts)
+    //    bites if this moves.
+    //    Why it must sit above the ladder: the URL carries `code` and
+    //    `state` (RFC 9700 §4.2) and must not leak them on ANY exit —
+    //    including the ones no line of this function writes (a rejected
+    //    `peekAttempt`/`consumeAttemptFor`, or a non-conflict `upsertLink`
+    //    error re-thrown, all land on Express's default error handler).
+    //    Verified against the real handler rather than assumed:
+    //    `finalhandler` removes only the Content-* headers before writing
+    //    its 500, so a header set here survives.
     noReferrer(res);
     // 1. availability — consumes NOTHING. PR1's flag-off consume was the
     //    route's last unauthenticated write, an attempt-destruction
