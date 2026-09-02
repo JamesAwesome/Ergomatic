@@ -1,6 +1,13 @@
 # Just Row without the monitor (time only) — design
 
-**Status: Gate 0 PASSED (rev 2e, James, 2026-09-02). Spec REV 4.** Rev 2
+**Status: Gate 0 PASSED (rev 2e, James, 2026-09-02). Spec REV 5.** Rev 5
+answers "Can it be harder" (James, 2026-09-02): every remaining place a
+reader could meet an ABSENT value and guess is closed — `mode` is
+required in the type (legacy records upgraded once, at load), the
+metre-less actual is a discriminated variant rather than an optional
+field, the log door's entry precedence is stated and tested rather than
+"whichever exists", and the one write-time derivation the wire still
+needs for old builds carries a dated sunset. Rev 2
 folded the antagonist's delta pass (BLOCK on rev 1's mechanism — eleven
 findings, marked ⟨F#⟩). Rev 3 answered James's first "Harden it" by
 storing provenance as a nullable column. Rev 4 answers his second: **the
@@ -90,17 +97,25 @@ none.
 
 **Three stored-shape changes, TRIAD: two on `SessionRun` (localStorage)
 and one on `session_logs` (Postgres, migration 0020).**
-(a) `mode?: "justrow"` — the same word `MonitorRun.mode` already uses, so
-one vocabulary names a free row on both records. No `v` bump, but
-**validated, not loose**: `isSessionRun` gains the clause
-`monitorRun.ts:489` already carries for the twin record
-(`value.mode === undefined || value.mode === "justrow"`) — Phase JR PR 1's
-own review found that declaring `mode?` and never checking it let
-`mode: "corrupt"` load as a valid record ⟨F7⟩. (b) `PhaseActual.splitSeconds`
-becomes OPTIONAL: a metre-less phase has no split, `NaN` is not a legal
-value (it serialises to `null` and round-trips as a typed `number`), and
-omitting it must be representable ⟨F5⟩. Every reader of `splitSeconds`
-(`logDraft.ts:466` writes `actualSplit` from it) skips when undefined.
+(a) `mode: "workout" | "justrow"` — **REQUIRED in the type.** The same
+word `MonitorRun.mode` already uses, so one vocabulary names a free row
+on both records. No `v` bump: `isSessionRun` accepts an ABSENT `mode`
+only as the legacy shape and `loadRun` upgrades it once, at load, to
+`"workout"` — so no reader anywhere sees `undefined`, and every branch is
+on one of two named values, exhaustively. Any other value is rejected
+(the clause `monitorRun.ts:489` already carries for the twin record —
+Phase JR PR 1's own review found that declaring `mode?` and never
+checking it let `mode: "corrupt"` load as valid ⟨F7⟩). The rejected
+alternative, `mode?: "justrow"` with absence meaning "workout", makes
+absence a value, which is exactly the shape rev 4 was told to remove.
+(b) `PhaseActual` becomes a **discriminated union on the field it
+already has**: `{ actualSource: "stopwatch"; elapsedSeconds; splitSeconds }`
+| `{ actualSource: "stopwatch-elapsed"; elapsedSeconds }`. A metre-less
+phase has no split, `NaN` is not a legal value (it serialises to `null`
+and round-trips as a typed `number`) ⟨F5⟩, and an OPTIONAL `splitSeconds`
+would let any reader `!` past it; the variant makes every reader switch
+on `actualSource` exhaustively (`logDraft.ts:466` writes `actualSplit`
+only from the first member). `isSessionRun` validates both shapes.
 (c) **`session_logs.source`**: `pgEnum("log_source", ["pm5", "timer",
 "manual"])`, **NOT NULL**. Migration 0020 adds it nullable, BACKFILLS
 every existing row with the one inference the read side uses today
@@ -110,7 +125,14 @@ NOT NULL — so every row that renders `PM5 …` / `TIMER` / `LOGGED BY HAND`
 today renders the same word tomorrow, from a column instead of a guess.
 **On the wire it is optional for one reason only — additive-only between
 tags: an old TestFlight build posts no `source`.** When absent the SERVER
-derives it by that same rule, once, at write time; when present the
+derives it by that same rule, once, at write time — **and that derivation
+has a sunset: at the first tag after this ships, `source` becomes
+REQUIRED on POST (a 400 when absent) and the derive path is deleted.**
+That is a breaking API change and so waits for a tag boundary per
+`docs/RELEASING.md`'s additive-only rule; it is filed in ROADMAP with
+that tag as its trigger, not left as "someday". Until then the derived
+member is also written to the ring as `source: derived` so an old build
+posting through it is visible in diagnostics; when present the
 server checks it against the body and refuses a contradiction with a 400
 naming the field: `pm5` requires a non-null `deviceName`; `timer` and
 `manual` require `deviceName` null; `timer` additionally requires either
@@ -201,7 +223,14 @@ which record each branch holds). Every reader below branches on
      `Keep going` resumes it — the same pattern as `handleKeepGoing`.
      Pinned with a clock gap between ▶ and Finish.
 4. **The log door** (`JustRowLog.tsx`) takes a second entry kind:
-   `{ kind: "timer", run: SessionRun }` beside the monitor entry. Its
+   `{ kind: "timer", run: SessionRun }` beside the monitor entry.
+   **Precedence is stated, not "whichever exists":** the door reads the
+   monitor hand-off first (a completed `MonitorRun` with
+   `mode: "justrow"`), then a completed `SessionRun` with
+   `mode: "justrow"`. Both present at once is a violated invariant (the
+   coexistence guard at both doors exists to prevent it — criterion 6);
+   if it ever happens the door renders the NEWER `completedAt` and files
+   a diagnostics-ring entry naming the other, never a silent pick. Its
    seconds are the one actual's `elapsedSeconds`, derived AT THE DOOR;
    `freeRowTotals` is `(run: MonitorRun)` and is not touched ⟨F6⟩ — no
    connected-path file changes for this piece. The card renders TIME
@@ -300,7 +329,21 @@ which record each branch holds). Every reader below branches on
    guard clause must go red.
 7. `mode` lifetime: abandon, discard and a successful save each leave no
    run; relaunch mid-row (reload with the key present) resumes the same
-   clock; `isSessionRun` rejects `mode: "corrupt"` ⟨F7⟩.
+   clock; `isSessionRun` rejects `mode: "corrupt"`; a stored legacy run
+   with NO `mode` loads with `mode: "workout"` and re-saves with it
+   (RF24: the fixture is a byte-literal of today's shape, not one built
+   from the new type) ⟨F7⟩.
+7b. `PhaseActual` union: a `"stopwatch-elapsed"` actual round-trips
+   through `saveRun`/`loadRun`; `logDraft` posts no `actualSplit` for it;
+   `isSessionRun` rejects `{ actualSource: "stopwatch" }` without a
+   `splitSeconds` and `{ actualSource: "stopwatch-elapsed", splitSeconds }`
+   alike — the union is enforced at the boundary, not only by the type.
+7c. Log-door precedence: with BOTH a completed monitor hand-off and a
+   completed timer run seeded (the invariant deliberately violated), the
+   door shows the newer and the ring carries the conflict; a mutation
+   swapping the precedence goes red.
+8b. The derive-when-absent sunset is in ROADMAP with the next tag as its
+   trigger before this PR merges (RF14: a PR body is not a record).
 8. Every string on the shipped boards appears verbatim in the rendered
    screens (`STEP` slot `JUST ROW`, `Free`, `UP NEXT · FINISH`,
    `Finish this session?`, `SEP · TIMER`, `Save this row`).
