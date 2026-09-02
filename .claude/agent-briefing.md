@@ -255,14 +255,19 @@ those eight passes unnecessary; the `harden` skill owns what is left.
   asserted a `SwiftCompile` log count of `1` — the one value it can never
   legitimately print, since a real Sources-phase member counts 4 on a cold
   build and 0 on a warm one. Nobody had run the build.
-- **Cite by provenance, never by the plan's own line numbers, and carry no
-  self-describing bookkeeping.** A plan-internal citation cannot survive its
-  own fold — prepending one paragraph moved two of them by +2 in the commit
-  that wrote them. Cite Task/step/symbol. The same rule kills pass-count
-  bullets, revision tallies, and hand-transcribed corpus tables: a
-  twelve-row census table of expected counts drifted at five consecutive
-  passes. If a census is needed, the plan carries the SCRIPT and a
-  base-vs-head diff, never the numbers.
+- **Cite by provenance, never by line numbers into the document under
+  discussion, and carry no self-describing bookkeeping.** Such a citation
+  cannot survive its own fold: prepending one paragraph moves every one of
+  them. Cite Task/step/symbol. This binds the hardening REPORTS as hard as
+  the plan — measured across all twelve revisions of PR1.75b's plan, the plan
+  carried none and every instance lived in a report citing the plan by line.
+  The same rule kills pass-count bullets and revision tallies, which grew
+  from 2 mentions to 21 across those revisions, one per fold. And it kills
+  hand-transcribed corpus tables: that plan's 14-row census table never
+  changed size, but its cells went stale as later steps changed the corpus
+  they described, and two rows were falsified by the plan's own prescribed
+  text. If a census is needed, the plan carries the SCRIPT and a base-vs-head
+  diff, never the numbers.
 - **Paste-test every prescribed block before the plan is finished.** Extract
   each code block to its REAL path in a scratch tree and run the repo's own
   gates — `pnpm typecheck` and `pnpm lint`, not only `format:check`, which

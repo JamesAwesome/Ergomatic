@@ -193,12 +193,17 @@ requirements).
     near-identical briefs.
   - **The `harden` SKILL owns the pre-implementation loop, and caps it at
     TWO passes (2026-09-02).** Wave E PR1.75b's native plan took eleven
-    antagonist passes; six found drift in bookkeeping the plan itself
-    invented (a hand-transcribed census table, pass-count bullets,
-    plan-internal line citations), and the two highest-value late finds
-    came from lenses never in the loop — running the repo's own typecheck
-    and lint over the prescribed blocks, and reading that code as code
-    with hostile inputs. Passes 5-10 cost roughly a third of a session for
+    antagonist passes; six found drift in bookkeeping the loop itself
+    generated (a stale census table, pass-count bullets that grew from 2
+    to 21 one per fold, and reports citing the plan by line number), and
+    the two highest-value late finds came from lenses never in the loop —
+    running the repo's own typecheck and lint over the prescribed blocks,
+    and reading that code as code with hostile inputs. **The skill was
+    then TESTED against that plan's own draft with the ledger withheld:
+    one lens-2 dispatch returned fifteen findings, recovering in a single
+    pass what the original loop needed passes 1, 2, 3, 4, 6, 7 and 11 to
+    reach, plus four the eleven never found — including the `?code=`
+    bug.** Passes 5-10 cost roughly a third of a session for
     record hygiene a reviewer swept in one round, while a real bug in a
     prescribed block (`?code=` empty parses to `""`, not `null`) survived
     all eleven. `/harden` runs the mechanism lens (this agent) and the

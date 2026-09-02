@@ -26,12 +26,20 @@ Fix them yourself, in one edit, before dispatching anything:
 1. **Unmeasured numbers.** Every expected count, line count and gate pass
    value names the command that produced it and the tree it ran against. A
    number with no command is deleted or measured — never attacked.
-2. **Plan-internal line citations.** `:41`, `:292-296` pointing into the
-   document itself. Rewrite as Task/step/symbol; they cannot survive the
-   first fold.
+2. **Line citations INTO the document being hardened** — in the document
+   itself, and equally in the hardening reports that discuss it. Rewrite as
+   Task/step/symbol; they cannot survive the first fold, since prepending one
+   paragraph moves every one of them. **Measured 2026-09-02: the plan carried
+   none at any revision, and every instance lived in the antagonist's own
+   reports citing the plan by line.** The reports are where this rule bites.
 3. **Self-describing bookkeeping.** Pass counts, revision tallies,
    hand-transcribed corpus tables. Delete them. A census ships as its SCRIPT
-   plus a base-vs-head diff, never as transcribed numbers.
+   plus a base-vs-head diff, never as transcribed numbers. **Measured: pass
+   and revision bookkeeping grew from 2 mentions in the draft to 21 by rev
+   12, monotonically, one per fold. The 14-row census table never changed
+   SIZE; its cells went stale instead, because later steps changed the corpus
+   the numbers described — which is why the script, not the numbers, is the
+   artifact.**
 4. **Untested prescribed blocks.** The author owes the paste-test
    (agent-briefing, "Plan authoring"): every code block at its real path
    through `pnpm typecheck` and `pnpm lint`, prescribed tests against
@@ -109,6 +117,36 @@ returns only bookkeeping. There is no third lens and no verification pass.
 If lens 2's fixes are substantial enough to want re-checking, that is what
 per-task review and the PR's own review rounds are for — they run anyway,
 and they swept this exact class in one round.
+
+Run lens 1 before lens 2. A mechanism finding rewrites the blocks lens 2
+would have gated, so gating them first spends the expensive lens on code the
+cheap one is about to invalidate.
+
+## What this was measured against
+
+The two lenses were tested on the DRAFT of the plan that motivated the skill
+(`606d3f72`, `wave-e-pr175b-native`), with the ledger withheld so the test
+could not read the answer key, against a baseline worktree at the commit the
+plan was written for. One lens-2 dispatch returned fifteen findings and
+recovered, in a single pass, defects that the original loop needed passes 1,
+2, 3, 4, 6, 7 and 11 to reach: the `TS2493` typecheck failure and the
+`react-hooks/set-state-in-effect` lint failure over the prescribed blocks,
+the concurrency test that hangs on correct code, the prerequisite chain from
+`xcodebuild` back through `cap sync` to `pnpm build`, the heredoc splice
+point, the fish-shell walk card, and two census rows falsified by the plan's
+own prescribed text.
+
+It also found four things the eleven passes never did: the `?code=` empty
+string parsing to `""` rather than `null`; an empty `state` reported as
+echoed, which would have written a false YES into the walk's own record for a
+design exit criterion; a constant pinned by a test that imports it, proven by
+mutating it to `webauth-99` against a green suite; and the two defects that
+per-task review caught later anyway, a fail-open `ephemeral` default and a
+diagnostic that reached no readout.
+
+What it did NOT find, and what therefore stays with lens 1 or with review: a
+regex census defect, an e2e gate blind to the diff, and prose claims about
+grep output. Cost: one Opus dispatch, roughly twenty minutes.
 
 ## Specs versus plans
 
