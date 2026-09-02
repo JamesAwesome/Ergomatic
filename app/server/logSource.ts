@@ -23,11 +23,12 @@ import type { LogStep } from "./stores/logs.js";
 // `sourceLabel` inference) verbatim: device name wins, else any stopwatch
 // step, else by hand. It is knowingly wrong about one row — a connected
 // session the app never heard a pull from, saved through the manual door —
-// which is exactly why the column exists and this path has a SUNSET:
-// at the first tag after this ships, `source` becomes required on POST
-// and this function is deleted (ROADMAP carries the item with that tag as
-// its trigger). `source.integration.test.ts` runs the migration's own CASE
-// text against three rows and asserts it agrees with this function, so the
+// which is exactly why the column exists. The SUNSET named above fired at
+// v0.35.0 (#273): `source` became required on POST and the derivation
+// stopped being called — this function was KEPT, not deleted, because it
+// still documents migration 0020's backfill rule in TS.
+// `source.integration.test.ts` runs the migration's own CASE text against
+// the five staged rows and asserts it agrees with this function, so the
 // two copies of the rule cannot drift while both exist.
 //
 // `logSourceContradiction` is the other half: when a client DOES post a
@@ -72,12 +73,18 @@ export function logSourceContradiction(
         ? "source pm5 requires a deviceName"
         : null;
     case "timer":
-      return evidence.deviceName !== null
-        ? "source timer requires deviceName to be absent"
-        : null;
     case "manual":
+    case "no-reading":
+      // Door spec (2026-09-02) §2.2: the biconditional
+      // `deviceName ≠ null ⟺ source = 'pm5'` SURVIVES the fourth
+      // member. `no-reading` is a connected arrival that measured
+      // NOTHING, so the only name reachable on that path is
+      // `loadLastDevice()`'s best-effort LAST-USED name — posting it
+      // would have the row assert that a named erg supplied numbers
+      // that came off nothing (`src/log/storedSummary.ts:66-73`;
+      // PM ruling, "prefer the false negative").
       return evidence.deviceName !== null
-        ? "source manual requires deviceName to be absent"
+        ? `source ${source} requires deviceName to be absent`
         : null;
   }
 }

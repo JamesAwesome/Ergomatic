@@ -1,0 +1,51 @@
+-- Door PR A (spec `docs/superpowers/specs/2026-09-02-door-partial-design.md`
+-- §2.4 and §4, TRIAD — a stored WORD's meaning). Two statements.
+--
+-- 1. `log_source` gains a fourth member, `no-reading`: a connected
+--    arrival the app holds no reading for. It reads NO MONITOR READING,
+--    the word the LIVE screen has used since Phase LM — one fact, one
+--    word, on both screens.
+--
+--    NO BACKFILL, and not only because it would fail. PostgreSQL 18,
+--    `ALTER TYPE`, verbatim: "If ALTER TYPE ... ADD VALUE ... is
+--    executed inside a transaction block, the new value cannot be used
+--    until after the transaction has been committed."
+--    (https://www.postgresql.org/docs/18/sql-altertype.html). Drizzle's
+--    migrator runs each file in ONE transaction, so any statement here
+--    writing 'no-reading' fails outright. Independently: an old `manual`
+--    row that was really a no-reading arrival is INDISTINGUISHABLE from
+--    a genuine by-hand entry (that is the whole reason the member
+--    exists), so there is nothing to backfill FROM. Those rows stay
+--    LOGGED BY HAND permanently. Stated rather than promised.
+--
+--    ROLLBACK POSTURE: `docs/RELEASING.md`'s rollback table gains a row
+--    for the tag that ships this. A server older than this migration
+--    400s every `no-reading` save (`domain/types.ts`'s LOG_SOURCES,
+--    checked at `routes/data.ts`), and the client's only 400 retry
+--    strips `workoutId` — the save is LOST, not degraded.
+--
+-- 2. `preferences.warmup` is DROPPED (spec §4 rider 1). No reader in
+--    either direction: `routes/data.ts:1862-1863` already 400s the
+--    field on PUT ("warmup is no longer a preference"), and the only
+--    other hit was `schema.ts` itself — its `warmup: jsonb("warmup")`
+--    field is removed in the SAME commit as this migration (not merely
+--    left stale), because `db.select().from(preferences)` selects every
+--    column the schema DECLARES (`getTableColumns`,
+--    `drizzle-orm/pg-core/query-builders/select.js`); leaving the field
+--    declared after the column is gone would 500 every `GET /api/prefs`
+--    with "column \"warmup\" does not exist" (42703). ONE-WAY DDL:
+--    rolling the image back past this tag against a post-drop DB gives a
+--    schema/model mismatch on `preferences` that no rolled-back code path
+--    exercises — practical risk nil, recorded in the rollback row.
+--    Drizzle's generated DROP COLUMN carries no data-loss guard; the
+--    mirror census in the spec is the guard. Phase WU set this rider's
+--    trigger at "the first server-touching phase after TWO tags"; ten
+--    have shipped.
+--
+-- Index 0022: `gh pr list --state open --json number,title,files`
+-- returned no open PRs at generation (2026-09-02, worktree
+-- wave-f-door-a, base d4c42cb1). RE-CHECK BEFORE MERGE: 0019, 0020 and
+-- 0021 were each regenerated on rebase, and a duplicate index is
+-- silently skipped by drizzle's timestamp ordering.
+ALTER TYPE "public"."log_source" ADD VALUE 'no-reading';--> statement-breakpoint
+ALTER TABLE "preferences" DROP COLUMN "warmup";

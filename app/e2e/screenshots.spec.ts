@@ -2562,12 +2562,15 @@ async function postLog(
     // session must set this explicitly.
     deviceName?: string | null;
     // Just Row unconnected spec (2026-09-02), stored shape (c): the row's
-    // own door, `pm5 | timer | manual`. REQUIRED on the wire since the
-    // v0.35.0 sunset (the server derived it when absent until then). A
-    // capture that names its door is the honest shape; one that does not
-    // gets the member the server used to derive for it (below), so no
-    // seeded row's provenance moved at the sunset.
-    source?: "pm5" | "timer" | "manual";
+    // own door, `pm5 | timer | manual | no-reading` (door PR A, spec
+    // `docs/superpowers/specs/2026-09-02-door-partial-design.md` §2.4,
+    // added the fourth). REQUIRED on the wire since the v0.35.0 sunset (the
+    // server derived it when absent until then). A capture that names its
+    // door is the honest shape; one that does not gets the member the
+    // server used to derive for it (below), so no seeded row's provenance
+    // moved at the sunset — the derivation never produces `no-reading`, so
+    // an omitting capture can never seed one.
+    source?: "pm5" | "timer" | "manual" | "no-reading";
     // Task 5's own "log-detail" capture: real measured/judged rows and,
     // via `advancesPlan` below, genuine plan linkage — both need fields
     // this helper's original narrower signature (§5G's own hero-snippet

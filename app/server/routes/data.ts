@@ -1673,7 +1673,11 @@ export function createDataRouter({
       return;
     }
     if (!LOG_SOURCES.includes(body.source as LogSource)) {
-      badRequest(res, "source must be one of pm5, timer, manual", "source");
+      badRequest(
+        res,
+        "source must be one of pm5, timer, manual, no-reading",
+        "source",
+      );
       return;
     }
     const contradiction = logSourceContradiction(

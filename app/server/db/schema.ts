@@ -146,10 +146,18 @@ export const workouts = pgTable(
 // TRIAD — a stored shape): WHICH DOOR a session log came through. A real
 // Postgres pgEnum TYPE, so widening it is an `ALTER TYPE ... ADD VALUE`
 // migration, never a type-level edit (the `endedByEnum` lesson above).
-// Three mirrors of this value set move together: this array,
-// `domain/types.ts`'s `LOG_SOURCES` (what `routes/data.ts` validates the
-// wire against), and the backfill CASE in `drizzle/0020_*.sql`.
-export const logSourceEnum = pgEnum("log_source", ["pm5", "timer", "manual"]);
+// Door PR A (spec `docs/superpowers/specs/2026-09-02-door-partial-design.md`
+// §2.4, migration 0022) added a fourth member, `no-reading`. ELEVEN
+// mirrors of this value set move together — see `domain/types.ts`'s
+// `LogSource` doc comment for the full named list and which ones the
+// compiler checks; this array is NOT one of them (a `pgEnum` widening is
+// DB-level, invisible to `tsc`).
+export const logSourceEnum = pgEnum("log_source", [
+  "pm5",
+  "timer",
+  "manual",
+  "no-reading",
+]);
 
 export const sessionLogs = pgTable(
   "session_logs",
@@ -412,17 +420,16 @@ export const preferences = pgTable("preferences", {
     .notNull()
     .default(["easy", "medium", "hard"]),
   timeCapMinutes: integer("time_cap_minutes").notNull().default(60),
-  // Phase 9's warmup-setting design (2026-08-09, §2) added this column,
-  // replacing the two columns above (warmup_minutes/warmup_override — the
-  // override was never consumed anywhere; minutes' one consumer, the
-  // Builder hint, was rewritten against this column). Phase WU
-  // (2026-08-21) removed the setting: nothing reads or writes this column
-  // any more. LEFT IN PLACE ON PURPOSE — spec §4: dropping it in the same
-  // release that stops reading it would break rollback (the server image
-  // a rollback restores still reads it, and `/api/health` is `select 1`,
-  // so a rollback would report healthy over a dead preferences path). The
-  // drop is an owed follow-up (ROADMAP), not forgotten.
-  warmup: jsonb("warmup"),
+  // Phase 9's warmup-setting design (2026-08-09, §2) added a `warmup`
+  // column here, replacing the two columns above (warmup_minutes/
+  // warmup_override). Phase WU (2026-08-21) removed the setting, and the
+  // owed follow-up this comment used to promise — dropping the column —
+  // is door PR A (spec §4 rider 1, migration 0022): the field is deleted
+  // from this table on purpose, in the same commit as the migration's
+  // `DROP COLUMN`, so the ORM's own `db.select().from(preferences)`
+  // (which selects every declared column, `getTableColumns` —
+  // `node_modules/drizzle-orm/pg-core/query-builders/select.js`) never
+  // asks Postgres for a column the migration just removed.
   countdownSeconds: integer("countdown_seconds").notNull().default(10),
   paceToleranceSeconds: real("pace_tolerance_seconds").notNull().default(1),
   accentColor: text("accent_color").notNull().default("#b5341f"),

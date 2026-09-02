@@ -93,6 +93,7 @@ import {
   buildTotalLine,
   formatTimeOfDay,
   MIN_MEASURABLE_ELAPSED_SECONDS,
+  NO_MONITOR_READING_SOURCE,
   rowJudgment,
   targetsOnlyCaption,
   type SummaryHeroes,
@@ -290,6 +291,10 @@ export interface StoredSummaryView {
 // ⇒ `LOGGED BY HAND` (James's copy ruling, fix round 2026-08-18, supersedes
 // §5A's own shorter table literal "BY HAND" with the live door's exact
 // string — see the module header for why the two screens must agree).
+// Door PR A (2026-09-02) §2.1 adds a fourth: `no-reading` ⇒ the live
+// screen's own `NO_MONITOR_READING_SOURCE`, imported rather than retyped —
+// this is the "next stored-shape change" the module header's LM exception
+// named as its own trigger.
 // `steps` are never consulted: a time-only Just Row is `timer` with NO
 // steps, which the old fingerprint could only ever have called by-hand.
 // The `?? "PM5"` arm is the type's, not the wire's: the server refuses
@@ -304,6 +309,14 @@ function sourceLabel(row: StoredLog): string {
       return "TIMER";
     case "manual":
       return "LOGGED BY HAND";
+    case "no-reading":
+      // Door spec (2026-09-02) §2.1: the live screen's own word
+      // (`summaryModel.ts`'s `NO_MONITOR_READING_SOURCE`), imported so one
+      // fact never reads as two words live vs from the log (James's
+      // 2026-08-18 ruling). This closes the LM exception the module
+      // header above describes — its trigger was "the next stored-shape
+      // change to the logs table", which is this PR.
+      return NO_MONITOR_READING_SOURCE;
   }
 }
 
