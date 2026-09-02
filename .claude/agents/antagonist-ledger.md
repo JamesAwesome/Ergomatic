@@ -6212,3 +6212,56 @@ found by re-running the previous pass's own reasoning one column over.
   (`routes/concept2.ts:212-277`) has no already-linked refusal, so the card's
   "an already linked account can re-link" holds and checks (b)-(d) survive a
   successful (a).
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 8, verifying pass 7's fixes)
+
+Eighth consecutive verification pass on one plan. Two REVISE, both found by
+running something the plan only asserted.
+
+- **CLAIM: "the six new checks FAIL" before the code exists.** FALSE — five do.
+  The third, `[ "$rc" -ne 0 ]` on a script that does not exist yet, passes
+  vacuously: `bash <missing file>` exits 127, which is indistinguishable from
+  the correct refusal it will later assert. **Technique: a failing-test-first
+  step's expected failure COUNT is a measurement, not an inference — run the
+  prescribed block against the pre-fix tree (point its `$HERE` at the real
+  directory from a scratch copy; nothing needs writing into the worktree) and
+  count the FAIL lines. Any check whose assertion is "exits non-zero", "returns
+  empty", or "is absent" is green before the subject exists, so it can never be
+  part of a red proof.** Sibling of the ledger's `SwiftCompile`-count entry: the
+  pass value was reasoned, not counted.
+- **CLAIM (pass 7's own fold): the SDK-header citation rule is widened.** TRUE
+  where the rule is ARGUED (Global Constraints), FALSE where it is USED. The
+  prescribed `WebAuthPlugin.swift` still ships "Every Apple-behaviour claim
+  below quotes the SDK header … by line", and two claims below it do not: the
+  bare-scheme guard rests on a labelled SECONDARY forums post (`grep -i
+  "special char|should not include|bare|colon"` over
+  `ASWebAuthenticationSession.h` → EMPTY, so no header line exists to quote),
+  and the `shouldOverrideLoad` comment cites WebKit and Capacitor with zero
+  header quotes. **Technique: when a pass RELAXES a rule, grep the relaxed
+  absolute ("every", "only", "by line") through the plan's own PRESCRIBED CODE
+  BLOCKS, not just its prose — shipped comments are where a withdrawn absolute
+  survives, and CLAUDE.md's sweep rule names exactly this ("correcting where the
+  claim was ARGUED and leaving it where it was USED is the failure").**
+- **Attacked and HELD:** the whole census re-run one more time, per phrase,
+  against every prescribed insertion and code block extracted to files — only
+  the two documented additions appear (`appUrlOpen` in `WebAuthPlugin.swift`
+  and in step 4's ROADMAP block; `browserFinished` in that block and in step 5's
+  HISTORICAL note), and `ROADMAP.md`'s baseline (2 / 1, at `:1091,:1108` /
+  `:1089`) plus the replaced `:1120-1127` block containing neither confirms the
+  2→3 and 1→2 cells exactly; two apparent extra hits were extraction artefacts
+  (a quoted sentence being REMOVED, and the plan's own instruction prose).
+  `ios-version.sh:14` prints the card's success line byte-for-byte.
+  `Main.storyboard:14` and the `Info.plist` `:21-30` fragment are BYTE-identical
+  to the plan's replacements (tabs included). All four `project.pbxproj`
+  anchors, the seven existing id prefixes, `E2A1` = 0. `ios-release.sh:101-108`
+  is exactly the block being replaced, with `APP_DIR`/`PLIST` in scope. Task 1's
+  commit stages zero lint-staged-matching files (`package.json:14,18`), so no
+  hook can reformat it. No Xcode state is required that a fresh engineer lacks:
+  no scheme is tracked, none is needed (`CODE_SIGNING_ALLOWED=NO`, `generic/
+  platform=iOS Simulator`), and `Package.resolved` is untracked so it cannot
+  break gate (b). `linkFlow.test.ts` lands in the jsdom `client` project, loads
+  cleanly (only `vitest` is a static import) and fails per-test on the dynamic
+  import — no zero-collection trap. `eslint.config.js:89-90` still exact.
+- **Nit, optional:** Task 9's `git status -- app/ios` "must be empty" — that
+  form prints five lines on a clean tree; Task 6 step 4's `--short` form is the
+  one that reads empty.
