@@ -67,8 +67,8 @@ describe("renderCallbackPage", () => {
       expect(page.status).toBe(status);
       expect(page.html).toContain(label);
       expect(page.html).toContain(statement);
-      // The action may carry a same-origin anchor around "here"; strip
-      // tags before comparing the sentence.
+      // No anchors, ever (design §5) — strip tags before comparing the
+      // sentence anyway, since the sentence itself carries no markup.
       expect(page.html.replace(/<[^>]+>/g, "")).toContain(action);
     },
   );
@@ -96,9 +96,10 @@ describe("renderCallbackPage", () => {
     expect(page.html).toContain("a&quot;b&amp;c@example.test");
   });
 
-  // Design §5: callback HTML carries NO subresource and NO outbound link —
-  // the first external stylesheet or anchor would leak `code`/`state` in
-  // Referer. Anchors, when present, are same-origin and relative.
+  // Design §5: callback HTML carries NO subresource and NO outbound link,
+  // ever — the first external stylesheet or anchor would leak `code`/`state`
+  // in Referer. There are no anchors on any page, including "here": it is
+  // plain text, not a link.
   it.each([
     "linked",
     "alreadyLinked",
@@ -116,6 +117,7 @@ describe("renderCallbackPage", () => {
     expect(html).not.toMatch(
       /<(link|script|img|iframe|object|embed|video|audio|source)\b/i,
     );
+    expect(html).not.toMatch(/<a\b/i);
     expect(html).not.toMatch(/\bsrc=/i);
     expect(html).not.toMatch(/@import|url\(/i);
     for (const m of html.matchAll(/href="([^"]*)"/g)) {
