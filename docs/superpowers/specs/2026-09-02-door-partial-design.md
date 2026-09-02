@@ -1,8 +1,10 @@
 # The `door` item, re-scoped: PARTIAL, `no-reading`, and the in-flight metres
 
 **Date:** 2026-09-02 · **Wave:** F · **Class:** TRIAD (a stored word's meaning
-in PR A; a stored number's meaning in PR B) · **Status:** DRAFT, awaiting
-James's review; anchor pass RUN 2026-09-02 and a spec pass RUN the same day on the
+in PR A; a stored number's meaning in PR B) · **Status:** APPROVED by James 2026-09-02 (spec "looks good"; Gate 0-A approved
+with one copy change — the `LINK LOST` line shortens to `LINK LOST · the app
+lost the monitor`, a change to the shipped literal that PR A carries; chip in
+the numbers-line slot; chip border left as the shipped Just Row chip's); anchor pass RUN 2026-09-02 and a spec pass RUN the same day on the
 written text (five blockers, all applied below; both ledger entries landed
 with this spec) · **Gate 0:** two, one per PR, rendered before any implementation task.
 
@@ -101,7 +103,7 @@ the rower produced; there is no threshold.
 | `endedBy` | who ended it | marker (draft, Gate 0-A decides the words) |
 |---|---|---|
 | `rower` | the rower (End, or the monitor's TERMINATE) | `STOPPED EARLY · N of M intervals measured` |
-| `link-lost` | the app lost the monitor | existing `LINK LOST · the app lost the monitor before the end`, plus the suffix when PARTIAL |
+| `link-lost` | the app lost the monitor | existing `LINK LOST · the app lost the monitor`, plus the suffix when PARTIAL |
 | `program-dropped` | the erg discarded the program | `THE MONITOR DROPPED THE PROGRAM · N of M intervals measured` |
 | `program-failed` | our `program()` call failed against an already-open run (`useMonitorSession.ts:4946`); reaches the log only via Today's unlogged row, carrying the previous program's steps | `THE PROGRAM DID NOT LOAD · N of M intervals measured` |
 | `interrupted` | the record was closed from Today's unlogged row with no wire evidence (`monitorRun.ts:1108-1119`) | `LEFT UNFINISHED · N of M intervals measured` |
