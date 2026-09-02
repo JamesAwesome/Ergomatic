@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # Configuration gate for compose.yml's Concept2 env passthrough (Wave E
 # PR1): server/index.ts reads
-# C2_BASE_URL/C2_CLIENT_ID/C2_CLIENT_SECRET/C2_LINK_ENABLED, and the
-# documented env-only prod cutover is impossible if compose.yml never
-# forwards them into the api service's environment. This test runs the
-# REAL `docker compose config` against the REAL compose.yml (never a copy,
+# C2_BASE_URL/C2_CLIENT_ID/C2_CLIENT_SECRET/C2_LINK_ENABLED, and
+# AVAILABILITY (the flag reaching the api service at all) is env-gated —
+# that passthrough is impossible if compose.yml never forwards them into
+# the api service's environment. ACTIVATION on a real cohort is a
+# separate, larger question this test does not cover: it additionally
+# requires option (g) fully implemented, per the design gate ruling —
+# see docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md §6 and
+# ROADMAP.md's C2 account-injection row. This test runs the REAL
+# `docker compose config` against the REAL compose.yml (never a copy,
 # never a hand-parsed grep of the YAML source) — it goes red the moment a
 # passthrough line is removed, renamed, or loses its default.
 set -uo pipefail
@@ -16,7 +21,8 @@ check() { if [ "$1" = "$2" ]; then echo "ok: $3"; else echo "FAIL: $3 (want '$2'
 cd "$REPO_ROOT"
 
 # 1. No C2 host vars set — the state of every real stack today (dev, e2e,
-#    and prod until the deliberate env-only cutover). The three gating vars
+#    and prod until availability is deliberately turned on, which is only
+#    part of activation — see the file header). The three gating vars
 #    must stay empty (dark); C2_BASE_URL is the one exception (its default
 #    mirrors server/index.ts's own JS-side fallback to the sandbox URL, so
 #    it is never absent — only ever empty would be the bug, since an empty
@@ -28,8 +34,9 @@ check "$(grep -c '^ *C2_CLIENT_SECRET: ""$' <<<"$dark")" "1" "C2_CLIENT_SECRET e
 check "$(grep -c '^ *C2_BASE_URL: https://log-dev.concept2.com$' <<<"$dark")" "1" "C2_BASE_URL falls back to the sandbox default (never absent)"
 
 # 2. All four dummy host vars set — every value must actually reach the api
-#    service. This is the half of the gate that proves the cutover is
-#    POSSIBLE, not just that dark stays dark.
+#    service. This is the half of the gate that proves availability is
+#    POSSIBLE to turn on via env, not just that dark stays dark.
+#    Activation still requires option (g) — see the file header.
 lit=$(POSTGRES_PASSWORD=dummy C2_BASE_URL=https://real.concept2.example C2_CLIENT_ID=dummy-id C2_CLIENT_SECRET=dummy-secret C2_LINK_ENABLED=1 docker compose config 2>/dev/null)
 check "$(grep -c '^ *C2_BASE_URL: https://real.concept2.example$' <<<"$lit")" "1" "C2_BASE_URL passes through"
 check "$(grep -c '^ *C2_CLIENT_ID: dummy-id$' <<<"$lit")" "1" "C2_CLIENT_ID passes through"

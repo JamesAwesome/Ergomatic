@@ -878,7 +878,13 @@ now build items against a picked shape, not open questions:**
   12), and Concept2's own approval of a new native `redirect_uri`.
 - PR2's detect-identity treatment (§6: option (b), shipping alongside)
   — the callback/linked card naming which Ergomatic account the link
-  goes to.
+  goes to. **This is an OWED Gate 0 AMENDMENT, not yet rendered or
+  approved:** the frozen board
+  (`docs/design/handoffs/2026-08-31-concept2-connect/README.md`) predates
+  this ruling, and its Linked card (1c) carries no account identity line
+  today — see that file's own note. The amendment gets its own rendered
+  Gate 0 pass, James-approved, before PR2 implements it; it does not
+  retroactively authorize a copy change against the frozen board.
 - **Moot, since (d) was not the ruling: the two bullets this section
   used to carry about (d) specifically** (a device measurement of
   `/start`'s cookie surviving the full round trip; the Confirm/Continue
@@ -942,7 +948,11 @@ currently-unauthenticated web callback — or an explicit re-ruling.
 **Shipping with PR2's surface:** the detect-identity treatment (option
 (b) — the callback and linked card naming which Ergomatic account
 receives the link), the cheap hedge that makes the attack
-self-identifying. Everything below is the evidence this ruling rests on.
+self-identifying. **This treatment is an OWED Gate 0 AMENDMENT** (§4's
+"Still owed" list, above) — the frozen board predates this ruling and
+carries no identity copy yet; it is rendered and James-approved before
+PR2 implements it, not pre-approved here. Everything below is the
+evidence this ruling rests on.
 
 This was the decision input. **James's ruling (above) was made from this
 package — corrected, round 7, finding 3, extended round 9, corrected again

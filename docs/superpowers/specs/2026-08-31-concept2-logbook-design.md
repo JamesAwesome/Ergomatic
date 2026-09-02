@@ -70,8 +70,11 @@ are results.
   DURABLY (single-process re-auth 2026-08-31, sha256 equality receipt
   committed in the PR0 report; the harness enforces state and aborts
   before exchange on mismatch, abort path mutation-proven).**
-  **Branch A is CHOSEN.** Branch B below stays as the recorded
-  contingency design, not a live option. Other PR0 measurements: dedup is DATETIME-GRANULAR to the
+  **Branch A is CONFIRMED as the wire fact.** §Architecture 3 uses this
+  fact (not a fallback) as the basis for a single ruled hybrid completion
+  design — see there for the mechanism, which is per-surface for
+  principal-binding reasons, not because Branch A failed. Other PR0
+  measurements: dedup is DATETIME-GRANULAR to the
   second and the 409 body names the colliding result id; dates ~3+
   days in the future are 422-rejected; a zero-rest `VariableInterval`
   post is accepted (F11 answered: omission never forced); the raw
@@ -150,41 +153,87 @@ Concept2's present.
 
 ## Architecture
 
-**Server broker for secrets; system browser for consent; no APP
-CREDENTIAL anywhere in the native path** (narrowed, PR1.5 fix round 7,
-finding 4 — this used to say "no cookie anywhere," which overclaimed:
-the design-gate ruling
+**Server broker for secrets; no app credential enters the CONSENT
+BROWSER** (corrected, PR1.5 fix round 13 — this used to read "no app
+credential anywhere in the native path," which the ruled design below
+directly contradicts: the native completion leg deliberately carries the
+app's own Keychain bearer, at the authenticated exchange call. The
+invariant that actually holds — and what round 7's own narrowing, "no
+cookie anywhere" → "no app credential anywhere in the native path," was
+reaching for without quite landing on — is narrower and still true:
+nothing the app holds, Keychain bearer or `erg_session`, ever enters the
+SYSTEM/in-app browser that renders C2's own consent screen. The
+design-gate ruling
 (`docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md` §3(d)) may yet
-introduce a PURPOSE-BUILT, non-credential cookie into the consent
-browser's own hop; that cookie would never carry the app's own Keychain
-bearer or an `erg_session`, which is the invariant this sentence actually
-needs). The anchor pass killed rev 1's redirect-chain flow: native auth
-is a Keychain bearer attached by `api.ts` to fetches — a top-level
-WebView navigation carries no credential, `CapacitorHttp` follows
-redirects into a JS string, and the callback browser has no session to
-bind. Google sign-in's native plugin flow (`docs/deploy.md:105-108`) is
-the in-repo precedent; C2 has no SDK, so we build the RFC 8252 shape:
+add a PURPOSE-BUILT, non-credential cookie to that browser hop; even
+that would never be an app credential). The anchor pass killed rev 1's
+redirect-chain flow: native auth is a Keychain bearer attached by
+`api.ts` to fetches — a top-level WebView navigation carries no
+credential, `CapacitorHttp` follows redirects into a JS string, and the
+callback browser has no session to bind. Google sign-in's native plugin
+flow (`docs/deploy.md:105-108`) is the in-repo precedent; C2 has no SDK,
+so we build the RFC 8252 shape:
 
 1. **Mint:** authed `POST /api/concept2/connect {weightClass}` (bearer or
    cookie — works on both surfaces). Server validates `H`/`L`, creates a
    short-lived single-use `concept2_auth_attempts` row `{nonce, user_id,
-   weight_class, created_at}`, and returns the authorize URL. No
-   credential needs to survive the browser hop: the nonce IS the binding.
+   weight_class, surface, created_at}` — `surface` (`"native"` | `"web"`,
+   new column, gate doc §3(g) round 10) records which caller minted the
+   attempt, so a nonce minted for one surface cannot complete on the
+   other — and returns the surface-appropriate authorize URL. No
+   credential needs to survive the browser hop: the nonce correlates the
+   return to the attempt, and the identity check in step 3 is what makes
+   the binding real (surface enforcement alone is route integrity, not
+   principal authority — gate doc §3(g) round 12).
 2. **Consent:** client opens the URL in the SYSTEM browser / in-app
    browser tab (`@capacitor/browser` on native — new dependency, version
    verified at add time; plain navigation on web).
-3. **Return — two designs, chosen by PR0's `state` probe, both written
-   now (anchor F4):**
-   - **Branch A (C2 echoes `state`):** `redirect_uri` is our https
-     callback; C2 sends `code` + `state` there; the server resolves the
-     attempt row by nonce, exchanges the code (secret server-side),
-     fetches `GET /api/users/me` for `c2_user_id`, writes the link row
-     for the attempt's user, consumes the attempt, and renders a plain
-     "Linked. Return to the app." page. The APP never sees the code; it
-     learns the outcome by re-fetching `GET /api/concept2/link` on
-     return — **PR1.5 plan correction, superseding this paragraph's
-     original `appStateChange` wording, updated again by PR1.5 fix round
-     2 (P1a):** `useReturnToApp.ts` composes THREE signals, not one:
+3. **Return — one measured hybrid, both mechanisms used together, not
+   two contingency designs chosen between (anchor F4):** PR0's `state`
+   probe measured **Branch A — C2 DOES echo `state`**
+   (`docs/monitor/c2-crossconnect-2026-09/README.md` "Auth +
+   state-echo probe": sha256 equality receipt, single-process re-auth,
+   2026-08-31): `redirect_uri` is our https callback, C2 sends `code` +
+   `state` there, and the server resolves the attempt row by nonce. That
+   wire fact settles the state-echo question for **Branch A's mechanism
+   (the https callback, below, used for web)**; it does not by itself
+   decide whether native also needs its own completion mechanism, which
+   is a principal-binding question, not a state-echo one — **Branch B
+   (the native private-use-scheme + `appUrlOpen` mechanism, corrected
+   round 13 — this used to be paired with the false parenthetical "C2
+   does not echo state," and framed as Branch A's mutually-exclusive
+   alternative; the state-echo wire fact never bore on whether native
+   needs its own scheme at all)** is used for native regardless of the
+   state-echo result, because it is what lets the app hold and present
+   the Keychain bearer at an authenticated exchange call:
+   - **Native (Branch B)** completes through a private-use scheme
+     (Info.plist): C2 redirects to
+     `haus.waffle.ergomatic://oauth/callback?code=…&state=…` (state IS
+     present, per the measured wire fact, even though native does not
+     need it to disambiguate the return the way the shared-nonce https
+     callback does — the app itself received the redirect directly);
+     an `appUrlOpen` handler posts `{code, state}` to authed `POST
+     /api/concept2/exchange`, **carrying the app's own Keychain
+     bearer**, and the server checks the caller's id against the
+     attempt's before exchanging.
+   - **Web (Branch A)** completes through the EXISTING `/api/concept2/callback` —
+     unauthenticated today, per `server/routes/concept2.ts:171`'s own
+     "NO requireUser — the nonce binds" comment, which describes the
+     PRE-RULING shape, not the target — gaining the same
+     caller-identity check via the `erg_session` cookie that already
+     exists for web sessions (`server/auth/cookies.ts`) and is already
+     delivered on C2's redirect back to our own first-party origin: "a
+     cookie exists there" is no longer a reason to skip authenticating
+     it, it is what makes authenticating it possible with no new
+     mechanism. After the identity check passes, the server exchanges
+     the code (secret server-side), fetches `GET /api/users/me` for
+     `c2_user_id`, writes the link row for the attempt's user, consumes
+     the attempt, and renders a plain "Linked. Return to the app." page.
+     The app never sees the code on this path; it learns the outcome by
+     re-fetching `GET /api/concept2/link` on return — **PR1.5 plan
+     correction, superseding this paragraph's original `appStateChange`
+     wording, updated again by PR1.5 fix round 2 (P1a):**
+     `useReturnToApp.ts` composes THREE signals, not one:
      `adapters/appLifecycle.ts`'s own `pause`/`resume` translation
      (native, via `@capacitor/app`, already a dependency),
      `registerWebAppLifecycleListener`'s raw Page Visibility mapping
@@ -200,46 +249,31 @@ the in-repo precedent; C2 has no SDK, so we build the RFC 8252 shape:
      firing on a Control Centre swipe without the app ever leaving the
      foreground, and it made a lost-link banner fire nine times over a
      link that never dropped (`adapters/appLifecycle.ts:27-31`).
-     **RULED (James, 2026-09-01, PR1.5 design gate — `2026-09-01-concept2-pr15-gate.md`):
-     ACCEPT the bounded residual for the dark plumbing today (four real
-     bounds — `ALLOWED_EMAILS`, the `C2_LINK_ENABLED` dark flag, one live
-     attempt per user, the 15-minute window — not the two the original
-     "SUSPECTED" framing named).** `C2_LINK_ENABLED=1` on any REAL cohort
-     is GATED, not free, on the fully authenticated form of option (g)
-     below (not chosen yet, but the condition of activation): the nonce
-     alone binding the exchange, as this section originally described,
-     is the failure mode the ruling closes before flag flip, not a
-     standing design. Seven options across four buckets (accept, detect,
-     physically-confirm, app-bind) are catalogued in the gate doc's §3;
-     this bullet states only the RULED activation contract, not the
-     survey.
-   - **Branch B (C2 does not echo `state`) — THE RULED ACTIVATION SHAPE,
-     not a contingency design:** the callback cannot bind a user by nonce
-     alone, so BOTH completion paths authenticate the caller and compare
-     `attempt.userId === req.user.id` BEFORE the C2 token exchange runs
-     (never after, and never merely before writing the link — a failed
-     comparison must prevent the exchange call itself, not just the
-     write that follows it). On native: register a private-use scheme
-     (Info.plist), C2 redirects to
-     `haus.waffle.ergomatic://oauth/callback?code=…`, an `appUrlOpen`
-     handler posts `{code, state}` to authed `POST /api/concept2/exchange`
-     carrying the app's Keychain bearer, and the server checks the
-     caller's id against the attempt's before exchanging. On web: the
-     EXISTING `/api/concept2/callback` — unauthenticated today, per
-     `server/routes/concept2.ts:171`'s own "NO requireUser — the nonce
-     binds" comment — gains the SAME check, using the `erg_session`
-     cookie that already exists for web sessions (`server/auth/cookies.ts`)
-     and is already delivered on C2's redirect back to our own
-     first-party origin; "a cookie exists there" is no longer a reason to
-     skip authenticating it, it is what makes authenticating it possible
-     with no new mechanism. BOTH routes additionally enforce the
-     attempt's own `surface` (a new column, `2026-09-01-concept2-pr15-gate.md`
-     §3(g)) so a nonce minted for one surface cannot complete on the
-     other — surface enforcement is route integrity; the identity check
-     above is what makes the binding real. `redirect_uri` is chosen per
-     surface at mint time, exactly as originally drafted.
+   - **Both** completion paths compare `attempt.userId === req.user.id`
+     BEFORE the C2 token exchange runs (never after, and never merely
+     before writing the link — a failed comparison must prevent the
+     exchange call itself, not just the write that follows it) AND
+     enforce the attempt's own `surface` column from step 1, so a nonce
+     minted for one surface cannot complete on the other — surface
+     enforcement is route integrity; the identity check is what makes
+     the binding real. `redirect_uri` is chosen per surface at mint
+     time.
    - Attempt rows expire (15 min) and are single-use; expiry/garbage
      collection is the server's, not a cron.
+
+   **RULED (James, 2026-09-01, PR1.5 design gate — `2026-09-01-concept2-pr15-gate.md`):
+   ACCEPT the bounded residual for the dark plumbing today (four real
+   bounds — `ALLOWED_EMAILS`, the `C2_LINK_ENABLED` dark flag, one live
+   attempt per user, the 15-minute window — not the two the original
+   "SUSPECTED" framing named).** `C2_LINK_ENABLED=1` on any REAL cohort
+   is GATED, not free, on the fully authenticated completion shape above
+   (surface binding + both-path identity check) being built end-to-end:
+   the nonce alone binding the exchange, as an earlier revision of this
+   section described, is the failure mode the ruling closes before flag
+   flip, not a standing design. Seven options across four buckets
+   (accept, detect, physically-confirm, app-bind) are catalogued in the
+   gate doc's §3; this bullet states only the RULED activation contract,
+   not the survey.
 4. **Link routes:** `GET /api/concept2/link` → `{linked, weightClass,
    c2UserId}` (never tokens — `c2UserId` is the linked account's numeric
    id, which PR2's sent-state contract and its View-on-Concept2 link-out
@@ -281,7 +315,14 @@ the in-repo precedent; C2 has no SDK, so we build the RFC 8252 shape:
    unpredictably.
 7. **Env:** `C2_BASE_URL` (defaults `https://log-dev.concept2.com`),
    `C2_CLIENT_ID`, `C2_CLIENT_SECRET`, and `C2_LINK_ENABLED` (default
-   OFF). Real env only. Prod cutover is env + the write-approval check.
+   OFF). Real env only. **`C2_LINK_ENABLED=1` on a real cohort is not an
+   env-only cutover: it additionally requires option (g) fully
+   implemented** — attempt-surface binding plus an authenticated
+   completion check (`attempt.userId === req.user.id`, run before the
+   C2 token exchange) on BOTH the native and web paths — alongside the
+   write-approval check below (RULED, James, 2026-09-01,
+   `docs/superpowers/plans/2026-09-01-concept2-pr15-gate.md` §6; ROADMAP's
+   C2 account-injection row).
 8. **Visibility flag (James, 2026-08-31: "gate the visibility... in case
    we want to go live without it").** The whole surface is gated
    server-side: available iff `C2_LINK_ENABLED=1` AND both credentials
@@ -290,9 +331,13 @@ the in-repo precedent; C2 has no SDK, so we build the RFC 8252 shape:
    when unavailable, and every link/upload route refuses server-side too
    — a capability gate, not a cosmetic hide. Server-driven rather than a
    `VITE_` build flag on purpose: one build ships everywhere (no second
-   iOS binary, no RF13 disarmed-flag class), and flipping prod live is
-   an env change, not a release. Client code ships in the bundle either
-   way — hidden, not absent; nothing in it is secret. Lifecycle rule:
+   iOS binary, no RF13 disarmed-flag class); AVAILABILITY (the flag
+   existing at all) is an env change, not a release, but ACTIVATING it
+   for a real cohort is gated on more than the env flip — see item 7's
+   (g) precondition and item 9's write-approval precondition, both
+   required before flag flip, not either alone. Client code ships in
+   the bundle either way — hidden, not absent; nothing in it is secret.
+   Lifecycle rule:
    turning the flag OFF after users linked hides the surface but deletes
    nothing — links and per-row sent state persist as history.
    **Availability matrix (James's #244 review, finding 7) — every route,
@@ -315,7 +360,11 @@ the in-repo precedent; C2 has no SDK, so we build the RFC 8252 shape:
    too early would have to unlink and relink. Therefore
    `C2_LINK_ENABLED` stays OFF on prod until write approval is
    CONFIRMED, not merely requested; approval-before-first-link is the
-   ordering, not approval-before-first-upload.
+   ordering, not approval-before-first-upload. **This is one of two
+   preconditions the flag flip requires, not the whole cutover** — item
+   7's (g) precondition (attempt-surface binding plus authenticated
+   completion on both paths) is the other, and both must hold before
+   `C2_LINK_ENABLED=1` reaches a real cohort.
 
 ## Stored shapes (TRIAD)
 
@@ -333,11 +382,20 @@ the in-repo precedent; C2 has no SDK, so we build the RFC 8252 shape:
 | `created_at` / `updated_at` | timestamptz | house pattern |
 
 **`concept2_auth_attempts`** — `{nonce (pk), user_id FK, weight_class,
-created_at}`; single-use, 15-minute expiry, consumed at exchange. Exists
-because the browser hop carries no credential; the nonce is the user
-binding. No `redirect_kind` column: Branch A is the chosen and measured
-path (PR0's `state` probe), so the redirect URI is one env-derived boot
-constant rather than a per-attempt choice (plan deviation 1).
+surface, created_at}`; single-use, 15-minute expiry, consumed at
+exchange. Exists because the browser hop carries no credential; the
+nonce correlates the return, and (per the ruled activation shape,
+§Architecture 3) `attempt.userId === req.user.id` at an authenticated
+completion is what actually binds it. **`surface` column** (`"native"` |
+`"web"`, added PR1.5 fix round 13, superseding this row's original "no
+`redirect_kind` column ... one env-derived boot constant" claim — that
+held only while the design was Branch-A-only web completion; the ruled
+hybrid needs a per-surface redirect URI chosen at mint time, since
+native completes through a private-use scheme and web through the
+existing https callback, and the column is what lets both completion
+routes enforce that a nonce minted for one surface cannot complete on
+the other, gate doc §3(g) round 10) — plan deviation 1 is therefore
+superseded, not standing.
 
 **`session_logs` additions**, all additive-optional, no default, no
 backfill (house pattern):
@@ -462,9 +520,10 @@ rather than inferred:**
   from a surface that does not render while `available:false`. Deployed
   prod behavior: unchanged.
 - **After PR2:** the surface renders ONLY when the server reports
-  `available:true`; prod stays dark until write approval + flag flip
-  (§Architecture 9). Deployed prod behavior: unchanged until the
-  deliberate env change, which is the release act.
+  `available:true`; prod stays dark until BOTH write approval is
+  confirmed AND option (g) is fully implemented (§Architecture 7, 9).
+  Deployed prod behavior: unchanged until that deliberate flag flip,
+  which is the release act — an env change alone does not suffice.
 
 **Atomicity ruling:** no PR in this wave depends on a later one to be
 safe; the flag, not PR ordering, is the safety mechanism.
@@ -502,9 +561,10 @@ safe; the flag, not PR ordering, is the safety mechanism.
 - **PR1.5 — the native link flow** (PM condition 1's split: a reviewer
   should not hold a token-broker migration and an iOS deep-link contract
   in one pass): `@capacitor/browser` dependency, foreground re-fetch
-  wiring, and — Branch B only — the URL scheme + `appUrlOpen` handler.
-  Verified ON DEVICE, not by reading Capacitor docs (RF13/RF19: our e2e
-  is web; the native arm is exactly where our instruments are blind).
+  wiring, and — the native completion leg only (§Architecture 3) — the
+  URL scheme + `appUrlOpen` handler. Verified ON DEVICE, not by reading
+  Capacitor docs (RF13/RF19: our e2e is web; the native arm is exactly
+  where our instruments are blind).
 - **PR2 — client (after Gate 0):** You card, send affordance and states,
   api client additions. `pnpm e2e` + screenshots (RF1); per-file coverage
   (RF2); realistic fixtures (RF3).
@@ -562,6 +622,7 @@ Auto-upload (follow-on; webhooks noted for it), per-interval `intervals`
 array (per-interval rest not stored server-side), `stroke_data` (RC-11
 clock mismatch), manual/terminated rows, PATCH/DELETE of C2 results,
 re-reading sent rows against C2 (the sent state is a past-tense record,
-declared above), prod cutover (env flip + write-approval check when the
-key arrives). The word "sync" does not appear in any release note for
+declared above), prod cutover (write-approval confirmation AND option
+(g) fully implemented, then the flag flip, when the key arrives — see
+§Architecture 7, 9). The word "sync" does not appear in any release note for
 this wave (PM): nothing here syncs.
