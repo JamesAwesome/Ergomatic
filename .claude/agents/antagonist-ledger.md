@@ -6156,3 +6156,59 @@ same way.
   the "only the calling app's session" guarantee traced to design §Research `:73` (PRIMARY,
   developer.apple.com) rather than the SDK header, which does not contain it — the Swift comment
   attributes it correctly.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 7, verifying pass 6's fixes)
+
+Seventh consecutive verification pass on one plan. Three REVISE, all
+found by re-running the previous pass's own reasoning one column over.
+
+- **CLAIM (pass 6's fix): the census table's residual cells now reflect the
+  plan's own prescribed record edits.** FALSE for the sibling row. Pass 6
+  re-counted `browserFinished` after steps 4-5 add sentences to three
+  documents, and got 1→2 / 3→4 / 7→8 exactly right. It never re-counted the
+  OTHER phrase inside the same prescribed block: step 4's replacement ROADMAP
+  Status block also contains `appUrlOpen` once, so ROADMAP goes 2→3 and step
+  6b's gate diff emits an unpermitted line. **Technique: when a fix re-measures
+  ONE row of a table against a newly-written source, re-measure every row
+  against that same source — the source is the unit, not the row.** Settled by
+  running the plan's own census script against a detached worktree at the
+  stated baseline, then grepping the prescribed replacement text for each
+  phrase in the list.
+- **CLAIM: an operator command in a walk card is checked when its OUTPUT is
+  checked.** FALSE. `pnpm ios:build` (package.json:29) ends in
+  `scripts/ios-version.sh:12-13`, which rewrites two TRACKED files with version
+  stamps. The plan's own Global Constraints state the rule and the required
+  `git restore`; the card is the plan's only invocation of the command and
+  carries neither, and the SDLC step that would catch it names those exact two
+  files as known pre-existing dirt in a DIFFERENT checkout. **Technique: for
+  every command handed to an operator, read what it writes, not only what it
+  prints — and grep the plan for who restores it.** The main checkout's own
+  `git status` was the standing proof nobody restores them.
+- **CLAIM: a walk case that carries a PASS criterion is fully recorded.**
+  FALSE for an OPTIONAL variant. Check (d)'s optional WebContent-termination
+  run is, by the plan's own words, "the only thing that can settle" an
+  INFERENCE the shipped Swift comment declares in its own text — and it had no
+  bullet in the report contents and no row in the fold task, so a measurement
+  would have left `INFERENCE, not measured` standing in shipped code.
+  **Technique: for every "UNMEASURED"/"INFERENCE" string a plan puts into
+  shipped prose, find the walk step that measures it AND the fold row that
+  rewrites it; a measurement with no fold row is not an instrument.**
+- **HELD, attacked hard:** all four of pass 6's folds — the `linkFlow.ts`
+  header and every prescribed `app/src` block re-grepped (0 lowercase
+  `browserFinished`, including the surviving halves of the three edited files);
+  the single permitted `app/ios` `appUrlOpen` hit; step 6b's placement and all
+  three `browserFinished` post-edit counts re-derived by counting the current
+  files; the `/tmp/pr175b-base` worktree lifecycle (created once, reused,
+  removed once). The census mutation was RUN: exit 0, `posts nothing and
+  carries no client id` drops 1→0 for `Concept2LinkProbe.tsx` while `never a
+  real link` survives at 1, and the diff moves exactly one line — the survivor
+  requirement is what separates a bite from a crashed tool. Pass counts
+  consistent at all three sites. **Newly verified PRIMARY, and it was the
+  walk's single point of failure: the (d) inspector chain** —
+  `debug.xcconfig:1` → `project.pbxproj:187,308` → `Info.plist:5-6` →
+  `CAPInstanceDescriptor.swift:144` / `CapacitorBridge.swift:31` →
+  `CapacitorBridge.swift:458` `isInspectable`, documented at
+  `CAPInstanceDescriptor.h:102`. Also verified: `POST /connect`
+  (`routes/concept2.ts:212-277`) has no already-linked refusal, so the card's
+  "an already linked account can re-link" holds and checks (b)-(d) survive a
+  successful (a).
