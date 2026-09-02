@@ -642,7 +642,7 @@ function libraryWorkoutFixture(id: string, title: string): LibraryWorkout {
  * (`/library/:id/log?from=monitor` — `monitorModeRun`'s own condition 1)
  * over whatever `MonitorRun` a prior `runReplay` call already wrote to
  * `localStorage`, drives the door's Save flow (`chooseHeldAndPain` +
- * `LogSession.test.tsx`'s own default "Save without logging" button, no
+ * `LogSession.test.tsx`'s own default no-plan "Save" button, no
  * active plan), and returns the resulting save POST's parsed body.
  * EXPORTED for reuse (task brief): Task 2 (leg 2) and Task 4 (leg 3)
  * mount their own replayed storage through this identical helper rather
@@ -713,9 +713,7 @@ export async function mountLogSessionAndSave(
   // source), not a hand-picked number this fixture invented.
   await userEvent.click(screen.getByRole("button", { name: "HELD" }));
   await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
-  await userEvent.click(
-    screen.getByRole("button", { name: "Save without logging" }),
-  );
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByText("TODAY SCREEN");
 
   const call = apiFn.mock.calls[0];

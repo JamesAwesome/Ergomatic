@@ -141,8 +141,8 @@ test.describe("Just Row: the whole flow", () => {
     await expect(page.getByText(/DID YOU HOLD THE TARGETS/)).toHaveCount(0);
 
     // A fresh backdoor user has no plan, so the door's save stack is the
-    // no-plan rule's one button — `Save` leading alone (timer-mode spec 2026-09-02, ruling 5)
-    // (substitution spec 2026-09-02 §Mechanism 2; the plan-active pair is
+    // no-plan rule's one button — `Save` leading alone (timer-mode spec
+    // 2026-09-02, ruling 5; substitution spec §Mechanism 2 — the pair is
     // its own flow below). Asserted as the ONLY save control so a pair
     // rendered against a plan the user never chose would be caught here.
     await expect(
@@ -191,6 +191,10 @@ test.describe("Just Row: without the monitor", () => {
     await page.getByRole("link", { name: "JUST ROW" }).click();
     await expect(page).toHaveURL(/\/justrow$/);
 
+    // The door's band is James's line (timer-mode handoff rev 1c, ruling
+    // 3): the door says what it is, the two buttons say how.
+    await expect(page.getByText("Start a free row session.")).toBeVisible();
+
     // The door's second action, under Connect (handoff `Main.dc.html`).
     await page.getByRole("button", { name: "Start Timer" }).click();
     await expect(page).toHaveURL(/\/session\/run$/);
@@ -232,8 +236,8 @@ test.describe("Just Row: without the monitor", () => {
     await expect(page.getByText("—")).toHaveCount(0);
 
     // A fresh backdoor user has no plan, so the door's save stack is the
-    // no-plan rule's one button — `Save` leading alone (timer-mode spec 2026-09-02, ruling 5)
-    // (substitution spec 2026-09-02 §Mechanism 2; the plan-active pair is
+    // no-plan rule's one button — `Save` leading alone (timer-mode spec
+    // 2026-09-02, ruling 5; substitution spec §Mechanism 2 — the pair is
     // its own flow below). Asserted as the ONLY save control so a pair
     // rendered against a plan the user never chose would be caught here.
     await expect(
@@ -242,16 +246,21 @@ test.describe("Just Row: without the monitor", () => {
     await page.getByRole("button", { name: "Save" }).click();
 
     // History (handoff `History.dc.html`, criterion 4): the row wears the
-    // JR chip on its own class, no `.type-badge`, and NO second line — a
-    // row with no avg split and no distance gets no hero snippet
-    // (`LogRow.heroSnippet` returns ""). A fresh backdoor user's history
-    // holds only this row, so every count below is about it.
+    // JR chip on its own class, no `.type-badge`, and — since the
+    // timer-mode spec (2026-09-02, ruling 4; its own `History.dc.html`) —
+    // a second line reading `TIME m:ss`, the detail's own label, where a
+    // row with no avg split and no distance used to get nothing
+    // (`LogRow.heroSnippet`). The figure is the same seconds the door
+    // showed. A fresh backdoor user's history holds only this row, so
+    // every count below is about it.
     await expect(page).toHaveURL(/\/today\/log$/);
     const row = page.locator(".today-log-row", { hasText: "Just Row" });
     await expect(row).toHaveCount(1);
     await expect(row.locator(".free-row-chip")).toHaveText("JR");
     await expect(row.locator(".type-badge")).toHaveCount(0);
-    await expect(row.locator(".today-log-hero")).toHaveCount(0);
+    await expect(row.locator(".today-log-hero")).toHaveText(
+      /^TIME 0:(0[3-9]|[1-5]\d)$/,
+    );
 
     // The detail (handoff `Detail.dc.html`, criterion 3): the meta line
     // reads `SEP 2 · hh:mm · TIMER` from the stored `source` column (never
