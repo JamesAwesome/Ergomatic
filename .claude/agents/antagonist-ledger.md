@@ -4791,3 +4791,46 @@ SPLIT oracle were attacked.
   `armedProgram() !== null` (`driver.ts:4946-4948`); and Task 7 being genuinely
   upstream of the producer — with the caveat that it gates ONE reader while Today's
   own mount snapshot is the other.
+
+## 2026-09-02 — Wave F PR 3 §4 freeze-predicate design: the fix that ignored its own capture
+
+- **Claim (plan §4 Design, first draft):** "a pause may not be declared until
+  at least one frame has ADVANCED distance since the resume edge" suppresses
+  the resume-stall false positive; I1/I2 "HOLD." Believed because Reading 2
+  showed distance advancing throughout the false pause, so "advance = fresh
+  stream" looked like the discriminator.
+- **FALSE. The mechanism is inert for Reading 2, the capture it was designed
+  from.** Technique: trace the founding capture's literal frame numbers
+  against the proposed latch instead of reasoning abstractly. `pause-declared
+  frames=4 d=115.3` (seq 33) means 4 identical frames at 115.3; the resume
+  frame is 110.8 (seq 29). The latch clears on "first frame > 110.8" — which
+  is the FIRST 115.3 frame, three frames before the pause. The stall value is
+  itself an advance over the resume frame, so any "advanced since resume"
+  test clears exactly when it must hold. Both candidate shapes the plan
+  floated break identically, because there is one distinct post-resume value
+  appearing four times.
+- **Root lesson: when a discriminator keys on a monotonic quantity
+  (distance), confirm the failure case isn't monotonic too.** A re-emission
+  stall and a genuine row-then-stop are both "advance then freeze" in
+  distance; distance cannot separate them. The deterministic axis is frame
+  ARRIVAL TIMING — which the spec (§4) originally named and the plan's design
+  silently dropped. Brittleness axis: a HEURISTIC (infer "fresh stream" from
+  a distance advance) presented as deterministic; the machine never told us
+  "this frame is a re-emission."
+- **Second catch (I1 overstated):** the design marked I1 "HOLDS" analysing
+  only resume→row→stop. Resume→already-stopped never advances, so the latch
+  never clears and a genuine pause is suppressed forever; every foreground
+  edge re-arms it (a second resume suppresses a real stop); the
+  absolute-distance reference goes stale across a no-rest interval boundary
+  where `distanceMeters` resets to 0. Technique: enumerate producers of "no
+  advance after a resume edge" — the design imagined one and missed three.
+- **RF21 trap:** the named suppression-mutation can only go red by
+  constructing a stall with no post-resume advance — which is a genuine stop,
+  so its green state encodes the fix suppressing a real pause. A mutation
+  whose green means "the bug is present" is decoration; the tell that the
+  mechanism, not the test, is wrong.
+- **VETTED GROUND that held:** the defect's location and cause (post-resume
+  repeat-stall on a fresh value; `stale`'s pre-vs-post window genuinely can't
+  gate it) is correct; I3 (pure predicate, stateful suppression) is
+  satisfiable. Only the discriminator was broken. **Ruled (James, option 1):
+  instrument arrival timing first, then design.**

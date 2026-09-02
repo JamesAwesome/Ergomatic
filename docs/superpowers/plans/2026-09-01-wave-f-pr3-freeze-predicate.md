@@ -159,72 +159,68 @@ task sections + antagonist pass (no skip).
 
 ---
 
-## §4 Design (from Reading 2; DATA PHASE CLOSED — James, 2026-09-02: "no
-more captures now, capture at close if demanded")
+## §4 Design — REJECTED at the antagonist pass (2026-09-02); parked pending timing
 
-**The defect, exactly.** After a resume edge, the BLE frame stream delivers
-~`PAUSED_FRAME_HOLD` frames carrying an IDENTICAL `distanceMeters|currentSplit
-|spm` triple (a stall on the last pre-suspend value re-emitted) while the
-flywheel keeps turning. `nextFreezeRun` counts those identical frames;
-`isPausedRun` fires. Reading 2: 4 identical frames at `d=115.3` ~2 s after a
-resume, distance advancing 110.8→193.9 throughout, spm 28 — a pause declared
-on a rowing rower.
+**The first design (a post-resume "distance advanced" latch) is dead, killed
+by its own founding capture.** The antagonist traced Reading 2's literal
+frames: the stall value (`d=115.3`) is itself an advance over the resume
+frame (`110.8`), so any "advanced since resume" latch clears at the FIRST
+frame of the very stall it must suppress — three frames before the pause
+fires. Both candidate shapes (advance-since-resume; survive-one-fresh-frame)
+fail identically. Root lesson, now in the antagonist ledger: **a
+discriminator keyed on a monotonic quantity cannot separate two cases that
+are both monotonic-then-frozen** — a re-emission stall and a genuine
+row-then-stop look identical in distance. Three further regressions the
+latch would have shipped: resume→already-stopped never clears (I1 broken);
+every foreground edge re-arms it (second resume suppresses a real stop);
+the absolute-distance reference goes stale across an interval boundary
+where `distanceMeters` resets to 0.
 
-**Why `stale` can't gate it.** `resume-first-frame`'s `stale` compares the
-first post-resume frame against the last PRE-background frame; those differ
-(distance jumped across the lock), so `stale=false`. The defect is a stall
-AMONG post-resume frames, a different window. The `stale` flag is not the
-discriminator.
+**What survived:** the defect's location and cause (a post-resume
+repeat-stall on a fresh value; `stale`'s pre-vs-post window genuinely
+cannot gate it) and I3 (pure predicate, stateful suppression).
 
-**The discriminator (n=1, Reading 2 — antagonist carries this risk):** a
-resume-stall's identical frames are the IMMEDIATE post-resume tail and are
-followed by fresh movement within ~1-2 s; a genuine stop's identical frames
-follow a distance-advancing stretch. So: **a pause may not be declared until
-at least one frame has ADVANCED distance since the resume edge** — proving
-the resumed stream freshened, so any subsequent stall is a real stop.
+**The only deterministic axis is frame ARRIVAL TIMING** — the spec's own
+original candidate, which the rejected design silently dropped. Were the
+four `115.3` frames a bunched post-resume burst (re-emission) or normal
+~2.2/s cadence (indistinguishable from a stop)? **The current ring does not
+record inter-frame arrival gaps, so Reading 2 cannot answer it.**
 
-**Mechanism (preserves I3 — `nextFreezeRun`/`isPausedRun` stay pure):**
-- A stateful ref `postResumeSettleRef: boolean` — the "needs a fresh advance"
-  latch. SET at the resume edge (same site the `resume-first-frame` record
-  fires). CLEARED by the first rowing frame whose `distanceMeters` exceeds
-  the resume's first frame's distance (the stream advanced).
-- The pause gate becomes `isPausedRun(freeze) && !postResumeSettleRef.current`
-  at the stateful `nowPaused` site (`useMonitorSession.ts:3016`). Pure
-  predicate unchanged; the SUPPRESSION is stateful and recorded.
-- I5: when the gate suppresses a would-be pause, a ring entry
-  `pause-suppressed-post-resume` records `frames=<n> d=<m> gapMs=<resume gap>`
-  — measure, assert no cause.
+**Ruling (James, 2026-09-02, option 1): add the timing to the instrument
+first; ship it; one capture-at-close decides.** §4's mechanism stays parked
+until that field comes back. If the stall frames arrive bunched, timing is
+the discriminator and §4 becomes deterministic; if they arrive at cadence,
+no signal in the ring separates the cases and §4 is a crude resume-window
+mute with its over-suppression stated as accepted cost — James's call then.
 
-**Lifetime table addition (RF27):**
+### §3 timing addendum (this PR's actual content)
+
+Instrument-only; no predicate change; measure, assert no cause.
+
+- **`pause-declared` gains arrival timing:** `gapsMs=[g1,g2,g3]` — the
+  inter-arrival gaps (ms) between the consecutive frames that formed the
+  `PAUSED_FRAME_HOLD`-long identical run — and `sinceResumeMs=<n|none>`,
+  the time since the most recent foreground edge (or `none` if no resume
+  has happened in this session). Answers, for every future pause
+  declaration: bunched or cadence, and resume-adjacent or not.
+- **`resume-first-frame` gains `nextGapsMs=[…]`** — the arrival gaps of the
+  first `PAUSED_FRAME_HOLD` frames after the resume, recorded when the
+  fourth arrives (or `truncated` if the session ends first). This captures
+  the post-resume cadence even when no pause is declared, so a
+  no-false-positive session still yields the baseline.
+
+**Lifetime table (RF27):**
 
 | State | Mint (set) | Clear | Survives teardown/relaunch/re-arm |
 | --- | --- | --- | --- |
-| `postResumeSettleRef` | resume/foreground edge (beside `resume-first-frame`) | first distance-advancing rowing frame after resume; per-run resets (program/beginFreeRow/RC-37); connect; teardown | no / no / no |
+| `frameArrivalsRef: number[]` (last `PAUSED_FRAME_HOLD` rowing-frame `atMs`) | each rowing frame | non-rowing frame; per-run resets (program/beginFreeRow/RC-37); connect; teardown | no / no / no |
+| `lastResumeAtMsRef: number \| null` | foreground edge (beside `resume-first-frame`) | per-run resets; connect; teardown | no / no / no |
+| `postResumeGapsRef: number[] \| null` (collecting the first HOLD post-resume gaps) | foreground edge (empty array) | when it reaches HOLD-1 gaps (recorded, then null); per-run resets; connect; teardown (recorded `truncated` if non-null) | no / no / no |
 
-**Invariant check against the design:**
-- I1 (genuine pause still declares): a rower who resumes, rows (distance
-  advances → latch clears), THEN stops → declares normally. HOLDS.
-- I2 (staleness alone never declares): the resume-stall (no advance) is
-  suppressed. HOLDS — this IS the fix.
-- I3 (pure predicate): `nextFreezeRun`/`isPausedRun` untouched. HOLDS.
-- I4 (no number's meaning moves): only WHEN PULL TO RESUME/frozen-hero engage
-  changes; the numbers are unchanged. HOLDS — NOT triad, but the antagonist
-  confirms the frozen-hero mirror timing is cosmetic, not a stored-number
-  change.
+**Invariants:** the predicate's behaviour is byte-identical (I3 — `nextFreezeRun`/`isPausedRun` untouched; every existing pause leg still passes with the same declarations); the only change is what the two ring entries SAY; time comes from the hook's injected `now`, never `Date.now()` (the existing idiom). Edge-only recording (one entry per pause / per resume).
 
-**Antagonist targets (the pass runs on THIS design, no skip):**
-1. The n=1 risk: does "one advancing frame clears the latch" over-fit Reading
-   2? What if the resume-stall itself contains a spurious advance (a single
-   fresh frame then re-stall)? Consider requiring the advance to persist, or a
-   frame count, vs a single advance.
-2. Interaction with the real pocketed-phone stop: a rower who pockets, rows,
-   and genuinely stops WHILE still pocketed — does the latch clear (distance
-   advanced during rowing) so the later real stop still declares? Trace it.
-3. The `beginFreeRow` third arm and the resume edge co-occurring.
-4. Whether a committed capture can exercise the fix (Reading 2's ring is
-   RECORDS, not a replayable `pm5-recording` — §0.4). The gate story: a
-   constructed post-resume stall over the real hook (the PR 1 seam-test
-   precedent), stated as constructed-input/real-producer.
-5. RF21: the mutation for the suppression (remove the `!postResumeSettleRef`
-   guard → a constructed resume-stall re-declares) and for the clear (never
-   clear the latch → a genuine post-row stop never declares).
+**Gates:** unit legs with an injected clock — (a) a bunched stall (gaps `[40,40,40]`) after a resume records `gapsMs=[40,40,40] sinceResumeMs≈<n>`; (b) a cadence stall (`[450,450,450]`) with no resume records `sinceResumeMs=none`; (c) `nextGapsMs` recorded exactly once per resume after the fourth frame, `truncated` on early teardown; corpus regression over every committed recording asserting the SAME `pause-declared` count and positions as before (only the detail strings grew). Mutations (RF21): swap gaps to record the wrong frames (off-by-one) → leg (a) red; drop the `sinceResumeMs` write → leg (a) red on `none`; record `nextGapsMs` per frame → leg (c) red on count.
+
+**Antagonist skip, SPOKEN:** this addendum IS the instrument the antagonist's own verdict demanded ("the plan needs the ONE thing it does not have — the arrival-timing profile"); it invents no discriminator and changes no behaviour a rower sees. The pass resumes on §4's mechanism once the field numbers exist.
+
+**Release:** rides the next tag as a diagnostics change (no rower-visible item; the notes owe nothing). A capture-at-close on that build supplies the timing profile.
