@@ -1891,14 +1891,19 @@ export function useMonitorSession(
    *  teardown, relaunch, nor re-arm. */
   const frameArrivalsRef = useRef<number[]>([]);
   /** §3 timing addendum: `nowDate().getTime()` at the most recent FOREGROUND
-   *  lifecycle edge this session has seen — armed beside `resumeEdgeArmedRef`
+   *  lifecycle edge this RUN has seen — armed beside `resumeEdgeArmedRef`
    *  itself (the same "foreground" branch, same instant), `null` until the
-   *  first resume. `pause-declared` reads it to log `sinceResumeMs` (the
-   *  elapsed ms since that edge, or `"none"` while still `null`) — never
-   *  read by any predicate (I3). LIFETIME: cleared (to `null`) at the same
-   *  four sites `frameArrivalsRef` is — `connect()`, the three per-run
-   *  resets, and `teardown()` — survives neither teardown, relaunch, nor
-   *  re-arm. */
+   *  first resume since the run began. `pause-declared` reads it to log
+   *  `sinceResumeMs` (the elapsed ms since that edge, or `"none"` while
+   *  still `null`) — never read by any predicate (I3). PER-RUN, not
+   *  per-session: cleared (to `null`) at the same four sites
+   *  `frameArrivalsRef` is — `connect()`, the three per-run resets
+   *  (`program()`/`beginFreeRow()`'s fresh arms, the RC-37
+   *  programDropped/ready exit), and `teardown()` — survives neither
+   *  teardown, relaunch, nor re-arm. A mid-session `program()`/
+   *  `beginFreeRow()` clears it exactly like `resumeEdgeArmedRef`, so a
+   *  pause declared right after such a reset reads `sinceResumeMs=none`
+   *  even if this SESSION resumed earlier, under a prior run. */
   const lastResumeAtMsRef = useRef<number | null>(null);
   /** §3 timing addendum: the first-`PAUSED_FRAME_HOLD`-post-resume-frame
    *  arrival-time collector. Minted as `[]` at the SAME foreground edge that
@@ -1912,11 +1917,15 @@ export function useMonitorSession(
    *  session, already closed, or a fresh arm/connect discarded it). LIFETIME:
    *  the three per-run reset sites and `connect()` discard it SILENTLY (no
    *  entry — an unfinished window from a run/session that is over is not a
-   *  truncation of anything still live); `teardown()` is the one site that
-   *  LOGS the close, `nextGapsMs=truncated`, when it finds this still
-   *  non-`null` — "the session ended before the fourth frame arrived" is the
-   *  one truncation §3 asks this instrument to report. Survives neither
-   *  teardown, relaunch, nor re-arm. */
+   *  truncation of anything still live); TWO sites LOG a close instead of
+   *  discarding it — `teardown()` (`nextGapsMs=truncated`, "the session
+   *  ended before the fourth frame arrived") and a SECOND foreground edge
+   *  arriving while this is still non-`null` (`nextGapsMs=superseded
+   *  frames=<n>`, `<n>` the arrivals the open window had already collected)
+   *  — mirroring `resumeStaleRunRef`'s own `endedBy=resumed` discipline
+   *  (frame handler, above): a second resume must not silently discard the
+   *  first window's partial evidence. Survives neither teardown, relaunch,
+   *  nor re-arm. */
   const postResumeGapsRef = useRef<number[] | null>(null);
   // §6's latch counters and their once-per-session guard, and the logical
   // session's own identity, USED TO LIVE HERE as four standalone refs
@@ -3081,11 +3090,35 @@ export function useMonitorSession(
         freezeRef.current = freeze;
         const nowPaused = isPausedRun(freeze);
         // §3 timing addendum: mirror `nextFreezeRun`'s own rowing/non-rowing
-        // split into `frameArrivalsRef`'s matching rolling window — see that
-        // ref's own doc comment for why this keeps it in lockstep with
-        // `freeze` with no separate reset needed. Pure measurement riding
-        // beside the predicate call above, never inside it (I3): reads
-        // `frame`/`nowDate()` only, never `freeze`/`wasPaused`/`nowPaused`.
+        // split into `frameArrivalsRef`'s matching rolling window. Pure
+        // measurement riding beside the predicate call above, never inside
+        // it (I3): reads `frame`/`nowDate()` only, never
+        // `freeze`/`wasPaused`/`nowPaused`.
+        //
+        // THE REAL GUARANTEE is a numeric relation, not a synchronised
+        // reset: `PULL_EVIDENCE_FRAMES` (5) > `PAUSED_FRAME_HOLD` (4) forces
+        // at least 7 live-branch appends to accumulate before ANY
+        // declaration (5 strictly-increasing pull frames, the last of which
+        // is also the freeze run's own first frame, plus 3 more identical
+        // frames to reach the hold) — so by the time a declaration is
+        // possible, this window (capped at the last `PAUSED_FRAME_HOLD`
+        // entries) is always fully refreshed with the DECLARING run's own
+        // frames, whether or not the branch below ever resets it. The
+        // ready→live transition frame is a separate case, not this one: it
+        // seeds `freezeRef` via `nextFreezeRun(null, frame)` in the `ready`
+        // branch above and returns before reaching here, so it is never
+        // appended — harmless, since `pulled` is unconditionally `false` on
+        // that seed (a fresh `pull` can't yet have reached
+        // `PULL_EVIDENCE_FRAMES`), so it can never itself be the declaring
+        // run.
+        //
+        // The reset branch immediately below (mirroring `nextFreezeRun`'s
+        // own non-rowing clear) is DEFENSIVE, belt-and-braces: it is not
+        // load-bearing for the guarantee above, which holds on the append
+        // count alone. Verified by mutation — deleting the reset (always
+        // appending, never clearing) left all 169 client test files / 4410
+        // tests green, so no committed test can currently make this branch
+        // bite.
         if (frame.state !== "rowing" || frame.distanceMeters <= 0) {
           frameArrivalsRef.current = [];
         } else {
@@ -4664,6 +4697,18 @@ export function useMonitorSession(
         // `resumeEdgeArmedRef` itself — see `lastResumeAtMsRef`'s and
         // `postResumeGapsRef`'s own doc comments for why here (not the
         // arm-consume site in `handleFrame`) is the mint site for both.
+        //
+        // A SECOND foreground edge before the first window closes must not
+        // silently discard it — mirrors `resumeStaleRunRef`'s own
+        // `endedBy=resumed` discipline (frame handler, above): record what
+        // the still-open window had collected BEFORE this edge reassigns
+        // it, never merge or lose it quietly.
+        if (postResumeGapsRef.current !== null) {
+          log.record(
+            "resume-first-frame",
+            `nextGapsMs=superseded frames=${postResumeGapsRef.current.length}`,
+          );
+        }
         lastResumeAtMsRef.current = nowDate().getTime();
         postResumeGapsRef.current = [];
         // Only when we latched — see this handler's own header for why

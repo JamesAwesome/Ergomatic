@@ -12640,6 +12640,58 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
     expect(firstFrameEntries).toHaveLength(2);
     expect(firstFrameEntries[1]!.detail).toBe("nextGapsMs=truncated");
   });
+
+  it("gate (c) supersession: a second resume before the fourth post-resume frame closes the still-open window with nextGapsMs=superseded, not a silent discard", async () => {
+    vi.useFakeTimers();
+    const rowed = rowedFrames(100, 101);
+    // Only two frames land after the FIRST resume — never reaches the
+    // fourth — before the SECOND resume fires.
+    const postResume = seqFrames(500, 70, 2, (i) => 110 + i * 10);
+    const { fake, result, lifecycleCb, exportLog } = await setupTimingSession([
+      ...rowed,
+      ...postResume,
+    ]);
+
+    for (let i = 0; i < 5; i += 1) {
+      act(() => {
+        fake.tick(100);
+        vi.advanceTimersByTime(100);
+      });
+    }
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    for (let i = 0; i < 2; i += 1) {
+      act(() => {
+        fake.tick(70);
+        vi.advanceTimersByTime(70);
+      });
+    }
+
+    // The second resume: the window opened by the first resume is still
+    // open (two arrivals collected, short of the fourth) when this fires.
+    act(() => {
+      lifecycleCb("background");
+      lifecycleCb("foreground");
+    });
+
+    const exported = JSON.parse(exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const firstFrameEntries = exported.filter(
+      (e) => e.kind === "resume-first-frame",
+    );
+    // The immediate stale=... entry from the first post-resume-1 frame,
+    // then this leg's own supersession entry — never a silent discard.
+    expect(firstFrameEntries).toHaveLength(2);
+    expect(firstFrameEntries[0]!.detail).toContain("stale=false");
+    expect(firstFrameEntries[1]!.detail).toBe("nextGapsMs=superseded frames=2");
+  });
 });
 
 describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {

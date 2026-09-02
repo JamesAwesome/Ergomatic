@@ -201,8 +201,11 @@ Instrument-only; no predicate change; measure, assert no cause.
   inter-arrival gaps (ms) between the consecutive frames that formed the
   `PAUSED_FRAME_HOLD`-long identical run — and `sinceResumeMs=<n|none>`,
   the time since the most recent foreground edge (or `none` if no resume
-  has happened in this session). Answers, for every future pause
-  declaration: bunched or cadence, and resume-adjacent or not.
+  has happened in this RUN — a mid-session `program()`/`beginFreeRow()`
+  clears it exactly like `resumeEdgeArmedRef`, so a pause declared right
+  after such a reset reads `none` even if the session resumed earlier,
+  under a prior run). Answers, for every future pause declaration: bunched
+  or cadence, and resume-adjacent or not.
 - **`resume-first-frame` gains `nextGapsMs=[…]`** — the arrival gaps of the
   first `PAUSED_FRAME_HOLD` frames after the resume, recorded when the
   fourth arrives (or `truncated` if the session ends first). This captures
@@ -219,7 +222,7 @@ Instrument-only; no predicate change; measure, assert no cause.
 
 **Invariants:** the predicate's behaviour is byte-identical (I3 — `nextFreezeRun`/`isPausedRun` untouched; every existing pause leg still passes with the same declarations); the only change is what the two ring entries SAY; time comes from the hook's injected `now`, never `Date.now()` (the existing idiom). Edge-only recording (one entry per pause / per resume).
 
-**Gates:** unit legs with an injected clock — (a) a bunched stall (gaps `[40,40,40]`) after a resume records `gapsMs=[40,40,40] sinceResumeMs≈<n>`; (b) a cadence stall (`[450,450,450]`) with no resume records `sinceResumeMs=none`; (c) `nextGapsMs` recorded exactly once per resume after the fourth frame, `truncated` on early teardown; corpus regression over every committed recording asserting the SAME `pause-declared` count and positions as before (only the detail strings grew). Mutations (RF21): swap gaps to record the wrong frames (off-by-one) → leg (a) red; drop the `sinceResumeMs` write → leg (a) red on `none`; record `nextGapsMs` per frame → leg (c) red on count.
+**Gates:** unit legs with an injected clock — (a) a bunched stall (gaps `[40,40,40]`) after a resume records `gapsMs=[40,40,40] sinceResumeMs≈<n>`; (b) a cadence stall (`[450,450,450]`) with no resume records `sinceResumeMs=none`; (c) `nextGapsMs` recorded exactly once per resume after the fourth frame, `truncated` on early teardown; four new legs, plus three unmodified regressions that stayed green: the RC-25 `pause-declared` edge leg (`useMonitorSession.test.ts` ~:8541-8552), the pure-predicate `isPausedRun` position replay (~:7872-7905), and `lifecycleReplay.test.ts`'s hook-driven replay of a committed recording. Mutations (RF21): swap gaps to record the wrong frames (off-by-one) → leg (a) red; drop the `sinceResumeMs` write → leg (a) red on `none`; record `nextGapsMs` per frame → leg (c) red on count.
 
 **Antagonist skip, SPOKEN:** this addendum IS the instrument the antagonist's own verdict demanded ("the plan needs the ONE thing it does not have — the arrival-timing profile"); it invents no discriminator and changes no behaviour a rower sees. The pass resumes on §4's mechanism once the field numbers exist.
 
