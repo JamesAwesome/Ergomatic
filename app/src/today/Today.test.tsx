@@ -1997,6 +1997,7 @@ describe("Today (stale draft discard on mount)", () => {
   function makeRun(overrides: Partial<SessionRun>): SessionRun {
     return {
       v: 1,
+      mode: "workout",
       workoutId: "w-warmfront",
       title: "Stationary Front",
       phases: [],

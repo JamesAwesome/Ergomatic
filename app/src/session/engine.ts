@@ -81,6 +81,7 @@ export function buildRun(
   const nowIso = now.toISOString();
   return {
     v: 1,
+    mode: "workout",
     workoutId: draft.workoutId,
     title: draft.title,
     phases: enginePhases,

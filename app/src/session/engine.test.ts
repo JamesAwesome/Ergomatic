@@ -501,8 +501,11 @@ describe("nextDistance", () => {
     const run = calmSeaRun(); // index 0: the 10,000m work phase
     const now = addSeconds(t0, 4567);
     const result = nextDistance(run, now);
-    expect(result.actuals[0]!.splitSeconds).toBe(228.35);
-    expect(result.actuals[0]!.elapsedSeconds).toBe(4567);
+    expect(result.actuals[0]).toStrictEqual({
+      actualSource: "stopwatch",
+      elapsedSeconds: 4567,
+      splitSeconds: 228.35,
+    });
   });
 
   it("is a no-op on a non-distance (time) phase", () => {

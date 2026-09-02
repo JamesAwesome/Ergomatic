@@ -1122,10 +1122,11 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
     expect(screen.getByText("STEP 5 OF 5 · WORK")).toBeInTheDocument();
     expect(screen.queryByText(/Keep split/)).not.toBeInTheDocument();
     const saved = loadRun()!;
-    expect(saved.actuals[3]).toBeDefined();
-    expect(saved.actuals[3]!.elapsedSeconds).toBe(150);
-    expect(saved.actuals[3]!.splitSeconds).toBe(150); // (150/500)*500
-    expect(saved.actuals[3]!.actualSource).toBe("stopwatch");
+    expect(saved.actuals[3]).toStrictEqual({
+      actualSource: "stopwatch",
+      elapsedSeconds: 150,
+      splitSeconds: 150, // (150/500)*500
+    });
   });
 
   it("stages a Keep/Discard choice past 2x the estimate; Keep records the (suspect) actual and advances", async () => {
@@ -1146,9 +1147,11 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
 
     expect(screen.getByText("STEP 5 OF 5 · WORK")).toBeInTheDocument();
     const saved = loadRun()!;
-    expect(saved.actuals[3]).toBeDefined();
-    expect(saved.actuals[3]!.elapsedSeconds).toBe(250);
-    expect(saved.actuals[3]!.splitSeconds).toBe(250);
+    expect(saved.actuals[3]).toStrictEqual({
+      actualSource: "stopwatch",
+      elapsedSeconds: 250,
+      splitSeconds: 250,
+    });
   });
 
   // Fix round (spec review F3): staging the choice must FREEZE the
@@ -1173,8 +1176,11 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
     expect(screen.getByText("STEP 5 OF 5 · WORK")).toBeInTheDocument();
     const saved = loadRun()!;
     // The staged value (250s), NOT 250 + 30 = 280s.
-    expect(saved.actuals[3]!.elapsedSeconds).toBe(250);
-    expect(saved.actuals[3]!.splitSeconds).toBe(250);
+    expect(saved.actuals[3]).toStrictEqual({
+      actualSource: "stopwatch",
+      elapsedSeconds: 250,
+      splitSeconds: 250,
+    });
   });
 
   it("Discard records NO actual but still advances", async () => {
@@ -1281,8 +1287,11 @@ describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
 
     expect(screen.getByText("SUMMARY SCREEN")).toBeInTheDocument();
     const saved = loadRun()!;
-    expect(saved.actuals[1]!.elapsedSeconds).toBe(80);
-    expect(saved.actuals[1]!.splitSeconds).toBe(80); // (80/500)*500
+    expect(saved.actuals[1]).toStrictEqual({
+      actualSource: "stopwatch",
+      elapsedSeconds: 80,
+      splitSeconds: 80, // (80/500)*500
+    });
     expect(saved.completedAt).not.toBeNull();
   });
 

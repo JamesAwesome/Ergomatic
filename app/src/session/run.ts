@@ -7,16 +7,32 @@ import type { EnginePhase } from "./engine";
  *  but unlogged" by checking this key independently. */
 export const RUN_KEY = "ergomatic.sessionRun";
 
-/** A distance phase's recorded actual (Architecture: "Distance phases").
- *  `actualSource` is a literal today — 6B's only source is the on-screen
- *  stopwatch — but it's a discriminant from day one so a future PM5-fed
- *  actual (Phase 7) is an additive union member, not a breaking shape
- *  change. */
-export interface PhaseActual {
-  elapsedSeconds: number;
-  splitSeconds: number;
-  actualSource: "stopwatch";
-}
+/** A phase's recorded actual, a discriminated union on `actualSource`
+ *  (Just Row without the monitor, spec 2026-09-02, stored shape (b)):
+ *
+ *  - `"stopwatch"` — a DISTANCE phase's actual (Architecture: "Distance
+ *    phases"): elapsed seconds plus the average split they imply, written
+ *    by `nextDistance` (engine.ts) / `Timer.tsx`'s NEXT.
+ *  - `"stopwatch-elapsed"` — a METRE-LESS phase's actual: elapsed seconds
+ *    only. Written when a free-row timer run (`mode: "justrow"`, one
+ *    open-ended `test` phase) is finished. There is no split to record,
+ *    `NaN` is not a legal value (it serialises to `null` and would
+ *    round-trip as a typed number ⟨F5⟩), and an OPTIONAL `splitSeconds`
+ *    would let any reader `!` past it — so the variant carries no such
+ *    field at all, and every reader switches on `actualSource`
+ *    exhaustively (`logDraft.ts`'s `buildLogSteps` writes `actualSplit`
+ *    only from the first member). `isPhaseActual` below enforces both
+ *    shapes at the storage boundary. */
+export type PhaseActual =
+  | { actualSource: "stopwatch"; elapsedSeconds: number; splitSeconds: number }
+  | { actualSource: "stopwatch-elapsed"; elapsedSeconds: number };
+
+/** Which kind of session a `SessionRun` is (stored shape (a)). The same
+ *  word `MonitorRun.mode` already uses, so one vocabulary names a free row
+ *  on both records. REQUIRED on the type: no reader ever sees `undefined`
+ *  (see `loadRun`'s legacy upgrade), and every branch is on one of the two
+ *  named values, exhaustively. */
+export type SessionRunMode = "workout" | "justrow";
 
 /** The session run: a SEPARATE versioned record from `SessionDraft`
  *  (spec's "Run state" decision), expand-only from day one like the draft.
@@ -35,6 +51,12 @@ export interface PhaseActual {
  *  module's own header already establishes for the draft side. */
 export interface SessionRun {
   v: 1;
+  /** `"workout"`: built by `buildRun` from a started draft (every run
+   *  before 2026-09-02 was one of these). `"justrow"`: built by
+   *  `buildFreeRowRun` — `workoutId` null, a single open-ended `test`
+   *  phase, no draft behind it. No `v` bump: a stored record with NO
+   *  `mode` is the legacy shape, upgraded to `"workout"` once at load. */
+  mode: SessionRunMode;
   workoutId: string | null;
   title: string;
   phases: EnginePhase[];
@@ -71,10 +93,49 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 // treatment for the identical reason: a shape with the wrong type there
 // would otherwise pass and then hand Today's resume card (F2) a value it
 // can't safely render or key off.
-function isSessionRun(value: unknown): value is SessionRun {
+// One member of the `PhaseActual` union, checked EXHAUSTIVELY on its
+// discriminant: `"stopwatch"` REQUIRES a numeric `splitSeconds`;
+// `"stopwatch-elapsed"` FORBIDS one (a metre-less phase has no split — a
+// record carrying one was written by nothing this codebase ships, same
+// class of rejection as an unknown `actualSource`). `typeof === "number"`
+// deliberately admits NaN no further than JSON does: a NaN split
+// serialises as `null` and is refused here as a non-number ⟨F5⟩.
+function isPhaseActual(value: unknown): value is PhaseActual {
+  if (!isPlainRecord(value)) return false;
+  if (typeof value.elapsedSeconds !== "number") return false;
+  switch (value.actualSource) {
+    case "stopwatch":
+      return typeof value.splitSeconds === "number";
+    case "stopwatch-elapsed":
+      return !("splitSeconds" in value);
+    default:
+      return false;
+  }
+}
+
+// `mode` (Just Row without the monitor, stored shape (a)): ABSENT is
+// accepted only as the legacy shape — every run written before 2026-09-02
+// has no such key, and `loadRun` upgrades it — while any PRESENT value
+// must be one of the two named members. The twin record's validator
+// (`monitor/monitorRun.ts`, its own `mode` clause) learnt at Phase JR PR 1's
+// review that declaring an optional discriminant and never checking it
+// lets `mode: "corrupt"` load as a valid record; this clause is that
+// lesson applied here from day one.
+function isSessionRunMode(value: unknown): value is SessionRunMode {
+  return value === "workout" || value === "justrow";
+}
+
+// `Object.values` on a plain record: every stored actual must be one of
+// the union's members (stored shape (b)) — a record whose `actuals` bag
+// holds a shape no reader can switch on is rejected whole, same as any
+// other load-bearing field with the wrong type.
+function isSessionRun(value: unknown): value is Omit<SessionRun, "mode"> & {
+  mode?: SessionRunMode;
+} {
   if (!isPlainRecord(value)) return false;
   return (
     value.v === 1 &&
+    (value.mode === undefined || isSessionRunMode(value.mode)) &&
     (value.workoutId === null || typeof value.workoutId === "string") &&
     typeof value.title === "string" &&
     Array.isArray(value.phases) &&
@@ -83,6 +144,7 @@ function isSessionRun(value: unknown): value is SessionRun {
     (value.pausedAt === null || typeof value.pausedAt === "string") &&
     typeof value.pausedTotalMs === "number" &&
     isPlainRecord(value.actuals) &&
+    Object.values(value.actuals).every(isPhaseActual) &&
     typeof value.startedAt === "string" &&
     (value.completedAt === null || typeof value.completedAt === "string")
   );
@@ -136,7 +198,17 @@ export function loadRun(): SessionRun | null {
   if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (isSessionRun(parsed)) return parsed;
+    if (isSessionRun(parsed)) {
+      // Legacy upgrade (stored shape (a)): a record with no `mode` was
+      // written before the field existed, and every such run was built by
+      // `buildRun` from a draft — a "workout". This is the ONLY place
+      // absence is read, and it is read as the legacy SHAPE, never as a
+      // value: past this line `mode` is one of two named members and no
+      // reader ever branches on `undefined`. The next `saveRun` writes the
+      // upgraded record back (no `v` bump — additive, same expand-only rule
+      // the module header establishes).
+      return { ...parsed, mode: parsed.mode ?? "workout" };
+    }
   } catch {
     // fall through: garbage JSON is handled the same as an unknown shape
   }
