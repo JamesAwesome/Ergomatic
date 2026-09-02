@@ -428,6 +428,7 @@ describe("domain stores against real Postgres", () => {
         held: "held",
         pain: 1,
         notes: null,
+        source: "manual",
         steps: [],
         advancesPlan: true,
       });
@@ -556,6 +557,9 @@ describe("domain stores against real Postgres", () => {
           actualSource: "stopwatch",
         },
       ],
+      // Just Row unconnected spec: a stopwatch-stepped row came through
+      // the Timer (RF3 — the fixture says what production would).
+      source: "timer",
       // Task 3: true matches every pre-Task-3 call in this file (a log
       // always advanced the plan) — the new advancesPlan:false cases below
       // override it explicitly.

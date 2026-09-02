@@ -95,14 +95,14 @@ describe("logs.list cursor pagination — the same-millisecond trap (criterion 9
     // but a JS `Date` cannot.
     const older = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "logged_at", "steps")
-          values (${user.id}, 'Same ms A (older)', 'AT', '2026-01-01 00:00:00.000100+00'::timestamptz, '[]'::jsonb)
+          ("user_id", "workout_title", "workout_type", "logged_at", "steps", "source")
+          values (${user.id}, 'Same ms A (older)', 'AT', '2026-01-01 00:00:00.000100+00'::timestamptz, '[]'::jsonb, 'manual')
           returning "id"`,
     );
     const newer = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "logged_at", "steps")
-          values (${user.id}, 'Same ms B (newer)', 'AT', '2026-01-01 00:00:00.000199+00'::timestamptz, '[]'::jsonb)
+          ("user_id", "workout_title", "workout_type", "logged_at", "steps", "source")
+          values (${user.id}, 'Same ms B (newer)', 'AT', '2026-01-01 00:00:00.000199+00'::timestamptz, '[]'::jsonb, 'manual')
           returning "id"`,
     );
     const olderId = older.rows[0]!.id;
@@ -141,14 +141,14 @@ describe("logs.list cursor pagination — the same-millisecond trap (criterion 9
 
     const a = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "logged_at", "steps")
-          values (${user.id}, 'Exact tie A', 'AT', '2026-01-01 00:00:00.000100+00'::timestamptz, '[]'::jsonb)
+          ("user_id", "workout_title", "workout_type", "logged_at", "steps", "source")
+          values (${user.id}, 'Exact tie A', 'AT', '2026-01-01 00:00:00.000100+00'::timestamptz, '[]'::jsonb, 'manual')
           returning "id"`,
     );
     const b = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "logged_at", "steps")
-          values (${user.id}, 'Exact tie B', 'AT', '2026-01-01 00:00:00.000100+00'::timestamptz, '[]'::jsonb)
+          ("user_id", "workout_title", "workout_type", "logged_at", "steps", "source")
+          values (${user.id}, 'Exact tie B', 'AT', '2026-01-01 00:00:00.000100+00'::timestamptz, '[]'::jsonb, 'manual')
           returning "id"`,
     );
     const idA = a.rows[0]!.id;
