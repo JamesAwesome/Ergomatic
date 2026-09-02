@@ -6265,3 +6265,61 @@ running something the plan only asserted.
 - **Nit, optional:** Task 9's `git status -- app/ios` "must be empty" — that
   form prints five lines on a clean tree; Task 6 step 4's `--short` form is the
   one that reads empty.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 9, verifying pass 8's fixes)
+
+Ninth consecutive verification pass. One REVISE, found by testing the surviving
+universal rather than the two claims that triggered the previous pass.
+
+- **CLAIM (pass 8's fix): the Swift header's citation rule now matches the code
+  below it.** HALF TRUE. Pass 8 widened the rule where it is USED (the plugin
+  header, four source categories) but not where it is ARGUED (Global Constraint
+  `:41`, still three — missing "the vendored Capacitor sources by file:line",
+  the category the `shouldOverrideLoad` comment leans on hardest), while REV 9's
+  own summary claims the two "mirror ... exactly". And the universal is still
+  falsified below it: `// shouldOverrideLoad(_:) is a WKNavigationDelegate
+  callback, which UIKit already delivers on main` cites nothing, is the whole
+  thread-confinement argument for the RF27 table's four fields, names the wrong
+  framework (WebKit), and mis-describes a CAPPlugin method as a delegate callback
+  (`WebViewDelegationHandler.swift:67` → `:82`). A PRIMARY line existed the whole
+  time and the plan already uses the identical idiom one observation away:
+  `WKNavigationDelegate.h:69-70` carries `WK_SWIFT_UI_ACTOR`, defined
+  `= NS_SWIFT_UI_ACTOR` at `WKFoundation.h:60`. **Technique: when a pass RELAXES
+  an absolute, run the check in BOTH directions — (a) the argued site and the
+  used site must enumerate the SAME set, and (b) re-test the universal against
+  every claim it governs, not only the ones that triggered the pass. Grepping for
+  the absolute's WORDS finds instance (a); only enumerating the governed claims
+  finds (b), and (b) is where the uncited premise lives.**
+- **Technique added: a plan that predicts `format:check → green` is making a
+  measurable claim about its own prescribed code.** Extract every prescribed
+  source block to files and run the repo's own formatter over them. Measured
+  here: four of six blocks fail `prettier --check` (pure 80-column re-wrapping,
+  no literal or census phrase moves), so the gate as written goes red on
+  verbatim paste.
+- **Attacked and HELD:** the step-1 block RUN against a scratch copy pointed at
+  the real `app/scripts` — 20 pre-existing `ok`, `fails=5`, the vacuous
+  "exits non-zero" check green and the next check failing on the
+  `No such file or directory` text, exactly as REV 9 states; `:246` is the
+  summary-block anchor on the current 250-line file and the new block's
+  `trap … EXIT` collides with nothing; `git status -- app/ios` prints 6 lines vs
+  `--short`'s 0, at both live `--short` sites; the census guard at all three
+  sites naming both tokens; the pass count EIGHT / REV 2–9 at both live sites;
+  the fold recounted at 120 words / 24 longest (a naive `wc -w` reads 126 —
+  it counts the bullet dashes); `94b83c84` confirmed as the commit before the
+  plan file was added and an ancestor of HEAD; the `/tmp/pr175b-base` lifecycle
+  and step 6b's placement; Task 5's gate order carrying no
+  prerequisite-after-consumer; every walk-card citation verbatim
+  (`index.ts:76`, `:126`, `:79-83`, `package.json:29,30`,
+  `ios-release.sh:42-45`, `auth/routes.ts:101-106`); `no-non-null-assertion`
+  absent from tseslint `recommended` (it is `strict`-only) and `app/scripts`
+  already in `tsconfig.app.json`'s include, so the new contract test is not
+  first-of-kind; `NATIVE_REDIRECT_URI` at `routes/concept2.ts:67` and the
+  prescribed `LINK_CALLBACK_SCHEME` both matching the contract test's regexes;
+  and `Concept2LinkProbe.test.tsx` loading cleanly (all imports static-safe,
+  component and adapter both dynamic) with `toHaveBeenCalledExactlyOnceWith`
+  already in use at `useMonitorSession.test.ts:9541`.
+- **Nit, optional:** Task 4 step 4's RF5 sweep says "the ONLY surviving hits may
+  be the two narrative sentences added in Task 3 steps 3-4"; the plan's own
+  prescribed text leaves three grep lines in two files (plan `:1674`, `:1678`,
+  `:1705`). The allowlist is defined by provenance, not the numeral, so nothing
+  is wrongly deleted — but it is the same off-by-one class as passes 6 and 7.
