@@ -144,8 +144,10 @@ guarantees an unmeasured step), so the suffix can never read `5 of 5`.
 
 ### 1.3 Where it renders
 
-- **The saved row (`FromTheLog.tsx`)**: the marker line beneath the heroes,
-  where `LINK LOST` renders today.
+- **The saved row (`FromTheLog.tsx`)**: the marker line in the slot where
+  `LINK LOST` renders today — ABOVE the heroes, between the black rule and
+  `AVG SPLIT` (the first draft said "beneath"; the gate artboard, built from
+  the real CSS, corrected it).
 - **`MachineConfirmedBlock` is IN SCOPE.** It renders on `machineWorkSeconds
   !== null` alone and bypasses the view model by spec (`FromTheLog.tsx:61-66`);
   `appendSummaryObservations` admits `rower`, so a terminated partial with a
@@ -454,7 +456,12 @@ saved row together, one vocabulary.
   `MACHINE CONFIRMED · WORK ONLY`, a stop AFTER a lost boundary (the
   `1 of 5 intervals measured` row, so the "measured, not progress" reading is
   approved on sight), a link-lost row with every step measured (line, no
-  suffix), and the History list chip. Every colour
+  suffix), and the History list chip. Rendered as
+  `2026-09-02-door-gate-a.html` (23 frames, contrast table); it asks five
+  approvals — the marker words, "measured not progress", the time on the
+  no-reading line, `MONITOR`, and the chip's slot (leading slot truncates the
+  title; the numbers-line slot is recommended and leaves Today's last-three
+  rows chipless). Every colour
   pairing's contrast ratio stated.
 - **Gate 0-B (before PR B's tasks):** the step row carrying a partial (how a
   250 of 500 reads beside a measured 500), the saved-row heroes unchanged by
