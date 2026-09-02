@@ -101,6 +101,19 @@ export function stepLineText(
   return parts.join(" · ");
 }
 
+/** The STEP slot's text for a whole run. A free-row timer run (Just Row
+ *  without the monitor, spec 2026-09-02 §Mechanism piece 3; `mode:
+ *  "justrow"`) has no steps to count — one open-ended phase and no plan —
+ *  and the handoff's board draws the slot as the bare pair `JUST ROW`, not
+ *  `STEP 1 OF 1 · TEST`. Every other run keeps `stepLineText`'s line
+ *  verbatim; the branch is on `mode`, the one discriminant every reader
+ *  of this record uses, never on `workoutId === null` or the title. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function stepSlotText(run: SessionRun): string {
+  if (run.mode === "justrow") return "JUST ROW";
+  return stepLineText(run.phases[run.index]!, run.index, run.phases.length);
+}
+
 /** The 96px numeral's seconds: a countdown for any phase with a fixed
  *  duration, a count-UP stopwatch otherwise. `engine.ts`'s own
  *  `remainingSeconds` doc comment already says a phase with no fixed
@@ -184,8 +197,11 @@ export function totalSessionSeconds(run: SessionRun): number {
  *
  *  ONLY A RECORDED ACTUAL COUNTS AS MEASURED, and on this surface that means
  *  a distance piece the rower pressed NEXT on (`engine.ts`'s `nextDistance`
- *  is the only writer of `SessionRun.actuals`, keyed by the phase's POSITION
- *  — which is exactly `IntervalGroup.workIndex`). A completed TIME phase is
+ *  and this file's `applyDistanceActual` write `SessionRun.actuals`, keyed
+ *  by the phase's POSITION — which is exactly `IntervalGroup.workIndex`;
+ *  the free-row finish in `handleConfirmFinish` is the third writer, but a
+ *  `mode: "justrow"` run has one phase and no bar to notch). A completed
+ *  TIME phase is
  *  deliberately NOT counted: `tick` advances it at its own programmed
  *  boundary, so its real elapsed equals its estimate and re-anchoring it
  *  would move nothing — but `advance`/`rewind` re-seed the clock at `now`
@@ -379,6 +395,12 @@ export default function Timer() {
   // deliberate, not a single stray tap under an unassuming "Next phase"
   // aria-label.
   const [finishStaged, setFinishStaged] = useState(false);
+  // Whether ▶ was the thing that paused a FREE-ROW run when it staged the
+  // finish confirm (Just Row without the monitor, ⟨F10⟩) — END's own
+  // `pausedByEndTap` latch, for the finish panel: `handleCancelFinish`
+  // must be the exact inverse of `handleNext`, resuming only a pause ▶
+  // itself took and never one the rower chose beforehand.
+  const [pausedByFinishTap, setPausedByFinishTap] = useState(false);
 
   // Keep-awake spans the screen's whole lifetime (spec: "on during
   // countdown + timer + complete, released on exit"). Countdown already
@@ -447,13 +469,28 @@ export default function Timer() {
   // still safe: `useStartWorkout`'s own guard reads the completed run's
   // `completedAt !== null` and stages the "unlogged" replace-confirm
   // rather than silently overwriting it.
+  //
+  // A free-row run (`mode: "justrow"`) hands off to the Just Row log door
+  // instead — the workout summary reads the DRAFT (`LogSession`'s own
+  // `useLogForm`), and a free row has none. `shell/AppRoutes.tsx`'s
+  // `CompleteRedirect` makes the same call for a stale `/session/complete`
+  // link ⟨F9⟩; both branch on `mode`, nothing else.
   useEffect(() => {
     if (run !== null && isComplete(run)) {
-      navigate("/session/log", { replace: true });
+      navigate(run.mode === "justrow" ? "/justrow/log" : "/session/log", {
+        replace: true,
+      });
     }
   }, [run, navigate]);
 
-  if (draft === null || run === null) {
+  // A workout run is driven by its draft (the confirm contract — `title`
+  // and the summary's `useLogForm` both read it), so a run without one is
+  // an orphan and bounces. A FREE-ROW run has no draft BY DESIGN (spec
+  // 2026-09-02 §Mechanism piece 3, ⟨F1⟩: the door saves `buildFreeRowRun`
+  // and comes straight here, and minting a synthetic draft is rejected
+  // because `SessionDraft.type` is a required `WorkoutType` a free row has
+  // none of) — it names itself, so the guard opens for it alone.
+  if (run === null || (draft === null && run.mode !== "justrow")) {
     return <Navigate to="/today" replace />;
   }
 
@@ -475,7 +512,14 @@ export default function Timer() {
   // re-prove what the guard above already established. `title`/
   // `currentRun` are typed non-nullable from the moment they're declared,
   // not narrowed-and-hoping the closure remembers it.
-  const title = draft.title;
+  //
+  // `title`: a free-row run names itself (`buildFreeRowRun` stamps
+  // "Just Row"); every other run reads its draft, which the guard above
+  // guarantees is present — the `?? run.title` fallback on that arm is
+  // unreachable (a workout run without a draft never gets past the guard)
+  // and exists only so this line needs no non-null assertion.
+  const isFreeRow = run.mode === "justrow";
+  const title = isFreeRow ? run.title : (draft?.title ?? run.title);
   const currentRun: SessionRun = run;
   const phase = currentRun.phases[currentRun.index]!;
   const isDistance = phase.meters !== undefined;
@@ -541,6 +585,20 @@ export default function Timer() {
       // `isComplete` comment) — the control that triggers it must be a
       // deliberate act, not a single tap under an unassuming "Next phase"
       // label (fix round, spec review F5).
+      if (isFreeRow) {
+        // ▶ FREEZES THE CLOCK on a free row (spec 2026-09-02 ⟨F10⟩): the
+        // elapsed at this instant is what `handleConfirmFinish` records,
+        // and the deliberation over "Finish this session?" must not bank
+        // into the row — the same reason `handleDistanceNext` freezes
+        // `stagedElapsed` (F3) and `handleEndTap` pauses (F1). Pausing the
+        // RUN rather than freezing a copy keeps the display honest too
+        // (it reads PAUSED at the frozen number, not RUNNING past it) and
+        // lets `elapsedSeconds` at confirm time read the frozen clock.
+        // A workout's last time phase records nothing, so it stays as it
+        // was — its Keep going test pins RUNNING.
+        setPausedByFinishTap(pausedAt === null);
+        apply(pause);
+      }
       setFinishStaged(true);
       return;
     }
@@ -548,6 +606,11 @@ export default function Timer() {
   }
 
   function handleCancelFinish() {
+    // The exact inverse of `handleNext`'s free-row branch (the
+    // `handleKeepGoing` rule, F1): resume ONLY if ▶ was what paused the
+    // run — a pause the rower chose before tapping ▶ stays theirs.
+    if (pausedByFinishTap) apply(resume);
+    setPausedByFinishTap(false);
     setFinishStaged(false);
     // Hygiene: only ever meaningful on the distance path (see
     // `handleDistanceNext`'s own last-phase branch below); harmless no-op
@@ -556,16 +619,38 @@ export default function Timer() {
   }
 
   function handleConfirmFinish() {
-    // Shared by BOTH ▶'s own last-phase staging (non-distance — plain
-    // `advance`, nothing to record) AND NEXT's last-phase staging (fix
+    // Shared by ▶'s own last-phase staging (a workout's non-distance phase
+    // — plain `advance`, nothing to record), NEXT's last-phase staging (fix
     // round, spec review F6 — distance, records the FROZEN elapsed exactly
     // like `handleKeepSplit` does, for the identical F3 reason: deliberating
     // over "Finish this session?" must not inflate the recorded split).
-    if (isDistance) {
+    //
+    // A FREE ROW records its one actual here (spec 2026-09-02 §Mechanism
+    // piece 3, ⟨F4⟩): the plain `advance` arm writes nothing, which is why
+    // a test-workout row used to read LOGGED BY HAND. The actual is the
+    // metre-less `"stopwatch-elapsed"` member (no split exists to record,
+    // `run.ts`'s union), keyed by POSITION like `applyDistanceActual`'s.
+    // `elapsedSeconds(r, at)` reads the FROZEN clock: `handleNext` paused
+    // the run when it staged this panel ⟨F10⟩ (or the rower had already),
+    // so `pausedAt`, not `at`, is the right edge — the seconds recorded
+    // are the seconds at ▶, however long this panel sat on screen.
+    if (isFreeRow) {
+      apply((r, at) => {
+        const actual: PhaseActual = {
+          actualSource: "stopwatch-elapsed",
+          elapsedSeconds: elapsedSeconds(r, at),
+        };
+        return advance(
+          { ...r, actuals: { ...r.actuals, [r.index]: actual } },
+          at,
+        );
+      });
+    } else if (isDistance) {
       if (stagedElapsed !== null) applyDistanceActual(stagedElapsed);
     } else {
       apply(advance);
     }
+    setPausedByFinishTap(false);
     setFinishStaged(false);
     setStagedElapsed(null);
   }
@@ -782,9 +867,7 @@ export default function Timer() {
           <span className="timer-phase-title" aria-hidden="true">
             {title} ·
           </span>
-          <span className="timer-phase-label">
-            {stepLineText(phase, currentRun.index, currentRun.phases.length)}
-          </span>
+          <span className="timer-phase-label">{stepSlotText(currentRun)}</span>
           <span className="timer-state">
             {pausedAt !== null ? "PAUSED" : "RUNNING"}
           </span>
@@ -798,7 +881,7 @@ export default function Timer() {
             </div>
           </div>
           <span className="timer-hero-divider" aria-hidden="true" />
-          <TimerTargets phase={phase} />
+          <TimerTargets phase={phase} freeRow={isFreeRow} />
         </div>
         {hasEstimate && (
           <div className="timer-phase-bar">

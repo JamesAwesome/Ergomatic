@@ -123,8 +123,23 @@ export function rateDisplay(phase: EnginePhase): {
  *  `.timer-card-static` and the bare `.timer-card-actual` had no renderer
  *  left at all and were deleted from `index.css` by the fix wave that
  *  retired the earlier `variant="connected"`. */
-export default function TimerTargets({ phase }: { phase: EnginePhase }) {
-  const target = targetSplitDisplay(phase);
+export default function TimerTargets({
+  phase,
+  freeRow = false,
+}: {
+  phase: EnginePhase;
+  /** A free-row timer run (Just Row without the monitor, spec 2026-09-02
+   *  §Mechanism piece 3): TARGET SPLIT reads `Free`, the word RATE already
+   *  shows for a phase with no `spm`. Without this the card would show
+   *  the phase's own label — "Just Row", the run's name a second time —
+   *  since `targetSplitDisplay` falls back to `phase.label` for every
+   *  phase kind with no `targetKind`. The caller branches on `run.mode`;
+   *  this component never sees the run. */
+  freeRow?: boolean;
+}) {
+  const target = freeRow
+    ? { main: FREE, sub: null }
+    : targetSplitDisplay(phase);
   const rate = rateDisplay(phase);
   return (
     <div className="timer-cards">
