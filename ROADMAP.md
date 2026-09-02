@@ -129,22 +129,48 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 ## Phase JR — Just Row
 
-**Status: Active — PR 2 IN REVIEW (#259).** PR 0a instrument + PR 0b
-capture DONE 2026-08-31 (#246); **PR 1 MERGED as #255** (2026-09-01, this
-line said "in review" until PR 2's PM gate caught it, RF9's shape); PR 2
-opened 2026-09-01 with Gate 0 passed
-(`docs/design/handoffs/2026-09-01-just-row/`) and the recovery UNSPLIT per
-the PM condition — both Today gates open in the same PR as the surface.
-Merge waits on James plus the R-A ordering question (a tag carrying PR 1,
-unless the PM's relaxation at PR 2's final gate is taken — that gate's
-report carries the case).
+**Status: RELEASED v0.32.0 (build 811) + exit walk PASSED — phase close
+owed.** PR 0a instrument + PR 0b capture DONE 2026-08-31 (#246); PR 1
+MERGED as #255; PR 2 MERGED as #259 (2026-09-01, 3-round review loop,
+accepted with no findings); James relaxed R-A so v0.32.0 tags both PRs
+together; notes #260, release-capture reup #261, TestFlight upload
+0.32.0 (811) all landed 2026-09-01. The exit walk ran the same evening
+on build 811 against prod and PASSED — record at
+`docs/monitor/sessions/walk-2026-09-01-jr-exit/` (its first save failed
+because prod was FROZEN at v0.31.0 behind a dirty deploy-host checkout;
+cleaned, redeployed, retry saved — the hold-and-retry path proved itself
+live). Remaining: the antagonist exit pass + PM close gate.
 
 - [x] PR 0a — the observe-only instrument (#246)
 - [x] PR 0b — the capture walk (walk-2026-08-31-justrow)
 - [x] PR 1 — every stored shape (#255, migration 0019)
-- [ ] PR 2 — surface + session + log door (#259, in review loop)
-- [ ] Exit walk — a real Just Row, both screens in one photograph, ended
-      once by Done and once by Menu (needs PR 2 on a device)
+- [x] PR 2 — surface + session + log door (#259, released v0.32.0)
+- [x] Exit walk — PASSED 2026-09-01 (both endings; Menu-ended row
+      digit-identical with the machine-confirmed stamp on a free row)
+- [ ] Phase close — antagonist exit pass + PM close gate, carrying the
+      follow-on slate below
+
+**Follow-on slate (2026-09-01 — two exit-walk findings, a tester
+request, and two James directives; queued for the close to shape):**
+
+- **The Just Row ready screen should BE the programmed ready view** (or
+  match it identically) — walk finding; today it is its own layout.
+- **Connect should put the erg into a Just Row session** — today the app
+  connects and the PM5 stays on its main menu, so to the rower the
+  connection did nothing. Wire-semantics work: whether a central can
+  drive the PM5 onto its Just Row screen (ErgData appears to) gets the
+  research pass and antagonist treatment before any mechanism is
+  invented.
+- **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, just
+  an infinite timer and the ability to log what you did.
+- **"JR" badge on Just Row sessions**, in the manner of the other type
+  chips (James, 2026-09-01 — supersedes the shipped "no type chip on
+  purpose" stance; v0.32.0's notes describe that release, not this
+  direction).
+- **Optional logging against plans** — a Just Row should be loggable
+  against a plan when the rower so wishes (James, 2026-09-01 —
+  supersedes "never advances your plan" as the ONLY mode; the default
+  stays off-plan, the option is the new work).
 
 **Owed within PR 2's own scope, recorded here so phase close can quote
 it:** a free row recovered with a `truncated` series trace (>4 h of rowing,
