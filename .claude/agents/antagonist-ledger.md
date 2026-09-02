@@ -5979,3 +5979,70 @@ same way.
   backed — query state is scheme-independent); every exchange error string is expressible in
   `LinkOutcome`; `POST /connect` has no already-linked guard so the walk's re-link path works;
   and all ten clauses of `ROADMAP.md:1096-1128` have a disposition.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 3, verifying pass 2's fixes)
+
+- **A concurrency test whose mock arms its resolver BELOW two awaits, released
+  from above them.** The `busy` case did `const second = await startLink(...)`
+  (one microtask) and then `release(...)` — but the first attempt was still
+  inside `await res.json()`, which settles on a LATER task, so `WebAuth.start`
+  had not been called, `release` still held its `() => undefined` initializer,
+  the release was dropped silently and `await first` never settled. The same
+  test then `await`ed a THIRD call against a mock returning a fresh
+  never-resolved promise per invocation. Both are timeouts; the test is red on
+  the mutant AND red on correct code, so the `finally`-deletion probe would be
+  logged as "biting" against a test that cannot go green.
+  **Technique: simulate the mock and the implementation in plain Node with a
+  `Promise.race` timeout before believing any test that interleaves a pending
+  promise with a module-scope guard. Two questions settle it — "is the
+  resolver armed when the test calls it?" and "how many times is the plugin
+  called versus how many resolvers exist?" Arm-detection (`releases.push`
+  + `vi.waitFor(() => expect(releases).toHaveLength(n))`) replaces a single
+  `let release` variable and makes both bugs impossible.**
+- **A prerequisite chain fixed one link short — the SAME defect class, one
+  layer up, inside the pass that fixed it.** Pass 2 moved `cap sync` in front
+  of `xcodebuild` because `xcodebuild` needed gitignored inputs `cap sync`
+  writes. `cap sync` itself needs `dist/client`, which is also gitignored:
+  in a fresh worktree it exits 1 with `Could not find the web assets
+  directory`. **Technique: when a fix reorders a gate because of a missing
+  generated input, walk the chain to the FIRST command whose inputs are all
+  tracked — one `ls` against `.gitignore` per hop, not one for the hop that
+  failed.**
+- **A mutation instruction that is not valid syntax.** "Delete `readStatus`'s
+  `catch` block (leave the `try`)" — `try {}` with no `catch`/`finally` is a
+  `SyntaxError: Missing catch or finally after try`. The sibling row in the
+  same plan ("remove the catch, leave `try`/`finally`") was legal, which is
+  how the illegal one read as fine. **Technique: paste every mutation
+  instruction into `node -e` (or a scratch file) before shipping it. A
+  mutation is code, and the same "run it or read the code that serves it" bar
+  applies (RF13).** Corollary: a mutation row that PREDICTS its failure mode
+  ("it dies by THROWING, record that exact text") must name the layer that
+  observes the failure — a rejection from `void f()` inside `useEffect` dies
+  as an assertion timeout, never as a thrown test.
+- **"finds nothing" about a grep that finds one unrelated line.** The e2e
+  blindness argument was correct and its own cited command falsified it
+  (`design.spec.ts:2017`, a PM5 BLE-name comment). **Technique: for every
+  "grep X finds nothing" sentence, run the grep and paste its ACTUAL output;
+  if it is non-empty, name the hit and why it does not count. A conclusion
+  that survives the real output is stronger than one that needs the output to
+  be empty.**
+- **Attacked and HELD (this plan's vetted ground is now closed):** the
+  clear-site clause against the Swift's four pre-claim / two post-claim
+  returns; the contract regex reproduced in Node (14 lines → 14 codes on the
+  fixed form, 12 on the naive, and the `typoCode` probe green on the naive /
+  red on the fixed); `census.sh` complete and its `norm()` reproduced across
+  all four comment syntaxes; the whole step-3b base-vs-head census procedure
+  run end to end (diff = 15 lines, all the plan's own file; `browserFinished`
+  = 52 under `app/src`; `appUrlOpen` = 0; every residual count exact);
+  `cap sync` leaving `git diff -- app/ios` EMPTY; `xcodebuild` BUILD SUCCEEDED
+  and `App.SwiftFileList` present at the named arm64 path listing
+  `AppDelegate.swift`; the fold counted at 119 words / 24 longest;
+  `UIApplicationSceneManifest` = 0; `searchParams` and Node's `querystring`
+  both decoding `+` as a space; `CAPBridgeProtocol.swift:80` declaring
+  `registerPluginInstance` (so `bridge?.` compiles) and
+  `capacitorDidLoad()` being an empty `open func` at `:164` called at `:53`
+  after the bridge is assigned; the storyboard's current
+  `customModule="Capacitor"` with no `customModuleProvider`, making the
+  plan's `customModule="App" customModuleProvider="target"` the correct
+  replacement; all Task 3 deletion ranges exact; and the three pre-existing
+  main-checkout items named correctly.
