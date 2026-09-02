@@ -285,8 +285,7 @@ the enum, the column, and the unique index. Additive to every other table.
 rollback image's concurrent double-mint (delete-then-insert, `stores/concept2.ts:159-165`)
 into a unique violation (500) rather than two rows. Accepted — a rare self-race,
 strictly smaller blast radius than the unbounded attempts the index prevents.
-**If §Decisions D1 is YES, 0020 also adds `UNIQUE (c2_user_id)` on
-`concept2_links`** — the cheap moment (`schema.ts:483` has no index today).
+**D1 APPROVED: 0020 also adds `UNIQUE (c2_user_id)` on `concept2_links`** — the cheap moment (`schema.ts:483` has no index today).
 
 **Mint is one atomic statement:** `INSERT … ON CONFLICT (user_id) DO UPDATE SET
 nonce = excluded.nonce, surface = excluded.surface, weight_class =
@@ -508,7 +507,7 @@ at the Gate 0 artifact, 2026-09-02. The copy, verbatim:
 | status | label | statement | action |
 | --- | --- | --- | --- |
 | 200 | Linked | **Concept2 `<c2 username>` is now connected to Ergomatic `<email>`.** (D2 — both identities, HTML-escaped; the shared-browser residual's only mitigation) | Return to the app. |
-| 409 | Already linked | That Concept2 account is already connected to a different Ergomatic account. (D1 only) | Return to the app. |
+| 409 | Already linked | That Concept2 account is already connected to a different Ergomatic account. (D1 APPROVED) | Return to the app. |
 | 400 | Expired | This link has expired or was already used. | Return to the app and start again. |
 | 400 | Incomplete | This link is missing required parameters. | Return to the app and start again. |
 | 401 | Not signed in | No Ergomatic session in this browser. | Sign in to Ergomatic here, then start the link again from the app. |
@@ -639,7 +638,7 @@ phrase grep pasted, all zero/accounted; (4) the walk table: per-request
 `authVia` + both-present, `state` echoed y/n, Info.plist needed y/n; (5)
 `ROADMAP.md` PR1.75 `[x]` with the still-owed line.
 
-## Decisions for James (from antagonist pass 2 — presented, not assumed)
+## Decisions for James (from antagonist pass 2) — **D1 YES, D2 YES (James, 2026-09-02 "Approved"); D3 PENDING**
 
 - **D1 — detective control against code injection (stored shape, 0020).** Add
   `UNIQUE (c2_user_id)` on `concept2_links`; a link whose Concept2 account is
@@ -647,11 +646,11 @@ phrase grep pasted, all zero/accounted; (4) the walk table: per-request
   (web: a 409 page). Stops the common injection case (victim already linked) and
   stops two Ergomatic accounts writing one logbook. **Cost:** one Concept2
   account can never be linked to two Ergomatic accounts in one database.
-  Recommendation: YES.
+  **APPROVED — in 1.75a's migration and both routes.**
 - **D2 — the Linked page names both identities** (Concept2 username + Ergomatic
   email, escaped). The shared-browser fixation residual passes every server
   check correctly; copy is its only mitigation. Changes an approved page →
-  rendered on the Gate 0 artifact for re-approval. Recommendation: YES.
+  rendered on the Gate 0 artifact; **APPROVED 2026-09-02.**
 - **D3 — the desk pre-check** (§GO/NO-GO): two URLs in
   `scratchpad/c2-desk-precheck.txt`, your logged-in browser, cancel at consent.
 
