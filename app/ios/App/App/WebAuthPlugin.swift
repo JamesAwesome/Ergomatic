@@ -75,6 +75,12 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         // deliberate: a second sheet would present over the first and there is
         // no correct answer for which call receives the callback.
         //
+        // "One session per app PROCESS" holds because there is one plugin per
+        // bridge, one bridge per `CAPBridgeViewController`, and one of those
+        // per process: `Info.plist` declares no `UIApplicationSceneManifest`
+        // and `AppDelegate.swift:7` holds a single `window`. Adopting UIScene
+        // would demote this to one claim per bridge.
+        //
         // THIS RETURN AND THE THREE BELOW IT MUST NOT CALL `clearActive()`.
         // They run BEFORE the claim is taken, so they hold nothing to clear --
         // and here specifically, clearing would strand the LIVE session this
@@ -135,7 +141,7 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         // `ASWebAuthenticationSessionCallback`, which is
         // `API_AVAILABLE(ios(17.4), ...)` (SDK header:71) -- above this
         // target's `IPHONEOS_DEPLOYMENT_TARGET = 15.0`
-        // (project.pbxproj:314,336). An `#available(iOS 17.4, *)` branch onto
+        // (project.pbxproj:322,344). An `#available(iOS 17.4, *)` branch onto
         // `.customScheme` is recorded as optional polish, not owed here.
 
         // SDK header:73-77 -- "A provider must be set prior to calling -start,
@@ -157,7 +163,12 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         // injection this whole PR closes on the Ergomatic side. It also
         // removes the sharing consent alert the class documentation describes
         // (SDK header:50-53), since there is nothing to share.
-        session.prefersEphemeralWebBrowserSession = call.getBool("ephemeral", false)
+        //
+        // Default TRUE: the design (§4) makes ephemeral a control, not a
+        // preference; a caller omitting the key must not get the shared-cookie
+        // session. The JS passes it explicitly and Task 2's contract test
+        // asserts that.
+        session.prefersEphemeralWebBrowserSession = call.getBool("ephemeral", true)
 
         // Claim BEFORE starting: `canStart`/`start()` can both fail, and those
         // two failure paths -- the ONLY two below this line, and the only two
@@ -219,7 +230,7 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin {
                     call.reject("No presentation context was provided", "noContext")
                 case .presentationContextInvalid:
                     // SDK header:27-28. Real on iPad, where
-                    // TARGETED_DEVICE_FAMILY = "1,2" (project.pbxproj:325,346)
+                    // TARGETED_DEVICE_FAMILY = "1,2" (project.pbxproj:333,354)
                     // means a window can legitimately be in a background scene.
                     call.reject("The presentation context cannot show the authentication UI", "contextInvalid")
                 @unknown default:
@@ -308,7 +319,7 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         // `finish`'s token check and resolves nothing (see `finish`).
         clearActive()
         session?.cancel()
-        call?.reject("The web view reloaded while a link session was in flight", "abandoned")
+        call?.reject("The web view navigated away while a link session was in flight", "abandoned")
     }
 
     private func clearActive() {
@@ -331,7 +342,7 @@ extension WebAuthPlugin: ASWebAuthenticationPresentationContextProviding {
     ///
     /// NO `assertionFailure` HERE. The walk build is a Debug build -- the
     /// `debug.xcconfig` at `app/ios/debug.xcconfig` is the base configuration
-    /// for both Debug configs (`project.pbxproj:187,308`) and Xcode's Run
+    /// for both Debug configs (`project.pbxproj:195,316`) and Xcode's Run
     /// action uses them -- so an `assertionFailure` would TRAP the app on the
     /// one build this whole plan exists to walk, turning a cosmetic
     /// last-resort into a crash.
@@ -342,6 +353,11 @@ extension WebAuthPlugin: ASWebAuthenticationPresentationContextProviding {
     /// if the window vanished between `start()` and presentation; the live
     /// bridge window is tried first so that case still has a chance of
     /// presenting rather than failing opaquely.
+    ///
+    /// `ASWebAuthenticationPresentationContextProviding` is `NS_SWIFT_UI_ACTOR`
+    /// (SDK header:114); under `SWIFT_VERSION = 5.0` that isolation is advisory
+    /// (no diagnostic); a Swift 6 language-mode move makes it an error --
+    /// annotate the METHOD `@MainActor` then, never the class.
     public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         return activeAnchor ?? bridge?.viewController?.view.window ?? ASPresentationAnchor()
     }

@@ -12,7 +12,18 @@
 #
 # Greps the plist XML rather than using PlistBuddy on purpose: PlistBuddy is
 # macOS-only and this script is exercised by ios-release.test.sh, which CI
-# runs on ubuntu-latest (.github/workflows/ci.yml:169-172).
+# runs on ubuntu-latest (.github/workflows/ci.yml:169-173).
+#
+# The grep reads the WHOLE FILE rather than scoping to the CFBundleURLTypes
+# array, DELIBERATELY. No other key in this plist carries a
+# `com.googleusercontent.apps.` string (measured 2026-09-02:
+# `grep -c com.googleusercontent.apps ios/App/App/Info.plist` -> 1), and a
+# future key that did would be a Google CONFIG error -- two client ids in one
+# bundle -- not the URL-type ORDERING error this script exists to survive.
+# Scoping the read would need an XML-aware parse: the array spans lines, and a
+# `head -1` within a narrower window would just reintroduce a positional
+# assumption in a smaller place. So the file-wide read is both simpler and the
+# one whose failure mode is the honest one.
 set -Eeuo pipefail
 
 PLIST="${1:?usage: ios-google-client-id.sh <path/to/Info.plist>}"
