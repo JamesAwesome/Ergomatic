@@ -5153,3 +5153,16 @@ same way.
   500 vs one added entry per resume; the ROADMAP register row's
   `ConnectedSurface.tsx:848` citation; `merge-tree` clean and a CI run
   present at head.
+
+- **2026-09-02, PR #267 pass 5 (closure):** BLANK on code and on the
+  gaps/arrivals sweep; the only residue was a Record block that said "two
+  internal passes" above a narration of five, and a "Pass 5 verdict below"
+  pointing at nothing. Technique: **a PR body's own bolded lead-in is a
+  figure like any other — grep the noun it counts against the items it then
+  lists** (`grep -c "^Pass [0-9]"` vs the word before "internal passes"), the
+  same sweep RF27's pre-ready checklist item 3 asks for and the same class
+  pass 4 caught one round earlier in a different sentence. Second: **a
+  `pull_request` CI event never skips the code jobs** — `ci.yml:31` feeds
+  `ci-changes.sh` the PR BASE sha, so it diffs the whole range; "docs-only
+  push, expect a skip" is only true of a bare `push` event, and expecting a
+  skip will make a reviewer read a legitimately-running gate as stuck.
