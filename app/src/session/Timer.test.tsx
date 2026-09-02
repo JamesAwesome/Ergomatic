@@ -1603,7 +1603,7 @@ describe("Timer — the gutter's structure and Pause's own row (connected-revamp
     vi.setSystemTime(FIXED_NOW);
   });
 
-  it("renders exactly one END button, inside .timer-gutter beside the decorative back glyph and NOTHING else", async () => {
+  it('renders exactly one END button, inside .timer-gutter, and NOTHING else — the decorative ← glyph is gone (James, desk walk 2: "what is this arrow" — it did nothing)', async () => {
     mockKeepAwake();
     const run = matrixRun();
     runAtIndex(run, 1);
@@ -1611,22 +1611,18 @@ describe("Timer — the gutter's structure and Pause's own row (connected-revamp
 
     const gutter = document.querySelector(".timer-gutter");
     expect(gutter).not.toBeNull();
-    const back = gutter!.querySelector(".timer-gutter-back");
-    expect(back).not.toBeNull();
-    expect(back).toHaveAttribute("aria-hidden", "true");
     const ends = screen.getAllByRole("button", { name: "END →" });
     expect(ends).toHaveLength(1);
     expect(gutter!.contains(ends[0])).toBe(true);
     // THE DECORATIVE HOUSING SPACER IS GONE (James's erg walk, 2026-08-13
     // — `Timer.tsx`'s own gutter comment has the reasoning). Asserted as an
-    // exact child census, not just `querySelector(...) === null`: landscape
-    // lays this column out with `justify-content: space-between`, which
-    // positions its children by COUNT, so "the housing is absent" and "back
-    // and END are the only two things space-between is dividing" are
-    // different claims and it is the second one the geometry depends on.
+    // exact child census, not just `querySelector(...) === null`. The
+    // decorative ← went the same way (desk walk 2, 2026-09-02): END is the
+    // gutter's ONE child, at the foot via `justify-content: flex-end`.
     expect(
       Array.from(gutter!.children).map((el) => el.className),
-    ).toStrictEqual(["timer-gutter-back", "timer-end"]);
+    ).toStrictEqual(["timer-end"]);
+    expect(gutter!.querySelector(".timer-gutter-back")).toBeNull();
   });
 
   it("Pause lives in .timer-upnext-row, never inside .timer-controls — which now holds exactly Previous phase + Next phase", async () => {

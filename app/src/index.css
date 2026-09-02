@@ -4179,14 +4179,14 @@ button.back-link:disabled,
   display: contents;
 }
 
-.timer-gutter-back {
-  order: -1;
-  font-family: var(--font-mono);
-  font-size: 15px;
-  color: var(--ink);
-}
-
 .timer-name {
+  /* The decorative ← that used to sit at `order: -1` is gone (desk walk
+     2, 2026-09-02); the name keeps its centred position by taking the
+     row's slack and matching END's 44px on the left, so it does not drift
+     22px off centre. */
+  flex: 1;
+  text-align: center;
+  margin-left: 44px;
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-4);
@@ -4887,7 +4887,7 @@ button.back-link:disabled,
    `grid-row` (same reasoning as before: Timer.tsx's own children are not in
    gutter/content-grouped DOM order, so auto-placement would interleave
    rows unpredictably) — `.timer-header` and its nested `.timer-gutter` both
-   go `display: contents` here, promoting `.timer-gutter-back`/
+   go `display: contents` here, promoting (formerly the ← glyph and)
    `.timer-end`/`.timer-name` to be independently
    placeable grid items in their own right (see `.timer-header`'s own base
    rule for the portrait half of this trick). Reference frame 844×390
@@ -4977,7 +4977,8 @@ button.back-link:disabled,
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: space-between;
+    /* One child now (the ← is gone, desk walk 2): END sits at the foot. */
+    justify-content: flex-end;
     grid-column: 1;
     grid-row: 1 / -1;
     /* Controls inside the inset; background to the edge (desk walk 1).
@@ -4987,15 +4988,6 @@ button.back-link:disabled,
     padding: 12px 0 env(safe-area-inset-bottom, 0px) var(--edge-inset);
     background: var(--surface-sunken);
     border-right: 1px solid var(--rule);
-  }
-
-  .timer-screen .timer-header .timer-gutter-back {
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 15px;
   }
 
   /* END needs no landscape rule any more: the accent-outlined 44×44 box

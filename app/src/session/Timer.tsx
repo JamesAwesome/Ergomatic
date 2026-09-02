@@ -767,9 +767,12 @@ export default function Timer() {
     <main className="screen timer-screen">
       <div className="timer-header">
         {/* THE GUTTER (connected-revamp Task 7, revision §5): "Landscape
-            gutter holds back (←, top) and END (bottom)." One `.timer-end`
-            button, not two — `display: contents` on `.timer-gutter`
-            promotes `.timer-gutter-back`/`.timer-end` to be direct flex
+            gutter holds back (←, top) and END (bottom)." The ← was a
+            DECORATIVE span with no handler — a back button that was not
+            one — and James deleted it at the timer-mode desk walk
+            (2026-09-02, "what is this arrow"); END is the one way out.
+            One `.timer-end` button — `display: contents` on `.timer-gutter`
+            promotes `.timer-end` to be a direct flex
             children of THIS row (portrait's own base rule, unchanged,
             ordered back/name/end via CSS `order`); the landscape override
             turns `.timer-header` ITSELF into `display: contents` too, so
@@ -793,9 +796,6 @@ export default function Timer() {
             is what puts back at the top and END at the bottom, so removing
             the middle child changes no position. */}
         <div className="timer-gutter">
-          <span className="timer-gutter-back" aria-hidden="true">
-            ←
-          </span>
           <button type="button" className="timer-end" onClick={handleEndTap}>
             END →
           </button>
