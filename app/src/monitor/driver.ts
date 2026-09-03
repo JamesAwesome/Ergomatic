@@ -56,6 +56,7 @@
 
 import {
   buildGetErrorType,
+  buildJustRowProgram,
   buildProgrammingSequence,
   buildSampleRateConfig,
   buildTerminate,
@@ -291,9 +292,26 @@ export class ProgramRejectionError extends Error implements ProgramRejection {
 export class ProgramBusyError extends Error {
   override readonly name = "ProgramBusyError";
 
-  constructor() {
+  /** `inFlight` names what is holding the slot — `program()`, or
+   *  `beginFreeRow()`'s detached p.80 send (spec 2026-09-02 ruling 4).
+   *  `program()` refuses with this while either is live. `terminate()`
+   *  refuses for NEITHER holder (spec rev 5, after the 2026-09-03 walk):
+   *  it WAITS for the free-row send to settle — a bounded wait, because
+   *  that send races `FREE_ROW_PROGRAM_DEADLINE_MS` — and it interleaves
+   *  with `program()` on purpose (`programInFlight`'s own doc comment).
+   *  Refusing WOULD leave the erg sitting in the Just Row session the app
+   *  had just armed. That is a REACHABLE defect, not an observed one, and
+   *  this comment used to blur the two: the 2026-09-03 walk's finding 4
+   *  never entered this refusal — ring 3's Cancel ran 1589 ms after the
+   *  send had settled, so `programInFlight` was already `false`. What the
+   *  walk actually caught was the hook's own `mode !== "justrow"`
+   *  exclusion. The refusal is fixed beside it as hardening, because both
+   *  callers swallow a rejection, so refusing could only ever mean "the
+   *  erg is not told"
+   *  (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4). */
+  constructor(inFlight = "program()") {
     super(
-      "program() is already in flight on this driver. A second call must wait for the first to settle (resolve or reject) before it may be dispatched",
+      `${inFlight} is already in flight on this driver. A second call must wait for the first to settle (resolve or reject) before it may be dispatched`,
     );
   }
 }
@@ -611,18 +629,22 @@ export interface DriverOptions {
    */
   now?: () => number;
   /**
-   * **THE ONE TIMER IN THIS FILE** (fast-follow Task 2, design spec §5) —
-   * a schedule-and-cancel pair returning the canceller, the same shape and
-   * the same injection reason `useMonitorSession.ts`'s
+   * **THE ONE TIMER SEAM IN THIS FILE** (fast-follow Task 2, design spec
+   * §5) — a schedule-and-cancel pair returning the canceller, the same
+   * shape and the same injection reason `useMonitorSession.ts`'s
    * `MonitorSessionDeps.schedule` has. Defaults to `setTimeout` /
    * `clearTimeout`.
    *
-   * It exists for exactly ONE deadline: the summary-fallback gate's
+   * It serves exactly TWO deadlines: the summary-fallback gate's
    * reconcile at `FINISH_GRACE_MS` after a natural finish
-   * (`armSummaryReconcile`). Every budget in this file is still counted in
-   * GENERAL_STATUS ticks and nothing about `program()` reads a timer at
-   * all — the rule stated on `ackTimeout`/`verifyTicks`/`settleTicks`
-   * above is intact for all of them.
+   * (`armSummaryReconcile`), and — since spec 2026-09-02 — the bound on
+   * `beginFreeRow()`'s detached p.80 send, `FREE_ROW_PROGRAM_DEADLINE_MS`
+   * (that constant's own doc comment says why a tick budget cannot bound
+   * a send to a transport that never ticks). Every OTHER budget in this
+   * file is still counted in GENERAL_STATUS ticks and nothing about
+   * `program()` reads a timer at all — the rule stated on
+   * `ackTimeout`/`verifyTicks`/`settleTicks` above is intact for all of
+   * them.
    *
    * Why the gate could not be a tick count, when every budget here is:
    * the reconcile's whole job is to decide, at a MOMENT, that a split has
@@ -883,6 +905,46 @@ const STRUCTURE_RECOVERED_LOG_CAP = 5;
  *  one is a measurement (walk day 3) and must not be padded to make room. */
 const FINISH_GRACE_MS = 3000;
 
+/** How long `beginFreeRow()`'s detached p.80 send may hold `programInFlight`
+ *  waiting for its ack before it is ABANDONED and `free-row-program-
+ *  unanswered` is recorded (spec 2026-09-02 ruling 4, harden lens 2).
+ *  A wall-clock deadline, not a tick budget, on purpose: the transports
+ *  that never answer (the replay transport, a PM5 that has gone quiet)
+ *  are exactly the ones whose ticks cannot be counted on, and production
+ *  configures no `ackTimeout`, so without this the flag would hold for the
+ *  driver's life and `terminate()` would WAIT on it forever.
+ *
+ *  MEASURED, not reasoned (spec rev 5): the walk
+ *  `docs/monitor/sessions/walk-2026-09-03-jr-connect/` timed write→ack at
+ *  **1968 / 2060 / 1788 ms** across its three sessions — the Just Row
+ *  frame's ack arrives after the PM's three `notify-first` lines, not in
+ *  the ~90 ms a workout program's ack takes (the figure this constant was
+ *  first written against, and the one the walk falsified for THIS frame).
+ *  3000 ms left under a second of margin over a 2.06 s worst case; 5000 ms
+ *  is ~2.4x the slowest ack observed. It is a ceiling, not a delay: every
+ *  ack that lands clears the flag the moment it arrives.
+ *
+ *  RAISING IT IS NOT FREE, and this comment used to say it was — written,
+ *  as the delta pass on PR #278 pointed out, on the one constant that
+ *  exists for machines that do NOT answer. On a machine that never acks,
+ *  this number is exactly how long `terminate()` sits before it writes,
+ *  and that wait races the app's own teardown. Measured on the walk's ring
+ *  1 (offsets from its own p.80 write): END at `ready` closes the record
+ *  and opens the burst hold at +66903, which releases at +68905 (2002 ms);
+ *  release, navigation and the unmount take 2025 ms more, reaching
+ *  `disconnect-requested` at +70930 — 4027 ms from END. The Ready screen
+ *  is up at +1159, so the earliest END puts the hang-up at about
+ *  write+5186 ms against a terminate released at write+5000 ms. About
+ *  186 ms apart. The ordering is held by `terminateWritesOwed` (a hang-up waits
+ *  for a terminate that still owes its write), NOT by this number, which
+ *  is why the number did not move to buy margin. Anyone raising it further
+ *  is lengthening that wait, not padding a safety factor.
+ *
+ *  While it holds, an END or a Cancel from the app WAITS for the send
+ *  rather than being refused (`terminate()`'s own comment) — bounded here,
+ *  and the erg is told either way. */
+const FREE_ROW_PROGRAM_DEADLINE_MS = 5000;
+
 /** RC-9a (design spec 2026-08-25-free-oracles §1) — the live average-pace
  *  verdict's own band. The pre-spec pass measured a 0.07-0.20 s MEDIAN
  *  disagreement between 0x0032's `averageSplit` and our own quotient
@@ -1031,9 +1093,9 @@ export function createPm5Driver(
    *  (`STRUCTURE_MISMATCH_WINDOW_MS`, the finish grace's own expiry, and
    *  the summary gate's in-window test). */
   const now = options.now ?? ((): number => Date.now());
-  /** The only timer this driver ever sets — see `DriverOptions.schedule`
-   *  for why one exists at all, and `armSummaryReconcile` for its single
-   *  use. */
+  /** The only timer seam this driver has — see `DriverOptions.schedule`
+   *  for why one exists at all, and `armSummaryReconcile` /
+   *  `beginFreeRow` for its two uses. */
   const schedule =
     options.schedule ??
     ((cb: () => void, ms: number): (() => void) => {
@@ -1341,8 +1403,120 @@ export function createPm5Driver(
    *  `"structure-mismatch"`, anything `sendPrepare`/`sendSequence`/
    *  `verifyArmed` can throw — clears this exactly like a clean resolve
    *  does; there is deliberately no separate "only on success" branch to
-   *  get wrong). */
-  let programInFlight = false;
+   *  get wrong).
+   *
+   *  SECOND HOLDER (spec 2026-09-02 ruling 4), and why this is a LABEL
+   *  rather than a boolean: `beginFreeRow()`'s detached p.80 send holds it
+   *  for the send's duration, bounded by `FREE_ROW_PROGRAM_DEADLINE_MS`,
+   *  and clears it in its own `finally`. It gates `program()`'s re-entry
+   *  and the RC-37 watch (truthiness) exactly as `program()`'s own hold
+   *  does. `terminate()` refuses for NEITHER holder: it interleaves with
+   *  `program()` on purpose (the hook's teardown does it — "best-effort by
+   *  design — including the case where a `program()` is still in flight" —
+   *  so the erg is not left holding a workout the rower backed out of),
+   *  and it WAITS OUT the free-row send (`freeRowSendSettled`, just below).
+   *  Lifetime of the free-row hold: minted after the run is open and the
+   *  sequence built, cleared on ack, NAK, deadline, or disconnect (the
+   *  disconnect hatch resolves `pendingAck` as `"disconnected"`, which
+   *  rejects the send). */
+  let programInFlight: false | "program()" | "beginFreeRow()" = false;
+  /** The SETTLED promise of `beginFreeRow()`'s detached p.80 send — the
+   *  whole chain, so it resolves (never rejects: both handlers are
+   *  attached, and neither throws) on ack, NAK, deadline or disconnect,
+   *  whichever comes first. `terminate()` awaits it instead of refusing
+   *  (spec rev 5). The refusal it replaces was never observed FAILING —
+   *  the walk's finding 4 was the hook's free-row exclusion, and its ring
+   *  3 Cancel ran 1589 ms after the send had settled — but it is reachable
+   *  on its own (an END or a Cancel inside the ~2 s ack window), and both
+   *  callers swallow the rejection, so it could only ever mean "the erg is
+   *  not told". The WAIT is what the ack matcher needs — it is arrival-order
+   *  only, never reading the ack's command byte, so a terminate
+   *  interleaved with the live send would share the one `pendingAck` slot
+   *  and strand whichever registered first, with no `ackTimeout` in
+   *  production to expire the orphan. It is bounded because the send is:
+   *  `FREE_ROW_PROGRAM_DEADLINE_MS` is the ceiling on this await.
+   *
+   *  LIFETIME. Mint: inside `beginFreeRow()`, the same statement that sets
+   *  `programInFlight` — one site. It cannot be overwritten while live,
+   *  and the guard that holds that is the HOOK's, not this file's: the
+   *  driver's own `runIsOpen()` refusal at the top of `beginFreeRow()` is
+   *  NOT sufficient, because the machine's terminal frame can set
+   *  `activeRun.closed` during the ~2 s send (the rower presses Menu),
+   *  after which `runIsOpen()` is false and a second call would be
+   *  accepted. What actually holds is `useMonitorSession`'s
+   *  `beginFreeRow`, which returns early at `programming`/`ready`/`live`/
+   *  `ended` — and the phase is `ready` for the whole send, flipped
+   *  synchronously by the same call. Clear: the chain's own `finally`,
+   *  beside `programInFlight = false`. Survives nothing — it belongs to one send on one driver
+   *  instance, and a driver does not outlive its connection. `null`
+   *  whenever no free-row send is in flight, which is every workout
+   *  session and every free row after its send settles. */
+  let freeRowSendSettled: Promise<void> | null = null;
+  /** HOW MANY `terminate()` calls have entered but not yet put their frame
+   *  on the wire (or given up trying). `disconnect()` refuses to hang up
+   *  while this is non-zero — see `awaitTerminateWrites` just below.
+   *
+   *  WHY IT EXISTS (the delta pass on PR #278, 2026-09-03). `terminate()`
+   *  can now SUSPEND before it writes anything: it waits out
+   *  `freeRowSendSettled`, up to `FREE_ROW_PROGRAM_DEADLINE_MS`. That wait
+   *  races the hook's own teardown, which hangs up. MEASURED on the walk's
+   *  ring 1 (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, all
+   *  offsets from its own p.80 write): END flips to `ended` and opens the
+   *  burst hold at +66903 (`handoff-hold`), which releases 2002 ms later
+   *  at +68905 (`handoff-released`); release, navigation and the `JustRow`
+   *  unmount then take 2025 ms more, reaching `disconnect-requested` at
+   *  +70930. That is 4027 ms from END to hang-up. The Ready screen is up
+   *  at that ring's first `frame`, +1159 ms, so the EARLIEST END puts the
+   *  hang-up at about write+5186 ms — against a terminate the deadline
+   *  releases at write+5000 ms. About 186 ms, on the wrong side of a wait
+   *  nobody tuned for it. If the hang-up wins, the
+   *  resumed terminate writes to a dead transport, rejects, and the hook's
+   *  best-effort catch swallows it: the erg stays in the Just Row session,
+   *  which is the exact defect this PR exists to fix, one path over.
+   *
+   *  Apple's own contract is why a hang-up can abort a write rather than
+   *  merely reorder it: `cancelPeripheralConnection(_:)` is nonblocking and
+   *  "any pending commands ... may not complete" (`CBCentralManager`
+   *  reference) — the same citation `useMonitorSession.ts`'s `fail()` gives
+   *  for chaining ITS disconnect behind a terminate. This is that rule
+   *  generalized to the driver, where it holds for every caller of
+   *  `disconnect()` rather than the two hook paths that remembered.
+   *
+   *  LIFETIME. Mint: `terminate()`'s entry, one site, one increment per
+   *  call. Clear: that call's own release, run exactly once (the closure
+   *  latches), from `sendSequence`'s `onFrameWritten` when the frame is on
+   *  the wire, or from `terminate()`'s `finally` if the call failed or was
+   *  abandoned before it could write. A counter rather than a boolean so
+   *  two overlapping terminates cannot mask each other, and so this file
+   *  owes no claim about callers never overlapping. Survives nothing: it
+   *  belongs to the driver instance, and a driver does not outlive its
+   *  connection. */
+  let terminateWritesOwed = 0;
+  /** Resolves when `terminateWritesOwed` reaches zero — `null` whenever it
+   *  is already zero, so `disconnect()` awaits nothing in the ordinary
+   *  case. One deferred shared by however many terminates are owed. */
+  let terminateWritesDrained: Promise<void> | null = null;
+  let releaseTerminateWrites: (() => void) | null = null;
+
+  /** Called by `terminate()` on entry; the returned function is that
+   *  call's own release, idempotent. */
+  function noteTerminateWriteOwed(): () => void {
+    terminateWritesOwed += 1;
+    terminateWritesDrained ??= new Promise<void>((resolve) => {
+      releaseTerminateWrites = resolve;
+    });
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      terminateWritesOwed -= 1;
+      if (terminateWritesOwed > 0) return;
+      const resolve = releaseTerminateWrites;
+      releaseTerminateWrites = null;
+      terminateWritesDrained = null;
+      resolve?.();
+    };
+  }
   let raw: Partial<RawPm5Status> = {};
   // The last RAW machine interval index this driver has actually SEEN on
   // 0x0033 (Interval Count) — deliberately the UNNORMALIZED value (not
@@ -2583,8 +2757,11 @@ export function createPm5Driver(
     // "a program is armed", which a free row's own open run now satisfies —
     // `armedProgram()` returns its `{ intervals: [] }` — while the thing
     // this entry exists to report, a machine interval with no counterpart in
-    // the program we sent, cannot happen when we sent no program. Without
-    // this, every frame of every free row logs one.
+    // the program we sent, cannot happen when we sent NO INTERVAL STRUCTURE.
+    // (Since spec 2026-09-02 a free row does send the machine a frame — the
+    // p.80 JustRow program — but that frame carries a workout TYPE and a
+    // screen state, never intervals, so there is still nothing here to
+    // disagree with.) Without this, every frame of every free row logs one.
     if (p && !activeRun?.freeRow && intervalActive && intervalIndex === null) {
       log.record(
         "divergence",
@@ -4988,7 +5165,9 @@ export function createPm5Driver(
         // `activeRun.freeRow` opts out (Phase JR PR 2), for the same reason
         // the divergence escalation does: this watchdog exists to notice the
         // machine quietly ceasing to hold the workout WE armed, and a free
-        // row armed nothing. Opening its run makes `armedWorkout` non-null,
+        // row arms no interval structure to stop holding (the p.80 frame it
+        // does send since spec 2026-09-02 carries none — see the divergence
+        // opt-out's own note). Opening its run makes `armedWorkout` non-null,
         // so without this the watchdog would compare the machine's readback
         // against a zero-interval program and could report the program
         // dropped on a row that never had one.
@@ -5725,9 +5904,26 @@ export function createPm5Driver(
   async function sendSequence(
     sequence: Uint8Array[][],
     completionKind: string,
-    options_: { isPrepareStep?: boolean; fetchErrorTypeOnNak?: boolean } = {},
+    options_: {
+      isPrepareStep?: boolean;
+      fetchErrorTypeOnNak?: boolean;
+      /** Fired once every chunk of a frame has been handed to the
+       *  transport, BEFORE that frame's ack is awaited. `terminate()` is
+       *  the only caller: it is how `disconnect()`'s wait ends at the
+       *  moment the bytes are out rather than at the moment the machine
+       *  answers — an ack whose only production exit, when the PM5 has
+       *  gone quiet, is that very disconnect (`t.onDisconnect`'s M-3
+       *  hatch). Called per frame; `terminate()` sends one, and the
+       *  release it passes is idempotent, so a multi-frame caller would
+       *  simply see the first frame's dispatch. */
+      onFrameWritten?: () => void;
+    } = {},
   ): Promise<void> {
-    const { isPrepareStep = false, fetchErrorTypeOnNak = false } = options_;
+    const {
+      isPrepareStep = false,
+      fetchErrorTypeOnNak = false,
+      onFrameWritten,
+    } = options_;
     // Fix-round 2: purge anything left over from a PREVIOUS sequence
     // before this one's own first frame ever asks the buffer for
     // anything — see `discardStaleAcks`'s own comment. Once, here, not
@@ -5768,6 +5964,7 @@ export function createPm5Driver(
         log.record("write", hex);
         await t.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
       }
+      onFrameWritten?.();
 
       const outcome = await ackPromise;
 
@@ -5852,8 +6049,10 @@ export function createPm5Driver(
     capabilities,
 
     /**
-     * Phase JR PR 2: open a run for the PM5's own Just Row, sending the
-     * machine nothing.
+     * Phase JR PR 2: open a run for the PM5's own Just Row — and, since
+     * spec 2026-09-02, put the erg INTO it: send Concept2's p.80 JustRow
+     * program (`buildJustRowProgram`) so the PM5 leaves its main menu when
+     * the link comes up, instead of waiting for the first pull.
      *
      * This is the free row's counterpart to `program()`, and it exists
      * because `activeRun` had exactly one assignment — inside `program()` —
@@ -5862,12 +6061,44 @@ export function createPm5Driver(
      * whole row: no `terminated` on the rower's Menu press, no 0x0039 filed,
      * and boundaries routed as if they belonged to nobody.
      *
-     * DELIBERATELY SYNCHRONOUS AND UNACKED, unlike `program()`. There is no
-     * wire traffic to await and nothing for the machine to confirm: the row
-     * is already the PM5's, and this only tells the driver to start
-     * accounting for it. `program()`'s ack gating, prepare-settle wait and
-     * structural readback all exist to establish that the machine is holding
-     * OUR workout, a question a free row does not raise.
+     * DELIBERATELY SYNCHRONOUS in everything the hook reads, unlike
+     * `program()`: the run opens and this returns before any ack, so the
+     * hook's `ready` flip stays one indivisible step with it. The send is
+     * DETACHED — `void`, its only effects ring entries — and NOTHING on the
+     * phone branches on its outcome (ruling 2): the erg's own screen is the
+     * acknowledgment, and the readback that would verify it
+     * (0x0031 `workoutType = 1`) is also the machine's idle-after-terminate
+     * default (`EMPTY_ARM_STRUCTURE`), so it verifies nothing. `program()`'s
+     * prepare-settle wait and structural readback establish that the
+     * machine holds OUR workout, a question a free row does not raise.
+     *
+     * NO PREPARE, and this is load-bearing (spec §Research): `program()`
+     * sends `buildTerminate()` before any run exists, but this call opens
+     * the run FIRST, and a terminate with a run open is the row's own END
+     * byte for byte — `maybeEmitFrame`'s terminal branch would close the
+     * run on the machine's `terminated`. The `freeRow` opt-outs (the
+     * divergence escalation and the RC-37 watch) do not cover that branch.
+     * So the p.80 frame goes alone; a program replaces a loaded workout
+     * (interface-notes.md §19.1 verdict (b)).
+     *
+     * ORDER: the run is open (and `free-row-open` recorded) before the
+     * first byte is written — `activeRun.freeRow` is what holds the RC-37
+     * watch and the divergence escalation off during the send, and
+     * `sendSequence` issues its first write synchronously, inside this
+     * call. The sequence is built BEFORE `programInFlight` is set, so a
+     * builder throw can never strand the flag. The send holds
+     * `programInFlight` for its duration (so `terminate()` WAITS it out on
+     * `freeRowSendSettled` rather than sharing the one ack slot) and races
+     * a `FREE_ROW_PROGRAM_DEADLINE_MS` deadline (so a transport that never
+     * answers cannot hold it forever). Outcomes, all to the ring:
+     * `free-row-program-sent` (written by `sendSequence` itself as its
+     * completion kind — not logged twice here), `free-row-program-
+     * unanswered` on the deadline, `free-row-program-failed` with the hex
+     * trace on a NAK/garble/disconnect, or `String(err)` for the
+     * transport's own plain rejections (the fake's "unexpected write",
+     * `capacitorBle`'s post-disconnect throw), which carry no `hexTrace`.
+     * The handlers never throw — a throwing handler on a `void` chain is
+     * an unhandled rejection.
      *
      * Idempotent against an open run: a second call while one is live is
      * ignored rather than replacing it, so a stray re-entry cannot silently
@@ -5895,7 +6126,51 @@ export function createPm5Driver(
         terminatedAwaitingSummary: false,
         finalFilledFromSummary: false,
       };
-      log.record("free-row-open", "opened a free row (no program sent)");
+      log.record(
+        "free-row-open",
+        "opened a free row; sending the PM5 its Just Row program (CSAFE-DEF p.80), no prepare",
+      );
+      const sequence = buildJustRowProgram();
+      programInFlight = "beginFreeRow()";
+      let cancelDeadline: (() => void) | null = null;
+      const deadline = new Promise<"unanswered">((resolve) => {
+        cancelDeadline = schedule(
+          () => resolve("unanswered"),
+          FREE_ROW_PROGRAM_DEADLINE_MS,
+        );
+      });
+      freeRowSendSettled = Promise.race([
+        sendSequence(sequence, "free-row-program-sent").then(
+          (): "sent" => "sent",
+        ),
+        deadline,
+      ])
+        .then(
+          (outcome) => {
+            if (outcome === "unanswered") {
+              log.record(
+                "free-row-program-unanswered",
+                `no ack within ${FREE_ROW_PROGRAM_DEADLINE_MS}ms — send abandoned, the row proceeds regardless (ruling 2)`,
+              );
+            }
+          },
+          (err: unknown) => {
+            log.record(
+              "free-row-program-failed",
+              err instanceof ProgramRejectionError ? err.hexTrace : String(err),
+            );
+          },
+        )
+        .finally(() => {
+          cancelDeadline?.();
+          programInFlight = false;
+          // Cleared here, in the same statement's own `finally`, so the
+          // wait `terminate()` takes is exactly as long as the send is
+          // live and not one microtask longer (`freeRowSendSettled`'s own
+          // lifetime paragraph). A `terminate()` already suspended on this
+          // chain holds its own reference and resumes normally.
+          freeRowSendSettled = null;
+        });
     },
 
     // D1 IS WITHDRAWN (interface-notes.md §19.2, on §19.1's per-send
@@ -5945,9 +6220,9 @@ export function createPm5Driver(
       // must cost NOTHING, not even a read of `raw`, so it can never be
       // mistaken for genuine progress on the call it is refusing to start.
       if (programInFlight) {
-        throw new ProgramBusyError();
+        throw new ProgramBusyError(programInFlight);
       }
-      programInFlight = true;
+      programInFlight = "program()";
       try {
         // Fix-3 Task 2 (design spec §1b): the machine's state AT THE MOMENT
         // the prepare is about to be sent — read from `raw` directly (never
@@ -6120,26 +6395,78 @@ export function createPm5Driver(
     // `buildGetErrorType` cites at its own definition (interface-notes.md
     // §17 item 14).
     async terminate(): Promise<void> {
-      // TERMINATE-DISPATCH FINALS (Task 7, "one terminal path" — spec 1's
-      // re-walk: "the ring ended at the terminate write"). The END/cancel
-      // path's own terminated status frame — the trigger `maybeEmitFrame`'s
-      // terminal branch waits for — routinely arrives AFTER the hook's
-      // teardown has already stashed and hung up the radio, so waiting for
-      // it here would lose the `final-totals` entry the same way it did
-      // before this task. Writing it from THIS call instead means the
-      // caller-initiated ending's own totals are in the ring before this
-      // promise even resolves, however long the machine's own frame takes.
+      // Spec 2026-09-02 ruling 4, REVISED rev 5 by the 2026-09-03 walk:
+      // this WAITS OUT `beginFreeRow()`'s bounded p.80 send; it does not
+      // refuse it. The wait is what the ONE `pendingAck` slot needs (the
+      // matcher is arrival-order only and never reads the ack's command
+      // byte, so an interleaved terminate would strand whichever
+      // registered first), and it is bounded by the send's own
+      // `FREE_ROW_PROGRAM_DEADLINE_MS` ceiling.
       //
-      // Guarded on an OPEN run (`recordFinalTotals`'s own doc comment):
-      // nothing to summarize before `program()` ever opened one, and a run
-      // the machine's own frame already closed already told its one story
-      // through that call site — this never re-tells a shorter version of
-      // it.
-      if (activeRun !== null && !activeRun.closed) {
-        recordFinalTotals(activeRun);
+      // It refused until this revision. BE PRECISE ABOUT WHAT THE WALK
+      // SAW, because an earlier draft of this comment was not: the
+      // 2026-09-03 walk's finding 4 — James at the erg, watching the
+      // monitor not move after Cancel — did NOT come through here. Its
+      // ring 3 shows the Cancel 1589 ms after the send's own ack, so
+      // `programInFlight` was already `false` and nothing refused; the
+      // cause was the hook's `mode !== "justrow"` exclusion, fixed in
+      // `useMonitorSession.ts`. The refusal is a SEPARATELY reachable
+      // defect (an END or a Cancel inside the ~2 s ack window), fixed here
+      // as hardening rather than as an observed cause. There is no caller
+      // for whom "your END did not reach the machine" is a better answer
+      // than a wait of at most one deadline — both swallow the rejection,
+      // so a refusal is silent by construction. `program()`'s hold is not waited on for the
+      // separate reason its own doc comment gives: the hook's teardown
+      // interleaves a terminate with a live `program()` on purpose.
+      //
+      // FIRST, before the finals below, so that everything after this line
+      // — the finals and the terminate write they describe — runs in one
+      // uninterrupted stretch. The finals are a snapshot of the run this
+      // call is ending; taking it before a wait that can last a deadline
+      // would date it.
+      //
+      // THE HANG-UP CANNOT OVERTAKE THIS (delta pass, PR #278). Because
+      // this call can suspend below before it has written a byte, it
+      // registers the write it OWES first — `disconnect()` waits for that
+      // debt to clear before it hangs up, so the ordering holds no matter
+      // how long the wait runs or which caller fires the hang-up.
+      // `terminateWritesOwed`'s own comment carries the measured race.
+      const terminateWritten = noteTerminateWriteOwed();
+      try {
+        if (freeRowSendSettled !== null) {
+          await freeRowSendSettled;
+        }
+        // TERMINATE-DISPATCH FINALS (Task 7, "one terminal path" — spec 1's
+        // re-walk: "the ring ended at the terminate write"). The END/cancel
+        // path's own terminated status frame — the trigger `maybeEmitFrame`'s
+        // terminal branch waits for — routinely arrives AFTER the hook's
+        // teardown has already stashed and hung up the radio, so waiting for
+        // it here would lose the `final-totals` entry the same way it did
+        // before this task. Writing it from THIS call instead means the
+        // caller-initiated ending's own totals are in the ring before this
+        // promise even resolves, however long the machine's own frame takes.
+        //
+        // Guarded on an OPEN run (`recordFinalTotals`'s own doc comment):
+        // nothing to summarize before `program()` ever opened one, and a run
+        // the machine's own frame already closed already told its one story
+        // through that call site — this never re-tells a shorter version of
+        // it.
+        if (activeRun !== null && !activeRun.closed) {
+          recordFinalTotals(activeRun);
+        }
+        await sendSequence(buildTerminate(), "terminate-sent", {
+          onFrameWritten: terminateWritten,
+        });
+        await settleAfterTerminate();
+      } finally {
+        // Belt to `onFrameWritten`'s braces: a call that threw before its
+        // write — a builder throw, a transport that rejects the write
+        // itself — still owes nothing, and leaving the debt standing would
+        // hang the next `disconnect()` instead of merely ordering it. The
+        // release is idempotent, so the ordinary path runs it twice to no
+        // effect.
+        terminateWritten();
       }
-      await sendSequence(buildTerminate(), "terminate-sent");
-      await settleAfterTerminate();
     },
 
     events(cb: (e: MonitorEvent) => void): () => void {
@@ -6162,6 +6489,23 @@ export function createPm5Driver(
 
     async disconnect(): Promise<void> {
       log.record("disconnect-requested", "caller-initiated");
+      // A TERMINATE STILL OWED ITS WRITE GOES FIRST (delta pass, PR #278 —
+      // `terminateWritesOwed`'s own comment carries the measured race and
+      // Apple's "any pending commands ... may not complete"). The wait is
+      // bounded by exactly what `terminate()` can block on before it
+      // writes: `freeRowSendSettled`, itself capped at
+      // `FREE_ROW_PROGRAM_DEADLINE_MS`. It deliberately does NOT cover the
+      // rest of `terminate()` — its ack and its settle ticks, whose only
+      // production exit (no `ackTimeout` is configured) is the
+      // `t.onDisconnect` hatch this very call is about to fire. Waiting on
+      // those would not be a longer bound; it would be a deadlock.
+      if (terminateWritesOwed > 0) {
+        log.record(
+          "disconnect-deferred",
+          `${terminateWritesOwed} terminate write(s) still owed — holding the hang-up`,
+        );
+        await terminateWritesDrained;
+      }
       // The caller is done with this driver, so its one timer goes with it
       // either way (fast-follow Task 2) — draining rather than merely
       // cancelling (Task 7) answers it first, using whatever evidence this

@@ -8,8 +8,10 @@ import {
 } from "../program.js";
 import { parseFrame } from "../csafe.js";
 import { reassemble } from "./framer.js";
+import { buildAckFrame, echoedCommandIds } from "./response.js";
 import {
   buildGetErrorType,
+  buildJustRowProgram,
   buildProgrammingSequence,
   buildSampleRateConfig,
   buildTerminate,
@@ -393,6 +395,35 @@ describe("buildTerminate", () => {
     expect(Array.from(frames[0]![0]!)).toStrictEqual([
       0xf1, 0x76, 0x04, 0x13, 0x02, 0x01, 0x02, 0x60, 0xf2,
     ]);
+  });
+});
+
+describe("buildJustRowProgram (Just Row connect programs the erg, spec 2026-09-02 §Mechanism 1)", () => {
+  it("is Concept2's own p.80 JustRow frame byte for byte, one frame in one chunk — F1 76 07 01 01 01 13 02 01 01 61 F2 (interface-notes.md §12 example 2)", () => {
+    const frames = buildJustRowProgram();
+    // The literal is TYPED from the notes' transcription of CSAFE-DEF
+    // p.80, never derived from the builder's own constants (exit
+    // criterion 1): wrapper `76 07` carrying SET_WORKOUTTYPE(01) = 01 and
+    // SET_SCREENSTATE(13) = (WORKOUT 01, PREPARETOROWWORKOUT 01), checksum
+    // 0x61 by the XOR rule. Two frames or two chunks here would mean the
+    // driver's ack-gated loop awaits two acks for what the machine treats
+    // as one program.
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toHaveLength(1);
+    expect(Array.from(frames[0]![0]!)).toStrictEqual([
+      0xf1, 0x76, 0x07, 0x01, 0x01, 0x01, 0x13, 0x02, 0x01, 0x01, 0x61, 0xf2,
+    ]);
+  });
+
+  it("earns the p.80 ack shape the PM5 answers it with — 76 02 01 13, status 01 checksum 0x67 (interface-notes.md §16 R2)", () => {
+    const chunk = buildJustRowProgram()[0]![0]!;
+    // `echoedCommandIds` is what the fake feeds `buildAckFrame`; the
+    // driver's matcher never reads the echo, so this pins the WIRE shape
+    // an operator sees in the ring beside the write, not a driver branch.
+    expect(echoedCommandIds(chunk)).toStrictEqual([0x01, 0x13]);
+    expect(
+      Array.from(buildAckFrame({ commandIds: echoedCommandIds(chunk) })),
+    ).toStrictEqual([0xf1, 0x01, 0x76, 0x02, 0x01, 0x13, 0x67, 0xf2]);
   });
 });
 

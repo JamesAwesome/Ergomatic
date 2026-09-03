@@ -291,7 +291,10 @@ export default function JustRow() {
   //
   // `"armed"` is the axis's word for the phase this screen reaches, and it
   // is the internal name rather than a claim about the machine: a free row
-  // arms nothing, which is exactly why `beginFreeRow` sends no bytes.
+  // arms no interval structure. `beginFreeRow` does send the PM5 its Just
+  // Row program (spec 2026-09-02) so the erg leaves its menu, but that send
+  // is detached and nothing here reads its outcome — the Ready line below
+  // is true whether or not it landed.
   const ready = axes.program === "armed";
   return (
     <main className="screen connected-interstitial">
@@ -317,7 +320,7 @@ export default function JustRow() {
         </h1>
         <p className="connected-body-line">
           {ready
-            ? "Nothing is programmed. The monitor keeps its own time, and the clock starts on your first stroke."
+            ? "The clock starts on your first stroke."
             : "Wake the monitor if its screen is dark."}
         </p>
         {ready && (
