@@ -105,6 +105,27 @@ function mockApi(opts: {
   return { api, openReadOnlyUrl };
 }
 
+/** A send that FAILS once and then succeeds — the shape both re-send
+ *  controls exist for. Separate from `mockApi` because that helper answers
+ *  every upload the same way, which cannot tell "the button is on screen"
+ *  from "the button sends". */
+function twoAttempts(first: { status: number; body: unknown }) {
+  const openReadOnlyUrl = vi.fn();
+  let sends = 0;
+  const api = vi.fn(async (path: string, _init?: RequestInit) => {
+    if (path === "/api/concept2/link") {
+      return new Response(JSON.stringify(LINKED), { status: 200 });
+    }
+    sends += 1;
+    return sends === 1
+      ? new Response(JSON.stringify(first.body), { status: first.status })
+      : new Response(JSON.stringify({ resultId: 339 }), { status: 200 });
+  });
+  vi.doMock("../api", () => ({ api }));
+  vi.doMock("../adapters/externalBrowser", () => ({ openReadOnlyUrl }));
+  return { api, openReadOnlyUrl };
+}
+
 async function renderBlock(row: StoredLog) {
   vi.resetModules();
   const { default: Concept2SendBlock } = await import("./Concept2SendBlock");
@@ -426,6 +447,48 @@ describe("Concept2SendBlock refusals (amendment 2d/2e/2f/2h/2i)", () => {
     // And it does not name a destination this state's one control cannot
     // reach: the class is PER-RESULT, while the button opens the profile.
     expect(screen.queryByText(/logbook/)).toBeNull();
+  });
+
+  it("RETRIES on Retry send, and lands the row when the second attempt works", async () => {
+    // RF4, and it is the whole point of the control: asserting `Retry send`
+    // EXISTS says nothing about whether it sends. The per-file function
+    // coverage said so out loud — both re-send handlers were the two
+    // uncovered functions in this component.
+    const { api } = twoAttempts({ status: 502, body: { error: "c2_error" } });
+    await renderBlock(eligibleRow());
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Send to Concept2" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Retry send" }),
+    );
+    expect(await screen.findByText("Accepted by Concept2.")).toBeTruthy();
+    expect(screen.getByText("RESULT 339")).toBeTruthy();
+    expect(
+      api.mock.calls.filter(([p]) => p === "/api/concept2/results/log-1"),
+    ).toHaveLength(2);
+  });
+
+  it("RE-SENDS on Send again, which is the second half of the instruction 2i gives", async () => {
+    // The panel tells the rower to set their weight on Concept2 and come
+    // back. On native the link-out returns to this still-mounted block, so
+    // this is the tap that finishes the sentence — and it has to actually
+    // post, not merely be present.
+    const { api } = twoAttempts({
+      status: 422,
+      body: { error: "no_weight_class", reason: "no_weight" },
+    });
+    await renderBlock(eligibleRow());
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Send to Concept2" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Send again" }),
+    );
+    expect(await screen.findByText("Accepted by Concept2.")).toBeTruthy();
+    expect(
+      api.mock.calls.filter(([p]) => p === "/api/concept2/results/log-1"),
+    ).toHaveLength(2);
   });
 
   it("names the class it sent AND where it came from, on the send that sent it", async () => {
