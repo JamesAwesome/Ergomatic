@@ -2084,6 +2084,20 @@ Each needs erg time or a deliberate recording session.
   negotiation for two reserved strings was considered and declined as
   disproportionate.
 
+- **AMENDED 2026-09-03 (Wave E PR2 Task 6): the two flakes are ONE flake, and
+  it lives in `server/routes/data.test.ts`.** Measured at ~1 in 12 runs of that
+  file alone, on a DIFFERENT test each time — `deleting the terminal
+  plan-linked log un-counts`, `two sequential advancing saves stamp
+  consecutive indexes`, `returns the full row, steps included, for the owner` —
+  and always with the same signature, a response-body field reading
+  `undefined` (`expected undefined to match object {planKey: 'head',
+  planIndex: 0}` at the `list.body.find(...)` on line 2585 is the fullest
+  capture so far). **Reproduced at 1/25 against `3a294bd7`'s own copies of
+  `data.ts` and `data.test.ts`**, so it predates that task and is not Wave E's.
+  The shared shape is a LIST or GET read coming back WITHOUT the row a POST
+  just created, which points at the fake store's insertion ordering rather
+  than at any one test — narrowing, but not choosing, between the two theories
+  below. Three named instances, where the entry below has two.
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
   clears thumbs previously set to a real value`, then `GET/PUT /api/prefs` >
