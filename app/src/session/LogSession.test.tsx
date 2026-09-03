@@ -4763,6 +4763,69 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   });
 });
 
+// Wave E PR2 Task 6 (TRIAD — a number's MEANING). Its own describe rather
+// than a tail on the monitor-mode block above, because the pair it pins
+// spans BOTH doors this file renders: the monitor door (which must post the
+// stamp) and the session/timer door (which must not). Keeping the two
+// witnesses adjacent is the point — the second is what makes the first a
+// choice rather than a blanket.
+describe("LogSession: the close stamp on the wire (Wave E PR2 Task 6)", () => {
+  it("the monitor door posts the run's close stamp and this device's zone", async () => {
+    // Observation 17: PR1 shipped the validator and no producer, so this
+    // pair has never crossed the wire. Without it every Concept2 upload
+    // carries the SAVE clock as its date, minutes to hours after the row
+    // was rowed and by however long the rower sat on the summary screen.
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-monitor-stamp" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.completedAt).toBe(run.completedAt);
+    expect(body.tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  });
+
+  it("the timer door posts NEITHER field, because a timer row can never be uploaded", async () => {
+    // The fence is `source !== "pm5" -> not_monitor`. Posting a zone on a
+    // row nothing can read it from is one more stored attribute for
+    // nothing, against the standing "ask as little as we can" ruling.
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-timer-no-stamp" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.source).toBe("timer");
+    expect("completedAt" in body).toBe(false);
+    expect("tz" in body).toBe(false);
+  });
+});
+
 // Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1, Gate 0
 // CLEARED 2026-08-31, "PLACEMENT REVISED with the destination ruling: the
 // strip sits at the top of the LOG screen"): a `?from=monitor` arrival whose

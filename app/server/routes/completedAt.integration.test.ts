@@ -18,6 +18,11 @@ import { createPlanStateStore } from "../stores/planState.js";
 import { createPreferencesStore } from "../stores/preferences.js";
 import { createTestHistoryStore } from "../stores/testHistory.js";
 import { createWorkoutsStore } from "../stores/workouts.js";
+// `formatC2Date` as well as `buildC2Payload` — the seam case's last
+// assertion calls it, and an earlier draft imported only the second, which
+// does not compile.
+import { completionStamp } from "../../src/session/completionStamp.js";
+import { buildC2Payload, formatC2Date } from "../concept2/mapping.js";
 import type { Stores } from "./data.js";
 
 // Wave E PR1 Task 2 (2026-08-31-concept2-logbook-design.md §Stored shapes,
@@ -165,23 +170,105 @@ describe("POST/GET /api/logs: completedAt/tz round-trip through the real route a
     expect(after.body.length).toBe(countBefore);
   });
 
-  it("rejects a non-IANA tz with 400, field named — nothing is persisted", async () => {
-    const bearer = await bearerToken();
-    const before = await request(app)
-      .get("/api/logs")
-      .set("Authorization", bearer);
-    const countBefore = before.body.length;
+  // Wave E PR2 Task 6 (TRIAD). THE INVARIANT: a Concept2 field can never
+  // cost a rower their row. These two cases REPLACE a "rejects a non-IANA
+  // tz with 400, field named — nothing is persisted" case; the refusal was
+  // safe only while no client sent `tz` at all, and both monitor doors now
+  // send it on every save. Against the REAL column, not the fake store: the
+  // point is that the row exists and its zone is null, not merely that the
+  // route answered 201. Do not restore the refusal here — the strict check
+  // lives on the upload route (`routes/concept2.ts`).
+  //
+  // Both bodies are ELIGIBLE pm5 rows (source/deviceName/endedBy/both work
+  // columns) so that a failure here can only be about `tz`: a bare
+  // `source: "pm5"` with no `deviceName` 400s on the route's own
+  // source/deviceName biconditional, which reads exactly like this change
+  // failing.
+  function eligiblePm5(extra: Record<string, unknown>) {
+    return logBody({
+      source: "pm5",
+      deviceName: "PM5 432331249 Row",
+      endedBy: "finished",
+      workSeconds: 1234.5,
+      workMeters: 5000,
+      ...extra,
+    });
+  }
 
-    const rejected = await request(app)
+  it("degrades an unrecognised tz to null in the real column and SAVES the row", async () => {
+    const bearer = await bearerToken();
+    const created = await request(app)
       .post("/api/logs")
       .set("Authorization", bearer)
-      .send(logBody({ tz: "+05:00" }));
-    expect(rejected.status).toBe(400);
-    expect(rejected.body.field).toBe("tz");
+      .send(eligiblePm5({ tz: "Not/AZone" }));
+    expect(created.status).toBe(201);
 
-    const after = await request(app)
-      .get("/api/logs")
+    const log = await request(app)
+      .get(`/api/logs/${created.body.id}`)
       .set("Authorization", bearer);
-    expect(after.body.length).toBe(countBefore);
+    expect(log.status).toBe(200);
+    expect(log.body.tz).toBeNull();
+  });
+
+  it("degrades an EMPTY tz to null in the real column and SAVES the row", async () => {
+    const bearer = await bearerToken();
+    const created = await request(app)
+      .post("/api/logs")
+      .set("Authorization", bearer)
+      .send(eligiblePm5({ tz: "" }));
+    expect(created.status).toBe(201);
+
+    const log = await request(app)
+      .get(`/api/logs/${created.body.id}`)
+      .set("Authorization", bearer);
+    expect(log.status).toBe(200);
+    // The empty string is a string: a bare `?? null` would have stored it.
+    expect(log.body.tz).toBeNull();
+  });
+
+  it("a row posted with the CLIENT's own completion stamp gives Concept2 the workout's end, not the save clock", async () => {
+    // RF24: this test starts UPSTREAM of the writer. The body is built with
+    // the SAME `completionStamp` the monitor door calls, so deleting `tz`
+    // from that function — the deciding production source — makes this go
+    // red. A hand-written body here would gate nothing: it would prove the
+    // server can store two fields, which the cases above already proved,
+    // and say nothing about whether anything sends them.
+    const closed = "2026-09-01T09:10:20.000Z";
+    const bearer = await bearerToken();
+    const created = await request(app)
+      .post("/api/logs")
+      .set("Authorization", bearer)
+      .send(eligiblePm5({ ...completionStamp({ completedAt: closed }) }));
+    expect(created.status).toBe(201);
+    const detail = await request(app)
+      .get(`/api/logs/${String(created.body.id)}`)
+      .set("Authorization", bearer);
+    const row = detail.body as Record<string, unknown>;
+    expect(row.completedAt).not.toBeNull();
+    expect(row.tz).not.toBeNull();
+
+    // The oracle is INDEPENDENT of the row: what Concept2 would be told,
+    // against what the rower's own monitor said. `effectiveTz` is
+    // deliberately a DIFFERENT zone from the posted one, so a payload built
+    // off the fallback branch is distinguishable from one built off the
+    // paired branch by more than a few hours of drift.
+    const payload = buildC2Payload(
+      {
+        loggedAt: new Date(row.loggedAt as string),
+        completedAt: new Date(row.completedAt as string),
+        tz: row.tz as string,
+        workSeconds: 1234.5,
+        workMeters: 5000,
+        restSeconds: null,
+        restMeters: null,
+        machineSummary: null,
+        source: "pm5",
+        endedBy: "finished",
+      },
+      "H",
+      "Pacific/Kiritimati",
+    );
+    expect(payload.timezone).toBe(row.tz);
+    expect(payload.date).toBe(formatC2Date(new Date(closed), row.tz as string));
   });
 });

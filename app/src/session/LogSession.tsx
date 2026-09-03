@@ -56,6 +56,7 @@ import {
   measuredIntervalCount,
   type SummaryModel,
 } from "./summaryModel";
+import { completionStamp } from "./completionStamp";
 import { postTestOffer, type PostTestOffer } from "./postTestOffer";
 import PostTestPrompt from "./PostTestPrompt";
 import { recordTestResult } from "../api/testHistory";
@@ -643,6 +644,16 @@ export interface LogFormFields {
   machineSummary?: {
     verificationBytes?: readonly number[];
   } & Partial<MachineSummaryDetail>;
+  // Wave E PR2 (plan observation 17). Optional, exactly like `deviceName`
+  // above: the doors that have no close stamp put no key on the wire and
+  // the server's `?? null` default stands. Only the two `source: "pm5"`
+  // doors set them — every other member is refused by
+  // `eligibilityFailure`'s first gate before a payload is ever built, so a
+  // zone stored on one of those rows has no reader. Both are set together,
+  // through `completionStamp` and never by hand, because `buildC2Payload`'s
+  // branch is PAIRED: one without the other changes no upload.
+  completedAt?: string | null;
+  tz?: string;
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
@@ -1921,6 +1932,12 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           distanceMeters: model.heroes.distanceMeters,
           series: monitorRun.series,
           endedBy: monitorRun.endedBy,
+          // Wave E PR2 Task 6: the run's own close stamp plus this
+          // device's zone — the pair `buildC2Payload` reads to date the
+          // Concept2 row by when the rower STOPPED, not when they tapped
+          // Save. Spread as a pair, never split (the mapping's branch is
+          // paired; one alone changes nothing).
+          ...completionStamp(monitorRun),
           workSeconds: monitorRun.workSeconds,
           workMeters: monitorRun.workMeters,
           restSeconds: monitorRun.restSeconds,

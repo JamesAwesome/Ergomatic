@@ -246,6 +246,28 @@ describe("JustRowLog (the workout-less log door)", () => {
     // Landed elsewhere, not a broken form over nothing.
     expect(await screen.findByText("ELSEWHERE")).toBeInTheDocument();
   });
+
+  it("the Just Row MONITOR door posts the close stamp too, not just the session door's", async () => {
+    // The class, not the instance: this is the app's other `source: "pm5"`
+    // producer, over the same `MonitorRun` record, behind the same
+    // eligibility fence. Fixing only `LogSession.tsx` would leave a free
+    // row that ends `finished` uploading with its save clock as C2's date.
+    const fn = mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    commitHandoff(closedFreeRow().startedAt, null, closedFreeRow());
+    await renderDoor();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      const body = savedBody(fn);
+      // `closedFreeRow`'s own literal — the MONITOR fixture's close
+      // stamp, not `completedTimerRun`'s, which is a different clock on a
+      // door that posts neither field. Written out, never read back
+      // through the production path.
+      expect(body.completedAt).toBe("2026-09-01T09:10:20.000Z");
+      expect(body.tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    });
+  });
 });
 
 // Substitution spec (2026-09-02) §Mechanism 2, exit criterion 2: the door
