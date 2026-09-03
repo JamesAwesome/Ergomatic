@@ -6462,3 +6462,70 @@ plan's own tools and never with the REPO's.
   before trusting a mutation row, ask what value the mutant produces for EACH
   fixture the suite feeds it; a mutation that maps every fixture to the
   original output is not a mutation of the behaviour under test.**
+
+## 2026-09-02 — Wave F `door` PR B (§5, in-flight metres): harden lens 1, FULL pass, TRIAD stored number
+
+- **CLAIM: "the in-flight ref is cleared when that interval's boundary actual
+  lands."** FALSIFIED by replay. On a program with rests the `IntervalActual`
+  arrives at the END of the interval's rest — measured 59 941 ms after the
+  work→rest frame (`walk-2026-08-28/rest-boundary-recording.jsonl.gz`, boundary
+  at t=136430 vs the resting transition at t=76489), with zero resting frames
+  after it. The mechanism is in the wire, not the timing: 0x0037 carries
+  `intervalRestTimeSeconds` (`pm5/parse.ts`, `readU16LE(bytes, 12)`; bytes
+  12-13 of that rx are `3c 00` = 60), so the characteristic CANNOT be emitted
+  before the rest completes. Consequence: a ~60 s window per interval in which
+  a completed interval is stored as a "partial" and counted as unmeasured.
+  TECHNIQUE: **when a design keys a lifetime on "the event that closes X",
+  replay a committed capture and print the interleaving of that event against
+  the frames — and then read the PAYLOAD of the characteristic that carries it.
+  A field the event must report (here, the rest it just finished) is a hard
+  lower bound on when the event can exist, and it converts a timing observation
+  into a mechanism.**
+- **A GUARD WRITTEN AGAINST STATE CAN MISS THE SAME BUG ARRIVING ON THE OTHER
+  STATE.** I-B3 excluded `resting` readings to stop a double count; the double
+  count is reachable from a ROWING frame instead, because `MonitorFrame.intervalIndex`
+  lags the machine's own interval reset (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`:
+  boundary index 0 at t=80417, then `state=rowing idx=0 d=0` at t=80957, 810 ms
+  and two frames before `idx=1` at t=81227). TECHNIQUE: **for any guard phrased
+  as "only while state === S", replay the boundary and check whether the
+  DISCRIMINATOR the guard reads is itself lagged there. `intervalIndex.ts`
+  documents a 10.6-92.9 ms lag; the real corpus shows 810 ms.** The durable fix
+  is to key the invariant on the RECORD ("never for an interval already carrying
+  an `IntervalActual`"), never on event timing.
+- **A CLOSE-ARM CENSUS IS `grep closeRecord(` PLUS THE CLOSES THAT DO NOT USE
+  IT.** The spec named three arms; there are five producers of an allowlisted
+  `endedBy`, and the fifth (`completeContinuityReset` → `link-lost`, committed
+  via `applyProducerCommit`) never touches `closeRecord` at all, so a fix
+  installed "inside `closeRecord`" would still miss it. TECHNIQUE: **grep the
+  close FUNCTION, then grep the stored FIELD's other writers
+  (`grep -rn 'endedBy' src/monitor/monitorRun.ts`) — a pure transform exported
+  beside the main closer is the shape that hides a producer.** Corollary found
+  the same way: the arm the spec omitted (machine TERMINATE, `endByMachine(true)`
+  → `"rower"`) is the one every committed capture actually exercises, because a
+  replay cannot press a button — it delivers `ws=11`. **A replay-based gate for
+  a user-initiated close is testing the machine's arm unless the harness cuts
+  the capture and calls the API itself.**
+- **A "widen the type" task counts ONE type when the repo carries three.**
+  `LogStep` is declared in `src/session/logDraft.ts` (write), `server/stores/logs.ts`
+  (server) and as `StoredLogStep` in `src/log/storedSummary.ts` (read — and
+  the one the new row renders from). TECHNIQUE: **before accepting "widens
+  `<Type>`", grep for `interface <Type>` AND for the read-side alias; a payload
+  that crosses the wire in this repo has a write shape, a server shape and a
+  read shape, and the render task depends on the third.**
+- **Attacked and HELD:** the two index spaces really are one after normalization
+  (`toProgramIndex` on 0x0033, `toActualIndex` on 0x0037/38 both return OUR
+  0-based-per-work-interval index — they disagree on the WIRE, never after);
+  a rowing frame's `distanceMeters`/`elapsedSeconds` are per-interval on every
+  capture (first rowing frame of N+1 reads d=0.8 / d=0); `isMonitorRun` has no
+  unknown-key check, so `MonitorRun` takes the new field with no `v` bump;
+  `PATCH /api/logs/:id` accepts only held/pain/thumbs/notes, so no edit path can
+  strip new step keys; no reader iterates `LogStep` keys generically; the
+  four `rowingStreakRef` clear sites are exactly the four named; `closeRecord`'s
+  `completedAt` guard makes a double partial unrepresentable; and a Just Row
+  can never mint the ref (`toProgramIndex` returns null for `programLength <= 0`).
+- **Filed alongside:** at a terminate the PM5 DOES send the in-flight interval's
+  own 0x0037/0x0038 (`end-on-interval-1-recording.jsonl.gz`, t=15442, el=8.5
+  d=15) — we decline it only because `toActualIndex` returns `null` for
+  `terminated` (CSAFE-DEF footnote 12). "Our number, never the machine's" is
+  correct for a stronger reason than the spec states, and the next implementer
+  will find that event.
