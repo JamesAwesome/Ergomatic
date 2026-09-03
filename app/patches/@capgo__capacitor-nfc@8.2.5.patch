@@ -1,0 +1,706 @@
+diff --git a/dist/esm/definitions.d.ts b/dist/esm/definitions.d.ts
+index 0e326d1079f35737268a6989032177a19b4e7df0..bd5007666d436b1e53af86a41d5d07d7d69f42d5 100644
+--- a/dist/esm/definitions.d.ts
++++ b/dist/esm/definitions.d.ts
+@@ -92,6 +92,7 @@ export interface NfcTag {
+  * Generic NFC discovery event dispatched by the plugin.
+  */
+ export interface NfcEvent {
++    attemptId: string;
+     type: NfcEventType;
+     tag: NfcTag;
+ }
+@@ -99,6 +100,7 @@ export interface NfcEvent {
+  * Options controlling the behaviour of {@link CapacitorNfcPlugin.startScanning}.
+  */
+ export interface StartScanningOptions {
++    attemptId: string;
+     /**
+      * iOS-only: closes the NFC session automatically after the first successful tag read.
+      * Defaults to `true`.
+@@ -132,6 +134,12 @@ export interface StartScanningOptions {
+      */
+     androidReaderModeFlags?: number;
+ }
++/**
++ * Options controlling the identity of the NFC scanning session to stop.
++ */
++export interface StopScanningOptions {
++    attemptId: string;
++}
+ /**
+  * Options used when writing an NDEF message on the current tag.
+  */
+@@ -165,6 +173,7 @@ export interface NfcStateChangeEvent {
+  * This event is not emitted when a session closes normally after its first successful read.
+  */
+ export interface NfcSessionEndEvent {
++    attemptId: string;
+     reason: 'userCancelled' | 'sessionTimeout' | 'invalidated';
+ }
+ /**
+@@ -177,11 +186,11 @@ export interface CapacitorNfcPlugin {
+     /**
+      * Starts listening for NFC tags.
+      */
+-    startScanning(options?: StartScanningOptions): Promise<void>;
++    startScanning(options: StartScanningOptions): Promise<void>;
+     /**
+      * Stops the ongoing NFC scanning session.
+      */
+-    stopScanning(): Promise<void>;
++    stopScanning(options: StopScanningOptions): Promise<void>;
+     /**
+      * Writes the provided NDEF records to the last discovered tag.
+      */
+diff --git a/ios/Sources/NfcPlugin/NdefAttemptState.swift b/ios/Sources/NfcPlugin/NdefAttemptState.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..5ca5d4129d9edbb9ab07d0a80d99917ee113dbca
+--- /dev/null
++++ b/ios/Sources/NfcPlugin/NdefAttemptState.swift
+@@ -0,0 +1,97 @@
++import Foundation
++
++struct NdefAttemptKey: Equatable {
++    let attemptId: String
++    let generation: UInt64
++    let sessionIdentifier: ObjectIdentifier
++}
++
++enum NdefStartDecision: Equatable {
++    case begin(String)
++    case invalidate(NdefAttemptKey)
++}
++
++enum NdefStopDecision: Equatable {
++    case invalidate(NdefAttemptKey)
++    case awaitInvalidation(NdefAttemptKey)
++    case cancelPending
++    case alreadyDrained
++}
++
++enum NdefAttemptStateError: Error {
++    case emptyAttemptId
++    case activationDoesNotMatchPendingStart
++}
++
++func isExactlyOneDetectedTag(count: Int) -> Bool { count == 1 }
++
++struct NdefAttemptState {
++    private(set) var nextGeneration: UInt64 = 0
++    private(set) var active: NdefAttemptKey?
++    private(set) var draining: NdefAttemptKey?
++    private(set) var beginCandidate: String?
++    private(set) var pendingAttemptId: String?
++
++    mutating func requestStart(attemptId: String) throws -> NdefStartDecision {
++        guard !attemptId.isEmpty else { throw NdefAttemptStateError.emptyAttemptId }
++        if let active {
++            pendingAttemptId = attemptId
++            draining = active
++            self.active = nil
++            return .invalidate(active)
++        }
++        if let draining {
++            pendingAttemptId = attemptId
++            return .invalidate(draining)
++        }
++        beginCandidate = attemptId
++        return .begin(attemptId)
++    }
++
++    mutating func activate(attemptId: String, session: AnyObject) throws -> NdefAttemptKey {
++        guard beginCandidate == attemptId else {
++            throw NdefAttemptStateError.activationDoesNotMatchPendingStart
++        }
++        nextGeneration += 1
++        let key = NdefAttemptKey(
++            attemptId: attemptId,
++            generation: nextGeneration,
++            sessionIdentifier: ObjectIdentifier(session)
++        )
++        beginCandidate = nil
++        active = key
++        return key
++    }
++
++    func accepts(_ key: NdefAttemptKey) -> Bool { active == key && draining == nil }
++
++    mutating func requestStop(attemptId: String) -> NdefStopDecision {
++        if pendingAttemptId == attemptId {
++            pendingAttemptId = nil
++            return .cancelPending
++        }
++        if beginCandidate == attemptId && active == nil && draining == nil {
++            beginCandidate = nil
++            return .cancelPending
++        }
++        if let active, active.attemptId == attemptId {
++            draining = active
++            self.active = nil
++            return .invalidate(active)
++        }
++        if let draining, draining.attemptId == attemptId {
++            return .awaitInvalidation(draining)
++        }
++        return .alreadyDrained
++    }
++
++    mutating func finishInvalidation(_ key: NdefAttemptKey) -> String? {
++        guard draining == key else { return nil }
++        active = nil
++        draining = nil
++        let next = pendingAttemptId
++        pendingAttemptId = nil
++        beginCandidate = next
++        return next
++    }
++}
+diff --git a/ios/Sources/NfcPlugin/NfcPlugin.swift b/ios/Sources/NfcPlugin/NfcPlugin.swift
+index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..e5588aacacefe6527e66bc32a5dab0b6c731df1a 100644
+--- a/ios/Sources/NfcPlugin/NfcPlugin.swift
++++ b/ios/Sources/NfcPlugin/NfcPlugin.swift
+@@ -36,7 +36,11 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+         CAPPluginMethod(name: "isSupported", returnType: CAPPluginReturnPromise)
+     ]
+
+-    private var ndefReaderSession: NFCNDEFReaderSession?
++    private var ndefState = NdefAttemptState()
++    private var ndefSession: NFCNDEFReaderSession?
++    private var ndefKey: NdefAttemptKey?
++    private var ndefPendingStart: (call: CAPPluginCall, attemptId: String, alertMessage: String?, invalidateAfterFirstRead: Bool)?
++    private var ndefStopCalls: [String: [CAPPluginCall]] = [:]
+     private var tagReaderSession: NFCTagReaderSession?
+     private let sessionQueue = DispatchQueue(label: "app.capgo.nfc.session")
+     private var currentTag: NFCNDEFTag?
+@@ -48,6 +52,7 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+     private var tagSessionActivated = false
+     private var tagSessionTriedFallback = false
+     private var tagSessionPollingOptions: NFCTagReaderSession.PollingOption = []
++    private var tagAttemptId: String?
+
+     private func isSessionAvailable(for type: String) -> Bool {
+         if type == "tag" {
+@@ -60,16 +65,77 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+         NFCTagReaderSession.readingAvailable || NFCNDEFReaderSession.readingAvailable
+     }
+
+-    private func notifySessionEnd(for error: Error) {
++    private func owns(_ session: NFCNDEFReaderSession, key: NdefAttemptKey) -> Bool {
++        ndefState.accepts(key) &&
++            key.sessionIdentifier == ObjectIdentifier(session) &&
++            key.attemptId == ndefKey?.attemptId &&
++            key.generation == ndefKey?.generation
++    }
++
++    private func notifySessionEnd(for error: Error, attemptId: String) {
+         guard let reason = nfcSessionEndReason(for: error) else {
+             return
+         }
+
+         DispatchQueue.main.async {
+-            self.notifyListeners("nfcSessionEnd", data: ["reason": reason], retainUntilConsumed: true)
++            self.notifyListeners(
++                "nfcSessionEnd",
++                data: ["attemptId": attemptId, "reason": reason],
++                retainUntilConsumed: true
++            )
++        }
++    }
++
++    private func beginNdefStart(
++        call: CAPPluginCall,
++        attemptId: String,
++        alertMessage: String?,
++        invalidateAfterFirstRead: Bool
++    ) {
++        let session = NFCNDEFReaderSession(
++            delegate: self,
++            queue: .main,
++            invalidateAfterFirstRead: false
++        )
++
++        do {
++            let key = try ndefState.activate(attemptId: attemptId, session: session)
++            ndefSession = session
++            ndefKey = key
++            self.invalidateAfterFirstRead = invalidateAfterFirstRead
++            if let alertMessage, !alertMessage.isEmpty {
++                session.alertMessage = alertMessage
++            }
++            session.begin()
++            call.resolve()
++        } catch {
++            call.reject("NFC scan did not have a pending start.", "CANCELLED", error)
++        }
++    }
++
++    private func invalidateOwnedNdefSession(
++        _ session: NFCNDEFReaderSession,
++        key: NdefAttemptKey,
++        errorMessage: String? = nil
++    ) {
++        guard owns(session, key: key) else {
++            return
++        }
++        guard case .invalidate = ndefState.requestStop(attemptId: key.attemptId) else {
++            return
++        }
++        if let errorMessage {
++            session.invalidate(errorMessage: errorMessage)
++        } else {
++            session.invalidate()
+         }
+     }
+
++    private func resolveNdefStopCalls(for attemptId: String) {
++        let calls = ndefStopCalls.removeValue(forKey: attemptId) ?? []
++        calls.forEach { $0.resolve() }
++    }
++
+     private func pollingOptions(_ requestedPollingOptions: JSArray) -> NFCTagReaderSession.PollingOption {
+         var pollingOptions: NFCTagReaderSession.PollingOption = []
+         for option in requestedPollingOptions {
+@@ -121,6 +187,11 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+         call.reject("NFC is not available on the simulator.", "NO_NFC")
+         return
+         #else
++        guard let attemptId = call.getString("attemptId"), !attemptId.isEmpty else {
++            call.reject("attemptId is required.", "INVALID_ARGUMENT")
++            return
++        }
++
+         let requestedSessionType = call.getString("iosSessionType", "ndef").lowercased()
+         sessionType = requestedSessionType == "tag" ? "tag" : "ndef"
+
+@@ -132,7 +203,7 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+             return
+         }
+
+-        invalidateAfterFirstRead = call.getBool("invalidateAfterFirstRead", true)
++        let requestedInvalidateAfterFirstRead = call.getBool("invalidateAfterFirstRead", true)
+         let alertMessage = call.getString("alertMessage")
+
+         let requestedPollingOptions = call.getArray("iosPollingOptions", Self.defaultIosPollingOptions)
+@@ -143,21 +214,25 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+         }
+
+         DispatchQueue.main.async {
+-            // Invalidate any existing sessions
+-            self.ndefReaderSession?.invalidate()
+-            self.ndefReaderSession = nil
+-            self.tagReaderSession?.invalidate()
+-            self.tagReaderSession = nil
+-            self.currentTag = nil
+-            if let pendingStartCall = self.pendingStartCall, pendingStartCall !== call {
+-                pendingStartCall.reject("NFC scan was superseded by a new startScanning call.", "CANCELLED")
+-            }
+-            self.pendingStartCall = nil
+-            self.pendingStartSession = nil
+-            self.pendingAlertMessage = nil
+-            self.tagSessionTriedFallback = false
+-
+             if self.sessionType == "tag" {
++                if let ndefKey = self.ndefKey {
++                    if let ndefSession = self.ndefSession {
++                        self.invalidateOwnedNdefSession(ndefSession, key: ndefKey)
++                    }
++                }
++                self.tagReaderSession?.invalidate()
++                self.tagReaderSession = nil
++                self.currentTag = nil
++                if let pendingStartCall = self.pendingStartCall, pendingStartCall !== call {
++                    pendingStartCall.reject("NFC scan was superseded by a new startScanning call.", "CANCELLED")
++                }
++                self.pendingStartCall = nil
++                self.pendingStartSession = nil
++                self.pendingAlertMessage = nil
++                self.tagSessionTriedFallback = false
++                self.tagAttemptId = attemptId
++                self.invalidateAfterFirstRead = requestedInvalidateAfterFirstRead
++
+                 // Use NFCTagReaderSession for raw tag support
+                 self.pendingStartCall = call
+                 self.pendingAlertMessage = alertMessage
+@@ -180,32 +255,75 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+
+                 return
+             } else {
+-                // Use NFCNDEFReaderSession (default behavior)
+-                self.ndefReaderSession = NFCNDEFReaderSession(
+-                    delegate: self,
+-                    queue: self.sessionQueue,
+-                    invalidateAfterFirstRead: self.invalidateAfterFirstRead
+-                )
+-                if let alertMessage, !alertMessage.isEmpty {
+-                    self.ndefReaderSession?.alertMessage = alertMessage
++                do {
++                    switch try self.ndefState.requestStart(attemptId: attemptId) {
++                    case .begin:
++                        self.beginNdefStart(
++                            call: call,
++                            attemptId: attemptId,
++                            alertMessage: alertMessage,
++                            invalidateAfterFirstRead: requestedInvalidateAfterFirstRead
++                        )
++                    case .invalidate(let key):
++                        if let pending = self.ndefPendingStart, pending.call !== call {
++                            pending.call.reject("NFC scan was superseded by a new startScanning call.", "CANCELLED")
++                        }
++                        self.ndefPendingStart = (
++                            call,
++                            attemptId,
++                            alertMessage,
++                            requestedInvalidateAfterFirstRead
++                        )
++                        guard let session = self.ndefSession,
++                              key.sessionIdentifier == ObjectIdentifier(session) else {
++                            self.ndefPendingStart = nil
++                            call.reject("NFC scan session is no longer available.", "CANCELLED")
++                            return
++                        }
++                        session.invalidate()
++                    }
++                } catch {
++                    call.reject("attemptId is required.", "INVALID_ARGUMENT", error)
+                 }
+-                self.ndefReaderSession?.begin()
+             }
+-
+-            call.resolve()
+         }
+         #endif
+     }
+
+     @objc public func stopScanning(_ call: CAPPluginCall) {
++        guard let attemptId = call.getString("attemptId"), !attemptId.isEmpty else {
++            call.reject("attemptId is required.", "INVALID_ARGUMENT")
++            return
++        }
++
+         DispatchQueue.main.async {
+-            self.ndefReaderSession?.invalidate()
+-            self.ndefReaderSession = nil
+-            self.tagReaderSession?.invalidate()
+-            self.tagReaderSession = nil
+-            self.currentTag = nil
++            switch self.ndefState.requestStop(attemptId: attemptId) {
++            case .invalidate(let key):
++                self.ndefStopCalls[attemptId, default: []].append(call)
++                guard let session = self.ndefSession,
++                      key.sessionIdentifier == ObjectIdentifier(session) else {
++                    self.resolveNdefStopCalls(for: attemptId)
++                    return
++                }
++                session.invalidate()
++            case .awaitInvalidation:
++                self.ndefStopCalls[attemptId, default: []].append(call)
++            case .cancelPending:
++                if let pending = self.ndefPendingStart, pending.attemptId == attemptId {
++                    self.ndefPendingStart = nil
++                    pending.call.reject("NFC scan was cancelled before it started.", "CANCELLED")
++                }
++                call.resolve()
++            case .alreadyDrained:
++                if self.tagAttemptId == attemptId {
++                    self.tagReaderSession?.invalidate()
++                    self.tagReaderSession = nil
++                    self.currentTag = nil
++                    self.tagAttemptId = nil
++                }
++                call.resolve()
++            }
+         }
+-        call.resolve()
+     }
+
+     @objc public func write(_ call: CAPPluginCall) {
+@@ -244,7 +362,7 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+             return
+         }
+
+-        if let ndefSession = ndefReaderSession {
++        if let ndefSession {
+             // For NDEF session, we need to connect to the tag first
+             performWrite(message: message, on: tag, session: ndefSession, call: call)
+         } else if tagReaderSession != nil {
+@@ -410,17 +528,19 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+         return data.map { NSNumber(value: $0) }
+     }
+
+-    private func notify(event: [String: Any]) {
++    private func notify(event: [String: Any], attemptId: String) {
+         DispatchQueue.main.async {
+-            self.notifyListeners("nfcEvent", data: event, retainUntilConsumed: true)
+-            guard let type = event["type"] as? String else {
++            var payload = event
++            payload["attemptId"] = attemptId
++            self.notifyListeners("nfcEvent", data: payload, retainUntilConsumed: true)
++            guard let type = payload["type"] as? String else {
+                 return
+             }
+             switch type {
+             case "ndef":
+-                self.notifyListeners("ndefDiscovered", data: event, retainUntilConsumed: true)
++                self.notifyListeners("ndefDiscovered", data: payload, retainUntilConsumed: true)
+             default:
+-                self.notifyListeners("tagDiscovered", data: event, retainUntilConsumed: true)
++                self.notifyListeners("tagDiscovered", data: payload, retainUntilConsumed: true)
+             }
+         }
+     }
+@@ -515,8 +635,26 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+
+ extension NfcPlugin: NFCNDEFReaderSessionDelegate {
+     public func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
++        guard let key = ndefKey,
++              key.sessionIdentifier == ObjectIdentifier(session) else {
++            return
++        }
++
++        if ndefState.draining != key {
++            guard case .invalidate(let draining) = ndefState.requestStop(attemptId: key.attemptId),
++                  draining == key else {
++                return
++            }
++        }
++        guard ndefState.draining == key else {
++            return
++        }
++
+         currentTag = nil
+-        notifySessionEnd(for: error)
++        let pendingAttemptId = ndefState.finishInvalidation(key)
++        ndefSession = nil
++        ndefKey = nil
++        notifySessionEnd(for: error, attemptId: key.attemptId)
+         if (error as NSError).code != NFCReaderError.readerSessionInvalidationErrorFirstNDEFTagRead.rawValue {
+             DispatchQueue.main.async {
+                 let payload: [String: Any] = [
+@@ -526,68 +664,113 @@ extension NfcPlugin: NFCNDEFReaderSessionDelegate {
+                 self.notifyListeners("nfcStateChange", data: payload, retainUntilConsumed: true)
+             }
+         }
+-        ndefReaderSession = nil
++        resolveNdefStopCalls(for: key.attemptId)
++
++        guard let pendingAttemptId,
++              let pending = ndefPendingStart,
++              pending.attemptId == pendingAttemptId else {
++            return
++        }
++        ndefPendingStart = nil
++        beginNdefStart(
++            call: pending.call,
++            attemptId: pending.attemptId,
++            alertMessage: pending.alertMessage,
++            invalidateAfterFirstRead: pending.invalidateAfterFirstRead
++        )
+     }
+
+     public func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
+-        guard let tag = tags.first else {
++        guard let key = ndefKey, owns(session, key: key) else {
++            return
++        }
++        guard isExactlyOneDetectedTag(count: tags.count), let tag = tags.first else {
++            invalidateOwnedNdefSession(session, key: key, errorMessage: "Present exactly one NFC tag.")
+             return
+         }
+
+         session.connect(to: tag) { [weak self] error in
+-            guard let self else {
++            guard let self, self.owns(session, key: key) else {
+                 return
+             }
+
+             if let error {
+-                session.invalidate(errorMessage: "Failed to connect to the tag: \(error.localizedDescription)")
++                self.invalidateOwnedNdefSession(
++                    session,
++                    key: key,
++                    errorMessage: "Failed to connect to the tag: \(error.localizedDescription)"
++                )
+                 return
+             }
+
+             tag.queryNDEFStatus { status, capacity, statusError in
++                guard self.owns(session, key: key) else {
++                    return
++                }
+                 if let statusError {
+-                    session.invalidate(errorMessage: "Failed to read tag status: \(statusError.localizedDescription)")
++                    self.invalidateOwnedNdefSession(
++                        session,
++                        key: key,
++                        errorMessage: "Failed to read tag status: \(statusError.localizedDescription)"
++                    )
+                     return
+                 }
+
+                 tag.readNDEF { message, readError in
++                    guard self.owns(session, key: key) else {
++                        return
++                    }
+                     if let readError {
+                         if !self.invalidateAfterFirstRead && status == .readWrite {
+                             self.currentTag = tag
+                             let event = self.buildEvent(tag: tag, status: status, capacity: capacity, message: nil)
+-                            self.notify(event: event)
++                            self.notify(event: event, attemptId: key.attemptId)
+                             return
+                         }
+-                        session.invalidate(errorMessage: "Failed to read NDEF message: \(readError.localizedDescription)")
++                        self.invalidateOwnedNdefSession(
++                            session,
++                            key: key,
++                            errorMessage: "Failed to read NDEF message: \(readError.localizedDescription)"
++                        )
+                         return
+                     }
+
+                     self.currentTag = tag
+                     let event = self.buildEvent(tag: tag, status: status, capacity: capacity, message: message)
+-                    self.notify(event: event)
++                    self.notify(event: event, attemptId: key.attemptId)
++                    if self.invalidateAfterFirstRead {
++                        self.invalidateOwnedNdefSession(session, key: key)
++                    }
+                 }
+             }
+         }
+     }
+
+     public func readerSession(_ session: NFCNDEFReaderSession, didDetectNDEFs messages: [NFCNDEFMessage]) {
+-        guard !messages.isEmpty else {
++        guard let key = ndefKey, owns(session, key: key) else {
++            return
++        }
++        guard messages.count == 1, let message = messages.first else {
++            invalidateOwnedNdefSession(session, key: key, errorMessage: "Present exactly one NFC tag.")
+             return
+         }
+         let event: [String: Any] = [
+             "type": "ndef",
+             "tag": [
+-                "ndefMessage": messages.first?.records.map { record in
++                "ndefMessage": message.records.map { record in
+                     [
+                         "tnf": NSNumber(value: record.typeNameFormat.rawValue),
+                         "type": array(from: record.type) ?? [],
+                         "id": array(from: record.identifier) ?? [],
+                         "payload": array(from: record.payload) ?? []
+                     ]
+-                } ?? []
++                }
+             ]
+         ]
+-        notify(event: event)
++        notify(event: event, attemptId: key.attemptId)
++        if invalidateAfterFirstRead {
++            invalidateOwnedNdefSession(session, key: key)
++        }
+     }
+ }
+
+@@ -657,7 +840,7 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+                 return
+             }
+
+-            notifySessionEnd(for: error)
++            notifySessionEnd(for: error, attemptId: tagAttemptId ?? "")
+             pendingStartCall = nil
+             pendingStartSession = nil
+             pendingAlertMessage = nil
+@@ -677,7 +860,7 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+         }
+
+         currentTag = nil
+-        notifySessionEnd(for: error)
++        notifySessionEnd(for: error, attemptId: tagAttemptId ?? "")
+
+         // Don't emit state change for normal session completion (user canceled)
+         // Also check for successful read completion
+@@ -756,7 +939,7 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+                         // Successfully read NDEF (or keep session open for writes after a read error)
+                         self.currentTag = tag
+                         let event = self.buildEvent(tag: tag, status: status, capacity: capacity, message: message)
+-                        self.notify(event: event)
++                        self.notify(event: event, attemptId: self.tagAttemptId ?? "")
+                         if self.invalidateAfterFirstRead {
+                             session.invalidate()
+                         }
+@@ -805,7 +988,7 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+             "tag": tagInfo
+         ]
+
+-        notify(event: event)
++        notify(event: event, attemptId: tagAttemptId ?? "")
+
+         if invalidateAfterFirstRead {
+             session.invalidate()
+diff --git a/ios/Tests/NfcPluginTests/NdefAttemptStateTests.swift b/ios/Tests/NfcPluginTests/NdefAttemptStateTests.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..c8d8c358b605292f258506e880e8a44855c4762f
+--- /dev/null
++++ b/ios/Tests/NfcPluginTests/NdefAttemptStateTests.swift
+@@ -0,0 +1,59 @@
++import XCTest
++@testable import NfcPlugin
++
++final class NdefAttemptStateTests: XCTestCase {
++    func testBWaitsForAAndLateACannotClearB() throws {
++        let aSession = NSObject()
++        let bSession = NSObject()
++        var state = NdefAttemptState()
++
++        XCTAssertEqual(try state.requestStart(attemptId: "attempt-a"), .begin("attempt-a"))
++        let a = try state.activate(attemptId: "attempt-a", session: aSession)
++        XCTAssertTrue(state.accepts(a))
++
++        XCTAssertEqual(try state.requestStart(attemptId: "attempt-b"), .invalidate(a))
++        XCTAssertFalse(state.accepts(a))
++        XCTAssertEqual(state.finishInvalidation(a), "attempt-b")
++
++        let b = try state.activate(attemptId: "attempt-b", session: bSession)
++        XCTAssertTrue(state.accepts(b))
++        XCTAssertNil(state.finishInvalidation(a))
++        XCTAssertTrue(state.accepts(b))
++        XCTAssertEqual(state.requestStop(attemptId: "attempt-a"), .alreadyDrained)
++        XCTAssertTrue(state.accepts(b))
++    }
++
++    func testStopSettlesOnlyAfterMatchingInvalidation() throws {
++        let session = NSObject()
++        var state = NdefAttemptState()
++        XCTAssertEqual(try state.requestStart(attemptId: "attempt-a"), .begin("attempt-a"))
++        let a = try state.activate(attemptId: "attempt-a", session: session)
++
++        XCTAssertEqual(state.requestStop(attemptId: "attempt-a"), .invalidate(a))
++        XCTAssertFalse(state.accepts(a))
++        XCTAssertNil(state.finishInvalidation(
++            NdefAttemptKey(attemptId: "attempt-a", generation: a.generation + 1, sessionIdentifier: a.sessionIdentifier)
++        ))
++        XCTAssertEqual(state.finishInvalidation(a), nil)
++        XCTAssertEqual(state.requestStop(attemptId: "attempt-a"), .alreadyDrained)
++    }
++
++    func testStopCancelsBWhileBIsQueuedBehindA() throws {
++        let session = NSObject()
++        var state = NdefAttemptState()
++        XCTAssertEqual(try state.requestStart(attemptId: "attempt-a"), .begin("attempt-a"))
++        let a = try state.activate(attemptId: "attempt-a", session: session)
++        XCTAssertEqual(try state.requestStart(attemptId: "attempt-b"), .invalidate(a))
++
++        XCTAssertEqual(state.requestStop(attemptId: "attempt-b"), .cancelPending)
++        XCTAssertNil(state.finishInvalidation(a))
++    }
++
++    func testRejectsMissingAttemptIdAndNonSingletonTagCounts() {
++        var state = NdefAttemptState()
++        XCTAssertThrowsError(try state.requestStart(attemptId: ""))
++        XCTAssertFalse(isExactlyOneDetectedTag(count: 0))
++        XCTAssertTrue(isExactlyOneDetectedTag(count: 1))
++        XCTAssertFalse(isExactlyOneDetectedTag(count: 2))
++    }
++}

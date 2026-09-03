@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@capgo/capacitor-nfc@8.2.5': ebd4b1f4af6c0f1a8515b4b8b8ca23f367f021317440b4371b141af231357e3b
+
 importers:
 
   .:
@@ -26,6 +29,9 @@ importers:
       '@capacitor/core':
         specifier: ^8.5.0
         version: 8.5.0
+      '@capgo/capacitor-nfc':
+        specifier: 8.2.5
+        version: 8.2.5(patch_hash=ebd4b1f4af6c0f1a8515b4b8b8ca23f367f021317440b4371b141af231357e3b)(@capacitor/core@8.5.0)
       '@capgo/capacitor-social-login':
         specifier: ^8.4.4
         version: 8.4.4(@capacitor/core@8.5.0)
@@ -510,6 +516,11 @@ packages:
 
   '@capacitor/keyboard@8.0.5':
     resolution: {integrity: sha512-oFXygC4eKYA5l2MdpTR06L2M/4x6e2SLD5yS1T9+UBDKTkzyvhWKEhbYLUaTIBPpLKqlfGudJw1X73S1H9eUzQ==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
+  '@capgo/capacitor-nfc@8.2.5':
+    resolution: {integrity: sha512-Jsyg9ZVhKBJtsbY8eHLxUgVELtfqt/W1EQfgDMWvMBWiVdZY4ejRgGyzRYAmu3onusgl1pmX9J9RBny3nqZjtQ==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
@@ -4368,6 +4379,10 @@ snapshots:
       '@capacitor/core': 8.5.0
 
   '@capacitor/keyboard@8.0.5(@capacitor/core@8.5.0)':
+    dependencies:
+      '@capacitor/core': 8.5.0
+
+  '@capgo/capacitor-nfc@8.2.5(patch_hash=ebd4b1f4af6c0f1a8515b4b8b8ca23f367f021317440b4371b141af231357e3b)(@capacitor/core@8.5.0)':
     dependencies:
       '@capacitor/core': 8.5.0
 

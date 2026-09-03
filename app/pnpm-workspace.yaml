@@ -7,3 +7,5 @@ minimumReleaseAgeExclude:
   - jsdom@30.0.0
   - react-router-dom@7.18.2
   - react-router@7.18.2
+patchedDependencies:
+  '@capgo/capacitor-nfc@8.2.5': patches/@capgo__capacitor-nfc@8.2.5.patch
