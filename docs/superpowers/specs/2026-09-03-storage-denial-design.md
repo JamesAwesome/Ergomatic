@@ -216,8 +216,9 @@ One PR, four tasks, no migration and no stored shape.
    loader returns `null`; a getter that returns a malformed value → today's
    behaviour, unchanged). Mutation per leg: remove that guard → red.
 2. Countdown's blocked start: the boolean honoured, the state rendered,
-   Retry and Row anyway wired. Legs at the component. Mutation: ignore the
-   boolean again → red.
+   Retry and Cancel wired (NOT "Row anyway" — I-5; this line said otherwise
+   until the plan's own review caught it contradicting §2 and Gate 0). Legs
+   at the component. Mutation: ignore the boolean again → red.
 3. The two composed tests from §3.
 4. e2e + captures (the blocked state, both orientations), the ROADMAP tick,
    the release note line (tester-visible: a rower whose phone is full now
