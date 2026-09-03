@@ -2852,6 +2852,68 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(client.fetchMe).not.toHaveBeenCalled();
   });
 
+  it("a 401 on the PROFILE read reaches the same needs_reauth flag a 401 on the declaration does", async () => {
+    // The profile is the SECOND wire call in the resolution, and its own
+    // `auth` arm is a separate branch from the declaration read's. A rower
+    // whose grant died between the two calls must not be told "try again"
+    // forever.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({ ok: true, rows: [] });
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: false,
+      kind: "auth",
+      status: 401,
+    });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "at-2",
+        refreshToken: "rt-2",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
+    expect(client.postResult).not.toHaveBeenCalled();
+    expect((await store.getLink(userA.id))?.needsReauthAt).not.toBeNull();
+  });
+
+  it("a class-read 401 whose token reacquisition ALSO fails answers that failure, never a second read", async () => {
+    // The retry's own `acquireAccessToken` can fail on its own terms (a
+    // dead refresh grant). Its status/body wins, and no second declaration
+    // read is attempted on a token we never got.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({
+      ok: false,
+      kind: "auth",
+      status: 401,
+    });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: false,
+      grantDead: true,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
+    expect(client.fetchResults).toHaveBeenCalledTimes(1);
+    expect(client.postResult).not.toHaveBeenCalled();
+  });
+
   it("resolves the class ONCE per request, so a 401 retry cannot send a different class than the first attempt", async () => {
     // Ruling R13. `fetchResults` answers "L" then "H"; both POST bodies
     // must carry "L", because a re-read between two attempts at the same
