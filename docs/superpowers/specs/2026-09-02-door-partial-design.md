@@ -4,9 +4,7 @@
 in PR A; a stored number's meaning in PR B) · **Status:** APPROVED by James 2026-09-02 (spec "looks good"; Gate 0-A approved
 with one copy change — the `LINK LOST` line shortens to `LINK LOST · the app
 lost the monitor`, a change to the shipped literal that PR A carries; chip in
-the numbers-line slot; chip border left as the shipped Just Row chip's); anchor pass RUN 2026-09-02 and a spec pass RUN the same day on the
-written text (five blockers, all applied below; both ledger entries landed
-with this spec) · **Gate 0:** two, one per PR, rendered before any implementation task
+the numbers-line slot; chip border left as the shipped Just Row chip's); the antagonist entries for this item are in `.claude/agents/antagonist-ledger.md` · **Gate 0:** two, one per PR, rendered before any implementation task
 · **RE-SCOPED 2026-09-02, after approval:** §4's fourth item (the `source`
 derive-when-absent sunset) SHIPPED SEPARATELY as #273 / v0.35.0 on the same
 day and is no longer part of PR A. Nothing else moved.
@@ -464,7 +462,7 @@ null-index actuals.
 
 | state | mint | clear | survives teardown / relaunch / re-arm |
 |---|---|---|---|
-| in-flight interval reading (`lastRowingFrameRef`: `{ intervalIndex, meters, seconds }`) | every `state === "rowing"` frame of the live run with a non-null `intervalIndex` | each boundary actual for that interval (the in-flight interval advanced); the FOUR per-run reset sites `rowingStreakRef` clears at (`useMonitorSession.ts:3536` RC-37 exit, `:4810` `beginFreeRow`, `:4886` `program`, `:5169` cancel — `rowingStreakRef` itself clears at exactly those four and NOT at connect/teardown), PLUS, for this ref only, `connect()` (`:4307`) and `teardown()` (`:3824`) — six sites for the new ref, enumerated by line in the plan (the `beginFreeRow` copy was missed once before, its own comment says so) | no / no / no |
+| in-flight interval reading (`lastRowingFrameRef`: `{ intervalIndex, meters, seconds }`) | every `state === "rowing"` frame of the live run with a non-null `intervalIndex` | each boundary actual for that interval (the in-flight interval advanced); the four per-run reset sites `rowingStreakRef` clears at (the RC-37 programDropped/ready exit in `handleEvent`, `beginFreeRow()`, `program()`, `cancel()` — `rowingStreakRef` itself clears at exactly those four and NOT at connect/teardown), PLUS, for this ref only, `connect()` and `teardown()` — six sites for the new ref, found by symbol (the `beginFreeRow` copy was missed once before, its own comment says so) | no / no / no |
 
 The close arms that write a partial: the user End arm, the live-drop arm
 (`program-dropped`), and the link-lost arm — each reads the ref once at close
