@@ -45,9 +45,19 @@ exercises them.
   2026-09-03 against log-dev (user 2211, PR0 harness token), verbatim body
   `{"message":"Could not create new result.","status_code":422,"errors":{"weight_class":["The weight class field is required."]}}`,
   with a same-row control carrying `weight_class:"H"` answering 201
-  (result 85831, deleted afterwards). So the class is DERIVED server-side
-  at send time from the linked Concept2 profile's own `weight` and
-  `gender`, and discarded with the response. Migration 0023 drops
+  (result 85831, deleted afterwards). So the class is READ FROM CONCEPT2 on
+  each send and discarded with the response, in this producer order:
+  **(1) the rower's own most recent DECLARATION** — the newest of their
+  recent results whose `weight_class` reads H or L, which is the producer
+  Concept2 itself uses (§Research); **(2) failing that, OUR derivation**
+  from the profile's `weight` + `gender`, behind a plausibility band;
+  **(3) failing that, refuse the send** (422 `no_weight_class`) and tell the
+  rower where to fix it. The class is **never cached** — a declaration can
+  change on Concept2 at any time with no signal to us, and a stale one
+  writes a wrong competition category into a record we cannot edit. The
+  SENT state names the class that was sent and which producer supplied it,
+  because a DERIVED class is a guess about a fact Concept2 lets its owner
+  set, and Concept2 permits per-result editing. Migration 0023 drops
   `concept2_links.weight_class` and `concept2_auth_attempts.weight_class`.
   Implementation: `docs/superpowers/plans/2026-09-03-concept2-pr2-client.md`
   Task 3.
@@ -162,12 +172,45 @@ are results.
   logbook_privacy, max_heart_rate, profile_image, roles, username,
   **weight**. **This REPLACES V10** ("returns 13 fields, none of them
   weight — `weight_class` must be asked by us"), which was wrong on its
-  count and, more importantly, wrong on its conclusion: `weight` and
-  `gender` are exactly what Concept2's own lightweight definition is
-  written in terms of, so the class was always derivable and never had to
-  be asked. There is no `weight_class` field on the user object, and
-  Concept2's API does not apply the profile's Weight Class default on our
-  behalf — the 422 in the ruling bullet above is that measurement.
+  count and on its conclusion: the class never had to be asked. There is no
+  `weight_class` field on the user object, and Concept2's API does not apply
+  the profile's Weight Class default on our behalf — the 422 in the ruling
+  bullet above is that measurement. **But `weight` + `gender` is the
+  FALLBACK producer, not the primary one — see the next bullet, which
+  supersedes an earlier revision of this spec that made the derivation
+  primary.** Also measured the same day: `/api/users/me/preferences`,
+  `/settings` and `/profile` all answer 500 HTML, so there is no readable
+  profile default.
+- **Concept2 says the profile weight does NOT determine the class; the
+  rower DESIGNATES it, per piece.** Logbook help, verbatim (SECONDARY — the
+  help page 403s to fetchers, so this is a search snippet of Concept2's own
+  text, 2026-09-03): *"Lightweight and heavyweight are weight categories
+  from the world of on-water rowing. **Even though you may have entered a
+  weight in your profile, you must designate L or H for every piece that
+  you enter.**"* Corroborated three ways: Concept2's own Utility documents a
+  "Weight Class Default" setting SEPARATE from weight
+  (archived.concept2.com); ErgData carries its own Weight Class setting,
+  and a c2forum thread (t=205661) is a rower complaining ErgData uploaded
+  **H** despite their Lightweight setting; and the API's Edit User surface
+  exposes `weight` and no `weight_class`. **Consequence:** a rower whose C2
+  default is L and whose profile weight is 76 kg would get **H** from a
+  weight-derived design, and their Ergomatic rows would sit in a different
+  ranking category from every row they log through ErgData or the website.
+  Who would be wrong: us.
+- **The declaration is readable, and one small page is one cheap round
+  trip.** MEASURED 2026-09-03 against log-dev (user 2211, a token whose
+  scope is the production `user:read,results:write` — nothing here widens a
+  scope): `GET /api/users/me/results?number=1` → 200; **every result in the
+  list carries `weight_class`**; the list is DATE-descending (id 85561 dated
+  `2026-09-02 10:00:30` sorted ahead of id 85562 dated
+  `2026-09-02 10:00:00`); pagination is `meta.pagination` with `total`,
+  `count`, `per_page`, `current_page`, `total_pages`, `links.next`.
+  `?type=rower` is ACCEPTED but UNPROVEN as a filter (every row on this
+  account is already `rower`), so selection is on the FIELD, never the
+  query. Latency medians from a dev laptop, 5 samples each: `?number=1`
+  216 ms, `?number=5` 221 ms, `/users/me` 220 ms. **UNMEASURED:** whether a
+  non-rower result carries a class at all — exit criterion 3b settles it
+  with one glance.
 - **The UNIT of `weight` is UNMEASURED and Concept2's docs contradict
   themselves about it.** The only published line sits on the CREATE USER
   endpoint (`https://log.concept2.com/developers/documentation/`, fetched
@@ -178,9 +221,17 @@ are results.
   0.01 kg). **PRIMARY for the write parameter, INFERENCE for the read
   field** — nothing states `GET /users/me` echoes the same encoding, and
   the account we can measure carries `weight: null`. The derivation's
-  constants therefore carry the unit in their identifiers, and a walk leg
-  measuring a known weight on James's log-dev profile is an exit criterion
-  on the flag flip.
+  constants therefore carry the unit in their identifiers, AND the
+  derivation runs a PLAUSIBILITY BAND (30-300 kg in the assumed unit) on the
+  raw number before classifying. Tabulated for a 75 kg rower: decigrams
+  750000, grams 75000, integer kg 75 and integer lb 165 all fall outside and
+  refuse loudly — which matters most for the two integer readings, since
+  they would otherwise class EVERY rower lightweight and file heavyweights
+  in Concept2's lightweight rankings. **The band cannot catch a
+  hundredths-of-a-pound reading (16530), and no band can:** a 2.2x error is
+  inside any range wide enough to hold real rowers. That residue is what
+  exit criterion 3b's two readings settle, and it is bounded by the producer
+  order — a rower who has declared a class never reaches the derivation.
 - **Concept2's lightweight definition** (SECONDARY — logbook help and
   forum, 2026-09-03; the help page 403s to fetchers, so this is a search
   snippet): men 75 kg / 165 lb or less, women 61.5 kg / 135 lb or less,
@@ -551,7 +602,7 @@ shape for the follow-on.
 | `timezone` | `tz` | first-class C2 POST parameter |
 | `distance` | `work_meters` | work-only (V12) |
 | `time` | `round(work_seconds * 10)` | tenths; safe at the doublePrecision boundary (V8: sums of tenths carry ~1e-12 vs a 0.05 margin; a true half-tenth cannot arise from summing tenths) |
-| `weight_class` | DERIVED at send time from `GET /api/users/me`'s `weight` + `gender` (2026-09-03 ruling), never stored by us | inclusive thresholds, men ≤ 75 kg, women ≤ 61.5 kg; a profile with no usable weight refuses the send `422 {error:"no_weight_class"}` and the rower is sent to their Concept2 profile |
+| `weight_class` | READ FROM CONCEPT2 at send time (2026-09-03 ruling), never stored by us: the rower's own most recent DECLARATION first (`GET /api/users/me/results`, newest entry reading H or L), our derivation from `GET /api/users/me`'s `weight` + `gender` second | derivation thresholds are inclusive, men ≤ 75 kg, women ≤ 61.5 kg, behind a plausibility band; when neither producer answers the send refuses `422 {error:"no_weight_class", reason}` with four reason tokens (`no_weight`, `unreadable_weight`, `implausible_weight`, `no_gender`) and the rower is sent to their Concept2 account. A fresh send's 200 carries `weightClass` and `weightClassSource`, which the SENT state renders |
 | `workout_type` | `machineSummary.workoutType` (flat — see below), the PM5's OWN decoded value, mapped ordinal → C2 enum string; OMITTED when absent or unmapped | anchor F6: rev 1 derived a constant from our programming call (`commands.ts:158` sets `WORKOUTTYPE_VARIABLE_INTERVAL` unconditionally — that describes US, not the workout), and its JustRow branch modeled a state the app cannot yet produce. The machine's field is also the only one that can ever satisfy `verification_code`'s match rule. Field is optional; omission is honest |
 | `rest_time` | `round(rest_seconds * 10)` when > 0 | "Depends: for interval workouts only" |
 | `rest_distance` | `rest_meters` when > 0 | |
@@ -590,8 +641,12 @@ which is also the dedup experiment.
    stay on Concept2); link-failed (retryable). No weight class appears on
    any card, because the app does not hold one.
 2. **Log row: "Send to Concept2".** idle → sending → sent / duplicate
-   ("Concept2 already has this row") / failed (retryable). **Sent state
-   includes a "View on Concept2" link-out** built from `c2_result_id`
+   ("Concept2 already has this row") / failed (retryable) / no weight class
+   (repairable on Concept2, with a link-out and a Send again). **Sent state
+   includes a "View on Concept2" link-out** built from `c2_result_id`, and
+   names the weight class that was sent and which producer supplied it
+   (session-scoped: nothing about the class is stored, so a later mount
+   renders SENT without that line).
    (PM open gate: the one thing that closes the rower's loop — "did it
    actually land?"). Sent renders only when the row's `c2_user_id`
    matches the live link. Non-qualifying and not-linked treatments are
@@ -761,15 +816,30 @@ safe; the flag, not PR ordering, is the safety mechanism.
    failure states each observed for real at least once.
 3. Countable PII bound (PM), STRENGTHENED by the 2026-09-03 ruling: the
    link flow's request bodies carry NO new user attribute. The weight
-   class is Concept2's own fact — derived at send time from the linked
-   profile, never asked, never stored by us.
-3b. **The unit of Concept2's `weight` field is MEASURED on hardware
-   before the flag flips**, not inferred from a vendor sentence that
-   contradicts its own example (§Research). James sets a known weight on
-   his log-dev profile; the operator GETs `/api/users/me` and records the
-   raw number beside the kilogram value; the derivation's constants are
-   corrected if they disagree. No gate in this repo can settle this —
-   every test agrees with whatever constant we chose (RF11).
+   class is Concept2's own fact — read from Concept2 at send time, never
+   asked, never stored by us. The READ is minimal too: the declaration
+   page is projected down to an ordered list of class letters, and none of
+   the rower's other logbook rows is persisted, logged or rendered.
+3b. **A DESK step, not a walk step, and it gates the FLAG FLIP rather than
+   any merge.** It touches no erg, no phone and no PM5: it is a profile
+   edit plus API GETs through the PR0 harness, runnable today. **It takes
+   TWO readings, not one**, because the 16-field profile carries no
+   weight-unit preference and a single reading cannot detect a per-user
+   display unit: James sets a known weight with his Concept2 unit
+   preference on **kg** and the operator records the raw number, then he
+   switches the preference to **lb** and the operator reads again. If the
+   raw number moves, the derivation is unsound and the ruling needs
+   revisiting. The same session answers two other questions one glance
+   settles and no status code can: **which Concept2 page carries the weight
+   and weight-class fields** (the 2i link-out's target is PROVISIONAL until
+   then — an id-less `/profile` was chosen because the id-bearing path was
+   measured to render a public read-only card with no weight and no form),
+   and **whether a non-rower result carries a class**.
+   **How much less this gates than it used to:** with the DECLARATION as
+   the primary producer, the unit only matters for a rower who has declared
+   nothing at all, and the plausibility band already refuses four of the
+   five wrong readings. It is a confirmation, not the sole instrument it
+   was when the derivation was primary.
 4. The dedup-granularity, `state`-echo, and zero-rest-post questions
    each carry a measured answer in PR0's report — "unknown" leaves the
    wave open.

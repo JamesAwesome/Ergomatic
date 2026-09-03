@@ -13,8 +13,15 @@ that set in our app. I want it to be set on Concept2's side."** This
 SUPERSEDES the 2026-08-22 ruling ("asked once, from the You card's Connect
 flow") and the conditional-ask amendment below. Concept2's API refuses a
 result carrying no `weight_class` (measured 422, 2026-09-03), so the class
-is DERIVED server-side at send time from the linked Concept2 profile's own
-`weight` and `gender`, and stored by us nowhere. Every 1a detail below
+is READ FROM CONCEPT2 on each send and stored by us nowhere: the rower's
+own most recent DECLARATION first — Concept2's help says *"you must
+designate L or H for every piece that you enter"*, so the declaration is
+the vendor's own producer — and our derivation from the profile's `weight`
++ `gender` only as a fallback. **An earlier revision of this note said
+"derived", which named the wrong producer; that wording is withdrawn.** The
+SENT state names the class that was sent and which producer supplied it
+(amendment change 7), because a DERIVED class is a guess and Concept2
+permits per-result editing. Every 1a detail below
 describing a WEIGHT CLASS section, its segmented control, its helper line,
 or a dimmed Connect is a record of a rendered board that is no longer
 built — see `amendment-2026-09-03.html` for what replaces it, and the
@@ -64,11 +71,23 @@ not rewrite it.
   field, and a result POSTed without one is refused
   `422 {"errors":{"weight_class":["The weight class field is required."]}}`.
   But the same measurement showed the profile DOES carry `weight` and
-  `gender`, which is what the class is defined from. **The ruling is
-  therefore neither conditional nor unconditional: there is no ask.** The
-  server derives the class from the profile at send time. A rower whose
-  Concept2 profile has no weight is told so, with a button to their
-  Concept2 profile (amendment 2i).
+  `gender`, and a later one showed that **every result Concept2 returns
+  carries `weight_class`** — which is the rower's own designation, and the
+  producer Concept2 itself uses. **The ruling is therefore neither
+  conditional nor unconditional: there is no ask.** The server reads the
+  rower's latest declaration, derives from the profile only when there is
+  none, and refuses the send when neither answers. A rower who reaches that
+  refusal is told which of the two it was, with a button to their Concept2
+  account and a Send again (amendment 2i, redrawn 2026-09-03).
+- **The SENT state names the class and its source** (amendment change 7,
+  2026-09-03): "WEIGHT CLASS H · FROM YOUR LAST CONCEPT2 ROW", or "· FROM
+  YOUR CONCEPT2 WEIGHT" when we derived it. Session-scoped — nothing about
+  the class is stored, so a later visit renders 2c without the line.
+- **2i's link-out targets the ID-LESS `{origin}/profile`** (2026-09-03).
+  The id-bearing path was measured to render a public read-only card with
+  no weight and no form, while the id-less one 302s to login. The target is
+  PROVISIONAL until one logged-in glance names the page that carries the
+  weight and weight-class fields.
 - **Weight class does not show on ANY card** (1a, 1c, 1d) — there is none
   to show. Linked state is LINKED ✓, the identity line, helper, unlink.
 - **Not linked → nothing on the log row.** The Concept2 block renders only

@@ -6594,6 +6594,110 @@ plan's own tools and never with the REPO's.
   derivable and never had to be asked. **The residual this ruling creates is
   named rather than closed:** the UNIT of that `weight` field is an INFERENCE
   (Concept2's only published line sits on a different endpoint and contradicts
-  its own example — "decigrams", "e.g. 7500 for 75kg"), and no gate in this repo
-  can settle it, because every test we write agrees with whatever constant we
-  chose. RF11's shape exactly; the answer is a walk leg, not a test.
+  its own example — "decigrams", "e.g. 7500 for 75kg"). **Superseded in part by
+  the delta pass below**, which added a plausibility band that refuses four of
+  the five candidate units, made the derivation a FALLBACK behind the rower's own
+  declaration, and moved the confirming measurement from a walk leg to a
+  two-reading DESK step. What stands: a 2.2x pound-vs-kilogram error is inside
+  any band wide enough to hold real rowers, so that one reading is still not
+  settleable by a test. RF11's shape, narrowed rather than closed.
+
+**Delta pass, 2026-09-03 (the ruling-(i) mechanism). Six of seven claims broke;
+the fixes are folded into the plan, the spec, the amendment and ROADMAP.**
+
+- **A vendor field we can read, mistaken for the vendor's authority on the thing
+  it describes.** The design derived Concept2's `weight_class` from the profile's
+  `weight` + `gender` because both are on `GET /users/me` and C2's lightweight
+  definition is written in those terms. Concept2's own help says the opposite in
+  one sentence: _"Even though you may have entered a weight in your profile, you
+  must designate L or H for every piece that you enter."_ The class is a
+  DECLARATION (a profile default plus a per-piece choice); the weight is a
+  different attribute C2 never derives it from. **Technique: having established
+  that the system HAS the concept, do not stop — find its PRODUCER, and check
+  whether the field you can read is the one the vendor's own surfaces write.**
+  Corroborated by looking at what the vendor's OWN client does: ErgData carries a
+  separate Weight Class setting, and its most-reported bug is uploading the wrong
+  class — the vendor got this wrong too, which is evidence the derivation is not
+  the intended one. **Follow-through, and the reason this one paid twice:** the
+  same question asked of the RESULTS endpoint found the declaration is readable
+  (every result carries `weight_class`, date-descending, ~220 ms for a page of
+  five), so the fix was a better producer rather than a caveat.
+- **A `curl -sI` 200 cited as proof a page is the right destination.** The 2i
+  link-out pointed at `/profile/{id}` on the strength of a status line. Fetching
+  the BODY showed a public read-only card — Age, Country, Logbook ID, Login/Sign
+  Up chrome, no weight and no form — while `/profile` (no id) 302s to `/login`.
+  **Technique: for a link-out, a 200 to an ANONYMOUS fetcher is evidence AGAINST
+  the page being the rower's own settings form; the account page is the one that
+  redirects to login.** Compounded by the browser layer: the native arm is
+  `SFSafariViewController`, cookie-isolated from Safari since iOS 11 (which is
+  why the OAuth hop uses `ASWebAuthenticationSession`), so the rower arrives
+  signed out — ask which COOKIE JAR a link-out opens in before assuming a
+  signed-in page.
+- **Copy and controls contradicting each other on one approved frame.** 2i read
+  "Set it there, then send this row again" and offered no way to send again; the
+  rationale for removing Retry ("the server would refuse again") is true only if
+  the rower ignores the sentence above it. **Technique: read a design frame's
+  COPY as a list of actions and check each one against the frame's own
+  controls** — RC-24's "REST twice with two numbers" in its verb form.
+- **A unit inference whose failure DIRECTION was never enumerated.** "A wrong
+  unit classifies every rower as one class" was written as a single risk;
+  tabulating the five candidate units against the actual predicate shows two of
+  them (integer kg, integer lb) make every rower LIGHTWEIGHT, which falsifies a
+  competition record rather than merely disadvantaging its owner. **Technique:
+  for any unit inference, tabulate every candidate unit against the actual
+  predicate and name which way each one fails — then add the PLAUSIBILITY BAND
+  that turns the un-measurable inference into a loud refusal.** **And state what
+  the band cannot catch**: writing the band's own test found that
+  hundredths-of-a-pound (16530 for 75 kg) sits inside any range wide enough to
+  hold real rowers, so four of five refuse and the fifth does not. The plan, the
+  code comment and a dedicated test now say "four of five" — a guard oversold is
+  worse than no guard, and the test exists so a later overclaim goes red.
+- **A wrong-surface doc row refused for one field and accepted for its neighbour,
+  in the same paragraph.** The plan correctly tagged Create User's `weight` row
+  "PRIMARY for the write parameter; INFERENCE for the read field", then two
+  paragraphs later cited Create User's `gender | Required: Yes | Must be one of
+  F, M` as proof a read can never carry a third value — on a
+  client-credentials admin endpoint, with no gender row on Edit User at all.
+  **Technique: after catching a wrong-surface citation, grep the same document
+  for every OTHER field the argument leans on and re-ask the surface question for
+  each** — RF16's second corollary applies to the neighbour, not just to the
+  field that was caught. The victim was real: any value outside `M`/`F` routed to
+  a state rendering `SET YOUR WEIGHT ON CONCEPT2` for a rower whose weight was
+  set, forever.
+- **A schema drop whose test ripple runs in two directions at once.** The plan
+  scoped `schema.integration.test.ts` as "two `db.insert` calls". The file's
+  describes run against DIFFERENT migration caps: the full-migrate block must
+  LOSE the column (and delete outright the test whose subject is the dropped
+  enum), while the capped-at-0021 block must KEEP its raw-SQL `weight_class`
+  inserts — and its two typed `db.insert` calls break precisely because the
+  drizzle object can no longer supply a column the capped DB still requires,
+  failing with a not-null violation instead of the unique violation they assert.
+  **Technique: for a DROP, group the test sites by which migration CAP their
+  describe runs against; the answer is opposite on each side, and raw-SQL sites
+  are invisible to both `typecheck` and `--project unit`.** And note the sibling
+  gate the repo already has: migration 0021 carries a "rollback-image insert
+  still succeeds" test — a drop that cannot pass its equivalent is not
+  rollback-safe, and that must be STATED rather than omitted.
+- **A count query standing in for a writer check.** "Both tables are empty" makes
+  a drop safe against DATA LOSS and says nothing about an old instance still
+  INSERTing. **Technique: name the predicate that actually makes the migration
+  safe (here: the feature flag being off on every running instance) and assert
+  THAT; the counts are corroboration, not the check.**
+- **An exit criterion labelled "on hardware" that touches no hardware.** 3b is a
+  profile edit plus API GETs — a desk step, coupled by its own wording to erg
+  time. **Technique: for every criterion that names a walk, list the equipment it
+  actually touches; if the list is empty, it is blocking the flag flip for
+  nothing.** And ask whether ONE reading can distinguish the failure that
+  matters: a single weight measurement cannot detect a per-user display-unit
+  preference, which the profile carries no field for — so it is two readings, kg
+  then lb.
+- **What the paste-test found that no reading pass had.** Placing the whole
+  producer chain (including the route step the previous receipt had to leave
+  UNRUN) surfaced three things a review would have caught only in a task round:
+  the band's pound blind spot above; that adding a second read call to the upload
+  path breaks ~20 existing route tests until `makeStubClient` gains a
+  `fetchResults` default; and that a new method on an `as unknown as C2Client`
+  cast is invisible to `typecheck` and appears only as a runtime TypeError.
+  **Technique: a paste-test is not a formality when the change adds a CALL to a
+  shared path — the ripple is in the stubs, and stubs behind a cast are exactly
+  where the compiler stops helping.**

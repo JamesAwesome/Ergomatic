@@ -1276,18 +1276,28 @@ closed with zero Concept2 contact.
       (Connect + Unlink; it asks nothing) and the log row's Send action with
       sent/duplicate/failed states and a View-on-Concept2 link-out. **M**
       Also carries the 2026-09-03 weight-class ruling: migration 0023 drops
-      `weight_class` from both Concept2 tables and the send path derives the
-      class from the linked Concept2 profile. **TRIAD** (stored shape + what
-      a number means on a third party's record).
+      `weight_class` from both Concept2 tables and the send path READS the
+      class from Concept2 on every send — the rower's own most recent
+      DECLARATION first (Concept2's help: "you must designate L or H for
+      every piece that you enter"), our derivation from the profile's
+      `weight`+`gender` as a fallback, a 422 the rower can act on when
+      neither answers. Never stored, never cached; the SENT state names the
+      class and which producer supplied it. **TRIAD** (stored shape + what a
+      number means on a third party's record).
 - [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open and
-      RE-RULED 2026-09-03: the `weight_class` gate is answered by Concept2's
-      own profile, not by the link flow. James: "I don't want that set in our
-      app. I want it to be set on Concept2's side." This SUPERSEDES the
-      2026-08-22 ruling ("a binary H/L asked only at C2 link time"). The app
-      asks nothing and stores nothing; the send path derives H/L from the
-      profile's `weight` + `gender`. Measured 2026-09-03 on log-dev: a result
-      POSTed without `weight_class` is refused 422, and `GET /api/users/me`
-      carries `weight` and `gender` but no `weight_class`. The
+      RE-RULED 2026-09-03: the `weight_class` gate is answered by Concept2,
+      not by the link flow. James: "I don't want that set in our app. I want
+      it to be set on Concept2's side." This SUPERSEDES the 2026-08-22 ruling
+      ("a binary H/L asked only at C2 link time"). The app asks nothing and
+      stores nothing. **Corrected the same day, after an antagonist pass:**
+      the send path does not merely derive from the profile — Concept2's own
+      help says the class is the rower's per-piece DECLARATION, so the send
+      reads their most recent one first and derives only as a fallback.
+      Measured 2026-09-03 on log-dev: a result POSTed without `weight_class`
+      is refused 422; `GET /api/users/me` carries `weight` and `gender` but
+      no `weight_class`; and `GET /api/users/me/results` returns every result
+      carrying `weight_class`, date-descending, in ~220 ms for a small page.
+      The
       per-interval `rest_time` gate is NOT answered this wave — RC-1 stored the
       session-level split only, `LogStep` carries no per-interval rest, so the
       `intervals` array is out of scope and rides the auto-upload follow-on.
@@ -1311,9 +1321,18 @@ request bodies carry NO new user attribute (the countable form of
 minimal-PII, STRENGTHENED by the 2026-09-03 ruling — it used to read
 "exactly ONE new user attribute, `weight_class`"); **the UNIT of Concept2's
 `weight` field is measured on James's log-dev profile before the flag
-flips** (Concept2's only published line contradicts its own example, and no
-gate in this repo can settle it — every test agrees with whatever constant
-we chose); and the dedup-granularity, `state`-echo and
+flips — a DESK step, not a walk step, and it takes TWO readings** (the
+profile's unit preference on kg, then on lb, because the profile carries no
+unit field and one reading cannot detect a per-user display unit). The same
+desk session answers two more questions no status code can: which Concept2
+page carries the weight and weight-class fields (2i's link-out target is
+provisional until then), and whether a non-rower result carries a class.
+**It gates less than it used to:** with the declaration as the primary
+producer the unit only matters for a rower who has declared nothing, and
+the derivation's plausibility band already refuses four of the five wrong
+unit readings — the fifth, hundredths-of-a-pound, is a 2.2x error no band
+can exclude, which is exactly what the second reading settles. Plus the
+dedup-granularity, `state`-echo and
 zero-rest-post questions each carry a measured answer in PR0's report —
 "unknown" leaves the wave open. (RC-9(b)'s live ring verdict moved OUT to
 the open-item register at the PM open gate: no shared mechanism, PR, or

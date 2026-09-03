@@ -574,7 +574,7 @@
       app's, glyph shapes are not. Mono tracking reads slightly wider here.</p>
     </div>
 
-    <h2>0 · The six substantive changes, up front</h2>
+    <h2>0 · The substantive changes, up front</h2>
     <table class="kv">
       <tr>
         <th>#</th><th>Board says</th><th>Amendment</th><th>Forced by</th>
@@ -594,9 +594,14 @@
           (<code>{"errors":{"weight_class":["The weight class field is
           required."]}}</code>), and <code>GET /api/users/me</code> carries
           <code>weight</code> and <code>gender</code> but no
-          <code>weight_class</code> &mdash; so the class is DERIVED
-          server-side at send time and stored by us nowhere. Supersedes both
-          the board's conditional ask and this amendment's earlier
+          <code>weight_class</code> &mdash; so the class is READ FROM CONCEPT2
+          at send time and stored by us nowhere. <strong>Corrected
+          2026-09-03:</strong> an earlier revision of this row said
+          &quot;derived&quot;, which named the wrong producer. Concept2's own
+          help says the rower <em>designates</em> the class per piece, so the
+          server reads their most recent declaration first and derives from
+          the profile only as a fallback (see 2i and 2c). Supersedes both the
+          board's conditional ask and this amendment's earlier
           &quot;unconditional&quot; answer.</td>
       </tr>
       <tr>
@@ -641,6 +646,34 @@
           specific row is reachable. Also: 2d is
           <em>session-transient</em> — after any remount the row reads SENT
           (2c), because that write is durable.</td>
+      </tr>
+      <tr>
+        <td class="num">7</td>
+        <td>2c Sent shows the result id and nothing about the class.</td>
+        <td><strong>A second mono sub-line naming the class that was sent and
+          which producer supplied it</strong> &mdash; &quot;WEIGHT CLASS H
+          &middot; FROM YOUR LAST CONCEPT2 ROW&quot; or &quot;&hellip; FROM
+          YOUR CONCEPT2 WEIGHT&quot;. Session-scoped: nothing about the class
+          is stored, so a later visit renders 2c without it.</td>
+        <td>Concept2's help makes the class the rower's declaration, so a class
+          we DERIVED is a guess written to a permanent third-party record.
+          Concept2 permits per-result editing, so a guess the rower can see is
+          one they can fix. A guess nobody sees is one nothing can catch
+          (RF11).</td>
+      </tr>
+      <tr>
+        <td class="num">8</td>
+        <td>2i offers only &quot;OPEN CONCEPT2 PROFILE&quot;, pointed at
+          <code>{origin}/profile/{id}</code>, with one sentence for every
+          reason.</td>
+        <td><strong>It keeps a &quot;Send again&quot;, targets the id-less
+          <code>{origin}/profile</code>, and carries three sentences for the
+          route's four reasons.</strong></td>
+        <td>The frame's own copy said &quot;send this row again&quot; and gave
+          no way to; the link-out returns to a still-mounted block on native.
+          The id-bearing path was MEASURED to render a public read-only card
+          with no weight and no form. And a profile Concept2 cannot classify at
+          all must not be told to set a weight that is not the broken thing.</td>
       </tr>
       <tr>
         <td class="num">6</td>
@@ -1623,7 +1656,37 @@
       </div>
     </div>
 
-    <h3>2c Sent <span class="badge b-changed">CHANGED</span></h3>
+    <h3>2c Sent <span class="badge b-changed">CHANGED</span> <span class="badge b-new">NEW LINE 2026-09-03</span></h3>
+    <p class="lede">
+      <strong>A second sub-line, and it is the whole answer to a real
+      defect.</strong> Concept2's own help makes the weight class the rower's
+      <em>declaration</em> (&quot;you must designate L or H for every piece that
+      you enter&quot;), so when we cannot read one and DERIVE it from their
+      profile weight instead, we are guessing at a competition category and
+      writing it to a permanent third-party record. The first drawing of this
+      surface showed that guess to nobody. Concept2 permits per-result editing,
+      so a guess the rower can SEE is a guess the rower can fix; a guess they
+      never see is one nothing can ever catch.
+    </p>
+    <p class="lede">
+      So the SENT state names the class and where it came from, in one mono
+      sub-line beside the result id, in the same
+      <code>--ink-4</code> as <code>RESULT 339</code>
+      (5.29:1 on <code>--surface</code>, already a &sect;4 row):
+      <strong>WEIGHT CLASS H &middot; FROM YOUR LAST CONCEPT2 ROW</strong> when
+      the rower's own declaration supplied it, or
+      <strong>WEIGHT CLASS H &middot; FROM YOUR CONCEPT2 WEIGHT</strong> when we
+      derived it. No em-dash; uppercase mono, the same idiom as every other
+      sub-line on this card.
+    </p>
+    <p class="lede">
+      <strong>It is session-scoped by construction, and that is correct rather
+      than a shortfall.</strong> Nothing about the class is stored by us, so the
+      line renders on the response of the send that just happened and is absent
+      on every later visit &mdash; where 2c reads exactly as it does below the
+      strike-through. The moment the line matters is the moment the row lands,
+      which is the moment the disagreement is created.
+    </p>
     <p class="lede">
       The timestamp is removed. Nothing stores when Concept2 accepted the row:
       <code>session_logs</code> gained <code>c2_result_id</code> and
@@ -1655,6 +1718,9 @@
             <div class="send-linkrow">View on Concept2 &rarr;</div>
             <p class="c2foot" style="text-align: left">
               RESULT 339 &middot; OPENS YOUR CONCEPT2 LOGBOOK
+            </p>
+            <p class="c2foot" style="text-align: left">
+              WEIGHT CLASS H &middot; FROM YOUR LAST CONCEPT2 ROW
             </p>
           </div>
           <div class="btn-l4" style="margin-top: 10px">Delete session</div>
@@ -1709,6 +1775,9 @@
             <div class="send-linkrow">View on Concept2 &rarr;</div>
             <p class="c2foot" style="text-align: left">
               RESULT 339 &middot; OPENS YOUR CONCEPT2 LOGBOOK
+            </p>
+            <p class="c2foot" style="text-align: left">
+              WEIGHT CLASS H &middot; FROM YOUR CONCEPT2 WEIGHT
             </p>
           </div>
           <span class="frame-dim">844 &times; 390</span>
@@ -2051,30 +2120,49 @@
       REASON line, not &quot;block disappears&quot;.</p>
     </div>
 
-    <h3>2i No weight on Concept2 <span class="badge b-new">NEW STATE</span></h3>
+    <h3>2i Concept2 has no class for you <span class="badge b-new">NEW STATE</span> <span class="badge b-changed">REDRAWN 2026-09-03</span></h3>
     <p class="lede">
-      <strong>The 2026-09-03 ruling's own state.</strong> James: &quot;I don't
-      want that set in our app. I want it to be set on Concept2's side.&quot; So
-      the app asks nothing &mdash; but Concept2 still requires a
+      <strong>The 2026-09-03 ruling's own state, redrawn.</strong> James: &quot;I
+      don't want that set in our app. I want it to be set on Concept2's
+      side.&quot; So the app asks nothing &mdash; but Concept2 still requires a
       <code>weight_class</code> on every rower result (measured: a POST without
-      it is refused <strong>422</strong>), and the server derives one from the
-      linked profile's <code>weight</code> and <code>gender</code>. This is what
-      the rower sees when that profile carries no usable weight.
+      it is refused <strong>422</strong>). The server now reads the rower's own
+      most recent <strong>declaration</strong> first &mdash; Concept2's help says
+      <em>&quot;you must designate L or H for every piece that you enter&quot;</em>,
+      so the declaration is the vendor's own producer &mdash; and falls back to
+      deriving one from the profile's weight. This frame is what the rower sees
+      when <strong>neither</strong> can supply one.
     </p>
     <p class="lede">
-      <strong>It is a 422 like 2h, and it must not read like one.</strong> 2h is
-      about the ROW and cannot be repaired at all; this is about the rower's
-      Concept2 PROFILE and is repaired in one visit, on a screen that is not
-      ours. So the chrome is 2f/2g's failed-state chrome, unchanged, and the one
-      difference is the button: <strong>no Retry</strong> (the server would read
-      the same unchanged profile and refuse again &mdash; the
-      guaranteed-to-fail affordance 1g already rejected), and instead
-      <strong>OPEN CONCEPT2 PROFILE</strong>, the same accent outline row the
-      View-on-Concept2 link-out already uses.
+      <strong>Two things changed since the first drawing of this frame, and both
+      were the frame contradicting itself.</strong>
     </p>
+    <ul class="tight">
+      <li><strong>It keeps a &quot;Send again&quot;.</strong> The earlier draft
+        removed it, reasoning that &quot;the server would read the same
+        unchanged profile and refuse again&quot;. That is true only if the rower
+        ignores the sentence directly above the button, which is the one thing
+        this state exists to make them not do. The 1g parallel was false:
+        nothing a rower can do fixes a stale app build, while
+        <em>everything</em> here is fixable in one visit &mdash; which is why the
+        state has a link-out at all. On native the link-out is
+        <code>SFSafariViewController</code>, chosen precisely because it
+        <em>returns to the app</em>, so the rower comes back to this still-mounted
+        block. Without a Send again there is no way to finish the instruction
+        except navigating away and back.</li>
+      <li><strong>Four server reasons, three sentences.</strong> The route answers
+        <code>reason</code> as one of <code>no_weight</code>,
+        <code>unreadable_weight</code>, <code>implausible_weight</code>,
+        <code>no_gender</code>. The two middle ones share a rendering, because the
+        rower's action is identical. <strong><code>no_gender</code> does
+        not</strong>: Concept2's category is two-valued with gendered thresholds,
+        so that profile has no derivable class at all, and its weight is not the
+        broken thing. Telling that rower to set a weight sends them after a field
+        that is fine.</li>
+    </ul>
     <div class="boards">
       <div class="board">
-        <p class="board-cap">2i &middot; PORTRAIT</p>
+        <p class="board-cap">2i &middot; PORTRAIT &middot; <code>no_weight</code></p>
         <div class="frame">
           <p class="plan-foot">Logged to Foundation &middot; session 4</p>
           <div class="sendcard">
@@ -2088,10 +2176,49 @@
             </p>
             <p class="panel-reason">REASON: SET YOUR WEIGHT ON CONCEPT2</p>
             <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+            <div class="btn-l4" style="margin-top: 10px">Send again</div>
           </div>
           <span class="frame-dim">390 &times; 844</span>
         </div>
       </div>
+      <div class="board">
+        <p class="board-cap">2i &middot; the other two sentences, same chrome</p>
+        <div class="frame">
+          <p class="board-cap"><code>unreadable_weight</code> / <code>implausible_weight</code></p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">NO WEIGHT CLASS</span>
+            </div>
+            <p class="send-line">
+              Concept2 needs a weight class on every result, and the weight on
+              your Concept2 profile came back in a form we couldn't read. Check
+              it there, then send this row again.
+            </p>
+            <p class="panel-reason">REASON: CHECK YOUR WEIGHT ON CONCEPT2</p>
+            <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+            <div class="btn-l4" style="margin-top: 10px">Send again</div>
+          </div>
+          <p class="board-cap" style="margin-top: 16px"><code>no_gender</code></p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">NO WEIGHT CLASS</span>
+            </div>
+            <p class="send-line">
+              Concept2 needs a weight class on every result, and we couldn't work
+              one out from your Concept2 profile. Pick lightweight or heavyweight
+              on a result in your Concept2 logbook, then send this row again.
+            </p>
+            <p class="panel-reason">REASON: PICK A CLASS ON CONCEPT2</p>
+            <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+            <div class="btn-l4" style="margin-top: 10px">Send again</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
       <div class="board">
         <p class="board-cap wide">2i &middot; LANDSCAPE</p>
         <div class="frame land">
@@ -2110,6 +2237,7 @@
             </p>
             <p class="panel-reason">REASON: SET YOUR WEIGHT ON CONCEPT2</p>
             <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+            <div class="btn-l4" style="margin-top: 10px">Send again</div>
           </div>
           <span class="frame-dim">844 &times; 390</span>
         </div>
@@ -2121,25 +2249,44 @@
       17.11:1; the send line <code>--ink-2</code> on <code>--surface</code>
       10.81:1; the REASON <code>--ink-3</code> on <code>--surface</code>
       7.43:1; the link-out label <code>--accent</code> on <code>--surface</code>
-      5.94:1. All four are rows in &sect;4 already. The link-out row is 44px,
-      the same as View on Concept2 &mdash; and it is a
-      <strong>button</strong> for the same reason that one is: inside the
-      Capacitor WebView a plain anchor drives the WebView itself to
-      concept2.com with no way back.</p>
-      <p><strong>The destination was checked, not assumed.</strong>
-      <code>curl -sI https://log-dev.concept2.com/profile/2211</code> answered
-      <strong>HTTP 200</strong> on 2026-09-03 &mdash; not a redirect to login,
-      not a 404. The origin comes from the server's own
-      <code>logbookBaseUrl</code>, never a hardcoded
-      <code>log.concept2.com</code>, which would 404 for the whole sandbox
-      phase; if that origin is missing, the button does not render and the
-      sentence and REASON still name the repair.</p>
-      <p><strong>One line covers both server reasons.</strong> The route
-      answers <code>{error:"no_weight_class", reason:"no_weight"|"no_gender"}</code>.
-      Concept2 documents <code>gender</code> as <em>Required: Yes</em> on user
-      creation, so <code>no_gender</code> is a shape we have never seen; the
-      rower's action is identical either way, and inventing a second sentence
-      for an unobserved state would be copy nobody has tested.</p>
+      5.94:1. <strong>Send again</strong> is the level-4 button 2e already uses
+      for Retry send, unchanged &mdash; same token, same 44px row. All five are
+      rows in &sect;4 already. The link-out row is 44px, the same as View on
+      Concept2 &mdash; and it is a <strong>button</strong> for the same reason
+      that one is: inside the Capacitor WebView a plain anchor drives the WebView
+      itself to concept2.com with no way back.</p>
+      <p><strong>The destination CHANGED, and the measurement that was cited for
+      the old one is evidence against it.</strong> The earlier draft pointed at
+      <code>{origin}/profile/{id}</code> on the strength of
+      <code>curl -sI &hellip;/profile/2211</code> answering <strong>200</strong>.
+      Fetching the <em>body</em> (2026-09-03, 13862 bytes) shows a public
+      read-only card &mdash; &quot;Login Sign Up &hellip; james morelli Age: 38
+      Country: United States Logbook ID: 2211 Member since: August 21, 2026&quot;
+      &mdash; with no weight, no form and no edit control. <strong>A page that
+      renders to a signed-out fetcher is by construction not the rower's own
+      account form.</strong> Probed the same day: <code>/profile</code> (no id)
+      <strong>302s to <code>/login</code></strong>, which is the
+      authenticated-self signature; <code>/profile/edit</code>,
+      <code>/account</code>, <code>/settings</code> and
+      <code>/preferences</code> all 404. So the button targets the
+      <strong>id-less</strong> <code>{origin}/profile</code>.</p>
+      <p><strong>And it opens signed out, which is why the id-less path
+      matters.</strong> The native arm is <code>SFSafariViewController</code>,
+      whose website data has been isolated from Safari since iOS 11 (SECONDARY;
+      it is the same isolation that forced the OAuth hop onto
+      <code>ASWebAuthenticationSession</code>). The rower's Concept2 session
+      lives in Safari's jar, so the sheet lands them at a sign-in and the id-less
+      path takes them to their own account afterwards.</p>
+      <p><strong>The target is PROVISIONAL, and the gate should read it as
+      such.</strong> No status code can say which Concept2 page carries the
+      weight and weight-class fields; one logged-in glance can, and that glance
+      is a step in the same desk session as exit criterion 3b. If it names a
+      different page, the constant moves and this frame does not.</p>
+      <p>The origin comes from the server's own <code>logbookBaseUrl</code>,
+      never a hardcoded <code>log.concept2.com</code>, which would 404 for the
+      whole sandbox phase; if that origin is missing, the button does not render
+      and the sentence, the REASON and <strong>Send again</strong> still name the
+      repair.</p>
     </div>
 
     <h3>2g Absent <span class="badge b-same">UNCHANGED</span></h3>
@@ -2433,13 +2580,21 @@
 
     <h2>6 · What this gate is asking for</h2>
     <ul class="tight">
-      <li>The six changes in §0, each individually.</li>
+      <li>The changes in §0, each individually.</li>
       <li><strong>Ruling (i) is already ANSWERED and is here for the record,
         not for a decision (James, 2026-09-03):</strong> &quot;I don't want that
         set in our app. I want it to be set on Concept2's side.&quot; What this
         gate asks about it is the RENDERED consequence &mdash; §1a with no ask,
-        and 2i, the new state where the rower is told their Concept2 profile has
-        no weight and given a button to it.</li>
+        2i (redrawn), and <strong>2c's new provenance line</strong>.</li>
+      <li><strong>The two frames this revision REDREW, and why each was wrong
+        rather than merely thin:</strong> <strong>2i</strong> told the rower to
+        &quot;send this row again&quot; and offered no way to, pointed at a page
+        measured to be a public read-only card, and gave one sentence to four
+        server reasons including one where the rower's weight is not the broken
+        thing; <strong>2c</strong> wrote a weight class we may have GUESSED onto
+        a permanent Concept2 record and showed it to nobody, on a surface whose
+        vendor permits per-result editing. Both are copy-and-control changes on
+        chrome that already exists; neither introduces a new idiom.</li>
       <li>Ruling (ii): identity line variant A (numeric) or B (stored username).
         B is rendered as the recommendation and costs one nullable column.</li>
       <li>Ruling (iii): the reworded 401/403 callback lines (§3).</li>
@@ -2447,7 +2602,8 @@
         <strong>1i the read failed</strong>, <strong>1j the unlink was
         refused</strong>, 2f row-level reconnect, <strong>2c-b sent with no
         link-out</strong>, <strong>2h Concept2 won't take this row</strong>,
-        <strong>2i no weight on Concept2</strong>, and the REASON lines.</li>
+        <strong>2i Concept2 has no class for you</strong>, and the REASON
+        lines.</li>
       <li><strong>The three states added 2026-09-03, each because the state is
         REACHABLE and the earlier drawing of it was wrong rather than
         missing:</strong> 2c-b replaces a SENT row that showed no result id at
