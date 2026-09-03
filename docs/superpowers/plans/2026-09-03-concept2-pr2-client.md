@@ -176,7 +176,7 @@ Numbered so review can cite them. Each is a place where an authority this plan i
 
 3. **1b's Cancel button has no reachable presser, on either surface.** Native: `startLink` awaits `ASWebAuthenticationSession` (`adapters/linkFlow.ts:172-272`) and the sheet is presented over the app, so nothing behind it is tappable; the outcome then arrives in the promise. Web: `openExternalUrl` is `window.location.assign` (`adapters/webNavigate.ts`) and the document unloads. The board's second 1b variant ("CONFIRMING THE LINK") has the same problem — on web there is no document to confirm in, and on native the promise has already resolved. **Amendment change 3: both removed; one buttonless panel remains, visible only during the mint round trip.**
 
-4. **The two `busy` outcomes are indistinguishable, and the code says they must not be.** `adapters/linkFlow.ts:148-155`, verbatim: *"PR2's card must therefore not render one string for both `busy` sources: the JS guard means 'your last tap is still working', the plugin's means 'a sheet is already up and your fresh mint just superseded the attempt it belongs to'."* But `startLink:287` and `pluginRejection:156` both return bare `{ kind: "busy" }` — the union cannot express it. **Task 2 makes the member `{ kind: "busy"; source: "guard" | "sheet" }`.** Typechecked: no existing consumer constructs a `busy` outcome, and `Concept2LinkProbe`'s `outcomeDetail` (`:98-107`) branches on `code`/`status`/`message`, none of which `busy` carries, so it needs no change.
+4. **The two `busy` outcomes are indistinguishable, and the code says they must not be.** `adapters/linkFlow.ts:148-155`, verbatim: *"PR2's card must therefore not render one string for both `busy` sources: the JS guard means 'your last tap is still working', the plugin's means 'a sheet is already up and your fresh mint just superseded the attempt it belongs to'."* When this was written, `startLink`'s guard return and `pluginRejection` both returned a bare `{ kind: "busy" }` and the union could not express the distinction. **LANDED IN TASK 1, not Task 2 (2026-09-03):** the member is now `{ kind: "busy"; source: "guard" | "sheet" }`, because Task 1's own `describeFailure` reads `outcome.source` and could not typecheck without it. Task 2 is re-scoped accordingly — see its header. Typechecked at the time and still true: no other consumer constructs a `busy` outcome, and `Concept2LinkProbe`'s `outcomeDetail` branches on `code`/`status`/`message`, none of which `busy` carries, so the probe needed no change.
 
 5. **The client cannot build the "View on Concept2" URL.** PR0 measured the shape — `/profile/{c2_user_id}/log/{result_id}` (`docs/monitor/c2-crossconnect-2026-09/README.md`) — but not the origin, and the origin is a deployment fact: `server/index.ts:119` defaults `C2_BASE_URL` to `https://log-dev.concept2.com`, and a hardcoded `log.concept2.com` link 404s for the entire sandbox phase, which is the phase every walk happens in. **Task 3 returns `logbookBaseUrl` on `GET /api/concept2/link`, derived from the same `C2_BASE_URL` the client already talks through.** There is no client-side alternative that is not a guess.
 
@@ -1227,8 +1227,24 @@ git commit -m "Wave E PR2: the link hook and the card's pure failure model"
 
 ## Task 2: The two adapter changes — `busy` gets a source, and read-only link-outs get an arm
 
+**RE-SCOPED 2026-09-03, after Task 1 landed.** Task 1 could not compile
+without the `busy` widening — its prescribed `describeFailure` reads
+`outcome.source`, which does not typecheck against a bare
+`| { kind: "busy" }` — so it took the minimum: the union member,
+`pluginRejection`'s case, `startLink`'s guard return, the comment, and the
+two `linkFlow.test.ts` edits that follow them. That was the brief's own
+escape hatch ("land them in one commit") and the task review upheld it.
+**Task 2 therefore DROPS step 3 entirely and items 1 and 2 of step 1**, and
+adopts the LANDED comment wording rather than this plan's, which contained an
+error Task 1 corrected (it said `linkInFlight` sits "immediately below" when
+it is declared above). **Everything else stands**, including step 1 item 3
+(the web-arm `guard` test, which cannot be written until `startLink` loses
+its argument), items 4-6, step 3b's whole weight-class chain, and both
+adapter functions.
+
 **Files:**
-- Modify: `app/src/adapters/linkFlow.ts` (the `busy` union member, `pluginRejection`'s `busy` case, `startLink`'s guard return, the `:148-155` comment, **and the whole weight-class chain: the `WeightClass` type, `startLink`'s parameter, the mint body, the exchange-response shape and the `linked` member's field** — ruling i)
+- Modify: `app/src/adapters/linkFlow.ts` (**the weight-class chain only, now that Task 1 landed the `busy` widening: the `WeightClass` type, `startLink`'s parameter, the mint body, the exchange-response shape and the `linked` member's field** — ruling i)
+- Modify: `app/src/you/concept2CardModel.test.ts` — **added to this list by the Task 1 review.** Its `linked` fixture carries `weightClass: "H"` on purpose, so that dropping the field from the union is a COMPILE error here rather than a silently stale fixture. Update it in the same commit.
 - Modify: `app/src/adapters/webNavigate.ts` (append `openWebInNewTab`)
 - Modify: `app/src/adapters/externalBrowser.ts` (import and append `openReadOnlyUrl`)
 - Test: `app/src/adapters/externalBrowser.test.ts` (append), `app/src/adapters/webNavigate.test.ts` (append), `app/src/adapters/linkFlow.test.ts` (append)
@@ -1567,6 +1583,7 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit sc
 - Test: `app/server/concept2/mapping.test.ts` (the derivation table; `buildC2Payload`'s call sites), `app/server/concept2/client.test.ts` (`fetchMe`'s new fields and failure kinds)
 - Modify: `app/server/index.ts` (pass `c2BaseUrl` in as `logbookBaseUrl`), `app/server/app.ts` (thread it)
 - Modify: **`app/scripts/webauth-contract.test.ts`** — its pinned `GET /link` key list AND its own `LinkStatus` interface. Named because the paste-test's full `unit` run found it, and no earlier draft of this plan mentioned the file at all (observation 21).
+  **AND the gate the Task 1 review found missing (F4, carried here 2026-09-03).** That file's only link-shape test holds the route's key list equal to the DEV PROBE's `LinkStatus` — a type no rower's screen ever reads. The product reader is `normalizeLink` in `app/src/api/useConcept2Link.ts`, and nothing binds it to the route at all: it already parses two keys the route does not yet emit. **This task is the one that adds `c2Username` and `logbookBaseUrl`, so this task owns the gate:** hold `Concept2Link`'s key set equal to the handler's emitted set, in the same commit that adds the fields. Probe it by renaming the route's key to `c2username` and confirming RED — today that rename is silent, and its production symptom is the identity line reading `account #2211` forever while the View-on-Concept2 button never renders. RF24's exact shape: both halves well tested, nothing starting upstream of the producer.
 - Modify: **`app/src/monitor/Concept2LinkProbe.tsx`** — the dev probe's `LinkStatus` interface, the other side of that same gate. The probe's BEHAVIOUR is unchanged (ruling iv); only its type declaration gains the two fields, because the gate holds it equal to the route.
 - Modify: **`app/server/db/schema.integration.test.ts`** — BOTH describes, in opposite directions, and one test deleted outright (see step A10). Sixteen occurrences, five of which must be KEPT and are invisible to `typecheck` and `--project unit`.
 - Modify: **`app/server/index.ts`** — a second change beside threading the origin: the env read becomes `||`, not `??` (observation 22).
@@ -3301,6 +3318,8 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project integra
 **Interfaces:**
 - Consumes: `useConcept2Link` (Task 1), `describeFailure`/`identityLine` (Task 1), `startLink`'s widened `LinkOutcome` (Task 2). **`OptionGroup` is NOT consumed** — ruling (i) removed the only control this card would have used it for, and this task imports nothing from `src/onboarding/`.
 - Produces: `default Concept2Card({ email }: { email: string })`, `UNLINK_DISARM_MS`.
+
+**This task owns three panel lines that live nowhere else (Task 1 review, F9, carried here 2026-09-03).** `describeFailure` returns `null` for `navigating`, `updateRequired` and `busy` with source `guard`, which is correct — none of them is a failure. But the Gate 0 amendment gives all three a rendered line: *"Approve access on Concept2's page."* for `navigating` and for `busy·guard` (the rower's own previous tap is still working, so the card must not contradict itself), and *"Update Ergomatic to link your Concept2 account."* for `updateRequired`. Those strings have no home in the card model and no totality guarantee protecting them, so this component is the only thing that can get them wrong. Pin each with an independent literal transcribed from the amendment, exactly as Task 1's fix round pins the failure strings, and make sure the test table covers all three rather than the two that are easy to reach.
 
 **Three things in this task's component are NOT in the board or in an earlier draft, and each is a state a rower can actually reach.** They are called out here rather than left to be discovered in the diff:
 
