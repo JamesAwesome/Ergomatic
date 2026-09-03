@@ -77,6 +77,29 @@ describe("sentResultId (spec anchor F8: sent belongs to an ACCOUNT, not just a r
   it("returns null when the row was accepted by a DIFFERENT account", () => {
     expect(sentResultId({ c2ResultId: 339, c2UserId: 999 }, LINK)).toBeNull();
   });
+
+  it("returns null for a row that was never sent, and for a link with no account", () => {
+    // THE COMMON CASE, and the one the coverage rows showed untested: every
+    // row in the record carries `c2ResultId: null, c2UserId: null` until a
+    // send succeeds (`stores/logs.ts`'s `recordC2Result` is the only writer),
+    // and the pair is written together — a half-null row is a shape the
+    // column cannot produce, but this predicate has to be total over it
+    // anyway. The last case is a link the server answered without an
+    // account id (`normalizeLink` degrades a non-numeric `c2UserId` to
+    // `null`): unknown is never a match.
+    expect(sentResultId({ c2ResultId: null, c2UserId: null }, LINK)).toBeNull();
+    expect(sentResultId({ c2ResultId: 339, c2UserId: null }, LINK)).toBeNull();
+    expect(sentResultId({ c2ResultId: null, c2UserId: 2211 }, LINK)).toBeNull();
+    expect(
+      sentResultId(
+        { c2ResultId: 339, c2UserId: 2211 },
+        {
+          ...LINK,
+          c2UserId: null,
+        },
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("the two Concept2 URLs", () => {
@@ -144,6 +167,55 @@ describe("readSendResponse (409 carries THREE meanings, 422 carries TWO; never k
     ).toStrictEqual({
       kind: "failed",
       reason: "CONCEPT2 WON'T TAKE THIS ROW · DIDN'T FINISH",
+    });
+  });
+
+  it("writes a rower's phrase for every eligibility token the route can send", () => {
+    // EXHAUSTIVE over `server/concept2/mapping.ts`'s own `EligibilityFailure`
+    // union (`"not_monitor" | "not_finished" | "no_work_totals"`), plus a
+    // token this build does not know. Every phrase is transcribed
+    // independently from the Gate 0 amendment
+    // (`docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-03.html`,
+    // which draws all three and the `<REASON>` placeholder), never read back
+    // off the module that produces it. The per-file coverage rows are why
+    // this test exists: three of the four arms were rendered copy no test
+    // reached.
+    expect(
+      (
+        [
+          "not_monitor",
+          "not_finished",
+          "no_work_totals",
+          "something_new",
+        ] as const
+      ).map((reason) => {
+        const state = readSendResponse(422, { error: "not_eligible", reason });
+        return state.kind === "failed" ? state.reason : state.kind;
+      }),
+    ).toStrictEqual([
+      "CONCEPT2 WON'T TAKE THIS ROW · NO MONITOR USED",
+      "CONCEPT2 WON'T TAKE THIS ROW · DIDN'T FINISH",
+      "CONCEPT2 WON'T TAKE THIS ROW · NO WORK TIME OR METERS",
+      "CONCEPT2 WON'T TAKE THIS ROW · NOT ELIGIBLE",
+    ]);
+  });
+
+  it("names the DEVICE's time zone as the fault when that is what the route rejected", () => {
+    // The route 400s a missing or unparseable zone with `{field: "tz"}`
+    // (`server/routes/concept2.ts`'s upload handler). A bare 400 with any
+    // other `field` is not that fault and must not borrow its words.
+    expect(
+      readSendResponse(400, {
+        error: "tz must be an IANA timezone name",
+        field: "tz",
+      }),
+    ).toStrictEqual({
+      kind: "failed",
+      reason: "COULDN'T READ THIS DEVICE'S TIME ZONE",
+    });
+    expect(readSendResponse(400, { field: "logId" })).toStrictEqual({
+      kind: "failed",
+      reason: "COULDN'T SEND THIS ROW · 400",
     });
   });
 
