@@ -19,8 +19,8 @@ import {
   type SessionDraft,
 } from "./draft";
 import { buildRun } from "./engine";
-import { hasRunProgress } from "./Countdown";
-import { loadRun, saveRun, type SessionRun } from "./run";
+import { attemptBuild, hasRunProgress } from "./Countdown";
+import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
 
 // Realistic fixture, matching Timer.test.tsx:
 // Hoarfrost (O2) — a reps×2 marker + one split-ref work step (12' @
@@ -312,10 +312,20 @@ describe("Countdown", () => {
     // can count invocations directly rather than infer them from storage.
     // `loadRun` still has to return something (F1's own mount guard reads
     // it too, now) — `null`, the ordinary "nothing sitting in storage yet"
-    // case this test's own fixture actually is.
+    // case this test's own fixture actually is at MOUNT. Storage-denial
+    // spec §2's I-4 read-back adds a SECOND `loadRun()` call, right after
+    // `saveRun`, inside the build effect itself — this fixture must not
+    // keep returning `null` there too, or every build in this file would
+    // read as blocked. Returning the just-`saveRun`'d run on every call
+    // after the first (mount's own) gives both callers what they need from
+    // one mock, without this test caring what shape the run itself is.
     mockAdapters();
-    const saveRunSpy = vi.fn(() => true);
-    vi.doMock("./run", () => ({ saveRun: saveRunSpy, loadRun: () => null }));
+    const saveRunSpy = vi.fn((_r: SessionRun) => true);
+    vi.doMock("./run", () => ({
+      saveRun: saveRunSpy,
+      loadRun: () =>
+        saveRunSpy.mock.calls.length > 0 ? saveRunSpy.mock.calls[0]![0] : null,
+    }));
     saveDraft(hoarfrostDraft());
     const { default: Countdown } = await import("./Countdown");
 
@@ -612,6 +622,170 @@ describe("Countdown — F1 mount guard against rebuilding a progressed run", () 
     await renderCountdown();
 
     expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
+  });
+});
+
+// Storage-denial spec (2026-09-03) §2, I-4 — `attemptBuild` tested
+// directly with the REAL `run.ts` (never a mocked seam), controlling
+// only `Storage.prototype.setItem` — the same key-scoped idiom
+// `handoffStoreReplay.test.ts` established. Cheaper and more precise
+// than driving it through a full Countdown render for the two
+// conditions I-4 combines with `||`: each leg below isolates ONE half
+// by making the OTHER half true on its own, so a mutation that drops
+// either half is caught by exactly one leg, never both at once.
+describe("attemptBuild (storage-denial spec §2, I-4)", () => {
+  it("returns the built run when the write succeeds and reads back", () => {
+    const draft = hoarfrostDraft();
+    const run = attemptBuild(draft, BASELINES, new Date());
+    expect(run).not.toBeNull();
+    expect(loadRun()).toStrictEqual(run);
+  });
+
+  it("returns null when the write throws, even though the run key still holds an OLD, unrelated value (I-4's boolean half, isolated from the read-back half)", () => {
+    const draft = hoarfrostDraft();
+    // A stale run already sitting in storage BEFORE the denied write
+    // below — proves this leg exercises the BOOLEAN half specifically:
+    // `loadRun()` after the failed write still finds something (this
+    // old record), so only `saveRun`'s own returned boolean can be
+    // what blocks the build.
+    const stale = buildRun(
+      draft,
+      BASELINES,
+      new Date("2026-01-01T00:00:00.000Z"),
+    );
+    saveRun(stale);
+    const realSetItem = Storage.prototype.setItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(function (this: Storage, key: string, value: string) {
+        if (key === RUN_KEY) {
+          throw new DOMException("quota exceeded", "QuotaExceededError");
+        }
+        return realSetItem.call(this, key, value);
+      });
+    try {
+      expect(attemptBuild(draft, BASELINES, new Date())).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(loadRun()).toStrictEqual(stale);
+  });
+
+  it("returns null when the write appears to succeed but nothing is actually readable back (I-4's read-back half, isolated from the boolean half)", () => {
+    const draft = hoarfrostDraft();
+    const realSetItem = Storage.prototype.setItem;
+    // "Succeeds" (never throws, so `saveRun` returns `true`) without
+    // actually writing the run key — the shape I-4's own comment says
+    // no supported producer has shown, modelled here anyway so the
+    // read-back half has a leg that cannot pass by the boolean half
+    // alone.
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(function (this: Storage, key: string, value: string) {
+        if (key === RUN_KEY) return;
+        return realSetItem.call(this, key, value);
+      });
+    try {
+      expect(attemptBuild(draft, BASELINES, new Date())).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+// Storage-denial spec (2026-09-03) §2 — Gate 0 APPROVED by James
+// 2026-09-03 (`docs/superpowers/specs/2026-09-03-blocked-start-gate.html`).
+// Module-mocked `./run` (not real storage — `attemptBuild`'s own
+// describe block above already covers the real-storage half of I-4);
+// this describe is about what the SCREEN does once `attemptBuild` has
+// returned `null`.
+describe("Countdown — the blocked start (AUD-015, storage-denial spec §2)", () => {
+  it("shows the blocked-start message and Retry/Cancel, and never renders GET ON THE HANDLE, when the run write fails", async () => {
+    mockAdapters();
+    vi.doMock("./run", () => ({
+      saveRun: () => false,
+      loadRun: () => null,
+      clearRun: vi.fn(),
+    }));
+    saveDraft(hoarfrostDraft());
+    await renderCountdown();
+
+    expect(
+      await screen.findByText("Couldn't keep your session on this phone."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "CANCEL" })).toBeInTheDocument();
+    expect(screen.queryByText("GET ON THE HANDLE")).not.toBeInTheDocument();
+  });
+
+  it("Retry rebuilds a FRESH run rather than re-saving the run the failed mount attempt held, and the count reopens at the full configured length", async () => {
+    mockAdapters();
+    const saved: SessionRun[] = [];
+    let attempt = 0;
+    vi.doMock("./run", () => ({
+      // Mount's own attempt fails; Retry's own attempt succeeds — models
+      // the recoverable case Gate 0's copy exists for.
+      saveRun: (r: SessionRun) => {
+        attempt += 1;
+        saved.push(r);
+        return attempt > 1;
+      },
+      loadRun: () => (attempt > 1 ? saved[saved.length - 1] : null),
+      clearRun: vi.fn(),
+    }));
+    saveDraft(hoarfrostDraft());
+    await renderCountdown();
+    await screen.findByText("Couldn't keep your session on this phone.");
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
+    // Gate 0 decision (c): the count reopens at the full configured
+    // length (10, this file's READY_PREFS), not wherever a stalled
+    // count would have been.
+    expect(screen.getByText("10")).toBeInTheDocument();
+    expect(saved).toHaveLength(2);
+    // The mutation this leg exists to catch (Retry re-saving the SAME
+    // run object the failed mount attempt built) would make these equal.
+    expect(saved[1]!.startedAt).not.toBe(saved[0]!.startedAt);
+  });
+
+  it("Retry stays on the blocked-start state, offering Retry again, when the phone is still refusing the write", async () => {
+    mockAdapters();
+    vi.doMock("./run", () => ({
+      saveRun: () => false,
+      loadRun: () => null,
+      clearRun: vi.fn(),
+    }));
+    saveDraft(hoarfrostDraft());
+    await renderCountdown();
+    await screen.findByText("Couldn't keep your session on this phone.");
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(
+      await screen.findByText("Couldn't keep your session on this phone."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("GET ON THE HANDLE")).not.toBeInTheDocument();
+  });
+
+  it("CANCEL from the blocked state clears the draft and the run, and navigates to the workout's own page", async () => {
+    mockAdapters();
+    const clearRunSpy = vi.fn();
+    vi.doMock("./run", () => ({
+      saveRun: () => false,
+      loadRun: () => null,
+      clearRun: clearRunSpy,
+    }));
+    saveDraft(hoarfrostDraft());
+    await renderCountdown();
+    await screen.findByText("Couldn't keep your session on this phone.");
+
+    await userEvent.click(screen.getByRole("button", { name: "CANCEL" }));
+
+    expect(await screen.findByText("DETAIL SCREEN")).toBeInTheDocument();
+    expect(clearRunSpy).toHaveBeenCalledTimes(1);
+    expect(loadDraft()).toBeNull();
   });
 });
 
