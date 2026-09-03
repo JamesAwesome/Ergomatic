@@ -6577,3 +6577,50 @@ plan's own tools and never with the REPO's.
   plan WIDENED (`CloseReason | "interrupted"`) admitted the member the spec
   says writes none — "allowlists, never negations" applies to the guard on the
   producer, not only to the render.
+
+### 2026-09-03 — Storage-denial spec (AUD-011 / AUD-015), DELTA pass
+
+- **CLAIM: "a denied getter makes `loadRun()` return null, so Start PROCEEDS and
+  then meets `saveRun === false`" — one denial, one composed path.** FALSE. The
+  denial the spec cites fails EVERY access, so the first writer on that path
+  (`useStartWorkout.confirmReplace`'s `saveDraft`) returns false and shows its
+  existing inline error; the screen the composed test targets never mounts.
+  **Technique: a composed test's ordering is settled by walking the path FORWARD
+  from the user's press and listing every persist call and its branch, not
+  backward from the two findings you want to join. Ask which single fault
+  reaches BOTH legs; if the answer is "a different one for each", they do not
+  compose — and name the fault that actually reaches the second leg (here:
+  quota, where `setItem` throws and `getItem` does not).**
+- **CLAIM: a "proceed anyway" button lets the rower row with a memory-only
+  run.** FALSE as scoped. `Timer` and `LogSession` both re-read the record with
+  `useState(() => loadRun())` at mount and bounce to Today when it is null, so
+  the offer reproduces the very symptom it fixes, one navigation later.
+  **Technique: for any "proceed without persisting" offer, grep the destination
+  route AND every screen downstream of it for `useState(() => load*())` — a
+  memory-only value is only real if every reader on the remaining journey can
+  see it. If making them see it means a module-level memory tier, that is a new
+  session lifetime (RF27) and the antagonist skip that called the change
+  "no session state" is wrong.**
+- **CLAIM: "Countdown does not leave for Timer unless the active run is
+  DURABLE."** NARROWED. The boolean means "`setItem` did not throw" — no
+  read-back. **Technique: a persist function's boolean earns the word "durable"
+  only by reading the value back THROUGH THE CONSUMER'S OWN LOADER; when the
+  consumer is one screen away and reads at mount, calling that loader once at
+  the producer is the cheapest deterministic check available (RF24 in
+  production form, not test form).**
+- **Found, not in the spec: state stamped BEFORE a new blocking state keeps
+  ticking behind it.** `buildRun` stamps `phaseStartedAt` at Countdown's build
+  effect and nothing restamps, so every second spent in a new error state is
+  charged to phase 1 — bounded today by the 10 s countdown, unbounded once a
+  Retry screen exists. **Technique: for every new state that HOLDS a rower on a
+  screen, list the timestamps already stamped upstream of it and say which are
+  re-stamped when the hold ends. A "Retry" that re-writes the object built
+  before the hold silently ships the dwell as elapsed time.**
+- **Attacked and HELD:** the "these three loaders are the whole remaining set"
+  census — every other `localStorage`/`sessionStorage` getter under `app/src`
+  is inside a `try`, including the one that looks like a counterexample
+  (`LogSession.readMonitorLogStash`, bare, but reached only through
+  `readMonitorLogStashSafely`). **Technique for census claims: grep the API, not
+  the wrapper names, then check each hit's ENCLOSING block and each bare hit's
+  CALL SITES — a bare getter behind a `…Safely` wrapper is guarded, and a
+  wrapper-name grep would have produced a false finding here.**
