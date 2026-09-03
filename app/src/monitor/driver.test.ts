@@ -9599,7 +9599,8 @@ describe("createPm5Driver: the deferred status subscriptions (connect-latency de
   it("over a real two-sequence program(), no status subscribe sits between the prepare's ack and the chunk writes — the release point is the SEQUENCE, not the frame write", async () => {
     const fake = createFakeTransport({ program: seaFretProgram() });
     const transport = recording(fake);
-    const driver = createPm5Driver(transport, createEventLog());
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
 
     await programAndArm(driver, fake, seaFretProgram());
 
@@ -9623,6 +9624,17 @@ describe("createPm5Driver: the deferred status subscriptions (connect-latency de
     expect(
       statusSubscribes(transport.calls.slice(lastChunkWrite)),
     ).toStrictEqual(DEFERRED_STATUS_SUBSCRIBES);
+
+    // ...and the release is the ACK, not the last write. The transport
+    // sees no call between those two, so call order alone cannot tell
+    // them apart; the ring can, because the driver records every ack it
+    // parses. The programming sequence's own ack is the last one here —
+    // nothing writes CSAFE again on this path.
+    const ring = log.entries().map((e) => e.kind);
+    expect(ring.lastIndexOf("ack")).toBeGreaterThanOrEqual(0);
+    expect(ring.indexOf("status-subscribe")).toBeGreaterThan(
+      ring.lastIndexOf("ack"),
+    );
   });
 
   it("a driver that never arms subscribes the full group on the fallback, at 3000ms, and not before", () => {
