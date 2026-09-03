@@ -754,6 +754,23 @@ describe("the e2e fixtures ARE this component's output (F5)", () => {
     );
   });
 
+  it("c2-card-read-failed.html is what the read-failed card renders", async () => {
+    const api = vi.fn(
+      async () => new Response("<html>502</html>", { status: 502 }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    vi.resetModules();
+    const { default: Concept2Card } = await import("./Concept2Card");
+    const { container } = render(
+      <Concept2Card email="james@jamestheaweso.me" />,
+    );
+    await screen.findByRole("button", { name: "Retry" });
+    expect(norm(container.innerHTML)).toBe(
+      norm(committed("c2-card-read-failed.html")),
+    );
+  });
+
   it("c2-card-update-required.html is what the update-required card renders", async () => {
     const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
       kind: "updateRequired",

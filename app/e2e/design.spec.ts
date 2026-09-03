@@ -9941,6 +9941,38 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
     await expect(page.locator(".c2-card-hair")).toBeVisible();
   });
 
+  test("every control clears the height its own frame draws, in both orientations", async ({
+    page,
+  }) => {
+    // THE GATE D1 NEEDED AND DID NOT HAVE (fix round 4). The retry button
+    // shipped at 48px for four rounds — 4px shorter than every frame that
+    // draws it — and nothing here would have noticed, because no test
+    // measured a control's box. The reviewer caught it by measuring the
+    // PAGE; this measures the BUILD against the same numbers.
+    //
+    // The numbers are the amendment's own inline styles, transcribed, not
+    // read back off `index.css`: all seven `.btn-outline`s inside a `c2card`
+    // frame carry `min-height: 52px`, `.btn-primary` is 48px and
+    // `.btn-danger` is 52px. Independent literals, so retuning the CSS
+    // cannot retune the test with it (RF21).
+    const cases: [string, string, number][] = [
+      ["c2-card-unlinked.html", ".c2-card-primary", 48],
+      ["c2-card-armed.html", ".c2-card-danger", 52],
+      ["c2-card-read-failed.html", ".c2-card-retry", 52],
+    ];
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      for (const [fixture, selector, expected] of cases) {
+        await loadCard(page, fixture);
+        const box = await page.locator(selector).boundingBox();
+        if (box === null) throw new Error(`${selector} had no box`);
+        expect(box.height).toBe(expected);
+        // And the house floor, which is the reason any of this matters.
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+    }
+  });
+
   test("a state with nothing to DO (1g) gives its panel the full card width", async ({
     page,
   }) => {
