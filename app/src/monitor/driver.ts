@@ -6205,16 +6205,32 @@ export function createPm5Driver(
      * whole row: no `terminated` on the rower's Menu press, no 0x0039 filed,
      * and boundaries routed as if they belonged to nobody.
      *
-     * DELIBERATELY SYNCHRONOUS in everything the hook reads, unlike
-     * `program()`: the run opens and this returns before any ack, so the
-     * hook's `ready` flip stays one indivisible step with it. The send is
-     * DETACHED — `void`, its only effects ring entries — and NOTHING on the
-     * phone branches on its outcome (ruling 2): the erg's own screen is the
-     * acknowledgment, and the readback that would verify it
-     * (0x0031 `workoutType = 1`) is also the machine's idle-after-terminate
-     * default (`EMPTY_ARM_STRUCTURE`), so it verifies nothing. `program()`'s
-     * prepare-settle wait and structural readback establish that the
-     * machine holds OUR workout, a question a free row does not raise.
+     * SYNCHRONOUS IN THE RUN, ASYNCHRONOUS IN THE ARM (spec 2026-09-03
+     * Part 2, which reverses half of what this paragraph used to say:
+     * "DELIBERATELY SYNCHRONOUS in everything the hook reads ... the hook's
+     * `ready` flip stays one indivisible step with it", and "NOTHING on the
+     * phone branches on its outcome"). The run still opens before the first
+     * byte and this call still returns before any ack — but the send is no
+     * longer detached from the hook: `{ kind: "armed" }` is emitted when it
+     * SETTLES, and the hook's `ready` waits for that, exactly as a workout's
+     * waits for `program()`. The door draws a sending card in between.
+     *
+     * ALL THREE OUTCOMES ARM (Gate 0, James, 2026-09-03: fall-through). Ack,
+     * rejection and deadline each emit, once, because a free row needs
+     * nothing from the monitor to be rowable — the rower can start it on the
+     * PM5 — so a failure card would block a row that would have worked.
+     * Which way it went is in the ring, never on the screen.
+     *
+     * NO READBACK, settled rather than assumed (item 2's antagonist pass,
+     * confirmed on hardware by
+     * `docs/monitor/sessions/walk-2026-09-03-jr-connect/`, where two of the
+     * three rings report type 1 BEFORE their own ack): 0x0031's
+     * `workoutType = 1` is ALSO the machine's idle-after-terminate default
+     * (`EMPTY_ARM_STRUCTURE`), so a check on it can never fail and would be
+     * decoration. `program()`'s prepare-settle wait and structural readback
+     * establish that the machine holds OUR workout, a question a free row
+     * does not raise: the workout's acceptance point is the readback, the
+     * free row's is the ack.
      *
      * NO PREPARE, and this is load-bearing (spec §Research): `program()`
      * sends `buildTerminate()` before any run exists, but this call opens
@@ -6314,6 +6330,18 @@ export function createPm5Driver(
           // lifetime paragraph). A `terminate()` already suspended on this
           // chain holds its own reference and resumes normally.
           freeRowSendSettled = null;
+          // THE ARM (spec 2026-09-03 Part 2). One emit per `beginFreeRow()`
+          // that actually opened a run, on whichever of the three outcomes
+          // the `.then` pair above resolved: this `finally` is the single
+          // join point, so the fall-through is structural rather than three
+          // call sites agreeing. `program()`'s own emit is the sibling, and
+          // the hook treats them identically.
+          //
+          // The ring entry uses `program()`'s own kind so one census reads
+          // both arms, with a detail naming which outcome released it — the
+          // preceding `free-row-program-*` entry is the outcome itself.
+          log.record("armed", "free row: the p.80 send settled");
+          emit({ kind: "armed", freeRow: true });
         });
     },
 

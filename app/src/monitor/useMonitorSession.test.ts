@@ -419,6 +419,20 @@ async function connect(result: Session): Promise<void> {
   });
 }
 
+/** `beginFreeRow()` PLUS the drain its arm now needs (spec 2026-09-03 Part
+ *  2, "the free row waits, like a workout does"). The call itself reaches
+ *  only `"programming"`; `"ready"` arrives on the driver's `armed` event,
+ *  which it emits when the p.80 send settles — one microtask hop against a
+ *  fake that answers inline, a wire round trip against a real PM5. Every
+ *  test below that wants a free row ALREADY ARMED goes through here; the
+ *  ones that want the window in between drive it by hand. */
+async function armFreeRow(result: Session): Promise<void> {
+  await act(async () => {
+    result.current.beginFreeRow();
+    await flush();
+  });
+}
+
 /** F1 fix round 1: `injectDisconnect()` now disposes `driverRef` itself
  *  (the CRITICAL fix), so it can no longer reproduce D6's "a write against
  *  a dead GATT handle throws untyped" — `program()` finds `driverRef`
@@ -13692,30 +13706,199 @@ describe("beginFreeRow (the free row's own arm)", () => {
     return { program: LIBRARY.program, events: FREE_ROW_EVENTS };
   }
 
-  it("reaches ready without programming, under a Just Row identity", async () => {
+  it("reaches ready without calling program(), under a Just Row identity", async () => {
     const { result, fake } = harness(freeRowScript());
     await connect(result);
+
+    await armFreeRow(result);
+
+    // `ready` is the phase the record-open branch waits in. Reaching it
+    // without `program()` is the whole arm. (This comment used to end "and
+    // we have sent it nothing", which spec 2026-09-02's p.80 send made
+    // false; the four tests below this block are where the send's own
+    // timing is pinned.)
+    expect(result.current.phase).toBe("ready");
+    // `null`, not 0: the fake reports what the MACHINE is holding as a
+    // PROGRAMMED WORKOUT, and it is holding none — a p.80 Just Row loads no
+    // intervals. Reaching `ready` with that still empty is the assertion; a
+    // programmed arm would have loaded intervals here.
+    expect(fake.loadedIntervals()).toBeNull();
+  });
+
+  /**
+   * SPEC 2026-09-03 PART 2 — THE FREE ROW WAITS FOR THE MONITOR.
+   *
+   * These four are the gate the spec names, and they live at the HOOK
+   * because that is the only layer that can reach the invariant: the
+   * component reads `axes.program`, which is a pure function of the phase
+   * this file owns, and the driver has no phase at all.
+   *
+   * What they pin, in order: the door does NOT say ready while the p.80
+   * send is on the wire; an ack arms it; and — Gate 0's approved
+   * fall-through — a send the monitor never answers and a send the monitor
+   * REFUSES both arm it anyway, because a free row needs nothing from the
+   * monitor to be rowable and a failure card would block a row that would
+   * have worked. Which way it went is in the ring, never on the screen.
+   *
+   * The mutation that must bite all of them is restoring the synchronous
+   * flip (`update({ phase: "ready" })` on the line after
+   * `driver.beginFreeRow()`); this task's report records what it said.
+   */
+  it("does NOT reach ready while the p.80 send is still on the wire", async () => {
+    const { result, fake } = harness(freeRowScript());
+    await connect(result);
+    // Holds each write's own promise open for 50 real ms while the fake
+    // still answers inline, so the send is provably mid-flight here rather
+    // than merely un-drained (the same idiom the terminate tests below use).
+    fake.delayWrites(50);
 
     act(() => {
       result.current.beginFreeRow();
     });
 
-    // `ready` is the phase the record-open branch waits in. Reaching it
-    // without `program()` is the whole arm: the machine is already in its
-    // own Just Row and we have sent it nothing.
+    // The whole point, stated as the thing a rower would see: "Ready when
+    // you pull" is a promise about the erg, and the erg has not answered.
+    expect(result.current.phase).not.toBe("ready");
+    expect(result.current.phase).toBe("programming");
+    // ...and not a drain away from it either — the ack is what releases it,
+    // and no ack has landed.
+    await act(async () => {
+      await flush();
+    });
+    expect(result.current.phase).toBe("programming");
+  });
+
+  it("reaches ready when the ack lands", async () => {
+    const { result, fake } = harness(freeRowScript());
+    await connect(result);
+    fake.delayWrites(50);
+
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.phase).toBe("programming");
+
+    // The 50 ms window closes, `sendSequence` resolves on the ack the fake
+    // answered inline, and the settle emits the arm.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+      await flush();
+    });
+
     expect(result.current.phase).toBe("ready");
-    // `null`, not 0: the fake reports what the MACHINE is holding, and it is
-    // holding nothing at all. Reaching `ready` with the machine still empty
-    // is the assertion — a programmed arm would have loaded intervals here.
-    expect(fake.loadedIntervals()).toBeNull();
+    const kinds = (
+      JSON.parse(result.current.exportLog()) as { kind: string }[]
+    ).map((e) => e.kind);
+    expect(kinds).toContain("free-row-program-sent");
+    expect(kinds).not.toContain("free-row-program-unanswered");
+    expect(kinds).not.toContain("free-row-program-failed");
+  });
+
+  /** A transport that answers NOTHING: the shape a PM5 that has gone quiet
+   *  presents, and the only way to hold the p.80 send open to its own
+   *  deadline. Hand-rolled rather than scripted, because `transports/fake
+   *  .ts` is an HONEST protocol simulator and always acks — the same reason
+   *  the RC-37 block below keeps its own `rawTransport` (this file's
+   *  per-test-file convention: no cross-file test imports). */
+  function silentTransport(): Transport {
+    return {
+      scan: () => Promise.resolve([{ id: "stub", name: DEVICE_NAME }]),
+      connect: () => Promise.resolve(),
+      write: () => Promise.resolve(),
+      subscribe: () => () => undefined,
+      disconnect: () => Promise.resolve(),
+      onDisconnect: () => () => undefined,
+    };
+  }
+
+  it("reaches ready ANYWAY when the monitor never answers — at the deadline, with the ring saying so", async () => {
+    const transport = silentTransport();
+    const driverTimer = manualSchedule();
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          // `releasingSchedule` fires the driver's FIRST timer (the status-
+          // subscription fallback) at construction; every later one — the
+          // free-row deadline included — lands here to be fired by hand.
+          schedule: releasingSchedule(driverTimer.schedule),
+        },
+      }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.phase).toBe("programming");
+
+    // 5000 as an INDEPENDENT literal, never `FREE_ROW_PROGRAM_DEADLINE_MS`
+    // (RF21: a test that imports the constant it gates retunes itself with
+    // it, and this one exists to say the deadline is five seconds).
+    const deadline = driverTimer.pendingWithMs(5000);
+    expect(deadline).not.toBeNull();
+    await act(async () => {
+      deadline!.fire();
+      await flush();
+    });
+
+    // FALL-THROUGH, approved with Gate 0: no failure card, no stuck door.
+    expect(result.current.phase).toBe("ready");
+    const kinds = (
+      JSON.parse(result.current.exportLog()) as { kind: string }[]
+    ).map((e) => e.kind);
+    expect(kinds).toContain("free-row-program-unanswered");
+    expect(kinds).not.toContain("free-row-program-sent");
+  });
+
+  it("reaches ready ANYWAY when the monitor REFUSES the frame — with the failure and its hex trace in the ring", async () => {
+    const { result, fake } = harness({
+      ...freeRowScript(),
+      failNextProgramFrame: "reject",
+    });
+    await connect(result);
+    // The in-flight step is what makes THIS test bite the change rather
+    // than merely agree with it: without it, the old synchronous flip
+    // satisfied every assertion below (measured — this was the one of the
+    // four that stayed green against the pre-change source). The door must
+    // wait through a send that is going to be REFUSED, exactly as it waits
+    // through one that is going to be acked.
+    fake.delayWrites(50);
+
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.phase).toBe("programming");
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+      await flush();
+    });
+
+    expect(result.current.phase).toBe("ready");
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const failed = ring.find((e) => e.kind === "free-row-program-failed");
+    expect(failed).toBeDefined();
+    // The TRACE, not just the entry: the walk reads this to see what the
+    // monitor actually said, so an empty detail would be a receipt for
+    // nothing. `driver.test.ts`'s own NAK test pins the same two halves.
+    expect(failed?.detail).toContain(`write ${JUST_ROW_FRAME_HEX}`);
+    expect(failed?.detail).toContain("ack ");
+    expect(ring.map((e) => e.kind)).not.toContain("free-row-program-sent");
   });
 
   it("opens a record carrying the free-row identity and mode on first motion", async () => {
     const { result, fake } = harness(freeRowScript());
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
 
     tick(fake, 1000);
     tick(fake, 1000);
@@ -13735,9 +13918,7 @@ describe("beginFreeRow (the free row's own arm)", () => {
   it("files the machine's own summary totals on a free row", async () => {
     const { result, fake } = harness(freeRowScript());
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
     tick(fake, 1000);
     tick(fake, 1000);
 
@@ -13798,9 +13979,7 @@ describe("beginFreeRow (the free row's own arm)", () => {
   it("cancel() at ready TERMINATES a free row: the terminate frame follows the p.80 write and its ack", async () => {
     const { result, transport } = harness(freeRowScript());
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
     expect(result.current.phase).toBe("ready");
     const writesAtReady = transport.wireWrites;
 
@@ -13882,7 +14061,12 @@ describe("beginFreeRow (the free row's own arm)", () => {
     act(() => {
       result.current.beginFreeRow();
     });
-    expect(result.current.phase).toBe("ready");
+    // `"programming"`, and that IS the window this test is about (spec
+    // 2026-09-03 Part 2 — the line used to read `toBe("ready")`, which was
+    // true when the flip was synchronous and is now the very thing the
+    // sending card exists to stop claiming). END arrives with the p.80 send
+    // still on the wire.
+    expect(result.current.phase).toBe("programming");
     const writesAtReady = transport.wireWrites;
 
     await act(async () => {
@@ -13950,7 +14134,9 @@ describe("beginFreeRow (the free row's own arm)", () => {
     act(() => {
       result.current.beginFreeRow();
     });
-    expect(result.current.phase).toBe("ready");
+    // `"programming"`, for the reason the sibling test above states: the
+    // send is still on the wire, which is the whole interleaving here.
+    expect(result.current.phase).toBe("programming");
     const writesAtReady = transport.wireWrites;
 
     await act(async () => {
@@ -14107,9 +14293,7 @@ describe("a free row banks no intervals", () => {
       ],
     });
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
     tick(fake, 1000);
     tick(fake, 1000);
     tick(fake, 1000);
@@ -14136,9 +14320,7 @@ describe("beginFreeRow after Ended (the no-reopen rule)", () => {
   it("is a no-op at phase ended — a new row requires a new user action", async () => {
     const { result, fake } = harness(freeRowScriptForDebug());
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
     tick(fake, 1000);
     tick(fake, 1000);
     expect(result.current.phase).toBe("live");

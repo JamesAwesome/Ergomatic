@@ -13,6 +13,11 @@ import {
   currentUnretired as currentUnretiredHandoff,
   resetForTests as resetHandoffStoreForTests,
 } from "../monitor/handoffStore";
+import {
+  RECEIVE_CHARACTERISTIC_UUID,
+  TRANSMIT_CHARACTERISTIC_UUID,
+} from "../../domain/monitor/pm5/uuids.js";
+import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
 import JustRow from "./JustRow";
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
@@ -600,6 +605,19 @@ describe("JustRow: Lost → Try again through the real hook", () => {
     let disconnectCb: ((reason: string) => void) | null = null;
     let connectCalls = 0;
     let releaseSecondConnect: (() => void) | null = null;
+    // THE STUB ANSWERS ITS CSAFE FRAMES, and it has to (spec 2026-09-03
+    // Part 2). It used to `write: async () => undefined` and
+    // `subscribe: () => () => undefined` — a transport that takes bytes and
+    // never says anything back — which was harmless while `beginFreeRow()`
+    // flipped to Ready on its own. Now the door WAITS for the monitor's
+    // answer, so a stub that never answers holds it on the sending card
+    // until the 5-second deadline: a real second of a real phone's life
+    // this test would be asserting away. The ack it sends is the one the
+    // PM5 sends (`buildAckFrame`'s default is `frameStatus: "ok"`,
+    // `slaveState: "ready"`), delivered on the transmit characteristic the
+    // driver subscribes to, in a microtask so it can never arrive inside
+    // the write that provoked it.
+    const subs = new Map<string, (bytes: Uint8Array) => void>();
     const transport = {
       scan: async () => [{ id: "pm5-1", name: "PM5 432331249" }],
       connect: async () => {
@@ -610,8 +628,15 @@ describe("JustRow: Lost → Try again through the real hook", () => {
           });
         }
       },
-      write: async () => undefined,
-      subscribe: () => () => undefined,
+      write: async (uuid: string) => {
+        if (uuid !== RECEIVE_CHARACTERISTIC_UUID) return;
+        const answer = subs.get(TRANSMIT_CHARACTERISTIC_UUID);
+        if (answer) queueMicrotask(() => answer(buildAckFrame()));
+      },
+      subscribe: (uuid: string, cb: (bytes: Uint8Array) => void) => {
+        subs.set(uuid, cb);
+        return () => subs.delete(uuid);
+      },
       disconnect: async () => undefined,
       onDisconnect: (cb: (reason: string) => void) => {
         disconnectCb = cb;
