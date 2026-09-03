@@ -96,8 +96,11 @@ import {
   formatTimeOfDay,
   MIN_MEASURABLE_ELAPSED_SECONDS,
   NO_MONITOR_READING_SOURCE,
+  partialCaption,
+  partialRowLabel,
   rowJudgment,
   targetsOnlyCaption,
+  type PrescribedRow,
   type SummaryHeroes,
   type SummaryMeta,
   type SummaryRow,
@@ -946,7 +949,7 @@ function buildRows(steps: StoredLogStep[]): SummaryRow[] {
     const index = i + 1;
     const elapsed = measuredElapsedSeconds(step);
     if (elapsed === undefined) {
-      return {
+      const row: PrescribedRow = {
         measured: false,
         index,
         label: step.label,
@@ -961,6 +964,9 @@ function buildRows(steps: StoredLogStep[]): SummaryRow[] {
             ? fmtSplit(step.targetSplit)
             : undefined,
       };
+      const partial = partialRowLabel(step);
+      if (partial !== undefined) row.partialLabel = partial;
+      return row;
     }
     const timeLabel = fmtDuration(elapsed / 60);
     const paceLabel =
@@ -1175,7 +1181,7 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const meta = buildMeta(row);
   const heroes = buildHeroes(row);
   const rows = buildRows(row.steps);
-  const caption = targetsOnlyCaption(rows);
+  const caption = partialCaption(rows, row.endedBy) ?? targetsOnlyCaption(rows);
   const readBack = buildReadBack(row);
   const closeLine = buildCloseLine(row);
   const planFooter = buildPlanFooter(row);

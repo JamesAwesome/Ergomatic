@@ -228,16 +228,31 @@ function IntervalRow({ row }: { row: SummaryRow }) {
       </li>
     );
   }
+  // Door spec (2026-09-02) §5.1: a step the rower was IN THE MIDDLE OF
+  // when the session closed short reads its own two numbers where an
+  // unreached step reads the dash. Both are unmeasured rows — the
+  // difference is that one has a reading and the other genuinely has
+  // nothing. Gate 0-B decision (g), APPROVED: the accessible name says
+  // `stopped at 250 m · 1:03`. Decision (d): an over-target partial
+  // reads exactly the same way — there is no over/under branch here.
   return (
     <li
       className="summary-row"
-      aria-label={`Interval ${row.index}: ${row.label}, not measured`}
+      aria-label={`Interval ${row.index}: ${row.label}${
+        row.partialLabel === undefined
+          ? ", not measured"
+          : `, stopped at ${row.partialLabel}`
+      }`}
     >
       <span className="summary-row-index">{row.index}</span>
       <span className="summary-row-duration">{row.durationLabel ?? ""}</span>
       <span className="summary-row-target">{row.targetPaceLabel ?? ""}</span>
       <span className="summary-row-offset">{offsetFragment(row.label)}</span>
-      <span className="summary-row-dash">—</span>
+      {row.partialLabel === undefined ? (
+        <span className="summary-row-dash">—</span>
+      ) : (
+        <span className="summary-row-partial">{row.partialLabel}</span>
+      )}
     </li>
   );
 }

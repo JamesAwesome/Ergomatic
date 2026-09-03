@@ -9535,6 +9535,27 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-4);
 }
 
+/* Door spec (2026-09-02) §5.1: the in-flight pair, in the slot the dash
+   occupies on an unreached row. `flex: 0 0 auto` plus `nowrap` ON THE FLEX
+   ITEM ITSELF — RF21's own recorded failure was a `min-width` placed on a
+   CHILD of the flex item, where the shrink algorithm never reads it. The
+   e2e no-clip assertion measures THIS element's `scrollWidth` against its
+   `clientWidth`, and this element is a block-level flex item, so both are
+   real (an inline element reports 0 for both, RF21's second smell).
+   `.summary-row-offset` beside it is `flex: 1; min-width: 0` and already
+   ellipsises, so it is what yields the space. VALUES APPROVED at Gate
+   0-B (James, 2026-09-02). Contrast computed, not eyeballed (RF6):
+   `--ink-2` (#3f3c35) on `--page` (#f4f1e8) is 9.75:1 and on `--surface`
+   (#fffdf7) is 10.81:1, both clear of the 4.5:1 AA floor. */
+.summary-row-partial {
+  flex: 0 0 auto;
+  text-align: right;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
 .summary-legend {
   margin: 10px 0 0;
   font-family: var(--font-mono);
