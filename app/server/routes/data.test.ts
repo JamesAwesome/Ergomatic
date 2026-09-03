@@ -2840,12 +2840,16 @@ describe("GET/POST /api/logs", () => {
       );
     });
 
+    // Fix round 1 (coordinator review): a bare partialMeters: -1 is ALSO a
+    // half-pair, so the pair check backstops it and the leg can never
+    // isolate the bound it names (M0.2 proved this). A valid partner value
+    // keeps the pair check satisfied so only the bound check can fire.
     it("rejects a negative partialMeters, naming the field", async () => {
       const res = await asA(
         request(appFor(makeStores())).post("/api/logs"),
       ).send({
         ...validLogBody(),
-        steps: [{ label: "Row 1", partialMeters: -1 }],
+        steps: [{ label: "Row 1", partialMeters: -1, partialSeconds: 8.28 }],
       });
       expect(res.status).toBe(400);
       expect(res.body.field).toBe("steps");
@@ -2859,7 +2863,7 @@ describe("GET/POST /api/logs", () => {
         request(appFor(makeStores())).post("/api/logs"),
       ).send({
         ...validLogBody(),
-        steps: [{ label: "Row 1", partialSeconds: -1 }],
+        steps: [{ label: "Row 1", partialSeconds: -1, partialMeters: 15 }],
       });
       expect(res.status).toBe(400);
       expect(res.body.field).toBe("steps");
