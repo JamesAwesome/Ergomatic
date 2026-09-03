@@ -10493,12 +10493,16 @@ section:not(.news-pinned) .news-row:last-of-type {
    `--surface-sunken`, so the `--ink-4` 4.48:1 failure that forces
    `.c2-card-panel-reason` up to `--ink-3` does not reach here.
 
-   The link-out's accent is accent's FIFTH job, outside the four
-   docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md names. Recorded as a
-   DEVIATIONS row rather than given its own token (Gate 0 amendment §5,
-   James's ruling): the four-meaning rule exists to stop accent meaning
-   "selected" or a fifth workout type, and one link-out on one screen is a
-   different exception. */
+   THE TWO LINK-OUTS ARE ACCENT'S FIFTH JOB, outside the four
+   docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md names — and this is the
+   surface that actually paints it (the `.c2-card` block above cites the
+   same exception for THIS rule, not for one of its own). To be given a
+   DEVIATIONS row rather than its own token, per Gate 0 amendment §5 and
+   James's ruling: the four-meaning rule exists to stop accent meaning
+   "selected" or a fifth workout type, and one link-out row on one screen
+   is a different exception. The row is owed by this PR's Task 13 and does
+   NOT exist yet — `docs/design/DEVIATIONS.md` mentions Concept2 nowhere
+   (grepped, zero hits). Do not read this paragraph as the record. */
 .c2-send {
   background: var(--surface);
   border: 1px solid var(--rule);
