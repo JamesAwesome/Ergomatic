@@ -230,9 +230,12 @@ export interface FakeStatusEvent {
   restDistanceMeters?: number;
   /** 0x0032 offsets 13-15, 0.01 s/lsb (EST LEFT design spec §1/§6) — the
    *  machine's own Rest Time, counting DOWN in real time regardless of the
-   *  flywheel (unlike the interval clock, which freezes when
-   *  `rowingActive` goes false — the whole bug this field's consumer
-   *  fixes). Script-authored, the SAME pattern as `restDistanceMeters`
+   *  flywheel (unlike the interval clock, which freezes through a REST —
+   *  NARROWED 2026-09-03 alongside its three sibling sites; this used to
+   *  say "freezes when `rowingActive` goes false", which over-reaches:
+   *  through a mid-WORK stop the clock KEEPS RUNNING, measured at
+   *  `docs/monitor/sessions/walk-2026-09-03-resume-edge/`. The REST case is
+   *  the one this field's consumer fixes and it is unchanged). Script-authored, the SAME pattern as `restDistanceMeters`
    *  just above (its own doc comment's reasoning applies verbatim: a
    *  countdown this file computed by formula, rather than the script's own
    *  authored reading, would be the invented mechanism that pattern

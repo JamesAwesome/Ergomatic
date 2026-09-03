@@ -469,7 +469,7 @@ rower's work silently.
       waiting on it.** The cited hook line numbers moved with PR #239; the
       handler is `useMonitorSession.ts`'s `programDropped` case, found by
       name rather than by line.
-- [ ] **Handle `programDropped` while a run is live** (from the
+- [x] **Handle `programDropped` while a run is live** (from the
       pocketed-phone re-diagnosis above). Small and deterministic, warranted
       whatever the full ring says — the detector already fires; only the
       live arm swallows it, and that arm has NO test
@@ -706,25 +706,37 @@ rower's work silently.
       invariants, a lifetime table for the in-flight reading, its own Gate
       0-B, and one replay owed before its plan (when `IntervalActual` N
       arrives — work→rest boundary or end of rest).
-- [ ] **`rowingActive` is falsified but not dangerous.** Owed: (a) one test
-      pinning `surfaceModel.ts:915`'s `midSessionMirror` byte-half — measured,
-      deleting it leaves 5,357 tests / 191 files green, so nothing gates it
-      today; (b) a reconciled comment; (c) a diagnostic carrying the raw byte,
-      since `parse.ts:608`'s strict `rowingState === 1` makes any non-1 read
-      `false` and the next occurrence still will not say which. No behaviour
-      change proposed. **S**
+- [x] **`rowingActive` is falsified but not dangerous — DONE in this PR
+      (2026-09-03, `2026-09-03-rowing-active-design.md`).** Owed: (a) one
+      test pinning `midSessionMirror`'s byte half (`surfaceModel.test.ts` —
+      cited by symbol, not the stale `surfaceModel.ts:915`) — the
+      measurement below was itself stale; RE-MEASURED on `c2182ef5`:
+      deleting `frame.rowingActive === false &&` gives `Test Files 1 failed
+      | 230 passed (231)`, caught only by
+      `ConnectedSurface.screens.test.tsx`'s RC-24 snapshot as an HTML diff,
+      which is why the explicit model-layer pin was still owed; (b) a
+      reconciled comment — ALREADY DONE, at `types.ts`'s `restSeconds`
+      block, narrowed at its own site by #280's walk; (c) a diagnostic
+      carrying the raw byte, since `parse.ts:608`'s strict
+      `rowingState === 1` makes any non-1 read `false` and the next
+      occurrence would otherwise still not say which — DONE, `driver.ts`
+      now logs a `raw-rowing-state` ring entry on the driver's first frame
+      and on every change after (spec §2, invariants I-2/I-3). No
+      behaviour change. **S**
       **(d) SETTLED 2026-09-03 at the resume-edge walk
       (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`): the clock
       RUNS through a mid-work stop.** With the rower sitting still, elapsed
       went 80.52 s → 92.11 s (+11.6 s) while distance went 247.1 → 249.6 m
-      (coast, then nothing). So `types.ts:189-191` holds for the mid-WORK
+      (coast, then nothing). So `MonitorFrame.state`'s own "no paused state
+      on the wire" note holds for the mid-WORK
       case and `types.ts:134`'s "FREEZES whenever `rowingActive` goes
       false" is correct only for its own measured REST — corrected at its
       site by this walk. Door PR B's `partialSeconds` is therefore interval
       elapsed INCLUDING idle time, exactly as `2026-09-02-door-partial-design.md`
-      §5.1 concluded; no shipped behaviour changes. **(c) is still open —
-      the ring carries no raw-byte diagnostic, so the byte's own value
-      through the stop remains unobserved.** The original text, for the
+      §5.1 concluded; no shipped behaviour changes. **(c) is now DONE too —
+      this PR's `driver.ts` ring carries the raw byte on the first frame and
+      on every change, so the next occurrence will say which value it
+      was.** The original text, for the
       record: `domain/monitor/types.ts:134` claims `MonitorFrame.elapsedSeconds`
       "FREEZES whenever `rowingActive` goes false", measured through a REST;
       `types.ts:189-191` says the wire has no paused state at all; and
@@ -2171,6 +2183,41 @@ Each needs erg time or a deliberate recording session.
   file, which is what rules out a regression and keeps this row's "cause
   UNKNOWN, capture the next one" instruction standing. `concept2.test.ts`
   ran 8/8 green in isolation, so it does not reproduce alone.
+  **A CLIENT-project flake joined the set on 2026-09-03** (the `rowingActive`
+  branch, across four full runs): `ConnectedSurface.screens.test.tsx > screen
+  fixtures for pnpm screenshots > pane C, the grid mid-rest (RC-24)` failed
+  once as a SNAPSHOT mismatch and passed on an identical re-run minutes later,
+  on an unchanged tree. This row's title says "unit-project" and its whole
+  inference section reasons about supertest against in-memory fakes — neither
+  covers a jsdom snapshot in the `client` project, so the row's SCOPE is
+  widened here rather than the observation being filed under a mechanism it
+  does not share. What is OBSERVED: one failure, one identical green re-run,
+  no code change between them. What is INFERENCE and explicitly unchosen: the
+  same parallel-worker load theory, or snapshot serialisation racing a
+  concurrent write. **Same standing instruction: capture the next one's full
+  diff rather than re-running past it.**
+- **`retest.spec.ts` is not idempotent across runs on a KEPT stack — the
+  e2e suite passes on a fresh database and fails on a reused one.** Found
+  2026-09-03 on the `rowingActive` branch, and DIAGNOSED rather than
+  re-run past. `retest.spec.ts:121` ("declining the offer keeps the
+  baselines untouched") failed twice in a row — reproducible, not a flake —
+  expecting the heading `Set your 2k baseline?` and landing on Today
+  instead. It is not that branch's doing: the only e2e-reachable file it
+  touches is `transports/fake.ts`, verified to have **0 non-comment changed
+  lines** against base. **The mechanism:** `pnpm e2e` leaves the stack up
+  (`E2E_KEEP` defaults to `1`) and `e2e.sh` tears down with
+  `docker compose down` and NO `-v`, so the per-worktree `pgdata` volume
+  survives every run. A test asserting "you have not set a baseline yet" is
+  exactly the shape that breaks once an earlier run in the same stack set
+  one. **Proof:** `docker compose -p <stack> down -v`, then `pnpm e2e` →
+  `455 passed (2.4m)`, against `454 passed / 1 failed` twice on the reused
+  volume. **Why it matters beyond one test:** CI is unaffected (fresh
+  containers every job), so this only ever bites a human or agent iterating
+  locally — and it bites as a mystery failure in a spec they did not touch,
+  which is the most expensive shape a false red can take. The fix is either
+  a test that seeds its own precondition instead of assuming a virgin
+  database, or an `e2e.sh` that resets the schema between runs; the first is
+  narrower and is the one to try. **S**
 - **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
   can no longer rot independently.** The class was two independent literals —
   `news.spec.ts`'s (CI-gated, bumped by every notes PR) and

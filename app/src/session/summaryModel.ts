@@ -719,14 +719,15 @@ export function readingOfIntervalActual(
  *
  *  NO SPLIT, PACE OR RATE IS DERIVED FROM THIS PAIR (§5.1), and a quotient
  *  of the two would be a number nobody rowed. The seconds are ELAPSED
- *  rather than rowing time on the balance of the evidence, NOT settled:
- *  `types.ts:189-191` says the wire has no paused state, while
- *  `types.ts:134` says this same field "FREEZES whenever `rowingActive`
- *  goes false" — measured through a REST. The mid-WORK case is what matters
- *  here and is measured the first way (§17 item 20, the 2026-08-08
- *  recording, quoted in `useMonitorSession.ts`'s `PAUSED_FRAME_HOLD`
- *  comment: the clock ran while the metres sat pinned). Spec §5.1 carries
- *  the open residual and the walk observation owed to close it. */
+ *  rather than rowing time, and the mid-WORK case this label actually
+ *  displays is NOW SETTLED (rowingActive design spec, 2026-09-03, §4;
+ *  `MonitorFrame.restSeconds`'s own doc comment, domain/monitor/types.ts,
+ *  narrowed the same day): `elapsedSeconds` RUNS through a mid-WORK stop —
+ *  measured at `docs/monitor/sessions/walk-2026-09-03-resume-edge/`,
+ *  elapsed 80.52s -> 92.11s while distance sat at 247.1 -> 249.6 m — and
+ *  only FREEZES through a REST. Same conclusion `useMonitorSession.ts`'s
+ *  `PAUSED_FRAME_HOLD` comment already reached from the 2026-08-08
+ *  recording (§17 item 20: the clock ran while the metres sat pinned). */
 export function partialRowLabel(
   step: Pick<LogStep, "partialMeters" | "partialSeconds" | "seconds">,
 ): string | undefined {

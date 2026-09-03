@@ -6443,6 +6443,146 @@ describe("createPm5Driver: the log records frame STATE CHANGES, not every frame"
   });
 });
 
+describe("createPm5Driver: the raw byte in the ring (raw-rowing-state, spec §2)", () => {
+  it("a session's FIRST frame records one entry reading previous=none and the byte's own value — so exactly one entry means the byte never moved", () => {
+    // Same stubTransport idiom as "a rowing-state frame arriving before
+    // program() was ever called" above: AS1/AS2 notified once (arbitrary
+    // valid bytes) purely to satisfy the "seen" gate so `maybeEmitFrame`
+    // reaches the raw-rowing-state logic at all, then ONE 0x0031 frame —
+    // I-2's defined case (spec §2's lifetime table: "no previous value
+    // exists; I-2 records unconditionally, so this is the defined case,
+    // not an edge").
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 1,
+        strokeState: 1,
+        totalWorkDistanceMeters: 100,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(1);
+    const entries = log.entries().filter((e) => e.kind === "raw-rowing-state");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("previous=none");
+    expect(entries[0]!.detail).toContain("value=1");
+  });
+
+  it("a stuck byte records exactly ONCE across five frames — I-3, and the walk-2026-08-26 shape this item exists for", () => {
+    // The byte reads Inactive (0) on every one of five frames while the
+    // machine's own state word says "rowing" throughout — walk-2026-08-26's
+    // own shape (spec §2: "the byte read `false` on every frame of an
+    // entire real row, one value, no changes"). I-3: after the first
+    // frame, an entry is recorded on CHANGE only, so five unchanging
+    // frames must still leave exactly ONE ring entry.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    for (let i = 0; i < 5; i += 1) {
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        buildGeneralStatusBytes({
+          elapsedSeconds: 30 + i,
+          distanceMeters: 100 + i * 4,
+          workoutType: 8,
+          intervalType: 0,
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          rowingState: 0,
+          strokeState: 1,
+          totalWorkDistanceMeters: 100 + i * 4,
+          workoutDurationRaw: 0,
+          workoutDurationType: 0,
+          dragFactor: 130,
+        }),
+      );
+    }
+
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(5);
+    const entries = log.entries().filter((e) => e.kind === "raw-rowing-state");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("previous=none");
+    expect(entries[0]!.detail).toContain("value=0");
+  });
+
+  it("a change records a SECOND entry naming both sides, plus state/elapsed/distance", () => {
+    // 1 -> 0 across two frames: the second entry must name the byte's
+    // PREVIOUS value (1) and its NEW one (0), not just the new one — an
+    // operator reading the ring needs both sides of the change.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 1,
+        strokeState: 1,
+        totalWorkDistanceMeters: 100,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 31,
+        distanceMeters: 104,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 0,
+        strokeState: 1,
+        totalWorkDistanceMeters: 104,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(2);
+    const entries = log.entries().filter((e) => e.kind === "raw-rowing-state");
+    expect(entries).toHaveLength(2);
+    expect(entries[0]!.detail).toContain("previous=none");
+    expect(entries[0]!.detail).toContain("value=1");
+    expect(entries[1]!.detail).toContain("previous=1");
+    expect(entries[1]!.detail).toContain("value=0");
+    expect(entries[1]!.detail).toContain("state=rowing");
+    expect(entries[1]!.detail).toContain("elapsed=31");
+    expect(entries[1]!.detail).toContain("distance=104");
+  });
+});
+
 describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x0031's fields legible (interface-notes.md §17 item 12)", () => {
   /** Mirrors `driver.ts`'s own module-private `toHex` byte-for-byte — kept
    *  local rather than exported, the same choice `L3`'s own `hex` helper
