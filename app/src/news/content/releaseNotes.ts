@@ -30,13 +30,16 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     //
     // IF MORE MERGES LAND BEFORE THE TAG, re-run the range and account
     // for them here — this list was accounted at door PR B's head, not at
-    // a cut tag.
+    // a cut tag. **The `date` below is provisional for the same reason**
+    // and is RE-STAMPED at the tag: it is the day this entry was written,
+    // not a day a release happened, and every other entry in this file
+    // carries the date its tag was actually cut.
     version: "v0.36.0",
     date: "2026-09-03",
     items: [
       "Stop a connected piece partway through an interval and that interval's row now shows what you actually did, 250 m · 1:03, instead of a dash. It is the last thing the erg told us before you stopped, so it is yours to see. It is never added into your totals, your average split, or the count of intervals kept: those still only count intervals you finished.",
       "'Nothing kept.' has left the three screens that said it: the lost-monitor banner, the line the end-of-session screen shows when the erg drops a workout, and the log door's strip. With a part-rowed interval now showing its own metres, the phrase was about to be denying something on the screen underneath it. (Corrected 2026-09-03: v0.24.0 said the banner 'says how much survived: 2 intervals kept., or Nothing kept. when there is nothing'. The first half stands. The second is withdrawn: with nothing kept the banner now shows LOST THE MONITOR alone and promises nothing about what survived.)",
-      "Your history says which sessions did not finish. A session you stopped early wears a STOPPED EARLY chip in the list, and opening it reads 'STOPPED EARLY · 2 of 5 intervals measured'; a session the link died in reads LINK LOST, and one the erg dropped reads PROGRAM DROPPED. And the promise v0.24.0 made is kept: a connected session the app never heard a pull in is now stored as exactly that and reads NO MONITOR READING in your history. Rows saved before this release still read LOGGED BY HAND, and always will.",
+      "Your history says which sessions did not finish. A session you stopped early wears a STOPPED EARLY chip in the list, and opening it reads 'STOPPED EARLY · 2 of 5 intervals measured'; a session the link died in reads LINK LOST, and one the erg dropped reads PROGRAM DROPPED. This is read off what was already saved, so sessions already in your log get it the moment you update: nothing was rewritten, they simply say what they always were. And the promise v0.24.0 made is kept: a connected session the app never heard a pull in is now stored as exactly that and reads NO MONITOR READING in your history. Rows saved before this release still read LOGGED BY HAND, and always will. One more: an erg that never told us its name is now saved as the connected session it was and reads MONITOR, instead of being filed as logged by hand.",
       "The timer screen has one END, in the same place whichever way up you hold the phone, and the empty band that used to sit under it is gone. Three smaller things with it: the Just Row door's band reads 'Start a free row session.', a saved row with a time but no distance now prints TIME m:ss under its name in History, and with no plan active the save button just says Save.",
     ],
   },

@@ -9456,7 +9456,7 @@ test.describe("connected screens (fake-driven)", () => {
     // test.tsx` legs and M6.1, and the snapshot is what ties the two
     // together (a source change without a regenerated fixture goes red in
     // the client project, not here).
-    test("banner: the kept === 0 arm renders the title ALONE — no body element, and no 'Nothing kept.'", async ({
+    test("banner: the shipped zero-kept fixture renders the title alone — no body element, and no 'Nothing kept.'", async ({
       page,
     }) => {
       await loadConnectedFixture(page, "connected-ready-lost");
