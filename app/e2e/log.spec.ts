@@ -501,11 +501,13 @@ test("a connected arrival with no reading saves as no-reading and reads NO MONIT
   );
 
   // Fill and Save — the manual door's own idiom (`connected.spec.ts`'s own
-  // fill block). No plan is active on a fresh account, so
-  // `Save without logging` leads alone.
+  // fill block). No plan is active on a fresh account, so the lone save
+  // leads alone and reads `Save`, never `Save without logging` (timer-mode
+  // spec 2026-09-02, ruling 5, shipped in #274 — `design.spec.ts`'s §2F
+  // leg pins the same word).
   await page.getByRole("button", { name: "HELD" }).click();
   await page.getByRole("button", { name: "Pain 3" }).click();
-  await page.getByRole("button", { name: "Save without logging" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/today$/);
 
   // OPENED FROM THE LOG — the row the producer wrote, re-read through the
