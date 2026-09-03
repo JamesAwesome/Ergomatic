@@ -1,0 +1,403 @@
+<title>Free Row Sending Card</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Mono:wght@400;500&family=Archivo:wght@600&display=swap");
+
+  :root {
+    --page: #f4f1e8;
+    --surface: #fffdf7;
+    --surface-sunken: #efeade;
+    --ink: #1b1a17;
+    --ink-2: #3f3c35;
+    --ink-3: #57544c;
+    --rule: #d8d3c4;
+    --rule-3: #c9c3b2;
+    --marker: #7d5510;
+    --action-connect: #2a6275;
+    --accent: #b5341f;
+    --accent-hover: #9c2c19;
+    --on-color: #fffdf7;
+    --font-sans: "Archivo", system-ui, sans-serif;
+    --font-serif: "Newsreader", Georgia, serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+    --doc-bg: #e8e4d8;
+    --doc-ink: #1b1a17;
+    --doc-ink-2: #57544c;
+    --doc-card: #fffdf7;
+    --doc-rule: #d8d3c4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --doc-bg: #171613;
+      --doc-ink: #ece8dc;
+      --doc-ink-2: #a7a294;
+      --doc-card: #201e1a;
+      --doc-rule: #35322b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --doc-bg: #171613;
+    --doc-ink: #ece8dc;
+    --doc-ink-2: #a7a294;
+    --doc-card: #201e1a;
+    --doc-rule: #35322b;
+  }
+
+  body {
+    background: var(--doc-bg);
+    color: var(--doc-ink);
+    font-family: var(--font-mono);
+    padding: 28px 20px 64px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  h1 {
+    font-family: var(--font-serif);
+    font-size: 30px;
+    font-weight: 500;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .sub { color: var(--doc-ink-2); font-size: 13px; margin: 0 0 30px; max-width: 62ch; line-height: 1.6; }
+  h2 {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--doc-ink-2);
+    margin: 38px 0 4px;
+    font-weight: 500;
+  }
+  .h2note { color: var(--doc-ink-2); font-size: 12.5px; margin: 0 0 16px; max-width: 68ch; line-height: 1.6; }
+
+  .row { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+  .slot { display: flex; flex-direction: column; gap: 8px; }
+  .cap {
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--doc-ink-2);
+  }
+  .cap b { color: var(--doc-ink); font-weight: 500; }
+  .new .cap b { color: var(--accent); }
+
+  /* ---- the phone frames, at real proportions ---- */
+  .phone {
+    width: 300px;
+    height: 650px;                 /* 390x844 at 0.769 */
+    background: var(--page);
+    border: 1px solid var(--doc-rule);
+    border-radius: 22px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12);
+  }
+  .land {
+    width: 650px;
+    height: 300px;                 /* 844x390 at 0.769 */
+  }
+
+  .screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 18px;
+    min-height: 0;
+  }
+  .body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    min-height: 0;
+  }
+  .land .screen { padding: 14px 26px; }
+  .land .body { gap: 8px; }
+
+  .status {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--ink-3);
+    margin: 0;
+  }
+  .serif {
+    font-family: var(--font-serif);
+    font-size: 36px;
+    line-height: 1.1;
+    color: var(--ink);
+    margin: 0;
+    font-weight: 400;
+  }
+  .land .serif { font-size: 30px; }
+  .bodyline {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-2);
+    margin: 0;
+    line-height: 1.5;
+  }
+  .keepon {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--marker);
+    background: var(--surface-sunken);
+    border-left: 3px solid var(--marker);
+    padding: 8px 10px;
+    margin: 0;
+  }
+
+  .checklist { display: flex; flex-direction: column; gap: 6px; }
+  .cl {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+  }
+  .cl .mk {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+  }
+  .cl.done { color: var(--ink); }
+  .cl.current { color: var(--ink); }
+  .cl.current .mk { background: var(--ink); }
+  .cl.pending .mk { background: var(--rule-3); }
+
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 14px;
+  }
+  /* Lifted verbatim from index.css: .button-l1 and .button-l2 */
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .btn.l1 {
+    min-height: 56px;
+    background: var(--accent);
+    border: none;
+    color: var(--on-color);
+  }
+  .btn.l2 {
+    min-height: 52px;
+    background: var(--surface);
+    border: 1px solid var(--ink);
+    color: var(--ink);
+  }
+  .land .btn.l1 { min-height: 44px; font-size: 15px; }
+  .land .btn.l2 { min-height: 44px; font-size: 15px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-top: 6px; }
+  th, td { text-align: left; padding: 7px 12px 7px 0; border-bottom: 1px solid var(--doc-rule); vertical-align: top; }
+  th { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--doc-ink-2); font-weight: 500; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pass { color: #2f6b3f; }
+  :root:not([data-theme="light"]) .pass { color: #7fbf90; }
+  @media (prefers-color-scheme: light) { .pass { color: #2f6b3f; } }
+
+  .scroller { overflow-x: auto; padding-bottom: 4px; }
+  ul { padding-left: 18px; margin: 10px 0 0; }
+  li { margin-bottom: 8px; font-size: 13px; line-height: 1.6; color: var(--doc-ink); max-width: 72ch; }
+  .q { border-left: 3px solid var(--accent); padding: 2px 0 2px 14px; margin: 16px 0 0; }
+  .q p { margin: 0 0 6px; font-size: 13.5px; line-height: 1.6; max-width: 70ch; }
+  .q p:last-child { margin-bottom: 0; }
+</style>
+
+<div class="wrap">
+
+  <h1>The free row's sending card</h1>
+  <p class="sub">
+    Today the free-row door says "Ready when you pull" eight milliseconds after Connect, while the
+    erg does not take the program for about two seconds. A workout never does this: it waits until
+    the monitor has accepted. This gate is the one card the free row is missing, so the two paths
+    behave the same.
+  </p>
+
+  <h2>Portrait · the free row, in sequence</h2>
+  <p class="h2note">
+    Middle card is new. The outer two ship today and are unchanged, shown so the new one is judged
+    against what it sits between.
+  </p>
+
+  <div class="scroller">
+    <div class="row">
+
+      <div class="slot">
+        <div class="cap">Ships today · <b>connecting</b></div>
+        <div class="phone">
+          <div class="screen">
+            <div class="body">
+              <p class="status">JUST ROW</p>
+              <h1 class="serif">Connecting to monitor</h1>
+              <p class="bodyline">Wake the monitor if its screen is dark.</p>
+            </div>
+            <div class="actions"><div class="btn l2">Cancel</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="slot new">
+        <div class="cap">New · <b>sending</b></div>
+        <div class="phone">
+          <div class="screen">
+            <div class="body">
+              <p class="status">PM5 432331249 · CONNECTED</p>
+              <h1 class="serif">Starting your row</h1>
+              <div class="checklist">
+                <div class="cl done"><span class="mk">✓</span>FOUND</div>
+                <div class="cl done"><span class="mk">✓</span>CONNECTED</div>
+                <div class="cl current"><span class="mk"></span>STARTING THE ROW</div>
+              </div>
+            </div>
+            <div class="actions"><div class="btn l2">Cancel</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="slot">
+        <div class="cap">Ships today · <b>ready</b></div>
+        <div class="phone">
+          <div class="screen">
+            <div class="body">
+              <p class="status">PM5 432331249 · CONNECTED</p>
+              <h1 class="serif">Ready when you pull</h1>
+              <p class="bodyline">The clock starts on your first stroke.</p>
+              <p class="keepon">KEEP YOUR PHONE SCREEN ON</p>
+            </div>
+            <div class="actions">
+              <div class="btn l1">Show me the numbers</div>
+              <div class="btn l2">Cancel</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <h2>The workout's equivalent, for comparison</h2>
+  <p class="h2note">
+    This is the card the free row is copying. Same anatomy, same checklist, one word different on the
+    serif line and one on the third checklist row, because a free row sends no workout.
+  </p>
+
+  <div class="scroller">
+    <div class="row">
+      <div class="slot">
+        <div class="cap">Ships today · <b>workout, programming</b></div>
+        <div class="phone">
+          <div class="screen">
+            <div class="body">
+              <p class="status">PM5 432331249 · CONNECTED</p>
+              <h1 class="serif">Sending the workout</h1>
+              <div class="checklist">
+                <div class="cl done"><span class="mk">✓</span>FOUND</div>
+                <div class="cl done"><span class="mk">✓</span>CONNECTED</div>
+                <div class="cl current"><span class="mk"></span>SENDING THE WORKOUT</div>
+              </div>
+            </div>
+            <div class="actions"><div class="btn l2">Cancel</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Landscape</h2>
+  <p class="h2note">
+    The frame is the shipped one, a fixed-height flex column that centres its body. The new card has
+    fewer lines than the failure card the height rule was written for, so it centres with room to
+    spare.
+  </p>
+
+  <div class="scroller">
+    <div class="row">
+      <div class="slot new">
+        <div class="cap">New · <b>sending</b></div>
+        <div class="phone land">
+          <div class="screen">
+            <div class="body">
+              <p class="status">PM5 432331249 · CONNECTED</p>
+              <h1 class="serif">Starting your row</h1>
+              <div class="checklist">
+                <div class="cl done"><span class="mk">✓</span>FOUND</div>
+                <div class="cl done"><span class="mk">✓</span>CONNECTED</div>
+                <div class="cl current"><span class="mk"></span>STARTING THE ROW</div>
+              </div>
+            </div>
+            <div class="actions"><div class="btn l2">Cancel</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Contrast, computed</h2>
+  <p class="h2note">
+    Every pairing on the new card, against the page it sits on. Nothing new was introduced; these are
+    the shipped tokens the two neighbouring cards already use.
+  </p>
+  <table>
+    <tr><th>Element</th><th>Pairing</th><th>Ratio</th><th>AA floor</th></tr>
+    <tr><td>Status label</td><td>--ink-3 #57544c on --page #f4f1e8</td><td class="num">6.69:1</td><td class="num pass">4.5 · passes</td></tr>
+    <tr><td>Serif line</td><td>--ink #1b1a17 on --page #f4f1e8</td><td class="num">15.41:1</td><td class="num pass">3.0 large · passes</td></tr>
+    <tr><td>Checklist, done and current</td><td>--ink #1b1a17 on --page #f4f1e8</td><td class="num">15.41:1</td><td class="num pass">4.5 · passes</td></tr>
+    <tr><td>Body line, where shown</td><td>--ink-2 #3f3c35 on --page #f4f1e8</td><td class="num">9.74:1</td><td class="num pass">4.5 · passes</td></tr>
+    <tr><td>Pending marker (decorative)</td><td>--rule-3 #c9c3b2 on --page #f4f1e8</td><td class="num">1.56:1</td><td class="num">n/a · not text</td></tr>
+    <tr><td>Show me the numbers (.button-l1)</td><td>--on-color #fffdf7 on --accent #b5341f</td><td class="num">5.94:1</td><td class="num pass">4.5 · passes</td></tr>
+    <tr><td>Cancel (.button-l2)</td><td>--ink #1b1a17 on --surface #fffdf7</td><td class="num">17.11:1</td><td class="num pass">4.5 · passes</td></tr>
+  </table>
+  <p class="h2note" style="margin-top:12px">
+    Hit targets: <b>.button-l1</b> is 56px tall and <b>.button-l2</b> 52px, both clear of the 44px
+    floor.
+  </p>
+
+  <h2>Correction to the first version of this page</h2>
+  <p class="h2note">
+    James caught it: the first draft drew both buttons as neutral outlines. They are not. The
+    primary action is the house's level-one button, accent red with light text at 56px, and it is
+    the same class on both the free-row door and the workout interstitial today. The frames above
+    now lift the real classes rather than approximating them.
+  </p>
+
+  <h2>Two things to decide</h2>
+
+  <div class="q">
+    <p><b>1. The words.</b> "Starting your row" over "STARTING THE ROW". The workout says "Sending
+    the workout" over "SENDING THE WORKOUT", and a free row sends no workout, so the word cannot be
+    reused. The alternative closest to the machine is "Sending the program".</p>
+  </div>
+
+  <div class="q">
+    <p><b>2. What happens when the monitor never answers.</b> The send gives up after five seconds.
+    The card can either fall through to Ready anyway, letting the rower start the row on the PM5
+    itself, or show the failure card a workout shows, which offers Try again and the phone timer.</p>
+    <p>My recommendation is falling through to Ready. A free row needs nothing from the monitor to
+    be rowable, so a failure card would block a row that would have worked.</p>
+  </div>
+
+  <h2>What this does not change</h2>
+  <ul>
+    <li><b>No new colour, type size, or component.</b> Every value is lifted from the two cards
+    either side of it and from the workout's own programming card.</li>
+    <li><b>Cancel stays where it is</b>, and still terminates the free row on the erg, which the
+    walk on 3 September proved it does.</li>
+    <li><b>The ready card is untouched.</b> It only arrives later, and by then it is true.</li>
+  </ul>
+
+</div>

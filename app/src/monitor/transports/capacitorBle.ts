@@ -578,8 +578,9 @@ export function createCapacitorBleTransport(): Transport & {
       // `startNotifications` REMOVES the first listener before adding its
       // own (`bleClient.js:293`, `eventListeners.get(key)?.remove()`) —
       // where Web Bluetooth stacks `characteristicvaluechanged` listeners.
-      // The driver legitimately subscribes 0x0031 twice (its startup
-      // status loop and the program-phase watcher), so without this
+      // The driver legitimately subscribes 0x0031 twice (its status loop
+      // and the program-phase watcher, both in the deferred group
+      // `driver.ts`'s own `subscribeStatus` enqueues), so without this
       // fan-out the second subscribe silently unplugs the first: frames
       // flow into the transport and the state machine never hears them,
       // the exact stuck-at-"sending the workout" hang the walk hit. The

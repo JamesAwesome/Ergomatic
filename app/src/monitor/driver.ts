@@ -1045,6 +1045,32 @@ const HASH_SUBWINDOW_MS = 200;
  *  this file able to measure the real number on a future hardware run. */
 const DEFAULT_PREPARE_SETTLE_TICKS = 10;
 
+/**
+ * How long after connect the driver waits for a CSAFE sequence before
+ * subscribing its status characteristics anyway (connect-latency design
+ * spec 2026-09-03, "What changes").
+ *
+ * The subscriptions are deferred so the first program write sits at the
+ * FRONT of the transport's queue instead of behind ten calls of our own —
+ * `subscribeStatus`'s own doc comment carries the measured cost. Two
+ * shipping callers arm within milliseconds of the link coming up, and this
+ * is for everything else: `JustRowObserver` connects and deliberately
+ * never programs, and a rower who cancels mid-connect never arms either.
+ *
+ * A FALLBACK RELEASE SILENTLY RESTORES THE OLD BEHAVIOUR — whatever is
+ * programmed after it queues behind the nine subscribes again, exactly as
+ * it did before this change — and nothing else in a ring would tell the
+ * two paths apart. That is why `releaseStatusSubscriptions` records which
+ * one fired (`status-subscribe`, detail `arm` or `fallback`) rather than
+ * merely recording that it happened.
+ *
+ * The value sits well past the modelled ~1600 ms second ack of a
+ * programmed workout (so a normal arm always wins the race) and well
+ * inside `FREE_ROW_PROGRAM_DEADLINE_MS`, so a monitor that never answers
+ * still gets its status stream before the free row gives up on it.
+ */
+const STATUS_SUBSCRIBE_FALLBACK_MS = 3000;
+
 /** `DriverOptions.errorTypeTicks`'s own default — same rationale as
  *  `DEFAULT_SETTLE_TICKS`, a separate constant so the two budgets can
  *  diverge independently if a future finding ever needs them to. */
@@ -1095,7 +1121,8 @@ export function createPm5Driver(
   const now = options.now ?? ((): number => Date.now());
   /** The only timer seam this driver has — see `DriverOptions.schedule`
    *  for why one exists at all, and `armSummaryReconcile` /
-   *  `beginFreeRow` for its two uses. */
+   *  `beginFreeRow` / the status-subscription fallback
+   *  (`STATUS_SUBSCRIBE_FALLBACK_MS`) for its three uses. */
   const schedule =
     options.schedule ??
     ((cb: () => void, ms: number): (() => void) => {
@@ -2042,16 +2069,6 @@ export function createPm5Driver(
     for (const cb of listeners) cb(e);
   }
 
-  // Fire-and-forget: the fastest documented sample rate (interface-notes.md
-  // §4) so a live countdown isn't stuck at the 500 ms default. A write
-  // failure here is logged, not thrown — it would otherwise turn
-  // `createPm5Driver` into something that can reject before returning,
-  // which the `MonitorDriver` interface (a synchronous constructor) has no
-  // way to surface.
-  t.write(SAMPLE_RATE_UUID, buildSampleRateConfig()).catch((err: unknown) => {
-    log.record("transport-error", `sample rate write failed: ${String(err)}`);
-  });
-
   const controlReassembler = reassemble();
   t.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (bytes) => {
     // The drain contract (`pm5/framer.ts`'s `reassemble` JSDoc): after a
@@ -2097,6 +2114,11 @@ export function createPm5Driver(
   }
 
   t.onDisconnect((reason) => {
+    // FIRST, ahead of every branch below (including the early return for a
+    // drop after the run closed): this driver may still owe its deferred
+    // status subscriptions, and `capacitorBle.subscribe()` throws
+    // synchronously once the device id is null. See `linkGone`.
+    noteLinkGone();
     // M-3 (final-review), empirically proven: resolve any `pendingAck`
     // BEFORE the expected-disconnect early-return below, not after. A
     // sequence sent AFTER the current run closed (a plausible 7B cleanup
@@ -4884,384 +4906,401 @@ export function createPm5Driver(
     }
   }
 
-  // AS1/AS2 only merge into `raw` and mark themselves `seen` — they do NOT
-  // themselves trigger a `frame` event. `GENERAL_STATUS_UUID`'s handler
-  // below is the sole "tick pulse" for `frame` events (interface-notes.md
-  // §4: General/AdditionalStatus1/2 are all sampled at the same rate, so
-  // treating any ONE of them as the trigger and merging the other two's
-  // latest values in is sufficient — and necessary: wiring `maybeEmitFrame`
-  // to all three would fire three redundant `frame` events per real tick
-  // once every characteristic has been `seen` at least once, which is
-  // exactly what an earlier version of this function did and a test caught
-  // (see the report).
-  mergeStatus(
-    ADDITIONAL_STATUS_1_UUID,
-    "0x0032",
-    parseAdditionalStatus1,
-    (decoded) => {
-      seen.as1 = true;
-      // RC-9a (`lastWorkStateAverageSplit`'s own doc comment carries the
-      // full reasoning): `raw` is already merged with `decoded` by the
-      // time this callback runs (`mergeStatus`'s own doc comment), but
-      // `raw.workoutState` is 0x0031's own field — this tick's 0x0032
-      // sample is judged against whichever 0x0031 reading is most recently
-      // merged, same "sampled at the same rate" idiom
-      // `splitAvgPaceProvenanceIndex`'s own callback (0x0033, below) already
-      // uses. `!== 0` excludes the interval-reset artifact — see the field's
-      // own comment for why this driver's own decode shows it is not
-      // actually a single frame.
-      if (
-        (raw.workoutState === WORKOUTSTATE_INTERVALWORKTIME ||
-          raw.workoutState === WORKOUTSTATE_INTERVALWORKDISTANCE) &&
-        decoded.averageSplit !== 0
-      ) {
-        lastWorkStateAverageSplit = decoded.averageSplit;
-      }
-    },
-  );
-  mergeStatus(
-    ADDITIONAL_STATUS_2_UUID,
-    "0x0033",
-    parseAdditionalStatus2,
-    (decoded) => {
-      seen.as2 = true;
-      // `splitAvgPaceProvenanceIndex`'s own doc comment (fix round 1,
-      // finding B): stamp THIS sample's own `intervalCount` with the
-      // state that was live the moment it arrived (`raw.workoutState` —
-      // `raw` is already merged with `decoded` by the time this callback
-      // runs, `mergeStatus`'s own doc comment, but `decoded.intervalCount`
-      // is used directly rather than re-reading it off `raw` so this stays
-      // correct even if a later merge races it, which nothing in this
-      // driver does today but nothing should have to prove). `undefined`
-      // `workoutState` (no 0x0031 ever seen yet) leaves this `null` — "no
-      // claim yet", not a fabricated interval.
-      splitAvgPaceProvenanceIndex =
-        raw.workoutState === undefined
-          ? null
-          : toProgramIndex(
-              decoded.intervalCount,
-              toMonitorState(raw.workoutState),
-              armedProgram()?.intervals.length ?? 0,
-            );
-    },
-  );
-  mergeStatus(
-    ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
-    "0x0038",
-    parseAdditionalSplitIntervalData,
-    (decoded) => {
-      noteBoundaryHalf("asSplit", decoded.splitIntervalNumber);
-    },
-  );
-  mergeStatus(
-    GENERAL_STATUS_UUID,
-    "0x0031",
-    parseGeneralStatus,
-    (decoded, bytes) => {
-      seen.general = true;
-      // The walk's mid-rest finished frame (2026-08-15): a payload our
-      // parser read as finished/elapsed=60/distance=0 killed a session 16s
-      // into interval 1's rest, and the ring had no bytes to decode after
-      // the fact — the raw-hex notify branch excludes 0x0031 as a flood,
-      // and frame entries carry decoded fields only. Kept here per tick
-      // (a 19-byte copy, no hex work) and logged ONLY at a terminal
-      // transition, so each session end costs one ring entry and the next
-      // mid-rest terminal convicts its own state byte.
-      lastRaw0x0031 = bytes.slice();
-      // Task 1 (fix-3): the machine's idea of the armed workout's structure,
-      // already decoded by `parseGeneralStatus` (interface-notes.md §10) —
-      // recorded ON CHANGE ONLY, comparing the three DECODED fields rather
-      // than the raw bytes (`elapsed`/`distance`/HR etc. inside the same 19
-      // bytes change on nearly every tick regardless of whether the program
-      // structure itself did, and 0x0031 notifies ~2/second — the exact flood
-      // the raw-hex `notify` branch above already excludes it for). This is
-      // the prerequisite interface-notes.md §17 item 12 has been waiting on:
-      // no 0x0031 payload has ever been recorded before now.
-      const structure = {
-        workoutType: decoded.workoutType,
-        workoutDurationRaw: decoded.workoutDurationRaw,
-        workoutDurationType: decoded.workoutDurationType,
-      };
-      if (
-        !lastLoggedStructure ||
-        structure.workoutType !== lastLoggedStructure.workoutType ||
-        structure.workoutDurationRaw !==
-          lastLoggedStructure.workoutDurationRaw ||
-        structure.workoutDurationType !==
-          lastLoggedStructure.workoutDurationType
-      ) {
-        lastLoggedStructure = structure;
-        log.record(
-          "structure",
-          `workoutType=${structure.workoutType} durationRaw=${structure.workoutDurationRaw} durationType=${structure.workoutDurationType} raw=${toHex(bytes)}`,
-        );
-      }
-      // R0 (CR2 spec 1): the machine's own Total Work Distance, sampled on
-      // a 25 m BUCKET CHANGE (review I1; `TWD_SAMPLE_BUCKET_METERS`'s own
-      // comment and `lastLoggedTwd`'s own comment have the full reasoning
-      // and the ring-budget arithmetic) — NOT on whole-metre change, which
-      // degenerates to one entry per tick at any pace faster than ~4:10/500
-      // and evicted the programming trace exactly like the defect
-      // `lastLoggedFrameState`'s own comment already documents fixing once.
-      // `workoutState`/`durationType` ride along on purpose: the antagonist
-      // established that characterising when this field appears without
-      // decoding the state byte is exactly how the last wrong conclusion
-      // was reached.
-      const twdBucket = Math.floor(
-        decoded.totalWorkDistanceMeters / TWD_SAMPLE_BUCKET_METERS,
-      );
-      const lastLoggedTwdBucket =
-        lastLoggedTwd === null
-          ? null
-          : Math.floor(lastLoggedTwd / TWD_SAMPLE_BUCKET_METERS);
-      if (twdBucket !== lastLoggedTwdBucket) {
-        lastLoggedTwd = decoded.totalWorkDistanceMeters;
-        log.record(
-          "twd-sample",
-          `machineTotal=${decoded.totalWorkDistanceMeters}m at elapsed=${decoded.elapsedSeconds}s ` +
-            `distance=${decoded.distanceMeters}m workoutState=${decoded.workoutState} ` +
-            `durationRaw=${decoded.workoutDurationRaw} durationType=${decoded.workoutDurationType}`,
-        );
-      }
-      // The ack-timeout policy's tick pulse (`DriverOptions.ackTimeout`,
-      // HIGH-2): only counts while a write is genuinely awaiting its ack
-      // (`pendingAck` set) AND a policy was actually configured — otherwise
-      // a fully-connected, un-timed-out session just counts nothing, ever.
-      if (pendingAck && options.ackTimeout) {
-        pendingAckTicks += 1;
-        if (pendingAckTicks >= options.ackTimeout.ticks) {
-          const resolve = pendingAck;
-          pendingAck = null;
-          resolve("ack-timeout");
-        }
-      }
-      maybeEmitFrame();
+  /**
+   * THE DEFERRED GROUP (connect-latency design spec 2026-09-03): the
+   * sample-rate write and the driver's nine status `subscribe()` calls —
+   * eight characteristics, 0x0031 twice — enqueued together, once, at the
+   * moment `releaseStatusSubscriptions` decides rather than at
+   * construction.
+   *
+   * WHY IT IS NOT AT CONSTRUCTION ANY MORE. Every one of these is a real
+   * radio round trip on a transport that serializes them (the Capacitor
+   * plugin's own FIFO promise queue; `capacitorBle.ts`'s QUEUE INVARIANT),
+   * and the arm cannot join the batch because it fires from a React effect
+   * once the link is up. So the program write used to drain ELEVENTH, and
+   * the erg sat on its old screen for ~2s: the same CSAFE Terminate frame
+   * acks in 1698-2058 ms at connect and 136-224 ms mid-session on an empty
+   * queue (`docs/monitor/sessions/ack-latency-census.py`). The CSAFE
+   * response subscription stays at the head, because it is what hears the
+   * ack.
+   *
+   * THE SAMPLE-RATE WRITE LEADS THIS GROUP rather than the constructor: it
+   * exists to set the frame cadence, and cadence cannot matter before any
+   * status subscription exists.
+   */
+  function subscribeStatus(): void {
+    // Fire-and-forget: the fastest documented sample rate (interface-notes.md
+    // §4) so a live countdown isn't stuck at the 500 ms default. A write
+    // failure here is logged, not thrown — it would otherwise turn
+    // `createPm5Driver` into something that can reject before returning,
+    // which the `MonitorDriver` interface (a synchronous constructor) has no
+    // way to surface.
+    t.write(SAMPLE_RATE_UUID, buildSampleRateConfig()).catch((err: unknown) => {
+      log.record("transport-error", `sample rate write failed: ${String(err)}`);
+    });
 
-      // `program()`'s PREPARE-SETTLE tick pulse (`waitForPrepareSettle`,
-      // below, design spec §1b) — STATE-KEYED, unlike `pendingSettle`'s raw
-      // tick-blind subscription (below): needs the DECODED state this same
-      // arrival just merged into `raw`, exactly like `pendingVerify`'s own
-      // pulse just below reads it. Ticks are counted only while the end
-      // condition's first half (`armed`) has not yet been observed — the
-      // instant it is, the very NEXT arrival (any state at all) satisfies
-      // the second half and resolves, uncounted against `ticksNeeded`
-      // (`waitForPrepareSettle`'s own doc comment: `ticksNeeded` bounds the
-      // ticks spent waiting to REACH `armed`, not the one grace tick after).
-      if (pendingPrepareSettle) {
-        const settleState = toMonitorFrame(raw as RawPm5Status).state;
-        if (pendingPrepareSettle.armedSeen) {
-          // Review finding I4: the success path used to record nothing —
-          // the ONE number a future hardware session most needs (how many
-          // ticks this wait actually consumed) was computed here and then
-          // silently discarded. `ticks` counts every arrival since the wait
-          // began UP TO AND INCLUDING the one that first reported `armed`
-          // (incremented once more per arrival, below, before that
-          // arrival's own state is even checked — never incremented again
-          // once `armedSeen` is set) — i.e. the tick NUMBER, within this
-          // wait, at which `armed` was observed. This is the genuine,
-          // live-measured dispatch-to-armed span the historical session-3
-          // log could never produce (no timestamps, on-change logging
-          // only, per `DEFAULT_PREPARE_SETTLE_TICKS`'s own doc comment).
-          const { resolve, ticks } = pendingPrepareSettle;
-          pendingPrepareSettle = null;
+    // AS1/AS2 only merge into `raw` and mark themselves `seen` — they do NOT
+    // themselves trigger a `frame` event. `GENERAL_STATUS_UUID`'s handler
+    // below is the sole "tick pulse" for `frame` events (interface-notes.md
+    // §4: General/AdditionalStatus1/2 are all sampled at the same rate, so
+    // treating any ONE of them as the trigger and merging the other two's
+    // latest values in is sufficient — and necessary: wiring `maybeEmitFrame`
+    // to all three would fire three redundant `frame` events per real tick
+    // once every characteristic has been `seen` at least once, which is
+    // exactly what an earlier version of this function did and a test caught
+    // (see the report).
+    mergeStatus(
+      ADDITIONAL_STATUS_1_UUID,
+      "0x0032",
+      parseAdditionalStatus1,
+      (decoded) => {
+        seen.as1 = true;
+        // RC-9a (`lastWorkStateAverageSplit`'s own doc comment carries the
+        // full reasoning): `raw` is already merged with `decoded` by the
+        // time this callback runs (`mergeStatus`'s own doc comment), but
+        // `raw.workoutState` is 0x0031's own field — this tick's 0x0032
+        // sample is judged against whichever 0x0031 reading is most recently
+        // merged, same "sampled at the same rate" idiom
+        // `splitAvgPaceProvenanceIndex`'s own callback (0x0033, below) already
+        // uses. `!== 0` excludes the interval-reset artifact — see the field's
+        // own comment for why this driver's own decode shows it is not
+        // actually a single frame.
+        if (
+          (raw.workoutState === WORKOUTSTATE_INTERVALWORKTIME ||
+            raw.workoutState === WORKOUTSTATE_INTERVALWORKDISTANCE) &&
+          decoded.averageSplit !== 0
+        ) {
+          lastWorkStateAverageSplit = decoded.averageSplit;
+        }
+      },
+    );
+    mergeStatus(
+      ADDITIONAL_STATUS_2_UUID,
+      "0x0033",
+      parseAdditionalStatus2,
+      (decoded) => {
+        seen.as2 = true;
+        // `splitAvgPaceProvenanceIndex`'s own doc comment (fix round 1,
+        // finding B): stamp THIS sample's own `intervalCount` with the
+        // state that was live the moment it arrived (`raw.workoutState` —
+        // `raw` is already merged with `decoded` by the time this callback
+        // runs, `mergeStatus`'s own doc comment, but `decoded.intervalCount`
+        // is used directly rather than re-reading it off `raw` so this stays
+        // correct even if a later merge races it, which nothing in this
+        // driver does today but nothing should have to prove). `undefined`
+        // `workoutState` (no 0x0031 ever seen yet) leaves this `null` — "no
+        // claim yet", not a fabricated interval.
+        splitAvgPaceProvenanceIndex =
+          raw.workoutState === undefined
+            ? null
+            : toProgramIndex(
+                decoded.intervalCount,
+                toMonitorState(raw.workoutState),
+                armedProgram()?.intervals.length ?? 0,
+              );
+      },
+    );
+    mergeStatus(
+      ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+      "0x0038",
+      parseAdditionalSplitIntervalData,
+      (decoded) => {
+        noteBoundaryHalf("asSplit", decoded.splitIntervalNumber);
+      },
+    );
+    mergeStatus(
+      GENERAL_STATUS_UUID,
+      "0x0031",
+      parseGeneralStatus,
+      (decoded, bytes) => {
+        seen.general = true;
+        // The walk's mid-rest finished frame (2026-08-15): a payload our
+        // parser read as finished/elapsed=60/distance=0 killed a session 16s
+        // into interval 1's rest, and the ring had no bytes to decode after
+        // the fact — the raw-hex notify branch excludes 0x0031 as a flood,
+        // and frame entries carry decoded fields only. Kept here per tick
+        // (a 19-byte copy, no hex work) and logged ONLY at a terminal
+        // transition, so each session end costs one ring entry and the next
+        // mid-rest terminal convicts its own state byte.
+        lastRaw0x0031 = bytes.slice();
+        // Task 1 (fix-3): the machine's idea of the armed workout's structure,
+        // already decoded by `parseGeneralStatus` (interface-notes.md §10) —
+        // recorded ON CHANGE ONLY, comparing the three DECODED fields rather
+        // than the raw bytes (`elapsed`/`distance`/HR etc. inside the same 19
+        // bytes change on nearly every tick regardless of whether the program
+        // structure itself did, and 0x0031 notifies ~2/second — the exact flood
+        // the raw-hex `notify` branch above already excludes it for). This is
+        // the prerequisite interface-notes.md §17 item 12 has been waiting on:
+        // no 0x0031 payload has ever been recorded before now.
+        const structure = {
+          workoutType: decoded.workoutType,
+          workoutDurationRaw: decoded.workoutDurationRaw,
+          workoutDurationType: decoded.workoutDurationType,
+        };
+        if (
+          !lastLoggedStructure ||
+          structure.workoutType !== lastLoggedStructure.workoutType ||
+          structure.workoutDurationRaw !==
+            lastLoggedStructure.workoutDurationRaw ||
+          structure.workoutDurationType !==
+            lastLoggedStructure.workoutDurationType
+        ) {
+          lastLoggedStructure = structure;
           log.record(
-            "prepare-settled",
-            `"armed" observed on tick ${ticks} of the wait; released one tick later (that tick's state: "${settleState}")`,
+            "structure",
+            `workoutType=${structure.workoutType} durationRaw=${structure.workoutDurationRaw} durationType=${structure.workoutDurationType} raw=${toHex(bytes)}`,
           );
-          resolve();
-        } else {
-          pendingPrepareSettle.ticks += 1;
-          if (pendingPrepareSettle.ticks >= pendingPrepareSettle.ticksNeeded) {
+        }
+        // R0 (CR2 spec 1): the machine's own Total Work Distance, sampled on
+        // a 25 m BUCKET CHANGE (review I1; `TWD_SAMPLE_BUCKET_METERS`'s own
+        // comment and `lastLoggedTwd`'s own comment have the full reasoning
+        // and the ring-budget arithmetic) — NOT on whole-metre change, which
+        // degenerates to one entry per tick at any pace faster than ~4:10/500
+        // and evicted the programming trace exactly like the defect
+        // `lastLoggedFrameState`'s own comment already documents fixing once.
+        // `workoutState`/`durationType` ride along on purpose: the antagonist
+        // established that characterising when this field appears without
+        // decoding the state byte is exactly how the last wrong conclusion
+        // was reached.
+        const twdBucket = Math.floor(
+          decoded.totalWorkDistanceMeters / TWD_SAMPLE_BUCKET_METERS,
+        );
+        const lastLoggedTwdBucket =
+          lastLoggedTwd === null
+            ? null
+            : Math.floor(lastLoggedTwd / TWD_SAMPLE_BUCKET_METERS);
+        if (twdBucket !== lastLoggedTwdBucket) {
+          lastLoggedTwd = decoded.totalWorkDistanceMeters;
+          log.record(
+            "twd-sample",
+            `machineTotal=${decoded.totalWorkDistanceMeters}m at elapsed=${decoded.elapsedSeconds}s ` +
+              `distance=${decoded.distanceMeters}m workoutState=${decoded.workoutState} ` +
+              `durationRaw=${decoded.workoutDurationRaw} durationType=${decoded.workoutDurationType}`,
+          );
+        }
+        // The ack-timeout policy's tick pulse (`DriverOptions.ackTimeout`,
+        // HIGH-2): only counts while a write is genuinely awaiting its ack
+        // (`pendingAck` set) AND a policy was actually configured — otherwise
+        // a fully-connected, un-timed-out session just counts nothing, ever.
+        if (pendingAck && options.ackTimeout) {
+          pendingAckTicks += 1;
+          if (pendingAckTicks >= options.ackTimeout.ticks) {
+            const resolve = pendingAck;
+            pendingAck = null;
+            resolve("ack-timeout");
+          }
+        }
+        maybeEmitFrame();
+
+        // `program()`'s PREPARE-SETTLE tick pulse (`waitForPrepareSettle`,
+        // below, design spec §1b) — STATE-KEYED, unlike `pendingSettle`'s raw
+        // tick-blind subscription (below): needs the DECODED state this same
+        // arrival just merged into `raw`, exactly like `pendingVerify`'s own
+        // pulse just below reads it. Ticks are counted only while the end
+        // condition's first half (`armed`) has not yet been observed — the
+        // instant it is, the very NEXT arrival (any state at all) satisfies
+        // the second half and resolves, uncounted against `ticksNeeded`
+        // (`waitForPrepareSettle`'s own doc comment: `ticksNeeded` bounds the
+        // ticks spent waiting to REACH `armed`, not the one grace tick after).
+        if (pendingPrepareSettle) {
+          const settleState = toMonitorFrame(raw as RawPm5Status).state;
+          if (pendingPrepareSettle.armedSeen) {
+            // Review finding I4: the success path used to record nothing —
+            // the ONE number a future hardware session most needs (how many
+            // ticks this wait actually consumed) was computed here and then
+            // silently discarded. `ticks` counts every arrival since the wait
+            // began UP TO AND INCLUDING the one that first reported `armed`
+            // (incremented once more per arrival, below, before that
+            // arrival's own state is even checked — never incremented again
+            // once `armedSeen` is set) — i.e. the tick NUMBER, within this
+            // wait, at which `armed` was observed. This is the genuine,
+            // live-measured dispatch-to-armed span the historical session-3
+            // log could never produce (no timestamps, on-change logging
+            // only, per `DEFAULT_PREPARE_SETTLE_TICKS`'s own doc comment).
             const { resolve, ticks } = pendingPrepareSettle;
             pendingPrepareSettle = null;
-            // Whole-branch review M1: `ticks` is incremented above BEFORE
-            // this same arrival's own state is checked, so the bound can be
-            // hit on the very tick that reports "armed" — the one case
-            // where the generic "no armed state observed" headline would be
-            // false (`armedSeen` is only set below, on a tick that never
-            // gets here). Behaviour is unchanged (this still expires rather
-            // than granting the +1 grace — that grace is earned by an
-            // EARLIER tick's `armedSeen`, not this one); only the message
-            // is branched, so it never asserts an absence it just
-            // contradicted in the same breath.
             log.record(
-              "prepare-settle-expired",
-              settleState === "armed"
-                ? `${ticks} tick(s) elapsed; "armed" was first observed on this very (final) tick — one short of the required +1 grace tick — proceeding without confirmation; the structural readback (verifyArmed, fix-3 Task 4) is the net`
-                : `${ticks} tick(s) elapsed with no "armed" state observed (last state: ${settleState}) — proceeding without confirmation; the structural readback (verifyArmed, fix-3 Task 4) is the net`,
+              "prepare-settled",
+              `"armed" observed on tick ${ticks} of the wait; released one tick later (that tick's state: "${settleState}")`,
             );
             resolve();
-          } else if (settleState === "armed") {
-            pendingPrepareSettle.armedSeen = true;
-          }
-        }
-      }
-
-      // `program()`'s verification tick pulse (`verifyArmed`, below) — the
-      // SAME GENERAL_STATUS_UUID arrival `maybeEmitFrame` just used, per
-      // `DriverOptions.verifyTicks`'s own doc comment on why this is a
-      // separate budget from `pendingAckTicks` above. Reads `raw.workoutState`
-      // directly via `toMonitorFrame` rather than waiting on `maybeEmitFrame`'s
-      // own `seen.general && seen.as1 && seen.as2` gate: verification only
-      // ever needs `state`, which 0x0031 alone determines, so it must not be
-      // held hostage by AS1/AS2 notifications that a real PM sends on the
-      // same cadence but that carry fields verification doesn't use.
-      //
-      // Fix-3 Task 4: the predicate is now `armed` AND the STRUCTURE, read
-      // from THIS arrival's own decode (`structure` above — the same tap
-      // Task 1's log takes, deliberately not routed through `MonitorFrame`,
-      // which has never carried these three fields and gains nothing by
-      // starting to; consumers are unchanged by this task).
-      if (pendingVerify) {
-        const armed = toMonitorFrame(raw as RawPm5Status).state === "armed";
-        if (armed && sameStructure(structure, pendingVerify.expected)) {
-          const resolve = pendingVerify.resolve;
-          pendingVerify = null;
-          resolve();
-        } else {
-          // The N-consecutive-STABLE-mismatch rule
-          // (`STRUCTURE_MISMATCH_TICKS`'s own doc comment carries both
-          // hardware facts it is built on). A tick that is not a
-          // mismatched ARMED tick — the machine mid-cycle, still
-          // terminated/idle/rowing — makes no claim about the armed
-          // workout at all and restarts the count; so does a mismatched
-          // armed tick whose payload differs from the previous one.
-          if (armed) {
-            const continues =
-              pendingVerify.lastMismatch !== null &&
-              sameStructure(structure, pendingVerify.lastMismatch);
-            pendingVerify.mismatchStreak = continues
-              ? pendingVerify.mismatchStreak + 1
-              : 1;
-            // The wall clock starts with the streak and restarts with it
-            // (`mismatchSince`'s own comment): a new payload is a new claim,
-            // and the window measures how long ONE claim has held.
-            if (!continues) pendingVerify.mismatchSince = now();
-            pendingVerify.lastMismatch = structure;
-            // The OBSERVATION (what the outer bound's typed reason reads)
-            // and the TRACE (written once, at first sighting) are recorded
-            // separately on purpose — see `sawArmedMismatch`'s own comment.
-            pendingVerify.sawArmedMismatch = true;
-            if (!pendingVerify.mismatchLogged) {
-              pendingVerify.mismatchLogged = true;
+          } else {
+            pendingPrepareSettle.ticks += 1;
+            if (
+              pendingPrepareSettle.ticks >= pendingPrepareSettle.ticksNeeded
+            ) {
+              const { resolve, ticks } = pendingPrepareSettle;
+              pendingPrepareSettle = null;
+              // Whole-branch review M1: `ticks` is incremented above BEFORE
+              // this same arrival's own state is checked, so the bound can be
+              // hit on the very tick that reports "armed" — the one case
+              // where the generic "no armed state observed" headline would be
+              // false (`armedSeen` is only set below, on a tick that never
+              // gets here). Behaviour is unchanged (this still expires rather
+              // than granting the +1 grace — that grace is earned by an
+              // EARLIER tick's `armedSeen`, not this one); only the message
+              // is branched, so it never asserts an absence it just
+              // contradicted in the same breath.
               log.record(
-                "structure-mismatch",
-                `first sighting — ${describeStructureMismatch(structure, pendingVerify.expected)} (one entry per verify phase, never per tick; a HEALTHY arm whose first tick lagged leaves exactly this entry and still resolves)`,
+                "prepare-settle-expired",
+                settleState === "armed"
+                  ? `${ticks} tick(s) elapsed; "armed" was first observed on this very (final) tick — one short of the required +1 grace tick — proceeding without confirmation; the structural readback (verifyArmed, fix-3 Task 4) is the net`
+                  : `${ticks} tick(s) elapsed with no "armed" state observed (last state: ${settleState}) — proceeding without confirmation; the structural readback (verifyArmed, fix-3 Task 4) is the net`,
               );
+              resolve();
+            } else if (settleState === "armed") {
+              pendingPrepareSettle.armedSeen = true;
             }
-          } else {
-            pendingVerify.mismatchStreak = 0;
-            pendingVerify.lastMismatch = null;
-            pendingVerify.mismatchSince = null;
-          }
-          pendingVerify.ticks += 1;
-          const { ticks, mismatchStreak, sawArmedMismatch, mismatchSince } =
-            pendingVerify;
-          const bounded =
-            ticks >= (options.verifyTicks ?? DEFAULT_VERIFY_TICKS);
-          // BOTH halves, or no verdict (walk 5 —
-          // `STRUCTURE_MISMATCH_WINDOW_MS`'s own doc comment carries the
-          // two-step structure update this second condition exists for). The
-          // streak says the machine is holding STILL; the window says it has
-          // held still for longer than any transition anyone has recorded.
-          // Three ticks alone was a verdict a faster radio could win: iOS's
-          // ~90-180 ms cadence fits three of them inside the PM5's own
-          // ~180 ms two-step update, and did, intermittently, at the erg.
-          const heldMs = mismatchSince === null ? null : now() - mismatchSince;
-          if (
-            mismatchStreak >= STRUCTURE_MISMATCH_TICKS &&
-            heldMs !== null &&
-            heldMs >= STRUCTURE_MISMATCH_WINDOW_MS
-          ) {
-            settleVerifyFailure(
-              "structure-mismatch",
-              `${mismatchStreak} consecutive armed tick(s) over ${heldMs}ms reporting the same wrong structure — ${describeStructureMismatch(structure, pendingVerify.expected)}`,
-            );
-          } else if (bounded) {
-            // Which reason the OUTER bound reports depends on what was
-            // actually seen. A machine that reached `armed` at least once
-            // and disagreed about the structure has told us something
-            // specific, even if its wrong payload never held still long
-            // enough for the streak to fire; a machine that never armed at
-            // all has said nothing about structure and must not be
-            // reported as though it had.
-            settleVerifyFailure(
-              sawArmedMismatch ? "structure-mismatch" : "not-observed",
-              sawArmedMismatch
-                ? `${ticks} tick(s) elapsed without a matching armed structure — last ${describeStructureMismatch(structure, pendingVerify.expected)}`
-                : `${ticks} tick(s) elapsed with no "armed" state observed (last raw workoutState: ${raw.workoutState})`,
-            );
           }
         }
-      } else if (!armedWatchFired && !programInFlight) {
-        // RC-37's own watch (`armedWatch`'s doc comment) — runs on every
-        // tick OUTSIDE a verify phase, for as long as a program has ever
-        // armed.
+
+        // `program()`'s verification tick pulse (`verifyArmed`, below) — the
+        // SAME GENERAL_STATUS_UUID arrival `maybeEmitFrame` just used, per
+        // `DriverOptions.verifyTicks`'s own doc comment on why this is a
+        // separate budget from `pendingAckTicks` above. Reads `raw.workoutState`
+        // directly via `toMonitorFrame` rather than waiting on `maybeEmitFrame`'s
+        // own `seen.general && seen.as1 && seen.as2` gate: verification only
+        // ever needs `state`, which 0x0031 alone determines, so it must not be
+        // held hostage by AS1/AS2 notifications that a real PM sends on the
+        // same cadence but that carry fields verification doesn't use.
         //
-        // **`!programInFlight` is NOT redundant with the `pendingVerify`
-        // check above (fix round 1, MUST-FIX — an earlier version of this
-        // comment claimed the re-arm window was already covered; it was
-        // not, and the claim itself was the worse half of the bug).**
-        // `pendingVerify` is non-null only during `verifyArmed`, the LAST
-        // of `program()`'s four phases (`sendPrepare` ->
-        // `waitForPrepareSettle` -> `sendSequence` -> `verifyArmed`).
-        // Through the first three, `pendingVerify` is null and
-        // `armedProgram()` still returns the OUTGOING program —
-        // `activeRun` is replaced only on the success path, after
-        // `verifyArmed` resolves. Left ungated, a re-arm in flight ran
-        // straight into this watch: `sendPrepare()`'s own Terminate drives
-        // the machine through Terminate -> Rearm -> WaitToBegin (state 0,
-        // "armed") holding its UNPROGRAMMED default
-        // (workoutType=1/durationRaw=0/durationType=128 — RC-37's OWN
-        // POSITIVE SHAPE), stably, for as long as the real `sendSequence`
-        // send takes — comparing that against the OUTGOING program's
-        // now-stale expectation fires a false `structure-left` mid-arm,
-        // tearing the driver down while the rower is watching "SENDING THE
-        // WORKOUT". `programInFlight` (already used to gate re-entrant
-        // `program()` calls, `:5782`/`:5934`) is true across all four
-        // phases and false only once `program()`'s own `finally` runs, so
-        // gating on it closes the window `pendingVerify` alone does not.
-        const armedWorkout = armedProgram();
-        const armed = toMonitorFrame(raw as RawPm5Status).state === "armed";
-        // `activeRun.freeRow` opts out (Phase JR PR 2), for the same reason
-        // the divergence escalation does: this watchdog exists to notice the
-        // machine quietly ceasing to hold the workout WE armed, and a free
-        // row arms no interval structure to stop holding (the p.80 frame it
-        // does send since spec 2026-09-02 carries none — see the divergence
-        // opt-out's own note). Opening its run makes `armedWorkout` non-null,
-        // so without this the watchdog would compare the machine's readback
-        // against a zero-interval program and could report the program
-        // dropped on a row that never had one.
-        if (armedWorkout !== null && !activeRun?.freeRow) {
-          if (!armed) {
-            // Left "armed" (rowing/resting/finished/terminated/idle) with
-            // no verdict reached — the rower pulled, or the machine cycled
-            // on its own. Not itself suspicious (the `armed` gate's own
-            // reason, `verifyArmed`'s comment: the structural quadruple
-            // legitimately moves mid-session outside "armed"); a streak
-            // that had started is the NEAR-MISS worth a ring line.
-            if (armedWatch.mismatchStreak > 0) {
-              recordArmedWatchRecovered(
-                `${armedWatch.mismatchStreak} consecutive armed tick(s) over ${now() - armedWatch.mismatchSince!}ms reporting the wrong structure, then the machine left "armed" before either threshold — ${describeStructureMismatch(armedWatch.lastMismatch!, expectedArmedStructure(armedWorkout))}`,
-              );
-              armedWatch = {
-                lastMismatch: null,
-                mismatchStreak: 0,
-                mismatchSince: null,
-              };
-            }
+        // Fix-3 Task 4: the predicate is now `armed` AND the STRUCTURE, read
+        // from THIS arrival's own decode (`structure` above — the same tap
+        // Task 1's log takes, deliberately not routed through `MonitorFrame`,
+        // which has never carried these three fields and gains nothing by
+        // starting to; consumers are unchanged by this task).
+        if (pendingVerify) {
+          const armed = toMonitorFrame(raw as RawPm5Status).state === "armed";
+          if (armed && sameStructure(structure, pendingVerify.expected)) {
+            const resolve = pendingVerify.resolve;
+            pendingVerify = null;
+            resolve();
           } else {
-            const expected = expectedArmedStructure(armedWorkout);
-            if (sameStructure(structure, expected)) {
-              // The common case, every armed tick once a program has
-              // settled: no allocation unless there was a streak to close
-              // out (the near-miss, same reasoning as the `!armed` branch
-              // above — a healthy arm whose first tick or two lagged the
-              // PM5's own two-step structure update, `STRUCTURE_MISMATCH_
-              // WINDOW_MS`'s own doc comment, self-corrects here).
+            // The N-consecutive-STABLE-mismatch rule
+            // (`STRUCTURE_MISMATCH_TICKS`'s own doc comment carries both
+            // hardware facts it is built on). A tick that is not a
+            // mismatched ARMED tick — the machine mid-cycle, still
+            // terminated/idle/rowing — makes no claim about the armed
+            // workout at all and restarts the count; so does a mismatched
+            // armed tick whose payload differs from the previous one.
+            if (armed) {
+              const continues =
+                pendingVerify.lastMismatch !== null &&
+                sameStructure(structure, pendingVerify.lastMismatch);
+              pendingVerify.mismatchStreak = continues
+                ? pendingVerify.mismatchStreak + 1
+                : 1;
+              // The wall clock starts with the streak and restarts with it
+              // (`mismatchSince`'s own comment): a new payload is a new claim,
+              // and the window measures how long ONE claim has held.
+              if (!continues) pendingVerify.mismatchSince = now();
+              pendingVerify.lastMismatch = structure;
+              // The OBSERVATION (what the outer bound's typed reason reads)
+              // and the TRACE (written once, at first sighting) are recorded
+              // separately on purpose — see `sawArmedMismatch`'s own comment.
+              pendingVerify.sawArmedMismatch = true;
+              if (!pendingVerify.mismatchLogged) {
+                pendingVerify.mismatchLogged = true;
+                log.record(
+                  "structure-mismatch",
+                  `first sighting — ${describeStructureMismatch(structure, pendingVerify.expected)} (one entry per verify phase, never per tick; a HEALTHY arm whose first tick lagged leaves exactly this entry and still resolves)`,
+                );
+              }
+            } else {
+              pendingVerify.mismatchStreak = 0;
+              pendingVerify.lastMismatch = null;
+              pendingVerify.mismatchSince = null;
+            }
+            pendingVerify.ticks += 1;
+            const { ticks, mismatchStreak, sawArmedMismatch, mismatchSince } =
+              pendingVerify;
+            const bounded =
+              ticks >= (options.verifyTicks ?? DEFAULT_VERIFY_TICKS);
+            // BOTH halves, or no verdict (walk 5 —
+            // `STRUCTURE_MISMATCH_WINDOW_MS`'s own doc comment carries the
+            // two-step structure update this second condition exists for). The
+            // streak says the machine is holding STILL; the window says it has
+            // held still for longer than any transition anyone has recorded.
+            // Three ticks alone was a verdict a faster radio could win: iOS's
+            // ~90-180 ms cadence fits three of them inside the PM5's own
+            // ~180 ms two-step update, and did, intermittently, at the erg.
+            const heldMs =
+              mismatchSince === null ? null : now() - mismatchSince;
+            if (
+              mismatchStreak >= STRUCTURE_MISMATCH_TICKS &&
+              heldMs !== null &&
+              heldMs >= STRUCTURE_MISMATCH_WINDOW_MS
+            ) {
+              settleVerifyFailure(
+                "structure-mismatch",
+                `${mismatchStreak} consecutive armed tick(s) over ${heldMs}ms reporting the same wrong structure — ${describeStructureMismatch(structure, pendingVerify.expected)}`,
+              );
+            } else if (bounded) {
+              // Which reason the OUTER bound reports depends on what was
+              // actually seen. A machine that reached `armed` at least once
+              // and disagreed about the structure has told us something
+              // specific, even if its wrong payload never held still long
+              // enough for the streak to fire; a machine that never armed at
+              // all has said nothing about structure and must not be
+              // reported as though it had.
+              settleVerifyFailure(
+                sawArmedMismatch ? "structure-mismatch" : "not-observed",
+                sawArmedMismatch
+                  ? `${ticks} tick(s) elapsed without a matching armed structure — last ${describeStructureMismatch(structure, pendingVerify.expected)}`
+                  : `${ticks} tick(s) elapsed with no "armed" state observed (last raw workoutState: ${raw.workoutState})`,
+              );
+            }
+          }
+        } else if (!armedWatchFired && !programInFlight) {
+          // RC-37's own watch (`armedWatch`'s doc comment) — runs on every
+          // tick OUTSIDE a verify phase, for as long as a program has ever
+          // armed.
+          //
+          // **`!programInFlight` is NOT redundant with the `pendingVerify`
+          // check above (fix round 1, MUST-FIX — an earlier version of this
+          // comment claimed the re-arm window was already covered; it was
+          // not, and the claim itself was the worse half of the bug).**
+          // `pendingVerify` is non-null only during `verifyArmed`, the LAST
+          // of `program()`'s four phases (`sendPrepare` ->
+          // `waitForPrepareSettle` -> `sendSequence` -> `verifyArmed`).
+          // Through the first three, `pendingVerify` is null and
+          // `armedProgram()` still returns the OUTGOING program —
+          // `activeRun` is replaced only on the success path, after
+          // `verifyArmed` resolves. Left ungated, a re-arm in flight ran
+          // straight into this watch: `sendPrepare()`'s own Terminate drives
+          // the machine through Terminate -> Rearm -> WaitToBegin (state 0,
+          // "armed") holding its UNPROGRAMMED default
+          // (workoutType=1/durationRaw=0/durationType=128 — RC-37's OWN
+          // POSITIVE SHAPE), stably, for as long as the real `sendSequence`
+          // send takes — comparing that against the OUTGOING program's
+          // now-stale expectation fires a false `structure-left` mid-arm,
+          // tearing the driver down while the rower is watching "SENDING THE
+          // WORKOUT". `programInFlight` (already used to gate re-entrant
+          // `program()` calls, `:5782`/`:5934`) is true across all four
+          // phases and false only once `program()`'s own `finally` runs, so
+          // gating on it closes the window `pendingVerify` alone does not.
+          const armedWorkout = armedProgram();
+          const armed = toMonitorFrame(raw as RawPm5Status).state === "armed";
+          // `activeRun.freeRow` opts out (Phase JR PR 2), for the same reason
+          // the divergence escalation does: this watchdog exists to notice the
+          // machine quietly ceasing to hold the workout WE armed, and a free
+          // row arms no interval structure to stop holding (the p.80 frame it
+          // does send since spec 2026-09-02 carries none — see the divergence
+          // opt-out's own note). Opening its run makes `armedWorkout` non-null,
+          // so without this the watchdog would compare the machine's readback
+          // against a zero-interval program and could report the program
+          // dropped on a row that never had one.
+          if (armedWorkout !== null && !activeRun?.freeRow) {
+            if (!armed) {
+              // Left "armed" (rowing/resting/finished/terminated/idle) with
+              // no verdict reached — the rower pulled, or the machine cycled
+              // on its own. Not itself suspicious (the `armed` gate's own
+              // reason, `verifyArmed`'s comment: the structural quadruple
+              // legitimately moves mid-session outside "armed"); a streak
+              // that had started is the NEAR-MISS worth a ring line.
               if (armedWatch.mismatchStreak > 0) {
                 recordArmedWatchRecovered(
-                  `${armedWatch.mismatchStreak} consecutive armed tick(s) over ${now() - armedWatch.mismatchSince!}ms reporting the wrong structure, then a matching armed tick arrived before either threshold — ${describeStructureMismatch(armedWatch.lastMismatch!, expected)}`,
+                  `${armedWatch.mismatchStreak} consecutive armed tick(s) over ${now() - armedWatch.mismatchSince!}ms reporting the wrong structure, then the machine left "armed" before either threshold — ${describeStructureMismatch(armedWatch.lastMismatch!, expectedArmedStructure(armedWorkout))}`,
                 );
                 armedWatch = {
                   lastMismatch: null,
@@ -5270,175 +5309,256 @@ export function createPm5Driver(
                 };
               }
             } else {
-              // The N-consecutive-STABLE-mismatch rule, identical to
-              // `pendingVerify`'s own above (`STRUCTURE_MISMATCH_TICKS`'s
-              // doc comment carries the hardware facts): a payload that
-              // keeps changing is a machine still settling, not a machine
-              // holding the wrong workout, so only a REPEATED identical
-              // wrong reading extends the streak.
-              const continues =
-                armedWatch.lastMismatch !== null &&
-                sameStructure(structure, armedWatch.lastMismatch);
-              const mismatchStreak = continues
-                ? armedWatch.mismatchStreak + 1
-                : 1;
-              const mismatchSince = continues
-                ? armedWatch.mismatchSince!
-                : now();
-              const heldMs = now() - mismatchSince;
-              // BOTH halves, never one alone (`STRUCTURE_MISMATCH_WINDOW_
-              // MS`'s own doc comment — the false economy an antagonist
-              // pass already caught in an earlier revision of this spec).
-              if (
-                mismatchStreak >= STRUCTURE_MISMATCH_TICKS &&
-                heldMs >= STRUCTURE_MISMATCH_WINDOW_MS
-              ) {
-                log.record(
-                  "structure-left",
-                  `${mismatchStreak} consecutive armed tick(s) over ${heldMs}ms reporting a structure that does not match the sent program — ${describeStructureMismatch(structure, expected)}`,
-                );
-                armedWatch = {
-                  lastMismatch: null,
-                  mismatchStreak: 0,
-                  mismatchSince: null,
-                };
-                armedWatchFired = true;
-                emit({ kind: "programDropped" });
+              const expected = expectedArmedStructure(armedWorkout);
+              if (sameStructure(structure, expected)) {
+                // The common case, every armed tick once a program has
+                // settled: no allocation unless there was a streak to close
+                // out (the near-miss, same reasoning as the `!armed` branch
+                // above — a healthy arm whose first tick or two lagged the
+                // PM5's own two-step structure update, `STRUCTURE_MISMATCH_
+                // WINDOW_MS`'s own doc comment, self-corrects here).
+                if (armedWatch.mismatchStreak > 0) {
+                  recordArmedWatchRecovered(
+                    `${armedWatch.mismatchStreak} consecutive armed tick(s) over ${now() - armedWatch.mismatchSince!}ms reporting the wrong structure, then a matching armed tick arrived before either threshold — ${describeStructureMismatch(armedWatch.lastMismatch!, expected)}`,
+                  );
+                  armedWatch = {
+                    lastMismatch: null,
+                    mismatchStreak: 0,
+                    mismatchSince: null,
+                  };
+                }
               } else {
-                armedWatch = {
-                  lastMismatch: structure,
-                  mismatchStreak,
-                  mismatchSince,
-                };
+                // The N-consecutive-STABLE-mismatch rule, identical to
+                // `pendingVerify`'s own above (`STRUCTURE_MISMATCH_TICKS`'s
+                // doc comment carries the hardware facts): a payload that
+                // keeps changing is a machine still settling, not a machine
+                // holding the wrong workout, so only a REPEATED identical
+                // wrong reading extends the streak.
+                const continues =
+                  armedWatch.lastMismatch !== null &&
+                  sameStructure(structure, armedWatch.lastMismatch);
+                const mismatchStreak = continues
+                  ? armedWatch.mismatchStreak + 1
+                  : 1;
+                const mismatchSince = continues
+                  ? armedWatch.mismatchSince!
+                  : now();
+                const heldMs = now() - mismatchSince;
+                // BOTH halves, never one alone (`STRUCTURE_MISMATCH_WINDOW_
+                // MS`'s own doc comment — the false economy an antagonist
+                // pass already caught in an earlier revision of this spec).
+                if (
+                  mismatchStreak >= STRUCTURE_MISMATCH_TICKS &&
+                  heldMs >= STRUCTURE_MISMATCH_WINDOW_MS
+                ) {
+                  log.record(
+                    "structure-left",
+                    `${mismatchStreak} consecutive armed tick(s) over ${heldMs}ms reporting a structure that does not match the sent program — ${describeStructureMismatch(structure, expected)}`,
+                  );
+                  armedWatch = {
+                    lastMismatch: null,
+                    mismatchStreak: 0,
+                    mismatchSince: null,
+                  };
+                  armedWatchFired = true;
+                  emit({ kind: "programDropped" });
+                } else {
+                  armedWatch = {
+                    lastMismatch: structure,
+                    mismatchStreak,
+                    mismatchSince,
+                  };
+                }
               }
             }
           }
         }
-      }
-    },
-  );
-  mergeStatus(
-    SPLIT_INTERVAL_DATA_UUID,
-    "0x0037",
-    parseSplitIntervalData,
-    (decoded) => {
-      noteBoundaryHalf("split", decoded.splitIntervalNumber);
-    },
-  );
-
-  // Fast-follow Task 1 (design spec §5): RAW subscriptions, deliberately
-  // NOT routed through `mergeStatus` — 0x0039/0x003A have their own decode
-  // (`parseEndOfWorkoutSummary`, not `mergeStatus`'s `Pm5ParseError`-typed
-  // idiom) and are never merged into `raw`/`RawPm5Status` (`WorkoutSummary`
-  // is a whole-workout total, not a per-tick status field).
-  //
-  // Receipt is logged for BOTH (`summary-half`, mirroring
-  // `noteBoundaryHalf`'s own site/voice) and only 0x0039 GATES the
-  // reconcile (Task 2's gate, `noteSummary` — review I5: every field the
-  // gate needs rides 0x0039, and waiting on 0x003A would rebuild the drop
-  // fragility R1 exists to fix). Receipt is logged FIRST on purpose: a
-  // stash must show that the bytes arrived even when the verdict below is
-  // that they change nothing.
-  t.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (bytes) => {
-    noteSummaryHalf("0x0039", bytes);
-    noteSummary(bytes);
-  });
-  // `bytes` (Phase LL Task 1): this callback used to take NO parameter at
-  // all — 0x003A's own hex could never reach the ring no matter what
-  // (`noteSummaryHalf`'s own updated doc comment has the full reasoning).
-  // RC-9d (design spec 2026-08-25-free-oracles §3): `recordRestDistanceVerdict`
-  // now reads that hex too, same call-order discipline as 0x0039 above —
-  // receipt (`summary-half`) logged first, the decode/verdict second, so a
-  // stash always shows the bytes arrived even if the verdict itself
-  // suppresses. This is still NOT the reconcile gate: `recordRestDistanceVerdict`
-  // writes its own `rest-distance-verdict` ring entry and nothing else,
-  // never touching `run.recordedActuals`/`finishGraceUntil` or any other
-  // state `noteSummary`'s gate depends on.
-  t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (bytes) => {
-    noteSummaryHalf("0x003A", bytes);
-    recordRestDistanceVerdict(bytes);
-  });
-
-  // 0x003F, the PRODUCTION subscriber (storage-spine design spec §2,
-  // delta-pass B3): raw bytes only, same as the two above — no decode
-  // lives here (`uuids.ts`'s own doc comment: the byte order is disputed
-  // WITHIN the BLE spec itself, unsettled until a hardware walk reads
-  // it). Non-critical by omission: this UUID is not in either transport's
-  // `CRITICAL_CHARACTERISTICS` set, so a subscribe rejection here degrades
-  // (`onCharacteristicDegraded` — LL's existing mechanism, unchanged by
-  // this task) rather than ending the session, exactly like the two
-  // summary characteristics above. Attributed to whichever run is open AT
-  // RECEIPT, same as `noteSummary`'s own `activeRun` read — `null` (no
-  // run open) simply leaves nothing to attribute it to, since a bare
-  // reading with no workout of ours to belong to is not evidence about
-  // any run's finish.
-  t.subscribe(LOGGED_WORKOUT_UUID, (bytes) => {
-    log.record(
-      "verification-received",
-      `0x003F received (run ${runIsOpen() ? "open" : "closed"}, state=${toMonitorFrame(raw as RawPm5Status).state}) raw=${toHex(bytes)}`,
+      },
     );
-    if (activeRun !== null) {
-      activeRun.verificationBytes = Array.from(bytes);
-      // CALL SITE 4 (final-review fix wave, HIGH-2): the hash's own
-      // arrival is the fourth place `maybeReconcileImmediately`'s
-      // completeness can newly become true — split and summary may
-      // already be in hand, waiting out the short `HASH_SUBWINDOW_MS` this
-      // exact byte exists to shorten. A no-op whenever split/summary are
-      // not both already held (this run's own guard), same as every other
-      // call site.
-      maybeReconcileImmediately(activeRun);
-      // CALL SITE 5, the terminate path's own (summary-record design spec
-      // §1). NOTHING above this line was ever finished-gated — the bytes
-      // are attributed to whichever run is open at receipt, closed or not,
-      // and `activeRun !== null` is the whole admission — so a rower-ended
-      // run's hash already landed on the run object correctly today; what
-      // it had no way to do was reach the RECORD, because nothing on the
-      // terminate path ever emitted an observations event to carry it.
-      // This is that missing trigger: the byte the observations emit is
-      // waiting for has arrived, so it goes out NOW rather than at the end
-      // of its `HASH_SUBWINDOW_MS`. A no-op on every other run.
-      flushTerminateObservations();
-    }
-  });
+    mergeStatus(
+      SPLIT_INTERVAL_DATA_UUID,
+      "0x0037",
+      parseSplitIntervalData,
+      (decoded) => {
+        noteBoundaryHalf("split", decoded.splitIntervalNumber);
+      },
+    );
 
-  // `terminate()`'s settle-wait tick pulse (design spec §7, interface-
-  // notes.md §19.6) AND `sendGetErrorType`'s always-active reply bound
-  // (Task 3 review, IMPORTANT-1) — a RAW subscription, deliberately NOT
-  // routed through `mergeStatus`. The ORIGINAL reason is gone with Task
-  // 4: `mergeStatus` used to `return` on `terminalLatched`, swallowing
-  // exactly the ticks the settle wait needs (terminate()'s own ack is
-  // usually what CAUSED the latch), and it no longer gates on anything.
-  // The reason this stays raw is the OTHER one, which survives intact:
-  // neither counter needs a DECODE. `mergeStatus` returns before its
-  // `after()` callback whenever a notification fails its length guard, so
-  // a garbled General Status would not tick a counter placed in there —
-  // yet a garbled frame still proves the radio is alive, which is the
-  // only thing these two budgets are counting.
-  t.subscribe(GENERAL_STATUS_UUID, () => {
-    if (pendingSettle) {
-      pendingSettle.ticks += 1;
-      if (pendingSettle.ticks >= pendingSettle.ticksNeeded) {
-        const resolve = pendingSettle.resolve;
-        pendingSettle = null;
-        resolve();
+    // Fast-follow Task 1 (design spec §5): RAW subscriptions, deliberately
+    // NOT routed through `mergeStatus` — 0x0039/0x003A have their own decode
+    // (`parseEndOfWorkoutSummary`, not `mergeStatus`'s `Pm5ParseError`-typed
+    // idiom) and are never merged into `raw`/`RawPm5Status` (`WorkoutSummary`
+    // is a whole-workout total, not a per-tick status field).
+    //
+    // Receipt is logged for BOTH (`summary-half`, mirroring
+    // `noteBoundaryHalf`'s own site/voice) and only 0x0039 GATES the
+    // reconcile (Task 2's gate, `noteSummary` — review I5: every field the
+    // gate needs rides 0x0039, and waiting on 0x003A would rebuild the drop
+    // fragility R1 exists to fix). Receipt is logged FIRST on purpose: a
+    // stash must show that the bytes arrived even when the verdict below is
+    // that they change nothing.
+    t.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (bytes) => {
+      noteSummaryHalf("0x0039", bytes);
+      noteSummary(bytes);
+    });
+    // `bytes` (Phase LL Task 1): this callback used to take NO parameter at
+    // all — 0x003A's own hex could never reach the ring no matter what
+    // (`noteSummaryHalf`'s own updated doc comment has the full reasoning).
+    // RC-9d (design spec 2026-08-25-free-oracles §3): `recordRestDistanceVerdict`
+    // now reads that hex too, same call-order discipline as 0x0039 above —
+    // receipt (`summary-half`) logged first, the decode/verdict second, so a
+    // stash always shows the bytes arrived even if the verdict itself
+    // suppresses. This is still NOT the reconcile gate: `recordRestDistanceVerdict`
+    // writes its own `rest-distance-verdict` ring entry and nothing else,
+    // never touching `run.recordedActuals`/`finishGraceUntil` or any other
+    // state `noteSummary`'s gate depends on.
+    t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (bytes) => {
+      noteSummaryHalf("0x003A", bytes);
+      recordRestDistanceVerdict(bytes);
+    });
+
+    // 0x003F, the PRODUCTION subscriber (storage-spine design spec §2,
+    // delta-pass B3): raw bytes only, same as the two above — no decode
+    // lives here (`uuids.ts`'s own doc comment: the byte order is disputed
+    // WITHIN the BLE spec itself, unsettled until a hardware walk reads
+    // it). Non-critical by omission: this UUID is not in either transport's
+    // `CRITICAL_CHARACTERISTICS` set, so a subscribe rejection here degrades
+    // (`onCharacteristicDegraded` — LL's existing mechanism, unchanged by
+    // this task) rather than ending the session, exactly like the two
+    // summary characteristics above. Attributed to whichever run is open AT
+    // RECEIPT, same as `noteSummary`'s own `activeRun` read — `null` (no
+    // run open) simply leaves nothing to attribute it to, since a bare
+    // reading with no workout of ours to belong to is not evidence about
+    // any run's finish.
+    t.subscribe(LOGGED_WORKOUT_UUID, (bytes) => {
+      log.record(
+        "verification-received",
+        `0x003F received (run ${runIsOpen() ? "open" : "closed"}, state=${toMonitorFrame(raw as RawPm5Status).state}) raw=${toHex(bytes)}`,
+      );
+      if (activeRun !== null) {
+        activeRun.verificationBytes = Array.from(bytes);
+        // CALL SITE 4 (final-review fix wave, HIGH-2): the hash's own
+        // arrival is the fourth place `maybeReconcileImmediately`'s
+        // completeness can newly become true — split and summary may
+        // already be in hand, waiting out the short `HASH_SUBWINDOW_MS` this
+        // exact byte exists to shorten. A no-op whenever split/summary are
+        // not both already held (this run's own guard), same as every other
+        // call site.
+        maybeReconcileImmediately(activeRun);
+        // CALL SITE 5, the terminate path's own (summary-record design spec
+        // §1). NOTHING above this line was ever finished-gated — the bytes
+        // are attributed to whichever run is open at receipt, closed or not,
+        // and `activeRun !== null` is the whole admission — so a rower-ended
+        // run's hash already landed on the run object correctly today; what
+        // it had no way to do was reach the RECORD, because nothing on the
+        // terminate path ever emitted an observations event to carry it.
+        // This is that missing trigger: the byte the observations emit is
+        // waiting for has arrived, so it goes out NOW rather than at the end
+        // of its `HASH_SUBWINDOW_MS`. A no-op on every other run.
+        flushTerminateObservations();
       }
-    }
-    // Only counts while a real ack is still outstanding — if the
-    // configured `options.ackTimeout` (a SEPARATE, opt-in bound on the
-    // very same `pendingAck`) already fired first, `pendingAck` is
-    // already `null` here and this is a no-op, never a double-resolve.
-    if (pendingErrorTypeTimeout && pendingAck) {
-      pendingErrorTypeTimeout.ticks += 1;
-      if (
-        pendingErrorTypeTimeout.ticks >= pendingErrorTypeTimeout.ticksNeeded
-      ) {
-        const resolve = pendingAck;
-        pendingAck = null;
-        pendingErrorTypeTimeout = null;
-        resolve("ack-timeout");
+    });
+
+    // `terminate()`'s settle-wait tick pulse (design spec §7, interface-
+    // notes.md §19.6) AND `sendGetErrorType`'s always-active reply bound
+    // (Task 3 review, IMPORTANT-1) — a RAW subscription, deliberately NOT
+    // routed through `mergeStatus`. The ORIGINAL reason is gone with Task
+    // 4: `mergeStatus` used to `return` on `terminalLatched`, swallowing
+    // exactly the ticks the settle wait needs (terminate()'s own ack is
+    // usually what CAUSED the latch), and it no longer gates on anything.
+    // The reason this stays raw is the OTHER one, which survives intact:
+    // neither counter needs a DECODE. `mergeStatus` returns before its
+    // `after()` callback whenever a notification fails its length guard, so
+    // a garbled General Status would not tick a counter placed in there —
+    // yet a garbled frame still proves the radio is alive, which is the
+    // only thing these two budgets are counting.
+    t.subscribe(GENERAL_STATUS_UUID, () => {
+      if (pendingSettle) {
+        pendingSettle.ticks += 1;
+        if (pendingSettle.ticks >= pendingSettle.ticksNeeded) {
+          const resolve = pendingSettle.resolve;
+          pendingSettle = null;
+          resolve();
+        }
       }
+      // Only counts while a real ack is still outstanding — if the
+      // configured `options.ackTimeout` (a SEPARATE, opt-in bound on the
+      // very same `pendingAck`) already fired first, `pendingAck` is
+      // already `null` here and this is a no-op, never a double-resolve.
+      if (pendingErrorTypeTimeout && pendingAck) {
+        pendingErrorTypeTimeout.ticks += 1;
+        if (
+          pendingErrorTypeTimeout.ticks >= pendingErrorTypeTimeout.ticksNeeded
+        ) {
+          const resolve = pendingAck;
+          pendingAck = null;
+          pendingErrorTypeTimeout = null;
+          resolve("ack-timeout");
+        }
+      }
+    });
+  }
+
+  /** Has `subscribeStatus()` already run? (Connect-latency design spec's
+   *  lifetime table: minted once per driver, i.e. once per connect, and
+   *  never re-armed.) The transport CANNOT dedupe a second release for us
+   *  — every registration passes a fresh closure, which `capacitorBle`
+   *  folds into the same fan-out set without a second
+   *  `startNotifications` — so a double release really would run every
+   *  status handler twice, halving each tick-counted wait and duplicating
+   *  frame emissions. This flag is the enforcement. */
+  let statusSubscribed = false;
+  /** Set the moment this driver learns the link is gone, by EITHER route:
+   *  the transport's own `onDisconnect` (an unexpected drop) or a
+   *  caller-initiated `disconnect()`, which per `Transport.onDisconnect`'s
+   *  contract never fires that callback. Deferral is what makes this
+   *  necessary: `capacitorBle.subscribe()` calls `requireConnected()`
+   *  SYNCHRONOUSLY and THROWS once the device id is null, and a cancel
+   *  during connect (walked 3 September) lands a release in exactly that
+   *  window. Latched for the driver's life on purpose — the driver is
+   *  constructed per connect, inside `useMonitorSession`'s own
+   *  `connect()`, so a link that comes back comes back with a new one. */
+  let linkGone = false;
+  /** Cancels the fallback timer while it is still pending — a driver that
+   *  leaves live timers behind is a driver a test cannot finish cleanly
+   *  (`disconnect()`'s own comment). Belt to `statusSubscribed`'s braces,
+   *  never the guard itself. */
+  let cancelStatusFallback: (() => void) | null = null;
+
+  /**
+   * Enqueues the deferred group exactly once per connect, and records
+   * which trigger got there first (`arm` — a completed CSAFE sequence — or
+   * `fallback`).
+   *
+   * A release that arrives after teardown is a NO-OP, not a throw
+   * (spec invariant 5): see `linkGone`.
+   */
+  function releaseStatusSubscriptions(via: "arm" | "fallback"): void {
+    if (statusSubscribed) return;
+    cancelStatusFallback?.();
+    cancelStatusFallback = null;
+    if (linkGone) {
+      // Deliberately still latched: nothing may subscribe on this
+      // transport again, and the ring should say why the stream never
+      // opened rather than leaving a connect with no `status-subscribe`
+      // entry at all.
+      statusSubscribed = true;
+      log.record("status-subscribe", `skipped after teardown (${via})`);
+      return;
     }
-  });
+    statusSubscribed = true;
+    // Recorded BEFORE the subscribes, so the ring reads in the order the
+    // calls were enqueued — every `notify-first` entry below follows it.
+    log.record("status-subscribe", via);
+    subscribeStatus();
+  }
+
+  /** The one place either teardown route reports the link is gone. */
+  function noteLinkGone(): void {
+    linkGone = true;
+    cancelStatusFallback?.();
+    cancelStatusFallback = null;
+  }
 
   /** Are two 0x0031 structure triples the same reading? (fix-3 Task 4.)
    *  All three fields, compared exactly — no tolerance anywhere: session
@@ -6103,8 +6223,32 @@ export function createPm5Driver(
         });
       }
     }
+    // THE ARM RELEASE (connect-latency design spec 2026-09-03): a COMPLETED
+    // CSAFE sequence — every frame written AND acked — is what lets the
+    // deferred status subscriptions go out. Never `onFrameWritten`, which
+    // fires before the ack: on `program()`'s two sequences that would put
+    // the nine calls between the prepare's ack and the chunk writes, which
+    // cannot be enqueued until that ack lands, and the programmed path
+    // (whose erg screen changes on the SECOND ack) would end up ~400 ms
+    // SLOWER than before this change. A prepare step is skipped for that
+    // same reason, and it is the one place the spec's phrasing ("the first
+    // CSAFE sequence") needs reading against its own worked example: the
+    // prepare IS a `program()`'s first sequence, so releasing there is the
+    // regression above by another name. The programming sequence that
+    // follows it is the release point; a free row's single frame is both
+    // at once.
+    if (!isPrepareStep) releaseStatusSubscriptions("arm");
     log.record(completionKind, `${sequence.length} frame(s) acked`);
   }
+
+  // THE FALLBACK, armed once, as the last thing this constructor does (so
+  // everything it can reach is already initialized). `STATUS_SUBSCRIBE_
+  // FALLBACK_MS`'s own doc comment carries why it exists and why the ring
+  // has to say which path fired.
+  cancelStatusFallback = schedule(() => {
+    cancelStatusFallback = null;
+    releaseStatusSubscriptions("fallback");
+  }, STATUS_SUBSCRIBE_FALLBACK_MS);
 
   return {
     capabilities,
@@ -6122,16 +6266,32 @@ export function createPm5Driver(
      * whole row: no `terminated` on the rower's Menu press, no 0x0039 filed,
      * and boundaries routed as if they belonged to nobody.
      *
-     * DELIBERATELY SYNCHRONOUS in everything the hook reads, unlike
-     * `program()`: the run opens and this returns before any ack, so the
-     * hook's `ready` flip stays one indivisible step with it. The send is
-     * DETACHED — `void`, its only effects ring entries — and NOTHING on the
-     * phone branches on its outcome (ruling 2): the erg's own screen is the
-     * acknowledgment, and the readback that would verify it
-     * (0x0031 `workoutType = 1`) is also the machine's idle-after-terminate
-     * default (`EMPTY_ARM_STRUCTURE`), so it verifies nothing. `program()`'s
-     * prepare-settle wait and structural readback establish that the
-     * machine holds OUR workout, a question a free row does not raise.
+     * SYNCHRONOUS IN THE RUN, ASYNCHRONOUS IN THE ARM (spec 2026-09-03
+     * Part 2, which reverses half of what this paragraph used to say:
+     * "DELIBERATELY SYNCHRONOUS in everything the hook reads ... the hook's
+     * `ready` flip stays one indivisible step with it", and "NOTHING on the
+     * phone branches on its outcome"). The run still opens before the first
+     * byte and this call still returns before any ack — but the send is no
+     * longer detached from the hook: `{ kind: "armed" }` is emitted when it
+     * SETTLES, and the hook's `ready` waits for that, exactly as a workout's
+     * waits for `program()`. The door draws a sending card in between.
+     *
+     * ALL THREE OUTCOMES ARM (Gate 0, James, 2026-09-03: fall-through). Ack,
+     * rejection and deadline each emit, once, because a free row needs
+     * nothing from the monitor to be rowable — the rower can start it on the
+     * PM5 — so a failure card would block a row that would have worked.
+     * Which way it went is in the ring, never on the screen.
+     *
+     * NO READBACK, settled rather than assumed (item 2's antagonist pass,
+     * confirmed on hardware by
+     * `docs/monitor/sessions/walk-2026-09-03-jr-connect/`, where two of the
+     * three rings report type 1 BEFORE their own ack): 0x0031's
+     * `workoutType = 1` is ALSO the machine's idle-after-terminate default
+     * (`EMPTY_ARM_STRUCTURE`), so a check on it can never fail and would be
+     * decoration. `program()`'s prepare-settle wait and structural readback
+     * establish that the machine holds OUR workout, a question a free row
+     * does not raise: the workout's acceptance point is the readback, the
+     * free row's is the ack.
      *
      * NO PREPARE, and this is load-bearing (spec §Research): `program()`
      * sends `buildTerminate()` before any run exists, but this call opens
@@ -6231,6 +6391,18 @@ export function createPm5Driver(
           // lifetime paragraph). A `terminate()` already suspended on this
           // chain holds its own reference and resumes normally.
           freeRowSendSettled = null;
+          // THE ARM (spec 2026-09-03 Part 2). One emit per `beginFreeRow()`
+          // that actually opened a run, on whichever of the three outcomes
+          // the `.then` pair above resolved: this `finally` is the single
+          // join point, so the fall-through is structural rather than three
+          // call sites agreeing. `program()`'s own emit is the sibling, and
+          // the hook treats them identically.
+          //
+          // The ring entry uses `program()`'s own kind so one census reads
+          // both arms, with a detail naming which outcome released it — the
+          // preceding `free-row-program-*` entry is the outcome itself.
+          log.record("armed", "free row: the p.80 send settled");
+          emit({ kind: "armed", freeRow: true });
         });
     },
 
@@ -6550,6 +6722,12 @@ export function createPm5Driver(
 
     async disconnect(): Promise<void> {
       log.record("disconnect-requested", "caller-initiated");
+      // Before the awaits below, and before `t.disconnect()` nulls the
+      // transport's device id: a caller-initiated hang-up never fires
+      // `Transport.onDisconnect` (its own contract), so this is the OTHER
+      // route by which a pending release learns the link is gone. The
+      // walked producer is a cancel during connect.
+      noteLinkGone();
       // A TERMINATE STILL OWED ITS WRITE GOES FIRST (delta pass, PR #278 —
       // `terminateWritesOwed`'s own comment carries the measured race and
       // Apple's "any pending commands ... may not complete"). The wait is

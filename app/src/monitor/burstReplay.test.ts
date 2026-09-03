@@ -75,6 +75,7 @@ import {
 } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { withLiveness } from "./transports/liveness";
+import { releasingSchedule } from "../test/statusSubscriptions";
 
 /** Same path-surgery idiom as `registerReplay.test.ts`/`connectedMetrics
  *  Replay.test.ts`/`captureReplay.test.ts` (all three cite the same reason:
@@ -260,7 +261,7 @@ async function runReplay(events: RecordedEvent[]): Promise<ReplayOutcome> {
       now: () => FIXED_NOW,
       driverOptions: {
         now: () => replay.clock.now(),
-        schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+        schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
       },
     }),
   );
