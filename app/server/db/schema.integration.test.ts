@@ -1396,6 +1396,13 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
         "updated_at",
       ]),
     );
+    // Wave E PR2 (migration 0023): `arrayContaining` cannot assert an
+    // ABSENCE — dropping `"weight_class"` from the list above asserts
+    // nothing on its own. Absence holds only transitively today (keeping
+    // either column kills `migrate()` on the `DROP TYPE`), and that
+    // transitive proof evaporates the moment some future migration keeps
+    // the type. Say it directly.
+    expect(linkColNames).not.toContain("weight_class");
 
     const attemptCols = await db.execute(
       sql`select column_name from information_schema.columns where table_name = 'concept2_auth_attempts'`,
@@ -1404,6 +1411,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
     expect(attemptColNames).toStrictEqual(
       expect.arrayContaining(["nonce", "user_id", "created_at"]),
     );
+    expect(attemptColNames).not.toContain("weight_class");
   });
 
   it("reads a pre-0018 row's existing fields unchanged, and all four new columns as null, after 0018 applies (never-migrate contract)", async () => {

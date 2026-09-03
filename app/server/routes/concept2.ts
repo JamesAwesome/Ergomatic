@@ -94,16 +94,37 @@ const ATTEMPT_MAX_AGE_MS = 15 * 60 * 1000;
 const TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 
 // How many of the rower's most recent Concept2 results the send path reads to
-// find their latest weight-class DECLARATION (ruling i, producer 1). FIVE,
-// and the number is measured rather than felt: against log-dev from a dev
-// laptop, 5 samples each, medians on 2026-09-03, `?number=1` answered in
-// 216 ms and `?number=5` in 221 ms — a small page is free, so take the one
-// that survives a short run of recent non-rower pieces (a BikeErg or SkiErg
-// result is not required to carry a class). One page only: the route never
-// walks `meta.pagination.links.next`, and a rower with no readable class in
-// these five falls through to the profile derivation, which is quieter than
-// paging their history.
-const DECLARATION_PAGE_SIZE = 5;
+// find their latest weight-class DECLARATION (ruling i, producer 1).
+//
+// FIFTY, and the number is sized by the OWN-WRITES EXCLUSION rather than by
+// latency. This page has two consumers: `pickDeclaredWeightClass` reads a
+// declaration off it, and `logs.sentC2ResultIds` removes the rows THIS APP
+// wrote from it (observation 29). The exclusion removes our rows but does not
+// widen the window — so at a page of five, a rower who sends five workouts in
+// a row through Ergomatic pushes their own real Concept2 declaration off the
+// read PERMANENTLY, and from send six onward the class is derived from their
+// profile forever. Someone who declared L on Concept2 whose profile derives H
+// would have H written onto their permanent Concept2 record, silently. Fifty
+// is also Concept2's own default `per_page` (measured in the pagination
+// meta), so this is the page their API hands out unasked.
+//
+// The width is free, measured rather than assumed: against log-dev from a dev
+// laptop, 4 samples each, medians on 2026-09-03 — `?number=5` 267 ms,
+// `?number=20` 208 ms, `?number=50` 259 ms. Flat, and one round trip either
+// way.
+//
+// ONE PAGE ONLY, and the residue is NAMED rather than left implicit: the
+// route never walks `meta.pagination.links.next`, because a second page is a
+// second round trip on EVERY send for a case this window already covers. So
+// the failure mode still exists, just fifty deep — after 50 consecutive
+// app-written rows with no other declaration among them, producer 1
+// legitimately has nothing to read and the send falls to the profile
+// derivation. That case is VISIBLE, not silent, and both halves are gated:
+// the SENT state names which producer answered (ruling R2's
+// `weightClassSource`, asserted by "a page that is ALL ours falls to the
+// profile …"), and this route's `c2_weight_class` log line carries
+// `ourRowsSkipped`, which reads 50 in exactly this case.
+const DECLARATION_PAGE_SIZE = 50;
 
 // Same shape as `routes/data.ts`'s own `UUID_RE` (that file's own comment:
 // a malformed uuid literal 500s Postgres rather than finding no row).
@@ -877,6 +898,20 @@ export function createConcept2Router({
       // this app posted, and nothing on them says so. `ourRowsSkipped` rides
       // out purely so the log line can report it — it is a count of OUR OWN
       // writes, never anything about the rower's other rows.
+      //
+      // ONE ROW THE EXCLUSION CANNOT COVER, named because the claim above is
+      // otherwise stronger than it is: the exclusion reads `session_logs`,
+      // so it only knows about rows whose id we managed to STORE. The
+      // `if (!recorded)` -> 502 branch below is exactly the case where we
+      // did not — the session_log row was concurrently deleted between the
+      // eligibility read and the write, so no retry can ever record that id.
+      // Concept2 keeps the result; we have no local trace of it; a later
+      // send reads it back and reports `source: "declaration"` for a class
+      // WE derived. The VALUE is almost always identical, so nothing a rower
+      // sees is wrong — the PROVENANCE is, and provenance is the whole point
+      // of ruling R2. Bounded by how rare the race is (a delete landing
+      // inside one send) and by the fact that it self-heals the moment the
+      // rower makes any real declaration.
       type WeightClassResolution =
         | {
             ok: true;

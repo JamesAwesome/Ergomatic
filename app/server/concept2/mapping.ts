@@ -217,7 +217,13 @@ function rowInstantMs(row: C2ResultRow): number | null {
  *
  *   1. `ourResultIds` — a result THIS APP wrote. See the block comment
  *      above: without this, our own derived guess is read back as the
- *      rower's declaration on the very next send.
+ *      rower's declaration on the very next send. A row whose `id` did NOT
+ *      parse is skipped too, and that direction is deliberate: an
+ *      unidentifiable row cannot be checked against the exclusion set, so
+ *      reading a class off it risks laundering our own write back as a
+ *      declaration — the exact defect this skip exists for. Discarding it
+ *      costs at worst one real declaration among fifty; honouring it costs
+ *      the provenance of a permanent third-party record.
  *   2. a type Concept2 does not require a class on
  *      (`CLASS_BEARING_RESULT_TYPES`), and a row with no `type` at all.
  *   3. a `weight_class` that is not exactly "H" or "L". Selection is on the
@@ -234,7 +240,8 @@ export function pickDeclaredWeightClass(
   opts: { ourResultIds: ReadonlySet<number>; now: number },
 ): WeightClass | null {
   for (const row of rows) {
-    if (row.id !== null && opts.ourResultIds.has(row.id)) continue;
+    if (row.id === null) continue;
+    if (opts.ourResultIds.has(row.id)) continue;
     if (row.type === null) continue;
     if (!CLASS_BEARING_RESULT_TYPES.includes(row.type)) continue;
     if (row.weightClass !== "H" && row.weightClass !== "L") continue;

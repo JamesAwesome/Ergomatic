@@ -1339,9 +1339,11 @@ page carries the weight and weight-class fields (2i's link-out target is
 provisional until then), and whether a non-rower result carries a class.
 **It gates less than it used to:** with the declaration as the primary
 producer the unit only matters for a rower who has declared nothing, and
-the derivation's plausibility band already refuses four of the five wrong
-unit readings — the fifth, hundredths-of-a-pound, is a 2.2x error no band
-can exclude, which is exactly what the second reading settles. Plus the
+the derivation's plausibility band already refuses four of the SIX wrong
+unit readings — the two it admits are hundredths-of-a-kilogram, which is
+the assumed-correct reading, and hundredths-of-a-pound, a 2.2x error no
+band can exclude, which is exactly what the second reading settles. Plus
+the
 dedup-granularity, `state`-echo and
 zero-rest-post questions each carry a measured answer in PR0's report —
 "unknown" leaves the wave open. (RC-9(b)'s live ring verdict moved OUT to

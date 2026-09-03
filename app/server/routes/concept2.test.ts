@@ -2640,6 +2640,117 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     });
   });
 
+  // The page the declaration read asks for has TWO consumers: it is what
+  // `pickDeclaredWeightClass` reads a class off, AND it is what the
+  // own-writes exclusion removes our rows from. The exclusion does not
+  // WIDEN it, so the page size is what decides how many consecutive app
+  // sends a rower can make before their own real Concept2 declaration is
+  // pushed off the read for good. These two cases pin both ends of that.
+  //
+  // Both drive `fetchResults` through a stub that SLICES to the requested
+  // count, the way Concept2's `?number=` genuinely does — without that the
+  // page size is unobservable from here and shrinking it could not go red.
+  function pagedClient(page: readonly unknown[]): C2Client {
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockImplementation(
+      async (_token: string, count: number) => ({
+        ok: true as const,
+        rows: page.slice(0, count) as never,
+      }),
+    );
+    return client;
+  }
+
+  // A row THIS APP wrote: indistinguishable from a real declaration in
+  // every projected field except its id (observation 29's whole point).
+  const ourRow = (id: number) => ({
+    id,
+    type: "rower",
+    weightClass: "H",
+    dateUtc: "2026-09-02 10:00:30",
+    date: "2026-09-02 06:00:30",
+  });
+
+  it("finds a declaration sitting under SIX of our own consecutive sends", async () => {
+    // The defect the page width exists to prevent: at a five-row page this
+    // rower's own `L` is off the window from their sixth app send onward,
+    // and every send after that writes our PROFILE-derived `H` onto their
+    // permanent Concept2 record — silently, forever.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = pagedClient([
+      ...[9001, 9002, 9003, 9004, 9005, 9006].map(ourRow),
+      {
+        id: 85561,
+        type: "rower",
+        weightClass: "L",
+        dateUtc: "2026-08-20 10:00:30",
+        date: "2026-08-20 06:00:30",
+      },
+    ]);
+    // The exclusion set itself is stubbed rather than seeded through 51
+    // real sends: this case is about the WINDOW, not about the writer.
+    // "never reads its OWN write back as the rower's declaration on the
+    // next send" is the one that starts upstream of the producer.
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 51 });
+    const { app, logs } = buildApp({ store, client });
+    vi.spyOn(logs, "sentC2ResultIds").mockResolvedValue(
+      new Set([9001, 9002, 9003, 9004, 9005, 9006]),
+    );
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.weightClassSource).toBe("declaration");
+    expect(client.postResult).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ weight_class: "L" }),
+    );
+    // `fetchMe` never ran: the declaration answered, so no profile
+    // derivation was needed. Without this a mutant that derived `L` some
+    // other way would satisfy the two assertions above.
+    expect(client.fetchMe).not.toHaveBeenCalled();
+  });
+
+  it("a page that is ALL ours falls to the profile, and the SENT state says so", async () => {
+    // The residue that survives at fifty, made visible rather than silent:
+    // after 50 consecutive app-written rows with no other declaration among
+    // them, producer 1 legitimately has nothing to read. The rower is told
+    // which producer answered rather than being handed a class with no
+    // provenance.
+    const ids = Array.from({ length: 50 }, (_, i) => 9001 + i);
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = pagedClient(ids.map(ourRow));
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jmorelli",
+      weight: 7000,
+      gender: "M",
+    });
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 52 });
+    const { app, logs } = buildApp({ store, client });
+    vi.spyOn(logs, "sentC2ResultIds").mockResolvedValue(new Set(ids));
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toStrictEqual({
+      resultId: 52,
+      weightClass: "L",
+      weightClassSource: "profile",
+    });
+    // The whole window really was asked for and really was all ours: the
+    // read requested 50 rows and the profile fallback actually ran.
+    expect(client.fetchResults).toHaveBeenCalledWith(expect.any(String), 50);
+    expect(client.fetchMe).toHaveBeenCalledTimes(1);
+  });
+
   it("never reads its OWN write back as the rower's declaration on the next send", async () => {
     // RF24, and the only shape that can catch observation 29: this test
     // STARTS upstream of the producer. Send 1 writes a row; Concept2 then

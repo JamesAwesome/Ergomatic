@@ -26,19 +26,29 @@
 -- still succeeds). 0023 gets no equivalent, because its equivalent would go
 -- RED: an old image's `INSERT` into either table names `weight_class`, and
 -- after this drop that errors. The deploy is safe for ONE stated reason —
--- no writer exists. `C2_LINK_ENABLED` has never been on, so no route can
--- reach either table; MEASURED 2026-09-03 by reading `printenv
--- C2_LINK_ENABLED` inside every running api container (all unset/empty;
--- `compose.yml` passes it through as `${C2_LINK_ENABLED:-}` and
--- `server/index.ts` treats anything but `"1"` as off). That predicate is the
--- deciding one: a row count answers "does this destroy anything", while a
--- WRITER is what makes a NOT NULL drop dangerous. The corroborating counts
--- (`select count(*) from concept2_links` / `concept2_auth_attempts`, both
--- expected zero) are OWED on the deploy host before this ships — the
--- implementing agent has no credentials for it, and migration 0021's own
--- header records the same check being run by hand by James before ITS merge.
--- Neither count being zero is a STOP: a live grant whose class we are about
--- to drop is a design question nobody has asked.
+-- no writer exists, i.e. `C2_LINK_ENABLED` is not "1" on the instance that
+-- runs this, so no route can reach either table (`compose.yml` passes the
+-- variable through as `${C2_LINK_ENABLED:-}` and `server/index.ts` treats
+-- anything but `"1"` as off). That predicate is the DECIDING one: a row
+-- count answers "does this destroy anything", while a WRITER is what makes
+-- a NOT NULL drop dangerous.
+--
+-- THREE CHECKS ARE OWED ON THE DEPLOY HOST BEFORE THIS SHIPS, and none of
+-- them has been taken there. The implementing agent has no credentials for
+-- that host; what it measured on 2026-09-03 was `printenv C2_LINK_ENABLED`
+-- inside the four per-worktree e2e api containers on a DEV LAPTOP (all
+-- unset or empty), which says nothing about production. Migration 0021's
+-- own header records the equivalent check being run by hand by James before
+-- ITS merge; do the same here:
+--
+--   docker exec <the prod api container> printenv C2_LINK_ENABLED
+--   psql "$DATABASE_URL" -c "select count(*) from concept2_links;" \
+--                        -c "select count(*) from concept2_auth_attempts;"
+--
+-- Expected: unset or empty, and zero, and zero. ANY OTHER ANSWER IS A STOP.
+-- A `1` is a live writer whose INSERT this drop breaks; a non-zero link
+-- count is a real rower holding a live grant whose class we are about to
+-- drop, which is a design question nobody has asked.
 ALTER TABLE "concept2_links" ADD COLUMN "c2_username" text;--> statement-breakpoint
 ALTER TABLE "concept2_auth_attempts" DROP COLUMN "weight_class";--> statement-breakpoint
 ALTER TABLE "concept2_links" DROP COLUMN "weight_class";--> statement-breakpoint

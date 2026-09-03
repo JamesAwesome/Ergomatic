@@ -782,15 +782,16 @@ function makeFakeLogsStore(
     // AND account-scoped read (stores/logs.ts's own comment) — a row
     // written while a DIFFERENT Concept2 account was linked says nothing
     // about this one, so it must not be excluded from this account's
-    // declaration read. The `c2ResultId !== null` half is the real store's
-    // same defence-in-depth clause, unreachable through `recordC2Result`
-    // (that method's own comment says why it stays).
+    // declaration read. The null is a TYPE NARROWING and not a claimed
+    // guard, mirroring the real store's own shape for the reason its
+    // comment gives.
     async sentC2ResultIds(userId: string, c2UserId: number) {
       const rows = byUser.get(userId) ?? [];
       return new Set(
         rows
-          .filter((r) => r.c2UserId === c2UserId && r.c2ResultId !== null)
-          .map((r) => r.c2ResultId as number),
+          .filter((r) => r.c2UserId === c2UserId)
+          .map((r) => r.c2ResultId)
+          .filter((id): id is number => id !== null),
       );
     },
     // Wave E PR1 Task 6, plan deviation 2: mirrors the real store's

@@ -990,15 +990,16 @@ export function createLogsStore(db: Db) {
     // is the rower's own log, and the eligible population measured on prod
     // was 6 of 20 rows).
     //
-    // The `isNotNull(c2ResultId)` clause is DEFENCE IN DEPTH and is stated
-    // as such rather than sold as a gate: `recordC2Result` is the only
-    // writer of either column and writes both in one statement, so a row
-    // with a matching non-null `c2_user_id` always has a non-null
-    // `c2_result_id` — no supported path can produce the row this clause
-    // excludes, and the contract suite's own probe for it stays GREEN when
-    // the clause is deleted (task-3-report.md, mutation M-null-guard). It
-    // stays because the `as number` cast below would otherwise be a lie the
-    // compiler cannot see.
+    // The null is handled by a TYPE NARROWING, not by a WHERE clause, and
+    // the difference is the point: `c2_result_id` is nullable, so the
+    // compiler is right to insist, but `recordC2Result` is the only writer
+    // of either column and writes both in one statement — so no supported
+    // path produces a row with a matching non-null `c2_user_id` and a null
+    // `c2_result_id`. An `isNotNull()` predicate would therefore have been
+    // an unfalsifiable guard sold as a check (deleting it left the contract
+    // suite green; see task-3-fix-1-report.md). The `filter` below is what
+    // the type genuinely requires and costs no claim, and it also removes
+    // the `as number` cast the predicate version needed.
     async sentC2ResultIds(
       userId: string,
       c2UserId: number,
@@ -1010,10 +1011,11 @@ export function createLogsStore(db: Db) {
           and(
             eq(sessionLogs.userId, userId),
             eq(sessionLogs.c2UserId, c2UserId),
-            isNotNull(sessionLogs.c2ResultId),
           ),
         );
-      return new Set(rows.map((r) => r.c2ResultId as number));
+      return new Set(
+        rows.map((r) => r.c2ResultId).filter((id): id is number => id !== null),
+      );
     },
 
     // Wave E PR1 Task 6, plan deviation 2: legacy-row upload persist-on-

@@ -419,6 +419,26 @@ describe("pickDeclaredWeightClass", () => {
     ).toBe("H");
   });
 
+  it("skips a row whose id did not parse, because an unidentifiable row cannot be checked against the exclusion", () => {
+    // F7. The exclusion is keyed on `id`; a row with none cannot be tested
+    // against it, so reading a class off it risks laundering OUR OWN write
+    // back as the rower's declaration — the exact defect skip 1 exists for.
+    // The second assertion proves the fixture is a declaration in every
+    // other respect, so the first is really about the missing id.
+    expect(
+      pickDeclaredWeightClass([resultRow({ id: null, weightClass: "L" })], {
+        ourResultIds: new Set(),
+        now: NOW,
+      }),
+    ).toBeNull();
+    expect(
+      pickDeclaredWeightClass([resultRow({ id: 85561, weightClass: "L" })], {
+        ourResultIds: new Set(),
+        now: NOW,
+      }),
+    ).toBe("L");
+  });
+
   it("takes a row whose timestamps are BOTH absent, because Concept2's own example carries a null date_utc", () => {
     expect(
       pickDeclaredWeightClass(
