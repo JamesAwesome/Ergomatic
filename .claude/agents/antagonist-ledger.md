@@ -6649,9 +6649,14 @@ the fixes are folded into the plan, the spec, the amendment and ROADMAP.**
   that turns the un-measurable inference into a loud refusal.** **And state what
   the band cannot catch**: writing the band's own test found that
   hundredths-of-a-pound (16530 for 75 kg) sits inside any range wide enough to
-  hold real rowers, so four of five refuse and the fifth does not. The plan, the
-  code comment and a dedicated test now say "four of five" — a guard oversold is
-  worse than no guard, and the test exists so a later overclaim goes red.
+  hold real rowers. The plan, the code comment and a dedicated test say **four of
+  the SIX candidate readings refuse and two do not** — hundredths-of-a-kilogram
+  because it is the reading we assume is right, hundredths-of-a-pound because no
+  band can exclude a 2.2x error. (Corrected 2026-09-03: this entry and four
+  other places said "four of five" over a six-element list, and the sweep that
+  fixed the rest missed a capitalised instance because its grep was
+  case-sensitive. A guard oversold is worse than no guard, and the test exists
+  so a later overclaim goes red.)
 - **A wrong-surface doc row refused for one field and accepted for its neighbour,
   in the same paragraph.** The plan correctly tagged Create User's `weight` row
   "PRIMARY for the write parameter; INFERENCE for the read field", then two
