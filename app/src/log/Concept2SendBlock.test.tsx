@@ -184,11 +184,21 @@ describe("Concept2SendBlock idle -> sent (board 2a/2b/2c, amendment change 4)", 
     expect([...Intl.supportedValuesOf("timeZone"), "UTC"]).toContain(body.tz);
   });
 
-  it("draws the idle and sending frames word for word, helper included", async () => {
+  it("draws the idle and sending frames word for word, helper and dim status included", async () => {
     // Every literal here is transcribed from the amendment's 2a and 2b
     // PORTRAIT frames, never read back off the component that produces
     // them. `Sending to Concept2 …` carries the page's own space before
     // the ellipsis.
+    //
+    // THE STATUS TREATMENT IS ASSERTED IN THE ONE STATE WHERE IT IS
+    // CONTESTED. §2's frames draw `<span class="c2status">` bare for 2a NOT
+    // SENT and 2b SENDING, and `c2status on` for all nineteen remaining
+    // status spans — so the status lights when Concept2 has ANSWERED, not
+    // when the rower has tapped (`--ink-4` 5.29:1 dim, `--ink` 17.11:1 at
+    // weight 600 lit). Idle and sent alone cannot tell the two predicates
+    // apart: a build lighting SENDING passes both, which is what probe M36
+    // measured. This test is the only place SENDING is observable, because
+    // it is the only one that holds the request open.
     let release = (): void => {};
     const gate = new Promise<void>((resolve) => {
       release = () => {
@@ -205,12 +215,14 @@ describe("Concept2SendBlock idle -> sent (board 2a/2b/2c, amendment change 4)", 
     });
     vi.doMock("../api", () => ({ api }));
     vi.doMock("../adapters/externalBrowser", () => ({ openReadOnlyUrl }));
-    await renderBlock(eligibleRow());
+    const { container } = await renderBlock(eligibleRow());
+    const status = () => container.querySelector(".c2-send-status")!;
 
     const send = await screen.findByRole("button", {
       name: "Send to Concept2",
     });
     expect(screen.getByText("NOT SENT")).toBeTruthy();
+    expect(status().className).toBe("c2-send-status");
     expect(
       screen.getByText(
         "Sends this row's work time and meters to your Concept2 logbook.",
@@ -223,6 +235,7 @@ describe("Concept2SendBlock idle -> sent (board 2a/2b/2c, amendment change 4)", 
       name: "Sending to Concept2 …",
     });
     expect(sending).toBeDisabled();
+    expect(status().className).toBe("c2-send-status");
     // The helper stays through the send: 2b's frame draws it.
     expect(
       screen.getByText(
@@ -230,23 +243,6 @@ describe("Concept2SendBlock idle -> sent (board 2a/2b/2c, amendment change 4)", 
       ),
     ).toBeTruthy();
     release();
-    await screen.findByText("Accepted by Concept2.");
-  });
-
-  it("keeps the status dim until Concept2 has answered, and lights it after", async () => {
-    // The page's own markup, not a principle: `2a NOT SENT` and
-    // `2b SENDING` are both a bare `.c2status`, while every state from 2c
-    // on carries `.c2status.on` (`--ink` 17.11:1, weight 600, against
-    // `--ink-4` 5.29:1 for the dim one). Counted over §2's frames:
-    // two bare, nineteen `on`.
-    mockApi({});
-    const { container } = await renderBlock(eligibleRow());
-    const status = () => container.querySelector(".c2-send-status")!;
-    await screen.findByRole("button", { name: "Send to Concept2" });
-    expect(status().className).toBe("c2-send-status");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Send to Concept2" }),
-    );
     await screen.findByText("Accepted by Concept2.");
     expect(status().className).toBe("c2-send-status c2-send-status-on");
   });
