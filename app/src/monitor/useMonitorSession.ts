@@ -237,8 +237,9 @@ const ANONYMOUS_RUN: RunIdentity = {
  *  **RECONCILED, Phase JR PR 2.** This used to read: "None can — `live` is
  *  downstream of `ready`, which is downstream of the `armed` event, which
  *  only `program()` produces." The last clause is no longer true.
- *  `beginFreeRow()` is a SECOND producer of `ready`, reaching it with no
- *  wire traffic at all, so `ready` now has two doors rather than one.
+ *  `beginFreeRow()` is a SECOND producer of `ready`, reaching it with
+ *  nothing awaited (its p.80 send is detached), so `ready` now has two
+ *  doors rather than one.
  *
  *  The conclusion survives the correction: this value is still never read,
  *  because both doors seed `identityRef` before flipping the phase. It
@@ -968,10 +969,13 @@ export interface MonitorSession {
   connect(): Promise<void>;
   program(p: WorkoutProgram, identity: RunIdentity): Promise<void>;
   /** Phase JR PR 2: arms for the machine's OWN free row — reaches `ready`
-   *  with no wire traffic and files the record under a Just Row identity
-   *  (`workoutId: null`, `mode: "justrow"`). `program()`'s counterpart, and
-   *  synchronous because nothing is sent. A no-op while a programmed
-   *  session is `programming`/`ready`/`live`. */
+   *  synchronously and files the record under a Just Row identity
+   *  (`workoutId: null`, `mode: "justrow"`). `program()`'s counterpart.
+   *  Since spec 2026-09-02 the driver also sends the PM5 Concept2's p.80
+   *  Just Row program as a DETACHED send (ring entries only — nothing here
+   *  awaits or branches on it), so the erg leaves its menu when the link
+   *  comes up. A no-op while a programmed session is
+   *  `programming`/`ready`/`live`. */
   beginFreeRow(): void;
   /** The rower's End. Idempotent, and idempotent specifically against a
    *  terminal event racing it (spec §2). */
@@ -4175,13 +4179,16 @@ export function useMonitorSession(
         // never pulled" case is unchanged by this task).
         if (driver === null) return;
         const phase = stateRef.current.phase;
-        // Phase JR PR 2: same free-row exclusion as `cancel()`'s own armed
-        // predicate, same reasoning — an unmount at `ready` on a free row
-        // must not terminate the machine's own row.
+        // No free-row exclusion here either, for the reason `cancel()`'s
+        // own armed predicate now gives in full: since spec 2026-09-02 a
+        // free row IS armed — `beginFreeRow()` puts the monitor into a Just
+        // Row session — so leaving through the tab bar at `ready` owes the
+        // erg the same undo that Cancel does. The two exits were written to
+        // match each other and still do; only the fact underneath them
+        // changed (walk `walk-2026-09-03-jr-connect`, finding 4).
         if (
           !alreadyTerminated &&
-          (phase === "programming" || phase === "ready") &&
-          identityRef.current.mode !== "justrow"
+          (phase === "programming" || phase === "ready")
         ) {
           bestEffort(
             driver.terminate().finally(() => bestEffort(driver.disconnect())),
@@ -5061,16 +5068,22 @@ export function useMonitorSession(
   /**
    * PHASE JR PR 2 — the free row's arm, and `program()`'s counterpart.
    *
-   * Reaches `ready` with no wire traffic, because the row is already the
-   * machine's own: the rower is in the PM5's Just Row and there is nothing
-   * to send, arm or verify. Everything downstream is inherited unchanged —
-   * `handleFrame`'s own `"ready"` branch opens the record on the first
-   * rowing frame with distance, which IS the spec's "user intent plus
-   * motion" rule (the tap on Just Row was the intent).
+   * Reaches `ready` with nothing awaited: the row is the machine's own
+   * Just Row, and there is nothing to verify. Since spec 2026-09-02 the
+   * driver's `beginFreeRow()` does send Concept2's p.80 Just Row program
+   * so the PM5 leaves its menu — but as a DETACHED send whose only
+   * effects are ring entries (`free-row-program-sent`/`-unanswered`/
+   * `-failed`); this hook neither awaits nor reads its outcome, by ruling
+   * (the erg's own screen is the acknowledgment). Everything downstream is
+   * inherited unchanged — `handleFrame`'s own `"ready"` branch opens the
+   * record on the first rowing frame with distance, which IS the spec's
+   * "user intent plus motion" rule (the tap on Just Row was the intent).
    *
-   * SYNCHRONOUS, unlike `program()`: there is no promise to await when
-   * nothing is sent. That also makes the phase flip and the identity seed
-   * one indivisible step, so no frame can arrive between them.
+   * SYNCHRONOUS, unlike `program()`: no promise is awaited, which makes
+   * the phase flip and the identity seed one indivisible step, so no frame
+   * can arrive between them. That synchronous flip is load-bearing
+   * (`JustRow.tsx`'s once-latch and `deriveProgram` rely on it); an async
+   * rewrite would reopen the arm-effect re-trigger it closes.
    *
    * **The guard is not defensive tidiness.** Without it, calling this
    * during a programmed session silently rewrites `identityRef` to the Just
@@ -5471,16 +5484,48 @@ export function useMonitorSession(
     // open until `live`). The handoff's "nothing lost" is amended in
     // DEVIATIONS accordingly: nothing OF OURS is lost, and the erg is left
     // terminated rather than armed with an orphan.
-    // Phase JR PR 2: a free row is EXCLUDED from the terminate — the line
-    // above says why it exists ("it terminates what we armed") and a free
-    // row armed nothing, so the terminate would reach the machine's OWN
-    // row. Worst case is a rower who began pulling before the motion gate
-    // fired (~5 frames at the walk's measured 1 Hz): their row dies on the
-    // erg because they tapped Cancel in an app that was only watching.
+    // A FREE ROW IS ARMED TOO, since spec 2026-09-02: `beginFreeRow()`
+    // sends the PM5 Concept2's p.80 frame, which puts the monitor into a
+    // Just Row session on the rower's behalf. So the line above applies to
+    // it unchanged — "it terminates what we armed" — and Cancel undoes the
+    // arm exactly as it does for a workout.
+    //
+    // This used to EXCLUDE `mode === "justrow"`, on the reasoning that "a
+    // free row armed nothing". That was true before the p.80 send and
+    // false after it, and the walk found the cost the same day
+    // (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4):
+    // James tapped Cancel on the Ready screen and the PM5 sat there in the
+    // Just Row session the app had just put it in, with nothing on the
+    // wire to undo it. The old worst case still stands and is still
+    // accepted — a rower who began pulling before the motion gate fired
+    // (up to ~5 frames at the walk's measured 1 Hz) loses that row on the
+    // erg — but it is now the SAME trade the programmed path already
+    // makes, rather than a reason to leave the machine armed.
+    //
+    // THE TWO EXITS ARE ONE INVARIANT WITH ONE OBSERVABLE, and a probe
+    // proved it: restoring the exclusion HERE alone leaves every test
+    // green, because this function's own `teardown(armed, driver)` call a
+    // few lines down reaches the same phase with the same driver and sends
+    // the terminate itself (`alreadyTerminated` would be `false`). So do
+    // not read a green suite as licence to put this back — the biting
+    // mutation is both exclusions together, which is the state the walk
+    // caught. This site keeps its own terminate because it is `cancel()`'s
+    // own work, with `alreadyTerminated: true` stopping the repeat, rather
+    // than something left to a cleanup.
+    //
+    // THE `await` HAS NO CALLER (delta pass, PR #278). An earlier version
+    // of this comment called it a CONTRACT — "cancel() has DONE it,
+    // awaited" — and no caller can observe that: all six sites are
+    // `void session.cancel()` (`JustRow.tsx` x3, `ConnectedInterstitial
+    // .tsx` x2, `JustRowObserver.tsx`). What the await genuinely buys is
+    // INTERNAL ordering — the terminate lands before this function's own
+    // `teardown(armed, driver)` hangs up — and since PR #278 the driver
+    // holds that ordering for every caller anyway (`disconnect()` waits
+    // for a terminate that still owes its write). So the await is now belt
+    // to that braces: kept because it costs nothing and reads as the
+    // sequence it is, claimed as nothing more.
     const armed =
-      driver !== null &&
-      (phase === "programming" || phase === "ready") &&
-      identityRef.current.mode !== "justrow";
+      driver !== null && (phase === "programming" || phase === "ready");
     if (armed) {
       try {
         await driver.terminate();

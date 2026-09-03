@@ -29,6 +29,21 @@ const SET_WORKOUTTYPE = 0x01;
  *  values, so this is the only workout type `buildProgrammingSequence`
  *  ever emits — never the undefined-rest sibling type. */
 const WORKOUTTYPE_VARIABLE_INTERVAL = 0x08;
+/** `WORKOUTTYPE_JUSTROW` — a doc LABEL, not a transcription: the notes never
+ *  transcribe Appendix A's `OBJ_WORKOUTTYPE_T` row (Concept2's PDFs sit
+ *  behind Cloudflare; spec 2026-09-02 §Research, RC-38 disposition). What
+ *  this value rests on instead is (1) CSAFE-DEF's own p.80 JustRow worked
+ *  example, `F1 76 07 01 01 01 13 02 01 01 61 F2` (interface-notes.md §12
+ *  example 2), whose `SET_WORKOUTTYPE` data byte is `01`, and (2) the
+ *  machine's own reading: the 2026-08-31 capture's Just Row reports
+ *  0x0031 `workoutType = 1` from the first pull
+ *  (`docs/monitor/sessions/walk-2026-08-31-justrow/decode-0031.py` over
+ *  `just-row-pm5-recording-1788214688045.jsonl.gz`). Deliberately NOT
+ *  named `_SPLITS`, the doc's fuller enum label the notes cannot quote.
+ *  NOTE it is also the machine's idle-after-terminate default
+ *  (`statusFrames.ts`'s `EMPTY_ARM_STRUCTURE`), which is why no readback
+ *  verifies this program landed — the spec's ruling 2. */
+const WORKOUTTYPE_JUSTROW = 0x01;
 
 /** `CSAFE_PM_SET_INTERVALTYPE` (interface-notes.md §11). */
 const SET_INTERVALTYPE = 0x17;
@@ -255,10 +270,11 @@ function fitsInOneFrame(units: Uint8Array[]): boolean {
  * guarantees the finer rule for free: never splitting a 26-byte block
  * trivially never splits the smaller commands inside it.
  *
- * Requires `units` to be non-empty — both call sites guarantee this
+ * Requires `units` to be non-empty — all three call sites guarantee this
  * (`buildProgrammingSequence` always appends the trailing `SET_SCREENSTATE`
  * unit regardless of interval count; `buildTerminate` always passes exactly
- * one unit), so `current` always holds at least the final unit by the time
+ * one unit; `buildJustRowProgram` always passes its two 3- and 4-byte
+ * units), so `current` always holds at least the final unit by the time
  * the loop ends and is pushed unconditionally, rather than guarding against
  * an empty-`units` case neither caller can produce.
  *
@@ -429,6 +445,30 @@ export function expectedArmedStructure(p: WorkoutProgram): ArmedStructure {
         ? WORKOUT_DURATION_IDENTIFIER_TIME
         : WORKOUT_DURATION_IDENTIFIER_DISTANCE,
   };
+}
+
+/**
+ * Concept2's own JustRow program — CSAFE-DEF p.80's worked example, byte
+ * for byte (interface-notes.md §12 example 2; the frame is pinned as a
+ * literal in `commands.test.ts`): ONE `0x76`-wrapped unit carrying
+ * `SET_WORKOUTTYPE = WORKOUTTYPE_JUSTROW` and the same trailing
+ * `SET_SCREENSTATE(PREPARETOROWWORKOUT)` every `buildProgrammingSequence`
+ * ends with, wrapped exactly as that function wraps its units. Sent by
+ * `src/monitor/driver.ts`'s `beginFreeRow()` — alone, with NO leading
+ * `buildTerminate()` prepare (spec 2026-09-02 §Research: a terminate sent
+ * with the free row's run already open is the row's own END, byte for
+ * byte) — so the PM5 leaves its main menu for its Just Row screen when the
+ * link comes up. Its ack is R2, `01|81 76 02 01 13` (interface-notes.md
+ * §16), and an ack means QUEUED for the UI task, not shown (§19.6); the
+ * driver verifies nothing off it, by ruling — the readback that would
+ * answer is the idle default too.
+ */
+export function buildJustRowProgram(): Uint8Array[][] {
+  const unit = Uint8Array.from([SET_WORKOUTTYPE, 0x01, WORKOUTTYPE_JUSTROW]);
+  return buildFrameGroups([
+    unit,
+    buildScreenState(SCREENVALUEWORKOUT_PREPARETOROWWORKOUT),
+  ]).map(packGroup);
 }
 
 /**

@@ -189,15 +189,50 @@ slate.
   `docs/monitor/pm5-interface-notes.md:204` (`SET_WORKOUTTYPE(0x01)` +
   `SET_SCREENSTATE(PREPARETOROWWORKOUT)`), and `SET_SCREENSTATE` is
   already built and emitted. **No research pass — the earlier line here
-  saying one was owed was wrong (RF18).** Cost if built: `beginFreeRow()`
-  stops being "sends no bytes" and gains a reject path and an ack gate;
-  carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
-  `OBJ_WORKOUTTYPE_T` entry). One driver change plus one walk leg. **M**
+  saying one was owed was wrong (RF18).** One driver change plus one walk
+  leg; carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
+  `OBJ_WORKOUTTYPE_T` entry). **M**
   **RE-CONFIRMED by James, 2026-09-02 ("i do want item 2"), after using the
   ready fix: build it. Its own PR (wire semantics + a walk leg), after the
   Timer-mode design pass. Ground already in the repo: the 08-31 walk's
   OPEN 5, the p.80 JustRow frame at `docs/monitor/pm5-interface-notes.md:204`,
-  RC-38 rides with it.**
+  RC-38 rides with it.** **IMPLEMENTED (PR #278, 2026-09-02; spec
+  `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`
+  rev 5, Gate 0 rev 1c): `beginFreeRow()` opens the run, then sends the
+  p.80 frame ALONE — no prepare, since a terminate with a run open is the
+  row's own END — as a DETACHED send bounded by
+  `FREE_ROW_PROGRAM_DEADLINE_MS` (5 s, raised from 3 s by the walk's
+  measured write→ack of 1968/2060/1788 ms); its outcome goes to the ring
+  (`free-row-program-sent`/`-unanswered`/`-failed`) and nothing on the
+  phone branches on it. The earlier cost line here ("gains a reject path
+  and an ack gate") was half wrong: there is a reject PATH but no ack
+  GATE, because the readback that would verify the program (0x0031
+  `workoutType = 1`) is also the PM5's idle-after-terminate default, so
+  the erg's own screen is the acknowledgment. The Ready line is James's:
+  `The clock starts on your first stroke.` (the shipped `Nothing is
+  programmed…` line became false and is gone). Gates: `commands.test.ts`
+  pins the frame literal; `driver.test.ts` the ring order, the no-prepare
+  literal, NAK, the terminate-waits ordering and deadline paths;
+  `justRowReplay.test.ts` the
+  unanswered send over the 08-31 capture; `e2e/justrow.spec.ts` reads
+  `free-row-program-sent` off the diagnostics door's copied ring.
+  **WALK RUN 2026-09-03** (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`,
+  three sessions with the control): the frame DOES drive the erg —
+  `workoutType` 0 at the virgin menu, ack at 1.97 s, type 1 89 ms later,
+  and the PM5's own Just Row screen photographed. It also found the
+  defect James saw: **Cancel on the Ready screen left the erg in the Just
+  Row session.** ONE cause was observed — `cancel()` excluded
+  `mode === "justrow"` from its terminate on the now-false ground that "a
+  free row armed nothing". Two more paths to the same stranded monitor were
+  found by reading, NOT on the erg, and are fixed as hardening: the
+  driver's `terminate()` refusal while the send holds the ack slot (never
+  entered on the walk — ring 3's Cancel ran 1589 ms after the ack), and a
+  teardown hang-up overtaking the terminate that refusal fix introduced
+  (~186 ms of margin, from ring 1's own END timings). FIXED in this PR:
+  both exclusions go, `terminate()` WAITS OUT the free-row send instead of
+  refusing it (bounded by the deadline above), and `disconnect()` holds the
+  hang-up while a terminate still owes its write. RC-38's disposition is
+  under Phase PROTO.**
 - **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
   infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
   James ruled TIME ONLY; Gate 0 PASSED on rev 2e
@@ -1733,6 +1768,20 @@ close, not before.**
   confirms our reading or finds a real defect; both outcomes are cheap.
   **Per recurring failure 16's second corollary, the row for each value is
   quoted verbatim beside the claim it supports.** **S**
+  **DISPOSITION (Just Row connect spec 2026-09-02, PR #278): NOT
+  transcribed, and said so where the value is used.** Concept2's PDFs sit
+  behind Cloudflare and could not be fetched, so `0x01` ships as
+  `WORKOUTTYPE_JUSTROW` in `domain/monitor/pm5/commands.ts` with a doc
+  comment naming it a LABEL rather than an `OBJ_WORKOUTTYPE_T` row. What
+  the value rests on instead is machine corroboration, counted not
+  transcribed: the 08-31 capture's 0x0031 census
+  (`docs/monitor/sessions/walk-2026-08-31-justrow/decode-0031.py`) reads
+  type `0` at a virgin menu, `1` from the first pull, and `1` again after
+  a Menu end with nothing sent by anyone — so `1` is what the PM5 picks
+  for its own Just Row, and ALSO its idle default, which is why the spec
+  keys no gate on it. The verbatim row is still owed: James can drop the
+  CSAFE PDF into `docs/monitor/` and the transcription is a comment
+  change. Still **S**, no longer scheduled against a PR.
 - **The axis-quantity question — REHOMED 2026-08-31** into the "say which number
   this is" design pass below. It was never only about `traceModel.ts`'s `t` and
   `d`; it is one of three places the same screen mixes two quantities.

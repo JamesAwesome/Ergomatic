@@ -10,6 +10,14 @@
 // asserts AFTER the reader, on the log door's rendered DOM. Nothing seeds a
 // `MonitorRun`.
 //
+// Since spec 2026-09-02 `beginFreeRow()` also sends the PM5 its Just Row
+// program (Concept2's p.80 frame). The replay transport resolves writes and
+// never acks, so here that send is ABANDONED at the driver's deadline and
+// the ring records `free-row-program-unanswered` — the row opens and
+// completes exactly as before, which is the ruling (nothing branches on the
+// send). The 08-31 capture predates the send, so `run()`'s divergence check
+// cannot see the write; the ring is this suite's witness for it.
+//
 // THE CAPTURE: `docs/monitor/sessions/walk-2026-08-31-justrow/`, the
 // phase's own capture walk. Pull from the PM5's main menu (auto-enters Just
 // Row), row past the 5:00 auto-split, a deliberate stop, resume, Menu end —
@@ -141,6 +149,30 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     // than a synthetic frame or two: no divergence escalation and no
     // phantom intervals across a real row with a real auto-split in it.
     expect(replayResult.divergences).toStrictEqual([]);
+
+    // THE SEND, witnessed by the ring (spec 2026-09-02, exit criterion 3).
+    // The replay transport resolves every write and never acks, so the
+    // p.80 frame goes out ONCE and its send is abandoned at the driver's
+    // deadline — `run()` drove that deadline itself, since the hook's
+    // `driverOptions.schedule` above IS `replay.clock.schedule` and the
+    // capture spans some 400 s of virtual time. The frame literal is typed
+    // from `docs/monitor/pm5-interface-notes.md:204`, never built. The
+    // hook's `exportLog()` is the same string the diagnostics door copies.
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const ringKinds = ring.map((e) => e.kind);
+    expect(
+      ring.filter((e) => e.kind === "write").map((e) => e.detail),
+    ).toStrictEqual(["f1 76 07 01 01 01 13 02 01 01 61 f2"]);
+    expect(ringKinds.indexOf("free-row-open")).toBeGreaterThanOrEqual(0);
+    expect(ringKinds.indexOf("write")).toBeGreaterThan(
+      ringKinds.indexOf("free-row-open"),
+    );
+    expect(ringKinds).toContain("free-row-program-unanswered");
+    expect(ringKinds).not.toContain("free-row-program-sent");
+    expect(ringKinds).not.toContain("free-row-program-failed");
     const record = freshStore.currentUnretired()?.run;
     expect(record).toBeDefined();
     expect(record?.mode).toBe("justrow");
