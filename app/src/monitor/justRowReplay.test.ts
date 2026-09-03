@@ -276,9 +276,7 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     // reaching zero of sixteen production rows (RF24's own price tag).
     // The bytes below are the CAPTURE's, decoded by the real driver off
     // the real wire — not a fixture's.
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {
       const call = apiFn.mock.calls.find(([path]) => path === "/api/logs");
       expect(call).toBeDefined();

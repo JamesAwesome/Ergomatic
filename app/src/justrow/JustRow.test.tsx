@@ -94,11 +94,10 @@ describe("JustRow door", () => {
     // The handoff's exact string: `NEEDS THE MONITOR` left the line the day
     // it stopped being true (spec 2026-09-02, Global Constraints).
     expect(screen.getByText("NO TARGETS · NO PLAN")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /The monitor keeps its own time\. Pull when you are ready/,
-      ),
-    ).toBeInTheDocument();
+    // The band is James's own line (timer-mode handoff rev 1c, ruling 3):
+    // the door says what it is, the two buttons say how. Exact, not a
+    // regex — the string IS the ruling.
+    expect(screen.getByText("Start a free row session.")).toBeInTheDocument();
   });
 
   // Handoff "The JR chip" (rev 2e): the chip appears where type chips appear

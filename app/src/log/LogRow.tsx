@@ -1,4 +1,5 @@
 import TypeBadge from "../components/TypeBadge";
+import { fmtDuration } from "../../domain/duration.js";
 import FreeRowChip from "../workout/FreeRowChip";
 import { fmtSplit } from "../../domain/format.js";
 import type { RecentLog } from "../api/useRecentLogs";
@@ -174,11 +175,29 @@ function heroAvgSplitSeconds(log: RecentLog): number | undefined {
 // each segment independently absent when its underlying value is
 // undefined, the whole snippet absent (returns "") when both are — the
 // same absence idiom §2B's stored-hero block already uses (old rows read
-// back null everywhere). TIME is deliberately not part of this snippet —
+// back null everywhere). TIME is deliberately not part of THAT snippet —
 // §5G's own literal example carries only AVG and DISTANCE.
+//
+// ONE EXCEPTION (timer-mode spec 2026-09-02, ruling 4; `History.dc.html`):
+// a row with NEITHER an average NOR a distance but a stored `timeSeconds`
+// — the phone-timed free row, whose only number IS its time — prints
+// `TIME m:ss` here instead, the detail door's own label (`JustRowLog`'s
+// TIME card, formatted by the same `fmtDuration`). It fills the line §5G
+// would leave empty and touches no row that has an AVG or DISTANCE
+// segment: a connected free row keeps `AVG · m`, a workout row keeps its
+// pair, and a row with no time at all keeps its bare meta line (never a
+// placeholder). `RecentLog.timeSeconds` was already on the wire
+// (`useRecentLogs.ts`); nothing new is projected.
 function heroSnippet(log: RecentLog): string {
   const avgSplitSeconds = heroAvgSplitSeconds(log);
   const distanceMeters = heroDistanceMeters(log);
+  if (
+    avgSplitSeconds === undefined &&
+    distanceMeters === undefined &&
+    log.timeSeconds !== null
+  ) {
+    return `TIME ${fmtDuration(log.timeSeconds / 60)}`;
+  }
   return [
     avgSplitSeconds !== undefined ? `AVG ${fmtSplit(avgSplitSeconds)}` : null,
     distanceMeters !== undefined ? `${fmtMeters(distanceMeters)} m` : null,

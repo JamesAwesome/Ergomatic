@@ -440,9 +440,7 @@ describe("WorkoutDetail -> real live program drop -> LogSession (Wave F PR 1 Tas
     // own POST-body assertions for the same shape, on a shorter fixture.
     await userEvent.click(screen.getByRole("button", { name: "HELD" }));
     await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(apiFn).toHaveBeenCalled());
     const [, init] = apiFn.mock.calls[0]!;
     const body = JSON.parse((init as RequestInit).body as string) as {

@@ -865,7 +865,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     await page
       .getByLabel("NOTES")
       .fill("Rowed at the gym, logging it after the fact.");
-    await page.getByRole("button", { name: "Save without logging" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page).toHaveURL(/\/today$/);
     const row = page
@@ -946,7 +946,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
 
     await page.getByRole("button", { name: "HELD" }).click();
     await page.getByRole("button", { name: "Pain 3" }).click();
-    await page.getByRole("button", { name: "Save without logging" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
     await expect(page).toHaveURL(/\/today$/);
 
     const draftAfter = await page.evaluate(() =>

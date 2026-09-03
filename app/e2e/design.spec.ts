@@ -4739,6 +4739,153 @@ test.describe("timer screen (landscape, 844x420)", () => {
   });
 });
 
+// TIMER MODE, BOTH WAYS UP (spec 2026-09-02-timer-mode-design, exit
+// criterion 2; handoff `docs/design/handoffs/2026-09-02-timer-mode/`).
+// James's phone (build 823): END was plain header text in portrait and an
+// accent box in landscape, and both orientations left a dead band at the
+// bottom. The geometry below is the phone's OWN CSS size (393×852 /
+// 852×393, the handoff's mechanical-reference captures), measured for the
+// programmed timer AND the free row — the free row exposed the defects,
+// but they were the shipped programmed timer's own. jsdom has no layout,
+// so this is where the rulings are pinned as numbers; `Timer.test.tsx`
+// pins the stylesheet's structure.
+const PHONE_PORTRAIT = { width: 393, height: 852 };
+const PHONE_LANDSCAPE = { width: 852, height: 393 };
+
+async function assertOneEndBox(page: Page): Promise<void> {
+  // Ruling 1: one END, the accent-outlined 44×44 box, whichever way up.
+  const end = page.getByRole("button", { name: "END →" });
+  const box = (await stableBoundingBox(end))!;
+  expect(Math.round(box.width)).toBe(44);
+  expect(Math.round(box.height)).toBe(44);
+  const style = await end.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return {
+      color: s.color,
+      border: s.borderTopWidth,
+      borderColor: s.borderTopColor,
+    };
+  });
+  expect(style.color).toBe("rgb(181, 52, 31)"); // --accent
+  expect(style.border).toBe("1px");
+  expect(style.borderColor).toBe("rgb(181, 52, 31)"); // --accent
+}
+
+async function assertNoVerticalScroll(page: Page): Promise<void> {
+  const overflow = await page.evaluate(() => ({
+    scrollHeight: document.documentElement.scrollHeight,
+    clientHeight: document.documentElement.clientHeight,
+  }));
+  expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+}
+
+/** Portrait (ruling 2): the ◀ ▶ row sits under Pause as one control group
+ *  — its top within 12px of Pause's bottom — instead of clinging to the
+ *  viewport's bottom edge (`margin-top: auto`, measured 264px of dead band
+ *  on build 823). */
+async function assertPortraitTimerGeometry(page: Page): Promise<void> {
+  await page.setViewportSize(PHONE_PORTRAIT);
+  await assertOneEndBox(page);
+  const pause = (await stableBoundingBox(
+    page.locator(".timer-control-pause"),
+  ))!;
+  const controls = (await stableBoundingBox(page.locator(".timer-controls")))!;
+  const gap = controls.y - (pause.y + pause.height);
+  expect(gap).toBeGreaterThanOrEqual(0);
+  expect(gap).toBeLessThanOrEqual(12);
+  await assertNoVerticalScroll(page);
+}
+
+/** Landscape (ruling 2): the controls row sits on the bottom edge (within
+ *  16px of the viewport's bottom — build 823 measured 70px of page under
+ *  it) and the face centres in the room the hero row gains (its vertical
+ *  centre within 24px of the hero row's). */
+async function assertLandscapeTimerGeometry(page: Page): Promise<void> {
+  await page.setViewportSize(PHONE_LANDSCAPE);
+  await assertOneEndBox(page);
+  const controls = (await stableBoundingBox(page.locator(".timer-controls")))!;
+  expect(
+    PHONE_LANDSCAPE.height - (controls.y + controls.height),
+  ).toBeLessThanOrEqual(16);
+  const hero = (await stableBoundingBox(page.locator(".timer-hero")))!;
+  const face = (await stableBoundingBox(page.locator(".timer-time")))!;
+  const heroCentre = hero.y + hero.height / 2;
+  const faceCentre = face.y + face.height / 2;
+  expect(Math.abs(faceCentre - heroCentre)).toBeLessThanOrEqual(24);
+  await assertNoVerticalScroll(page);
+}
+
+test.describe("timer mode, both ways up — programmed timer at the phone's own size", () => {
+  const title = "Design Timer Mode Programmed";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-timer-mode-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Timer Mode Tester",
+    });
+    await setBaselines(page);
+    // The handoff's own three-phase fixture (a rest between two work
+    // steps), so the dots row, TOTAL LEFT and UP NEXT are all populated —
+    // the fullest column this screen renders, where a dead band is
+    // hardest to blame on an empty middle.
+    await importBulk(
+      page,
+      [
+        `${title} | AT | medium | 3`,
+        "w 4:00 6k @20 r1.5",
+        "w 4:00 6k @20",
+      ].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 3/)).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("portrait 393×852: one END box, ◀ ▶ under Pause, no dead band", async ({
+    page,
+  }) => {
+    await assertPortraitTimerGeometry(page);
+  });
+
+  test("landscape 852×393: one END box, controls on the bottom edge, face centred in the hero row", async ({
+    page,
+  }) => {
+    await assertLandscapeTimerGeometry(page);
+  });
+});
+
+test.describe("timer mode, both ways up — free row at the phone's own size", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-timer-mode-jr-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Timer Mode Tester",
+    });
+    // The Just Row door's Start Timer: one phase, nothing to fill the
+    // middle — the emptiest column this screen renders, which is what
+    // exposed the band on the phone.
+    await page.goto("/justrow");
+    await page.getByRole("button", { name: "Start Timer" }).click();
+    await expect(page).toHaveURL(/\/session\/run$/);
+    await expect(page.getByText("JUST ROW", { exact: true })).toBeVisible();
+  });
+
+  test("portrait 393×852: one END box, ◀ ▶ under Pause, no dead band", async ({
+    page,
+  }) => {
+    await assertPortraitTimerGeometry(page);
+  });
+
+  test("landscape 852×393: one END box, controls on the bottom edge, face centred in the hero row", async ({
+    page,
+  }) => {
+    await assertLandscapeTimerGeometry(page);
+  });
+});
+
 // Phase PW Task 5: the post-workout summary (PostWorkoutSummary.tsx)
 // replaces SessionComplete AND the old Log screen chrome wholesale — the
 // session door's own "just finished" render, reached through the real
@@ -4958,17 +5105,23 @@ test.describe("post-workout summary (session door, just finished)", () => {
     await expect(discard).toBeEnabled();
   });
 
-  // §2F: no active plan in this fixture — Save without logging leads alone
-  // at its own 54px (the accent slot), Discard sits last.
-  test("Save without logging renders at the specced 54px height, not the browser's default button chrome", async ({
+  // §2F: no active plan in this fixture — the lone save leads alone at
+  // its own 54px (the accent slot), Discard sits last. It reads `Save`,
+  // not `Save without logging` (timer-mode spec 2026-09-02, ruling 5:
+  // with no plan there is nothing to log against, so the qualifier
+  // survives only beneath `Log against plan` — the plan describes below).
+  test("Save (no plan) renders at the specced 54px height, not the browser's default button chrome, and never says 'without logging'", async ({
     page,
   }) => {
-    const lead = page.getByRole("button", { name: "Save without logging" });
+    const lead = page.getByRole("button", { name: "Save" });
     await expect(lead).toHaveClass(/summary-save-lead/);
     const height = await lead.evaluate((el) => getComputedStyle(el).height);
     expect(height).toBe("54px");
     await expect(
       page.getByRole("button", { name: /Log against plan/ }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Save without logging" }),
     ).toHaveCount(0);
   });
 
