@@ -9535,9 +9535,15 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-4);
 }
 
-/* Door spec (2026-09-02) §5.1: the in-flight pair, in the slot the dash
-   occupies on an unreached row. `flex: 0 0 auto` plus `nowrap` ON THE FLEX
-   ITEM ITSELF — RF21's own recorded failure was a `min-width` placed on a
+/* Door spec (2026-09-02) §5.1: the in-flight pair, as an EXTRA CELL IN
+   FRONT OF the dash — Gate 0-B decision (a), APPROVED: "The dash stays.
+   The pair is an extra cell in front of it, not a replacement for it".
+   Every declaration is `.summary-row-time`'s own (mono, 13px, `--ink-2`,
+   tabular-nums): the pair is typed as one of the table's numbers, not as
+   a new register. Only the box differs — content-sized instead of a 44px
+   column, right-aligned, never wrapping.
+
+   `flex: 0 0 auto` plus `nowrap` ON THE FLEX ITEM ITSELF — RF21's own recorded failure was a `min-width` placed on a
    CHILD of the flex item, where the shrink algorithm never reads it. The
    e2e no-clip assertion measures THIS element's `scrollWidth` against its
    `clientWidth`, and this element is a block-level flex item, so both are
@@ -9554,6 +9560,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .summary-legend {

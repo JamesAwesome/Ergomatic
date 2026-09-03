@@ -1208,7 +1208,7 @@ function rowByIndex(index: number): HTMLElement {
 }
 
 describe("PostWorkoutSummary — the in-flight pair on a partial step row (§5.1)", () => {
-  it("renders the pair in the slot the dash occupies, and drops the dash on THAT row only", () => {
+  it("renders the pair as an EXTRA CELL IN FRONT OF the dash — the dash stays, so a part-rowed row never reads as a rowed one (Gate 0-B decision (a))", () => {
     renderSummary({ model: partialModel() });
     const partial = rowByIndex(3);
     // A DIRECT CHILD of `.summary-row`, which is the flex CONTAINER — so
@@ -1221,7 +1221,27 @@ describe("PostWorkoutSummary — the in-flight pair on a partial step row (§5.1
     expect(
       partial.querySelector(":scope > .summary-row-partial")?.textContent,
     ).toBe("250 m · 1:03");
-    expect(partial.querySelector(".summary-row-dash")).toBeNull();
+
+    // THE DASH STAYS. The approved artboard renders the alternative — the
+    // pair REPLACING the dash — beside the recommendation and captions it
+    // "Not recommended: the dash is doing real work", because it is the
+    // one mark rows 3, 4 and 5 share and the only thing that stops a
+    // part-rowed row ending in a number like the measured rows above it.
+    // This assertion is what holds the rejected shape out.
+    expect(
+      partial.querySelector(":scope > .summary-row-dash")?.textContent,
+    ).toBe("—");
+
+    // ORDER: pair, THEN dash. The row must end on the dash.
+    const cells = Array.from(partial.children).map((c) => c.className);
+    expect(cells).toStrictEqual([
+      "summary-row-index",
+      "summary-row-duration",
+      "summary-row-target",
+      "summary-row-offset",
+      "summary-row-partial",
+      "summary-row-dash",
+    ]);
 
     // The unreached row keeps exactly what it has today — the dash, and
     // no partial element at all.
@@ -1382,6 +1402,39 @@ describe("index.css: .summary-row-partial is a NON-SHRINKING, NON-WRAPPING flex 
     // 10.81:1 — both clear the 4.5:1 AA floor.
     expect(rule.body).toMatch(/color:\s*var\(--ink-2\)/);
     expect(rule.body).toMatch(/font-family:\s*var\(--font-mono\)/);
+  });
+
+  it("is typed as one of the table's own numbers: every TYPE declaration is `.summary-row-time`'s, tabular figures included", () => {
+    // Gate 0-B's approved rule, verbatim: "Every declaration is
+    // `.summary-row-time`'s own (mono, 13px, --ink-2, tabular-nums): the
+    // pair is typed as one of the table's numbers, not as a new register.
+    // Only the box differs." Held equal here rather than trusted, so the
+    // two cannot drift into two registers. `.summary-row-time` shares its
+    // rule with `.summary-row-duration`, which is why the selector list is
+    // read rather than assumed.
+    const partial = summaryRuleFor(".summary-row-partial");
+    const rules = cssRules(SUMMARY_CSS).filter((r) =>
+      r.selectors.includes(".summary-row-time"),
+    );
+    expect(rules).toHaveLength(1);
+    const time = rules[0]!;
+    const typeDecls = (body: string) =>
+      body
+        .split(";")
+        .map((d) => d.trim().replace(/\s+/g, " "))
+        .filter((d) =>
+          /^(font-family|font-size|color|font-variant-numeric)\s*:/.test(d),
+        )
+        .sort();
+    expect(typeDecls(partial.body)).toStrictEqual(typeDecls(time.body));
+    // Named as well as compared, so deleting a declaration from BOTH rules
+    // cannot keep this leg green.
+    expect(typeDecls(partial.body)).toStrictEqual([
+      "color: var(--ink-2)",
+      "font-family: var(--font-mono)",
+      "font-size: 13px",
+      "font-variant-numeric: tabular-nums",
+    ]);
   });
 
   it("the neighbour that yields the space still does: .summary-row-offset stays flex: 1 with min-width: 0", () => {
