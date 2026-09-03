@@ -14303,6 +14303,17 @@ describe("Door PR B Task 3 (§5.3): the in-flight reading, banked at close", () 
     expect(run?.partial).toBeUndefined();
     expect(run?.actuals).toHaveLength(1);
     expect(measuredIntervalCount(run!.actuals)).toBe(1);
+    // `reason=no-reading`, NOT `reason=actual-banked` — and the ring is the
+    // ONLY observable that tells those two apart, because both leave the
+    // record without a partial. `no-reading` means the actual RETIRED the
+    // reading when it landed (I-B3 half two); `actual-banked` would mean the
+    // reading survived and was refused at close by `withPartial`'s own
+    // belt-and-braces I-B6 check. Deleting the clear leaves this record
+    // identical and flips this line, which is what makes the clear itself
+    // gated rather than merely redundant.
+    const refused = ring(result).filter((e) => e.kind === "partial-refused");
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.detail).toBe("reason=no-reading idx=none");
   });
 
   it("D3: a rowing frame whose index the program cannot explain mints nothing — the close banks the last INDEXED reading", async () => {
