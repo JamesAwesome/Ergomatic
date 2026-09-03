@@ -1890,6 +1890,25 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **FILED (PR2 Task 4 review, 2026-09-03): `e2e/retest.spec.ts` fails under
+  full-suite load, and the first recorded diagnosis was wrong.** Seen four
+  times across three PR2 tasks, always green when the spec runs in isolation
+  (`pnpm e2e e2e/retest.spec.ts` -> 3 passed), so it is load- or
+  order-dependent, not a broken test. **Corrected signature:** both captured
+  failures are downstream, on `getByText('SESSION SAVED')` never appearing, and
+  the error-context snapshot shows Today ALREADY carrying the saved log row
+  **and** `SET UP YOUR BASELINE` — i.e. the save landed and the baselines were
+  absent. That reads as state pollution between the file's two tests, NOT the
+  test-auth backdoor returning non-ok under load, which is what an earlier
+  report guessed and what a reader would otherwise chase. Traces:
+  `app/test-results/retest-Phase-BL-the-You-re-5b0d3-*/error-context.md` and
+  `.../retest-Phase-BL-the-You-re-cbcae-*/error-context.md` (local, not
+  committed — capture again before re-running, since `pnpm e2e` overwrites
+  `test-results/`). **Unrelated to Wave E PR2:** the Concept2 card has no
+  importer on this branch until Task 8, and every added selector is `.c2-card*`.
+  Owed: root-cause before treating any future red `retest.spec.ts` as noise.
+  **S**
+
 - **FILED (PR2 copy pass, 2026-09-03): the four device-open link failures
   now reach no diagnosis on a plain build.** James's copy ruling made every
   rendered string mechanical, which removed the wire token from
