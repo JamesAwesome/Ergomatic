@@ -41,9 +41,17 @@
 -- own header records the equivalent check being run by hand by James before
 -- ITS merge; do the same here:
 --
---   docker exec <the prod api container> printenv C2_LINK_ENABLED
---   psql "$DATABASE_URL" -c "select count(*) from concept2_links;" \
---                        -c "select count(*) from concept2_auth_attempts;"
+--   docker exec ergomatic-api printenv C2_LINK_ENABLED || echo "UNSET (pass)"
+--   docker exec ergomatic-postgres psql -U ergomatic -d ergomatic \
+--     -c "select count(*) from concept2_links;" \
+--     -c "select count(*) from concept2_auth_attempts;"
+--
+-- The container names are unqualified because production leaves ERGO_STACK
+-- unset: `compose.yml` builds them as `${ERGO_STACK:-ergomatic}-api` and
+-- `-postgres`, and only per-worktree local stacks carry a prefix
+-- (`docs/deploy.md` says the same about `ergomatic-postgres`). The `|| echo`
+-- is there because `printenv` exits non-zero when the variable is ABSENT,
+-- which is the passing case and would otherwise read as a failed command.
 --
 -- Expected: unset or empty, and zero, and zero. ANY OTHER ANSWER IS A STOP.
 -- A `1` is a live writer whose INSERT this drop breaks; a non-zero link
