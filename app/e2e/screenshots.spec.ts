@@ -1867,7 +1867,7 @@ test("post-test-prompt", async ({ page }) => {
   await page.clock.fastForward("08:00");
   await page.getByRole("button", { name: "NEXT →" }).click();
   await page.getByRole("button", { name: "Finish session" }).click();
-  await page.getByRole("button", { name: "Save without logging" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
   await page.getByRole("heading", { name: "Set your 2k baseline?" }).waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "post-test-prompt.png"),
@@ -5317,7 +5317,7 @@ test("justrow-history-chip", async ({ page }) => {
     timeout: 10_000,
   });
   await finishJustRowTimer(page);
-  await page.getByRole("button", { name: "Save without logging" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/today\/log$/);
   await expect(page.locator(".today-log-row")).toHaveCount(3);
   await expect(page.locator(".free-row-chip")).toHaveCount(2);

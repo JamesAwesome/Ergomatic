@@ -178,9 +178,7 @@ describe("JustRowLog (the workout-less log door)", () => {
     commitHandoff(closedFreeRow().startedAt, null, closedFreeRow());
     await renderDoor();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       const body = savedBody(fn);
@@ -228,9 +226,7 @@ describe("JustRowLog (the workout-less log door)", () => {
     commitHandoff(fractional.startedAt, null, fractional);
     await renderDoor();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       const body = savedBody(fn);
@@ -350,16 +346,18 @@ describe("JustRowLog: the plan pair (a Just Row stands in for a session)", () =>
       });
     });
 
-    it("with no plan: Save without logging leads alone; no Log against plan, no Save this row", async () => {
+    // Timer-mode spec (2026-09-02, ruling 5): the no-plan button reads
+    // `Save` on this door too — `Save without logging` survives only
+    // beneath `Log against plan` (the pair tests above).
+    it("with no plan: Save leads alone — no Log against plan, no Save without logging, no Save this row", async () => {
       mockApi(() => new Response(JSON.stringify({ id: "log-1" })), NO_PLAN);
       seed();
       await renderDoor();
 
-      const only = await screen.findByRole("button", {
-        name: "Save without logging",
-      });
+      const only = await screen.findByRole("button", { name: "Save" });
       expect(only).toHaveClass("summary-save-lead");
       expect(screen.queryByText(/Log against plan/)).toBeNull();
+      expect(screen.queryByText("Save without logging")).toBeNull();
       expect(screen.queryByText("Save this row")).toBeNull();
       expect(
         screen
@@ -399,9 +397,7 @@ describe("JustRowLog with no numbers", () => {
     // its own test. A numberless save is undesigned work against the
     // stored shape PR 1 froze, and the honest state until then is a
     // disabled button over a line that says why.
-    expect(
-      screen.getByRole("button", { name: "Save without logging" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 });
 
@@ -434,9 +430,7 @@ describe("JustRowLog reflection", () => {
     await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
     await userEvent.type(screen.getByLabelText("NOTES"), "Steady pull.");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       const body = savedBody(fn);
@@ -480,9 +474,7 @@ describe("JustRowLog: the timer entry", () => {
     expect(screen.queryByText("—")).not.toBeInTheDocument();
     expect(screen.queryByText(/\d m$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/INTERVALS/)).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Save without logging" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
   it("Save posts the time-only body with source timer and NO distance, split, device or machine keys; success clears the run", async () => {
@@ -491,9 +483,7 @@ describe("JustRowLog: the timer entry", () => {
     await renderDoor();
 
     await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       const body = savedBody(fn);
@@ -529,9 +519,7 @@ describe("JustRowLog: the timer entry", () => {
     saveRun(completedTimerRun());
     await renderDoor();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText(/Couldn't save/i)).toBeInTheDocument();
     // RF25: the record outlives a failed write — nothing was cleared.
@@ -546,9 +534,7 @@ describe("JustRowLog: the timer entry", () => {
     await renderDoor();
 
     expect(screen.getByText("SEP 2 · TIMER")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Save without logging" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(screen.queryByText("12:34")).not.toBeInTheDocument();
   });
 

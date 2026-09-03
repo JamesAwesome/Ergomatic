@@ -685,7 +685,8 @@ export interface LogFormFields {
  *  wire entirely, and the STORE resolves it — `advancesPlan ?? !isFreeRow(
  *  workoutId, workoutType)` (`server/stores/logs.ts`, substitution spec
  *  2026-09-02 §Mechanism 1): true for a workout row, false for a free row.
- *  `{ advancesPlan: false }` is what `Save without logging` passes, and
+ *  `{ advancesPlan: false }` is what `Save without logging` passes (and the
+ *  no-plan door's lone `Save`, the same button in different words), and
  *  `{ advancesPlan: true }` is the free row's opt-in — the Just Row door's
  *  `Log against plan` — which is why the builder below writes the key for
  *  EITHER explicit value. It used to write only `false`, because no door
@@ -1359,7 +1360,8 @@ function SessionDoorLog() {
 
   // Fix round (C2): `plan` above conflates "no plan", "still loading" and
   // "hook errored" into the same `null` — correct for what button renders,
-  // wrong for what `Save without logging` sends on the wire. Only a
+  // wrong for what the no-plan `Save` (`Save without logging` when a plan
+  // is up) sends on the wire. Only a
   // RESOLVED plan fetch (`state === "ready"`) can tell the wire body
   // "genuinely omit this session from plan progress"; while the fetch is
   // loading or has errored, the store's own default (`logs.ts`: `??

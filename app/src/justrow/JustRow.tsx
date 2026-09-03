@@ -155,16 +155,14 @@ export default function JustRow() {
             (handoff 2026-09-02: "no longer true; no new words"). */}
         <p className="justrow-meta">NO TARGETS &middot; NO PLAN</p>
 
-        {/* The workout detail's own preview band, carrying the two facts a
-            rower cannot get anywhere else: the machine keeps its own clock,
-            so the row is the erg's rather than ours, and the numbers appear
-            here once they pull. The capture settled that pulling from the
-            main menu enters Just Row by itself, so there is nothing to
-            select on the monitor either. */}
-        <p className="justrow-band">
-          The monitor keeps its own time. Pull when you are ready and the
-          numbers appear here.
-        </p>
+        {/* The workout detail's own preview band. James's own line
+            (timer-mode handoff rev 1c, 2026-09-02, ruling 3): the door says
+            what it is and the two buttons below say how — the previous
+            copy described only the monitor's half ("pull and the numbers
+            appear") on a door that has offered Start Timer since the
+            unconnected spec landed. Exact string; `JustRow.test.tsx` pins
+            it. --ink-2 on --surface-sunken: 9.16:1. */}
+        <p className="justrow-band">Start a free row session.</p>
 
         <div className="action-stack">
           <ConnectAction onProceed={handleProceed} />

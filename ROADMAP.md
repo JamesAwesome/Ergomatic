@@ -293,8 +293,14 @@ slate.
       purpose; in practice the row was too easy to lose in History, so it
       has one now").** Ticked at door PR A's PM gate, which found the row
       discharged and unticked. Filed at #268's PM gate (RF14). **XS**
-- [ ] **Timer mode, on the phone (James, 2026-09-02, build 823, on a
-      Just Row): "really fucked up".** Two defects, both the SHIPPED
+- [x] **Timer mode, on the phone — DONE in this PR (2026-09-02; spec
+      `docs/superpowers/specs/2026-09-02-timer-mode-design.md`, Gate 0
+      `docs/design/handoffs/2026-09-02-timer-mode/`). One END box in both
+      orientations; portrait's ◀ ▶ row sits under Pause; landscape's grid
+      fills the frame (the band was the min-height formula and the shell's
+      reserved tab-bar strip, not the rows — row 4 was already `1fr`).**
+      (James, 2026-09-02, build 823, on a
+      Just Row): "really fucked up". Two defects, both the SHIPPED
       Timer's own — the free row copied it mechanically and made them
       visible on a one-phase screen. (1) **END does not match between
       orientations:** portrait prints `END →` as plain header text (ink-4,
@@ -308,8 +314,12 @@ slate.
       A design pass with a Gate 0 (both orientations, the programmed and
       the free-row timer side by side, since the fix is for both), then a
       fast-path or small PR. **S**
-- [ ] **Free-row copy, three notes for ONE design pass (batched, not one
-      per gate — #268's and #272's PM gates):** (1) the Just Row door's
+- [x] **Free-row copy, three notes — DONE in this PR (2026-09-02, with
+      the Timer-mode pass; rulings 3-5 of the same spec): the band reads
+      `Start a free row session.`, a time-only History row prints
+      `TIME m:ss`, and the no-plan button reads `Save` on both doors.**
+      Three notes for ONE design pass (batched, not one
+      per gate — #268's and #272's PM gates): (1) the Just Row door's
       paragraph ("The monitor keeps its own time…") now captions two
       buttons and describes one; (2) a time-only row's History line shows
       no number until opened; (3) with no plan the Just Row log door's only

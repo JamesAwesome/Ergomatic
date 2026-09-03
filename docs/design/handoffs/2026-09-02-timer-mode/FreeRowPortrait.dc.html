@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    :root { --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade; --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c; --ink-4: #6f6a5f; --rule: #d8d3c4; --rule-3: #c9c3b2; --accent: #b5341f; --on-color: #fffdf7; --action-connect: #2a6275; --radius: 2px; --font-serif: "Newsreader", Georgia, serif; --font-sans: "Archivo", system-ui, sans-serif; --font-mono: "IBM Plex Mono", ui-monospace, monospace; }
+    body { margin: 0; font-family: var(--font-sans); background: var(--page); color: var(--ink); }
+    .mono { font-family: var(--font-mono); }
+    .back { font-family: var(--font-mono); font-size: 15px; color: var(--ink); }
+    .name { font-family: var(--font-mono); font-size: 12px; color: var(--ink-4); text-align: center; }
+    /* THE ONE END: index.css's landscape .timer-end, now in both orientations — 44×44, mono 11/600, 0.06em, accent text + 1px accent border, radius 2 (the connected surface's own End). */
+    .end { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; height: 44px; box-sizing: border-box; font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; white-space: nowrap; color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; }
+    .strip { height: 4px; background: var(--ink); }
+    .strip3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; height: 4px; } .seg { background: var(--rule); } .seg-on { background: var(--ink); }
+    .lbl { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; color: var(--ink-3); margin: 0; }
+    .state { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; color: var(--ink); font-weight: 600; margin: 0; }
+    .face { font-family: var(--font-mono); font-size: 96px; font-weight: 500; line-height: 0.9; letter-spacing: -0.05em; color: var(--ink); margin: 0; }
+    .el { display: flex; align-items: baseline; gap: 10px; font-family: var(--font-mono); } .el-l { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-3); } .el-v { font-size: 26px; color: var(--ink); }
+    .hr { height: 1px; background: var(--rule); }
+    .tl { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink-3); margin: 0 0 2px; }
+    .tv { font-family: var(--font-mono); font-size: 44px; line-height: 1.05; color: var(--ink); margin: 0; letter-spacing: -0.02em; }
+    .ts { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+    .bar { height: 4px; background: var(--rule); } .bar-fill { height: 4px; width: 2%; background: var(--accent); }
+    .upnext { background: var(--surface-sunken); display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; font-family: var(--font-mono); } .un-l { font-size: 10px; letter-spacing: 0.16em; color: var(--ink-3); } .un-v { font-size: 13px; letter-spacing: 0.06em; color: var(--ink); }
+    .pause { display: flex; align-items: center; justify-content: center; min-height: 56px; background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); font-family: var(--font-sans); font-size: 16px; font-weight: 600; color: var(--ink); }
+    .arrows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .arrow { display: flex; align-items: center; justify-content: center; min-height: 52px; background: var(--surface); border: 1px solid var(--rule-3); border-radius: var(--radius); font-size: 12px; color: var(--ink); }
+    .total { display: flex; justify-content: space-between; align-items: baseline; } .total-l { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink-3); } .total-v { font-family: var(--font-mono); font-size: 22px; color: var(--ink); }
+    .notch { position: relative; height: 4px; background: var(--rule); } .notch:after { content: ""; position: absolute; left: 58%; top: -3px; width: 1px; height: 10px; background: var(--ink); }
+    .h1 { font-family: var(--font-serif); font-size: 34px; font-weight: 500; margin: 0; letter-spacing: -0.01em; line-height: 1.08; }
+    .meta { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14px; letter-spacing: 0.14em; color: var(--ink-3); margin: 0; }
+    .band { background: var(--surface-sunken); padding: 12px 14px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; color: var(--ink-2); }
+    .connect { display: flex; align-items: center; justify-content: center; min-height: 56px; background: var(--action-connect); color: var(--on-color); border-radius: var(--radius); font-family: var(--font-sans); font-size: 16px; font-weight: 600; }
+    .l2 { display: flex; align-items: center; justify-content: center; min-height: 52px; background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); color: var(--ink); font-family: var(--font-sans); font-size: 16px; font-weight: 600; }
+    .jr { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; padding: 2px 6px; border: 1px solid var(--rule-3); border-radius: 2px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-3); }
+    .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; border-top: 1px solid var(--rule); background: var(--page); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; } .tab { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); text-align: center; } .tab-on { color: var(--ink); }
+    .card { background: var(--surface); border: 1px solid var(--ink); border-radius: var(--radius); padding: 16px; } .numlabel { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); margin: 0 0 4px; } .numvalue { font-family: var(--font-mono); font-size: 26px; color: var(--ink); margin: 0; }
+    .seclabel { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; color: var(--ink-3); margin: 0; }
+    .pain { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; } .paincell { display: flex; align-items: center; justify-content: center; min-height: 44px; background: var(--surface-sunken); border: 1px solid var(--rule-3); border-radius: var(--radius); font-size: 15px; color: var(--ink-2); }
+    .notes { min-height: 84px; background: var(--surface); border: 1px dashed var(--rule-3); border-radius: var(--radius); padding: 12px; font-family: var(--font-mono); font-size: 14px; color: var(--ink-4); }
+    .lead { display: flex; align-items: center; justify-content: center; min-height: 54px; background: var(--accent); color: var(--on-color); border-radius: var(--radius); font-family: var(--font-sans); font-size: 16px; font-weight: 600; }
+    .row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--rule); } .rname { font-family: var(--font-sans); font-size: 16px; color: var(--ink); display: flex; align-items: center; gap: 10px; } .rmeta { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); }
+    .rline { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink-3); padding: 0 0 8px; border-bottom: 1px solid var(--rule); }
+  </style>
+</helmet>
+<!-- PORTRAIT, free row. Same two changes. On a one-phase run the ◀ ▶ row
+     still exists (shipped: ▶ is the finish) — it sits under Pause, not 260 px
+     below it. -->
+<div style="width: 393px; height: 852px; background: var(--page); position: relative; overflow: hidden; box-sizing: border-box; padding: 8px 20px 20px; display: flex; flex-direction: column;">
+  <div style="display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; min-height: 44px;">
+    <span class="back">&larr;</span><span class="name">Just Row</span><span class="end">END &rarr;</span>
+  </div>
+
+  <div style="margin-top: 10px;"><div class="strip"></div></div>
+  <div style="display: flex; justify-content: space-between; margin-top: 26px;"><p class="lbl">JUST ROW</p><p class="state">RUNNING</p></div>
+  <p class="face" style="margin-top: 10px;">12:34</p>
+  <div class="el" style="margin-top: 12px;"><span class="el-l">ELAPSED</span><span class="el-v">12:34</span></div>
+  <div class="hr" style="margin-top: 10px;"></div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; margin-top: 14px;"><div><p class="tl">TARGET SPLIT</p><p class="tv">Free</p></div><div><p class="tl">RATE</p><p class="tv">Free</p></div></div>
+  <div class="upnext" style="margin-top: 18px;"><span class="un-l">UP NEXT</span><span class="un-v">FINISH</span></div>
+  <div class="pause" style="margin-top: 10px;">Pause</div>
+  <div class="arrows" style="margin-top: 8px;"><div class="arrow">&#9664;</div><div class="arrow">&#9654;</div></div>
+  
+</div>
+</x-dc>
+</body>
+</html>

@@ -294,9 +294,7 @@ describe("WorkoutDetail -> real connected recovery -> LogSession (James's PR #23
 
     await userEvent.click(screen.getByRole("button", { name: "HELD" }));
     await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(apiFn).toHaveBeenCalled());
     const body = parsedBodies(apiFn)[0]!;

@@ -200,6 +200,71 @@ describe("HistoryList", () => {
     expect(screen.getByText("AVG 2:04.5 · 5,000 m")).toBeVisible();
   });
 
+  // TIMER-MODE SPEC (2026-09-02, ruling 4; `History.dc.html`): a row with
+  // NEITHER an average NOR a distance — the phone-timed free row, which
+  // used to render title-and-date and nothing else — prints `TIME m:ss`
+  // under its name, the detail door's own label (`JustRowLog`'s TIME
+  // card). Every other row is untouched: the line exists only where the
+  // §5G snippet would otherwise be empty.
+  it("a time-only row (no average, no distance — the phone-timed free row) prints TIME m:ss under its name", () => {
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-time-only", {
+          workoutId: null,
+          workoutTitle: "Just Row",
+          workoutType: null,
+          timeSeconds: 754,
+        }),
+        makeLog("log-time-only-short", {
+          workoutId: null,
+          workoutTitle: "Just Row",
+          workoutType: null,
+          loggedAt: "2026-07-24T12:00:00.000Z",
+          timeSeconds: 4,
+        }),
+      ]),
+    );
+    renderHistoryList();
+    // m:ss with the seconds zero-padded (`fmtDuration`'s own shape — the
+    // board's 12:34, and the capture suite's four-second row as 0:04).
+    expect(screen.getByText("TIME 12:34")).toBeVisible();
+    expect(screen.getByText("TIME 0:04")).toBeVisible();
+  });
+
+  it("a row with a distance (or an average) shows NO TIME line even when a time is stored — the §5G snippet is unchanged there", () => {
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-connected-free-row", {
+          workoutId: null,
+          workoutTitle: "Just Row",
+          workoutType: null,
+          avgSplitSeconds: 147.4,
+          distanceMeters: 311,
+          timeSeconds: 91.7,
+        }),
+        makeLog("log-avg-and-time", {
+          workoutTitle: OCCLUDED_FRONT.title,
+          workoutType: OCCLUDED_FRONT.type,
+          loggedAt: "2026-07-24T12:00:00.000Z",
+          avgSplitSeconds: 124.5,
+          timeSeconds: 1550,
+        }),
+        makeLog("log-distance-and-time", {
+          workoutTitle: "Steady State",
+          workoutType: "AT",
+          loggedAt: "2026-07-23T12:00:00.000Z",
+          distanceMeters: 6000,
+          timeSeconds: 1550,
+        }),
+      ]),
+    );
+    renderHistoryList();
+    expect(screen.getByText("AVG 2:27.4 · 311 m")).toBeVisible();
+    expect(screen.getByText("AVG 2:04.5")).toBeVisible();
+    expect(screen.getByText("6,000 m")).toBeVisible();
+    expect(screen.queryByText(/TIME/)).not.toBeInTheDocument();
+  });
+
   // Exit criterion 2: a session saved on v0.11.0 (no hero keys posted at
   // all) renders with the meta line intact and no hero snippet — never a
   // dash, never a recomputed stand-in (§2B's absence idiom).
@@ -221,6 +286,9 @@ describe("HistoryList", () => {
     const row = screen.getByText("Steady State").closest("li")!;
     expect(within(row).getByText("JUL 25 · HELD · 2/5")).toBeVisible();
     expect(within(row).queryByText(/AVG/)).not.toBeInTheDocument();
+    // No time stored either, so no TIME line: the timer-mode spec's line
+    // needs a `timeSeconds` to print, never a placeholder.
+    expect(within(row).queryByText(/TIME/)).not.toBeInTheDocument();
   });
 
   it("renders only the present hero segment when the other stored hero is null", () => {

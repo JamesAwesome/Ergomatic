@@ -385,8 +385,7 @@ function wedgeIntoTheGap(deliver: () => void): {
     delivered = true;
     atDelivery.push({
       main: screenText(),
-      consumerMounted:
-        screen.queryByRole("button", { name: "Save without logging" }) !== null,
+      consumerMounted: screen.queryByRole("button", { name: "Save" }) !== null,
     });
     deliver();
   });
@@ -520,7 +519,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
           screen.getByRole("heading", { name: WORKOUT.title }),
         ).toBeInTheDocument();
         expect(
-          screen.getByRole("button", { name: "Save without logging" }),
+          screen.getByRole("button", { name: "Save" }),
         ).toBeInTheDocument();
       },
       { timeout: BURST_HANDOFF_HOLD_MS + 3000 },
@@ -692,9 +691,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     // `handleMonitorSave` builds its body from `monitorEntry.run` and
     // spreads the machine fields on when `summaryTotals !== undefined` —
     // which the store now satisfies and this screen's snapshot does not.
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {
       expect(apiFn).toHaveBeenCalled();
     });
@@ -783,7 +780,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
       await waitFor(
         () => {
           expect(
-            screen.getByRole("button", { name: "Save without logging" }),
+            screen.getByRole("button", { name: "Save" }),
           ).toBeInTheDocument();
         },
         { timeout: BURST_HANDOFF_HOLD_MS + 3000 },
@@ -892,14 +889,14 @@ describe("§10 row 2 through the real destination seam: a producer update after 
       fake.deliverVerification();
       foldedInsideTheGap =
         currentUnretired()?.run.summaryTotals !== undefined &&
-        screen.queryByRole("button", { name: "Save without logging" }) === null;
+        screen.queryByRole("button", { name: "Save" }) === null;
     });
 
     try {
       await waitFor(
         () => {
           expect(
-            screen.getByRole("button", { name: "Save without logging" }),
+            screen.getByRole("button", { name: "Save" }),
           ).toBeInTheDocument();
         },
         { timeout: BURST_HANDOFF_HOLD_MS + 3000 },
@@ -950,9 +947,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     // first test asserts ABSENT (its consumer never saw them) are present
     // here, carrying the shown values, with the identity fields as the
     // positive half so this cannot be satisfied by some other POST.
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {
       expect(apiFn).toHaveBeenCalled();
     });
@@ -986,7 +981,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     await waitFor(
       () => {
         expect(
-          screen.getByRole("button", { name: "Save without logging" }),
+          screen.getByRole("button", { name: "Save" }),
         ).toBeInTheDocument();
       },
       { timeout: BURST_HANDOFF_HOLD_MS + 3000 },
@@ -1012,7 +1007,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
         </Routes>
       </MemoryRouter>,
     );
-    await screen.findByRole("button", { name: "Save without logging" });
+    await screen.findByRole("button", { name: "Save" });
 
     // WHAT IT SHOWS: the machine's own totals, `summaryModel.ts`'s tier-A
     // branch rendering `summaryTotals` verbatim.
@@ -1024,9 +1019,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     // first test asserts ABSENT (its consumer never saw them) are present
     // here, carrying the shown values, with the identity fields as the
     // positive half so this cannot be satisfied by some other POST.
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save without logging" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => {
       expect(apiFn).toHaveBeenCalled();
     });

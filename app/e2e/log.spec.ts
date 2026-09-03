@@ -1112,7 +1112,7 @@ test("criterion 3: the PATCH round trip — skip everything at save, open from h
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 
   // Save with everything skipped — no HELD/PAIN/THUMBS/NOTES chosen.
-  await page.getByRole("button", { name: "Save without logging" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/today$/);
 
   await page.getByRole("link", { name: "ALL SESSIONS" }).click();

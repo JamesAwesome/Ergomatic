@@ -4146,9 +4146,10 @@ button.back-link:disabled,
    move by one pixel, which is the whole diagnosis: walked live in the
    browser at 390×844, the flex column's six children total 546.2px, so
    even at 16px spacing its natural height is 652.2px — well SHORT of the
-   box, and `.timer-controls`'s `margin-top: auto` (below) eats every pixel
-   of the difference (measured `margin-top: 185.8px` before this fix), so
-   no gap value on this column can change the page's height at all.
+   box, and `.timer-controls`'s then `margin-top: auto` (since removed —
+   timer-mode spec 2026-09-02, see that rule) ate every pixel of the
+   difference (measured `margin-top: 185.8px` before this fix), so no gap
+   value on this column could change the page's height at all.
 
    What sets that height is this `min-height` plus `.app-shell`'s
    `padding-bottom: calc(var(--tap) + safe-area-bottom)` (index.css:398),
@@ -4169,12 +4170,19 @@ button.back-link:disabled,
    real one: the document's own ceiling for this route is `100dvh` −
    `var(--tap)`, so that is what the box may be. Re-measured after:
    `scrollHeight` 844, `clientHeight` 844 — exact fit, zero scroll — the
-   box 800px, its content 652.2px, so the auto margin (now 147.8px) still
-   pins the controls to its foot exactly as before, 18px higher up the
+   box 800px, its content 652.2px, and at the time the auto margin (then
+   147.8px) still pinned the controls to its foot, 18px higher up the
    page and nothing else moved. The `gap`
    accordingly goes back to `main`'s 16px: nothing here was ever a spacing
    problem. Landscape is unaffected either way — its own `@media` block
-   overrides `min-height`, `row-gap` and `column-gap` outright. */
+   overrides `min-height`, `row-gap` and `column-gap` outright.
+
+   SINCE THE TIMER-MODE SPEC (2026-09-02, ruling 2) the controls no longer
+   take that slack: `.timer-controls` follows Pause and `.timer-total`
+   orders itself last, so the column's spare height is simply page below
+   TOTAL LEFT (`Main.dc.html`). This `min-height` stays as written — the
+   screen still fills the frame; it just no longer stretches a control
+   row to prove it. */
 .timer-screen {
   display: flex;
   flex-direction: column;
@@ -4213,14 +4221,14 @@ button.back-link:disabled,
   display: contents;
 }
 
-.timer-gutter-back {
-  order: -1;
-  font-family: var(--font-mono);
-  font-size: 15px;
-  color: var(--ink);
-}
-
 .timer-name {
+  /* The decorative ← that used to sit at `order: -1` is gone (desk walk
+     2, 2026-09-02); the name keeps its centred position by taking the
+     row's slack and matching END's 44px on the left, so it does not drift
+     22px off centre. */
+  flex: 1;
+  text-align: center;
+  margin-left: 44px;
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-4);
@@ -4231,16 +4239,26 @@ button.back-link:disabled,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: var(--tap);
-  /* Fix round (spec review F4): 44px height alone isn't a 44×44 target —
-     this measured 36px wide with no min-width, the text's own natural
-     width at 12px mono. */
-  min-width: var(--tap);
+  /* ONE END, BOTH WAYS UP (timer-mode spec 2026-09-02, ruling 1 — James's
+     phone, build 823: "END differs between orientations"). This is the
+     accent-outlined 44×44 box the landscape gutter already drew (revision
+     §2's own connected-header End, mirrored there since Task 7) — now the
+     base rule, so portrait wears the same control instead of plain
+     `--ink-4` header text. The landscape block no longer carries an END
+     rule of its own; `Timer.test.tsx` pins both halves. 44×44 is the
+     house floor and the whole target (spec review F4's old finding: the
+     text alone measured 36px wide). --accent on --page: 5.35:1. */
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
   font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink-4);
+  font-size: var(--size-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--accent);
   background: transparent;
-  border: none;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
   padding: 0;
   cursor: pointer;
 }
@@ -4691,6 +4709,13 @@ button.back-link:disabled,
   gap: 7px;
   border-top: 1px solid var(--ink);
   padding-top: 10px;
+  /* Portrait's regroup (timer-mode spec 2026-09-02, ruling 2;
+     `Main.dc.html`): TOTAL LEFT drops BELOW the ◀ ▶ pair so Pause and the
+     arrows read as one control group. Timer.tsx's DOM order (ruler, then
+     controls) is unchanged — `order` reorders the flex column only.
+     Landscape ignores it: there every child is placed by explicit
+     `grid-row`, and this row keeps its own cell. */
+  order: 1;
 }
 
 .timer-total-head {
@@ -4756,12 +4781,25 @@ button.back-link:disabled,
    forward control is one a rower reaches for mid-piece. Landscape keeps the
    two squares right-aligned (see the orientation override below): there the
    row shares its band with the ruler, and stretching them would put a
-   half-width ▶ under the totals it is not related to. */
+   half-width ▶ under the totals it is not related to.
+
+   NO LONGER PINNED TO THE VIEWPORT'S FOOT (timer-mode spec 2026-09-02,
+   ruling 2 — James's phone, build 823: "a giant gap at the bottom"). This
+   rule carried `margin-top: auto`, and on a flex column whose content is
+   shorter than its `min-height` that one margin swallowed every spare
+   pixel — 264px of dead band between TOTAL LEFT and the arrows at 393×852.
+   The pair now follows Pause as ONE control group (`Main.dc.html`: Pause,
+   then ◀ ▶ at 8px, then TOTAL LEFT), the 8px being this row's own column
+   gap rather than the column's 16px `gap` — hence the -8px, which pulls
+   the row up against Pause's margin. `.timer-total`'s `order` is the
+   other half of the regroup. `.timer-screen` still fills the viewport
+   (its min-height is untouched); only the controls stop clinging to its
+   bottom. */
 .timer-controls {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: auto;
+  margin-top: -8px;
   padding-bottom: 8px;
 }
 
@@ -4850,7 +4888,11 @@ button.back-link:disabled,
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: auto;
+  /* Replaces `.timer-controls` in Timer.tsx, so it takes that row's own
+     place under Pause (timer-mode spec 2026-09-02, ruling 2) — the
+     `margin-top: auto` it used to share with the controls went with
+     theirs; a staged prompt pinned to the viewport's foot, 260px below
+     the question it answers, was the same dead band wearing copy. */
   padding-bottom: 8px;
 }
 
@@ -4887,7 +4929,7 @@ button.back-link:disabled,
    `grid-row` (same reasoning as before: Timer.tsx's own children are not in
    gutter/content-grouped DOM order, so auto-placement would interleave
    rows unpredictably) — `.timer-header` and its nested `.timer-gutter` both
-   go `display: contents` here, promoting `.timer-gutter-back`/
+   go `display: contents` here, promoting (formerly the ← glyph and)
    `.timer-end`/`.timer-name` to be independently
    placeable grid items in their own right (see `.timer-header`'s own base
    rule for the portrait half of this trick). Reference frame 844×390
@@ -4897,7 +4939,32 @@ button.back-link:disabled,
 @media (orientation: landscape) {
   .timer-screen {
     display: grid;
-    grid-template-columns: 44px 1fr;
+    /* THREE COLUMNS, not two (timer-mode spec 2026-09-02, ruling 2;
+       `ProgrammedLandscape.dc.html`): the gutter, the content column, and
+       a 200px control column on the right — Pause's own width — so the
+       ◀ ▶ pair sits UNDER Pause beside TOTAL LEFT rather than on a row of
+       its own below it. Every full-width row spans `2 / -1`; only TOTAL
+       LEFT (column 2) and the controls (column 3) split the last band. */
+    /* Desk walk, 2026-09-02 ("the end button is partially obscured, and the
+       notch is in the way"): the gutter column is 44px PLUS the landscape
+       edge inset, so its controls sit inside the safe area while its
+       sunken background still reaches the physical edge — the connected
+       surface's own rule (`--edge-inset` there too). Symmetric on purpose:
+       Apple's landscape inset protects the rounded corners as well as the
+       housing (Phase CR2, Tech Talk 801; HIG Layout: "accommodating the
+       corner radius, sensor housing, and features like Dynamic Island"),
+       so the OTHER corner needs it as much as the notch side. */
+    --edge-inset: max(
+      env(safe-area-inset-left, 0px),
+      env(safe-area-inset-right, 0px)
+    );
+    grid-template-columns: calc(44px + var(--edge-inset)) 1fr 200px;
+    /* Row 4 (the hero) is the one `1fr` track, and it always was — the
+       band James saw under the controls (build 823) was never the rows
+       refusing to grow, it was the `min-height` below stopping 70px short
+       of the frame. Row 7 holds only the staged panels (END's abandon
+       confirm, the finish confirm, the suspect prompt), which REPLACE the
+       controls in Timer.tsx; empty, it costs a 3px row-gap. */
     grid-template-rows: auto auto auto 1fr auto auto auto;
     column-gap: 14px;
     /* 3px, not portrait's 12 (measured: the frame's real 390px budget
@@ -4909,15 +4976,20 @@ button.back-link:disabled,
        reopening a real 2px overflow — `scrollHeight` 392 vs `clientHeight`
        390 — closed here rather than by touching the row's own content). */
     row-gap: 3px;
-    /* Same `.app-shell` tab-bar-padding accounting as the pre-Task-7 rule
-       this replaces (Task 4's own fix round, F3) — this route hides the
-       tab bar but `.app-shell` still reserves its height, and the 390px
-       frame (unlike portrait's 844px) has no slack to absorb the mismatch
-       silently. */
-    min-height: calc(
-      100dvh - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
-    );
+    /* THE FRAME ITSELF (timer-mode spec 2026-09-02, ruling 2 — "a giant
+       gap at the bottom"). This used to read `100dvh - insets - 26px -
+       var(--tap)`: the 26px was `.screen`'s portrait padding, subtracted
+       from a box whose `border-box` sizing already counts it (the same
+       double-count the portrait rule's own comment diagnosed and removed),
+       and the `var(--tap)` term paid for a strip `.app-shell` reserves for
+       a tab bar this route never renders. Measured at 852×393 (the phone's
+       own CSS size): the grid stopped at 323px and 70px of bare page sat
+       under the controls. Now the grid IS the frame — the insets live in
+       its own padding, inside the box — and the shell's reserved strip is
+       dropped for this screen by the `.app-shell:has(.timer-screen)` rule
+       (beside the connected surface's identical one), so the document is
+       exactly the viewport: no band, no scroll. */
+    min-height: 100dvh;
     /* FULL-BLEED (revision §6/ruling 10, mirrored from the connected
        surface — spec §7's own instruction): `.screen`'s 480px cap and its
        20px/6px padding are sized for a portrait document column. The
@@ -4925,8 +4997,15 @@ button.back-link:disabled,
        connected surface broke out of the cap first. */
     max-width: none;
     margin: 0;
-    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
-      env(safe-area-inset-bottom, 0px) 0;
+    /* Desk walk 2 (James, 2026-09-02, build 835): "still a gap above the
+       bottom edge." The frame no longer pads the bottom inset itself: the
+       GUTTER's sunken background runs to the physical bottom edge (HIG,
+       Layout: "extend content to fill the screen… backgrounds extend to
+       the edges of the display") while each column keeps its CONTROLS
+       above the home-indicator zone with its own bottom inset — the
+       gutter's END and the content column's ◀ ▶ both sit on the safe-area
+       floor, nothing of ours stacked on top of it. */
+    padding: env(safe-area-inset-top, 0px) var(--edge-inset) 0 0;
   }
 
   /* THE GUTTER (revision §5) — this screen's own; the connected surface's
@@ -4940,45 +5019,26 @@ button.back-link:disabled,
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: space-between;
+    /* One child now (the ← is gone, desk walk 2): END sits at the foot. */
+    justify-content: flex-end;
     grid-column: 1;
     grid-row: 1 / -1;
-    padding: 12px 0;
+    /* Controls inside the inset; background to the edge (desk walk 1).
+       Bottom: the home-indicator inset ONLY (desk walk 2) — END's foot is
+       the safe-area floor, and the sunken background continues beneath
+       it to the glass. */
+    padding: 12px 0 env(safe-area-inset-bottom, 0px) var(--edge-inset);
     background: var(--surface-sunken);
     border-right: 1px solid var(--rule);
   }
 
-  .timer-screen .timer-header .timer-gutter-back {
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 15px;
-  }
-
-  /* END, in the gutter: 44×44, accent-outlined (fix round 1, review
-     Minor-5: this comment previously said "ink-outlined", contradicting
-     both the code below and its own parenthetical — revision §2's own
-     connected-header treatment, reused here for the timer's own gutter
-     END — mono 11px/600, accent text/border, radius 2). Overrides the
-     portrait rule's transparent/borderless/auto-width shape entirely.
-     This is a THIRD accent job on this surface (fix round 1, review
-     Minor-4) — the report's original "two jobs" inventory undercounted
-     it; spec-consistent (mirrors the connected surface's own accent-
-     outlined End), not a defect, just an incomplete tally. */
-  .timer-screen .timer-header .timer-end {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
-    font-family: var(--font-mono);
-    font-size: var(--size-label);
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    border-radius: var(--radius);
-  }
+  /* END needs no landscape rule any more: the accent-outlined 44×44 box
+     that lived here (revision §2's connected-header treatment, mono
+     11px/600, accent text/border, radius 2) is `.timer-end`'s BASE rule
+     since the timer-mode spec (2026-09-02, ruling 1 — one END, both ways
+     up). It sits at the gutter's foot by the wrapper's `space-between`
+     above. Still the third accent job on this surface (fix round 1,
+     review Minor-4's tally), now in both orientations. */
 
   /* `.timer-gutter` itself keeps `display: flex` (the override just above)
      — only its PARENT promotes here, one level, so `.timer-gutter` becomes
@@ -5031,7 +5091,7 @@ button.back-link:disabled,
   }
 
   .timer-screen .timer-phase-head {
-    grid-column: 2;
+    grid-column: 2 / -1;
     grid-row: 1;
     /* Spaces title/label/state apart — `.timer-phase-title`'s own text ends
        in a bare "·" (no trailing space, unlike the pre-fix-round nested
@@ -5062,7 +5122,7 @@ button.back-link:disabled,
   }
 
   .timer-screen .timer-dots {
-    grid-column: 2;
+    grid-column: 2 / -1;
     grid-row: 2;
   }
 
@@ -5070,7 +5130,7 @@ button.back-link:disabled,
      rendered at all (an empty grid row costs nothing), a thin 6px bar
      otherwise — never fights the hero row below it for the frame's slack. */
   .timer-screen .timer-phase-bar {
-    grid-column: 2;
+    grid-column: 2 / -1;
     grid-row: 3;
   }
 
@@ -5079,7 +5139,7 @@ button.back-link:disabled,
      `1fr` row in the grid, so it absorbs whatever vertical slack the frame
      has, exactly where the mockup puts the biggest numeral on the screen. */
   .timer-screen .timer-hero {
-    grid-column: 2;
+    grid-column: 2 / -1;
     grid-row: 4;
     flex-direction: row;
     align-items: stretch;
@@ -5115,7 +5175,7 @@ button.back-link:disabled,
      redeclare here beyond what the base rule already inherits. */
 
   .timer-screen .timer-upnext-row {
-    grid-column: 2;
+    grid-column: 2 / -1;
     grid-row: 5;
     flex-direction: row;
     align-items: center;
@@ -5177,9 +5237,16 @@ button.back-link:disabled,
     flex: none;
   }
 
+  /* TOTAL LEFT shares the frame's last band with the ◀ ▶ pair (timer-mode
+     spec 2026-09-02; `ProgrammedLandscape.dc.html`): column 2 beside the
+     controls' column 3, centred on their 44px, and the same 12px off the
+     bottom edge so the two — and END in the gutter, 12px up by its own
+     padding — end on one line. */
   .timer-screen .timer-total {
     grid-column: 2;
     grid-row: 6;
+    align-self: center;
+    margin-bottom: 12px;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -5199,9 +5266,19 @@ button.back-link:disabled,
   }
 
   .timer-screen .timer-controls {
-    grid-column: 2;
-    grid-row: 7;
+    /* Column 3, row 6 — under Pause, beside TOTAL LEFT (timer-mode spec
+       2026-09-02, ruling 2: "the controls sit on the bottom edge"). The
+       12px bottom margin is the board's own inset from the frame's edge
+       and lines the pair up with END's foot in the gutter. `margin-top`
+       resets the base rule's -8px (portrait's regroup against Pause,
+       meaningless on a grid cell). */
+    grid-column: 3;
+    grid-row: 6;
     margin-top: 0;
+    /* Desk walk 2: the board's own 12px inset stacked on top of the
+       home-indicator inset and read as a gap on the phone. The arrows now
+       sit on the safe-area floor, level with END's foot. */
+    margin-bottom: env(safe-area-inset-bottom, 0px);
     /* 0, not the base rule's 8 (measured budget finding, see
        `.timer-name`'s own comment above for the full accounting): this
        row's own trailing padding was part of the 66px overflow. */
@@ -5976,6 +6053,22 @@ section:not(.news-pinned) .news-row:last-of-type {
 .app-shell:has(.connected-surface),
 .app-shell:has(.connected-interstitial) {
   padding-bottom: 0;
+}
+
+/* THE PHONE TIMER'S LANDSCAPE FRAME, same reclaim (timer-mode spec
+   2026-09-02, ruling 2). `/session/run` hides the tab bar by route
+   (AppRoutes.tsx's `hidesTabBar`), but the shell still reserved the bar's
+   44px under it — and in landscape that strip plus the old min-height
+   arithmetic was the 70px band under the controls James saw on build 823.
+   Landscape only: portrait's `.timer-screen` min-height (its base rule)
+   is written against the strip and still fills the frame with it; the
+   landscape rule's `100dvh` is written without it. Same `:has()` floor as
+   the rule above (iOS Safari 15.4+, WKWebView, Chromium 105+); a browser
+   without it keeps the old band, not a broken screen. */
+@media (orientation: landscape) {
+  .app-shell:has(.timer-screen) {
+    padding-bottom: 0;
+  }
 }
 
 .app-shell:has(.connected-surface) .tabbar,

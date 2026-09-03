@@ -1603,7 +1603,7 @@ describe("Timer — the gutter's structure and Pause's own row (connected-revamp
     vi.setSystemTime(FIXED_NOW);
   });
 
-  it("renders exactly one END button, inside .timer-gutter beside the decorative back glyph and NOTHING else", async () => {
+  it('renders exactly one END button, inside .timer-gutter, and NOTHING else — the decorative ← glyph is gone (James, desk walk 2: "what is this arrow" — it did nothing)', async () => {
     mockKeepAwake();
     const run = matrixRun();
     runAtIndex(run, 1);
@@ -1611,22 +1611,18 @@ describe("Timer — the gutter's structure and Pause's own row (connected-revamp
 
     const gutter = document.querySelector(".timer-gutter");
     expect(gutter).not.toBeNull();
-    const back = gutter!.querySelector(".timer-gutter-back");
-    expect(back).not.toBeNull();
-    expect(back).toHaveAttribute("aria-hidden", "true");
     const ends = screen.getAllByRole("button", { name: "END →" });
     expect(ends).toHaveLength(1);
     expect(gutter!.contains(ends[0])).toBe(true);
     // THE DECORATIVE HOUSING SPACER IS GONE (James's erg walk, 2026-08-13
     // — `Timer.tsx`'s own gutter comment has the reasoning). Asserted as an
-    // exact child census, not just `querySelector(...) === null`: landscape
-    // lays this column out with `justify-content: space-between`, which
-    // positions its children by COUNT, so "the housing is absent" and "back
-    // and END are the only two things space-between is dividing" are
-    // different claims and it is the second one the geometry depends on.
+    // exact child census, not just `querySelector(...) === null`. The
+    // decorative ← went the same way (desk walk 2, 2026-09-02): END is the
+    // gutter's ONE child, at the foot via `justify-content: flex-end`.
     expect(
       Array.from(gutter!.children).map((el) => el.className),
-    ).toStrictEqual(["timer-gutter-back", "timer-end"]);
+    ).toStrictEqual(["timer-end"]);
+    expect(gutter!.querySelector(".timer-gutter-back")).toBeNull();
   });
 
   it("Pause lives in .timer-upnext-row, never inside .timer-controls — which now holds exactly Previous phase + Next phase", async () => {
@@ -1895,11 +1891,15 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
   // about by name — for `var(--accent)`, and asserts the exact set,
   // sorted, so a future accent addition or removal on this surface fails
   // this test rather than silently drifting past a report's own prose. */
-  it("accent's exactly three jobs on this surface, and no others — the phase-progress fill, the total-bar fill, and the gutter's END control", () => {
+  // Timer-mode spec (2026-09-02, ruling 1): the third job moved from the
+  // landscape-only `.timer-screen .timer-header .timer-end` to the base
+  // `.timer-end` — still three jobs, the END control now in both
+  // orientations.
+  it("accent's exactly three jobs on this surface, and no others — the phase-progress fill, the total-bar fill, and the END control (both orientations)", () => {
     const ACCENT_TIMER_SELECTORS = [
       ".timer-phase-bar span",
       ".timer-total-bar span",
-      ".timer-screen .timer-header .timer-end",
+      ".timer-end",
     ].toSorted();
 
     const found = new Set<string>();
@@ -1921,12 +1921,16 @@ describe("index.css: the landscape leak is closed (spec §7, adversarial finding
     const rules = timerLandscapeRules();
     // EXACT, not `> 10` (test-integrity sweep, S0c): a floor still passed
     // with half the block deleted, and the per-selector loop below would
-    // then have run against a truncated set. 29 rules today; a deliberate
+    // then have run against a truncated set. 28 rules today; a deliberate
     // addition or removal updates this line, and the author sees the
     // scoping rule it guards while doing so.
     //
-    // 30 -> 31 -> 30 -> 29, both moves in the close-out round and both
-    // deliberate:
+    // 30 -> 31 -> 30 -> 29 -> 28, every move deliberate:
+    //   29 -> 28 (timer-mode spec 2026-09-02, ruling 1). `.timer-screen
+    //     .timer-header .timer-end` is deleted: the accent-outlined 44×44
+    //     box it drew is `.timer-end`'s BASE rule now, one END in both
+    //     orientations, so landscape has nothing left to override (the
+    //     "one END and no dead band" describe below pins both halves).
     //   31 -> 30 (tail review M-3). James's 2026-08-12 ruling stretched the
     //     ◀/▶ pair across the column in PORTRAIT, so landscape needed a
     //     rule pinning them back to a fixed width — but it was added as a
@@ -1938,7 +1942,11 @@ describe("index.css: the landscape leak is closed (spec §7, adversarial finding
     //   30 -> 29 (James's erg walk, 2026-08-13). The gutter's decorative
     //     camera-housing spacer is deleted, and `.timer-screen
     //     .timer-header .timer-gutter-housing` went with it.
-    expect(rules).toHaveLength(29);
+    //   29 -> 28 (timer-mode spec, 2026-09-02): the landscape END override
+    //     deleted — its box rule became the base rule for both orientations.
+    //   28 -> 27 (desk walk 2, 2026-09-02): the decorative ← glyph deleted,
+    //     and `.timer-screen .timer-header .timer-gutter-back` went with it.
+    expect(rules).toHaveLength(27);
     for (const rule of rules) {
       expect(rule.selectors.length).toBeGreaterThan(0);
       for (const selector of rule.selectors) {
@@ -1975,6 +1983,125 @@ describe("index.css: the landscape leak is closed (spec §7, adversarial finding
         ]);
       }
     }
+  });
+});
+
+// TIMER MODE, BOTH WAYS UP (spec 2026-09-02-timer-mode-design, exit
+// criterion 1 — the structural half; `e2e/design.spec.ts`'s "timer mode,
+// both ways up" describe measures the same three facts as geometry). Read
+// against the served stylesheet's source, comment-stripped, the same
+// `ruleBody`/`baseRuleBody`/`timerLandscapeRules` readers as the block above.
+describe("index.css: one END and no dead band, both ways up (timer-mode spec 2026-09-02)", () => {
+  it("the base .timer-end rule IS the accent-outlined 44×44 box, and the landscape block carries no second .timer-end shape", () => {
+    // Ruling 1: one END — the box landscape already drew (the connected
+    // surface's own End) is now the base rule, so portrait wears it too.
+    const body = baseRuleBody(".timer-end");
+    expect(body).toContain("width: 44px");
+    expect(body).toContain("height: 44px");
+    expect(body).toContain("color: var(--accent)");
+    expect(body).toContain("border: 1px solid var(--accent)");
+    expect(body).not.toContain("border: none");
+    // The landscape override that used to hold the box is gone — nothing
+    // in the timer's own landscape query re-shapes END any more. `$`
+    // anchors past `.timer-end-confirm`/`.timer-end-actions`, which are
+    // different elements and stay.
+    const landscapeEndRules = timerLandscapeRules().filter((rule) =>
+      rule.selectors.some((selector) => /\.timer-end$/.test(selector)),
+    );
+    expect(landscapeEndRules).toHaveLength(0);
+  });
+
+  it(".timer-controls no longer clings to the viewport's bottom edge — no margin-top: auto", () => {
+    // Ruling 2, portrait: the ◀ ▶ row follows Pause as one control group.
+    // `margin-top: auto` was the whole dead band (the flex column's slack
+    // went into that one margin — measured 264px at 393×852 on build 823).
+    expect(baseRuleBody(".timer-controls")).not.toContain("margin-top: auto");
+  });
+
+  // Desk walk (James, 2026-09-02, build 834 on the phone): "the end button
+  // is partially obscured, and the notch is in the way." The landscape frame
+  // padded top/right/bottom with the safe-area insets and the LEFT with a
+  // hard 0 "so the gutter reaches the physical edge" — which put the
+  // gutter's CONTROLS under the rounded corner (both sides) and the sensor
+  // housing (one side). Apple: safe areas exist for "avoiding a device's
+  // interactive and display features, like Dynamic Island", and layouts
+  // must accommodate "the corner radius, sensor housing" (HIG, Layout);
+  // WebKit: `env(safe-area-inset-left)` grows in landscape "due to the
+  // sensor housing" (webkit.org/blog/7929); this repo's own finding (Phase
+  // CR2, Tech Talk 801): the landscape inset protects the rounded corners
+  // too, and iOS reports it on BOTH sides. The connected surface already
+  // encodes that as `--edge-inset: max(left, right)` with its gutter at
+  // `calc(44px + var(--edge-inset))`: the sunken background still reaches
+  // the edge, the controls sit inside the inset. The timer mirrors it.
+  it("landscape: the frame defines --edge-inset as max(left, right) and the gutter column is 44px PLUS it, with the gutter's controls padded inside the inset — the connected surface's own rule", () => {
+    const rules = timerLandscapeRules();
+    const screen = rules.find((r) => r.selectors.includes(".timer-screen"));
+    expect(screen, "landscape .timer-screen rule").toBeDefined();
+    const flat = screen!.body.replace(/\s+/g, " ");
+    expect(flat).toContain(
+      "--edge-inset: max( env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px) )",
+    );
+    expect(flat).toContain(
+      "grid-template-columns: calc(44px + var(--edge-inset)) 1fr 200px",
+    );
+    // Symmetric: the right edge takes the same inset, so RUNNING and the
+    // arrows clear the other corner (and the housing, whichever side).
+    // Desk walk 2: the FRAME pads no bottom inset — the gutter's background
+    // reaches the glass, and each column keeps its controls above the
+    // home-indicator zone with its own bottom inset (asserted below).
+    expect(flat).toContain(
+      "padding: env(safe-area-inset-top, 0px) var(--edge-inset) 0 0",
+    );
+    const gutter = rules.find((r) =>
+      r.selectors.includes(".timer-screen .timer-header .timer-gutter"),
+    );
+    expect(gutter, "landscape gutter rule").toBeDefined();
+    expect(gutter!.body.replace(/\s+/g, " ")).toContain(
+      "padding: 12px 0 env(safe-area-inset-bottom, 0px) var(--edge-inset)",
+    );
+    const controls = rules.find((r) =>
+      r.selectors.includes(".timer-screen .timer-controls"),
+    );
+    expect(controls, "landscape controls rule").toBeDefined();
+    expect(controls!.body.replace(/\s+/g, " ")).toContain(
+      "margin-bottom: env(safe-area-inset-bottom, 0px)",
+    );
+  });
+
+  it("landscape: the hero row is the grid's one 1fr track and the grid fills the viewport — no reserved tab-bar strip in its min-height", () => {
+    // Ruling 2, landscape. The middle (hero) row already grew — row 4 was
+    // `1fr` before this spec — so the dead band was never the rows: it was
+    // the min-height formula's `- 26px - var(--tap)` (a padding double-count
+    // plus a strip reserved for a tab bar this route never renders), 70px
+    // of page under a grid that had already stopped. The formula is now the
+    // viewport itself, and the shell's reserved strip is dropped for this
+    // screen the same way it is for the connected surface (the `:has()`
+    // rule pinned below).
+    const screen = timerLandscapeRules().filter((rule) =>
+      rule.selectors.includes(".timer-screen"),
+    );
+    expect(screen).toHaveLength(1);
+    const body = screen[0]!.body;
+    expect(body).toContain(
+      "grid-template-rows: auto auto auto 1fr auto auto auto",
+    );
+    expect(body).toMatch(/min-height:\s*100dvh/);
+    expect(body).not.toContain("var(--tap)");
+    expect(body).not.toContain("26px");
+
+    const shellRules = atRuleBodies(
+      indexCssStripped,
+      "@media (orientation: landscape)",
+    )
+      .flatMap((block) => cssRules(block))
+      .filter((rule) =>
+        rule.selectors.includes(".app-shell:has(.timer-screen)"),
+      );
+    expect(
+      shellRules,
+      "expected exactly one landscape .app-shell:has(.timer-screen) rule",
+    ).toHaveLength(1);
+    expect(shellRules[0]!.body).toContain("padding-bottom: 0");
   });
 });
 
