@@ -53,7 +53,7 @@ import type {
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
 import { phaseSeconds } from "../../../domain/expand.js";
-import { NAMELESS_MONITOR_CAPTION } from "../../monitor/driver.js";
+import { NAMELESS_MONITOR_CAPTION } from "../../monitor/deviceCaption.js";
 import type { EnginePhase } from "../../session/engine";
 import {
   intervalBoundaries,

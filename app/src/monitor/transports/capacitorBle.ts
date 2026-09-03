@@ -47,7 +47,7 @@ import type {
   DiscoveredMonitor,
   Transport,
 } from "../../../domain/monitor/types.js";
-import { NAMELESS_MONITOR_CAPTION } from "../driver.js";
+import { NAMELESS_MONITOR_CAPTION } from "../deviceCaption.js";
 
 // `Transport.write`/`subscribe` take a bare characteristic id (design's own
 // choice, `types.ts`'s header comment) — a real GATT call needs the OWNING

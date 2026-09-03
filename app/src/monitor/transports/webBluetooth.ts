@@ -40,7 +40,7 @@ import type {
   DiscoveredMonitor,
   Transport,
 } from "../../../domain/monitor/types.js";
-import { NAMELESS_MONITOR_CAPTION } from "../driver.js";
+import { NAMELESS_MONITOR_CAPTION } from "../deviceCaption.js";
 
 interface BluetoothRemoteGATTCharacteristic extends EventTarget {
   readonly value?: DataView;

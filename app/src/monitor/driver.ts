@@ -118,6 +118,7 @@ import type {
   Transport,
 } from "../../domain/monitor/types.js";
 import type { MonitorEventLog } from "./eventLog";
+import { NAMELESS_MONITOR_CAPTION } from "./deviceCaption.js";
 // RC-9a (design spec 2026-08-25-free-oracles §1, fix round 1): imported
 // rather than re-declared — a local copy had nothing binding it to
 // `summaryModel.ts`'s own value, so a future change there would silently
@@ -652,14 +653,12 @@ export interface DriverOptions {
   deviceName?: string;
 }
 
-/** RC-18 (door spec §3): the neutral caption every `?? "PM5"` fallback in
- *  this codebase used to invent — a real Concept2 monitor always advertises
- *  a `"PM5 <serial>"` name, so this literal only ever surfaces for a
- *  monitor whose advertised name was nameless (never given) or unusable
- *  (`LogSession.tsx`'s deviceName-band guard, its eighth consumer). Exported
- *  once here, beside the driver whose `capabilities.deviceName` is the
- *  fallback that actually reaches storage, rather than typed at each site. */
-export const NAMELESS_MONITOR_CAPTION = "MONITOR";
+/** RC-18's neutral caption, now defined in the LEAF module
+ *  `deviceCaption.ts` (door PR A's whole-branch review, M-3 — that file's
+ *  own comment has the why) and RE-EXPORTED here so this module's existing
+ *  consumers, the transports included, keep importing it from where they
+ *  always did. New READ-side consumers should import the leaf directly. */
+export { NAMELESS_MONITOR_CAPTION } from "./deviceCaption.js";
 
 /** `DriverOptions.settleTicks`'s own default — see that field's doc
  *  comment for why "omitted" means this number, not "no bound". */

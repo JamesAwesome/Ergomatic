@@ -17,7 +17,7 @@ import { saveRun } from "../session/run";
 // — the exact iOS data-loss failure the lifecycle work exists to prevent.
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import { deriveAxes } from "../monitor/connectedAxes";
-import { NAMELESS_MONITOR_CAPTION } from "../monitor/driver";
+import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption";
 import { read as readHandoff } from "../monitor/handoffStore";
 import { useMonitorSession } from "../monitor/useMonitorSession";
 import ConnectedSurface from "../workout/ConnectedSurface";

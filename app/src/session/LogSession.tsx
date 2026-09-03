@@ -32,7 +32,7 @@ import {
   type LogStep,
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
-import { NAMELESS_MONITOR_CAPTION } from "../monitor/driver";
+import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption";
 import {
   type MachineSummaryDetail,
   type MonitorRun,
@@ -2162,12 +2162,12 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         workoutType: activeWorkout.type,
         steps: logSteps,
         // Door spec (2026-09-02) §2.1: a connected arrival with no record
-        // (`connectedNoRecord`, computed once at mount at :1585 for the
-        // same reason it is read at :2099 — a later render must not
+        // (`connectedNoRecord`, computed once at mount at :1620 for the
+        // same reason it is read at :2247 — a later render must not
         // change what the screen already told the rower) names its own
         // door. No `deviceName` rides with it: the biconditional forbids
         // one on every member but `pm5`, and the only name reachable here
-        // is a best-effort LAST-USED name (see this file's :559 comment
+        // is a best-effort LAST-USED name (see this file's :560 comment
         // and `storedSummary.ts`'s SOURCE header, "SOURCE — A COLUMN, NOT
         // AN INFERENCE").
         source: connectedNoRecord ? "no-reading" : "manual",
