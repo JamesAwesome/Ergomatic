@@ -63,6 +63,20 @@
 //     **59 940 ms apart**, which is I-B3's whole reason for existing and what
 //     leg C2 gates.
 //
+// THE THIRD CAPTURE, for leg D — `walk-2026-08-25/rests-finished-recording
+// .jsonl.gz` ("Walk Rests", README's own grammar `w 1' r1 / w 500m r1 /
+// w 1'`), the corpus's NATURAL FINISH. Decoded the same way:
+//       seq 2437 t=416082.2 0x0031 state=4  (rowing)     el=59.52 d=215.7
+//       seq 2440 t=416622.6 0x0031 state=10 (WORKOUTEND) el=60.0   d=217.1
+//       seq 2443 t=416802.3 0x0037 splitT=60.0 splitD=217 num=3
+// The close fires SYNCHRONOUSLY on seq 2440 — 180 ms BEFORE the final
+// boundary at seq 2443 — and a `WORKOUTEND` frame is neither `rowing` nor
+// `resting`, so `noteFrameForPartial` neither mints nor clears on it. Seq
+// 2437's reading is therefore STILL HELD, on an interval that has no actual
+// yet, at the instant `closeRecord` runs. **I-B1's allowlist is the only
+// thing standing between a completed workout and a partial on its last
+// row**, which is exactly why this leg exists and what M7.2 reddens.
+//
 // Composition is `lifecycleReplay.test.ts`'s exactly (`createReplayTransport`
 // + `vi.doMock("../adapters/monitorTransport")` + `vi.resetModules()` +
 // dynamic re-import + the real `withLiveness` decorator with its clock
@@ -90,21 +104,33 @@ import { withLiveness } from "./transports/liveness";
 /** Same path-surgery idiom as `lifecycleReplay.test.ts`/`burstReplay.test.ts`
  *  (jsdom resolves `new URL(...)` against `http://localhost:3000/`, so string
  *  surgery on `import.meta.url` stands in for it). */
-const WALK_DIR = import.meta.url
+const MONITOR_SESSIONS_ROOT = import.meta.url
   .replace(/^file:\/\//, "")
   .replace(
     /src\/monitor\/partialReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-28/",
+    "../docs/monitor/sessions/",
   );
 
-function loadCapture(file: string): ParsedRecording {
+function loadCapture(walkDir: string, file: string): ParsedRecording {
   return parseRecording(
-    gunzipSync(readFileSync(`${WALK_DIR}${file}`)).toString("utf8"),
+    gunzipSync(
+      readFileSync(`${MONITOR_SESSIONS_ROOT}${walkDir}/${file}`),
+    ).toString("utf8"),
   );
 }
 
-const END_ON_INTERVAL_1 = loadCapture("end-on-interval-1-recording.jsonl.gz");
-const REST_BOUNDARY = loadCapture("rest-boundary-recording.jsonl.gz");
+const END_ON_INTERVAL_1 = loadCapture(
+  "walk-2026-08-28",
+  "end-on-interval-1-recording.jsonl.gz",
+);
+const REST_BOUNDARY = loadCapture(
+  "walk-2026-08-28",
+  "rest-boundary-recording.jsonl.gz",
+);
+const RESTS_FINISHED = loadCapture(
+  "walk-2026-08-25",
+  "rests-finished-recording.jsonl.gz",
+);
 
 /** HAND-TRANSCRIBED from the captures' own `ce060021` programming tx (seq
  *  15-19), which are byte-identical between the two files. **Its
@@ -157,6 +183,59 @@ const BARE_STEP = {
   targetSplit: 152,
   seconds: 60,
 } as const;
+
+/** Leg D's program. HAND-TRANSCRIBED from `rests-finished`'s own programming
+ *  tx and byte-verified the same way `WALK_0828_PROGRAM` is — TIME 60 s r60
+ *  (`03 05 00 00 00 17 70` = duration id TIME/6000 centiseconds,
+ *  `04 02 00 3c` = rest 0x3c = 60 s), DISTANCE 500 m r60
+ *  (`03 05 80 00 00 01 f4` = duration id DISTANCE/500), TIME 60 s r0, every
+ *  target pace `06 04 00 00 3b 60` = 15200 centiseconds = 152.0 s/500 m. Leg
+ *  D's `toStrictEqual([])` divergence assertion is the proof, exactly as legs
+ *  A and B's one-element pin is theirs. Independently reproduces
+ *  `structureWatchReplay.test.ts`'s own already-committed transcription of
+ *  this capture — a second confirmation of the same bytes, not a copy taken
+ *  on faith ("no test file in `src/monitor/` imports another"). */
+const RESTS_FINISHED_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 152,
+      displaySpm: null,
+      restSeconds: 60,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 500,
+      targetSplit: 152,
+      displaySpm: null,
+      restSeconds: 60,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 152,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+  ],
+};
+
+const RESTS_FINISHED_IDENTITY: RunIdentity = {
+  workoutId: "id-walk-2026-08-25-rests-fixture",
+  title: "Walk Rests",
+  logSeed: {
+    steps: [
+      { label: "1:00 @ 2:32", kind: "work" },
+      { label: "500m @ 2:32", kind: "work" },
+      { label: "1:00 @ 2:32", kind: "work" },
+    ],
+    paces: {},
+  },
+};
 
 /** Only ever feeds `MonitorRun.startedAt`/`completedAt`'s ISO stamps, which
  *  no assertion below reads. */
@@ -222,6 +301,8 @@ interface ReplayOutcome {
  */
 async function runReplay(
   recording: ParsedRecording,
+  program: WorkoutProgram,
+  identity: RunIdentity,
   opts: { pressEnd?: boolean } = {},
 ): Promise<ReplayOutcome> {
   // Physical `localStorage` is a real global that `vi.resetModules()` cannot
@@ -267,10 +348,7 @@ async function runReplay(
 
   let replayResult: ReplayResult = { divergences: [] };
   await act(async () => {
-    const pending = result.current.program(
-      WALK_0828_PROGRAM,
-      WALK_0828_IDENTITY,
-    );
+    const pending = result.current.program(program, identity);
     replayResult = await replay.run();
     await pending;
   });
@@ -300,7 +378,11 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
   });
 
   it("LEG A — end-on-interval-1: zero actuals, and the partial is the only number the row has", async () => {
-    const out = await runReplay(END_ON_INTERVAL_1);
+    const out = await runReplay(
+      END_ON_INTERVAL_1,
+      WALK_0828_PROGRAM,
+      WALK_0828_IDENTITY,
+    );
 
     // FIRST, before anything about the partial: the wire replayed as
     // recorded. A mis-transcribed `WALK_0828_PROGRAM` fails HERE rather than
@@ -340,7 +422,11 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
   });
 
   it("LEG B — rest-boundary: the banked boundary is untouched and the partial rides the NEXT step", async () => {
-    const out = await runReplay(REST_BOUNDARY);
+    const out = await runReplay(
+      REST_BOUNDARY,
+      WALK_0828_PROGRAM,
+      WALK_0828_IDENTITY,
+    );
 
     expect(out.divergences).toStrictEqual(EXPECTED_REST_DIVERGENCE);
     expect(out.run.endedBy).toBe("rower");
@@ -404,9 +490,12 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
     // drops interval 0's FIRST resting frame (seq 414, t=76488.9) — so the
     // work bout is still running when End is pressed, and the reading is
     // still live.
-    const out = await runReplay(cutAt(REST_BOUNDARY, 76_200), {
-      pressEnd: true,
-    });
+    const out = await runReplay(
+      cutAt(REST_BOUNDARY, 76_200),
+      WALK_0828_PROGRAM,
+      WALK_0828_IDENTITY,
+      { pressEnd: true },
+    );
 
     // The terminate tx (seq 839) is not in the cut, so there is no barrier
     // left to time out.
@@ -437,9 +526,12 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
     // a partial written now would store a completed interval as an in-flight
     // one and count it unmeasured — the inverse of the complaint this spec
     // exists for.
-    const out = await runReplay(cutAt(REST_BOUNDARY, 100_000), {
-      pressEnd: true,
-    });
+    const out = await runReplay(
+      cutAt(REST_BOUNDARY, 100_000),
+      WALK_0828_PROGRAM,
+      WALK_0828_IDENTITY,
+      { pressEnd: true },
+    );
 
     expect(out.divergences).toStrictEqual([]);
     expect(out.run.endedBy).toBe("rower");
@@ -450,5 +542,40 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
     // the pair off this step is I-B3.
     const steps = buildMonitorLogSteps(out.run);
     expect(steps[0]).toStrictEqual(BARE_STEP);
+  });
+
+  it("LEG D — I-B1 on the wire: a NATURAL FINISH banks nothing, with a live reading still in hand", async () => {
+    // The one leg in this file that is not a `rower` close, and the only
+    // gate anywhere that reaches I-B1 from the wire bytes rather than from
+    // a hand-passed `endedBy`. Its value is entirely in the PRECONDITION,
+    // which this capture supplies and no synthetic fixture would have
+    // volunteered (this file's header, "THE THIRD CAPTURE"): at the instant
+    // `closeRecord` runs, seq 2437's rowing reading is still held, on an
+    // interval with no actual — every gate EXCEPT I-B1 would let it
+    // through. Measured: with `"finished"` added to `PARTIAL_WRITE_REASONS`
+    // this leg banks `{ intervalIndex: 2, meters: 215.7, seconds: 59.52 }`
+    // — a COMPLETED workout carrying an in-flight pair on its last row.
+    const out = await runReplay(
+      RESTS_FINISHED,
+      RESTS_FINISHED_PROGRAM,
+      RESTS_FINISHED_IDENTITY,
+    );
+
+    // No trailing terminate tx in this capture — the machine finished on its
+    // own, so nothing was ever sent that a replay could fail to match.
+    expect(out.divergences).toStrictEqual([]);
+    expect(out.run.endedBy).toBe("finished");
+    expect(out.run.partial).toBeUndefined();
+
+    // And no step carries either key. Asserted over ALL THREE rather than
+    // just the last: the reading held at close belongs to interval 2, but a
+    // gate that only looked there would miss a write mis-keyed onto another
+    // index.
+    const steps = buildMonitorLogSteps(out.run);
+    expect(steps).toHaveLength(3);
+    for (const step of steps) {
+      expect(step.partialMeters).toBeUndefined();
+      expect(step.partialSeconds).toBeUndefined();
+    }
   });
 });
