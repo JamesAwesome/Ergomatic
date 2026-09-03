@@ -5829,6 +5829,84 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   });
 });
 
+// Door PR B (spec §5 + Gate 0-B decision (e), APPROVED 2026-09-02): the
+// PROGRAM-DROPPED log door with nothing kept and an in-flight pair — the
+// one screen where both halves of this PR meet. RF24 in mind: every other
+// gate on the pair reads it out of a STORED log row
+// (`log.spec.ts`'s own legs, `storedSummary.ts`'s builder), while this
+// route renders the LIVE builder (`summaryModel.ts`'s `monitorWorkRows`
+// off `buildMonitorLogSteps`) straight from the durable `MonitorRun`. Two
+// builders, one formatter — this is the half no stored-row leg can reach.
+//
+// The strip above it is the same frame's second claim: with nothing kept
+// its body no longer says "Nothing kept.", because a row directly beneath
+// it is now showing metres the phrase denies.
+function buildDroppedZeroKeptRunWithPartial(workoutId: string): MonitorRun {
+  return {
+    ...buildCompletedMonitorRun(workoutId),
+    // NOTHING KEPT: no interval ever produced an `IntervalActual`, which
+    // is `measuredIntervalCount`'s own zero — never a hand-set count.
+    actuals: [],
+    terminated: true,
+    endedBy: "program-dropped",
+    // Interval 0 is the authored 4:00 EASY step, so its target is a
+    // DURATION and the pair leads with the clock (Gate 0-B decision (b)).
+    // 250 m in 1:03 is 2:06/500m, the same easy pace the rest of this
+    // file's monitor fixtures row at.
+    partial: { intervalIndex: 0, meters: 250, seconds: 63 },
+  };
+}
+
+test.describe("log door (monitor, program-dropped with nothing kept and an in-flight pair)", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-dropped-partial-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Dropped Partial Tester",
+    });
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const run = buildDroppedZeroKeptRunWithPartial(workoutId);
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: MONITOR_RUN_KEY,
+      value: JSON.stringify(run),
+    });
+    await page.goto(`/library/${workoutId}/log?from=monitor`);
+    await expect(
+      page.getByRole("heading", { name: "Hoarfrost" }),
+    ).toBeVisible();
+  });
+
+  test("the drop strip's zero arm states the fact alone — no bold clause, no 'Nothing kept.'", async ({
+    page,
+  }) => {
+    await expect(page.locator(".log-dropped-title")).toHaveText(
+      "THE ERG DROPPED THE WORKOUT.",
+    );
+    // The whole body, by EQUALITY: an emptied `<b>` would leave the same
+    // words with a stray element, and `toContainText` would not see it.
+    await expect(page.locator(".log-dropped-body")).toHaveText(
+      "You had not finished an interval yet.",
+    );
+    await expect(page.locator(".log-dropped-body b")).toHaveCount(0);
+    await expect(page.getByText("Nothing kept.")).toHaveCount(0);
+  });
+
+  test("the in-flight pair renders through the LIVE row builder, clock first, beside the dash", async ({
+    page,
+  }) => {
+    const rows = page.locator(".summary-row");
+    await expect(rows).toHaveCount(3);
+    const partialRow = rows.nth(0);
+    await expect(partialRow.locator(".summary-row-partial")).toHaveText(
+      "1:03 · 250 m",
+    );
+    await expect(partialRow.locator(".summary-row-dash")).toHaveText("—");
+    // The other two intervals of the same dropped run: dash, no pair.
+    await expect(page.locator(".summary-row-partial")).toHaveCount(1);
+    await expect(rows.nth(1).locator(".summary-row-dash")).toHaveText("—");
+    await expect(rows.nth(2).locator(".summary-row-dash")).toHaveText("—");
+  });
+});
+
 // Phase 6B (Task 5): the three mutually-exclusive staged-confirm panels
 // (END's abandon confirm, ▶/NEXT's finish confirm, NEXT's suspect-actual
 // choice) each get their own sweep, one staged open at a time — the
@@ -9360,6 +9438,55 @@ test.describe("connected screens (fake-driven)", () => {
       expect(hollow.bg).toBe("rgba(0, 0, 0, 0)");
       expect(hollow.borderStyle).toBe("solid");
       expect(hollow.borderColor).toBe(INK_RGB);
+    });
+
+    // Gate 0-B decision (e), APPROVED 2026-09-02: with nothing kept the
+    // banner renders its TITLE ALONE — no body element at all, not an
+    // emptied one. Two reasons, both in `ConnectedSurface.tsx`'s own
+    // comment: the claim was never live long enough to be worth stating
+    // (fresh frames unmount the whole banner), and after §5 a stopped
+    // piece's step row now shows metres the phrase would be denying.
+    //
+    // WHAT THIS PROVES, EXACTLY (RF26): the fixture is
+    // `ConnectedSurface.screens.test.tsx`'s own `toMatchFileSnapshot`
+    // output, so this leg gates the SHIPPED MARKUP through the real
+    // cascade — the zero arm's title still lands as the banner's only
+    // child, at the banner's own filled-red contrast. It does not gate the
+    // component's branch logic; that is Task 6's two `ConnectedSurface.
+    // test.tsx` legs and M6.1, and the snapshot is what ties the two
+    // together (a source change without a regenerated fixture goes red in
+    // the client project, not here).
+    test("banner: the kept === 0 arm renders the title ALONE — no body element, and no 'Nothing kept.'", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-ready-lost");
+      const banner = page.locator(".connected-lost");
+      await expect(banner).toHaveAttribute("role", "status");
+      await expect(page.locator(".connected-lost-title")).toHaveText(
+        "LOST THE MONITOR",
+      );
+      // ABSENT, never present-and-empty: an empty span still reserves the
+      // banner's own `gap`, and a screen reader still announces a
+      // `role="status"` child that changed.
+      await expect(page.locator(".connected-lost-body")).toHaveCount(0);
+      await expect(banner.locator(":scope > *")).toHaveCount(1);
+      await expect(page.getByText("Nothing kept.")).toHaveCount(0);
+      // The header behind it still reads READY, so this is genuinely the
+      // zero case — a banner over a session that had produced nothing.
+      await expect(page.locator(".connected-line-trailing")).toHaveText(
+        "1 OF 4 · READY",
+      );
+      // Same filled-red banner as the kept >= 1 arm above: dropping the
+      // body must not have dropped the emphasis with it. `--judge-slower`
+      // ground with `--surface` text is 7.94:1, computed at that leg.
+      const fill = await banner.evaluate(
+        (el) => getComputedStyle(el).backgroundColor,
+      );
+      expect(fill).toBe(JUDGE_SLOWER_RGB);
+      const titleColor = await page
+        .locator(".connected-lost-title")
+        .evaluate((el) => getComputedStyle(el).color);
+      expect(titleColor).toBe(SURFACE_RGB);
     });
 
     test("layout: survives the banner's height without overflow, both orientations", async ({
