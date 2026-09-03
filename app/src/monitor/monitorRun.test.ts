@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
+import type { CloseReason } from "./monitorRun";
 import {
   compileProgram,
   type WorkoutProgram,
@@ -28,6 +29,8 @@ import {
   appendSummaryObservations,
   anyLiveSession,
   connectGuardStage,
+  withPartial,
+  partialRefusal,
   MONITOR_RUN_KEY,
   type MonitorRun,
   type MachineSummaryDetail,
@@ -530,6 +533,51 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
 
   it("MONITOR_RUN_KEY / RUN_KEY are distinct storage keys — the two records never collide", () => {
     expect(MONITOR_RUN_KEY).not.toBe(RUN_KEY);
+  });
+
+  // Door spec §5.1: `partial` is additive-optional, NO `v` bump. Start at
+  // the WRITER (saveMonitorRun), assert AFTER the reader (loadMonitorRun) —
+  // RF24.
+  it("round-trips a partial byte for byte through save/load — additive, no v bump", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      partial: { intervalIndex: 1, meters: 312, seconds: 61 },
+    };
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded?.partial).toStrictEqual({
+      intervalIndex: 1,
+      meters: 312,
+      seconds: 61,
+    });
+  });
+
+  // Door spec §5.1: "isMonitorRun tolerates new fields" — the tolerance
+  // belongs to the VALIDATOR's general no-unknown-key-check policy, not to
+  // `partial` specifically. This leg proves that: a record carrying
+  // `partial` PLUS a key this build has never heard of still loads whole,
+  // unknown key included.
+  it("tolerates an unknown key beside partial — proves the tolerance is the validator's, not this field's", () => {
+    const run = freshMonitorRun();
+    const raw = JSON.stringify({
+      ...run,
+      partial: { intervalIndex: 1, meters: 312, seconds: 61 },
+      someFutureField: "whatever",
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
+
+    const loaded = loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.partial).toStrictEqual({
+      intervalIndex: 1,
+      meters: 312,
+      seconds: 61,
+    });
+    expect((loaded as unknown as Record<string, unknown>).someFutureField).toBe(
+      "whatever",
+    );
   });
 });
 
@@ -2103,5 +2151,135 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
     expect(loaded).not.toBeNull();
     expect(loaded?.v).toBe(2);
     expect(loaded).toStrictEqual(viaJson(after));
+  });
+});
+
+describe("withPartial / partialRefusal: the in-flight partial gate (door spec §5.2 I-B1/I-B3/I-B6)", () => {
+  beforeEach(() => localStorage.clear());
+
+  const reading = { intervalIndex: 1, meters: 300, seconds: 60 };
+
+  // door spec §5.2 I-B1, as an ALLOWLIST — one `it.each` over ALL SIX
+  // members of `CloseReason | "interrupted"` so a future widening of
+  // either union cannot silently skip a member. Four accept and return a
+  // NEW object; two refuse (`"finished"` AND `"interrupted"`) and return
+  // the SAME reference. Mutations M1.1a/M1.1b (task-1-report.md) prove
+  // the two refused members are independently gated, not one negation.
+  it.each([
+    ["rower", true],
+    ["link-lost", true],
+    ["program-dropped", true],
+    ["program-failed", true],
+    ["finished", false],
+    ["interrupted", false],
+  ] satisfies [CloseReason | "interrupted", boolean][])(
+    "endedBy: %s -> writes partial: %s",
+    (endedBy, shouldWrite) => {
+      const run = freshMonitorRun();
+      const after = withPartial(run, endedBy, reading);
+      // Ternaries inside the expect arguments, not a conditional gating
+      // the assertion (vitest/no-conditional-expect) — the SAME two
+      // properties are checked on every row, refused or written.
+      expect(after === run).toBe(!shouldWrite);
+      expect(after.partial).toStrictEqual(shouldWrite ? reading : undefined);
+    },
+  );
+
+  // I-B3: the caller passes `null` once the in-flight interval's work
+  // bout has ended; `withPartial` does not re-derive that from timing —
+  // it simply declines. Same reference back.
+  it("refuses a null reading (I-B3's caller contract) — same reference", () => {
+    const run = freshMonitorRun();
+    const after = withPartial(run, "rower", null);
+    expect(after).toBe(run);
+  });
+
+  // I-B6: never for an interval that already carries an `IntervalActual`,
+  // checked against the RECORD (`run.actuals`), never inferred from
+  // boundary timing. Built from a real `createMonitorRun` + `recordActual`
+  // (RF3), never a hand-built literal.
+  it("refuses when run.actuals already carries that interval's own actual (I-B6)", () => {
+    const built = createMonitorRun(
+      {
+        workoutId: "fl-workout-id",
+        title: "Filling Low",
+        program: fillingLowProgram(),
+        deviceName: "PM5 12345",
+        logSeed: TEST_SEED,
+      },
+      t0,
+    );
+    const withActual = recordActual(built, actual1); // actual1.index === 0
+    const collidingReading = { intervalIndex: 0, meters: 50, seconds: 10 };
+
+    const after = withPartial(withActual, "rower", collidingReading);
+
+    expect(after).toBe(withActual);
+    expect(after.partial).toBeUndefined();
+  });
+
+  // A non-colliding interval on the SAME run still writes — proves I-B6's
+  // check is keyed on the specific interval index, not "any actuals
+  // present at all".
+  it("still writes a partial for a DIFFERENT interval than the one already banked", () => {
+    const built = createMonitorRun(
+      {
+        workoutId: "fl-workout-id",
+        title: "Filling Low",
+        program: fillingLowProgram(),
+        deviceName: "PM5 12345",
+        logSeed: TEST_SEED,
+      },
+      t0,
+    );
+    const withActual = recordActual(built, actual1); // index 0
+    const nonCollidingReading = { intervalIndex: 1, meters: 300, seconds: 60 };
+
+    const after = withPartial(withActual, "rower", nonCollidingReading);
+
+    expect(after).not.toBe(withActual);
+    expect(after.partial).toStrictEqual(nonCollidingReading);
+  });
+
+  // `partialRefusal` is a SECOND reading of the same `PARTIAL_WRITE_REASONS`
+  // const, written so the ring can name WHY nothing was banked without
+  // `withPartial` changing shape. This leg pins the two predicates to
+  // agree EXHAUSTIVELY: for every close reason and every reading state,
+  // `partialRefusal(...) === null` iff `withPartial(...)` actually wrote
+  // (returned a NEW reference). Mutation M1.4 makes the two disagree.
+  it("partialRefusal agrees with withPartial exhaustively, across all six close reasons and every reading state", () => {
+    const built = createMonitorRun(
+      {
+        workoutId: "fl-workout-id",
+        title: "Filling Low",
+        program: fillingLowProgram(),
+        deviceName: "PM5 12345",
+        logSeed: TEST_SEED,
+      },
+      t0,
+    );
+    const withActual = recordActual(built, actual1); // banks index 0
+
+    const closeReasons: (CloseReason | "interrupted")[] = [
+      "finished",
+      "rower",
+      "link-lost",
+      "program-failed",
+      "program-dropped",
+      "interrupted",
+    ];
+    const readingStates: (typeof reading | null)[] = [
+      null,
+      reading, // index 1 — not banked
+      { intervalIndex: 0, meters: 50, seconds: 10 }, // collides with actual1
+    ];
+
+    for (const endedBy of closeReasons) {
+      for (const r of readingStates) {
+        const wrote = withPartial(withActual, endedBy, r) !== withActual;
+        const refusal = partialRefusal(withActual, endedBy, r);
+        expect(refusal === null).toBe(wrote);
+      }
+    }
   });
 });

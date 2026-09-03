@@ -287,6 +287,26 @@ export interface MonitorRun {
    */
   verificationBytes?: readonly number[];
   /**
+   * Door spec (2026-09-02) §5.1 — THE FIRST OF THE TWO STORED SHAPES this
+   * change touches (the second is the posted `LogStep`). OUR reading of
+   * the interval that was still in flight when this run closed short: the
+   * last rowing frame's own 0x0031 `distanceMeters`/`elapsedSeconds`, plus
+   * the program index they belong to. Never an `IntervalActual` (§5.2
+   * I-B2), so `measuredIntervalCount` does not move and "N intervals kept"
+   * is unchanged.
+   *
+   * Additive-optional with NO `v` bump, the same never-migrate contract
+   * `endedBy`/`series`/`summaryTotals` above already established:
+   * `isMonitorRun` is a positive conjunction with no unknown-key check
+   * (its own comment says so), so an older build reading a newer record
+   * ignores this and a newer build reading an older one sees `undefined`.
+   *
+   * Written ONCE, at close, by `withPartial` below — never by
+   * `completeMonitorRun` (which is the wire-event closer and has no frame
+   * in hand) and never after `completedAt` is set.
+   */
+  partial?: { intervalIndex: number; meters: number; seconds: number };
+  /**
    * RC-3 (storage-spine design spec §2, PR 1 Task 2): 0x0039's other nine
    * fields — everything the characteristic carries beyond the work-only
    * totals `summaryTotals` above already holds — folded on in the SAME
@@ -1142,6 +1162,93 @@ function completeWithoutWireEvidence(
  */
 export function completeInterruptedRun(run: MonitorRun, now: Date): MonitorRun {
   return completeWithoutWireEvidence(run, now, "interrupted");
+}
+
+/** Door spec (2026-09-02) §5.2 I-B1 — the FOUR close reasons that WRITE
+ *  a partial, as a value-equality ALLOWLIST. Deliberately NOT
+ *  `endedBy !== "finished"`: `withPartial`'s input is
+ *  `CloseReason | "interrupted"`, and a negation would admit
+ *  `"interrupted"` — §5.3's "Today's unlogged row writes none".
+ *
+ *  This is `storedSummary.ts`'s `PARTIAL_CLOSE_REASONS` MINUS
+ *  `"interrupted"`, by design, and it is a second local declaration
+ *  rather than an import ON PURPOSE: importing that const here closes a
+ *  runtime cycle (`monitorRun` -> `storedSummary` -> `summaryModel` ->
+ *  `monitorRun`, the last hop a VALUE import of
+ *  `measuredSessionSeconds`). If a sixth close reason is ever added,
+ *  BOTH lists are edited; the render list keeps `"interrupted"` and this
+ *  one never gains it. */
+const PARTIAL_WRITE_REASONS = [
+  "rower",
+  "link-lost",
+  "program-dropped",
+  "program-failed",
+] as const;
+
+/**
+ * Door spec (2026-09-02) §5.2 — the in-flight reading's gate, as ONE pure
+ * function so both close sites (`useMonitorSession.ts`'s `closeRecord` and
+ * its continuity-reset commit) apply the identical rule rather than two
+ * copies of it.
+ *
+ * - **I-B1** — banked only on the FOUR wire-close reasons, as an
+ *   ALLOWLIST (`PARTIAL_WRITE_REASONS` above), never as
+ *   `endedBy !== "finished"`: this function's parameter type also admits
+ *   `"interrupted"`, and §5.3 says an interrupted close writes none. Tier
+ *   B2 (`storedSummary.ts`'s `isReconstructableClose`) therefore never
+ *   sees a partial and its GATED population stays provably historical.
+ * - **I-B3** — the caller passes `null` once the in-flight interval's WORK
+ *   BOUT has ended; this function does not re-derive that from timing.
+ * - **I-B6** — never for an interval that already carries an
+ *   `IntervalActual`, checked against the RECORD, never against boundary
+ *   timing: `MonitorFrame.intervalIndex` lags the machine's own interval
+ *   reset by up to 810 ms
+ *   (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`), so a rowing
+ *   frame can carry the index of an interval whose actual is already
+ *   banked. Without this check a close in that window writes
+ *   `partialMeters: 0` beside `actualMeters: 250`.
+ *
+ * Returns its input unchanged when any gate refuses, so a caller can hand
+ * the result straight on without an identity check of its own.
+ */
+export function withPartial(
+  run: MonitorRun,
+  endedBy: CloseReason | "interrupted",
+  reading: { intervalIndex: number; meters: number; seconds: number } | null,
+): MonitorRun {
+  if (!PARTIAL_WRITE_REASONS.some((r) => r === endedBy)) return run;
+  if (reading === null) return run;
+  if (run.actuals.some((a) => a.index === reading.intervalIndex)) return run;
+  return { ...run, partial: reading };
+}
+
+/**
+ * Door spec §5.3 + harden lens 2, finding 3 — the SAME three gates, as a
+ * NAME. Every refusal above is silent, and a rower who reports "it kept
+ * nothing" leaves a diagnostics ring with no line saying why; both close
+ * sites in `useMonitorSession.ts` record this reason (`partial-refused`)
+ * so the answer is in the export rather than re-derived from a timeline.
+ *
+ * Written as a second reading of the SAME `PARTIAL_WRITE_REASONS` const
+ * rather than folded into `withPartial`'s return type, so `withPartial`
+ * keeps the plain `MonitorRun` signature both close sites already hand
+ * straight on. The two predicates are pinned to agree EXHAUSTIVELY by
+ * `monitorRun.test.ts`'s own leg (M1.4) — a duplicated predicate with no
+ * agreement gate is the drift class this repo keeps paying for.
+ */
+export function partialRefusal(
+  run: MonitorRun,
+  endedBy: CloseReason | "interrupted",
+  reading: { intervalIndex: number; meters: number; seconds: number } | null,
+): "finished" | "interrupted" | "no-reading" | "actual-banked" | null {
+  if (!PARTIAL_WRITE_REASONS.some((r) => r === endedBy)) {
+    return endedBy === "finished" ? "finished" : "interrupted";
+  }
+  if (reading === null) return "no-reading";
+  if (run.actuals.some((a) => a.index === reading.intervalIndex)) {
+    return "actual-banked";
+  }
+  return null;
 }
 
 /**
