@@ -7,15 +7,19 @@ import { renderCallbackPage } from "../concept2/callbackPage.js";
 import type { C2Client } from "../concept2/client.js";
 import {
   buildC2Payload,
+  deriveWeightClass,
   eligibilityFailure,
+  pickDeclaredWeightClass,
   type SessionLogRow,
+  type WeightClass,
+  type WeightClassFailure,
+  type WeightClassSource,
 } from "../concept2/mapping.js";
 import {
   AttemptNonceCollisionError,
   Concept2LinkConflictError,
   type Concept2Store,
   type LinkSurface,
-  type WeightClass,
 } from "../stores/concept2.js";
 import type { LogsStore } from "../stores/logs.js";
 import { tzError } from "./data.js";
@@ -53,6 +57,12 @@ export interface Concept2RouterDeps {
   // callback", siteUrl).href — the Google precedent). The native one is
   // the constant below.
   webRedirectUri: string;
+  // The Concept2 ORIGIN this deployment talks to (`server/index.ts`'s
+  // `c2BaseUrl`). Returned on `GET /link` because the client builds the
+  // View-on-Concept2 URL and cannot know whether we are pointed at
+  // log.concept2.com or log-dev.concept2.com — a hardcoded guess 404s for
+  // the whole sandbox phase, which is the phase every walk happens in.
+  logbookBaseUrl: string;
   // Injectable clock for token-freshness expiry tests — mirrors the
   // concept2 store's own `clock` injection seam (testing/fakes.ts).
   now?: () => Date;
@@ -83,7 +93,17 @@ const ATTEMPT_MAX_AGE_MS = 15 * 60 * 1000;
 // in-flight request never races a token that expires mid-call.
 const TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 
-const WEIGHT_CLASSES: readonly WeightClass[] = ["H", "L"];
+// How many of the rower's most recent Concept2 results the send path reads to
+// find their latest weight-class DECLARATION (ruling i, producer 1). FIVE,
+// and the number is measured rather than felt: against log-dev from a dev
+// laptop, 5 samples each, medians on 2026-09-03, `?number=1` answered in
+// 216 ms and `?number=5` in 221 ms — a small page is free, so take the one
+// that survives a short run of recent non-rower pieces (a BikeErg or SkiErg
+// result is not required to carry a class). One page only: the route never
+// walks `meta.pagination.links.next`, and a rower with no readable class in
+// these five falls through to the profile derivation, which is quieter than
+// paging their history.
+const DECLARATION_PAGE_SIZE = 5;
 
 // Same shape as `routes/data.ts`'s own `UUID_RE` (that file's own comment:
 // a malformed uuid literal 500s Postgres rather than finding no row).
@@ -173,6 +193,7 @@ export function createConcept2Router({
   requireUser,
   sessions,
   webRedirectUri,
+  logbookBaseUrl,
   now = () => new Date(),
 }: Concept2RouterDeps): Router {
   const router = Router();
@@ -225,17 +246,13 @@ export function createConcept2Router({
         return;
       }
       const body = isRec(req.body) ? req.body : {};
-      const weightClass = body.weightClass;
-      if (
-        typeof weightClass !== "string" ||
-        !WEIGHT_CLASSES.includes(weightClass as WeightClass)
-      ) {
-        res.status(400).json({
-          error: `weightClass must be one of ${WEIGHT_CLASSES.join(", ")}`,
-          field: "weightClass",
-        });
-        return;
-      }
+      // Ruling (i), James 2026-09-03: "I don't want that set in our app. I
+      // want it to be set on Concept2's side." The mint takes nothing
+      // about the rower. An older installed build still SENDS
+      // `weightClass` in this body and is deliberately not refused — the
+      // field is read by nothing, so the value is ignored rather than
+      // 400'd. Refusing it would brick every unupdated build the moment
+      // this deploys, for a field the server no longer has a use for.
       const userId = req.user!.id;
       // Surface is SERVER-DERIVED from which credential requireUser
       // resolved (design §1) — no client-asserted surface exists for an
@@ -254,23 +271,13 @@ export function createConcept2Router({
       await store.deleteExpiredAttempts(ATTEMPT_MAX_AGE_MS);
       let nonce = randomBytes(32).toString("hex");
       try {
-        await store.createAttempt({
-          nonce,
-          userId,
-          weightClass: weightClass as WeightClass,
-          surface,
-        });
+        await store.createAttempt({ nonce, userId, surface });
       } catch (err) {
         if (!(err instanceof AttemptNonceCollisionError)) throw err;
         // 32 random bytes collided with another row's PK: retry ONCE with
         // a fresh nonce; a second collision propagates (500).
         nonce = randomBytes(32).toString("hex");
-        await store.createAttempt({
-          nonce,
-          userId,
-          weightClass: weightClass as WeightClass,
-          surface,
-        });
+        await store.createAttempt({ nonce, userId, surface });
       }
       // `state` explicit beside the URL (design §3): the native app holds
       // the correlation value it presents at /exchange without depending
@@ -385,10 +392,18 @@ export function createConcept2Router({
       // `upsertLink` comment) — a successful relink IS the recovery.
       await store.upsertLink(user.id, {
         c2UserId: me.c2UserId,
+        // `||`, not `??`: ABSENT, EMPTY and VALUED are three cases and only
+        // one of them is a username. `client.ts`'s `fetchMe` returns any
+        // string it finds, empty included (observation 18), and storing
+        // `""` would put a blank where the card's identity line names an
+        // account. `|| null` collapses both non-identities to the one the
+        // column already means.
+        c2Username: me.username || null,
         accessToken: tokenResult.tokens.accessToken,
         refreshToken: tokenResult.tokens.refreshToken,
         expiresAt: tokenResult.tokens.expiresAt,
-        weightClass: consumed.weightClass,
+        // No `weightClass`: migration 0023 dropped the column. `consumed`
+        // is now read only for its freshness verdict.
       });
     } catch (err) {
       // D1: the Concept2 account already belongs to a different Ergomatic
@@ -405,7 +420,18 @@ export function createConcept2Router({
         // `username` is documented optional on Concept2's /users/me (plan
         // observation 3) — the numeric id is the fallback so the page
         // never renders an empty identity.
-        c2Username: me.username ?? `#${me.c2UserId}`,
+        //
+        // `||`, not `??` (observation 18): an empty username is a string
+        // and would render "Concept2  is now connected to Ergomatic …" —
+        // under a comment that used to claim this page "never renders an
+        // empty identity".
+        //
+        // `account #<id>`, not `#<id>`: ONE spelling of the numeric
+        // identity across both surfaces. The card's `identityLine`
+        // renders "Concept2 account #2211 · Ergomatic …", and a rower who
+        // sees "#2211" here and "account #2211" a screen later has to work
+        // out they are the same thing.
+        c2Username: me.username || `account #${String(me.c2UserId)}`,
         email: user.email,
       }),
     );
@@ -491,10 +517,13 @@ export function createConcept2Router({
       try {
         await store.upsertLink(userId, {
           c2UserId: me.c2UserId,
+          // `||`, not `??` — the same absent/empty/valued rule the web
+          // callback's own site above states in full.
+          c2Username: me.username || null,
           accessToken: tokenResult.tokens.accessToken,
           refreshToken: tokenResult.tokens.refreshToken,
           expiresAt: tokenResult.tokens.expiresAt,
-          weightClass: consumed.weightClass,
+          // No `weightClass`: migration 0023 dropped the column.
         });
       } catch (err) {
         // D1, native half: 409 and the tokens are discarded.
@@ -505,11 +534,12 @@ export function createConcept2Router({
         throw err;
       }
       // Never a token on this response — the same projection GET /link
-      // makes.
+      // makes. No `weightClass`: ruling (i) dropped the column it was read
+      // from, and `adapters/linkFlow.ts`'s `linked` outcome stopped
+      // declaring the field in the same commit.
       res.status(200).json({
         linked: true,
         c2UserId: me.c2UserId,
-        weightClass: consumed.weightClass,
       });
     },
   );
@@ -535,13 +565,28 @@ export function createConcept2Router({
       res.json({
         available: true,
         linked: true,
-        weightClass: link.weightClass,
+        // No `weightClass` (ruling i): there is no stored class, and the
+        // card never showed one. Both sides of
+        // `scripts/webauth-contract.test.ts`'s key gate drop it in the
+        // same commit.
+        //
         // PR2 needs the linked account's identity to render the sent-state
         // contract (spec F8: "sent" only when a row's c2_user_id matches
         // the LIVE link's) and to build the View-on-Concept2 URL
         // (/profile/{c2_user_id}/log/{result_id}). Still no token on this
-        // response — only the numeric account id.
+        // response — only the numeric account id, the username, and our
+        // own configured origin.
         c2UserId: link.c2UserId,
+        c2Username: link.c2Username,
+        // EXPLICIT `key: value`, never the ES2015 shorthand
+        // `logbookBaseUrl,` — `scripts/webauth-contract.test.ts`'s
+        // `linkResponseKeys()` parses this literal with a regex that
+        // requires a `key:`, and holds the result equal to both
+        // `Concept2LinkProbe.tsx`'s `LinkStatus` and `useConcept2Link.ts`'s
+        // `Concept2Link`. Shorthand makes this key INVISIBLE to that gate:
+        // the gate stays green while the thing it exists to track goes
+        // unpinned. The redundancy is the point.
+        logbookBaseUrl: logbookBaseUrl,
         needsReauth: link.needsReauthAt !== null,
       });
     },
@@ -624,6 +669,12 @@ export function createConcept2Router({
       // account — never re-derived against a stale link. Resending after
       // relinking to a different account is deliberately allowed past this
       // point (deviation 5's own "resend-to-B overwrites A's record").
+      //
+      // This exit deliberately does NOT gain `weightClass`/
+      // `weightClassSource`: no class was resolved on this request, and
+      // inventing one would be a claim about a send that happened in the
+      // past. The client reads both new fields defensively for exactly
+      // this reason.
       if (row.c2ResultId !== null && row.c2UserId === link.c2UserId) {
         res.status(200).json({ resultId: row.c2ResultId });
         return;
@@ -665,12 +716,16 @@ export function createConcept2Router({
       // `completedAt`-based date on every attempt from here on.
       const mappingRow: SessionLogRow = { ...eligibilityRow, tz: effectiveTz };
 
-      // I4: `weightClass`/`c2UserId` for the payload and for
+      // I4: the `c2UserId` for the weight-class read and for
       // `recordC2Result` must come from the LOCKED re-read inside
       // `withLinkLock`, never the unlocked `store.getLink` read above — a
       // relink landing between that read and the lock would otherwise pair
       // the OLD account's identity with the NEW account's token.
-      type LinkIdentity = { weightClass: WeightClass; c2UserId: number };
+      //
+      // Ruling (i) narrowed this to ONE field: `weightClass` used to ride
+      // here too, read off the stored link row. There is no stored class
+      // any more (migration 0023) — it is resolved from Concept2 below.
+      type LinkIdentity = { c2UserId: number };
       type TokenOutcome =
         | { ok: true; accessToken: string; link: LinkIdentity }
         | { ok: false; status: number; body: Record<string, unknown> };
@@ -715,10 +770,7 @@ export function createConcept2Router({
               },
             };
           }
-          const identity: LinkIdentity = {
-            weightClass: locked.weightClass,
-            c2UserId: locked.c2UserId,
-          };
+          const identity: LinkIdentity = { c2UserId: locked.c2UserId };
           if (
             retry !== undefined &&
             locked.accessToken !== retry.staleAccessToken
@@ -762,8 +814,9 @@ export function createConcept2Router({
             };
           }
           if (refreshed.grantDead) {
-            // Link + weight_class INTACT (plan deviation 3) — automatic
-            // paths never delete.
+            // Link INTACT (plan deviation 3) — automatic paths never
+            // delete. (It used to say "link + weight_class"; ruling i
+            // dropped the column, so the link itself is the whole cost.)
             return {
               action: "flagReauth",
               result: {
@@ -781,6 +834,151 @@ export function createConcept2Router({
         });
       }
 
+      // Both wire calls this route makes can come back 401, and both must
+      // answer identically — hence one helper rather than two copies. The
+      // flag must be bound to the SAME link that actually produced the 401:
+      // a fresh unconditional `withLinkLock` would flag whatever link exists
+      // at that moment, and a callback relink landing in between would clear
+      // `needsReauthAt` (upsertLink's own contract) and then have this
+      // re-flag the NEW grant on the OLD grant's rejection (I4's
+      // authority-split class). If the link's CURRENT access token still
+      // matches the rejected one, the grant this route tried is still live —
+      // flag it. If it does not match, a relink or rotation happened
+      // concurrently and the NEW grant was never tried at all, so the honest
+      // answer is a retryable c2_error rather than a needs_reauth that sends
+      // the rower through re-consent for a grant that may be fine.
+      async function flagIfSameGrant(rejectedToken: string): Promise<boolean> {
+        return store.withLinkLock<boolean>(userId, async (locked) => {
+          const matches =
+            locked !== null && locked.accessToken === rejectedToken;
+          if (matches) {
+            return { action: "flagReauth", result: true };
+          }
+          return { action: "none", result: false };
+        });
+      }
+
+      // Producer order for Concept2's `weight_class` (ruling i;
+      // `concept2/mapping.ts`'s block comment carries the vendor sentence
+      // that forces it): the rower's own most recent DECLARATION first, our
+      // derivation from their profile second, a refusal third. We never
+      // guess a competition category onto a permanent third-party record.
+      //
+      // A FAILED read is not an EMPTY read. A `c2_error` on the declaration
+      // page returns here, retryable, naming the layer that failed; only a
+      // page that came back and genuinely carries no usable class falls
+      // through to the profile. Refusing when we have no data and guessing
+      // when we FAILED TO READ data is an asymmetry nothing argues for, and
+      // the thing it guesses is a competition category on a permanent
+      // third-party record. The only failure this helper surfaces as `auth`
+      // is one the CALLER must re-run wholesale on a refreshed token.
+      //
+      // `ourResultIds` is observation 29: the results list contains the rows
+      // this app posted, and nothing on them says so. `ourRowsSkipped` rides
+      // out purely so the log line can report it — it is a count of OUR OWN
+      // writes, never anything about the rower's other rows.
+      type WeightClassResolution =
+        | {
+            ok: true;
+            weightClass: WeightClass;
+            source: WeightClassSource;
+            ourRowsSkipped: number;
+          }
+        | { ok: false; kind: "auth" }
+        | {
+            ok: false;
+            kind: "c2_error";
+            layer: "declaration" | "profile";
+            status: number | null;
+          }
+        | { ok: false; kind: "no_class"; reason: WeightClassFailure };
+
+      async function resolveWeightClass(
+        token: string,
+        c2UserId: number,
+      ): Promise<WeightClassResolution> {
+        const list = await client.fetchResults(token, DECLARATION_PAGE_SIZE);
+        if (!list.ok) {
+          if (list.kind === "auth") return { ok: false, kind: "auth" };
+          return {
+            ok: false,
+            kind: "c2_error",
+            layer: "declaration",
+            status: list.status,
+          };
+        }
+        const ourResultIds = await logs.sentC2ResultIds(userId, c2UserId);
+        const ourRowsSkipped = list.rows.filter(
+          (row) => row.id !== null && ourResultIds.has(row.id),
+        ).length;
+        const declared = pickDeclaredWeightClass(list.rows, {
+          ourResultIds,
+          now: now().getTime(),
+        });
+        if (declared !== null) {
+          return {
+            ok: true,
+            weightClass: declared,
+            source: "declaration",
+            ourRowsSkipped,
+          };
+        }
+        const me = await client.fetchMe(token);
+        if (!me.ok) {
+          if (me.kind === "auth") return { ok: false, kind: "auth" };
+          return {
+            ok: false,
+            kind: "c2_error",
+            layer: "profile",
+            status: me.status,
+          };
+        }
+        const derived = deriveWeightClass(me);
+        if (!derived.ok) {
+          return { ok: false, kind: "no_class", reason: derived.reason };
+        }
+        return {
+          ok: true,
+          weightClass: derived.weightClass,
+          source: "profile",
+          ourRowsSkipped,
+        };
+      }
+
+      // One line per send, naming WHICH producer answered — the route had no
+      // logging at all before this. `console.log` on success and
+      // `console.warn` on failure follows `auth/middleware.ts`'s convention
+      // (`auth_via` logs, `auth_disagreement` warns).
+      //
+      // What it carries and what it must never carry: our own `logId` and
+      // the resolved source; a COUNT of how many returned rows were OUR OWN
+      // writes (the diagnostic that would have exposed observation 29 in
+      // production); and on failure the layer, its status, or the refusal
+      // reason. Never a token, never a result body, never a Concept2 result
+      // id, never anything about another rower's rows.
+      function logWeightClass(outcome: WeightClassResolution): void {
+        const base = { event: "c2_weight_class", logId };
+        if (outcome.ok) {
+          console.log(
+            JSON.stringify({
+              ...base,
+              source: outcome.source,
+              ourRowsSkipped: outcome.ourRowsSkipped,
+            }),
+          );
+          return;
+        }
+        console.warn(
+          JSON.stringify({
+            ...base,
+            failure: outcome.kind,
+            layer: outcome.kind === "c2_error" ? outcome.layer : undefined,
+            status: outcome.kind === "c2_error" ? outcome.status : undefined,
+            reason: outcome.kind === "no_class" ? outcome.reason : undefined,
+          }),
+        );
+      }
+
       const tokenOutcome = await acquireAccessToken();
       if (!tokenOutcome.ok) {
         res.status(tokenOutcome.status).json(tokenOutcome.body);
@@ -789,7 +987,80 @@ export function createConcept2Router({
 
       let accessToken = tokenOutcome.accessToken;
       let lockedLink = tokenOutcome.link;
-      let payload = buildC2Payload(mappingRow, lockedLink, effectiveTz);
+
+      // Ruling (i): the weight class Concept2 requires on every rower result
+      // is Concept2's, and we ask the rower for nothing. It is resolved HERE,
+      // on the send that uses it — never stored, never cached across requests
+      // (ruling R13). A declaration can change on Concept2 at any moment with
+      // no signal to us, and a stale one writes a wrong competition category
+      // into a record we cannot edit. The cost is one extra round trip per
+      // send (~220 ms measured, +~440 ms when the profile fallback also runs)
+      // on a human-initiated action that already renders SENDING; sends are
+      // one per workout, never on a render or a poll. What IS reused is one
+      // resolution per REQUEST across the internal 401 retry below — a
+      // re-read between two attempts at the same row could send two different
+      // classes for one send, which is the split-authority defect I4 exists
+      // to prevent.
+      let resolved = await resolveWeightClass(accessToken, lockedLink.c2UserId);
+      if (!resolved.ok && resolved.kind === "auth") {
+        const retryOutcome = await acquireAccessToken({
+          staleAccessToken: accessToken,
+        });
+        if (!retryOutcome.ok) {
+          res.status(retryOutcome.status).json(retryOutcome.body);
+          return;
+        }
+        accessToken = retryOutcome.accessToken;
+        lockedLink = retryOutcome.link;
+        // The WHOLE resolution re-runs on the fresh token, declaration read
+        // included: retrying only the profile would silently demote a rower
+        // who HAS a declaration to our own derivation, purely because their
+        // first token had expired.
+        resolved = await resolveWeightClass(accessToken, lockedLink.c2UserId);
+        if (!resolved.ok && resolved.kind === "auth") {
+          // I2's rule, one wire call earlier than it used to apply: a repeat
+          // 401 after a GENUINE refresh is a dead grant, not a stale token.
+          // Same helper, same answer, same never-delete.
+          logWeightClass(resolved);
+          const stillSameGrant = await flagIfSameGrant(accessToken);
+          res
+            .status(stillSameGrant ? 409 : 502)
+            .json(
+              stillSameGrant
+                ? { error: "needs_reauth" }
+                : { error: "c2_error" },
+            );
+          return;
+        }
+      }
+      logWeightClass(resolved);
+      if (!resolved.ok) {
+        if (resolved.kind !== "no_class") {
+          // A read that FAILED, not a read that came back empty — the
+          // difference matters because only one of them may be guessed past.
+          // It answers the existing retryable family (502 `c2_error`, the
+          // same words a failed post gets) rather than a new wire token,
+          // because from the rower's side it is the same fact and the only
+          // honest advice is "try again". WHICH layer failed is in the log
+          // line above, where an operator needs it.
+          res.status(502).json({ error: "c2_error" });
+          return;
+        }
+        // A SECOND 422, and the client must tell it from `not_eligible`: that
+        // one is decided from the ROW and cannot be repaired, this one is
+        // decided from Concept2's own side and IS repairable — by designating
+        // a class on a Concept2 result, or by fixing the profile weight.
+        res
+          .status(422)
+          .json({ error: "no_weight_class", reason: resolved.reason });
+        return;
+      }
+
+      let payload = buildC2Payload(
+        mappingRow,
+        resolved.weightClass,
+        effectiveTz,
+      );
       let postResult = await client.postResult(accessToken, payload);
 
       // ONE refresh-and-retry through the same locked path (brief) — C2
@@ -808,7 +1079,9 @@ export function createConcept2Router({
         }
         accessToken = retryOutcome.accessToken;
         lockedLink = retryOutcome.link;
-        payload = buildC2Payload(mappingRow, lockedLink, effectiveTz);
+        // Same class, deliberately: resolved ONCE per request (ruling R13),
+        // reused across this retry so one send can never carry two classes.
+        payload = buildC2Payload(mappingRow, resolved.weightClass, effectiveTz);
         postResult = await client.postResult(accessToken, payload);
 
         // I2: a REPEAT 401 immediately after a GENUINE refresh (or after
@@ -816,34 +1089,11 @@ export function createConcept2Router({
         // signal `refreshTokens`'s own `grantDead` gives — the grant is
         // invalid, not merely stale-by-timing. Flag it identically (never
         // delete) rather than falling through to a generic c2_error.
-        //
-        // The flag must be bound to the SAME link that actually produced
-        // this 401 — a fresh, unconditional
-        // `withLinkLock` call here would flag whatever link exists AT THAT
-        // MOMENT, not the one whose token was just rejected. A callback
-        // relink landing between the retry's `postResult` call and this
-        // lock would clear `needsReauthAt` (upsertLink's own contract) and
-        // then have this branch immediately re-flag the NEW grant based on
-        // the OLD grant's 401 (same authority-split class as I4). The
-        // locked re-read decides: if the link's CURRENT access token still
-        // matches the one that got the 401, the grant this route tried is
-        // still live — flag it. If it doesn't match, a relink or rotation
-        // happened concurrently and the NEW grant was never tried at all —
-        // the honest answer is a retryable c2_error, never a needs_reauth
-        // that would send the rower back through re-consent for a grant
-        // that may already be fine.
+        // `flagIfSameGrant` above carries the whole justification for why
+        // the flag is bound to the rejected grant rather than to whatever
+        // link exists at that moment.
         if (!postResult.ok && postResult.kind === "auth") {
-          const stillSameGrant = await store.withLinkLock<boolean>(
-            userId,
-            async (locked) => {
-              const matches =
-                locked !== null && locked.accessToken === accessToken;
-              if (matches) {
-                return { action: "flagReauth", result: true };
-              }
-              return { action: "none", result: false };
-            },
-          );
+          const stillSameGrant = await flagIfSameGrant(accessToken);
           if (stillSameGrant) {
             res.status(409).json({ error: "needs_reauth" });
           } else {
@@ -869,7 +1119,18 @@ export function createConcept2Router({
           res.status(502).json({ error: "c2_error" });
           return;
         }
-        res.status(200).json({ resultId: postResult.resultId });
+        // The class and WHERE IT CAME FROM ride the response so the rower can
+        // see them on the SENT state (ruling R2). Concept2's own help makes
+        // the class the rower's DECLARATION, so a class we DERIVED is a
+        // guess — and a guess nobody is ever shown can never be corrected,
+        // even though Concept2 permits per-result editing. Neither value is
+        // stored: this is the one moment they exist, which is exactly the
+        // moment the disagreement is created.
+        res.status(200).json({
+          resultId: postResult.resultId,
+          weightClass: resolved.weightClass,
+          weightClassSource: resolved.source,
+        });
         return;
       }
       if (postResult.kind === "duplicate") {

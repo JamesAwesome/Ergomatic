@@ -116,7 +116,11 @@ const stores: Stores = {
 // `completedAt`, `tz`); one new unauthenticated route
 // (`GET /api/concept2/callback`) answers 403 dark rather than not existing —
 // the spec's own "safe end state" (task-7-brief.md's "Produces" line).
-const c2BaseUrl = process.env.C2_BASE_URL ?? "https://log-dev.concept2.com";
+// `||`, not `??` (Wave E PR2): `C2_BASE_URL=""` in a deploy env is a
+// STRING and survives `??`, and an empty origin builds a RELATIVE
+// View-on-Concept2 URL that opens on Ergomatic's own domain. Absent and
+// empty are the same non-answer here, and both take the default.
+const c2BaseUrl = process.env.C2_BASE_URL || "https://log-dev.concept2.com";
 const c2ClientId = process.env.C2_CLIENT_ID ?? "";
 const c2ClientSecret = process.env.C2_CLIENT_SECRET ?? "";
 const c2LinkEnabled = process.env.C2_LINK_ENABLED;
@@ -145,6 +149,11 @@ const concept2 = {
     clientSecret: c2ClientSecret,
   }),
   webRedirectUri: c2WebRedirectUri,
+  // Wave E PR2: the SAME origin the client is configured against, echoed
+  // to the app on `GET /api/concept2/link` so it can build the
+  // View-on-Concept2 link-out without guessing which Concept2 this
+  // deployment talks to.
+  logbookBaseUrl: c2BaseUrl,
 };
 
 const port = Number(process.env.PORT ?? 8080);

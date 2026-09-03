@@ -1,0 +1,45 @@
+-- Wave E PR2 (Gate 0 amendment `docs/design/handoffs/2026-08-31-concept2-connect/
+-- amendment-2026-09-03.html`, rulings i + ii — TRIAD: a stored shape AND what a
+-- number MEANS on a third party's permanent record). One deploy, three changes:
+--   * ADD `concept2_links.c2_username` (text, NULLABLE, no backfill). The
+--     linked account's Concept2 username, captured at exchange from the same
+--     `GET /api/users/me` response `c2_user_id` already comes from. Concept2
+--     documents `username` as optional, so the column is nullable and the You
+--     card falls back to `account #<id>`. Exists because the card's identity
+--     line is the account-injection residual's detect-identity treatment: a
+--     numeric id is not an identity a rower recognises.
+--   * DROP `concept2_links.weight_class` and
+--     `concept2_auth_attempts.weight_class`, and the now-unused `weight_class`
+--     enum TYPE. Ruling (i), James 2026-09-03: "I don't want that set in our
+--     app. I want it to be set on Concept2's side." The class Concept2 requires
+--     on every rower result is now READ from Concept2 at send time — the
+--     rower's own most recent declaration first, our derivation from their
+--     profile weight + gender second, a refusal third — and never stored.
+--
+-- The three ship in ONE migration because they are one deploy: a server that
+-- has stopped asking for a class must not still be inserting one, and a NOT
+-- NULL column with no default cannot survive a writer that stopped writing it.
+--
+-- NOT OLD-IMAGE-COMPATIBLE, and this is stated rather than left to the 0021
+-- precedent. 0021 carries an explicit rollback affordance (`surface` NOT NULL
+-- DEFAULT 'web', with an integration test asserting a rollback-image insert
+-- still succeeds). 0023 gets no equivalent, because its equivalent would go
+-- RED: an old image's `INSERT` into either table names `weight_class`, and
+-- after this drop that errors. The deploy is safe for ONE stated reason —
+-- no writer exists. `C2_LINK_ENABLED` has never been on, so no route can
+-- reach either table; MEASURED 2026-09-03 by reading `printenv
+-- C2_LINK_ENABLED` inside every running api container (all unset/empty;
+-- `compose.yml` passes it through as `${C2_LINK_ENABLED:-}` and
+-- `server/index.ts` treats anything but `"1"` as off). That predicate is the
+-- deciding one: a row count answers "does this destroy anything", while a
+-- WRITER is what makes a NOT NULL drop dangerous. The corroborating counts
+-- (`select count(*) from concept2_links` / `concept2_auth_attempts`, both
+-- expected zero) are OWED on the deploy host before this ships — the
+-- implementing agent has no credentials for it, and migration 0021's own
+-- header records the same check being run by hand by James before ITS merge.
+-- Neither count being zero is a STOP: a live grant whose class we are about
+-- to drop is a design question nobody has asked.
+ALTER TABLE "concept2_links" ADD COLUMN "c2_username" text;--> statement-breakpoint
+ALTER TABLE "concept2_auth_attempts" DROP COLUMN "weight_class";--> statement-breakpoint
+ALTER TABLE "concept2_links" DROP COLUMN "weight_class";--> statement-breakpoint
+DROP TYPE "public"."weight_class";

@@ -126,10 +126,10 @@ const COPY_TABLE: CopyRow[] = [
     outcome: {
       kind: "linked",
       c2UserId: 2211,
-      // Task 2 deletes `weightClass` from this member (ruling i); the
-      // excess-property check turns that into a compile error here rather
-      // than letting a stale fixture survive.
-      weightClass: "H",
+      // No `weightClass` (ruling i): the field left this member in the same
+      // commit as the server's migration 0023, and the excess-property
+      // check is what turned that removal into a compile error here rather
+      // than a stale fixture nobody noticed.
       stateEchoed: true,
     },
     expected: null,

@@ -1390,7 +1390,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
         "access_token",
         "refresh_token",
         "expires_at",
-        "weight_class",
+        "c2_username",
         "needs_reauth_at",
         "created_at",
         "updated_at",
@@ -1402,31 +1402,8 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
     );
     const attemptColNames = attemptCols.rows.map((r) => r.column_name);
     expect(attemptColNames).toStrictEqual(
-      expect.arrayContaining([
-        "nonce",
-        "user_id",
-        "weight_class",
-        "created_at",
-      ]),
+      expect.arrayContaining(["nonce", "user_id", "created_at"]),
     );
-  });
-
-  it("rejects a weight_class value outside the enum at the DB layer", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "bad-weight-class-user",
-        email: "bad-weight-class@migrate.test",
-        name: "Bad Weight Class",
-      })
-      .returning();
-
-    await expect(
-      pool.query(
-        `insert into "concept2_auth_attempts" ("nonce", "user_id", "weight_class") values ('n1', $1, 'M')`,
-        [u.id],
-      ),
-    ).rejects.toThrow(/invalid input value for enum weight_class/);
   });
 
   it("reads a pre-0018 row's existing fields unchanged, and all four new columns as null, after 0018 applies (never-migrate contract)", async () => {
@@ -1498,7 +1475,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
       accessToken: "access-tok",
       refreshToken: "refresh-tok",
       expiresAt,
-      weightClass: "H",
+      c2Username: "jamesawesome",
       needsReauthAt,
     });
 
@@ -1510,7 +1487,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
     expect(link.accessToken).toBe("access-tok");
     expect(link.refreshToken).toBe("refresh-tok");
     expect(link.expiresAt).toStrictEqual(expiresAt);
-    expect(link.weightClass).toBe("H");
+    expect(link.c2Username).toBe("jamesawesome");
     expect(link.needsReauthAt).toStrictEqual(needsReauthAt);
   });
 
@@ -1527,7 +1504,6 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
     await db.insert(concept2AuthAttempts).values({
       nonce: "nonce-1",
       userId: u.id,
-      weightClass: "L",
     });
 
     const [attempt] = await db
@@ -1535,7 +1511,6 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
       .from(concept2AuthAttempts)
       .where(eq(concept2AuthAttempts.nonce, "nonce-1"));
     expect(attempt.userId).toBe(u.id);
-    expect(attempt.weightClass).toBe("L");
   });
 });
 
@@ -1752,34 +1727,30 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
         name: "Other",
       })
       .returning();
-    await db.insert(concept2Links).values({
-      userId: seededUserId,
-      c2UserId: 2211,
-      accessToken: "at",
-      refreshToken: "rt",
-      expiresAt: new Date("2026-10-01T00:00:00Z"),
-      weightClass: "H",
-    });
-    // The typed query builder wraps the underlying pg error in a
-    // `DrizzleQueryError` whose OWN `.message` is just "Failed query: ..."
-    // (drizzle-orm/errors.js) — the real Postgres text, which names the
-    // violated constraint, is on `.cause`, not `.message`. `toThrow(regex)`
-    // only reads `.message`, so it cannot see the constraint name here (the
-    // brief's original assertion form was written for the raw `pool.query`
-    // calls above, where pg's own error IS the top-level `.message`).
+    // RAW SQL, the same treatment (and for the same reason) this block's
+    // `surface` inserts above already carry: Drizzle's typed
+    // `.insert(concept2Links)` builder emits EVERY declared column,
+    // including ones the call never names — and this database is capped at
+    // 0021, where `c2_username` (added by 0023) does not exist yet, and
+    // `weight_class` still does and is NOT NULL. The typed form would fail
+    // on the missing column and, once that was worked around, on the
+    // not-null one — neither of which is what this test is about.
+    await pool.query(
+      `insert into "concept2_links" ("user_id", "c2_user_id", "access_token", "refresh_token", "expires_at", "weight_class") values ($1, 2211, 'at', 'rt', '2026-10-01T00:00:00Z', 'H')`,
+      [seededUserId],
+    );
+    // Raw `pool.query` throws pg's own error DIRECTLY, so the Postgres text
+    // naming the violated constraint IS the top-level `.message` and
+    // `toThrow(regex)` reads it — matching the `surface` precedent a few
+    // lines above. (Through the typed builder the same error arrives wrapped
+    // in a `DrizzleQueryError` whose own `.message` is just "Failed query:
+    // ...", with the real text on `.cause`; that is why this assertion used
+    // to be a `toMatchObject({ cause: … })` and no longer is.)
     await expect(
-      db.insert(concept2Links).values({
-        userId: other.id,
-        c2UserId: 2211,
-        accessToken: "at2",
-        refreshToken: "rt2",
-        expiresAt: new Date("2026-10-01T00:00:00Z"),
-        weightClass: "L",
-      }),
-    ).rejects.toMatchObject({
-      cause: {
-        message: expect.stringMatching(/concept2_links_c2_user_id_unique/),
-      },
-    });
+      pool.query(
+        `insert into "concept2_links" ("user_id", "c2_user_id", "access_token", "refresh_token", "expires_at", "weight_class") values ($1, 2211, 'at2', 'rt2', '2026-10-01T00:00:00Z', 'L')`,
+        [other.id],
+      ),
+    ).rejects.toThrow(/concept2_links_c2_user_id_unique/);
   });
 });

@@ -36,8 +36,6 @@ export const LINK_CALLBACK_SCHEME = "haus.waffle.ergomatic";
  *  predates the `WebAuth` plugin. */
 export const LINK_CLIENT = "webauth-1";
 
-export type WeightClass = "H" | "L";
-
 /**
  * Every way a link attempt can end. Design §4 names nine; this union adds
  * `linked`/`navigating` (the two successes), `updateRequired`/`mintFailed`/
@@ -80,7 +78,6 @@ export type LinkOutcome =
   | {
       kind: "linked";
       c2UserId: number;
-      weightClass: WeightClass;
       stateEchoed: boolean;
     }
   | { kind: "navigating" }
@@ -260,15 +257,18 @@ async function completeNative(
     body: JSON.stringify({ code, state }),
   });
   if (res.ok) {
+    // The exchange response no longer carries a class: ruling (i) dropped
+    // the column it was read from (`concept2_auth_attempts.weight_class`) and
+    // the server stopped emitting it in the same migration. Nothing on
+    // this side ever displayed it — the card shows the account, never a
+    // class — so this is a removal, not a regression.
     const body = (await res.json()) as {
       linked: boolean;
       c2UserId: number;
-      weightClass: WeightClass;
     };
     return {
       kind: "linked",
       c2UserId: body.c2UserId,
-      weightClass: body.weightClass,
       stateEchoed,
     };
   }
@@ -285,12 +285,12 @@ async function completeNative(
  * `navigating` once the full-page navigation is handed off; the SPA is
  * unloading and the outcome is read from `GET /api/concept2/link` on the next
  * mount.
+ *
+ * Takes NO argument (ruling i, James 2026-09-03): nothing about the rower
+ * travels to the server to start a link. The weight class Concept2 requires
+ * on a result is read from Concept2's own profile server-side, at send time.
  */
-export async function startLink({
-  weightClass,
-}: {
-  weightClass: WeightClass;
-}): Promise<LinkOutcome> {
+export async function startLink(): Promise<LinkOutcome> {
   if (linkInFlight) return { kind: "busy", source: "guard" };
   linkInFlight = true;
   try {
@@ -300,11 +300,21 @@ export async function startLink({
       headers: { "Content-Type": "application/json" },
       // The declaration is sent only where it means something. The server
       // reads it only when it derived `surface === "native"` from the bearer
-      // (`routes/concept2.ts:238-240`), so a cookie caller asserting a native
+      // (`routes/concept2.ts`'s mint), so a cookie caller asserting a native
       // capability would be a claim about a surface it is not on.
-      body: JSON.stringify(
-        native ? { weightClass, linkClient: LINK_CLIENT } : { weightClass },
-      ),
+      //
+      // Ruling (i), James 2026-09-03: nothing about the ROWER travels in
+      // this body. The weight class Concept2 requires on a result is
+      // Concept2's own fact, read from their profile server-side at send
+      // time. `linkClient` is a claim about this BUILD, which is why it
+      // survives and the class does not.
+      //
+      // The empty `{}` on web is deliberate and is not an omission to tidy
+      // up later: sending no body at all would change the request's content
+      // type and the route's `isRec(req.body)` read; `{}` keeps the wire
+      // shape the server already parses and says, in the one place a reader
+      // looks, that we send nothing rather than that we forgot to.
+      body: JSON.stringify(native ? { linkClient: LINK_CLIENT } : {}),
     });
     if (!res.ok) {
       const error = await readError(res);

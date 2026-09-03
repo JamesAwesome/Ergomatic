@@ -71,6 +71,302 @@ export function eligibilityFailure(row: {
   return null;
 }
 
+/* -------------------------------------------------------------------------
+ * Concept2's `weight_class`, and WHO produces it.
+ *
+ * Concept2 requires the field on every rower result (measured 2026-09-03
+ * against log-dev: a POST without it answers 422
+ * `{"errors":{"weight_class":["The weight class field is required."]}}`), and
+ * ruling (i) says the app asks the rower nothing. So the server reads it from
+ * Concept2. The question this block answers is which Concept2 fact IS the
+ * class, and the vendor answers it in one sentence (SECONDARY — the logbook
+ * help page 403s to fetchers, so this is a search snippet of Concept2's own
+ * text, 2026-09-03):
+ *
+ *   "Lightweight and heavyweight are weight categories from the world of
+ *    on-water rowing. Even though you may have entered a weight in your
+ *    profile, you must designate L or H for every piece that you enter."
+ *
+ * The class is a DECLARATION, not a function of the profile weight. So the
+ * producer order is:
+ *
+ *   1. The rower's own most recent declaration — the newest result in their
+ *      logbook that is THEIRS TO HAVE DECLARED and whose `weight_class`
+ *      reads "H" or "L" (`pickDeclaredWeightClass` below, over the ordered
+ *      page `client.fetchResults` returns).
+ *   2. Failing that, OUR derivation from the profile's `weight` + `gender`
+ *      (`deriveWeightClass`). This is ours, not Concept2's, and the SENT
+ *      state says so in as many words.
+ *   3. Failing that, refuse the send (422 `no_weight_class`) rather than
+ *      guessing a competition category onto a permanent third-party record.
+ *
+ * "THEIRS TO HAVE DECLARED" is doing real work, and producer 1 is a loop
+ * without it: the results list contains the rows THIS APP posted, echoing
+ * back the class we sent (`docs/monitor/c2-crossconnect-2026-09/
+ * raw-output.txt` lines 1-25 — the 201 body carries our `weight_class` and
+ * reports `source` as the rower's own name). Read naively, a class we
+ * DERIVED on send 1 comes back as "the rower's declaration" on send 2, and
+ * the provenance line that exists to make the guess correctable goes silent.
+ * `pickDeclaredWeightClass` therefore takes the ids this app already wrote
+ * for the linked account and skips them, and when every candidate is ours it
+ * returns null — which is "no declaration", never "our last class".
+ *
+ * Nothing here is stored. The class is read on the send that uses it and
+ * discarded with the response: a declaration can change on Concept2 at any
+ * time with no signal to us, and a cached one would write a stale competition
+ * category into a record we cannot edit.
+ * ---------------------------------------------------------------------- */
+
+export type WeightClass = "H" | "L";
+
+/** Which producer answered — carried to the rower on the SENT state, because
+ *  a class we DERIVED is a guess about a fact Concept2 lets its owner set,
+ *  and a guess nobody is shown can never be corrected. Concept2 permits
+ *  per-result editing, so naming the source at the moment the row lands is
+ *  what makes a wrong one repairable. */
+export type WeightClassSource = "declaration" | "profile";
+
+/** Why the profile fallback can fail to yield a class at all.
+ *
+ *  Four members, not two, because the vendor NUMBER has more states than
+ *  "set" and "not set" and folding them loses the one thing that would let an
+ *  operator diagnose it: `no_weight` is absent-or-zero; `unreadable_weight`
+ *  is present in a form we could not parse; `implausible_weight` is a number
+ *  outside any human's range, which is what a WRONG UNIT looks like from
+ *  here; `no_gender` is a profile whose `gender` is neither `M` nor `F`, for
+ *  which C2's own two-category, gendered definition yields NO answer at all
+ *  — that rower's class is only ever a declaration. */
+export type WeightClassFailure =
+  "no_weight" | "unreadable_weight" | "implausible_weight" | "no_gender";
+
+/** The profile weight as the wire actually presents it: a parsed number, the
+ *  string `"unreadable"` for a value that was PRESENT and not parseable, or
+ *  `null` for absent. Three states, because the caller's honest answer
+ *  differs for each and the middle one is otherwise indistinguishable from
+ *  "you have not set a weight" — which would tell a rower who HAS set one to
+ *  go and set it again, forever. */
+export type C2ProfileWeight = number | "unreadable" | null;
+
+/** One row of the rower's Concept2 results list, projected to the four
+ *  fields the declaration read decides on (`client.fetchResults`'s own
+ *  comment says what each is for). */
+export interface C2ResultRow {
+  id: number | null;
+  type: string | null;
+  weightClass: string | null;
+  dateUtc: string | null;
+  date: string | null;
+}
+
+/** The result types Concept2 REQUIRES a weight class on, and therefore the
+ *  only types whose `weight_class` is a designation rather than noise.
+ *  PRIMARY, `https://log.concept2.com/developers/documentation/` fetched
+ *  2026-09-03, the Add Result parameter table, verbatim:
+ *
+ *    weight_class | Depends | string | Required if type is rower, dynamic
+ *    or slides. Value must be either H or L | H
+ *
+ *  A row of any OTHER type may still carry a value — the same page's Get
+ *  Results 200 example has a `"type": "skierg"` row carrying
+ *  `"weight_class": "H"` — and that value is unmeasured, because nothing
+ *  required the rower to mean it. Skipping those rows is the hedge, and it
+ *  costs nothing: the rower falls through to the profile, or to the refusal
+ *  that tells them where to fix it. */
+export const CLASS_BEARING_RESULT_TYPES: readonly string[] = [
+  "rower",
+  "dynamic",
+  "slides",
+];
+
+/** How far ahead of our own clock a result may be dated and still count as
+ *  the rower's most recent declaration.
+ *
+ *  A logbook row can be entered by hand with any date, and "newest" has no
+ *  recency bound of its own: without this, ONE row dated 2030 pins the
+ *  declaration for every send this rower ever makes, and nothing in the app
+ *  could tell them why. Skipping it is the safe direction — the fallback is
+ *  an older real declaration, or the profile, or a refusal that names a
+ *  repair — whereas honouring it is silently permanent. A day of slack
+ *  absorbs clock skew and timezone-boundary rows without admitting a
+ *  deliberate future date. */
+export const FUTURE_ROW_SKEW_MS = 24 * 60 * 60 * 1000;
+
+/** `date_utc` is NULLABLE on Concept2's own documented example rows (both of
+ *  them carry `"date_utc": null`), so `date` is the fallback, read as UTC:
+ *  it is local time with no offset, which is at worst ~14 h out and well
+ *  inside the skew above. A row with NEITHER is taken at its list position
+ *  rather than discarded — a missing stamp is not a reason to throw away a
+ *  real designation. */
+function rowInstantMs(row: C2ResultRow): number | null {
+  const raw = row.dateUtc ?? row.date;
+  if (raw === null) return null;
+  const parsed = Date.parse(raw.includes("T") ? raw : `${raw.trim()}Z`);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Producer 1: the rower's own most recent designation.
+ *
+ *  `rows` arrives in the order Concept2 returned it, which is
+ *  DATE-DESCENDING — measured 2026-09-03 on log-dev with
+ *  `GET /api/users/me/results?number=1`, where id 85561 dated
+ *  `2026-09-02 10:00:30` sorts ahead of id 85562 dated `2026-09-02 10:00:00`,
+ *  so the order is by date and not by id. The first row that survives every
+ *  skip below is therefore the newest declaration.
+ *
+ *  FOUR skips, and the FIRST is the one that keeps this function honest:
+ *
+ *   1. `ourResultIds` — a result THIS APP wrote. See the block comment
+ *      above: without this, our own derived guess is read back as the
+ *      rower's declaration on the very next send.
+ *   2. a type Concept2 does not require a class on
+ *      (`CLASS_BEARING_RESULT_TYPES`), and a row with no `type` at all.
+ *   3. a `weight_class` that is not exactly "H" or "L". Selection is on the
+ *      FIELD, not on `?type=` — that parameter IS documented as a filter,
+ *      but it names one type and this read accepts three, and a field read
+ *      is auditable in the route's own log line.
+ *   4. a row dated further ahead than `FUTURE_ROW_SKEW_MS`.
+ *
+ *  Returning null means "this rower has declared nothing we can read", which
+ *  is what the caller falls through on. It never means "use the last class
+ *  we sent". */
+export function pickDeclaredWeightClass(
+  rows: readonly C2ResultRow[],
+  opts: { ourResultIds: ReadonlySet<number>; now: number },
+): WeightClass | null {
+  for (const row of rows) {
+    if (row.id !== null && opts.ourResultIds.has(row.id)) continue;
+    if (row.type === null) continue;
+    if (!CLASS_BEARING_RESULT_TYPES.includes(row.type)) continue;
+    if (row.weightClass !== "H" && row.weightClass !== "L") continue;
+    const at = rowInstantMs(row);
+    if (at !== null && at > opts.now + FUTURE_ROW_SKEW_MS) continue;
+    return row.weightClass;
+  }
+  return null;
+}
+
+/** Concept2's thresholds, which are Concept2's own: lightweight is 75 kg or
+ *  less for men and 61.5 kg or less for women, heavyweight above, RowErg only
+ *  (SECONDARY — logbook help and forum, 2026-09-03). "or less" is INCLUSIVE,
+ *  which is why both comparisons are `<=` and why the table test pins the
+ *  exact boundary on both sides.
+ *
+ *  Concept2 publishes the SAME boundary twice, in units that are not equal:
+ *  165 lb is 74.84 kg, not 75.00, and 135 lb is 61.24 kg, not 61.50. Our kg
+ *  pair is the more generous of the two, so a rower between 74.85 and 75.00 kg
+ *  is L to us and H under the pound rule. Concept2 publishes both, so neither
+ *  is wrong — this is recorded so nobody later "fixes" it.
+ *
+ *  THE UNIT IS AN INFERENCE AND THE IDENTIFIER SAYS SO. The only line
+ *  Concept2 publishes about the encoding sits on the CREATE USER endpoint
+ *  (`https://log.concept2.com/developers/documentation/`, fetched
+ *  2026-09-03), verbatim:
+ *
+ *    weight | No | integer | The weight in decigrams for the user,
+ *    e.g. 7500 for 75kg. Defaults to null if not set. | 7500
+ *
+ *  That sentence contradicts itself — 7500 decigrams is 750 g — and the
+ *  EXAMPLE is the half that pins an actual correspondence: one unit is
+ *  0.01 kg. Nothing states that `GET /api/users/me` echoes the same encoding,
+ *  and that endpoint's own documented example omits `weight` entirely, so no
+ *  observation settles it. Hence `_HUNDREDTHS_KG` in the names, and hence the
+ *  plausibility band below, which is the part a machine can check. */
+export const LIGHTWEIGHT_MAX_MEN_HUNDREDTHS_KG = 7500;
+export const LIGHTWEIGHT_MAX_WOMEN_HUNDREDTHS_KG = 6150;
+
+/** The band that turns the unit INFERENCE above into a loud refusal — for
+ *  every candidate unit EXCEPT one, and the exception is stated because a
+ *  guard oversold is worse than no guard.
+ *
+ *  Every candidate unit for the read field, against a 75 kg rower:
+ *
+ *    decigrams (the doc's word)  750000  -> outside, refused
+ *    grams                        75000  -> outside, refused
+ *    hundredths of a kilogram      7500  -> INSIDE, classified (assumed)
+ *    hundredths of a pound        16530  -> INSIDE, classified (WRONG)
+ *    integer kilograms               75  -> outside, refused
+ *    integer pounds                 165  -> outside, refused
+ *
+ *  Without the band, the two integer readings classify EVERY rower as
+ *  LIGHTWEIGHT, which files a heavyweight's rows in Concept2's lightweight
+ *  rankings — falsifying a competition record rather than merely
+ *  disadvantaging its owner. The band refuses those two and both
+ *  metric-mass readings, loudly, with a reason token.
+ *
+ *  IT CANNOT REFUSE THE POUND READING, and no band can: hundredths-of-a-lb
+ *  differs from hundredths-of-a-kg by 2.2x, and any band wide enough to hold
+ *  real rowers (30-300 kg) contains both readings of all of them. Under that
+ *  unit almost every rower reads HEAVY. That residue is what exit criterion
+ *  3b's TWO readings exist for — a weight recorded with the profile's unit
+ *  preference on kg and again on lb — and it is bounded by the fact that this
+ *  function is the FALLBACK: a rower who has declared a class on any recent
+ *  Concept2 result never reaches it.
+ *
+ *  30-300 kg is deliberately far wider than any rower: it is a UNIT check,
+ *  not a body check. */
+export const PLAUSIBLE_MIN_HUNDREDTHS_KG = 3000;
+export const PLAUSIBLE_MAX_HUNDREDTHS_KG = 30000;
+
+/** Producer 2: our derivation from the profile, used only when the rower has
+ *  made no declaration we can read. */
+export function deriveWeightClass(profile: {
+  weight: C2ProfileWeight;
+  gender: string | null;
+}):
+  | { ok: true; weightClass: WeightClass }
+  | { ok: false; reason: WeightClassFailure } {
+  const { weight, gender } = profile;
+  if (weight === "unreadable") {
+    return { ok: false, reason: "unreadable_weight" };
+  }
+  // `<= 0` and not just `null`: Concept2 defaults an unset weight to null,
+  // but a 0 is a profile that has been touched and left empty, and it must
+  // not classify as the lightest possible rower.
+  if (weight === null || weight <= 0) return { ok: false, reason: "no_weight" };
+  // The band runs BEFORE gender, so a wrong unit refuses for every profile
+  // rather than only for the two genders we can classify.
+  if (
+    weight < PLAUSIBLE_MIN_HUNDREDTHS_KG ||
+    weight > PLAUSIBLE_MAX_HUNDREDTHS_KG
+  ) {
+    return { ok: false, reason: "implausible_weight" };
+  }
+  // `M`/`F` is DOCUMENTED, and the read side's letter case is documented
+  // only by EXAMPLE — so the comparison case-folds rather than trusting the
+  // example. Both rows are PRIMARY,
+  // `https://log.concept2.com/developers/documentation/` fetched 2026-09-03:
+  //
+  //   Create User parameter table:
+  //     gender | Yes | string | Must be one of: F, M | M
+  //   Get User (`GET /api/users/{user}`), the documented 200 example body:
+  //     "gender": "M"
+  //
+  // The first is a WRITE parameter and pins the vocabulary; the second is
+  // this endpoint's own example and is the only statement about what the
+  // READ returns. Neither is an enumeration of what a live account may hold,
+  // and this project has not yet read a real value (exit criterion 3b's
+  // session does, in one glance). Case-folding and trimming cost nothing and
+  // turn a plausible `"m"` from a silent refusal into a classification.
+  const normalized = gender === null ? null : gender.trim().toUpperCase();
+  if (normalized === "M") {
+    return {
+      ok: true,
+      weightClass: weight <= LIGHTWEIGHT_MAX_MEN_HUNDREDTHS_KG ? "L" : "H",
+    };
+  }
+  if (normalized === "F") {
+    return {
+      ok: true,
+      weightClass: weight <= LIGHTWEIGHT_MAX_WOMEN_HUNDREDTHS_KG ? "L" : "H",
+    };
+  }
+  // Concept2's category is two-valued and its thresholds are gendered, so a
+  // profile outside `M`/`F` has no derivable class at all — not a missing
+  // weight, and never told to the rower as one. Their class can only ever be
+  // a declaration (producer 1).
+  return { ok: false, reason: "no_gender" };
+}
+
 // Transplanted from scripts/c2-crossconnect.ts:132-134.
 export function c2Tenths(seconds: number): number {
   return Math.round(seconds * 10);
@@ -165,7 +461,11 @@ function requireWorkTotals(row: SessionLogRow): {
 // check — it never falls back to `row.tz` alone.
 export function buildC2Payload(
   row: SessionLogRow,
-  link: { weightClass: "H" | "L" },
+  // Wave E PR2, ruling (i): this used to be the stored LINK row's class.
+  // It is now the resolution the send path produced (declaration first,
+  // our profile derivation second), so a parameter named `link` would be a
+  // stale name outliving the refactor.
+  weightClass: WeightClass,
   effectiveTz: string,
 ): Record<string, unknown> {
   const { workSeconds, workMeters } = requireWorkTotals(row);
@@ -184,7 +484,7 @@ export function buildC2Payload(
     timezone: tz,
     distance: workMeters,
     time: c2Tenths(workSeconds),
-    weight_class: link.weightClass,
+    weight_class: weightClass,
   };
 
   // rest_time/rest_distance ride only when > 0 — PR0's own rule

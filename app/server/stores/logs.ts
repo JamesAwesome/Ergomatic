@@ -980,6 +980,32 @@ export function createLogsStore(db: Db) {
       return rows.length === 1;
     },
 
+    // Wave E PR2 (observation 29): the Concept2 result ids THIS app wrote to
+    // the given Concept2 account, so the declaration read can exclude them.
+    // Owner-scoped AND account-scoped: result ids live in Concept2's
+    // namespace, and a row written while account A was linked says nothing
+    // about account B — scoping to the LIVE link's `c2UserId` is what makes
+    // this correct across a relink. Served by the existing
+    // `session_logs_user_id_idx`; no new index (the per-user row count here
+    // is the rower's own log, and the eligible population measured on prod
+    // was 6 of 20 rows).
+    async sentC2ResultIds(
+      userId: string,
+      c2UserId: number,
+    ): Promise<Set<number>> {
+      const rows = await db
+        .select({ c2ResultId: sessionLogs.c2ResultId })
+        .from(sessionLogs)
+        .where(
+          and(
+            eq(sessionLogs.userId, userId),
+            eq(sessionLogs.c2UserId, c2UserId),
+            isNotNull(sessionLogs.c2ResultId),
+          ),
+        );
+      return new Set(rows.map((r) => r.c2ResultId as number));
+    },
+
     // Wave E PR1 Task 6, plan deviation 2: legacy-row upload persist-on-
     // first-use. The `tz IS NULL` guard rides IN the WHERE clause (not a
     // read-then-write in JS) so a concurrent second upload attempt for the

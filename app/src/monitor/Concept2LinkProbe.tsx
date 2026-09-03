@@ -55,12 +55,24 @@ import { startLink, type LinkOutcome } from "../adapters/linkFlow";
  * production build with the flag unset -- `dist-grep.sh:127`'s eighth needle
  * is that exact string, and `ios-release.sh:42-45` refuses to run at all while
  * the flag is exported.
+ *
+ * `LinkStatus` below is a hand copy of `GET /api/concept2/link`'s response,
+ * held equal to the handler's own emitted key set by
+ * `scripts/webauth-contract.test.ts`. PUT NO `//` COMMENT INSIDE ITS BRACES:
+ * that gate's `linkStatusKeys()` reads the body with
+ * `/([A-Za-z_$][\w$]*)\??:/g` and does NOT strip comments (unlike its sibling
+ * `linkResponseKeys()`, which does), so a comment word followed by a colon
+ * becomes a phantom key and reddens the gate for a reason that has nothing to
+ * do with the contract. Wave E PR2 added `c2Username` and `logbookBaseUrl`
+ * here purely to keep that equality; the probe's behaviour is unchanged and
+ * it renders neither.
  */
 interface LinkStatus {
   available: boolean;
   linked?: boolean;
-  weightClass?: "H" | "L";
   c2UserId?: number;
+  c2Username?: string | null;
+  logbookBaseUrl?: string;
   needsReauth?: boolean;
 }
 
@@ -124,7 +136,9 @@ function describeStatus(
   // is real -- so it renders as a qualifier rather than a fourth state; a walk
   // that reads plain `linked` over a stale-token row records the wrong thing.
   const reauth = status.needsReauth === true ? ", needs re-auth" : "";
-  return `linked (C2 user ${String(status.c2UserId)}, ${String(status.weightClass)}${reauth})`;
+  // Wave E PR2 (ruling i): the class is gone from this response, so it is
+  // gone from this line. Printing it would render `undefined` on every walk.
+  return `linked (C2 user ${String(status.c2UserId)}${reauth})`;
 }
 
 export default function Concept2LinkProbe() {
@@ -168,7 +182,7 @@ export default function Concept2LinkProbe() {
   async function onStart(): Promise<void> {
     setBusy(true);
     try {
-      const result = await startLink({ weightClass: "H" });
+      const result = await startLink();
       setOutcome(result);
       // The card never infers its own status from an outcome: it re-reads the
       // server. An outcome saying `linked` while `GET /link` disagrees is
