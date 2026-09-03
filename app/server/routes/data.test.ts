@@ -10,7 +10,10 @@ import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { PREFERENCES_DEFAULTS } from "../stores/preferences.js";
 import { makeFakeStores } from "../testing/fakes.js";
 import { createDataRouter, type Stores } from "./data.js";
-import { PARTIAL_STEP_LEG_A } from "../../src/session/partialGateFixture.js";
+import {
+  PARTIAL_STEP_LEG_A,
+  PARTIAL_STEP_LEG_B,
+} from "../../src/session/partialGateFixture.js";
 
 // In-memory fakes, keyed by userId, mirroring the real stores' signatures
 // exactly, live in app/server/testing/fakes.ts (shared with other server
@@ -2810,6 +2813,26 @@ describe("GET/POST /api/logs", () => {
       expect(created.status).toBe(201);
       const fetched = await getLogById(app, created.body.id);
       expect(fetched.body.steps[0]).toStrictEqual({ ...PARTIAL_STEP_LEG_A });
+    });
+
+    // Task 7 step 6 — the MIRROR of the leg above, over the OTHER half of
+    // the shared declaration. Not redundant with it: leg A's pair is a
+    // whole-metre 15 / 8.28 s, leg B's is a TENTH-of-a-metre 37.6 / 10.9 s,
+    // so this is the leg that would go red on a route that rounded, floored
+    // or integer-coerced either number on the way through. `partialReplay
+    // .test.ts` (client) asserts the hook BANKS these two objects; this pair
+    // of legs asserts the route PRESERVES them. Neither side retypes the
+    // object — one declaration, two consumers, so a change to what the hook
+    // banks re-points both in the same edit.
+    it("round-trips the second declared pair (tenths, not whole numbers) through POST -> GET", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [{ ...PARTIAL_STEP_LEG_B }],
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.steps[0]).toStrictEqual({ ...PARTIAL_STEP_LEG_B });
     });
 
     it("rejects a half-pair: partialMeters with no partialSeconds", async () => {
