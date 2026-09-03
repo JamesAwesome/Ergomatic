@@ -4615,10 +4615,11 @@ const CONNECTED_STATES = [
   "connected-armed",
   // Phase LM PR 1 Task 4: the phase's FLAGSHIP frame, which had no
   // committed picture at all — the armed frame above with the link lost,
-  // so the header still reads `1 OF 4 · READY` while the banner reads
-  // `Nothing kept.` The pair is the whole phase in two images: the state
-  // that used to paint itself as a session in progress, and the same state
-  // saying what it actually is.
+  // so the header still reads `1 OF 4 · READY` while the banner renders
+  // its title alone, no body (Wave F door PR B, Gate 0-B decision (e)).
+  // The pair is the whole phase in two images: the state that used to
+  // paint itself as a session in progress, and the same state saying
+  // what it actually is.
   "connected-ready-lost",
   "connected-pane-live",
   // connected-revamp Task 4b (design spec §5b) originally added this as the

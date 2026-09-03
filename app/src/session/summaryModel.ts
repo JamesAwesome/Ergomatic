@@ -1336,11 +1336,11 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
  *
  *  WHAT IT DOES NOT SAY: why. Three producers of the silence are
  *  undistinguished, so this names only what we can see from here — that we
- *  hold no reading. The connected surface's own lost banner says
- *  "Nothing kept." for the same session minutes earlier; the two are
- *  deliberately the same register (short, no cause, no blame) without
- *  sharing a string, because they answer different questions on different
- *  screens.
+ *  hold no reading. The connected surface's own lost banner named the same
+ *  zero for the same session minutes earlier — its title alone, no body,
+ *  since Wave F door PR B (Gate 0-B decision (e)) retired the phrase
+ *  "Nothing kept." entirely; the two never shared a string even before
+ *  that, because they answer different questions on different screens.
  *
  *  RETIRED DIVERGENCE (Task 4 option 2 named it; Door PR A, 2026-09-02,
  *  §2.1 closes it): the STORED row for this same session used to read

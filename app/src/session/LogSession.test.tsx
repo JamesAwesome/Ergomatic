@@ -4827,7 +4827,7 @@ describe("LogSession: the drop strip (Wave F PR 1 Task 4, Gate 0)", () => {
     );
   });
 
-  it("says Nothing kept when the drop happened before any interval was measured", async () => {
+  it("drops the bold clause when the drop happened before any interval was measured", async () => {
     const { run, workout } = buildMonitorFixture({
       endedBy: "program-dropped",
       actuals: [],
@@ -4839,8 +4839,14 @@ describe("LogSession: the drop strip (Wave F PR 1 Task 4, Gate 0)", () => {
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(document.querySelector(".log-dropped-body")!.textContent).toBe(
-      "Nothing kept. You had not finished an interval yet.",
+      "You had not finished an interval yet.",
     );
+    // The bold clause is the element that carried "N kept."; at zero it
+    // must be absent, not an empty <b> (which would keep its own leading
+    // space ahead of the sentence).
+    expect(
+      document.querySelector(".log-dropped-body b"),
+    ).not.toBeInTheDocument();
   });
 
   // The gate itself: an ordinary machine finish renders no strip at all.
