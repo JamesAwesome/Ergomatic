@@ -3,8 +3,9 @@
 **Date:** 2026-09-03 · **Wave:** F · **Class:** not TRIAD (no stored shape,
 no number's meaning, no auth) · **Status:** DRAFT, awaiting James's review; hardened 2026-09-03 (lens 1 —
 two claims falsified and folded, see §1 scope, §2 and §3) ·
-**Gate 0:** ONE, on the Countdown blocked-start state (it changes what a
-rower reads and what happens when they press Start).
+**Gate 0:** ONE, on the Countdown blocked-start state —
+**APPROVED by James 2026-09-03** (`2026-09-03-blocked-start-gate.html`, all
+four decisions as proposed; see §2).
 
 ## What and why
 
@@ -114,17 +115,35 @@ said.
   would charge every second the rower spent reading this state to phase 1 —
   bounded today by the countdown's own 10 s, unbounded once a hold exists.
 
-**Gate 0 (the only one):** the rendered Countdown blocked-start state, both
-orientations, against the current Countdown, with the two controls at
-44 px and every colour pairing's contrast ratio stated as a number. **It is
-shown BESIDE the start-error that already exists one screen earlier** —
-`"Couldn't start this session. Try again."`, set identically by
-`useStartWorkout.confirmReplace`, `WorkoutDetail.handleRowInstead` and
-`JustRow`'s `StartTimerAction` — so James chooses between two vocabularies
-for one fact rather than approving a third (RF23). The post-row
-`COULD NOT KEEP THE RECORD ON THIS PHONE.` state is a different moment (a
-record of work already done) and is the weaker precedent. The copy is
-approved at the gate, not here — the strings above are drafts.
+**Gate 0 — APPROVED by James 2026-09-03**
+(`docs/superpowers/specs/2026-09-03-blocked-start-gate.html`), all four
+decisions as proposed:
+- **(a) The message is `Couldn't keep your session on this phone.`** — one
+  `<p className="mono-status">`, parallel to Countdown's own shipped
+  `Couldn't load your baselines.` / `Couldn't load your preferences.`, and
+  borrowing "keep" from the hand-off's shipped failure rather than adding a
+  word.
+- **(b) Retry (`button-outline`) and Cancel (`countdown-cancel`)** — both
+  controls already exist on this screen; nothing new is drawn. No "Row
+  anyway" (I-5).
+- **(c) A successful Retry restarts the count from full**, because it
+  rebuilds the run at the moment the write lands (I-6).
+- **(d) This vocabulary stands beside the shipped start-error, not instead
+  of it.** `Couldn't start this session. Try again.` keeps its place at the
+  DRAFT write (`useStartWorkout`, `WorkoutDetail`); this message is the RUN
+  write, one screen later, after the rower has committed. Two messages, two
+  moments, and the gate showed them side by side.
+- **Measured at the gate:** message and Cancel `--ink-3` on `--page`
+  6.69:1, Retry `--ink` on `--page` 15.41:1 — all pass; both controls
+  render at 48 px. One inherited residual, not introduced here and not
+  fixed here: `.countdown-cancel`'s border is `--rule` on `--page` at
+  1.32:1 against the 3:1 non-text floor.
+
+The rendered artboard also carried, and Gate 0 approved, the state at both
+orientations against the current mid-count screen, and the Retry-restarts
+pair. The post-row `COULD NOT KEEP THE RECORD ON THIS PHONE.` state was
+shown for reference and ruled a different moment (work already done), not a
+candidate.
 
 ## §3 — The composed test the anchor asked for
 
