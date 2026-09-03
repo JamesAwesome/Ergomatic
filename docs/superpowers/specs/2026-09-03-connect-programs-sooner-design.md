@@ -1,4 +1,4 @@
-# Connect programs the erg sooner (design)
+# Connect programs the erg sooner, and says so honestly (design)
 
 ## What and why
 
@@ -9,9 +9,21 @@ between programming the erg and the just row screen starting."
 
 The delay is not the frame and not the PM5. Our program write is issued
 10 ms after connect and is then held in a queue behind ten other calls we
-made first. This spec moves the write to the front of that queue. Expect
-the erg's screen to change in roughly half a second instead of two, on
-every connect: a free row, and every programmed workout too.
+made first. This spec does two things, and they are complements.
+
+**Part 1 moves the write to the front of that queue.** Expect the erg's
+screen to change in roughly half a second instead of two, on every connect.
+
+**Part 2 stops the free row claiming ready before the erg has anything.**
+James asked whether waiting longer before the ready screen would feel less
+like lag, and the answer turned out to be that the free row is the only
+path in the app that lies about this. A programmed workout waits until the
+monitor is confirmed to be holding our program -- its own code comment says
+"ready means ready, not the ack came back". The free row flips to ready in
+the same statement that starts the send, so on the 3 September walk the
+phone said "Ready when you pull" at 8 ms while the erg took the program at
+1978 ms. Part 2 makes the free row behave like a workout. Part 1 is what
+keeps that from simply becoming two seconds of waiting.
 
 ## The measurement (PRIMARY, our own rings)
 
@@ -232,3 +244,62 @@ eight times; a teardown inside the gap issues no subscribe at all.
 
 **The saving itself is a walk number**, read off the ring by the census
 script, at the second ack.
+
+## Part 2: the free row waits, like a workout does
+
+### What matches, and the one thing that cannot
+
+A workout's acceptance point is a READBACK: the driver confirms the machine
+is holding our program, structure and all, and only then emits `armed`,
+which is what moves the hook to `ready`.
+
+A free row cannot use that, and this is settled rather than assumed. Item
+2's antagonist pass falsified it and the 3 September walk confirmed it on
+hardware: `workoutType === 1` is the PM5's idle default, so two of the
+walk's three rings report type 1 BEFORE their own ack. A readback check
+there can never fail, which makes it decoration.
+
+**So the free row's acceptance point is the ack**, which is a real signal
+the monitor sends, which we already log as `free-row-program-sent`, and
+which the item 2 gates already assert on. Stated plainly rather than
+papered over: the workout is confirmed by readback, the free row by ack.
+
+Everything else matches. `beginFreeRow()` stops flipping straight to
+`ready`; the door shows a sending card while the program is in flight; the
+hook reaches `ready` on the driver's `armed`, exactly as a workout does.
+
+### The screen (Gate 0 PASSED, James, 2026-09-03)
+
+`docs/design/handoffs/2026-09-03-free-row-sending/` carries the approved
+artifact and its contrast table. The card is the status label, the serif
+line **Starting your row**, the workout's own three-line checklist with
+**STARTING THE ROW** current, and Cancel. No new colour, type size or
+component: every value is lifted from the cards either side of it.
+
+### When the monitor never answers
+
+**The card falls through to ready** (approved with the gate). The send is
+already bounded, and on the deadline or a rejection the door shows the
+ready card anyway rather than the workout's failure card. A free row needs
+nothing from the monitor to be rowable -- the rower can start it on the
+PM5 -- so a failure card would block a row that would have worked. The ring
+still records which way it went.
+
+### Invariants
+
+1. The free row reaches `ready` only after the monitor has accepted the
+   program, or after the send has failed or timed out. Never before both
+   are impossible.
+2. Cancel from the sending card terminates the free row on the erg, exactly
+   as it does from ready today (walked, 3 September).
+3. The ready card itself is unchanged. It only arrives later, and by then
+   it is true.
+4. Nothing on this path reads the workout type back. If a readback check
+   for a free row ever appears, it is decoration and must be deleted.
+
+### Gate
+
+At the hook, driving the fake: begin a free row, assert the phase is NOT
+`ready` while the send is in flight, feed the ack, assert `ready`. Then the
+same with the ack withheld: after the deadline, `ready` anyway. The
+mutation that must bite is restoring the synchronous flip to `ready`.
