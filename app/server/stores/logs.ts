@@ -92,6 +92,15 @@ export interface LogStep {
   actualSeconds?: number;
   actualMeters?: number;
   actualSpm?: number;
+  /** Door spec (2026-09-02) §5.1: the in-flight interval's own reading on
+   *  a connected close that was not `finished`. Independent, own-bounds
+   *  mirror of `src/session/logDraft.ts`'s `LogStep` (this type's own
+   *  convention). Bounds live in `routes/data.ts`'s
+   *  `validateLogStepEntry`: finite, >= 0, NO upper bound against the
+   *  step's own target (a partial can legitimately exceed a distance
+   *  target by the last stroke). */
+  partialMeters?: number;
+  partialSeconds?: number;
 }
 
 // Series capture spec (2026-08-19), §1/§3: a server-side MIRROR of the

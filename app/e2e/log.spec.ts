@@ -80,7 +80,24 @@ async function postLog(
     // (1). A step carrying `actualSource: "pm5"` and nothing else is NOT
     // measured, so the `N of M intervals measured` suffix cannot be seeded
     // through this helper without the field.
-    steps?: { label: string; actualSource?: string; actualSeconds?: number }[];
+    // Door PR B (2026-09-02) §5.1 widened this shape three times over:
+    // `meters`/`seconds` are the step's own PRESCRIBED quantity (which of
+    // the two is set decides the pair's visible ORDER — Gate 0-B decision
+    // (b)), `targetSplit` its target, and `partialMeters`/`partialSeconds`
+    // the in-flight pair itself. Like `source` and `endedBy` below, this is
+    // a HAND-COPIED shape, not compiler-checked against `server/stores/
+    // logs.ts`'s own `LogStep`: a field this object omits is simply never
+    // seeded, and the route drops any it does not name.
+    steps?: {
+      label: string;
+      actualSource?: string;
+      actualSeconds?: number;
+      meters?: number;
+      seconds?: number;
+      targetSplit?: number;
+      partialMeters?: number;
+      partialSeconds?: number;
+    }[];
     advancesPlan?: boolean;
     // The workout this log LINKS TO. Defaults to null below, which is
     // what every caller in this file used before the plan row started
@@ -439,6 +456,376 @@ test("a link-lost row with every interval measured keeps its ungated LINK LOST l
   // And NOT the partial suffix: this row is not partial, and the count
   // would be `2 of 2` — the reading clause 3 exists to make impossible.
   await expect(page.getByText("intervals measured")).toHaveCount(0);
+});
+
+// Door PR B (spec `docs/superpowers/specs/2026-09-02-door-partial-design.md`
+// §5, Gate 0-B APPROVED 2026-09-02), THROUGH THE REAL STACK. The pair is
+// TWO NEW STEP KEYS (`partialMeters`/`partialSeconds`), and every other
+// gate on them enters the pipe downstream of at least one seam this leg
+// crosses: the unit suites build a step by hand, `summaryModel.test.ts`
+// formats one, and the replay legs stop at `buildMonitorLogSteps()`.
+// Nothing else proves the pair survives `POST /api/logs`'s field list, a
+// JSONB round trip and `GET /api/logs/:id` back into the row a rower reads.
+//
+// ONE PARTIAL PER ROW, on purpose (RF3): `MonitorRun.partial` is a single
+// object and `buildMonitorLogSteps` copies it onto exactly one step, so a
+// row carrying two would be a shape no producer can write. The two
+// INTERVAL KINDS therefore need two rows, not two steps.
+test("a stopped connected piece shows the in-flight interval's own metres beside the dash, both interval kinds, over REAL stored rows", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `log-partial-pair-${RUN_ID}@e2e.test`,
+    name: "Log Partial Pair",
+  });
+
+  // A DISTANCE interval's partial. Five 500m intervals, two measured, the
+  // third stopped in: Gate 0-B decision (b) puts the metres first when the
+  // target is a distance, because the clock is the thing the rower did not
+  // reach the end of.
+  const { id: distanceId } = await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    steps: [
+      { label: "Work 1", actualSource: "pm5", actualSeconds: 480 },
+      { label: "Work 2", actualSource: "pm5", actualSeconds: 472 },
+      {
+        label: "Work 3",
+        meters: 500,
+        targetSplit: 112,
+        partialMeters: 250,
+        partialSeconds: 63,
+      },
+      { label: "Work 4", meters: 500, targetSplit: 112 },
+      { label: "Work 5", meters: 500, targetSplit: 112 },
+    ],
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+
+  await page.goto(`/today/log/${distanceId}`);
+  await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+
+  const rows = page.locator(".summary-row");
+  await expect(rows).toHaveCount(5);
+  const partialRow = rows.nth(2);
+  await expect(partialRow.locator(".summary-row-partial")).toHaveText(
+    "250 m · 1:03",
+  );
+  // DECISION (a), APPROVED AND SHIPPED: "The dash stays. The pair is an
+  // extra cell in front of it, not a replacement for it." The task brief
+  // for this file asked for the pair AND NO dash — the artboard James
+  // approved says the opposite, and the shipped renderer
+  // (`PostWorkoutSummary.tsx`'s `IntervalRow`) always emits the dash.
+  // Asserted as ORDER, not merely presence: a pair rendered after the dash
+  // would satisfy two `toHaveText`s and read as an afterthought.
+  await expect(partialRow.locator(".summary-row-dash")).toHaveText("—");
+  const cellOrder = await partialRow.evaluate((el) =>
+    [...el.children].map((c) => c.className),
+  );
+  expect(cellOrder.slice(-2)).toStrictEqual([
+    "summary-row-partial",
+    "summary-row-dash",
+  ]);
+
+  // NO DERIVED NUMBER anywhere on that row (§5.1: the pair's clock is
+  // ELAPSED, so a split computed from it is a pace nobody rowed).
+  await expect(partialRow.locator(".summary-row-pace")).toHaveCount(0);
+  await expect(partialRow.locator(".summary-row-dev")).toHaveCount(0);
+
+  // The OTHER unmeasured rows are untouched: dash, no pair. And exactly
+  // one pair exists in the whole table.
+  for (const i of [3, 4]) {
+    await expect(rows.nth(i).locator(".summary-row-partial")).toHaveCount(0);
+    await expect(rows.nth(i).locator(".summary-row-dash")).toHaveText("—");
+  }
+  await expect(page.locator(".summary-row-partial")).toHaveCount(1);
+
+  // I-B2, ON THE REAL STACK: a partial is never an `IntervalActual`, so
+  // the marker's own count does not move. Two measured rows, five
+  // intervals — the same `2 of 5` this row would have read before §5,
+  // with the pair now visible in the same frame.
+  await expect(
+    page.locator("p.summary-meta", { hasText: "STOPPED EARLY" }),
+  ).toHaveText("STOPPED EARLY · 2 of 5 intervals measured");
+  await expect(page.locator(".summary-row-pace")).toHaveCount(2);
+
+  // Gate 0-B decision (g), APPROVED: the spoken form APPENDS to `, not
+  // measured` (the accessible name may not claim more than the visible
+  // row, which still ends on the dash), spells the pair out with `after`,
+  // and leads with the metres on BOTH interval kinds.
+  await expect(partialRow).toHaveAttribute(
+    "aria-label",
+    "Interval 3: Work 3, not measured, stopped at 250 m after 1:03",
+  );
+
+  // A TIME interval's partial — the other kind, and the other visible
+  // order (decision (b): the clock leads when the target is a duration).
+  const { id: timeId } = await postLog(page, {
+    workoutTitle: "Occluded Front",
+    workoutType: "AT",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    steps: [
+      { label: "Work 1", actualSource: "pm5", actualSeconds: 180 },
+      {
+        label: "Work 2",
+        seconds: 180,
+        targetSplit: 112,
+        partialMeters: 480,
+        partialSeconds: 130,
+      },
+      { label: "Work 3", seconds: 180, targetSplit: 112 },
+    ],
+    avgSplitSeconds: 118,
+    distanceMeters: 3000,
+  });
+
+  await page.goto(`/today/log/${timeId}`);
+  await expect(
+    page.getByRole("heading", { name: "Occluded Front" }),
+  ).toBeVisible();
+  const timeRows = page.locator(".summary-row");
+  await expect(timeRows).toHaveCount(3);
+  await expect(timeRows.nth(1).locator(".summary-row-partial")).toHaveText(
+    "2:10 · 480 m",
+  );
+  await expect(timeRows.nth(1).locator(".summary-row-dash")).toHaveText("—");
+  // SPOKEN ORDER DOES NOT FLIP WITH THE VISIBLE ONE — "2:10 after 480 m"
+  // would say the metres are a duration.
+  await expect(timeRows.nth(1)).toHaveAttribute(
+    "aria-label",
+    "Interval 2: Work 2, not measured, stopped at 480 m after 2:10",
+  );
+  await expect(page.locator(".summary-row-partial")).toHaveCount(1);
+});
+
+// THE NO-CLIP GATE (Task 5's own review finding 4). What it asserts is
+// CONTAINMENT — the pair's box inside the row's own content box, on one
+// line — and the three sentences below say why, because the obvious
+// assertion is decoration here and this leg was written the obvious way
+// first (RF21).
+//
+// MEASURED at 375x812 against the real stack, not reasoned:
+// `.summary-row-partial`'s own `scrollWidth`/`clientWidth` agreed exactly
+// (117/117) even under a deliberately absurd `12345 m · 59:59` pair, and
+// went on agreeing with `flex: 0 0 auto` relaxed to `0 1 auto` — the row
+// runs about 1px from its widest natural content, and
+// `.summary-row-offset` (`flex: 1; min-width: 0`, ellipsised) absorbs the
+// whole deficit before anything else is asked to give. So a
+// `scrollWidth <= clientWidth` assertion on this cell cannot go red, and
+// shipping one would be a green check that retires the suspicion. The
+// non-shrink and the `nowrap` are pinned where they CAN fail —
+// `PostWorkoutSummary.test.tsx`'s CSS-rule legs, which read both
+// declarations off this very selector, on the flex ITEM itself.
+//
+// The ROW is deliberately not the subject either (the reviewer's own
+// wording): the offset cell ellipsises first, so the row keeps reading
+// clean while the cell beside it walks off the edge — which is exactly
+// what this leg's biting mutation produces. M8.1c: `.summary-row-offset`'s
+// `min-width: 0` -> `90px`, the yielding cell stops yielding ->
+// `Expected: <= 355.5, Received: 359.40625`.
+test("the in-flight pair is not clipped at the narrowest supported portrait (375x812)", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `log-partial-noclip-${RUN_ID}@e2e.test`,
+    name: "Log Partial No Clip",
+  });
+  // 375x812, this repo's own "tightest common width" (design.spec.ts's
+  // RC-24 rest-countdown leg, same phrase) rather than the 390x844 default.
+  await page.setViewportSize({ width: 375, height: 812 });
+
+  // The WIDEST pair a connected program can actually produce, not a round
+  // one: `compileProgram` caps a folded rest at `MAX_REST_SECONDS` (595)
+  // and no interval outruns its own target by more than a stroke, so four
+  // metre digits with a two-digit-minute clock is the realistic ceiling.
+  const { id } = await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    steps: [
+      { label: "Work 1", actualSource: "pm5", actualSeconds: 600 },
+      {
+        label: "2000m @ 1:52.0",
+        meters: 2000,
+        targetSplit: 112,
+        partialMeters: 1875,
+        partialSeconds: 428,
+      },
+    ],
+    avgSplitSeconds: 112,
+    distanceMeters: 4000,
+  });
+
+  await page.goto(`/today/log/${id}`);
+  await expect(page.locator(".summary-row-partial")).toHaveText(
+    "1875 m · 7:08",
+  );
+
+  const fit = await page.locator(".summary-row-partial").evaluate((el) => {
+    const row = el.parentElement!;
+    const rowBox = row.getBoundingClientRect();
+    const rowStyle = getComputedStyle(row);
+    const cell = el.getBoundingClientRect();
+    return {
+      cellRight: cell.right,
+      cellLeft: cell.left,
+      rowContentRight: rowBox.right - parseFloat(rowStyle.paddingRight),
+      rowContentLeft: rowBox.left + parseFloat(rowStyle.paddingLeft),
+      // ONE LINE BOX. Not `height / lineHeight` — this rule inherits a
+      // `normal` line-height, and `parseFloat("normal")` is NaN, which
+      // makes the comparison silently pass nothing (the same trap
+      // screenshots.spec.ts's landscape marker leg records).
+      lines: (() => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return range.getClientRects().length;
+      })(),
+    };
+  });
+  expect(fit.lines).toBe(1);
+  expect(fit.cellRight).toBeLessThanOrEqual(fit.rowContentRight + 0.5);
+  expect(fit.cellLeft).toBeGreaterThanOrEqual(fit.rowContentLeft - 0.5);
+});
+
+// I-B5, MADE VISIBLE ON THE REAL STACK: no summing reader sees the new
+// keys. The census script (Task 4) proves no reader NAMES them; this
+// proves the consequence a rower would notice — the same row, seeded twice
+// with only the pair differing, renders byte-identical heroes.
+test("the pair moves no hero: the same stored row with and without it reads identically", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `log-partial-heroes-${RUN_ID}@e2e.test`,
+    name: "Log Partial Heroes",
+  });
+
+  const withoutPair = await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    steps: [
+      { label: "Work 1", actualSource: "pm5", actualSeconds: 480 },
+      { label: "Work 2", meters: 500, targetSplit: 112 },
+    ],
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+  const withPair = await postLog(page, {
+    workoutTitle: "Occluded Front",
+    workoutType: "O2",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    steps: [
+      { label: "Work 1", actualSource: "pm5", actualSeconds: 480 },
+      {
+        label: "Work 2",
+        meters: 500,
+        targetSplit: 112,
+        partialMeters: 250,
+        partialSeconds: 63,
+      },
+    ],
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+
+  async function heroes(id: string): Promise<string[]> {
+    await page.goto(`/today/log/${id}`);
+    await expect(page.locator(".summary-row")).toHaveCount(2);
+    return page.locator(".summary-hero-value").allTextContents();
+  }
+  const plain = await heroes(withoutPair.id);
+  const partial = await heroes(withPair.id);
+  // Real numbers, not fallback dashes — a pair of identical "—"s would
+  // agree about nothing (RF7 in test form).
+  expect(plain).not.toContain("—");
+  expect(partial).toStrictEqual(plain);
+  // And the pair really is on the second row, so the equality above is a
+  // statement about a row that HAS one.
+  await expect(page.locator(".summary-row-partial")).toHaveText("250 m · 1:03");
+});
+
+// Gate 0-B decision (c), APPROVED: on a `link-lost` close the pair is what
+// GOT THROUGH, not where the rower got to, and the ROW cannot say so (an
+// inline word collapses the pace-ref cell). The sentence goes under the
+// table — and it REPLACES `TARGETS ONLY · NOTHING MEASURED` rather than
+// stacking with it, which is why this leg counts ELEMENTS.
+test("a link-lost row's caption names the partial's own interval, exactly once, and a rower close shows none", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `log-partial-caption-${RUN_ID}@e2e.test`,
+    name: "Log Partial Caption",
+  });
+
+  // THE PARTIAL IS ON ROW 2, not row 1 (`rows.find`, never `rows[0]`), and
+  // row 1 is MEASURED — so `targetsOnlyCaption` does not fire on either
+  // seed and the count below is a statement about the link-lost caption
+  // alone.
+  const steps = [
+    { label: "Work 1", actualSource: "pm5", actualSeconds: 480 },
+    {
+      label: "Work 2",
+      meters: 500,
+      targetSplit: 112,
+      partialMeters: 250,
+      partialSeconds: 63,
+    },
+    { label: "Work 3", meters: 500, targetSplit: 112 },
+  ];
+  const { id: lostId } = await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "link-lost",
+    steps,
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+  // The control: byte-identical steps, byte-identical pair, only the close
+  // differs — so a caption here would convict the close-reason gate rather
+  // than anything about rendering.
+  const { id: rowerId } = await postLog(page, {
+    workoutTitle: "Occluded Front",
+    workoutType: "O2",
+    source: "pm5",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    steps,
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+
+  await page.goto(`/today/log/${lostId}`);
+  await expect(page.locator(".summary-row-partial")).toHaveText("250 m · 1:03");
+  const caption = page.locator(".summary-targets-only-caption");
+  await expect(caption).toHaveCount(1);
+  await expect(caption).toHaveText(
+    "INTERVAL 2 · LAST READING BEFORE THE LINK WENT",
+  );
+  // Decision (g)'s SECOND form, on the one close that earns it: `last
+  // reading`, because `endSession`'s `linkGone` includes frame silence and
+  // `stopped at` would assert something the record cannot support.
+  await expect(page.locator(".summary-row").nth(1)).toHaveAttribute(
+    "aria-label",
+    "Interval 2: Work 2, not measured, last reading 250 m after 1:03",
+  );
+
+  await page.goto(`/today/log/${rowerId}`);
+  await expect(page.locator(".summary-row-partial")).toHaveText("250 m · 1:03");
+  await expect(page.locator(".summary-targets-only-caption")).toHaveCount(0);
 });
 
 // THE `no-reading` SEAM, START TO FINISH (RF24). Every other gate on

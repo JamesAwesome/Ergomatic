@@ -4827,7 +4827,12 @@ describe("LogSession: the drop strip (Wave F PR 1 Task 4, Gate 0)", () => {
     );
   });
 
-  it("says Nothing kept when the drop happened before any interval was measured", async () => {
+  // TWO `it`s, not one with two assertions (Task 6 review minor, landed at
+  // Task 8's sweep): the wording and the ELEMENT are separate claims, and
+  // when they shared a block M6.4 could only be observed reddening the
+  // first of them. An emptied `<b>` passes the wording and fails the
+  // element; a rewritten sentence does the reverse.
+  async function renderZeroKeptDroppedStrip(): Promise<void> {
     const { run, workout } = buildMonitorFixture({
       endedBy: "program-dropped",
       actuals: [],
@@ -4837,10 +4842,25 @@ describe("LogSession: the drop strip (Wave F PR 1 Task 4, Gate 0)", () => {
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
+  }
+
+  it("says only what is true when the drop happened before any interval was measured", async () => {
+    await renderZeroKeptDroppedStrip();
 
     expect(document.querySelector(".log-dropped-body")!.textContent).toBe(
-      "Nothing kept. You had not finished an interval yet.",
+      "You had not finished an interval yet.",
     );
+  });
+
+  it("renders NO bold clause at zero, rather than an emptied one", async () => {
+    await renderZeroKeptDroppedStrip();
+
+    // The bold clause is the element that carried "N kept."; at zero it
+    // must be absent, not an empty <b> (which would keep its own leading
+    // space ahead of the sentence).
+    expect(
+      document.querySelector(".log-dropped-body b"),
+    ).not.toBeInTheDocument();
   });
 
   // The gate itself: an ordinary machine finish renders no strip at all.

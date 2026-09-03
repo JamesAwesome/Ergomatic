@@ -451,6 +451,8 @@ function validateLogStepEntry(
     actualSeconds,
     actualMeters,
     actualSpm,
+    partialMeters,
+    partialSeconds,
   } = raw;
 
   if (typeof label !== "string" || label.length < 1 || label.length > 80) {
@@ -589,6 +591,43 @@ function validateLogStepEntry(
     };
   }
 
+  // Door spec (2026-09-02) §5.1/§8.2 task (0): the in-flight pair's own
+  // bounds. FINITE and >= 0, and deliberately NO upper bound against the
+  // step's own `meters`/`seconds` target — a rower's last stroke can carry
+  // a distance interval past its target before the close, and a validator
+  // that refused it would 400 the whole save over an honest number.
+  // `Number.isFinite` also covers the `typeof` check; NaN/Infinity are
+  // unreachable over JSON (`JSON.parse('{"a":NaN}')` throws), so no test
+  // asserts a 400 for them — the check is defensive, and saying so keeps
+  // it from being read as a gate that could go red (RF21).
+  if (
+    partialMeters !== undefined &&
+    (!Number.isFinite(partialMeters) || (partialMeters as number) < 0)
+  ) {
+    return { ok: false, message: at("partialMeters must be a number, >= 0") };
+  }
+  if (
+    partialSeconds !== undefined &&
+    (!Number.isFinite(partialSeconds) || (partialSeconds as number) < 0)
+  ) {
+    return {
+      ok: false,
+      message: at("partialSeconds must be a number, >= 0"),
+    };
+  }
+  // Door spec §5.1: the pair is a UNIT. Same both-or-absent rule
+  // `actualSplit`/`actualSource` above already enforces for its own pair —
+  // `buildMonitorLogSteps` writes both or neither, and a stored half-pair is a
+  // metre count with no clock that no renderer can use.
+  if ((partialMeters === undefined) !== (partialSeconds === undefined)) {
+    return {
+      ok: false,
+      message: at(
+        "partialMeters and partialSeconds must both be present or both be absent",
+      ),
+    };
+  }
+
   // Built from an explicit field list (never spread/cast the raw input) so
   // any extra keys the client sent are silently dropped, not persisted.
   const step: LogStep = { label };
@@ -603,6 +642,9 @@ function validateLogStepEntry(
   if (actualSpm !== undefined) step.actualSpm = actualSpm;
   if (meters !== undefined) step.meters = meters;
   if (seconds !== undefined) step.seconds = seconds;
+  if (partialMeters !== undefined) step.partialMeters = partialMeters as number;
+  if (partialSeconds !== undefined)
+    step.partialSeconds = partialSeconds as number;
   return { ok: true, step };
 }
 

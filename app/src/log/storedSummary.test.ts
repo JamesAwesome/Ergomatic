@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { LOG_SOURCES } from "../../domain/types";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import type {
-  MeasuredRow,
-  PrescribedRow,
-  SummaryRow,
+// I-B5 census (door spec §5.2), Task 4: `eligibilityFailure` is a pure,
+// framework-free function (no drizzle-orm, no db schema — the module's own
+// header) — the SAME "independent, own-bounds mirror" boundary
+// `LIBRARY_WORKOUTS` above already crosses from a client test, not the
+// `server/stores/`-graph import `useRecentLogs.ts`'s comment warns off.
+import { eligibilityFailure } from "../../server/concept2/mapping";
+import {
+  buildSummaryModel,
+  type MeasuredRow,
+  type PrescribedRow,
+  type SummaryRow,
 } from "../session/summaryModel";
 import {
   buildStoredSummary,
@@ -1881,4 +1888,321 @@ describe("partialChipWord / historyChipWord — door spec §1.3, the list chip",
       expect(historyChipWord({ partial: true, endedBy })).toBeUndefined();
     },
   );
+});
+
+describe("I-B5 census: no summing reader ever sees partialMeters/partialSeconds (door spec §5.2, Task 4)", () => {
+  // Realistic pm5 fixture (RF3): EXIT7_STEPS above, the exit-7 walk's own
+  // real captured values, both steps carrying `actualSource: "pm5"` and a
+  // genuine actualMeters/actualSeconds pair — the population this census
+  // exists to protect.
+  //
+  // PINNED to endedBy: "rower", not "link-lost" (harden lens 2, finding 5).
+  // Task 5 step 5b makes `caption` a FUNCTION of `endedBy`: on a
+  // `link-lost` row carrying a partial it legitimately becomes `INTERVAL N
+  // · LAST READING BEFORE THE LINK WENT` — a `link-lost` fixture here would
+  // fail this census for a reason that is NOT a leak (the caption moved BY
+  // DESIGN), and "fix" it by widening the assertion, which is exactly how a
+  // real leak gets waved through later. `endedBy: "rower"` is one of the
+  // four wire-close reasons I-B1 allows a partial for, and keeps `caption`
+  // (and every other field below) invariant regardless of Task 5, so any
+  // difference this test finds is a genuine leak.
+  const row = baseRow({
+    workoutTitle: SEA_FRET.title,
+    workoutType: SEA_FRET.type,
+    deviceName: "PM5 432331249",
+    source: "pm5",
+    steps: EXIT7_STEPS,
+    endedBy: "rower",
+  });
+  // Adds the pair to ONE step only — proving a single leaked step, not just
+  // an all-steps-carry-it shape, moves nothing.
+  const withPartial: StoredLog = {
+    ...row,
+    steps: [
+      { ...EXIT7_STEPS[0]!, partialMeters: 63, partialSeconds: 41 },
+      EXIT7_STEPS[1]!,
+    ],
+  };
+
+  it("adding partialMeters/partialSeconds to one step changes nothing about buildStoredSummary's heroes, total line, caption, read-back, or close line", () => {
+    const before = buildStoredSummary(row);
+    const after = buildStoredSummary(withPartial);
+    // `rows` is the one field that legitimately differs after Task 5 (it
+    // renders the pair on the affected row's own step list) — excluded
+    // here, per the task brief, so this stays a leak detector both before
+    // and after that task lands. Every other field on the view —
+    // `heroes` (`stepActualSums`/`hasStepActuals`/`tierBAvgSplitSeconds`/
+    // `buildStoredRest`/`buildStoredTotalLine` all run unconditionally at
+    // the top of `buildHeroes`, over the SAME `row.steps` `withPartial`
+    // widens — though for THIS row's own branch, read verbatim at
+    // `monitorRun.ts:1098`, `endedBy !== "finished"` means the RC-1 work
+    // pair is never written and `isReconstructableClose` gates TIER B2
+    // off, so `stepSums`'s numeric VALUE never reaches this particular
+    // row's own output — a mutation probe that proves the assertion can
+    // still bite is in the task report, via a rescue path realistically
+    // shaped like `buildStoredRest`'s own fallback-2 rung above), plus
+    // `caption`, `readBack`, `planFooter`, `closeLine` — is compared for
+    // real.
+    expect({ ...after, rows: undefined }).toStrictEqual({
+      ...before,
+      rows: undefined,
+    });
+  });
+
+  it("measuredElapsedSeconds: the affected step's own measured-elapsed reading (rendered as timeLabel) is unchanged by the pair riding alongside it", () => {
+    // `measuredElapsedSeconds` isn't exported and has no field of its own
+    // on `MeasuredRow` — it feeds `timeLabel` (`buildRows`' own source:
+    // `fmtDuration(elapsed / 60)`), reached only through `rows`, the one
+    // field the summary-object assertion above excludes. Read it off
+    // `rows[0]` directly instead: EXIT7_STEPS[0]'s own real capture is
+    // 67.9s, at/above the pm5 measurable floor, so `buildRows` measures it
+    // — `fmtDuration(67.9 / 60)` is "1:08" (`domain/duration.ts`'s own
+    // `splitParts`: `Math.round(67.9) = 68` -> `1:08`).
+    const beforeRow = asMeasured(buildStoredSummary(row).rows[0]);
+    const afterRow = asMeasured(buildStoredSummary(withPartial).rows[0]);
+    expect(afterRow.timeLabel).toBe(beforeRow.timeLabel);
+    expect(afterRow.timeLabel).toBe("1:08");
+  });
+
+  it("the C2 mapping: eligibilityFailure's own row shape has no `steps` field at all, so no value the pair could carry can ever reach it — and the fence excludes every partial row anyway (I-B1: a partial row's endedBy is never \"finished\", the one value eligibilityFailure accepts)", () => {
+    const c2Row = {
+      source: "pm5" as const,
+      endedBy: "rower",
+      workSeconds: 124,
+      workMeters: 500,
+    };
+    // `steps` isn't part of `SessionLogRow` at all (mapping.ts's own type) —
+    // added here only to prove, at runtime, that a caller handing this
+    // function an object that ALSO happens to carry a `steps` array with
+    // the new keys gets the identical verdict, because the function never
+    // reads the property.
+    const withSteps = { ...c2Row, steps: withPartial.steps };
+    expect(eligibilityFailure(withSteps)).toBe(eligibilityFailure(c2Row));
+    expect(eligibilityFailure(c2Row)).toBe("not_finished");
+  });
+
+  // heroDistanceMeters (`LogRow.tsx`) — STATED, not asserted (RF21):
+  // `RecentLog` has no `steps` field at all, so no value of
+  // `partialMeters`/`partialSeconds` can ever reach it. An equality
+  // assertion here could never fail and would be decoration, not a check.
+});
+
+// ---------------------------------------------------------------------
+// Door spec (2026-09-02) §5.1/§6 — the stored screen's own half of the
+// in-flight pair. Gate 0-B (James, 2026-09-02) APPROVED decisions (a),
+// (b) and (c); the strings below are that approval, not a proposal.
+// ---------------------------------------------------------------------
+
+/** The five 500 m reps of a REAL library workout (Tropical Wave — the
+ *  workout the approved artboard draws), as stored steps. RF3: a
+ *  five-step row with the partial on step 3 is what production looks
+ *  like, and a single-step fixture cannot tell `rows.find(...)` from
+ *  `rows[0]`. `targetSplit` 102 is 2k+2 against this suite's own
+ *  baselines idiom (2k = 100 s per 500). */
+const TROPICAL_WAVE = LIBRARY_WORKOUTS.find(
+  (w) => w.title === "Tropical Wave",
+)!;
+
+function tropicalSteps(): StoredLogStep[] {
+  return Array.from({ length: 5 }, (_unused, i) => ({
+    label: "500 m @ 2k +2",
+    targetSplit: 102,
+    meters: 500,
+    // Steps 1 and 2 measured off the machine; 3 is the in-flight one; 4
+    // and 5 were never reached.
+    ...(i < 2
+      ? {
+          actualSource: "pm5" as const,
+          actualSeconds: 112,
+          actualMeters: 500,
+          actualSplit: 112,
+        }
+      : {}),
+    ...(i === 2 ? { partialMeters: 250, partialSeconds: 63 } : {}),
+  }));
+}
+
+function tropicalRow(endedBy: StoredLog["endedBy"]): StoredLog {
+  return baseRow({
+    workoutTitle: TROPICAL_WAVE.title,
+    workoutType: TROPICAL_WAVE.type,
+    deviceName: "PM5 432331249",
+    source: "pm5",
+    steps: tropicalSteps(),
+    endedBy,
+  });
+}
+
+describe("buildRows — the in-flight pair on the stored step row (§5.1)", () => {
+  it("puts the formatted pair on the unmeasured step it belongs to, and on no other row", () => {
+    const rows = buildStoredSummary(tropicalRow("rower")).rows;
+    expect(asPrescribed(rows[2]).partialLabel).toBe("250 m · 1:03");
+    // Never on an unreached row (4 and 5) — absence is a KEY absence, not
+    // a present-and-undefined one, because rows are compared with
+    // `toStrictEqual` across this suite.
+    expect(asPrescribed(rows[3]).partialLabel).toBeUndefined();
+    expect("partialLabel" in asPrescribed(rows[3])).toBe(false);
+    expect("partialLabel" in asPrescribed(rows[4])).toBe(false);
+  });
+
+  it("a TIME step reads the clock first: `2:10 · 480 m` (Gate 0-B decision (b)), off the same one formatter", () => {
+    const rows = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "rower",
+        steps: [
+          {
+            label: "3:00 @ 6k",
+            seconds: 180,
+            targetSplit: 120,
+            partialMeters: 480,
+            partialSeconds: 130,
+          },
+        ],
+      }),
+    ).rows;
+    expect(asPrescribed(rows[0]).partialLabel).toBe("2:10 · 480 m");
+  });
+});
+
+describe("both row builders format the pair through the SAME function (§5.1: one formatter, two doors)", () => {
+  it("monitorWorkRows (live/log door) and buildRows (stored screen) put the IDENTICAL string on the same step for the same data", () => {
+    // THE LEG THAT CATCHES A SECOND COPY OF THE FORMAT. One expected
+    // value, asserted against both doors — a row saved from this very
+    // piece must read back the way the live summary read it, or the same
+    // number is described two ways on two screens.
+    const live = buildSummaryModel({
+      door: "monitor",
+      run: {
+        v: 2,
+        workoutId: null,
+        title: TROPICAL_WAVE.title,
+        program: {
+          intervals: [
+            {
+              type: "work",
+              kind: "distance",
+              value: 500,
+              targetSplit: 102,
+              displaySpm: 26,
+              restSeconds: 120,
+            },
+          ],
+        },
+        logSeed: {
+          steps: [{ label: "500 m @ 2k +2", kind: "work" as const }],
+          paces: {},
+        },
+        actuals: [],
+        deviceName: "PM5 432331249",
+        startedAt: "2026-08-18T18:57:00.000Z",
+        completedAt: "2026-08-18T19:02:00.000Z",
+        terminated: false,
+        endedBy: "rower",
+        partial: { intervalIndex: 0, meters: 250, seconds: 63 },
+      },
+    });
+    const stored = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "rower",
+        steps: [
+          {
+            label: "500 m @ 2k +2",
+            targetSplit: 102,
+            meters: 500,
+            partialMeters: 250,
+            partialSeconds: 63,
+          },
+        ],
+      }),
+    );
+    expect(asPrescribed(live.rows[0]).partialLabel).toBe("250 m · 1:03");
+    expect(asPrescribed(stored.rows[0]).partialLabel).toBe(
+      asPrescribed(live.rows[0]).partialLabel,
+    );
+  });
+});
+
+describe("buildStoredSummary's caption — the link-lost sentence, by precedence (§6, Gate 0-B decision (c))", () => {
+  it("a link-lost row whose steps carry a partial captions the INTERVAL the pair belongs to", () => {
+    expect(buildStoredSummary(tropicalRow("link-lost")).caption).toBe(
+      "INTERVAL 3 · LAST READING BEFORE THE LINK WENT",
+    );
+  });
+
+  it("the SAME steps on a `rower` close keep the caption they have today — the sentence is about the LINK, not about the partial", () => {
+    // Steps 1 and 2 are measured, so `targetsOnlyCaption` abstains:
+    // today's value is `undefined`, and it must stay `undefined`.
+    expect(buildStoredSummary(tropicalRow("rower")).caption).toBeUndefined();
+  });
+
+  it("a SINGLE-STEP link-lost row: the caption is EXACTLY the partial sentence — never TARGETS ONLY, never the two concatenated (precedence, not stacking)", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "link-lost",
+        steps: [
+          {
+            label: "500 m @ 2k +2",
+            targetSplit: 102,
+            meters: 500,
+            partialMeters: 250,
+            partialSeconds: 63,
+          },
+        ],
+      }),
+    );
+    // EQUALITY, never `toContain` — a `toContain` assertion stays green
+    // under a stacked value, which is the failure this leg exists for.
+    expect(view.caption).toBe("INTERVAL 1 · LAST READING BEFORE THE LINK WENT");
+  });
+});
+
+describe("buildRows — the spoken form of the pair, keyed on the stored close reason (§6, Gate 0-B decision (g))", () => {
+  it("a `rower` row speaks `stopped at`; the SAME steps on a `link-lost` row speak `last reading`", () => {
+    // The stored door reads its close reason off the persisted row, so
+    // this is where a saved link-lost piece proves it still says what got
+    // THROUGH months later — the live door's own leg is in
+    // `summaryModel.test.ts`, and both call one producer.
+    const rower = buildStoredSummary(tropicalRow("rower")).rows[2]!;
+    const lost = buildStoredSummary(tropicalRow("link-lost")).rows[2]!;
+    expect(asPrescribed(rower).partialSpoken).toBe(
+      "stopped at 250 m after 1:03",
+    );
+    expect(asPrescribed(lost).partialSpoken).toBe(
+      "last reading 250 m after 1:03",
+    );
+  });
+
+  it("a TIME step speaks metres first even though it SHOWS the clock first", () => {
+    const rows = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "rower",
+        steps: [
+          {
+            label: "3:00 @ 6k",
+            seconds: 180,
+            targetSplit: 120,
+            partialMeters: 480,
+            partialSeconds: 130,
+          },
+        ],
+      }),
+    ).rows;
+    expect(asPrescribed(rows[0]).partialLabel).toBe("2:10 · 480 m");
+    expect(asPrescribed(rows[0]).partialSpoken).toBe(
+      "stopped at 480 m after 2:10",
+    );
+  });
+
+  it("an unreached step carries no spoken form at all", () => {
+    const rows = buildStoredSummary(tropicalRow("rower")).rows;
+    expect("partialSpoken" in asPrescribed(rows[3])).toBe(false);
+  });
 });

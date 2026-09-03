@@ -642,8 +642,9 @@ describe("screen fixtures for pnpm screenshots", () => {
    *  armed capture above with ONE fact changed — the frames stopped
    *  arriving — so the two files sit side by side as the before/after of
    *  the defect this phase exists for: same header ordinal, same READY
-   *  status, `· LOST` now on the device caption, and the banner reading
-   *  `Nothing kept.` because nothing ever was.
+   *  status, `· LOST` now on the device caption, and the banner rendering
+   *  its title alone, with no body at all — Wave F door PR B, Gate 0-B
+   *  decision (e) — because nothing ever was.
    *
    *  ZERO ACTUALS IS THE POINT HERE, not an empty fixture (recurring
    *  failure #3): the mid-row capture below deliberately carries the
@@ -698,9 +699,13 @@ describe("screen fixtures for pnpm screenshots", () => {
    *  1 Task 3). It used to pass no `actuals` at all, which was invisible
    *  until the lost banner started naming how many intervals survive: the
    *  capture would have shown a surface two intervals into Filling Low,
-   *  2,705 m on its own counter, over a banner reading "Nothing kept." —
-   *  the empty-fixture defect (recurring failure #3) rendered as a
-   *  contradiction a reviewer can see. Interval 0's actual is the record
+   *  2,705 m on its own counter, over a banner that (at the time) read
+   *  "Nothing kept." — the empty-fixture defect (recurring failure #3)
+   *  rendered as a contradiction a reviewer can see. (Wave F door PR B,
+   *  Gate 0-B decision (e): the zero arm no longer says the phrase at all
+   *  — it would now be a bare title over the same contradicting 2,705 m,
+   *  which the actuals below still exist to prevent.) Interval 0's actual
+   *  is the record
    *  a real mid-session drop would have; the frame is unchanged, and so
    *  are the progress-bar boundaries (`actualFor` prices a TIME interval
    *  at its own programmed length, which is what `measuredWorkSeconds`

@@ -526,6 +526,16 @@ rower's work silently.
       pocketed-phone chain does not need it — the late open cost the series
       trace's head, never the interval actuals. Stays a separate Wave F
       item.
+      **IT NOW OWNS A SECOND THING, from door PR B (2026-09-03).** The
+      in-flight reading that PR banks is held in a per-run ref that
+      `connect()` and `teardown()` clear defensively, and those two clears
+      are unreachable today only because no surface offers Connect with a
+      run open. `useMonitorSession.ts`'s own comment at the ref says it:
+      **"ROADMAP's R10 reconnect would arm both `connect()`/`teardown()`
+      clears, and then these clears are what lose the metres."** So this
+      item must decide what a resumed run does with a held reading before
+      it arms either path — otherwise it silently reintroduces the loss
+      door PR B just closed.
 - [ ] **RC-29 — LEFT WAVE F on 2026-08-31, same day it was folded in.** It
       was folded in carrying a measured false-positive rate — "9 banners in
       288 s over a link that never dropped (`walk-2026-08-26/`)" — that
@@ -542,7 +552,7 @@ rower's work silently.
       current build; `2026-08-31-lifecycle-design.md` §6 ships a latch
       counter so ordinary use produces the number, and no threshold moves
       until it does.
-- [ ] **The `door` item — RE-SCOPED 2026-09-02, spec
+- [x] **The `door` item — RE-SCOPED 2026-09-02, spec
       `docs/superpowers/specs/2026-09-02-door-partial-design.md`.** The
       column itself SHIPPED as `session_logs.source` (`pm5 | timer |
       manual`) in #268 / migration 0020 on 2026-09-02, so "which door" is
@@ -588,7 +598,9 @@ rower's work silently.
         guard now keeping the `pm5` door for a nameless erg instead of
         storing the session as by-hand. All three riders below are ticked.
         Gate 0-A was APPROVED by James on 2026-09-02 before any task ran.
-        **PR B (the stored NUMBER) is still open.**
+        **PR B (the stored NUMBER) is IMPLEMENTED on branch
+        `wave-f-door-b`, 2026-09-03** — the item below carries what it
+        shipped as **PR #279**.
       - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
         in-flight interval's metres in NEW step keys (`partialMeters`/
         `partialSeconds`), never `actualMeters` — an older server drops
@@ -605,16 +617,39 @@ rower's work silently.
       **S/M each; A lands before B; B's plan gets a FULL antagonist pass
       (novel stored shape + session-scoped ref).**
 
-- [ ] **The in-flight interval's metres are discarded on a mid-row link loss.**
+      **TICKED 2026-09-03 — nothing remains under this item.** The column
+      shipped in #268; PR A shipped the stored WORD in #276 (`e6f456ce`);
+      PR B ships the stored NUMBER and is the last thing this item scoped.
+      Two things people have asked about here are NOT owed by this item and
+      have their own rows: the spec's §4 riders, all three ticked under PR A
+      above, and **correct resume**, which now also owns what a resumed run
+      does with a held in-flight reading. **The only thing still to write in
+      is PR B's number**, in the two places already marked for it — the PR A
+      sub-item's closing line just above, and the in-flight metres item just
+      below — and nowhere else.
+
+- [x] **The in-flight interval's metres are discarded on a mid-row link loss.**
+      **DONE — door PR B (branch `wave-f-door-b`), 2026-09-03.** A close that
+      catches the rower mid-interval banks that interval's last reading in two
+      NEW step keys and the row shows it beside the dash; no hero, tier, total
+      or "N intervals kept" moves (I-B2/I-B5). The five replay legs drive real
+      wire bytes from three committed captures. Gate 0-B approved 2026-09-02.
+      **PR #279.**
       On a single-interval workout — the tester's own 2000 m "Beam Sea" — any
       mid-row loss gives `kept = 0`, which was the MAJORITY outcome of walk
       leg B, not an oddity. **The spec states explicitly whether correct resume
-      recovers those metres.** **S**
+      recovers those metres — and the answer is that it does NOT:** correct
+      resume must first stop clearing the reading, because `connect()` and
+      `teardown()` both clear it today (see the correct-resume item above).
+      Discharged 2026-09-03 rather than struck: the sentence bound
+      independently of the tick. **S**
       **SPECCED as `2026-08-31-lifecycle-design.md` §5, and SEQUENCED BEHIND
       THE `door` COLUMN above.** The live-drop arm (§1) inherits this
       directly: banking "what was rowed" banks nothing when no boundary was
-      reached. A stored partial is OUR number, not the machine's — there is
-      no interval pair mid-interval — so it can never be tier A, and
+      reached. A stored partial is the machine's own frame reading with OUR
+      attribution to the in-flight interval, never an interval pair the
+      machine reported — there is none mid-interval — so it can never be
+      tier A, and
       `measuredIntervalCount` correctly will not count it toward
       "N intervals kept." That is the PARTIAL vocabulary's job, which is why
       this lands with or after that migration and its summary copy is part
@@ -631,6 +666,18 @@ rower's work silently.
       since `parse.ts:608`'s strict `rowingState === 1` makes any non-1 read
       `false` and the next occurrence still will not say which. No behaviour
       change proposed. **S**
+      **(d) added 2026-09-03, owed at the NEXT WALK, from door PR B's PM
+      gate:** `domain/monitor/types.ts:134` claims `MonitorFrame.elapsedSeconds`
+      "FREEZES whenever `rowingActive` goes false", measured through a REST;
+      `types.ts:189-191` says the wire has no paused state at all; and
+      `PAUSED_FRAME_HOLD`'s comment records that the byte's behaviour through
+      a mid-piece stop has NEVER been observed. Door PR B's stored pair is
+      elapsed time, so the mid-WORK case is the one that matters. The
+      observation: on a DISTANCE interval, stop pulling mid-interval for
+      ≥10 s, keep the program running, then End. The recording then carries
+      both the clock and the byte through the same stop and the loser of
+      those two comments is corrected at its own site. Spec
+      `2026-09-02-door-partial-design.md` §5.1 carries the full reading.
 - [x] **The machine's own totals have NEVER reached a saved row. TRIAD — a
       change to what a stored number MEANS, and it lands alone.** Found by
       James on production TestFlight 2026-08-28; the ring is
@@ -1330,17 +1377,32 @@ X" is a real disposition — most of these are single files.
       for free rows, or accept and say so in the button's copy. **S**
 
 ## Codebase-audit owners
-- **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02): on
-  the connected lost-link banner (`ConnectedSurface.tsx`'s `LostBanner`, the
-  `kept === 0` arm), that line reads as loss at the exact moment the
-  RECONNECT is nullifying it — scary and, given recovery, false. Proposed:
-  `kept === 0` renders the title alone (no body); `kept >= 1` keeps
-  "N intervals kept." Copy-only, one file, cosmetic failure mode —
-  FAST-PATH eligible, but a rendered **Gate 0** first (it changes what a
-  rower reads). **Rides PR 4 (§5 partial metres) — James, 2026-09-02**: the
-  same PR that makes a part-rowed interval count toward "kept" owns what the
-  zero-kept banner says, one Gate 0 for the whole kept vocabulary. Evidence:
-  `ConnectedSurface.tsx:848`.
+- [x] **LOST THE MONITOR must not say "Nothing kept." — DONE in door PR B**
+  (2026-09-03). Shipped on all THREE surfaces that carried the phrase, not
+  one: the banner's `kept === 0` arm renders its title alone (no body
+  element at all, never an emptied one), the connected surface's ended frame
+  says "The erg dropped the workout." and stops, and `LogSession.tsx`'s
+  dropped strip says "You had not finished an interval yet." with the bold
+  clause dropped rather than emptied. Every `kept >= 1` arm is byte-for-byte
+  unchanged. **The sentence below is WRONG and is corrected here rather than
+  deleted, because it was the reason this rode PR B:** a part-rowed interval
+  does NOT count toward "kept" and never will — I-B2, a partial is never an
+  `IntervalActual` and `measuredIntervalCount` does not see it. What PR B
+  actually does is make the zero-kept case one where something IS on screen
+  (the interval's own metres), which is why the phrase had to go. The
+  original text, for the record:
+  > **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02):
+  > on the connected lost-link banner (`ConnectedSurface.tsx`'s
+  > `LostBanner`, the `kept === 0` arm), that line reads as loss at the
+  > exact moment the RECONNECT is nullifying it — scary and, given
+  > recovery, false. Proposed: `kept === 0` renders the title alone (no
+  > body); `kept >= 1` keeps "N intervals kept." Copy-only, one file,
+  > cosmetic failure mode — FAST-PATH eligible, but a rendered **Gate 0**
+  > first (it changes what a rower reads). **Rides PR 4 (§5 partial
+  > metres) — James, 2026-09-02**: the same PR that makes a part-rowed
+  > interval count toward "kept" owns what the zero-kept banner says, one
+  > Gate 0 for the whole kept vocabulary. Evidence:
+  > `ConnectedSurface.tsx:848`.
 
 - **v0.32.0's notes owe the DIAGNOSTICS door its affordance sentence** (PM
   gate on #258, 2026-09-01): where it is (You → DIAGNOSTICS → Monitor logs),
@@ -1999,6 +2061,16 @@ Each needs erg time or a deliberate recording session.
   stack — capture it rather than re-running past it.** This matters more
   than the known e2e flakes: the unit project has no Docker, browser, or
   network and should be deterministic. **S**
+  **THREE files now, and a measured rate (door PR B Task 7, 2026-09-03):**
+  a third test joined the set — `server/auth/middleware.test.ts > noStore >
+  stamps Cache-Control: no-store` — alongside a `data.test.ts` cursor-
+  pagination leg and `server/routes/concept2.test.ts`'s cookie-caller leg
+  (`expected 401 to be 200` inside its own mint helper). Rate: **1 failure
+  in 10 runs at that branch's head, and 1 in 12 with `data.test.ts` reverted
+  to base** — the same rate with and without the branch's only `unit`-project
+  file, which is what rules out a regression and keeps this row's "cause
+  UNKNOWN, capture the next one" instruction standing. `concept2.test.ts`
+  ran 8/8 green in isolation, so it does not reproduce alone.
 - **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
   can no longer rot independently.** The class was two independent literals —
   `news.spec.ts`'s (CI-gated, bumped by every notes PR) and

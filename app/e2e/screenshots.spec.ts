@@ -241,6 +241,45 @@ async function scrollTraceChartIntoFrame(page: Page): Promise<void> {
   });
 }
 
+/** Scrolls the interval table's PARTIAL row into the frame, for the
+ *  landscape from-the-log captures. Same mechanism (and same measured
+ *  reason) as `scrollTraceChartIntoFrame` above: this route renders inside
+ *  `.overlay-screen`, a `position: fixed` element with its own
+ *  `overflow-y`, which `window.scrollBy` cannot move. Needed because a
+ *  844x390 viewport shot of this screen stops at the reflection card —
+ *  measured: the first version of `log-detail-partial-time-landscape`
+ *  captured the title, marker and heroes and NOT the row the capture
+ *  exists for, which is RF7's own failure shape.
+ *  `scrollIntoView` is not used: it scrolls the row to the TOP of the
+ *  scroller, cropping the marker and heroes that make the row's numbers
+ *  checkable in the same frame. */
+async function scrollPartialRowIntoFrame(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const el = document.querySelector(".summary-row-partial");
+    if (el === null) return;
+    const rect = el.getBoundingClientRect();
+    // THE FLOOR IS THE TAB BAR, NOT THE VIEWPORT. `/today/log/:id` is not
+    // in `HIDDEN_TABBAR_PREFIXES`, so the fixed `.tabbar` really is on
+    // screen here and a row scrolled to `innerHeight` lands BEHIND it —
+    // measured: the first version of this helper used the viewport floor,
+    // `toBeInViewport()` passed (the element is inside the viewport rect,
+    // just covered), and the committed capture showed rows 1 and 2 with
+    // the partial row hidden under the bar.
+    const bar = document.querySelector(".tabbar");
+    const floor =
+      bar === null ? window.innerHeight : bar.getBoundingClientRect().top;
+    const margin = 12;
+    const delta = rect.bottom - floor + margin;
+    if (delta <= 0) return;
+    const overlay = document.querySelector(".overlay-screen");
+    if (overlay !== null) {
+      overlay.scrollTop += delta;
+    } else {
+      window.scrollBy(0, delta);
+    }
+  });
+}
+
 /** Activates a preset plan via the real `PUT /api/plan` route — same
  *  in-page-fetch idiom as `setBaselines` above, duplicated from
  *  `e2e/design.spec.ts`'s own `choosePlan` rather than shared (this
@@ -2599,6 +2638,16 @@ async function postLog(
       actualMeters?: number;
       spm?: number;
       actualSpm?: number;
+      // Door PR B (2026-09-02) §5.1: the in-flight interval's own pair,
+      // written on a close that caught the rower mid-interval and NEVER
+      // summed into anything (I-B5). Which of `meters`/`seconds` the step
+      // carries decides the pair's visible ORDER (Gate 0-B decision (b)),
+      // which is why the two captures below differ only in that.
+      // HAND-COPIED, like `source`/`endedBy` below and every other field
+      // in this object: nothing here is compiler-checked against
+      // `server/stores/logs.ts`'s own `LogStep`.
+      partialMeters?: number;
+      partialSeconds?: number;
     }[];
     // Trace-rendering spec (Phase LT spec 3), Task 3: the stored door's
     // own source. This helper already builds every OTHER field by hand
@@ -3211,7 +3260,18 @@ async function seedPartialLogDetail(page: Page): Promise<void> {
         actualMeters: 500,
         actualSpm: 26,
       },
-      { label: "500m @ 1:52.0", targetSplit: 112.0, meters: 500 },
+      // THE INTERVAL THE ROWER STOPPED IN (door PR B §5.1). 250 m in 0:56
+      // is 500 x 56 / 250 = 112.0 s/500m — the row's own 1:52.0 target,
+      // exactly, so the pair is checkable against the target printed
+      // beside it (RF7 sharpened). A DISTANCE target, so the metres lead
+      // (Gate 0-B decision (b)).
+      {
+        label: "500m @ 1:52.0",
+        targetSplit: 112.0,
+        meters: 500,
+        partialMeters: 250,
+        partialSeconds: 56,
+      },
       { label: "500m @ 1:52.0", targetSplit: 112.0, meters: 500 },
       { label: "500m @ 1:52.0", targetSplit: 112.0, meters: 500 },
     ],
@@ -3265,6 +3325,20 @@ async function openAndVerifyPartialLogDetail(page: Page): Promise<void> {
   await expect(rows.nth(0).locator(".summary-row-pace")).toHaveText("1:48.4");
   await expect(rows.nth(1).locator(".summary-row-pace")).toHaveText("1:55.6");
   await expect(page.locator(".summary-row-pace")).toHaveCount(2);
+
+  // Door PR B §5: the interval the rower stopped IN, on row 3 — its own
+  // metres beside the dash that is still there (Gate 0-B decision (a):
+  // "The dash stays. The pair is an extra cell in front of it"). ONE such
+  // cell in the table, because a run carries one in-flight interval.
+  // I-B2 IS THE ARITHMETIC IN THIS FRAME: the marker above still reads
+  // `2 of 5`, and there are still exactly two paced rows — a partial is
+  // never an `IntervalActual`, so nothing it shows moves a count.
+  const partialCell = rows.nth(2).locator(".summary-row-partial");
+  await expect(partialCell).toHaveText("250 m · 0:56");
+  await expect(rows.nth(2).locator(".summary-row-dash")).toHaveText("—");
+  await expect(page.locator(".summary-row-partial")).toHaveCount(1);
+  await expect(rows.nth(3).locator(".summary-row-partial")).toHaveCount(0);
+  await expect(rows.nth(4).locator(".summary-row-partial")).toHaveCount(0);
 
   // Gate 0-A's own pairing: the marker sits ABOVE a MACHINE CONFIRMED ·
   // WORK ONLY block, and both are on screen at once.
@@ -3339,8 +3413,264 @@ test("log-detail-partial-landscape", async ({ page }) => {
     }));
   expect(markerBox.scrollWidth).toBeLessThanOrEqual(markerBox.clientWidth);
   expect(markerBox.lines).toBe(1);
+  // Door PR B: the frame has to SHOW the pair, not merely be taken on a
+  // screen that has one (RF7). At 844x390 the table starts below the fold,
+  // so the overlay's own scroller is nudged until the partial row clears
+  // the tab bar and no further. At 390px of height the whole block does
+  // not fit: the landscape frame keeps the interval table and the tail of
+  // the heroes, and the marker line is above the frame. The PORTRAIT
+  // capture is the one where the marker, the heroes, the rows and the
+  // machine block are all in one picture; landscape's job here is the
+  // pair's own geometry at the wide viewport.
+  await scrollPartialRowIntoFrame(page);
+  await expect(page.locator(".summary-row-partial")).toBeInViewport();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-detail-partial-landscape.png"),
+  });
+});
+
+// Door PR B (2026-09-02) §5, Gate 0-B decision (b) — THE OTHER INTERVAL
+// KIND. `partialRowLabel` flips the pair's order on the step's own
+// prescribed quantity: a DISTANCE target puts the metres first (the
+// capture above, `250 m · 0:56`), a TIME target puts the clock first,
+// because the clock is the thing the rower did not reach the end of.
+// One approved rule, two frames — modelled on the `log-monitor-dropped` /
+// `-landscape` pair's own idiom.
+//
+// EVERY NUMBER IS HAND-CHECKABLE IN THE FRAME (RF7). Five planned 3:00
+// intervals; two rowed, the third stopped in. 800 m + 810 m = 1610 m, the
+// DISTANCE hero. 180 s + 180 s = 360 s = TIME 6:00. AVG SPLIT is the
+// machine's own 1:51.8, which is also 500 × 360 ÷ 1610 = 111.8 s. The two
+// row paces are each interval's own 500 × 180 ÷ metres: 112.5 (1:52.5)
+// and 111.1 (1:51.1). And the pair itself, 375 m in 1:24, is 500 × 84 ÷
+// 375 = 112.0 s/500m — the 1:52.0 target printed beside it, exactly.
+// The 0x003F verification payload is the SAME real 19 bytes as
+// `log-detail`'s and `log-detail-partial`'s
+// (`docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.json`, seq 64),
+// reused with its provenance rather than invented.
+async function seedPartialTimeLogDetail(page: Page): Promise<void> {
+  await postLog(page, {
+    workoutTitle: "Cold Front",
+    workoutType: "AT",
+    deviceName: "PM5 432331249",
+    endedBy: "rower",
+    held: "under",
+    pain: 4,
+    thumbs: "down",
+    notes: "Third one went nowhere. Stopped a minute and a half in.",
+    // The legacy stored-fallback trio, never read on a tier-A row — kept
+    // for realism exactly as the two captures above keep theirs.
+    avgSplitSeconds: 111.8,
+    timeSeconds: 360,
+    distanceMeters: 1610,
+    machineWorkSeconds: 360,
+    machineWorkMeters: 1610,
+    machineSummary: {
+      avgPaceSecondsPer500m: 111.8,
+      verificationBytes: [
+        0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01, 0x00,
+        0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      ],
+    },
+    steps: [
+      {
+        label: "3:00 @ 1:52.0",
+        targetSplit: 112.0,
+        actualSplit: 112.5,
+        actualSeconds: 180,
+        actualSource: "pm5",
+        seconds: 180,
+        actualMeters: 800,
+        actualSpm: 25,
+      },
+      {
+        label: "3:00 @ 1:52.0",
+        targetSplit: 112.0,
+        actualSplit: 111.1,
+        actualSeconds: 180,
+        actualSource: "pm5",
+        seconds: 180,
+        actualMeters: 810,
+        actualSpm: 26,
+      },
+      {
+        label: "3:00 @ 1:52.0",
+        targetSplit: 112.0,
+        seconds: 180,
+        partialMeters: 375,
+        partialSeconds: 84,
+      },
+      { label: "3:00 @ 1:52.0", targetSplit: 112.0, seconds: 180 },
+      { label: "3:00 @ 1:52.0", targetSplit: 112.0, seconds: 180 },
+    ],
+  });
+}
+
+/** Opens the seeded time-interval partial row and asserts the state
+ *  BEFORE the shot (RF7: prove the state, then shoot) — shared by the
+ *  portrait and landscape captures so the two cannot drift. */
+async function openAndVerifyPartialTimeLogDetail(page: Page): Promise<void> {
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: "Cold Front" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: "Cold Front" })).toBeVisible();
+
+  await expect(
+    page.locator("p.summary-meta", { hasText: "STOPPED EARLY" }),
+  ).toHaveText("STOPPED EARLY · 2 of 5 intervals measured");
+  const heroValues = page.locator(".summary-hero-value");
+  await expect(heroValues.nth(0)).toHaveText("1:51.8");
+  await expect(heroValues.nth(1)).toHaveText("6:00");
+  await expect(heroValues.nth(2)).toHaveText("1610");
+
+  const rows = page.locator(".summary-row");
+  await expect(rows).toHaveCount(5);
+  await expect(rows.nth(0).locator(".summary-row-pace")).toHaveText("1:52.5");
+  await expect(rows.nth(1).locator(".summary-row-pace")).toHaveText("1:51.1");
+  await expect(page.locator(".summary-row-pace")).toHaveCount(2);
+  // THE CLOCK LEADS. The one difference from `log-detail-partial` above,
+  // and the whole reason this pair of frames exists.
+  await expect(rows.nth(2).locator(".summary-row-partial")).toHaveText(
+    "1:24 · 375 m",
+  );
+  await expect(rows.nth(2).locator(".summary-row-dash")).toHaveText("—");
+  await expect(page.locator(".summary-row-partial")).toHaveCount(1);
+  await expect(
+    page.getByRole("group", { name: "MACHINE CONFIRMED · WORK ONLY" }),
+  ).toBeVisible();
+  await expect(page.getByText("6:00.0 work · 1610m")).toBeVisible();
+}
+
+test("log-detail-partial-time", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-detail-partial-time@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedPartialTimeLogDetail(page);
+  await openAndVerifyPartialTimeLogDetail(page);
+  // Viewport-only, the same reason `log-detail-partial` states.
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-partial-time.png"),
+  });
+});
+
+test("log-detail-partial-time-landscape", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-detail-partial-time-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedPartialTimeLogDetail(page);
+  await openAndVerifyPartialTimeLogDetail(page);
+  await page.setViewportSize({ width: 844, height: 390 });
+  // NO tab-bar neutralize, same measured reason `log-detail-partial-
+  // landscape` records: this route renders inside a fixed
+  // `.overlay-screen`, so making the tab bar static hoists it into the
+  // top of the frame.
+  //
+  // The pair must be ONE unwrapped line beside a dash that is still
+  // there, at 844px — the row is at its widest here, and the cell that
+  // yields is `.summary-row-offset`, never this one. Measured, never
+  // eyeballed: a Range over the contents yields one client rect per line
+  // the text really occupies (`height / lineHeight` is NaN under a
+  // `normal` line-height, the trap the landscape marker leg above
+  // records).
+  const partialLines = await page
+    .locator(".summary-row-partial")
+    .evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getClientRects().length;
+    });
+  expect(partialLines).toBe(1);
+  await scrollPartialRowIntoFrame(page);
+  await expect(page.locator(".summary-row-partial")).toBeInViewport();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-partial-time-landscape.png"),
+  });
+});
+
+// Door PR B §6, Gate 0-B decision (c), APPROVED: on a `link-lost` close
+// the pair is what GOT THROUGH, not where the rower got to — and the row
+// cannot say so, because an inline word collapses the pace-ref cell (the
+// gate measured it). The sentence goes UNDER the table instead, and it
+// REPLACES `TARGETS ONLY · NOTHING MEASURED` rather than stacking with it.
+// Nothing in the capture set could show it: every other partial seed here
+// closes `rower`.
+//
+// PORTRAIT ONLY, deliberately. The caption is a centred single line under
+// the table, so 390px is its tightest case and landscape only gives it
+// more room; the element whose landscape behaviour was in doubt is the
+// ROW's pair cell, and `log-detail-partial-time-landscape` above captures
+// that. Three intervals rather than five so the whole thing — title,
+// close line, heroes, table, caption — lands in one viewport shot without
+// scrolling.
+//
+// HAND-CHECKABLE (RF7): one rowed interval of 500 m in 1:52.4 (112.4
+// s/500m, its own printed pace), then the link went 250 m into the
+// second — 250 m in 0:56 is 112.0 s/500m, the target beside it. The close
+// line reads `1 of 3` because exactly one row carries numbers.
+test("log-detail-partial-link-lost", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-detail-partial-linklost@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await postLog(page, {
+    workoutTitle: "Sea Mist",
+    workoutType: "O2",
+    deviceName: "PM5 432331249",
+    endedBy: "link-lost",
+    held: "held",
+    pain: 2,
+    avgSplitSeconds: 112.4,
+    timeSeconds: 112,
+    distanceMeters: 500,
+    steps: [
+      {
+        label: "500m @ 1:52.0",
+        targetSplit: 112.0,
+        actualSplit: 112.4,
+        actualSeconds: 112.4,
+        actualSource: "pm5",
+        meters: 500,
+        actualMeters: 500,
+        actualSpm: 24,
+      },
+      {
+        label: "500m @ 1:52.0",
+        targetSplit: 112.0,
+        meters: 500,
+        partialMeters: 250,
+        partialSeconds: 56,
+      },
+      { label: "500m @ 1:52.0", targetSplit: 112.0, meters: 500 },
+    ],
+  });
+
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: "Sea Mist" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.getByRole("heading", { name: "Sea Mist" })).toBeVisible();
+
+  // `link-lost` keeps its own ungated line AND gains the count, because
+  // this row is genuinely partial (door PR A §1.2's two-branch rule).
+  await expect(
+    page.locator("p.summary-meta", { hasText: "LINK LOST" }),
+  ).toHaveText(
+    "LINK LOST · the app lost the monitor · 1 of 3 intervals measured",
+  );
+  await expect(page.locator(".summary-row-partial")).toHaveText("250 m · 0:56");
+  // ONE caption element, never two: the precedence rule is what the frame
+  // has to show, so it is asserted as a COUNT and not only as text.
+  const caption = page.locator(".summary-targets-only-caption");
+  await expect(caption).toHaveCount(1);
+  await expect(caption).toHaveText(
+    "INTERVAL 2 · LAST READING BEFORE THE LINK WENT",
+  );
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-partial-link-lost.png"),
   });
 });
 
@@ -4615,10 +4945,11 @@ const CONNECTED_STATES = [
   "connected-armed",
   // Phase LM PR 1 Task 4: the phase's FLAGSHIP frame, which had no
   // committed picture at all — the armed frame above with the link lost,
-  // so the header still reads `1 OF 4 · READY` while the banner reads
-  // `Nothing kept.` The pair is the whole phase in two images: the state
-  // that used to paint itself as a session in progress, and the same state
-  // saying what it actually is.
+  // so the header still reads `1 OF 4 · READY` while the banner renders
+  // its title alone, no body (Wave F door PR B, Gate 0-B decision (e)).
+  // The pair is the whole phase in two images: the state that used to
+  // paint itself as a session in progress, and the same state saying
+  // what it actually is.
   "connected-ready-lost",
   "connected-pane-live",
   // connected-revamp Task 4b (design spec §5b) originally added this as the
