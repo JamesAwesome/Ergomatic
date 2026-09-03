@@ -196,7 +196,7 @@ slate.
   ready fix: build it. Its own PR (wire semantics + a walk leg), after the
   Timer-mode design pass. Ground already in the repo: the 08-31 walk's
   OPEN 5, the p.80 JustRow frame at `docs/monitor/pm5-interface-notes.md:204`,
-  RC-38 rides with it.** **IMPLEMENTED (PR #TBD, 2026-09-02; spec
+  RC-38 rides with it.** **IMPLEMENTED (PR #278, 2026-09-02; spec
   `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`
   rev 4.1, Gate 0 rev 1c): `beginFreeRow()` opens the run, then sends the
   p.80 frame ALONE — no prepare, since a terminate with a run open is the
@@ -1566,7 +1566,7 @@ close, not before.**
   confirms our reading or finds a real defect; both outcomes are cheap.
   **Per recurring failure 16's second corollary, the row for each value is
   quoted verbatim beside the claim it supports.** **S**
-  **DISPOSITION (Just Row connect spec 2026-09-02, PR #TBD): NOT
+  **DISPOSITION (Just Row connect spec 2026-09-02, PR #278): NOT
   transcribed, and said so where the value is used.** Concept2's PDFs sit
   behind Cloudflare and could not be fetched, so `0x01` ships as
   `WORKOUTTYPE_JUSTROW` in `domain/monitor/pm5/commands.ts` with a doc

@@ -2,7 +2,7 @@
 
 **Origin:** Phase JR follow-on item 2 (walk finding 2026-09-01: "the erg
 stays on the main menu, so it looks like the connection did nothing";
-re-confirmed by James 2026-09-02). **Status: GATE 0 PASSED — James, 2026-09-02, on rev 1c ("first stroke", his line; "approved"). IMPLEMENTED (PR #TBD, 2026-09-02): `app/src/justrow/JustRow.tsx` ships copy A verbatim on the shipped interstitial's `.connected-body-line`; the walk leg (spec exit criterion 5, with its control) is owed.** Spec: `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`.
+re-confirmed by James 2026-09-02). **Status: GATE 0 PASSED — James, 2026-09-02, on rev 1c ("first stroke", his line; "approved"). IMPLEMENTED (PR #278, 2026-09-02): `app/src/justrow/JustRow.tsx` ships copy A verbatim on the shipped interstitial's `.connected-body-line`; the walk leg (spec exit criterion 5, with its control) is owed.** Spec: `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`.
 
 ## Rev 2 amendment (after the antagonist pass, 2026-09-02)
 
