@@ -17,11 +17,13 @@ import {
 // suite green. An expectation derived from the symbol it exists to gate pins
 // nothing at all (RF21's first smell).
 //
-// TWO ROWS ARE TRANSCRIBED FROM THE PAGE'S RULING, NOT ITS TABLE, and the
-// page disagrees with itself on exactly these two. Its outcome→copy table
-// still carries the pre-ruling strings; its copy-pass ruling row (the one
-// that also says it "Supersedes the board's 'copy is final as rendered' note
-// for these strings") reads, verbatim:
+// TWO ROWS WERE TRANSCRIBED FROM THE PAGE'S RULING RATHER THAN ITS TABLE,
+// because when this file was written the page disagreed with itself on
+// exactly those two: the outcome→copy table still listed "THE BROWSER LEFT
+// THE LINK" and "THIS DEVICE COULDN'T OPEN CONCEPT2 · <code>", while the
+// copy-pass ruling row on the same page (the one that also says it
+// "Supersedes the board's 'copy is final as rendered' note for these
+// strings") reads, verbatim:
 //
 //   "Every token gets words written for a rower, or is dropped. […] one
 //    sentence, "THIS DEVICE COULDN'T OPEN CONCEPT2", for all four
@@ -29,10 +31,12 @@ import {
 //    EXCHANGE" (an OAuth word, not a rowing one), and "THE BROWSER LEFT
 //    CONCEPT2"."
 //
-// So `abandoned` reads THE BROWSER LEFT CONCEPT2 (the table's "THE BROWSER
-// LEFT THE LINK" is the superseded spelling), and the four device failures
-// carry no token (the table's "· <code>" is the superseded form, and is the
-// exact defect the ruling exists to remove).
+// The ruling won: a Capacitor error code on a rower's screen is the exact
+// defect it exists to remove. The page's table has SINCE been corrected to
+// match (commit "Gate 0: the outcome table said the pre-ruling strings"), so
+// the two halves now agree and every literal below can be checked against
+// either. The history is kept here because it is the reason these two rows
+// carry a note the others do not.
 // ---------------------------------------------------------------------------
 
 // Board 1e's panel line is transcribed inline on every row of the table
@@ -163,7 +167,7 @@ const COPY_TABLE: CopyRow[] = [
     },
   },
   {
-    name: "abandoned → THE BROWSER LEFT CONCEPT2 (the ruling's spelling, not the table's)",
+    name: "abandoned → THE BROWSER LEFT CONCEPT2 (the copy ruling's spelling)",
     outcome: { kind: "abandoned" },
     expected: {
       line: "The connection didn't complete. Nothing was linked.",
