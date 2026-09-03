@@ -1381,17 +1381,6 @@
       recovery one tap rather than an unlink and a fresh link.
     </p>
     <p class="lede">
-      <strong>The same frame carries <code>UPDATE NEEDED</code>.</strong> A
-      RECONNECT can also come back <code>409 update_required</code> &mdash; the
-      mint answers it for any build predating the <code>WebAuth</code> plugin,
-      regardless of link state, and <code>needsReauth</code> is sticky &mdash;
-      and that outcome is NOT a failure, so it carries no line of its own from
-      the outcome table. It draws 1g's panel in this frame's chrome, in the
-      same slot the failure panel uses, with no Try again for 1g's own reason:
-      retrying the same build cannot succeed. Until fix round 2 it rendered
-      nothing at all, which is the same silence this state exists to remove.
-    </p>
-    <p class="lede">
       Placement: BELOW the &quot;CONCEPT2 STOPPED ACCEPTING THIS LINK&quot;
       panel and ABOVE the RECONNECT button, so the reading order is what is
       wrong, then what just went wrong, then the control that fixes it &mdash;
@@ -1491,6 +1480,110 @@
       it ASKS them to DO goes right &mdash; and it is the reading this page's
       other four gridded frames (1a, 1c, 1i, 1j) already take.
     </p>
+
+    <h3>1f-c Needs re-auth, on a build too old to link <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      <strong>Drawn rather than described, because the client can render this
+      sentence.</strong> A RECONNECT can come back
+      <code>409 update_required</code>: the mint answers it for any build
+      predating the <code>WebAuth</code> plugin, regardless of link state
+      (<code>server/routes/concept2.ts:244-247</code>), and
+      <code>needsReauth</code> is sticky &mdash; so a rower on an old build
+      sits in exactly this state and taps RECONNECT.
+    </p>
+    <p class="lede">
+      It is 1f-b with one panel swapped. <code>updateRequired</code> is NOT a
+      failure, so it carries no line of its own in the outcome table and never
+      reaches the failure panel; it draws 1g's copy, verbatim, in the same slot
+      1f-b's failure panel uses. <strong>No Try again</strong>, for 1g's own
+      reason: retrying the same build cannot succeed. RECONNECT stays live
+      because the rower CAN act &mdash; by updating the app &mdash; and the
+      link is kept either way. <strong>Until fix round 2 of Task 4 this
+      rendered nothing at all</strong>, which is the same silence 1f-b exists
+      to remove, one outcome over.
+      <strong>No new colour pairing:</strong> both panels are the sunken panel
+      every other panel state paints &mdash; label and line <code>--ink</code>
+      on <code>--surface-sunken</code> (14.50:1), and this state has no REASON
+      line at all. Tappables unchanged: RECONNECT 48px, Unlink 52px.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1f-c &middot; PORTRAIT &middot; in situ</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+            <div class="panel">
+              <p class="panel-label">UPDATE NEEDED</p>
+              <p class="panel-line">
+                Update Ergomatic to link your Concept2 account.
+              </p>
+            </div>
+            <div class="btn-primary">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1f-c &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <p class="c2identity">
+                  Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+                </p>
+                <div class="panel">
+                  <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+                  <p class="panel-line">
+                    Your link is kept. Reconnect to send rows again.
+                  </p>
+                </div>
+                <div class="panel">
+                  <p class="panel-label">UPDATE NEEDED</p>
+                  <p class="panel-line">
+                    Update Ergomatic to link your Concept2 account.
+                  </p>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div class="btn-primary">RECONNECT CONCEPT2</div>
+                <div class="btn-danger">Unlink Concept2</div>
+              </div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
 
     <h3>1g Update required <span class="badge b-new">NEW STATE</span></h3>
     <p class="lede">
@@ -1729,6 +1822,18 @@
       wanted (<code>src/log/FromTheLog.tsx:365-371</code> takes the identical line
       for <code>DELETE /api/logs/:id</code>).
     </p>
+    <div class="callout">
+      <p><strong>The landscape frame below omits the linked helper line
+      ("Finished monitor rows can be sent from the log."), and the build does
+      not follow it.</strong> 1j's PORTRAIT frame draws that helper and 1c's
+      LANDSCAPE frame draws it too &mdash; and 1c is the same linked, gridded
+      state. Two frames of one state disagreeing is a drawing inconsistency
+      rather than a decision anyone made, and dropping a sentence on
+      orientation alone would be a behaviour change nobody asked for, so the
+      card follows 1c and renders the helper in both orientations. Recorded
+      here rather than by redrawing the frame, so a reader meets the
+      divergence where it is.</p>
+    </div>
     <div class="boards">
       <div class="board">
         <p class="board-cap">1j &middot; PORTRAIT &middot; in situ, after a refused second tap</p>
@@ -2789,8 +2894,8 @@
       <tr><td>callback page top rule</td><td class="num">#b5341f</td><td class="num">#fffdf8</td><td class="num">5.94:1</td><td>rule only, never text</td></tr>
     </table>
     <p class="lede">
-      <strong>1f-b, 1i and 1j introduce no new pairing</strong> &mdash; that is
-      the result, stated rather than assumed. All three reuse the sunken panel
+      <strong>1f-b, 1f-c, 1i and 1j introduce no new pairing</strong> &mdash;
+      that is the result, stated rather than assumed. All four reuse the sunken panel
       and the outline button the earlier states already paint, so every one of
       their colours was already computed above; the four rows naming them exist
       so the table can be read as covering every frame rather than every token.
@@ -2798,7 +2903,8 @@
       <code>--surface-sunken</code>, 4.48:1) applies to them too: their REASON
       lines are <code>--ink-3</code>. 1f-b in particular adds a SECOND sunken
       panel to a card that already had one and no colour that was not on this
-      table before it.
+      table before it, and 1f-c adds a second sunken panel and no colour at
+      all &mdash; it has no REASON line.
     </p>
     <p class="lede">
       Every tappable in every frame is &ge; 44px: Connect / Reconnect / Send /
