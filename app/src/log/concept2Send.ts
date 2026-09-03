@@ -26,29 +26,39 @@ export function isSendable(
  *  this rower — the link-out would point at a row the current grant cannot
  *  see. Re-derived on every render (invariant I3), never cached.
  *
- *  ONE line does the work, and a second null guard is deliberately ABSENT.
- *  An earlier revision opened with
- *  `if (row.c2ResultId === null || row.c2UserId === null) return null;`,
- *  which reads like a check and is not one: deleting it alone left this
- *  file green (Task 5 probe M33, 23/23), because the account line below is
- *  already total over every shape it caught — a row whose `c2UserId` is
- *  null never equals a live link's id, and a row whose `c2ResultId` is null
- *  but whose account matches falls through and returns that same null.
- *  That is an unfalsifiable guard sold as a check, which is worse than no
- *  guard, and it is the SAME question `server/stores/logs.ts`'s
- *  `sentC2ResultIds` answered in this PR when it deleted its own
- *  `isNotNull(c2_result_id)` for the identical reason. `recordC2Result` is
- *  the only writer of either column and writes both in one statement, so no
- *  supported path produces a half-null row. One question, one answer.
+ *  ONE COMPARISON, and TWO null guards are deliberately absent. Fix round 1
+ *  (F4) deleted them both, and the same probe condemned each: with the guard
+ *  gone the whole file stays green, which means it was an unfalsifiable
+ *  guard sold as a check — worse than no guard, because it retires the
+ *  suspicion that would have found a real defect. This is the answer
+ *  `server/stores/logs.ts`'s `sentC2ResultIds` gave the identical question
+ *  in this same PR when it deleted its own `isNotNull(c2_result_id)`. One
+ *  null-shape question, one answer.
  *
- *  The line that IS load-bearing is the account check: removing it reddens
- *  two tests (probe M33c), one of them the only pin on `link.c2UserId ===
- *  null`. */
+ *    - `row.c2ResultId === null || row.c2UserId === null` (probe M33, 23/23
+ *      green): a row whose `c2UserId` is null never equals a live link's id,
+ *      and a row whose `c2ResultId` is null but whose account matches falls
+ *      through and returns that same null.
+ *    - `link.c2UserId === null ||` (probe F4a, 24/24 green): when the link
+ *      carries no account, any NUMERIC `row.c2UserId` already fails the
+ *      comparison, and a null one lands on the case below.
+ *
+ *  WHICH LEAVES `null === null`, and it is correct rather than lucky.
+ *  `recordC2Result` (`server/stores/logs.ts`) is the only writer of either
+ *  column and writes BOTH in one statement, so a row with no account has no
+ *  result id either: the comparison "matches", and the `null` it then
+ *  returns is the right answer for an unsent row. The half-null row that
+ *  would make this wrong — an account id with no result id, or the reverse —
+ *  is a shape no supported path produces, which is the same invariant the
+ *  store leans on rather than a second copy of a check.
+ *
+ *  The comparison itself IS load-bearing: deleting the line reddens two
+ *  tests (probe F4c), one of them the only pin on a link with no account. */
 export function sentResultId(
   row: Pick<StoredLog, "c2ResultId" | "c2UserId">,
   link: Concept2Link,
 ): number | null {
-  if (link.c2UserId === null || row.c2UserId !== link.c2UserId) return null;
+  if (row.c2UserId !== link.c2UserId) return null;
   return row.c2ResultId;
 }
 
