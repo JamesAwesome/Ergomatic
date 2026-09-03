@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { startLink, type LinkOutcome } from "../adapters/linkFlow";
 import { useConcept2Link, type LinkReadFailure } from "../api/useConcept2Link";
-import { describeFailure, identityLine } from "./concept2CardModel";
+import {
+  describeFailure,
+  identityLine,
+  type LinkFailure,
+} from "./concept2CardModel";
 
 /**
  * Wave E PR2, Surface 1 (board `docs/design/handoffs/2026-08-31-concept2-
@@ -48,6 +52,33 @@ function reasonFor(failure: LinkReadFailure): string {
   return failure.status === null
     ? "NO CONNECTION"
     : `THE SERVER ANSWERED ${String(failure.status)}`;
+}
+
+/**
+ * The attempt-failed panel — amendment 1e, and 1f-b's half of it.
+ *
+ * ONE definition, TWO callers, on purpose. Fix round 1 (R2) made a failed
+ * RECONNECT render instead of staying silent, and the ruling was explicit
+ * that it shows "the same failure line and REASON the unlinked card would
+ * … reuse `describeFailure` — no new strings, no new copy decisions". A
+ * second inline copy of this markup would be a second place
+ * `THE LINK DIDN'T FINISH` is spelled, with no type protecting either — the
+ * exact shape of the three panel lines this task already had to pin by hand.
+ *
+ * `failure.reason` is rendered unconditionally because `LinkFailure.reason`
+ * is `string`, not `string | null` (`concept2CardModel.ts`'s own comment
+ * says why: the members with no REASON answer `null` for the WHOLE object
+ * and render no panel at all). The `!== null` guard this markup carried
+ * before the extraction could never be false.
+ */
+function FailurePanel({ failure }: { failure: LinkFailure }) {
+  return (
+    <div className="c2-card-panel">
+      <p className="c2-card-panel-label">THE LINK DIDN&apos;T FINISH</p>
+      <p className="c2-card-panel-line">{failure.line}</p>
+      <p className="c2-card-panel-reason">REASON: {failure.reason}</p>
+    </div>
+  );
 }
 
 export default function Concept2Card({ email }: { email: string }) {
@@ -195,20 +226,28 @@ export default function Concept2Card({ email }: { email: string }) {
           </h2>
           <span className="c2-card-status">COULDN&apos;T READ</span>
         </div>
-        <div className="c2-card-panel">
-          <p className="c2-card-panel-label">COULDN&apos;T READ CONCEPT2</p>
-          <p className="c2-card-panel-line">
-            Couldn&apos;t reach Concept2 linking.
-          </p>
-          <p className="c2-card-panel-reason">REASON: {reasonFor(failed)}</p>
+        <div className="c2-card-body">
+          <div className="c2-card-tell">
+            <div className="c2-card-panel">
+              <p className="c2-card-panel-label">COULDN&apos;T READ CONCEPT2</p>
+              <p className="c2-card-panel-line">
+                Couldn&apos;t reach Concept2 linking.
+              </p>
+              <p className="c2-card-panel-reason">
+                REASON: {reasonFor(failed)}
+              </p>
+            </div>
+          </div>
+          <div className="c2-card-act">
+            <button
+              type="button"
+              className="c2-card-retry"
+              onClick={() => void reload()}
+            >
+              Retry
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          className="c2-card-retry"
-          onClick={() => void reload()}
-        >
-          Retry
-        </button>
       </section>
     );
   }
@@ -244,161 +283,195 @@ export default function Concept2Card({ email }: { email: string }) {
         </span>
       </div>
 
-      {link.linked && (
-        <p className="c2-card-identity">{identityLine(link, email)}</p>
-      )}
-
-      {link.linked && link.needsReauth && (
-        <>
-          <div className="c2-card-panel">
-            <p className="c2-card-panel-label">
-              CONCEPT2 STOPPED ACCEPTING THIS LINK
-            </p>
-            <p className="c2-card-panel-line">
-              Your link is kept. Reconnect to send rows again.
-            </p>
-          </div>
-          {/* `busy` is the ONLY thing that can disable this button
-              (ruling i). An earlier revision also gated it on a stored
-              weight class and drew a state for the case where that class
-              could not be read back — a button nothing could press. There
-              is no stored class to be unreadable. */}
-          <button
-            type="button"
-            className="c2-card-primary"
-            disabled={busy}
-            onClick={() => void connect()}
-          >
-            RECONNECT CONCEPT2
-          </button>
-        </>
-      )}
-
-      {link.linked && !link.needsReauth && !armed && (
-        <p className="c2-card-helper">
-          Finished monitor rows can be sent from the log.
-        </p>
-      )}
-
-      {link.linked && armed && (
-        <p className="c2-card-explain">
-          Unlink removes this app&apos;s access. Rows already sent stay on
-          Concept2.
-        </p>
-      )}
-
-      {/* Amendment 1j. Sits above the Unlink control it belongs to, so the
-          rower reads the outcome and then sees the button that produced
-          it. Says the link is UNCHANGED explicitly: the dangerous reading
-          of a failed destructive action is that it half-worked. */}
-      {link.linked && unlinkFailed !== null && (
-        <div className="c2-card-panel">
-          <p className="c2-card-panel-label">UNLINK DIDN&apos;T HAPPEN</p>
-          <p className="c2-card-panel-line">
-            Couldn&apos;t unlink. Your link is unchanged.
-          </p>
-          <p className="c2-card-panel-reason">
-            REASON: {reasonFor(unlinkFailed)}
-          </p>
-        </div>
-      )}
-
-      {link.linked && (
-        <>
-          <hr className="c2-card-hair" />
-          <button
-            type="button"
-            className={`c2-card-danger${armed ? " c2-card-danger-armed" : ""}`}
-            disabled={busy}
-            onClick={() => {
-              if (armed) void unlink();
-              else arm();
-            }}
-          >
-            {armed ? "Tap again to unlink" : "Unlink Concept2"}
-          </button>
-          {armed && (
-            <p className="c2-card-foot">DISARMS ON ITS OWN AFTER 4 SECONDS</p>
+      {/* ONE RULE, NOT FIVE SPECIAL CASES (fix round 1, R1). What the card
+          TELLS the rower goes in `.c2-card-tell`; what it ASKS them to DO
+          goes in `.c2-card-act`. The pair is present in EVERY state, so the
+          landscape two-column rule is structural rather than per-state
+          guesswork — the amendment draws the grid in five landscape frames
+          (1a, 1c, 1f, 1i, 1j) and, in 1f alone, leaves the identity line
+          above it; the single rule resolves that inconsistency by putting
+          identity where it belongs, on the telling side.
+          Portrait stacks the pair and is unchanged: `.c2-card-body` is a
+          12px-gap flex column there, exactly the gap these children had as
+          direct flex children of `.c2-card` before the wrappers existed. */}
+      <div className="c2-card-body">
+        <div className="c2-card-tell">
+          {link.linked && (
+            <p className="c2-card-identity">{identityLine(link, email)}</p>
           )}
-        </>
-      )}
 
-      {/* The `navigating` line and the `busy · source guard` line are the
-          same sentence, deliberately: the amendment's outcome table gives
-          both members this copy, because to the rower they are one
-          situation — a tap of theirs is open at Concept2 and wants an
-          answer. Neither reaches `describeFailure`, so this is the only
-          place either string exists. */}
-      {!link.linked && opening && (
-        <div className="c2-card-panel">
-          <p className="c2-card-panel-label">OPENING CONCEPT2</p>
-          <p className="c2-card-panel-line">
-            Approve access on Concept2&apos;s page.
-          </p>
+          {link.linked && link.needsReauth && (
+            <div className="c2-card-panel">
+              <p className="c2-card-panel-label">
+                CONCEPT2 STOPPED ACCEPTING THIS LINK
+              </p>
+              <p className="c2-card-panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+          )}
+
+          {/* Amendment 1f-b (fix round 1, R2). A RECONNECT that fails used
+              to render NOTHING: every failure panel was gated `!link.linked`,
+              so the rower tapped, something failed, and the screen was
+              unchanged. It now shows the same line and REASON the unlinked
+              card would, from the same `describeFailure` — no new copy, and
+              no second spelling of the panel (see `FailurePanel`). The
+              RECONNECT button below stays live, so the recovery is one tap. */}
+          {link.linked && link.needsReauth && failure !== null && (
+            <FailurePanel failure={failure} />
+          )}
+
+          {link.linked && !link.needsReauth && !armed && (
+            <p className="c2-card-helper">
+              Finished monitor rows can be sent from the log.
+            </p>
+          )}
+
+          {link.linked && armed && (
+            <p className="c2-card-explain">
+              Unlink removes this app&apos;s access. Rows already sent stay on
+              Concept2.
+            </p>
+          )}
+
+          {/* Amendment 1j. Sits above the Unlink control it belongs to, so
+              the rower reads the outcome and then sees the button that
+              produced it. Says the link is UNCHANGED explicitly: the
+              dangerous reading of a failed destructive action is that it
+              half-worked. */}
+          {link.linked && unlinkFailed !== null && (
+            <div className="c2-card-panel">
+              <p className="c2-card-panel-label">UNLINK DIDN&apos;T HAPPEN</p>
+              <p className="c2-card-panel-line">
+                Couldn&apos;t unlink. Your link is unchanged.
+              </p>
+              <p className="c2-card-panel-reason">
+                REASON: {reasonFor(unlinkFailed)}
+              </p>
+            </div>
+          )}
+
+          {/* The `navigating` line and the `busy · source guard` line are
+              the same sentence, deliberately: the amendment's outcome table
+              gives both members this copy, because to the rower they are one
+              situation — a tap of theirs is open at Concept2 and wants an
+              answer. Neither reaches `describeFailure`, so this is the only
+              place either string exists. */}
+          {!link.linked && opening && (
+            <div className="c2-card-panel">
+              <p className="c2-card-panel-label">OPENING CONCEPT2</p>
+              <p className="c2-card-panel-line">
+                Approve access on Concept2&apos;s page.
+              </p>
+            </div>
+          )}
+
+          {!link.linked && !opening && updateRequired && (
+            <div className="c2-card-panel">
+              <p className="c2-card-panel-label">UPDATE NEEDED</p>
+              <p className="c2-card-panel-line">
+                Update Ergomatic to link your Concept2 account.
+              </p>
+            </div>
+          )}
+
+          {!link.linked && !opening && !updateRequired && failure !== null && (
+            <FailurePanel failure={failure} />
+          )}
+
+          {!link.linked && !opening && !updateRequired && failure === null && (
+            <>
+              <p className="c2-card-explain">
+                Sends finished monitor rows to your Concept2 logbook, one row at
+                a time, from the log.
+              </p>
+              <hr className="c2-card-hair" />
+              {/* Ruling (i): nothing is asked here. The hairline still marks
+                  the break between the explanation and the action; what used
+                  to sit between them was a WEIGHT CLASS section and a
+                  two-option radiogroup. The copy below says where the class
+                  comes from rather than leaving the rower to wonder where the
+                  question went — and it names CONCEPT2, not the profile,
+                  because the profile is only the FALLBACK producer
+                  (observation 29): the class comes from the rower's own most
+                  recent Concept2 row first. Naming the profile here would be
+                  wrong for every rower who has ever declared a class, and it
+                  would promise a page this card cannot open. */}
+              <p className="c2-card-helper">
+                Your weight class comes from Concept2.
+              </p>
+            </>
+          )}
         </div>
-      )}
 
-      {!link.linked && !opening && updateRequired && (
-        <div className="c2-card-panel">
-          <p className="c2-card-panel-label">UPDATE NEEDED</p>
-          <p className="c2-card-panel-line">
-            Update Ergomatic to link your Concept2 account.
-          </p>
+        <div className="c2-card-act">
+          {link.linked && link.needsReauth && (
+            <>
+              {/* `busy` is the ONLY thing that can disable this button
+                  (ruling i). An earlier revision also gated it on a stored
+                  weight class and drew a state for the case where that class
+                  could not be read back — a button nothing could press.
+                  There is no stored class to be unreadable. */}
+              <button
+                type="button"
+                className="c2-card-primary"
+                disabled={busy}
+                onClick={() => void connect()}
+              >
+                RECONNECT CONCEPT2
+              </button>
+            </>
+          )}
+
+          {link.linked && (
+            <>
+              <hr className="c2-card-hair" />
+              <button
+                type="button"
+                className={`c2-card-danger${armed ? " c2-card-danger-armed" : ""}`}
+                disabled={busy}
+                onClick={() => {
+                  if (armed) void unlink();
+                  else arm();
+                }}
+              >
+                {armed ? "Tap again to unlink" : "Unlink Concept2"}
+              </button>
+              {armed && (
+                <p className="c2-card-foot">
+                  DISARMS ON ITS OWN AFTER 4 SECONDS
+                </p>
+              )}
+            </>
+          )}
+
+          {!link.linked && !opening && !updateRequired && failure !== null && (
+            <button
+              type="button"
+              className="c2-card-retry"
+              disabled={busy}
+              onClick={() => void connect()}
+            >
+              Try again
+            </button>
+          )}
+
+          {!link.linked && !opening && !updateRequired && failure === null && (
+            <>
+              <button
+                type="button"
+                className="c2-card-primary"
+                disabled={busy}
+                onClick={() => void connect()}
+              >
+                CONNECT TO CONCEPT2
+              </button>
+              <p className="c2-card-foot">OPENS CONCEPT2 IN YOUR BROWSER</p>
+            </>
+          )}
         </div>
-      )}
-
-      {!link.linked && !opening && !updateRequired && failure !== null && (
-        <>
-          <div className="c2-card-panel">
-            <p className="c2-card-panel-label">THE LINK DIDN&apos;T FINISH</p>
-            <p className="c2-card-panel-line">{failure.line}</p>
-            {failure.reason !== null && (
-              <p className="c2-card-panel-reason">REASON: {failure.reason}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            className="c2-card-retry"
-            disabled={busy}
-            onClick={() => void connect()}
-          >
-            Try again
-          </button>
-        </>
-      )}
-
-      {!link.linked && !opening && !updateRequired && failure === null && (
-        <>
-          <p className="c2-card-explain">
-            Sends finished monitor rows to your Concept2 logbook, one row at a
-            time, from the log.
-          </p>
-          <hr className="c2-card-hair" />
-          {/* Ruling (i): nothing is asked here. The hairline still marks
-              the break between the explanation and the action; what used
-              to sit between them was a WEIGHT CLASS section and a
-              two-option radiogroup. The copy below says where the class
-              comes from rather than leaving the rower to wonder where the
-              question went — and it names CONCEPT2, not the profile,
-              because the profile is only the FALLBACK producer
-              (observation 29): the class comes from the rower's own most
-              recent Concept2 row first. Naming the profile here would be
-              wrong for every rower who has ever declared a class, and it
-              would promise a page this card cannot open. */}
-          <p className="c2-card-helper">
-            Your weight class comes from Concept2.
-          </p>
-          <button
-            type="button"
-            className="c2-card-primary"
-            disabled={busy}
-            onClick={() => void connect()}
-          >
-            CONNECT TO CONCEPT2
-          </button>
-          <p className="c2-card-foot">OPENS CONCEPT2 IN YOUR BROWSER</p>
-        </>
-      )}
+      </div>
     </section>
   );
 }

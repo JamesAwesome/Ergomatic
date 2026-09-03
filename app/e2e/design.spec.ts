@@ -9823,3 +9823,90 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
     }
   });
 });
+
+// ── Wave E PR2, Surface 1: the Concept2 card's landscape interior ──────────
+//
+// WHAT THIS PROVES, exactly (RF26 — the strongest claim it may make): that
+// `index.css`'s `@media (orientation: landscape)` rule for `.c2-card-body`
+// really moves the card's own markup in a real engine, and that portrait
+// really does not. It measures the COMPONENT'S OWN OUTPUT: the fixture below
+// was captured from a live `render(<Concept2Card email=… />)` of the unlinked
+// state, not hand-written, and `Concept2Card.test.tsx`'s
+// "Concept2Card layout structure" cases pin the same two class names in the
+// component so the fixture cannot silently drift from what ships.
+//
+// WHAT IT DOES NOT PROVE: that the card is reachable on You. It is not, yet —
+// Task 8 mounts it and the e2e stack runs with `C2_LINK_ENABLED` unset
+// (`compose.yml`'s `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`, exported by
+// neither `e2e.sh` nor `screenshots.sh`), so the route answers
+// `{available:false}` and the card renders `null` on every screen in this
+// suite today. The end-to-end version of this assertion — real card, real
+// stack, real flag — is owed at Task 8/11 and is recorded in the task report.
+// This test is the layer that CAN reach the CSS rule today, which is the
+// whole of RF21's "if a guard protects an invariant no user-facing path can
+// reach, the test belongs at the layer that can reach it".
+//
+// Boxes are read off `.c2-card-tell` and `.c2-card-act`, which are `div`s and
+// therefore block-level: an inline element reports 0 for every box metric,
+// which is the measurement error RF21's own example shipped.
+test.describe("Concept2 card: the landscape two-column interior (Gate 0 amendment §1a-1j)", () => {
+  async function loadCard(page: Page): Promise<void> {
+    const markup = readFileSync(
+      path.join(process.cwd(), "e2e/fixtures/c2-card-unlinked.html"),
+      { encoding: "utf-8" },
+    );
+    await page.goto("/", { waitUntil: "load" });
+    await page.waitForFunction(
+      () =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--page")
+          .trim() !== "",
+    );
+    await page.evaluate((html) => {
+      document.body.innerHTML = `<div class="app-shell">${html}</div>`;
+    }, markup);
+    await expect(page.locator(".c2-card")).toBeVisible();
+  }
+
+  /** Both columns' boxes in one round trip. */
+  async function columns(page: Page) {
+    const tell = await page.locator(".c2-card-tell").boundingBox();
+    const act = await page.locator(".c2-card-act").boundingBox();
+    if (tell === null || act === null)
+      throw new Error("a column had no box — the fixture did not render");
+    return { tell, act };
+  }
+
+  test("landscape puts the ACTION column to the right of the TELL column, and portrait stacks them", async ({
+    page,
+  }) => {
+    await page.setViewportSize(PHONE_LANDSCAPE);
+    await loadCard(page);
+    const land = await columns(page);
+    // The deciding assertion. Side by side means the action column STARTS
+    // to the right of where the tell column ENDS — stronger than comparing
+    // left edges alone, which a stacked layout with any indent could pass.
+    expect(land.act.x).toBeGreaterThan(land.tell.x + land.tell.width - 1);
+    // ...and on the same row, which is what "column" means here.
+    expect(Math.abs(land.act.y - land.tell.y)).toBeLessThan(land.tell.height);
+
+    await page.setViewportSize(PHONE_PORTRAIT);
+    await loadCard(page);
+    const port = await columns(page);
+    // Stacked: same left edge, and the action column sits BELOW.
+    expect(port.act.x).toBeCloseTo(port.tell.x, 0);
+    expect(port.act.y).toBeGreaterThan(port.tell.y + port.tell.height - 1);
+  });
+
+  test("landscape drops the hairline the amendment's landscape frames do not draw", async ({
+    page,
+  }) => {
+    await page.setViewportSize(PHONE_LANDSCAPE);
+    await loadCard(page);
+    await expect(page.locator(".c2-card-hair")).toBeHidden();
+
+    await page.setViewportSize(PHONE_PORTRAIT);
+    await loadCard(page);
+    await expect(page.locator(".c2-card-hair")).toBeVisible();
+  });
+});

@@ -535,6 +535,45 @@ describe("Concept2Card outcomes (Gate 0 amendment 1e/1f/1g)", () => {
     expect(screen.queryByText(/Concept2 jamesawesome/)).toBeNull();
   });
 
+  it("a failed RECONNECT says what happened, instead of leaving the screen unchanged", async () => {
+    // Fix round 1, R2 — amendment 1f-b. Every failure panel used to be gated
+    // `!link.linked`, so a declined or refused RECONNECT on the needs-reauth
+    // card rendered NOTHING: the rower tapped, something failed, and the
+    // screen was identical. It now draws the same line and REASON the
+    // unlinked card would, from the same `describeFailure`.
+    //
+    // Literals transcribed from the amendment's own outcome table
+    // (`exchangeFailed · any other error` → board copy, REASON
+    // `CONCEPT2 REFUSED THE LINK · <status>`), never read back off the model.
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "exchangeFailed",
+      status: 502,
+      error: "c2_error",
+      stateEchoed: true,
+    }));
+    mount({ ...LINKED, needsReauth: true }, startLink);
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "RECONNECT CONCEPT2" }),
+    );
+    expect(
+      await screen.findByText("REASON: CONCEPT2 REFUSED THE LINK · 502"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("The connection didn't complete. Nothing was linked."),
+    ).toBeTruthy();
+    expect(screen.getByText("THE LINK DIDN'T FINISH")).toBeTruthy();
+    // The link is KEPT — that is 1f's whole point — and the recovery is one
+    // tap, on a button nothing has disabled.
+    expect(screen.getByText("RECONNECT NEEDED")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "RECONNECT CONCEPT2" }),
+    ).not.toBeDisabled();
+    expect(
+      screen.getByText("CONCEPT2 STOPPED ACCEPTING THIS LINK"),
+    ).toBeTruthy();
+  });
+
   it("reconnects with a live button and no question, the same way Connect does (ruling i)", async () => {
     // An earlier revision had RECONNECT read a STORED class and disabled
     // itself when that class could not be read back — a button nothing
@@ -617,6 +656,73 @@ describe("Concept2Card panel lines no type protects (Task 1 review F9)", () => {
     expect(
       screen.getByText("Update Ergomatic to link your Concept2 account."),
     ).toBeTruthy();
+  });
+});
+
+// The landscape two-column rule (fix round 1, R1) is a CSS rule that acts on
+// TWO CLASS NAMES. `index.css` cannot check that the component still emits
+// them, and jsdom does no layout, so the proof is split deliberately and each
+// half says what it proves: THESE tests pin the DOM the rule targets, and
+// `e2e/design.spec.ts`'s "the Concept2 card's landscape interior" test proves
+// the rule actually moves that DOM in a real engine. Neither half alone is
+// evidence — a green layout assertion against markup the component no longer
+// renders is exactly RF21's "measuring the wrong element".
+describe("Concept2Card layout structure (the tell/act pair the grid targets)", () => {
+  it("puts what the card SAYS in the tell column and every control in the act column", async () => {
+    mount({ available: true, linked: false });
+    await renderCard();
+    const connect = await screen.findByRole("button", {
+      name: "CONNECT TO CONCEPT2",
+    });
+    const tell = document.querySelector(".c2-card-body > .c2-card-tell");
+    const act = document.querySelector(".c2-card-body > .c2-card-act");
+    expect(tell).not.toBeNull();
+    expect(act).not.toBeNull();
+    // The control is in ACT and nowhere else — this is the fact the grid
+    // rule depends on, and the fact the e2e fixture measures.
+    expect(act?.contains(connect)).toBe(true);
+    expect(tell?.contains(connect)).toBe(false);
+    expect(tell?.textContent).toContain(
+      "Your weight class comes from Concept2.",
+    );
+    expect(act?.textContent).toContain("OPENS CONCEPT2 IN YOUR BROWSER");
+    // The head stays OUTSIDE the pair: every amendment frame draws it full
+    // width above the split.
+    expect(document.querySelector(".c2-card-body .c2-card-head")).toBeNull();
+  });
+
+  it("leaves the act column with no child nodes at all when the state has nothing to do", async () => {
+    // 1g: a panel and no control. `.c2-card-act:empty { display: none }` is
+    // what keeps that panel full width in landscape, and `:empty` matches
+    // only when React emitted no child node — not even a whitespace text
+    // node. Asserting the node count is what makes that CSS rule reachable
+    // rather than decorative.
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "updateRequired",
+    }));
+    mount({ available: true, linked: false }, startLink);
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
+    await screen.findByText("UPDATE NEEDED");
+    const act = document.querySelector(".c2-card-act");
+    expect(act).not.toBeNull();
+    expect(act?.childNodes.length).toBe(0);
+  });
+
+  it("wraps the read-failed card the same way, so the one rule has no exception", async () => {
+    const api = vi.fn(
+      async () => new Response("<html>502</html>", { status: 502 }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    const tell = document.querySelector(".c2-card-body > .c2-card-tell");
+    const act = document.querySelector(".c2-card-body > .c2-card-act");
+    expect(act?.contains(retry)).toBe(true);
+    expect(tell?.textContent).toContain("Couldn't reach Concept2 linking.");
   });
 });
 

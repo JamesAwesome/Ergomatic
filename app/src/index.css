@@ -10057,6 +10057,36 @@ section:not(.news-pinned) .news-row:last-of-type {
   gap: 12px;
 }
 
+/* THE TELL / ACT PAIR (fix round 1, R1). One rule, not five special cases:
+   what the card TELLS the rower is `.c2-card-tell`, what it ASKS them to DO
+   is `.c2-card-act`, and the pair is in the DOM in every state so the
+   landscape rule at the foot of this block is structural rather than
+   per-state guesswork.
+
+   Portrait is deliberately IDENTICAL to what these children rendered as
+   direct flex children of `.c2-card`: three nested 12px-gap flex columns
+   compose to the same single 12px rhythm, so nothing about the approved
+   portrait frames moves. `.c2-card-head` stays OUTSIDE the pair — every
+   frame in the amendment draws it full width above the split. */
+.c2-card-body,
+.c2-card-tell,
+.c2-card-act {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 1b and 1g have nothing to DO — an OPENING or UPDATE NEEDED panel and no
+   control at all. Collapsing the empty column keeps their panels full
+   width, which is what the amendment's own 1b and 1g landscape frames draw
+   (they are the two of the ten it does not grid). Without this the grid
+   below would hold a 50% track open for a column with nothing in it, and
+   portrait would carry a stray 12px gap. React emits no text node for a
+   false branch, so the div is genuinely `:empty` in those states. */
+.c2-card-act:empty {
+  display: none;
+}
+
 .c2-card-label {
   margin: 0;
   font-family: var(--font-mono);
@@ -10213,23 +10243,59 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--on-color);
 }
 
-/* Landscape tightens the card's own padding and gap so a 390px-tall
-   viewport keeps the head, the body and the control in one screen.
+/* Landscape: the two-column card interior the amendment draws (fix round 1,
+   R1 — 1a's own board caption is "two-column card interior", and the page
+   grids 1a, 1c, 1f, 1i and 1j at `grid-template-columns: 1fr 1fr; gap: 20px`,
+   four of them with `align-items: center`).
 
-   IT DOES NOT RE-FLOW THE CARD INTERIOR, and that is a known gap rather
-   than a decision: the approved amendment's landscape frames for 1a, 1c,
-   1f, 1i and 1j each wrap the card's body in a two-column grid (copy left,
-   control right — `amendment-2026-09-03.html`, the five
-   `grid-template-columns: 1fr 1fr` frames), and this component renders every
-   state as direct flex children of `.c2-card` with no wrapper to grid.
-   Doing it properly means a per-state wrapper element in the JSX, since the
-   split differs by state; it is recorded in the task report rather than
-   half-done here. Portrait — the frames every one of those states was
-   approved in — matches the design exactly. */
-@media (orientation: landscape) and (max-height: 500px) {
+   BARE `@media (orientation: landscape)`, which is this file's ONLY landscape
+   idiom — the five existing blocks (the timer screen, the connected surface
+   and the JR band among them) all use exactly this form, and a
+   `grep -n "@media" src/index.css` over the file finds no width or height
+   clause on any of them. An earlier revision of this block carried
+   `and (max-height: 500px)`, which would have been the single media query in
+   the codebase with a size term, and would have silently excluded a tall
+   landscape viewport from a rule the design applies to landscape as such.
+
+   `grid-auto-flow: column` + `grid-auto-columns: 1fr` rather than an explicit
+   two-column template, so the states with nothing to DO (1b, 1g — whose
+   `.c2-card-act` is `:empty` and therefore `display: none` above) lay out as
+   ONE full-width column, exactly as the amendment's un-gridded 1b/1g
+   landscape frames draw them. One declaration serves both shapes; no
+   `:has()` and so no question about the iOS 15.0 deployment floor.
+
+   `align-items: center` uniformly, including for 1a, which is the one gridded
+   frame on the page without it — the one-rule ruling prefers the consistent
+   treatment to reproducing a four-of-five inconsistency.
+
+   The hairlines go: not one of the amendment's landscape frames draws a
+   `.hair`, because the 20px column gap already marks the break between what
+   the card says and what it asks. They stay in portrait, where every frame
+   has them.
+
+   NO NEW COLOUR PAIRING. This block sets layout only — no `color`, no
+   `background`, no `border` — so every ratio in this block's own header
+   still holds unchanged, and there is nothing new to compute. */
+@media (orientation: landscape) {
   .c2-card {
     padding: 14px 16px;
     gap: 10px;
+  }
+
+  .c2-card-body {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .c2-card-act {
+    justify-content: center;
+  }
+
+  .c2-card-hair {
+    display: none;
   }
 }
 
