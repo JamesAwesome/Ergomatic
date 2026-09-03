@@ -13,9 +13,20 @@
  * hand-written body, which is exactly the shape that let
  * `MACHINE CONFIRMED · WORK ONLY` reach zero of sixteen production rows.
  *
- * WHY IT MATTERS, in one sentence: Concept2's `date` is the END of the
- * workout (spec anchor K3), `loggedAt` is when the rower tapped Save, and
- * the gap between them is however long they spent on the summary screen.
+ * WHY IT MATTERS, in Concept2's own words. Their documentation of the
+ * `date` parameter on `POST /api/users/me/results`, quoted verbatim
+ * (`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`,
+ * §Research record, the "POST results" bullet):
+ *
+ *   "this should be the date as stored in the monitor, which is the end of
+ *    the workout, NOT the beginning"
+ *
+ * `loggedAt` is when the rower tapped Save, and the gap between the two is
+ * however long they spent on the summary screen. The sentence is quoted
+ * here rather than pointed at because it IS this module's whole
+ * justification, and `date` is neither optional nor forgiving: the same
+ * source lists it as required, and Concept2's dedup key is
+ * second-granular.
  *
  * `Intl.DateTimeFormat().resolvedOptions().timeZone` returns a canonical
  * IANA zone name, which is what `routes/data.ts`'s `tzError` accepts

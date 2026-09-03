@@ -7,8 +7,11 @@ afterEach(() => {
 
 describe("completionStamp (Wave E PR2: the producer server/db/schema.ts's tz comment named)", () => {
   it("carries the run's OWN close stamp, not the clock at save time", () => {
-    // The whole point: C2's `date` is the END of the workout (spec anchor
-    // K3), and `loggedAt` is minutes-to-hours later.
+    // The whole point, in Concept2's own words on the `date` parameter
+    // (`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`,
+    // §Research record, the "POST results" bullet): "this should be the
+    // date as stored in the monitor, which is the end of the workout, NOT
+    // the beginning". `loggedAt` is minutes-to-hours later.
     expect(
       completionStamp({ completedAt: "2026-09-01T09:10:20.000Z" }).completedAt,
     ).toBe("2026-09-01T09:10:20.000Z");

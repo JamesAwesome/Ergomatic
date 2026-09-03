@@ -241,13 +241,39 @@ function notesError(value: unknown): string | null {
   return null;
 }
 
-// Wave E PR1: completedAt is the run's own close stamp (C2's `date` is the
-// END of the workout — spec anchor K3). Malformed input is a client BUG and
-// 400s; a PARSEABLE stamp outside the plausible band is a wrong device
-// clock, and the save must survive it — the caller coerces to null (the
-// column is nullable and the upload mapping already has a loggedAt
-// fallback). This band is a save-time sanity bound only; C2's own
-// future-date bound applies at UPLOAD time to a different instant.
+// Wave E PR1: completedAt is the run's own close stamp. Concept2's own
+// documentation of the `date` parameter, quoted verbatim
+// (`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`,
+// §Research record, the "POST results" bullet): "this should be the date as
+// stored in the monitor, which is the end of the workout, NOT the
+// beginning".
+//
+// Malformed input is a client BUG and 400s; a PARSEABLE stamp outside the
+// plausible band is a wrong device clock, and the save must survive it —
+// the caller coerces to null (the column is nullable and the upload mapping
+// already has a loggedAt fallback). This band is a save-time sanity bound
+// only; C2's own future-date bound applies at UPLOAD time to a different
+// instant.
+//
+// WHY THIS FIELD STILL REFUSES WHILE `tz` BELOW DEGRADES (Wave E PR2 Task 6
+// — the asymmetry is deliberate, and it is not the same risk). `tzError`
+// consults an ENVIRONMENT-DEPENDENT list, so a phone and a server image can
+// legitimately disagree about a real zone; ISO 8601 parsing is not a list
+// and cannot skew that way. Both of this app's producers write
+// `completedAt` with `toISOString()` (`src/monitor/monitorRun.ts`'s two
+// close writers), so a malformed value means something upstream is wrong
+// and should be loud.
+//
+// THE RESIDUAL, stated so a future writer sees it before it costs a save:
+// `isMonitorRun` accepts ANY string for `completedAt`
+// (`src/monitor/monitorRun.ts`: `value.completedAt === null || typeof
+// value.completedAt === "string"`), and NEITHER client retry strips this
+// key — `useLogForm`'s 400-retry re-posts with `workoutId: null` and only
+// when the server named `workoutId`, and the series sacrifice drops
+// `series`. So a record from a tampered store, or from a future writer
+// that stamps some other format, loses the WHOLE save here rather than
+// just the stamp. If either becomes reachable, this branch degrades to a
+// stored null the way `tz` does, instead of refusing.
 // Capturing groups on the wall-clock fields (year/month/day/hour/min/sec):
 // the regex alone only shapes the string; a value like
 // "2026-02-31T12:00:00.000Z" matches it and parses (`Date.parse`

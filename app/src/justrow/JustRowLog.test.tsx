@@ -530,6 +530,17 @@ describe("JustRowLog: the timer entry", () => {
       expect("machineWorkSeconds" in body).toBe(false);
       expect("machineSummary" in body).toBe(false);
       expect("series" in body).toBe(false);
+      // Wave E PR2 Task 6, fix round 1 (F1). The close-stamp pair is the
+      // app's SECOND `source: "timer"` door, and the negative invariant has
+      // to be asserted at both or it is an instance fix wearing a class
+      // fix's reasoning. `eligibilityFailure`'s first gate refuses a
+      // `timer` row before a Concept2 payload is ever built, so a zone
+      // stored here has no reader — one more attribute about the rower's
+      // device for nothing, against the standing "ask as little as we can"
+      // ruling. Until this round, adding `...completionStamp(door.run)` to
+      // this door's own submit left all 4,822 client tests green.
+      expect("completedAt" in body).toBe(false);
+      expect("tz" in body).toBe(false);
     });
     // Lifetime table: a successful save is a clear site for the run.
     await waitFor(() => expect(loadRun()).toBeNull());

@@ -1922,9 +1922,11 @@ describe("GET/POST /api/logs", () => {
   // Wave E PR1 Task 2 (2026-08-31-concept2-logbook-design.md §Stored
   // shapes, TRIAD): `completedAt`/`tz`, optional/nullable, same
   // additive-only-between-tags posture as every other field on this
-  // route. `completedAt` is the run's own close stamp (C2's `date` is the
-  // END of the workout — spec anchor K3); `tz` is checked for IANA
-  // membership, not merely "Intl accepts it" (see `tzError`'s own
+  // route. `completedAt` is the run's own close stamp — Concept2's own
+  // words on the `date` parameter (same spec, §Research record, the "POST
+  // results" bullet): "this should be the date as stored in the monitor,
+  // which is the end of the workout, NOT the beginning". `tz` is checked
+  // for IANA membership, not merely "Intl accepts it" (see `tzError`'s own
   // comment in data.ts).
   it("accepts a valid completedAt + tz and round-trips both through GET", async () => {
     const app = appFor(makeStores());
