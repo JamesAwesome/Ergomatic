@@ -39,8 +39,11 @@ Files: `app/src/justrow/JustRow.tsx:306` (the line), `JustRow.test.tsx`, `app/sr
 Walk `docs/monitor/sessions/walk-2026-09-03-jr-connect/`, findings 4 and 5.
 The frame works (control leg PASSED, `workoutType` 0 → ack → 1); what does
 not is leaving: Cancel on the Ready screen left the PM5 in the Just Row
-session the app had just armed, and an END inside the send window would
-have done the same silently.
+session the app had just armed. **Precision the walk's own record now
+carries and this task did not: only the exclusion was OBSERVED.** Ring 3's
+Cancel ran 1589 ms after the send's ack, so the driver's refusal was never
+entered; an END inside the send window would hit it, but nobody pressed
+one. The refusal goes as hardening beside the observed cause.
 Files: `app/src/monitor/driver.ts` (`terminate()` waits on
 `freeRowSendSettled` instead of throwing `ProgramBusyError`; the deadline
 becomes 5000 ms against the walk's measured 1968/2060/1788 ms write→ack),
@@ -58,3 +61,27 @@ becomes 5000 ms against the walk's measured 1968/2060/1788 ms write→ack),
       terminate write precedes `free-row-program-sent`; restore the
       `mode !== "justrow"` exclusion → the hook tests red; delete
       `void session.cancel()` from the door's Cancel → the door test red.
+      **CORRECTED after the probes ran (see the spec's exit criterion 2b
+      table): `cancel()`'s exclusion restored ALONE leaves the whole suite
+      green — its own `teardown(armed, driver)` sends the terminate — so
+      the biting mutation there is both exclusions together, and
+      `endSession`'s leg has no exclusion to restore at all; the refusal is
+      what bites it.**
+
+### Task 7 (ADDED by the delta pass on Task 6): the hang-up must not overtake the terminate
+Task 6's wait gave `terminate()` a suspension BEFORE it writes, and that
+wait races the app's own teardown hang-up (~186 ms, from ring 1's own END
+timings — spec §Rulings 4). Invariant: a hang-up never precedes a terminate
+that still owes its write.
+Files: `app/src/monitor/driver.ts` (`terminate()` registers the write it
+owes; `sendSequence` gains an `onFrameWritten` hook; `disconnect()` holds
+while any debt stands and logs `disconnect-deferred`), `driver.test.ts`,
+`useMonitorSession.test.ts`.
+- [ ] Failing tests: driver — an unanswered send, a terminate issued
+      mid-window and a `disconnect()` behind it; the transport's own
+      `disconnect()` sees the terminate frame already written, and not
+      before 5000 ms. Hook — END at `ready` inside the send window followed
+      by an unmount; the terminate frame reaches the wire before the
+      transport's `disconnect()`.
+- [ ] Implement; green; commit; probes: drop `disconnect()`'s await → both
+      red; register the debt AFTER the wait instead of on entry → both red.

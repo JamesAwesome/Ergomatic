@@ -126,15 +126,37 @@ the machine did not take it.
    blocking there would leave the erg holding a workout the rower backed
    out of.
 
-   **Rev 4.1 said REFUSES, and the 2026-09-03 walk priced it**
-   (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4): James
-   tapped Cancel on the Ready screen, the refusal threw, the hook swallowed
-   it, and the PM5 sat in the Just Row session the app had just armed
-   (ring 3 ends `disconnect-requested` with no terminate write). A refusal
-   is only safe when some caller can act on it; both callers here
-   (`cancel`, `endSession`) are best-effort and swallow, so the refusal
-   could only ever mean "the erg is not told". The wait is bounded by the
-   deadline below, so it can never mean "hang".
+   **Rev 4.1 said REFUSES, and rev 5 withdraws it — but NOT because the
+   walk caught it refusing.** Rev 5 first wrote that James's Cancel "threw
+   here"; that is false, and the ring says so. Ring 3's
+   `disconnect-requested` lands 1589 ms after the p.80 ack, so
+   `programInFlight` was already `false` and nothing was refused. The
+   OBSERVED cause of finding 4 was the hook's `mode !== "justrow"`
+   exclusion, below. The refusal is a SEPARATELY reachable defect — an END
+   or a Cancel inside the ~2 s ack window — withdrawn as hardening on its
+   own merits: a refusal is only safe when some caller can act on it, and
+   both callers here (`cancel`, `endSession`) are best-effort and swallow,
+   so it could only ever mean "the erg is not told", silently. The wait is
+   bounded by the deadline below, so it can never mean "hang".
+
+   **And the wait it replaces the refusal with introduced a THIRD path,
+   found by the delta pass and fixed in the same PR:** a terminate
+   suspended on the send can be overtaken by the app's own teardown
+   hang-up. Measured on ring 1 (offsets from its p.80 write): the Ready
+   screen's first `frame` at +1159 ms, END's burst hold `handoff-hold`
+   +66903 → `handoff-released` +68905 (2002 ms), then
+   `disconnect-requested` +70930 (2025 ms of release, navigation and
+   unmount) — 4027 ms from END to hang-up, so the earliest END puts the
+   hang-up at about write+5186 ms against a terminate the deadline releases
+   at write+5000 ms. **INVARIANT: a hang-up never precedes a terminate that
+   still owes its write.** `terminate()` registers the write it owes on
+   entry and releases it when the frame is on the wire (or when the call
+   fails before it can be); `disconnect()` holds while any debt stands.
+   The wait is bounded by exactly what `terminate()` can block on before
+   writing — `freeRowSendSettled`, capped at the deadline — and
+   deliberately excludes the ack and settle waits, whose only production
+   exit is that very disconnect: awaiting those would be a deadlock, not a
+   bound.
 
    **And the arm is now UNDONE at both exits** (rev 5): `cancel()`'s armed
    predicate and `teardown`'s both excluded `mode === "justrow"` on the
@@ -199,6 +221,19 @@ the machine did not take it.
    way out by either exit. Nothing else about either path changes:
    `alreadyTerminated` still stops the two from writing twice, and both
    still swallow the terminate's failure.
+2c. `driver.ts` (delta pass on rev 5): `terminate()` takes a debt token
+   from a driver-closure counter on ENTRY — before the wait, which is the
+   point — and releases it from `sendSequence`'s new `onFrameWritten`
+   callback (fired once a frame's chunks are handed to the transport,
+   before its ack is awaited) or from its own `finally` if it never got
+   that far. `disconnect()` logs `disconnect-deferred` and awaits the
+   drain while any debt stands, then hangs up as before. The release is
+   idempotent and the counter is a count, not a flag, so overlapping
+   terminates cannot mask each other. Nothing outside the driver changes:
+   the hook's two existing terminate-then-disconnect chains (`fail()`,
+   `teardown`'s armed branch) still do their own ordering, and this makes
+   the same ordering hold for every OTHER caller of `disconnect()` —
+   including `teardown` at `ended`, which is the one that bit.
 3. `JustRow.tsx`: the Ready body line becomes James's line. No branch.
 4. Fake transport: accepts the p.80 frame like a workout program (acks);
    the NAK case rides the fake's EXISTING `failNextProgramFrame: "reject"`
@@ -228,23 +263,41 @@ the machine did not take it.
 
 ## Lifetime
 
-Two driver-closure values, one lifetime, one mint site, one clear site —
-both minted in `beginFreeRow()` after the run is open and the sequence
-built, both cleared in the send chain's own `finally`:
+FOUR driver-closure values. The first two belong to the send, minted in
+`beginFreeRow()` after the run is open and the sequence built and cleared
+in the send chain's own `finally`; the last two belong to the terminate
+and were added by the delta pass's fix:
 
 | value | is | mint | clear | survives |
 | --- | --- | --- | --- | --- |
-| `programInFlight` | the holder label `false \| "program()" \| "beginFreeRow()"` (pre-existing; gates `program()`'s re-entry and the RC-37 watch) | `beginFreeRow()`, set to `"beginFreeRow()"` | the chain's `finally`, back to `false` | nothing — a second `beginFreeRow()` with a run open is refused before the mint, so neither value can be overwritten while live |
+| `programInFlight` | the holder label `false \| "program()" \| "beginFreeRow()"` (pre-existing; gates `program()`'s re-entry and the RC-37 watch) | `beginFreeRow()`, set to `"beginFreeRow()"` | the chain's `finally`, back to `false` | nothing; and it cannot be overwritten while live — see the guard note below |
 | `freeRowSendSettled` | the send's own settled promise, `Promise<void> \| null`; resolves (never rejects) on ack, NAK, deadline or disconnect | same statement | same `finally`, back to `null` | as above |
+| `terminateWritesOwed` | a COUNT of `terminate()` calls that have entered and not yet put their frame on the wire | `terminate()`'s entry, one increment per call | that call's own release, run once: from `sendSequence`'s `onFrameWritten` when the frame is out, or from `terminate()`'s `finally` if it failed first | nothing; a counter rather than a boolean so two overlapping terminates cannot mask each other, and so this design owes no claim that callers never overlap |
+| `terminateWritesDrained` | the promise `disconnect()` awaits, `Promise<void> \| null`; `null` whenever the count is zero | the first increment from zero | the decrement back to zero, which resolves it and nulls it | as above |
+
+**The guard that actually holds row 1 and 2's "cannot be overwritten" is
+the HOOK's, not the driver's** (corrected by the delta pass; rev 5 said the
+driver's own `runIsOpen()` refusal did it). `beginFreeRow()`'s
+`runIsOpen()` check is `activeRun !== null && !activeRun.closed`, and the
+machine's own terminal frame sets `activeRun.closed` — reachable during the
+~2 s send if the rower presses Menu — after which a second call would be
+accepted. What holds is `useMonitorSession`'s `beginFreeRow`, which returns
+early at `programming`/`ready`/`live`/`ended`; the phase is `ready` for the
+whole send, flipped synchronously by the same call. The driver's guard is
+belt, not braces.
 
 INVARIANTS, not mechanisms. (a) While a free-row send is live, a
 `terminate()` writes no byte until that send has settled — one ack slot,
 one conversation at a time. (b) That wait is bounded: it can never outlast
-`FREE_ROW_PROGRAM_DEADLINE_MS`. (c) Neither value outlives its send, and
-neither outlives the driver — a driver does not outlive its connection, so
-nothing here survives a teardown, a relaunch or a re-arm. (d) A
-`terminate()` already suspended on the chain holds its own reference and
-resumes normally after the clear.
+`FREE_ROW_PROGRAM_DEADLINE_MS`. (c) **A hang-up never precedes a terminate
+that still owes its write**, whichever caller fires it. (d) That wait is
+bounded by the same ceiling, and by nothing else: it covers only what
+`terminate()` can block on BEFORE writing, never its ack or its settle
+ticks, whose only production exit is the disconnect itself. (e) No value
+here outlives its send or its terminate, and none outlives the driver — a
+driver does not outlive its connection, so nothing survives a teardown, a
+relaunch or a re-arm. (f) A `terminate()` already suspended on the send
+chain holds its own reference and resumes normally after the clear.
 
 The detached
 promise belongs to the driver instance; `capacitorBle.write` throws from
@@ -279,12 +332,28 @@ teardown-timed failure.
    `free-row-program-unanswered` is logged and the terminate goes out
    (independent literals, never the constant); a mutation that re-adds
    `sendPrepare()` closes the free row on the terminate-reacting fake (red).
-2b. Hook (rev 5, the layer that can reach it): at `ready` on a free row,
-   `cancel()` puts the terminate literal on the wire AFTER the p.80 write
-   and its ack, and so does an unmount; an `endSession()` fired while the
-   send is still in flight (`delayWrites`) writes its terminate after
-   `free-row-program-sent`. Mutation for each: restore the
-   `mode !== "justrow"` exclusion → red.
+2b. Hook (rev 5, the layer that can reach it) — four legs, and **the
+   mutation is NOT the same one for each**. Rev 5 said "restore the
+   `mode !== "justrow"` exclusion → red" for all of them, and two thirds of
+   that was false: `cancel()`'s exclusion restored ALONE leaves the whole
+   suite green, and `endSession` has no such exclusion to restore. Measured
+   on `ed8b0766`, one mutation at a time, `pnpm test --project unit
+   --project client` (baseline: `Test Files 230 passed`, `Tests 6584 passed
+   | 1 skipped`):
+
+   | leg | assertion | the mutation that BITES | what its failure says |
+   | --- | --- | --- | --- |
+   | `cancel()` at `ready` | the terminate literal reaches the wire after the p.80 write and its ack | **both** exclusions restored (`cancel`'s AND `teardown`'s) | `expected +0 to be 1` — `Test Files 1 failed \| 229 passed`, `Tests 2 failed \| 6582 passed` (this leg and the unmount leg) |
+   | an unmount at `ready` | same | `teardown`'s exclusion alone | `expected +0 to be 1` — `Test Files 1 failed \| 229 passed`, `Tests 1 failed \| 6583 passed` |
+   | `endSession()` inside the send window | the terminate follows `free-row-program-sent` | **the refusal**: restore `if (programInFlight === "beginFreeRow()") throw new ProgramBusyError(programInFlight)` in `terminate()` | `ProgramBusyError: beginFreeRow() is already in flight on this driver…` — `Tests 6 failed \| 6578 passed` across `driver.test.ts` and `useMonitorSession.test.ts` |
+   | an unmount while END's terminate is still suspended | the terminate frame is on the wire before the transport's `disconnect()` | drop `disconnect()`'s await of the owed write | `expected 1 to be 2` (hook), `expected 1 to be -1` (driver) |
+
+   **The falsified leg, stated where it was argued:** restoring `cancel()`'s
+   exclusion alone leaves `Test Files 230 passed` / `Tests 6584 passed | 1
+   skipped` — its own `teardown(armed, driver)` call then sends the
+   terminate instead. Recorded at the predicate and at the test in
+   `7d0c50ce`; recorded here, where the claim was made, in the delta pass's
+   second fix round.
 3. Replay over the 08-31 capture (observe-only; the replay transport
    resolves writes and never acks): the free row still opens and
    completes exactly as today, the ring holds ONE `write` of the p.80

@@ -12436,11 +12436,14 @@ describe("beginFreeRow", () => {
 
   /**
    * TERMINATE DURING THE SEND WAITS — it does not refuse (spec rev 5).
-   * It refused until the 2026-09-03 walk, and the cost was the walk's
-   * finding 4: Cancel on the Ready screen threw here, the hook swallowed
-   * the rejection, and the PM5 stayed in the Just Row session the app had
-   * just armed. The wait is bounded by the send's own deadline (the test
-   * below holds that end), so "wait" can never mean "hang".
+   * It refused until the 2026-09-03 walk, but NOT as that walk's observed
+   * cause: finding 4's Cancel ran 1589 ms after the send's own ack (ring
+   * 3), so the refusal was never entered and the hook's
+   * `mode !== "justrow"` exclusion is what left the erg armed. The refusal
+   * is a separately reachable sibling — an END or a Cancel inside the ~2 s
+   * ack window, silent because both callers swallow it — fixed in the same
+   * PR as hardening. The wait is bounded by the send's own deadline (the
+   * test below holds that end), so "wait" can never mean "hang".
    *
    * The ORDER is the assertion, read off the ring: the p.80 write, its
    * ack, the send's own completion entry, and only THEN the terminate
@@ -12541,9 +12544,11 @@ describe("beginFreeRow", () => {
    * Waiting the send out gave `terminate()` something it never had before:
    * a suspension BEFORE it writes anything. The app's own teardown hangs
    * up on a timer that knows nothing about it — measured on the walk's
-   * ring 1, END at `ready` reaches `disconnect()` about 170 ms after the
-   * deadline would release the terminate, which is not a margin, it is a
-   * coin toss. A hang-up that wins aborts the write (Apple:
+   * ring 1, an END at `ready` reaches `disconnect()` about 186 ms after
+   * the deadline would release the terminate (first `frame` +1159 ms after
+   * the p.80 write; `handoff-hold` +66903 -> `handoff-released` +68905 ->
+   * `disconnect-requested` +70930, so END->hang-up is 4027 ms), which is
+   * not a margin, it is a coin toss. A hang-up that wins aborts the write (Apple:
    * `cancelPeripheralConnection(_:)` is nonblocking and "any pending
    * commands ... may not complete"), the terminate rejects, and both hook
    * callers swallow it — leaving the erg in the Just Row session, which is
@@ -12555,6 +12560,13 @@ describe("beginFreeRow", () => {
    * it. `writesAtHangUp` is read INSIDE the transport's own `disconnect()`
    * — the one place that can say what had reached the wire at the moment
    * the radio went away.
+   *
+   * WHAT IT CANNOT DISTINGUISH (measured, not assumed): both this test and
+   * its hook sibling count a write when the transport's `write()` is
+   * CALLED, so moving `sendSequence`'s `onFrameWritten` from after the
+   * awaited chunk loop to before it leaves both green. The release is
+   * placed after the await anyway — the stronger position, and the one a
+   * real radio needs — but no assertion here holds it there.
    */
   it("disconnect() does not overtake a terminate that still owes its write — the hang-up waits out the deadline first", async () => {
     const base = stubTransport();

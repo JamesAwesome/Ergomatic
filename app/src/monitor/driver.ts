@@ -299,9 +299,16 @@ export class ProgramBusyError extends Error {
    *  it WAITS for the free-row send to settle — a bounded wait, because
    *  that send races `FREE_ROW_PROGRAM_DEADLINE_MS` — and it interleaves
    *  with `program()` on purpose (`programInFlight`'s own doc comment).
-   *  Refusing left the erg sitting in the Just Row session the app had
-   *  just armed (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`,
-   *  finding 4). */
+   *  Refusing WOULD leave the erg sitting in the Just Row session the app
+   *  had just armed. That is a REACHABLE defect, not an observed one, and
+   *  this comment used to blur the two: the 2026-09-03 walk's finding 4
+   *  never entered this refusal — ring 3's Cancel ran 1589 ms after the
+   *  send had settled, so `programInFlight` was already `false`. What the
+   *  walk actually caught was the hook's own `mode !== "justrow"`
+   *  exclusion. The refusal is fixed beside it as hardening, because both
+   *  callers swallow a rejection, so refusing could only ever mean "the
+   *  erg is not told"
+   *  (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4). */
   constructor(inFlight = "program()") {
     super(
       `${inFlight} is already in flight on this driver. A second call must wait for the first to settle (resolve or reject) before it may be dispatched`,
@@ -922,11 +929,13 @@ const FINISH_GRACE_MS = 3000;
  *  exists for machines that do NOT answer. On a machine that never acks,
  *  this number is exactly how long `terminate()` sits before it writes,
  *  and that wait races the app's own teardown. Measured on the walk's ring
- *  1: END at `ready` closes the record, opens the 2000 ms burst hold
- *  (`handoff-released` +68915 -> `disconnect-requested` +70940 = 2025 ms),
- *  releases, navigates, and unmounts — reaching `disconnect()` at about
- *  write+5.17 s against a terminate released at write+5.00 s. About 170 ms
- *  apart. The ordering is held by `terminateWritesOwed` (a hang-up waits
+ *  1 (offsets from its own p.80 write): END at `ready` closes the record
+ *  and opens the burst hold at +66903, which releases at +68905 (2002 ms);
+ *  release, navigation and the unmount take 2025 ms more, reaching
+ *  `disconnect-requested` at +70930 — 4027 ms from END. The Ready screen
+ *  is up at +1159, so the earliest END puts the hang-up at about
+ *  write+5186 ms against a terminate released at write+5000 ms. About
+ *  186 ms apart. The ordering is held by `terminateWritesOwed` (a hang-up waits
  *  for a terminate that still owes its write), NOT by this number, which
  *  is why the number did not move to buy margin. Anyone raising it further
  *  is lengthening that wait, not padding a safety factor.
@@ -1415,9 +1424,12 @@ export function createPm5Driver(
    *  whole chain, so it resolves (never rejects: both handlers are
    *  attached, and neither throws) on ack, NAK, deadline or disconnect,
    *  whichever comes first. `terminate()` awaits it instead of refusing
-   *  (spec rev 5, walk `walk-2026-09-03-jr-connect` finding 4: a refused
-   *  terminate left the erg in the Just Row session the app had just
-   *  armed). The WAIT is what the ack matcher needs — it is arrival-order
+   *  (spec rev 5). The refusal it replaces was never observed FAILING —
+   *  the walk's finding 4 was the hook's free-row exclusion, and its ring
+   *  3 Cancel ran 1589 ms after the send had settled — but it is reachable
+   *  on its own (an END or a Cancel inside the ~2 s ack window), and both
+   *  callers swallow the rejection, so it could only ever mean "the erg is
+   *  not told". The WAIT is what the ack matcher needs — it is arrival-order
    *  only, never reading the ack's command byte, so a terminate
    *  interleaved with the live send would share the one `pendingAck` slot
    *  and strand whichever registered first, with no `ackTimeout` in
@@ -1425,10 +1437,17 @@ export function createPm5Driver(
    *  `FREE_ROW_PROGRAM_DEADLINE_MS` is the ceiling on this await.
    *
    *  LIFETIME. Mint: inside `beginFreeRow()`, the same statement that sets
-   *  `programInFlight` (one site; a second `beginFreeRow()` with a run
-   *  open is refused before it, so this can never be overwritten while
-   *  live). Clear: the chain's own `finally`, beside `programInFlight =
-   *  false`. Survives nothing — it belongs to one send on one driver
+   *  `programInFlight` — one site. It cannot be overwritten while live,
+   *  and the guard that holds that is the HOOK's, not this file's: the
+   *  driver's own `runIsOpen()` refusal at the top of `beginFreeRow()` is
+   *  NOT sufficient, because the machine's terminal frame can set
+   *  `activeRun.closed` during the ~2 s send (the rower presses Menu),
+   *  after which `runIsOpen()` is false and a second call would be
+   *  accepted. What actually holds is `useMonitorSession`'s
+   *  `beginFreeRow`, which returns early at `programming`/`ready`/`live`/
+   *  `ended` — and the phase is `ready` for the whole send, flipped
+   *  synchronously by the same call. Clear: the chain's own `finally`,
+   *  beside `programInFlight = false`. Survives nothing — it belongs to one send on one driver
    *  instance, and a driver does not outlive its connection. `null`
    *  whenever no free-row send is in flight, which is every workout
    *  session and every free row after its send settles. */
@@ -1440,14 +1459,17 @@ export function createPm5Driver(
    *  WHY IT EXISTS (the delta pass on PR #278, 2026-09-03). `terminate()`
    *  can now SUSPEND before it writes anything: it waits out
    *  `freeRowSendSettled`, up to `FREE_ROW_PROGRAM_DEADLINE_MS`. That wait
-   *  races the hook's own teardown, which hangs up. Measured against the
-   *  walk's ring 1 (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`):
-   *  END at `ready` flips to `ended`, opens the 2000 ms burst hold
-   *  (`handoff-released` +68915 -> `disconnect-requested` +70940 = 2025 ms
-   *  in that ring), releases, navigates, unmounts `JustRow`, and teardown
-   *  calls `disconnect()` at about write+5.17 s — while the terminate is
-   *  still suspended until write+5.00 s. About 170 ms of margin, on the
-   *  wrong side of a wait nobody tuned for it. If the hang-up wins, the
+   *  races the hook's own teardown, which hangs up. MEASURED on the walk's
+   *  ring 1 (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, all
+   *  offsets from its own p.80 write): END flips to `ended` and opens the
+   *  burst hold at +66903 (`handoff-hold`), which releases 2002 ms later
+   *  at +68905 (`handoff-released`); release, navigation and the `JustRow`
+   *  unmount then take 2025 ms more, reaching `disconnect-requested` at
+   *  +70930. That is 4027 ms from END to hang-up. The Ready screen is up
+   *  at that ring's first `frame`, +1159 ms, so the EARLIEST END puts the
+   *  hang-up at about write+5186 ms — against a terminate the deadline
+   *  releases at write+5000 ms. About 186 ms, on the wrong side of a wait
+   *  nobody tuned for it. If the hang-up wins, the
    *  resumed terminate writes to a dead transport, rejects, and the hook's
    *  best-effort catch swallows it: the erg stays in the Just Row session,
    *  which is the exact defect this PR exists to fix, one path over.
@@ -6381,13 +6403,19 @@ export function createPm5Driver(
       // registered first), and it is bounded by the send's own
       // `FREE_ROW_PROGRAM_DEADLINE_MS` ceiling.
       //
-      // It refused until this revision, and the erg paid: Cancel on the
-      // Ready screen threw here, the hook swallowed the rejection, and the
-      // PM5 stayed in the Just Row session the app itself had just armed
-      // (walk `walk-2026-09-03-jr-connect`, finding 4 — James, at the erg,
-      // watching the monitor not move). There is no caller for whom "your
-      // END did not reach the machine" is a better answer than a wait of
-      // at most one deadline. `program()`'s hold is not waited on for the
+      // It refused until this revision. BE PRECISE ABOUT WHAT THE WALK
+      // SAW, because an earlier draft of this comment was not: the
+      // 2026-09-03 walk's finding 4 — James at the erg, watching the
+      // monitor not move after Cancel — did NOT come through here. Its
+      // ring 3 shows the Cancel 1589 ms after the send's own ack, so
+      // `programInFlight` was already `false` and nothing refused; the
+      // cause was the hook's `mode !== "justrow"` exclusion, fixed in
+      // `useMonitorSession.ts`. The refusal is a SEPARATELY reachable
+      // defect (an END or a Cancel inside the ~2 s ack window), fixed here
+      // as hardening rather than as an observed cause. There is no caller
+      // for whom "your END did not reach the machine" is a better answer
+      // than a wait of at most one deadline — both swallow the rejection,
+      // so a refusal is silent by construction. `program()`'s hold is not waited on for the
       // separate reason its own doc comment gives: the hook's teardown
       // interleaves a terminate with a live `program()` on purpose.
       //

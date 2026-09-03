@@ -13776,11 +13776,15 @@ describe("beginFreeRow (the free row's own arm)", () => {
   /**
    * END INSIDE THE SEND WINDOW. `endSession` swallows the terminate's
    * rejection, so while `terminate()` REFUSED during the free-row send an
-   * END in the first seconds ended the app's row and told the erg nothing —
-   * the walk's finding 4, one button over, and invisible because the
-   * swallow is silent by design. `driver.terminate()` now waits the send
-   * out (bounded by its own deadline), so the terminate reaches the wire
-   * AFTER the p.80 ack instead of never.
+   * END in the first seconds ended the app's row and told the erg nothing.
+   * NOT what the walk saw, and this comment used to imply it was: finding
+   * 4's Cancel ran 1589 ms after the send's own ack (ring 3), so nothing
+   * refused there — the exclusion did it. This is the refusal's own,
+   * separately reachable sibling, invisible in the field because the
+   * swallow is silent by design, and fixed in the same PR as hardening.
+   * `driver.terminate()` now waits the send out (bounded by its own
+   * deadline), so the terminate reaches the wire AFTER the p.80 ack
+   * instead of never.
    *
    * `delayWrites(50)` is what makes the window real: it holds each write's
    * returned promise open for 50 real ms while the fake still answers
@@ -13827,7 +13831,11 @@ describe("beginFreeRow (the free row's own arm)", () => {
    * so it hangs up with a bare `driver.disconnect()` while `endSession`'s
    * own `await driver.terminate()` is still suspended on the free-row
    * send. Measured on the walk's ring 1, those two land about 170 ms
-   * apart. A hang-up that wins aborts the terminate write (Apple:
+   * apart (ring 1: the Ready screen's first `frame` at +1159 ms after the
+   * p.80 write, END's hold `handoff-hold` +66903 -> `handoff-released`
+   * +68905, then `disconnect-requested` +70930 — an earliest END puts the
+   * hang-up at write+5186 ms against a terminate released at write+5000).
+   * A hang-up that wins aborts the terminate write (Apple:
    * `cancelPeripheralConnection(_:)` is nonblocking and "any pending
    * commands ... may not complete"), the terminate rejects, and
    * `endSession`'s catch swallows it — the erg is left in the Just Row

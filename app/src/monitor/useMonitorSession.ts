@@ -5509,9 +5509,21 @@ export function useMonitorSession(
     // the terminate itself (`alreadyTerminated` would be `false`). So do
     // not read a green suite as licence to put this back — the biting
     // mutation is both exclusions together, which is the state the walk
-    // caught. This site keeps its own terminate because `cancel()`'s
-    // contract is to have DONE it (awaited, with `alreadyTerminated: true`
-    // stopping the repeat), not to leave it to a cleanup.
+    // caught. This site keeps its own terminate because it is `cancel()`'s
+    // own work, with `alreadyTerminated: true` stopping the repeat, rather
+    // than something left to a cleanup.
+    //
+    // THE `await` HAS NO CALLER (delta pass, PR #278). An earlier version
+    // of this comment called it a CONTRACT — "cancel() has DONE it,
+    // awaited" — and no caller can observe that: all six sites are
+    // `void session.cancel()` (`JustRow.tsx` x3, `ConnectedInterstitial
+    // .tsx` x2, `JustRowObserver.tsx`). What the await genuinely buys is
+    // INTERNAL ordering — the terminate lands before this function's own
+    // `teardown(armed, driver)` hangs up — and since PR #278 the driver
+    // holds that ordering for every caller anyway (`disconnect()` waits
+    // for a terminate that still owes its write). So the await is now belt
+    // to that braces: kept because it costs nothing and reads as the
+    // sequence it is, claimed as nothing more.
     const armed =
       driver !== null && (phase === "programming" || phase === "ready");
     if (armed) {

@@ -221,13 +221,18 @@ slate.
   `workoutType` 0 at the virgin menu, ack at 1.97 s, type 1 89 ms later,
   and the PM5's own Just Row screen photographed. It also found the
   defect James saw: **Cancel on the Ready screen left the erg in the Just
-  Row session** (`cancel()` excluded `mode === "justrow"` from its
-  terminate on the now-false ground that "a free row armed nothing"), and
-  END inside the send window did the same silently. FIXED in this PR:
-  `terminate()` WAITS OUT the free-row send instead of refusing it
-  (bounded by the deadline above), and both Cancel and an unmount at
-  `ready` terminate a free row exactly as they do a programmed one. RC-38's
-  disposition is under Phase PROTO.**
+  Row session.** ONE cause was observed — `cancel()` excluded
+  `mode === "justrow"` from its terminate on the now-false ground that "a
+  free row armed nothing". Two more paths to the same stranded monitor were
+  found by reading, NOT on the erg, and are fixed as hardening: the
+  driver's `terminate()` refusal while the send holds the ack slot (never
+  entered on the walk — ring 3's Cancel ran 1589 ms after the ack), and a
+  teardown hang-up overtaking the terminate that refusal fix introduced
+  (~186 ms of margin, from ring 1's own END timings). FIXED in this PR:
+  both exclusions go, `terminate()` WAITS OUT the free-row send instead of
+  refusing it (bounded by the deadline above), and `disconnect()` holds the
+  hang-up while a terminate still owes its write. RC-38's disposition is
+  under Phase PROTO.**
 - **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
   infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
   James ruled TIME ONLY; Gate 0 PASSED on rev 2e
