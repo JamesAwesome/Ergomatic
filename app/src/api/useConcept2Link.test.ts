@@ -394,9 +394,10 @@ describe("useConcept2Link: a newer read always wins (review F7)", () => {
 
   it("drops a stale SUCCESS too, not only a stale failure", async () => {
     // The same guard from the other side: an older read whose body parses
-    // fine must not overwrite a newer answer either. This is the arm that
-    // needs the second `superseded()` check, the one AFTER `res.json()`
-    // settles.
+    // fine must not overwrite a newer answer either. This one is decided by
+    // the check BEFORE the body await — the older response arrives after the
+    // newer read has already started. The check AFTER the body await needs a
+    // narrower window and has its own test below.
     const releases: ((res: Response) => void)[] = [];
     const api = vi.fn(
       async () =>
@@ -435,6 +436,58 @@ describe("useConcept2Link: a newer read always wins (review F7)", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.link?.linked).toBe(false);
+    expect(result.current.link?.c2UserId).toBeNull();
+  });
+
+  it("drops a read that was superseded WHILE its body was still being parsed", async () => {
+    // The narrow window the second `superseded()` check exists for, and the
+    // one the two tests above cannot reach: an older read whose RESPONSE
+    // arrived while it was still the newest, and which is only overtaken
+    // during `await res.json()`. `res.json()` is a real async read of the
+    // network stream, and a foreground `visibilitychange` landing inside
+    // that window is an ordinary event.
+    //
+    // Written after the mutation probe caught it: deleting the post-body
+    // check left all 21 tests green, which is RF21 exactly — a guard whose
+    // test could not reach it. The fix is the probe, not the guard.
+    let releaseBody!: (body: unknown) => void;
+    const slowBody = new Promise<unknown>((resolve) => {
+      releaseBody = resolve;
+    });
+    const queue: Response[] = [
+      // Hand-built so `json()` is a promise this test controls; a real
+      // `Response` resolves its body too eagerly to hold the window open.
+      {
+        ok: true,
+        status: 200,
+        json: () => slowBody,
+      } as unknown as Response,
+      new Response(JSON.stringify({ available: true, linked: false }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ];
+    let served = 0;
+    const api = vi.fn(async () => queue[served++]!);
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    // The mount read is now parked inside `await res.json()`.
+    await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
+
+    // A newer read starts and finishes while the first is still parsing.
+    await act(async () => {
+      await result.current.reload();
+    });
+    expect(result.current.link?.linked).toBe(false);
+
+    // Only NOW does the first read's body arrive, saying something else.
+    await act(async () => {
+      releaseBody({ available: true, linked: true, c2UserId: 999 });
       await Promise.resolve();
       await Promise.resolve();
     });
