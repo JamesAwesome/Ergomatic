@@ -40,6 +40,8 @@ function storedRow(overrides: Partial<StoredLog> = {}): StoredLog {
     thumbs: null,
     deviceName: "PM5 432331249",
     source: "pm5",
+    c2ResultId: null,
+    c2UserId: null,
     steps: [
       {
         label: "6:00 @ 6k",
