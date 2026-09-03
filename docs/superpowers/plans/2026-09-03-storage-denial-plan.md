@@ -480,11 +480,17 @@ internal function, `handleRetry`. No prop, no route, no new component.
       Place the `attemptBuild` describe block, and the screen-level describe
       block, right after the existing `"Countdown — F1 mount guard against
       rebuilding a progressed run"` describe closes (`Countdown.test.tsx`).
-      Add to the file's imports first:
+      **MERGE into the file's two EXISTING imports — do not add new lines.**
+      `Countdown.test.tsx` already imports `hasRunProgress` from
+      `./Countdown` and `loadRun`/`saveRun`/`SessionRun` from `./run`;
+      adding the lines whole duplicates four bindings and fails typecheck
+      with `TS2300: Duplicate identifier`. The diff:
 
-      ```ts
-      import { attemptBuild, hasRunProgress } from "./Countdown";
-      import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
+      ```diff
+      -import { hasRunProgress } from "./Countdown";
+      +import { attemptBuild, hasRunProgress } from "./Countdown";
+      -import { loadRun, saveRun, type SessionRun } from "./run";
+      +import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
       ```
 
       ```ts
@@ -1017,8 +1023,13 @@ copy (`cp`, never `git checkout`) before the next mutation.
 
 **Mutation:** already covered — Task 1's per-loader mutations and Task 2's
 render-branch-disable mutation both bite this leg's own assertions too (the
-render-branch mutation's `Tests 4 failed | 31 passed (35)` result INCLUDES
-this leg, confirmed above). No separate mutation owed for leg 3: it asserts
+render-branch mutation bites this leg's own `findByText` too). **The
+render-branch mutation's measured `Tests 4 failed | 31 passed (35)` was
+taken at the TASK 2 checkpoint, before this task added its leg to the same
+file; against the completed tree the same mutation reads
+`Tests 5 failed | 31 passed (36)`** — five legs, because this task's
+`quota-real-storage` describe opens with the same `findByText` (the gates
+table carries the corrected figure). No separate mutation owed for leg 3: it asserts
 against `useStartWorkout.ts`'s pre-existing, unmodified `confirmReplace`
 logic, which this PR does not touch.
 
@@ -1297,7 +1308,7 @@ logic, which this PR does not touch.
 | Today survives a denied `TODAY_PICK_KEY` getter (composed) | `Today.test.tsx` | Same mutation on `todayPick.ts` | `Tests 1 failed \| 132 passed (133)`, crash traced to `Today.tsx:1244` |
 | I-4's boolean half | `Countdown.test.tsx` (`attemptBuild` describe) | `if (!saveRun(run) \|\| loadRun() === null)` → drop the `!saveRun(run) \|\|` clause | `Tests 1 failed \| 34 passed (35)` |
 | I-4's read-back half | same | Drop the `loadRun() === null` clause | `Tests 1 failed \| 34 passed (35)` |
-| The blocked state renders (all 4 legs) | `Countdown.test.tsx` (blocked-start + quota-real-storage describes) | `if (saveBlocked)` → `if (false && saveBlocked)` | `Tests 4 failed \| 31 passed (35)` |
+| The blocked state renders (all 5 legs) | `Countdown.test.tsx` (blocked-start + quota-real-storage describes) | `if (saveBlocked)` → `if (false && saveBlocked)` | `Tests 5 failed \| 31 passed (36)` against the completed tree — the measured `4 failed \| 31 passed (35)` was the Task 2 checkpoint, before Task 3 added its leg to this file |
 | Retry rebuilds fresh, never resumes | `Countdown.test.tsx` | Reuse the mount-built run object in `handleRetry` instead of a fresh `attemptBuild` call | `Tests 1 failed \| 34 passed (35)`, timestamps equal |
 | The fixture cannot go stale | `Countdown.screens.test.tsx` | Drop the copy's trailing period in `Countdown.tsx` | `Tests 1 failed (1)`, `toMatchFileSnapshot` mismatch |
 | Quota at the run key reaches the blocked state (real storage) | `Countdown.test.tsx` | Any of the I-4 mutations above (this leg composes both halves through real `run.ts`) | Covered by the same rows |
