@@ -1894,13 +1894,35 @@ Each needs erg time or a deliberate recording session.
   full-suite load, and the first recorded diagnosis was wrong.** Seen four
   times across three PR2 tasks, always green when the spec runs in isolation
   (`pnpm e2e e2e/retest.spec.ts` -> 3 passed), so it is load- or
-  order-dependent, not a broken test. **Corrected signature:** both captured
-  failures are downstream, on `getByText('SESSION SAVED')` never appearing, and
-  the error-context snapshot shows Today ALREADY carrying the saved log row
-  **and** `SET UP YOUR BASELINE` — i.e. the save landed and the baselines were
-  absent. That reads as state pollution between the file's two tests, NOT the
-  test-auth backdoor returning non-ok under load, which is what an earlier
-  report guessed and what a reader would otherwise chase. Traces:
+  order-dependent, not a broken test. **Corrected signature:** every captured
+  failure is downstream, and every snapshot shows Today ALREADY carrying the
+  saved log row **and** `SET UP YOUR BASELINE` — i.e. the save landed and the
+  post-save baseline offer never rendered. It is NOT the test-auth backdoor
+  returning non-ok under load: that stack came from a bare
+  `pnpm exec playwright test`, which bypasses the worktree's stack, and was an
+  artifact of the wrong command rather than the flake.
+  **Three occurrences, two different assertions, one mechanism.** Two failed
+  at `getByText('SESSION SAVED')` (`retest.spec.ts:51`); the third, captured
+  2026-09-03 during Task 4 fix round 2, failed at
+  `getByRole('heading', {name: 'Set your 2k baseline?'})`
+  (`retest.spec.ts:121`). Both locators belong to the same prompt, so the
+  signature is the PROMPT not rendering, not either assertion.
+  **MEASURED mechanism:** in `LogSession.tsx`'s `useLogForm` callback, a null
+  `pendingOfferRef.current` takes the `navigate("/today")` branch instead of
+  rendering `PostTestPrompt` — exactly "saved row on Today, no prompt". That
+  ref comes from `postTestOffer(...)`, which returns null on any of four
+  conditions (no measured `avgSplitSeconds`; the workout not the global
+  designated test; `completedFullDistance` false; the split outside the
+  60..240 s band). **INFERENCE, not confirmed:** both tests reach Save via
+  `page.clock.install()` + `fastForward("08:00")`, and the two conditions a
+  timing race can flip are `completedFullDistance` and the band — a
+  fast-forward that has not taken effect yields an implausibly fast split the
+  band rejects. Instrument the offer's four inputs to settle which fires.
+  **"State pollution between the file's two tests" is NOT supported** and was
+  this entry's own first guess: each test signs in with its own address
+  (`retest-6k-`/`retest-2k-`/`retest-decline-` + `RUN_ID`), so the accounts
+  are always distinct, and `SET UP YOUR BASELINE` is simply what a fresh
+  account renders. Traces:
   `app/test-results/retest-Phase-BL-the-You-re-5b0d3-*/error-context.md` and
   `.../retest-Phase-BL-the-You-re-cbcae-*/error-context.md` (local, not
   committed — capture again before re-running, since `pnpm e2e` overwrites
