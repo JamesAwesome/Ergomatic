@@ -236,9 +236,32 @@ describe("startLink on native", () => {
     });
   });
 
+  it("the PLUGIN's busy names its own source, so the card can tell it from the JS guard's", async () => {
+    // Pulled out of the `it.each` table below: that block shares ONE
+    // `toStrictEqual({ kind })` assertion across its rows, which cannot
+    // express the extra `source` field without breaking the others.
+    // linkFlow.ts's own `case "busy"` comment requires the two sources to
+    // render differently; before PR2 the union could not say which was which.
+    vi.doMock("../platform", () => ({ isNative: () => true }));
+    mockApi(MINT_OK);
+    mockPlugin(
+      vi.fn(async () => {
+        const err = new Error("rejected") as Error & { code: string };
+        err.code = "busy";
+        throw err;
+      }),
+    );
+    vi.resetModules();
+    const { startLink } = await import("./linkFlow");
+
+    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+      kind: "busy",
+      source: "sheet",
+    });
+  });
+
   it.each([
     ["cancelled", "cancelled"],
-    ["busy", "busy"],
     ["abandoned", "abandoned"],
     ["noWindow", "noWindow"],
     ["noContext", "noContext"],
@@ -504,7 +527,7 @@ describe("startLink on native", () => {
     const first = startLink({ weightClass: "H" });
     const second = await startLink({ weightClass: "H" });
 
-    expect(second).toStrictEqual({ kind: "busy" });
+    expect(second).toStrictEqual({ kind: "busy", source: "guard" });
     expect(api).toHaveBeenCalledOnce();
 
     // `await startLink()` above yields ONE microtask; the first attempt is

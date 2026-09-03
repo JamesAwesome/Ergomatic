@@ -96,7 +96,7 @@ export type LinkOutcome =
   | { kind: "serverError"; status: number; stateEchoed: boolean }
   | { kind: "mintFailed"; status: number; error: string | null }
   | { kind: "updateRequired" }
-  | { kind: "busy" }
+  | { kind: "busy"; source: "guard" | "sheet" }
   | { kind: "cancelled" }
   | { kind: "abandoned" }
   | { kind: "noWindow" }
@@ -148,12 +148,14 @@ function pluginRejection(err: unknown): LinkOutcome {
     // its flag in `startLink`'s `finally` while Swift's `activeSession` claim
     // stands until the sheet actually finishes. A tap in that window mints a
     // NEW attempt -- replacing the live attempt's nonce server-side -- and then
-    // is refused here. PR2's card must therefore not render one string for both
-    // `busy` sources: the JS guard means "your last tap is still working", the
-    // plugin's means "a sheet is already up and your fresh mint just superseded
-    // the attempt it belongs to".
+    // is refused here. The two therefore carry a `source` and the card renders
+    // them differently: the JS guard means "your last tap is still working"
+    // (not a failure), the plugin's means "a sheet is already up and your fresh
+    // mint just superseded the attempt it belongs to" (a failure the rower has
+    // to act on). `you/concept2CardModel.ts`'s `describeFailure` is the
+    // consumer that splits on it.
     case "busy":
-      return { kind: "busy" };
+      return { kind: "busy", source: "sheet" };
     case "noWindow":
       return { kind: "noWindow" };
     case "noContext":
@@ -284,7 +286,7 @@ export async function startLink({
 }: {
   weightClass: WeightClass;
 }): Promise<LinkOutcome> {
-  if (linkInFlight) return { kind: "busy" };
+  if (linkInFlight) return { kind: "busy", source: "guard" };
   linkInFlight = true;
   try {
     const native = isNative();
