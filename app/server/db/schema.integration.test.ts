@@ -11,6 +11,7 @@ import {
   copyFile,
   readFile,
   writeFile,
+  rm,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1546,14 +1547,27 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
 // DELETED first (15-minute disposable rows — an in-flight link at deploy
 // restarts at mint, already the retry story). Same pre/post-migration
 // harness as the 0018 block above: rows are seeded against a folder capped
-// at 0020, then the real folder applies 0021 ALONE — the staging assertion
-// below pins that, so a future renumbering that leaves this block behind
-// goes red here instead of silently testing someone else's migration.
+// at 0020, then a SECOND folder capped at 0021 applies 0021 ALONE — the
+// staging assertion below pins that, so a future renumbering that leaves
+// this block behind goes red here instead of silently testing someone
+// else's migration. (It used to apply the real `drizzle` folder directly
+// for that second step; door PR A's migration 0022 tripped exactly the
+// failure this comment warned about, and the fix is the second capped
+// folder — the same shape `source.integration.test.ts` already carries
+// for 0020 vs #268's 0021.)
 describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_user_id), attempts wiped", () => {
   let container: StartedPostgreSqlContainer;
   let pool: pg.Pool;
   let db: Db;
   let tempDir: string;
+  // Door PR A added migration 0022: the "real folder applies 0021 ALONE"
+  // design this block's own header describes broke the moment 0022
+  // existed, exactly as that header warned — caught here, not silently.
+  // `tempDirThrough21` is `source.integration.test.ts`'s fix for the
+  // identical shape (0020 vs #268's 0021), applied here: a SECOND capped
+  // folder, so this block keeps testing 0021 alone regardless of how many
+  // migrations ship after it.
+  let tempDirThrough21: string;
   let seededUserId: string;
   // Captured in beforeAll, asserted in the first `it` — the staging is only
   // a proof about THIS migration if these hold. Literals, never derived
@@ -1605,7 +1619,8 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
     const journal = JSON.parse(
       await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
     ) as { entries: { idx: number; tag: string }[] };
-    staging.newestTag = journal.entries[journal.entries.length - 1].tag;
+    const through21 = journal.entries.filter((e) => e.idx <= 21);
+    staging.newestTag = through21.at(-1)?.tag ?? "";
     await writeFile(
       path.join(tempDir, "meta", "_journal.json"),
       JSON.stringify({
@@ -1634,6 +1649,24 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
           values ('pre-0021-a', ${u.id}, 'H'), ('pre-0021-b', ${u.id}, 'L')`,
     );
 
+    tempDirThrough21 = await mkdtemp(path.join(tmpdir(), "drizzle-0021-"));
+    await mkdir(path.join(tempDirThrough21, "meta"));
+    for (const { idx, tag } of through21) {
+      const paddedIdx = String(idx).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDirThrough21, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${paddedIdx}_snapshot.json`),
+        path.join(tempDirThrough21, "meta", `${paddedIdx}_snapshot.json`),
+      );
+    }
+    await writeFile(
+      path.join(tempDirThrough21, "meta", "_journal.json"),
+      JSON.stringify({ ...journal, entries: through21 }),
+    );
+
     const applied = async () =>
       Number(
         (
@@ -1643,13 +1676,14 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
         ).rows[0].n,
       );
     staging.appliedBefore = await applied();
-    await migrate(db, { migrationsFolder: "drizzle" });
+    await migrate(db, { migrationsFolder: tempDirThrough21 });
     staging.appliedAfter = await applied();
   });
 
   afterAll(async () => {
     await pool.end().catch(() => {});
     await container.stop().catch(() => {});
+    await rm(tempDirThrough21, { recursive: true, force: true });
   });
 
   it("staged 0000..0020, then applied 0021 alone", () => {

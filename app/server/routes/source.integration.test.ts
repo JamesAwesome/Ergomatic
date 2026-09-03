@@ -127,7 +127,10 @@ describe("POST/GET /api/logs: source is required (v0.35.0 sunset), refused when 
       .get(`/api/logs/${created.body.id}`)
       .set("Authorization", bearer);
     expect(got.status).toBe(200);
-    return got.body as { source: string };
+    // `deviceName` widened for the no-reading legs below (door PR A):
+    // GET /api/logs/:id already returns it, this helper just hadn't typed
+    // it before now.
+    return got.body as { source: string; deviceName: string | null };
   }
 
   // The v0.35.0 SUNSET (ROADMAP: "`source` derive-when-absent SUNSET"):
@@ -168,6 +171,7 @@ describe("POST/GET /api/logs: source is required (v0.35.0 sunset), refused when 
       }),
       body({ source: "timer", steps: [STOPWATCH_STEP] }),
       body({ source: "manual" }),
+      body({ source: "no-reading" }),
     ]) {
       await postThenGet(bearer, sent);
     }
@@ -177,7 +181,7 @@ describe("POST/GET /api/logs: source is required (v0.35.0 sunset), refused when 
     expect(list.status).toBe(200);
     const sources = (list.body as { source: string }[]).map((r) => r.source);
     expect(sources).toStrictEqual(
-      expect.arrayContaining(["pm5", "timer", "manual"]),
+      expect.arrayContaining(["pm5", "timer", "manual", "no-reading"]),
     );
     expect(sources.every((s) => typeof s === "string")).toBe(true);
   });
@@ -255,6 +259,33 @@ describe("POST/GET /api/logs: source is required (v0.35.0 sunset), refused when 
     expect(row.source).toBe("timer");
   });
 
+  // Door PR A (spec `docs/superpowers/specs/2026-09-02-door-partial-design.md`
+  // §2.4): the fourth member. A connected arrival that measured nothing
+  // carries no `deviceName` — the same biconditional as `timer`/`manual`.
+  it("posted source no-reading with no deviceName is stored as posted (the connected arrival that measured nothing)", async () => {
+    const bearer = await bearerToken();
+    const row = await postThenGet(bearer, {
+      workoutTitle: "No reading",
+      steps: [],
+      source: "no-reading",
+    });
+    expect(row.source).toBe("no-reading");
+    expect(row.deviceName).toBeNull();
+  });
+
+  it("no-reading WITH a deviceName is a 400 naming the field (the biconditional)", async () => {
+    const bearer = await bearerToken();
+    const res = await request(app)
+      .post("/api/logs")
+      .set("Authorization", bearer)
+      .send(body({ source: "no-reading", deviceName: "PM5 432331249" }));
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({
+      error: "source no-reading requires deviceName to be absent",
+      field: "source",
+    });
+  });
+
   it.each([["bogus"], [null], [""], [1]])(
     "refuses a non-member source (%j) with a 400 naming the field",
     async (source) => {
@@ -265,7 +296,7 @@ describe("POST/GET /api/logs: source is required (v0.35.0 sunset), refused when 
         .send(body({ source }));
       expect(res.status).toBe(400);
       expect(res.body).toStrictEqual({
-        error: "source must be one of pm5, timer, manual",
+        error: "source must be one of pm5, timer, manual, no-reading",
         field: "source",
       });
     },
@@ -444,7 +475,7 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
     });
   });
 
-  it("the column is the enum: Postgres refuses a value outside pm5 | timer | manual", async () => {
+  it("the column is the enum: Postgres refuses a value outside pm5 | timer | manual | no-reading", async () => {
     await expect(
       pool.query(
         "insert into session_logs (user_id, workout_title, workout_type, steps, source) values ($1, 'Bad source', 'AT', '[]'::jsonb, 'bogus')",

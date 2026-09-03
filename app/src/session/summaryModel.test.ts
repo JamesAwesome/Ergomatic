@@ -933,10 +933,16 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
       program,
       actuals: [wu, w1, w2],
       logSeed: {
+        // Unsafe cast: door PR A narrowed `LogSeed.steps[].kind` to the
+        // literal `"work"`, but this fixture models a run stored BEFORE
+        // that change, which can still carry the runtime string "warmup"
+        // despite the type no longer admitting it — see `warmupIndex`'s
+        // own comment (`summaryModel.ts`) for why the reader still checks
+        // for it.
         steps: program.intervals.map((_iv, i) => ({
           label: `Interval ${i}`,
-          kind: i === 0 ? ("warmup" as const) : ("work" as const),
-        })),
+          kind: i === 0 ? "warmup" : "work",
+        })) as { label: string; kind: "work" }[],
         paces: {},
       },
     });
@@ -967,10 +973,16 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
       program,
       actuals: [oldShapeActual],
       logSeed: {
+        // Unsafe cast: door PR A narrowed `LogSeed.steps[].kind` to the
+        // literal `"work"`, but this fixture models a run stored BEFORE
+        // that change, which can still carry the runtime string "warmup"
+        // despite the type no longer admitting it — see `warmupIndex`'s
+        // own comment (`summaryModel.ts`) for why the reader still checks
+        // for it.
         steps: program.intervals.map((_iv, i) => ({
           label: `Interval ${i}`,
-          kind: i === 0 ? ("warmup" as const) : ("work" as const),
-        })),
+          kind: i === 0 ? "warmup" : "work",
+        })) as { label: string; kind: "work" }[],
         paces: {},
       },
     });
@@ -984,10 +996,16 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
       program,
       actuals: [],
       logSeed: {
+        // Unsafe cast: door PR A narrowed `LogSeed.steps[].kind` to the
+        // literal `"work"`, but this fixture models a run stored BEFORE
+        // that change, which can still carry the runtime string "warmup"
+        // despite the type no longer admitting it — see `warmupIndex`'s
+        // own comment (`summaryModel.ts`) for why the reader still checks
+        // for it.
         steps: program.intervals.map((_iv, i) => ({
           label: `Interval ${i}`,
-          kind: i === 0 ? ("warmup" as const) : ("work" as const),
-        })),
+          kind: i === 0 ? "warmup" : "work",
+        })) as { label: string; kind: "work" }[],
         paces: {},
       },
     });

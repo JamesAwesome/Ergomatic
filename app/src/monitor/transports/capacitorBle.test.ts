@@ -422,7 +422,7 @@ describe("scan(): the already-connected guard (§3, F-6)", () => {
     expect(BleClient.setDisplayStrings).not.toHaveBeenCalled();
   });
 
-  it("a held device with no advertised name falls back to 'PM5', same as the picker path", async () => {
+  it("a held device with no advertised name falls back to 'MONITOR', same as the picker path", async () => {
     vi.mocked(BleClient.getConnectedDevices).mockResolvedValue([
       { deviceId: "held-1", name: undefined as unknown as string },
     ]);
@@ -430,7 +430,7 @@ describe("scan(): the already-connected guard (§3, F-6)", () => {
 
     const found = await transport.scan();
 
-    expect(found).toStrictEqual([{ id: "held-1", name: "PM5" }]);
+    expect(found).toStrictEqual([{ id: "held-1", name: "MONITOR" }]);
   });
 
   it("nothing held: degrades to today's flow — the picker opens exactly as before", async () => {

@@ -70,21 +70,23 @@
 // that never existed; `deviceName` — reachable via `loadLastDevice()` — is
 // a best-effort LAST-USED name, so posting it would have the row assert
 // that a named erg supplied numbers that came off nothing), and the
-// conclusion was "a new stored field plus a migration", queued at ROADMAP
-// `## Phase LM`. THAT FIELD IS THIS COLUMN. What the no-reading row does
-// NOW: it posts `manual` (it goes through the manual door's `handleSave`,
-// `LogSession.tsx`) and migration 0020 backfilled its earlier instances to
-// `manual` — so it renders `LOGGED BY HAND`, exactly what it rendered
-// before, and the divergence from the live screen's word remains. The
-// column gives it somewhere to be honest; WHICH word it should carry (a
-// fourth member, or `manual` as the truthful "no reading was stored")
-// is Phase LM's call, not this spec's — see ROADMAP `## Phase LM`.
+// conclusion was "a new stored field plus a migration", queued at the time
+// under a ROADMAP heading that no longer exists (formalized since as
+// `docs/superpowers/specs/2026-09-02-door-partial-design.md` §2). THAT
+// FIELD IS THIS COLUMN. Door PR A (2026-09-02) closes the divergence: a
+// connected arrival with no record now posts `source: "no-reading"`
+// (`LogSession.tsx`'s manual door), never `manual`, and this switch's
+// fourth arm renders it as `NO_MONITOR_READING_SOURCE` — the same word
+// the live screen already used. A row saved before this PR shipped still
+// carries `manual` (no backfill — §2.4) and still renders `LOGGED BY
+// HAND`; only a row saved after this PR can be honest.
 
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import { PLANS } from "../../domain/plans.js";
 import type { LogSource, WorkoutType } from "../../domain/types.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
+import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption.js";
 import type { CloseReason } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { formatLogDate } from "../session/logDraft";
@@ -93,6 +95,7 @@ import {
   buildTotalLine,
   formatTimeOfDay,
   MIN_MEASURABLE_ELAPSED_SECONDS,
+  NO_MONITOR_READING_SOURCE,
   rowJudgment,
   targetsOnlyCaption,
   type SummaryHeroes,
@@ -245,9 +248,9 @@ export interface StoredLog {
   // the sound signal `buildHeroes` below now PREFERS over recomputing
   // from `Σ steps` — see that function's own tier-B comment for why Σ
   // steps alone can under-count (a null-index actual, or a legacy
-  // warm-up interval, never becomes a step at all) while this pair
-  // cannot, because it is summed directly off `run.actuals`, never off
-  // `steps`/`logSeed`. Required-and-nullable, same convention as
+  // warm-up interval, never becomes a MEASURED step at all) while this
+  // pair cannot, because it is summed directly off `run.actuals`, never
+  // off `steps`/`logSeed`. Required-and-nullable, same convention as
   // `restSeconds`/`restMeters` above.
   workSeconds: number | null;
   workMeters: number | null;
@@ -277,12 +280,16 @@ export interface StoredSummaryView {
    *  `planIndex` non-null — `create()`'s own invariant, `stores/logs.ts`,
    *  keeps them null together). */
   planFooter?: string;
-  /** Cohort-unlock spec (2026-08-23), §2: the exact marked line, present
-   *  only when `row.endedBy === "link-lost"` — every other `endedBy`
-   *  value (including every other real one and absent/null) renders
-   *  nothing here; this spec is the lost-link surface, not an `endedBy`
-   *  taxonomy display (spec's own line). */
-  linkLostLine?: string;
+  /** Door spec (2026-09-02) §1.2: the close-reason line, on TWO triggers
+   *  and no others. (1) `row.endedBy === "link-lost"` ALONE, steps-
+   *  independent, exactly as the cohort-unlock spec (2026-08-23) §2 shipped
+   *  it — a release-noted promise (`news/content/releaseNotes.ts:366`).
+   *  (2) a row `partialCloseReason` marks PARTIAL, which renders that
+   *  reason's own sentence plus `· N of M intervals measured`; for
+   *  `link-lost` the two triggers compose into one line. Every other
+   *  `endedBy` value — including `finished` and absent/null — renders
+   *  nothing here: this is not an `endedBy` taxonomy display. */
+  closeLine?: string;
 }
 
 // Just Row unconnected spec (2026-09-02), §Mechanism 6: the word comes from
@@ -290,20 +297,41 @@ export interface StoredSummaryView {
 // ⇒ `LOGGED BY HAND` (James's copy ruling, fix round 2026-08-18, supersedes
 // §5A's own shorter table literal "BY HAND" with the live door's exact
 // string — see the module header for why the two screens must agree).
+// Door PR A (2026-09-02) §2.1 adds a fourth: `no-reading` ⇒ the live
+// screen's own `NO_MONITOR_READING_SOURCE`, imported rather than retyped —
+// this is the "next stored-shape change" the module header's LM exception
+// named as its own trigger.
 // `steps` are never consulted: a time-only Just Row is `timer` with NO
 // steps, which the old fingerprint could only ever have called by-hand.
-// The `?? "PM5"` arm is the type's, not the wire's: the server refuses
-// `pm5` without a `deviceName` (`server/logSource.ts`), so a stored `pm5`
-// row always carries a name; the fallback only keeps the function total
-// over `deviceName: string | null`.
+// The `?? NAMELESS_MONITOR_CAPTION` arm is the type's, not the wire's: the
+// server refuses `pm5` without a `deviceName` (`server/logSource.ts`), so a
+// stored `pm5` row always carries a name; the fallback only keeps the
+// function total over `deviceName: string | null` — RC-18 (door spec §3),
+// same as before, DEAD by the biconditional's own guarantee and
+// deliberately untested here for that reason. What RC-18 changes is
+// upstream, not this arm's reachability: a `pm5` row MUST carry a name
+// (the biconditional, `server/logSource.ts`), so without a neutral
+// fallback a nameless erg's row would 400 the whole save — `LogSession.tsx`
+// (`:730-755`) is the site that actually substitutes
+// `NAMELESS_MONITOR_CAPTION` for the unusable advertised name, which is
+// what makes the word load-bearing rather than decorative: a real saved
+// row can genuinely read `MONITOR` here, just never via THIS `??`.
 function sourceLabel(row: StoredLog): string {
   switch (row.source) {
     case "pm5":
-      return row.deviceName ?? "PM5";
+      return row.deviceName ?? NAMELESS_MONITOR_CAPTION;
     case "timer":
       return "TIMER";
     case "manual":
       return "LOGGED BY HAND";
+    case "no-reading":
+      // Door spec (2026-09-02) §2.1: the live screen's own word
+      // (`summaryModel.ts`'s `NO_MONITOR_READING_SOURCE`), imported so one
+      // fact never reads as two words live vs from the log (James's
+      // 2026-08-18 ruling). This closes the LM exception the module
+      // header above describes — its trigger was "the next stored-shape
+      // change to the logs table", which is this PR.
+      return NO_MONITOR_READING_SOURCE;
   }
 }
 
@@ -315,24 +343,28 @@ function sourceLabel(row: StoredLog): string {
 // `loggedAt` (`session_logs.logged_at` is `NOT NULL`), even for a by-hand
 // save — but showing a wall-clock reading next to "LOGGED BY HAND" would
 // fill in a moment the original screen never claimed to know, the exact
-// fabrication §2B's own absence idiom forbids elsewhere. Gated on the
-// SAME resolved word, not a separate flag: `sourceLabel(row) ===
-// "LOGGED BY HAND"` is precisely the `manual` column value (the by-hand
-// door, and — until Phase LM rules on its own word — the no-reading row
-// the module header describes) — symmetric with the two doors that DO
-// get a timeLabel live, and BYTE-IDENTICAL to what `buildManualModel`
-// itself does (no `timeLabel` field at all) — fix round's own 5A
-// resolution: consistency with the live door's manual-summary meta wins
-// over table-literalism. A `timer` row therefore shows its clock time,
-// including the time-only Just Row (the handoff board's `SEP · hh:mm ·
-// TIMER` line — Just Row unconnected spec, exit criterion 3).
+// fabrication §2B's own absence idiom forbids elsewhere.
+//
+// Door PR A (2026-09-02) §2.3. Re-derived POSITIVELY, over the column,
+// after the negation this replaced (`sourceLabel(row) !== "LOGGED BY
+// HAND"`) was found to hand a fourth member a wall-clock time by
+// accident — phase-lm.md:314-318 predicted exactly this. The three
+// members that carry a time are the three whose moment the APP WITNESSED:
+// the connected door, the phone clock, and a connected arrival that
+// measured nothing (Gate 0-A decision (c) — it gains the time BECAUSE the
+// app was there). `manual` is an off-app session and shows none, which is
+// byte-identical to what `buildManualModel` does live. An ALLOWLIST,
+// never a negation: a future fifth member shows no time rather than
+// silently gaining one.
+const TIME_LABEL_SOURCES: readonly LogSource[] = ["pm5", "timer", "no-reading"];
+
 function buildMeta(row: StoredLog): SummaryMeta {
   const source = sourceLabel(row);
   const meta: SummaryMeta = {
     dateLabel: formatLogDate(row.loggedAt),
     sourceLabel: source,
   };
-  if (source !== "LOGGED BY HAND") {
+  if (TIME_LABEL_SOURCES.includes(row.source)) {
     meta.timeLabel = formatTimeOfDay(row.loggedAt);
   }
   return meta;
@@ -371,8 +403,9 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  `tierBWorkTimeSeconds` sum on the live door, with no null-index or
 //  warm-up exclusion — so it is SOUND where Σ steps (tier B2 below) is
 //  not: a null-index actual, or a legacy warm-up interval, never becomes
-//  a stored step at all (see B2's own comment), but this pair counts it
-//  regardless, because it never goes through `steps`/`logSeed` at all.
+//  a MEASURED stored step at all (see B2's own comment), but this pair
+//  counts it regardless, because it never goes through `steps`/`logSeed`
+//  at all.
 //  AVG SPLIT still comes from `tierBAvgSplitSeconds(row.steps)` — that
 //  computation is UNAFFECTED by the same gap (a null-index actual is
 //  correctly excluded from AVG SPLIT by §1's own rule, and since it never
@@ -416,17 +449,21 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  gets instead.
 //  DISTANCE/TIME are Σ `actualMeters`/Σ `actualSeconds` over every step
 //  that carries them. **PARITY CLAIM (fix round 1: TRUE for the
-//  sub-threshold exclusion, FALSE for null-index/warm-up):**
+//  sub-threshold exclusion, FALSE for null-index/warm-up. Door PR A's
+//  rider 2 narrowed `LogSeed.steps[].kind` to the literal `"work"` but
+//  KEPT `buildMonitorLogSteps`'s legacy warm-up skip — restored at the
+//  whole-branch review, Important 1 — so the warm-up leg below stands
+//  exactly as written, and no number moves):**
 //    - Sub-threshold parity HOLDS: like the live door, this sum applies
 //      no sub-threshold exclusion (a mis-tap's own tiny reading still
 //      counts toward DISTANCE/TIME here, exactly as `tierBWorkDistanceMeters`
 //      does) — only AVG SPLIT excludes it, below.
-//    - Null-index/warm-up parity DOES NOT HOLD: `logDraft.ts:844-846`
-//      builds `buildMonitorLogSteps`'s `actualByIndex` map ONLY from
+//    - Null-index/warm-up parity DOES NOT HOLD: `logDraft.ts`'s
+//      `buildMonitorLogSteps` builds its `actualByIndex` map ONLY from
 //      actuals whose `index !== null`, so a null-index actual — or a
 //      LEGACY warm-up interval (`buildMonitorLogSteps`'s own "a legacy
 //      warmup seed step produces NO step" rule) — can NEVER produce a
-//      stored step, on ANY row, at any time. Σ steps therefore
+//      MEASURED stored step, on ANY row, at any time. Σ steps therefore
 //      UNDER-COUNTS relative to what the live door's `tierBWorkDistanceMeters`/
 //      `tierBWorkTimeSeconds` compute (which sum `run.actuals` directly
 //      and include both), while spec §1 explicitly requires a null-index
@@ -629,23 +666,30 @@ function buildStoredRest(
 // (`buildStoredRest` above plus the monitor-row gate below), never a
 // second copy of the formatting.
 //
-// `isMonitorRow` gates this OFF for the timer/manual doors, mirroring
+// Gates this OFF for the timer/manual/no-reading doors, mirroring
 // `SummaryHeroes.totalLine`'s own doc comment ("the manual/timer doors
-// never set it — no rest concept applies to either"): every timer/manual
-// row lands in `buildHeroes`' FALLBACK branch (neither door writes
+// never set it — no rest concept applies to either"): every non-pm5 row
+// lands in `buildHeroes`' FALLBACK branch (neither door writes
 // `actualMeters`), which is otherwise ambiguous between "a genuinely
 // door-agnostic fallback row" and "a legacy monitor row predating
-// actualMeters" — `row.deviceName !== null` is the SAME signal
-// `sourceLabel`/`buildMeta` above already use to tell a PM5 row from a
-// TIMER/LOGGED-BY-HAND one. Without this gate, every stored timer/manual
-// row in the database would suddenly grow a spurious "X:XX total" line
-// it never had before and the live door still never renders.
+// actualMeters". Without this gate, every stored timer/manual/no-reading
+// row in the database would suddenly grow a spurious "X:XX total" line it
+// never had before and the live door still never renders.
+//
+// Door PR A (2026-09-02) §2.2: reads `row.source !== "pm5"`, not
+// `row.deviceName === null`. Provenance is what the column is FOR — the
+// deviceName check was convenient (it happened to agree with `source` on
+// every stored row, never itself the stated signal for "which door") —
+// and the rewrite is a true no-op: 0020's backfill CASE was `WHEN
+// device_name IS NOT NULL THEN 'pm5'`, and `logSourceContradiction` has
+// enforced the biconditional `deviceName ≠ null ⟺ source = 'pm5'` on
+// every write since, attacked and held (spec §9).
 function buildStoredTotalLine(
   row: StoredLog,
   workSeconds: number | undefined,
   stepSums: { meters?: number; seconds?: number },
 ): string | undefined {
-  if (workSeconds === undefined || row.deviceName === null) return undefined;
+  if (workSeconds === undefined || row.source !== "pm5") return undefined;
   const rest = buildStoredRest(row, stepSums);
   const totalSeconds = workSeconds + (rest.seconds ?? 0);
   return buildTotalLine(totalSeconds, rest.meters);
@@ -816,6 +860,69 @@ function measuredElapsedSeconds(step: StoredLogStep): number | undefined {
   return undefined;
 }
 
+/** The five close reasons that name WHO ended a session. The server enum
+ *  (`schema.ts`'s `endedByEnum`) minus `finished`. A value-equality
+ *  ALLOWLIST, never `!== "finished"`: `null` is NOT a member and DOES
+ *  occur on `pm5` rows (a legacy v1/v2 `MonitorRun` logged from Today —
+ *  `monitorRun.ts:228-233`, `routes/data.ts:1738` stores `?? null`), and
+ *  a negation would mark every one of them partial. */
+export const PARTIAL_CLOSE_REASONS = [
+  "rower",
+  "link-lost",
+  "program-dropped",
+  "program-failed",
+  "interrupted",
+] as const;
+export type PartialCloseReason = (typeof PARTIAL_CLOSE_REASONS)[number];
+
+/** The close reason when the row is genuinely PARTIAL, else `undefined` —
+ *  door spec (2026-09-02) §1.1's four clauses, in the order they are
+ *  cheapest to refute. Pure and framework-free on purpose: the server's
+ *  list projection derives the same boolean, and the two surfaces must
+ *  agree by construction rather than by two hand-kept copies of the rule
+ *  (the divergence class that burned at `HistoryList.test.tsx:459`).
+ *
+ *  DETERMINISTIC: every input is a stored fact the machine or the rower
+ *  produced; there is no threshold. `endedBy` owns HOW THE SESSION ENDED,
+ *  `steps` owns WHAT WAS MEASURED, neither derives from the other, and
+ *  they can legally disagree — a short step on a `finished` row is
+ *  MEASUREMENT LOSS, not a stopped piece, and clause 4 excludes it. */
+export function partialCloseReason(
+  row: Pick<StoredLog, "source" | "steps" | "endedBy">,
+): PartialCloseReason | undefined {
+  // Clause 1 (spec §1.1): only the connected door stores planned-vs-
+  // measured steps. `buildMonitorLogSteps` is the ONLY writer of
+  // `actualMeters`/`actualSeconds` (`logDraft.ts:921-922`); a timer step
+  // never rowed emits `actualSplit = targetSplit`, `actualSource:
+  // "assumed"` — byte-identical to one rowed to plan. A timer row cannot
+  // be partial in stored data at all: `/session/log` is reached only from
+  // `isComplete(run)` (`Timer.tsx:477-483`) and the abandon path saves
+  // nothing.
+  if (row.source !== "pm5") return undefined;
+  // Clause 2: a connected Just Row stores `steps: []` (`JustRowLog.tsx:209`)
+  // and has no plan to be partial against. REDUNDANT given clause 3
+  // (`[].some(...)` is false); kept as an explicit statement of the rule,
+  // not as the thing that enforces it. MEASURED, not asserted: deleting
+  // this line alone leaves the whole suite green (170/170 files,
+  // 4591/4591 tests, mutation M3.1b), which is the evidence for the word
+  // "redundant". Deleting it is therefore NOT a probe of the Just Row
+  // leg — only clause 3 flipped to `.every` (so `[].every()` is `true`
+  // and the empty case falls through) WITH this line gone makes that leg
+  // red ("expected 'rower' to be undefined", M3.1c); `.every` on its own
+  // leaves it green, because this line still catches it.
+  if (row.steps.length === 0) return undefined;
+  // Clause 3: an interval never reached carries no `actualSource` at all
+  // (`logDraft.ts:924-928`, "Unambiguous against the row-local
+  // discriminant"). `undefined` is the only absence the wire can produce —
+  // `routes/data.ts:472-479` 400s an explicit null. This clause is also
+  // what guarantees PARTIAL => N < M, so the rendered suffix can never
+  // read `5 of 5`.
+  if (!row.steps.some((s) => s.actualSource === undefined)) return undefined;
+  // Clause 4: an ALLOWLIST of five, never `!== "finished"`.
+  const endedBy = row.endedBy ?? null;
+  return PARTIAL_CLOSE_REASONS.find((r) => r === endedBy);
+}
+
 // §5C, re-baselined (Phase LT spec 1, §4): fed by stored `steps`, spec
 // 1's §1 rendering/judgment rule verbatim — `rowJudgment`/`buildSpmCell`
 // (Task 2, `summaryModel.ts`) are the ONE place either rule is decided;
@@ -950,15 +1057,104 @@ function buildPlanFooter(row: StoredLog): string | undefined {
 // copy). Named as its own constant so the exact string is pinned once,
 // not re-typed at both this builder and the FromTheLog test that asserts
 // it renders.
-const LINK_LOST_LINE = "LINK LOST · the app lost the monitor before the end";
+//
+// SHORTENED at Gate 0-A (door spec 2026-09-02, James APPROVED): it read
+// "LINK LOST · the app lost the monitor before the end" from the
+// cohort-unlock spec until now; the trailing clause goes so the combined
+// PARTIAL line fits the header. The release note's promise
+// (`news/content/releaseNotes.ts:366`, "LINK LOST appears on the session
+// detail") is unchanged — the words `LINK LOST` and the trigger are what
+// it promised.
+// DECLARED FIRST: `CLOSE_REASON_WORDS` reads it in its initialiser, and a
+// `const` below would be a TDZ ReferenceError at module load.
+const LINK_LOST_LINE = "LINK LOST · the app lost the monitor";
 
-// §2: "no other endedBy values render anything." A plain equality check
-// against the one value this spec owns — never a negation of every
-// other close reason (which would silently start rendering the line for
-// any future value the union might grow, exactly the taxonomy-display
-// this spec explicitly declines to be).
-function buildLinkLostLine(row: StoredLog): string | undefined {
-  return row.endedBy === "link-lost" ? LINK_LOST_LINE : undefined;
+// Gate 0-A (`docs/superpowers/specs/2026-09-02-door-gate-a.html`,
+// decisions (a) and (e), APPROVED by James 2026-09-02): one row per close
+// reason, the full sentence for the detail screen and a short form for the
+// list row (`THE MONITOR DROPPED THE PROGRAM` is ~240px on a 332px row).
+// Keyed by VALUE, so a future sixth close reason renders NOTHING rather
+// than a wrong word.
+const CLOSE_REASON_WORDS: Record<
+  PartialCloseReason,
+  { line: string; chip: string }
+> = {
+  rower: { line: "STOPPED EARLY", chip: "STOPPED EARLY" },
+  "link-lost": { line: LINK_LOST_LINE, chip: "LINK LOST" },
+  "program-dropped": {
+    line: "THE MONITOR DROPPED THE PROGRAM",
+    chip: "PROGRAM DROPPED",
+  },
+  "program-failed": {
+    line: "THE PROGRAM DID NOT LOAD",
+    chip: "PROGRAM NOT LOADED",
+  },
+  interrupted: { line: "LEFT UNFINISHED", chip: "UNFINISHED" },
+};
+
+// Door spec §1.2: `link-lost` keeps its OWN ungated, steps-independent
+// trigger exactly as it has since the cohort-unlock spec — it is a
+// release-noted promise and it renders on rows the PARTIAL predicate
+// EXCLUDES (a link-lost Just Row; a link-lost row with every step
+// measured), which is why the non-partial branch below is not simply
+// "render nothing". The other four words render ONLY when all four
+// clauses hold: a steps-independent `STOPPED EARLY` would print on every
+// connected Just Row (`useMonitorSession.ts:5010`) and on every planned
+// row Ended after its last interval. Both branches are value equalities,
+// never negations, so a future sixth close reason renders nothing.
+function buildCloseLine(row: StoredLog): string | undefined {
+  const reason = partialCloseReason(row);
+  if (reason === undefined) {
+    return row.endedBy === "link-lost" ? LINK_LOST_LINE : undefined;
+  }
+  const measured = row.steps.filter(
+    (s) => measuredElapsedSeconds(s) !== undefined,
+  ).length;
+  // "measured", never "progress" (Gate 0-A decision (b), approved on the
+  // rendered frame): after a lost boundary (`logDraft.ts:806-809`) a rower
+  // who did two and a bit reads `1 of 5`, true of what the machine
+  // reported and silent about what was rowed. `N` calls
+  // `measuredElapsedSeconds` — the stored door's own generalisation of the
+  // live surface's `isMonitorRowMeasurable`/`timerMeasurableElapsedSeconds`
+  // (see its doc comment above) and the same quantity the connected
+  // surface's lost banner counts. There is no fourth definition.
+  // PARTIAL => measured < steps.length by clause 3, so this can never read
+  // `5 of 5`.
+  return `${CLOSE_REASON_WORDS[reason].line} · ${measured} of ${row.steps.length} intervals measured`;
+}
+
+/** The short word the History chip carries for a close reason, or
+ *  `undefined` for a value outside the allowlist. Shared with the detail
+ *  line (one `CLOSE_REASON_WORDS` row per reason) so the two surfaces
+ *  cannot name one close two ways. */
+export function partialChipWord(
+  endedBy: (CloseReason | "interrupted") | null | undefined,
+): string | undefined {
+  const reason = PARTIAL_CLOSE_REASONS.find((r) => r === endedBy);
+  return reason === undefined ? undefined : CLOSE_REASON_WORDS[reason].chip;
+}
+
+/** THE LIST'S WHOLE RULE, in one place, so the two surfaces cannot
+ *  disagree about the WORD. `link-lost` is UNGATED here exactly as it is
+ *  in `buildCloseLine`: a link-lost row the PARTIAL predicate EXCLUDES —
+ *  a link-lost Just Row, or one with every step measured — still reads
+ *  `LINK LOST · the app lost the monitor` on the detail screen, so a chip
+ *  gated on `partial` alone would leave History silent about the one row
+ *  the detail screen shouts about. The other four words render only when
+ *  the row is partial. Both branches are value equalities, never
+ *  negations.
+ *
+ *  `partial` is the caller's own evaluation of `partialCloseReason` — the
+ *  list row cannot compute it itself (`LOG_LIST_COLUMNS` carries `source`
+ *  and `endedBy` but not `steps`), so the server derives it over the same
+ *  four clauses and the list passes it in. */
+export function historyChipWord(row: {
+  partial: boolean;
+  endedBy: (CloseReason | "interrupted") | null;
+}): string | undefined {
+  if (row.endedBy === "link-lost") return CLOSE_REASON_WORDS["link-lost"].chip;
+  if (!row.partial) return undefined;
+  return partialChipWord(row.endedBy);
 }
 
 /** The from-the-log view's own pure model — §5's property table,
@@ -973,7 +1169,7 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const rows = buildRows(row.steps);
   const caption = targetsOnlyCaption(rows);
   const readBack = buildReadBack(row);
-  const linkLostLine = buildLinkLostLine(row);
+  const closeLine = buildCloseLine(row);
   const planFooter = buildPlanFooter(row);
-  return { meta, heroes, rows, caption, readBack, planFooter, linkLostLine };
+  return { meta, heroes, rows, caption, readBack, planFooter, closeLine };
 }

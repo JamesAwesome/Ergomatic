@@ -586,25 +586,24 @@ export function buildManualLogSteps(
  *  its own), so `seed.steps[i]` and `program.intervals[i]` name the SAME
  *  interval for every `i` — a later task's whole alignment contract.
  *
- *  `kind` KEEPS its `"warmup"` member after Phase WU, and that is
- *  deliberate — this is the one warm-up union the removal does NOT delete.
- *  `LogSeed` is PERSISTED inside a stored `MonitorRun`
- *  (`src/monitor/monitorRun.ts`'s localStorage record), so a run written
- *  before Phase WU still carries `kind: "warmup"` on its first step. The
- *  reader in `buildMonitorLogSteps` below skips exactly those steps;
- *  deleting the member would make that guard unwritable and silently add a
- *  phantom warm-up row to what such a record SAVES.
- *  It stays a LITERAL union rather than widening to `string`: widening
- *  admits typos, erases the enumeration, and hides the owed cleanup from
- *  the compiler. `buildLogSeed` below can no longer PRODUCE `"warmup"` —
- *  no phase can be one — so the member is legacy-read-only from here.
- *  Owed removal: ROADMAP Phase WU, at the first server-touching phase
- *  after two tags have shipped. */
+ *  `kind` LOST its `"warmup"` MEMBER at door PR A (spec §4 rider 2) — the
+ *  union is now the literal `"work"` alone. It stays a LITERAL union rather
+ *  than widening to `string`: widening admits typos, erases the
+ *  enumeration, and hides a future owed cleanup from the compiler.
+ *  `buildLogSeed` below has not been able to PRODUCE `"warmup"` since
+ *  Phase WU, so every step it writes is `"work"`.
+ *  **The READER in `buildMonitorLogSteps` still honours the legacy value**,
+ *  behind an explicit cast rather than a union member: `LogSeed` is
+ *  PERSISTED inside a stored `MonitorRun` (`src/monitor/monitorRun.ts`'s
+ *  localStorage record), so a run authored before warm-up removal
+ *  (PR #150, v0.16.0, 2026-08-22) and still unlogged carries
+ *  `kind: "warmup"` on its first step once it comes back out of JSON,
+ *  despite the type no longer admitting it. That is the same
+ *  "trust the wire, not the type" legacy-population read
+ *  `summaryModel.ts`'s `warmupIndex` performs on the SAME records; see
+ *  `buildMonitorLogSteps`'s own guard comment below. */
 export interface LogSeed {
-  /** `kind: "warmup"` is legacy-only — see this interface's own comment.
-   *  Nothing writes it any more; the reader in `buildMonitorLogSteps`
-   *  still honours it for records written before Phase WU. */
-  steps: { label: string; kind: "warmup" | "work" }[];
+  steps: { label: string; kind: "work" }[];
   /** The PACES LOCKED panel's values (README.md §7's "PACES LOCKED AT 2K
    *  1:52.0 · 6K 2:02.0"), captured HERE because the monitor door has no
    *  draft to recover them from later the way `LogSession.tsx`'s own
@@ -617,8 +616,8 @@ export interface LogSeed {
 
 /** Builds a `MonitorRun`'s `logSeed`. Every non-rest phase produces exactly
  *  one seed step, in phase order, and since Phase WU every one of them is
- *  `kind: "work"` — no phase can be a warm-up any more, so this function
- *  never writes the seed's legacy `"warmup"` value (see `LogSeed`).
+ *  `kind: "work"` — no phase can be a warm-up any more, and `LogSeed`'s own
+ *  type has named only `"work"` since door PR A (see `LogSeed`).
  *
  *  Labels reuse this module's OWN `durationText`/`refPaceLabel` helpers —
  *  the SAME ones `buildManualLogSteps` composes its labels from — so a work
@@ -775,8 +774,8 @@ export const MONITOR_SPM_MAX = 99;
  *  what `run.logSeed` (`buildLogSeed`'s own output, frozen at Connect)
  *  exists to supply; see this file's `LogSeed` doc comment for the
  *  alignment contract between `logSeed.steps` and `program.intervals`, and
- *  for why the seed's own `kind` keeps its legacy `"warmup"` member after
- *  Phase WU removed the concept everywhere else.
+ *  for the legacy `"warmup"` string this reader still honours behind a cast
+ *  after door PR A narrowed the seed's own `kind` union.
  *
  *  **Alignment / disqualification** (§3): `logSeed` missing, or
  *  `logSeed.steps.length !== program.intervals.length`, throws
@@ -786,9 +785,12 @@ export const MONITOR_SPM_MAX = 99;
  *
  *  **A LEGACY warmup seed step produces NO step** (§3, adversarial B2):
  *  shape parity with the manual door, which has never emitted a warmup row.
- *  Nothing writes `kind: "warmup"` since Phase WU, but a `MonitorRun`
- *  stored before it still can, so the guard stays. Such a step's own
- *  program-interval position is still consumed while walking the two
+ *  Nothing has written `kind: "warmup"` since Phase WU, and since door PR A
+ *  (spec §4 rider 2) the type does not admit it either — but a `MonitorRun`
+ *  stored before warm-up removal still carries the string at RUNTIME, so
+ *  the guard stays, as an explicit legacy-population read behind a cast
+ *  (the same shape `summaryModel.ts`'s `warmupIndex` uses). Such a step's
+ *  own program-interval position is still consumed while walking the two
  *  parallel arrays (so later intervals keep their correct position), but no
  *  `LogStep` is pushed for it, and any actual matched to that position
  *  (§3's matching rule, next) never surfaces. Rest never gets its own
@@ -855,13 +857,22 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
   const out: LogStep[] = [];
   run.program.intervals.forEach((interval, i) => {
     const seedStep = seed.steps[i]!;
-    // KEEP (Phase WU). `LogSeed` is PERSISTED on a stored `MonitorRun`, so
-    // a record written before Phase WU still carries `kind: "warmup"`.
-    // Removing this guard adds a phantom warm-up row to what gets SAVED
-    // from such a record. Nothing produces the value any more
-    // (`buildLogSeed` above). Owed removal: ROADMAP Phase WU, at the first
-    // server-touching phase after two tags have shipped.
-    if (seedStep.kind === "warmup") return;
+    // KEEP — RESTORED at door PR A's whole-branch review (Important 1).
+    // The earlier fix-round ruling that ACCEPTED removing this guard is
+    // REVERSED; no number moves. `LogSeed` is PERSISTED on a stored
+    // `MonitorRun`, so a record authored before warm-up removal (PR #150,
+    // v0.16.0, 2026-08-22) and still unlogged carries `kind: "warmup"` at
+    // runtime once it comes back out of JSON — that population, and only
+    // that one, is what this guard reads for. The TYPE no longer admits the
+    // value (spec §4 rider 2 narrowed `LogSeed.steps[].kind` to the literal
+    // `"work"`, and that narrowing stands), so the read is an explicit
+    // legacy-population cast — the identical shape `summaryModel.ts`'s
+    // `warmupIndex` uses over the SAME records. Deleting it would push a
+    // phantom warm-up row into what such a record SAVES, and the saved
+    // row's AVG SPLIT would then read back through the Log door as a
+    // DIFFERENT number from the live summary `warmupIndex` keeps frozen.
+    // Nothing produces the value any more (`buildLogSeed` above cannot).
+    if ((seedStep.kind as string) === "warmup") return;
     const step: LogStep = { label: seedStep.label };
     if (interval.targetSplit !== null) step.targetSplit = interval.targetSplit;
     if (interval.kind === "time") {

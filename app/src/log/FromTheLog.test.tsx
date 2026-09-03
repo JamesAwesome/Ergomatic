@@ -387,9 +387,7 @@ describe("FromTheLog — cohort-unlock §2 link-lost line", () => {
     );
     await renderFromTheLog();
     expect(
-      await screen.findByText(
-        "LINK LOST · the app lost the monitor before the end",
-      ),
+      await screen.findByText("LINK LOST · the app lost the monitor"),
     ).toBeVisible();
   });
 
@@ -403,9 +401,154 @@ describe("FromTheLog — cohort-unlock §2 link-lost line", () => {
     await renderFromTheLog();
     await screen.findByRole("heading", { name: "Sea Fret" });
     expect(
-      screen.queryByText("LINK LOST · the app lost the monitor before the end"),
+      screen.queryByText("LINK LOST · the app lost the monitor"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/^LINK LOST/)).not.toBeInTheDocument();
+  });
+});
+
+// Door spec (2026-09-02) §1.3: the PARTIAL marker renders in the slot
+// `LINK LOST` already uses — ABOVE the heroes, between the black rule and
+// AVG SPLIT — and `MachineConfirmedBlock` is UNTOUCHED: the marker is a
+// sibling from the view model, so the block keeps its "reads the row and
+// nothing else" constraint (`FromTheLog.tsx:65-84`).
+//
+// A REAL five-interval connected row: `storedRow`'s own fixture with pm5
+// steps in the two shapes `buildMonitorLogSteps` writes — two matched
+// intervals, three never reached (recurring failure 3: the shipped defect
+// class here is a fixture emptier than production).
+const STOPPED_AFTER_TWO_STEPS: StoredLog["steps"] = [
+  {
+    label: "3:00 @ 6k +12",
+    targetSplit: 139.0,
+    seconds: 180,
+    actualSource: "pm5",
+    actualSplit: 139.1,
+    actualSeconds: 180.0,
+    actualMeters: 647,
+    actualSpm: 22,
+    spm: 22,
+  },
+  {
+    label: "3:00 @ 6k +12",
+    targetSplit: 139.0,
+    seconds: 180,
+    actualSource: "pm5",
+    actualSplit: 138.2,
+    actualSeconds: 180.0,
+    actualMeters: 651,
+    actualSpm: 22,
+    spm: 22,
+  },
+  { label: "3:00 @ 6k +12", targetSplit: 139.0, seconds: 180, spm: 22 },
+  { label: "3:00 @ 6k +12", targetSplit: 139.0, seconds: 180, spm: 22 },
+  { label: "3:00 @ 6k +12", targetSplit: 139.0, seconds: 180, spm: 22 },
+];
+
+describe("FromTheLog — door spec §1 PARTIAL marker", () => {
+  it("renders the stopped-early sentence for a rower-ended partial session", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({ endedBy: "rower", steps: STOPPED_AFTER_TWO_STEPS }),
+          ),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    expect(
+      await screen.findByText("STOPPED EARLY · 2 of 5 intervals measured"),
+    ).toBeVisible();
+  });
+
+  it("renders the marker ABOVE the heroes, in the slot LINK LOST already uses", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({ endedBy: "rower", steps: STOPPED_AFTER_TWO_STEPS }),
+          ),
+          { status: 200 },
+        ),
+    );
+    const { container } = await renderFromTheLog();
+    const marker = await screen.findByText(
+      "STOPPED EARLY · 2 of 5 intervals measured",
+    );
+    const heroes = container.querySelector(".summary-heroes-block");
+    expect(heroes).not.toBeNull();
+    // Order by INDEX in document order, not by a bit mask: both directions
+    // of `compareDocumentPosition` are one fact restated, and an index pair
+    // says which slot the marker actually occupies. The marker sits between
+    // the meta block and the heroes — spec §1.3's "ABOVE the heroes, between
+    // the black rule and AVG SPLIT", the slot `LINK LOST` already used.
+    const ordered = [...container.querySelectorAll("*")];
+    expect(ordered.indexOf(marker)).toBeLessThan(ordered.indexOf(heroes!));
+  });
+
+  it("a link-lost partial row gains the suffix on the existing sentence", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({ endedBy: "link-lost", steps: STOPPED_AFTER_TWO_STEPS }),
+          ),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    expect(
+      await screen.findByText(
+        "LINK LOST · the app lost the monitor · 2 of 5 intervals measured",
+      ),
+    ).toBeVisible();
+  });
+
+  it("a rower-ended row with every step measured renders no marker", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              endedBy: "rower",
+              steps: STOPPED_AFTER_TWO_STEPS.slice(0, 2),
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    expect(screen.queryByText(/^STOPPED EARLY/)).not.toBeInTheDocument();
+  });
+
+  // §1.3: `MachineConfirmedBlock` is IN SCOPE and UNTOUCHED — a terminated
+  // partial carrying a 0x0039 burst shows BOTH, the marker above the heroes
+  // and the block below the intervals. walk-2026-09-01 piece 2 (Menu-
+  // terminated, code D338-90E8) is a live instance of exactly this pairing.
+  it("a terminated partial with a machine burst renders the marker AND the machine block", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              endedBy: "rower",
+              steps: STOPPED_AFTER_TWO_STEPS,
+              machineWorkSeconds: 360,
+              machineWorkMeters: 1298,
+              machineSummary: { verificationBytes: WALK_VERIFICATION_BYTES },
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    expect(
+      await screen.findByText("STOPPED EARLY · 2 of 5 intervals measured"),
+    ).toBeVisible();
+    expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
+    expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
   });
 });
 

@@ -280,18 +280,19 @@ slate.
       deleted, and `docs/RELEASING.md`'s API note records the break. The
       0020 BACKFILL rule stays (it is history, not a live inference).
       Filed here per RF14 and the spec's exit criterion 8b. **XS**
-- [ ] **v0.35.0's release notes must RETIRE "A Just Row never advances
-      your plan" (v0.32.0) — trigger: the v0.35.0 notes PR, once the
-      substitution PR ships.** One sentence in the notes' own voice: a Just
-      Row can now stand in for a plan session, and the Plan tab says so.
-      Filed at the substitution spec (RF14). **XS**
-- [ ] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
-      told testers — trigger: the v0.34.0 notes PR.** v0.32.0 said
-      "connect to the erg" (there is now a Start Timer with no erg) and
-      "no type chip, on purpose" (free rows now carry the JR chip). One
-      sentence each, in the notes' own voice, or the News tab contradicts
-      itself two entries apart. Filed at #268's PM gate (RF14, and the PR
-      body had claimed this row already existed). **XS**
+- [x] **v0.35.0's release notes must RETIRE "A Just Row never advances
+      your plan" (v0.32.0).** **DONE — shipped in `releaseNotes.ts:18`
+      (v0.35.0 entry): "v0.32.0 said a Just Row never advances your plan;
+      now it can, when you say so, and never otherwise."** Ticked at door
+      PR A's PM gate, which found the row discharged and unticked. Filed at
+      the substitution spec (RF14). **XS**
+- [x] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
+      told testers.** **DONE — both shipped in the v0.34.0 entry:
+      `releaseNotes.ts:39` ("v0.32.0 said connect to the erg; that is now
+      one of two ways in") and `:40` ("v0.32.0 said no type chip, on
+      purpose; in practice the row was too easy to lose in History, so it
+      has one now").** Ticked at door PR A's PM gate, which found the row
+      discharged and unticked. Filed at #268's PM gate (RF14). **XS**
 - [x] **Timer mode, on the phone — DONE in this PR (2026-09-02; spec
       `docs/superpowers/specs/2026-09-02-timer-mode-design.md`, Gate 0
       `docs/design/handoffs/2026-09-02-timer-mode/`). One END box in both
@@ -568,6 +569,26 @@ rower's work silently.
         `source` SUNSET is NO LONGER PART OF PR A** — it shipped on its own
         as #273 / v0.35.0 on 2026-09-02 (its own row above is reconciled).
         **Gate 0-A** on the rendered saved row + list chip.
+        **SHIPPED as door PR A (2026-09-02), every clause above:** the
+        four-clause PARTIAL predicate with its five-word marker table
+        (`storedSummary.ts`'s `partialCloseReason`/`buildCloseLine`);
+        `STOPPED EARLY · N of M intervals measured` on the session detail,
+        above the heroes, and a `.log-partial-chip` on the History row,
+        both words from one table so the two surfaces cannot disagree;
+        `LINK LOST` keeping its own ungated, steps-independent trigger and
+        shortened to `LINK LOST · the app lost the monitor` so the combined
+        line fits; the list's boolean derived in SQL from the same four
+        clauses (no new column) with an agreement test holding the two
+        copies equal; `log_source` gaining `no-reading` (migration 0022, no
+        backfill, no device name) so a connected arrival that measured
+        nothing reads `NO MONITOR READING` with its wall-clock time rather
+        than `LOGGED BY HAND` with none; `timeLabel` re-derived as a
+        positive three-member allowlist; RC-18's fallback becoming the
+        literal `MONITOR` at all seven sites, with the deviceName-band
+        guard now keeping the `pm5` door for a nameless erg instead of
+        storing the session as by-hand. All three riders below are ticked.
+        Gate 0-A was APPROVED by James on 2026-09-02 before any task ran.
+        **PR B (the stored NUMBER) is still open.**
       - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
         in-flight interval's metres in NEW step keys (`partialMeters`/
         `partialSeconds`), never `actualMeters` — an older server drops
@@ -756,20 +777,35 @@ the re-scope — not a branch of their own and not the lifecycle spec's PRs. The
 none of that migration's risk, so bundling them costs a reviewer nothing and
 saves three round trips.
 
-- [ ] **`ALTER TABLE "preferences" DROP COLUMN "warmup";`** — one line, safe
-      once no deployed image reads it. Still present at
-      `server/db/schema.ts:369`. **Its trigger fired long ago:** Phase WU set it
-      at "the first server-touching phase after TWO tags have shipped",
-      deliberately countable. **Ten tags have shipped since.**
-- [ ] **Remove the legacy warm-up guards on the persisted `LogSeed.steps[].kind`
-      union.** `logDraft.ts:864` (was `:857`) still carries `if (seedStep.kind === "warmup")
-return;` and the union at `:607` (was `:600`) is still `"warmup" | "work"`. Binding
-      sub-ruling from WU: `kind` stays the literal union, never widened to
-      `string`. Same expired trigger as above.
-- [ ] **RC-12's last unreconciled comment.** Four of six sites are already
-      corrected; `domain/monitor/types.ts:630-631` (was `:607`, now the `Transport` interface) still claims `onDisconnect`
-      covers "the Bluetooth stack resetting" without qualification. The
-      neighbouring iOS-backgrounding claim was already struck as false.
+- [x] **`ALTER TABLE "preferences" DROP COLUMN "warmup";`** — one line, safe
+      once no deployed image reads it. **DONE (door PR A, migration 0022,
+      Task 1):** the column is dropped and the `preferences.warmup` Drizzle
+      field is removed from `server/db/schema.ts` in the same commit
+      (comment now at `:423-432`). Its trigger fired long ago: Phase WU set
+      it at "the first server-touching phase after TWO tags have shipped",
+      deliberately countable, and ten tags had shipped by the time this
+      rider rode.
+- [x] **Remove the legacy warm-up guards on the persisted `LogSeed.steps[].kind`
+      union.** **PARTLY DONE (door PR A, Task 6, amended at the whole-branch
+      review): the union is NARROWED, the GUARD is KEPT behind a cast for
+      the residual population.** `LogSeed.steps[].kind` is now the literal
+      `"work"` — per the binding sub-ruling from WU, never widened to
+      `string`. `buildMonitorLogSteps`'s skip survives as an explicit
+      legacy-population read, `(seedStep.kind as string) === "warmup"`, the
+      identical shape `summaryModel.ts`'s `warmupIndex` already uses over
+      the same records: an unlogged `MonitorRun` authored before warm-up
+      removal (PR #150, v0.16.0) still carries the string at runtime, and
+      deleting the guard would move that row's AVG SPLIT between the live
+      and stored doors. NO NUMBER MOVES. Owed removal, now for BOTH readers
+      together: when that population is provably gone.
+- [x] **RC-12's last unreconciled comment.** **DONE (door PR A, Task 6):**
+      `domain/monitor/types.ts`'s `onDisconnect` doc block no longer claims
+      "the phone's Bluetooth stack resetting" or "iOS backgrounding" as
+      causes. Both are struck as UNSOURCED and UNMEASURED, not as disproven
+      — what the walks establish is the absence of OUR OWN evidence (the
+      capture-corpus grep is empty), never the radio's behaviour
+      (`docs/history/phase-rc.md:2054-2056`). Wording softened at door
+      PR A's PM gate.
 
 **Exit:** a phone locked before the first pull, a phone backgrounded mid-piece,
 and a link dropped mid-piece each produce a stored row that matches what the
@@ -1765,6 +1801,50 @@ Each needs erg time or a deliberate recording session.
   (`representableCentiseconds` has never been sent to a real PM5).
 
 ## Small, queued, rides the next PR in its area
+
+- **FILED (door PR A's PM gate, 2026-09-02): the server tsconfig now
+  includes a client file, and no lint fence stops `server/` importing
+  `src/`.** `app/tsconfig.server.json`'s `include` reads
+  `["server", "domain", "src/vite-env.d.ts"]` — the third entry added by
+  #226's Playwright-typecheck ratchet, so the server project's roots reach
+  into `src/`. `app/eslint.config.js`'s `no-restricted-imports` block
+  (`:108`) fences Capacitor plugins and `src/platform`/`src/native` for the
+  CLIENT; there is no mirror rule forbidding a `server/**` file from
+  importing `src/**`. Owed: that fence, with a carve-out for tests, which
+  legitimately cross. Rides the next PR touching server lint or tsconfig.
+  **XS**
+- **FILED (door PR A's PM gate, 2026-09-02): `1,000` in the History list,
+  `1000` on the log detail.** Pre-existing, not this PR's.
+  `LogRow.tsx:51` hand-rolls a comma thousands separator (`fmtMeters`, its
+  own house-style comment) and the History row uses it (`:185`); the
+  detail's own step rows render `` `${step.meters} m` `` raw
+  (`storedSummary.ts:947`). Same distance, two spellings, one screen apart.
+  Owed: pick one and share the formatter. Rides the next PR touching
+  either. **XS**
+- **FILED (door PR A's PM gate, 2026-09-02):
+  `server/concept2/mapping.test.ts:160-169` is pinned by TYPECHECK, not by
+  its own assertion.** The leg exists to make the retired
+  `deviceName === null` gate and the live `source !== "pm5"` gate disagree,
+  and to do it the fixture is cast past the excess-property check
+  (`as unknown as Parameters<typeof eligibilityFailure>[0]`) onto a row
+  shape the wire cannot produce — `logSourceContradiction` 400s a
+  `deviceName` on any non-pm5 row. So the runtime expectation discriminates
+  a state only the cast can reach. Owed: either say so in the leg's own
+  comment (the honest reading — it is a mutation discriminator, not a
+  reachability claim), or reach the same disagreement through a supported
+  producer. **XS**
+- **FILED (door PR A's PM gate, 2026-09-02): the `freeRow` 401 first-run
+  flake.** On a cold stack (24 containers up) the first `freeRow` e2e
+  sign-in has 401'd once and passed on retry. Not reproduced on a warm
+  stack. Owed: one run with the backdoor sign-in instrumented, to say
+  whether it is the auth seam or container start-up ordering. **S**
+- **ACCEPTED (Gate 0-A's own cost, door PR A, 2026-09-02): Today's last
+  three rows carry no PARTIAL chip.** The chip lands in History and on the
+  log detail; Today's compact rows have no slot for it without displacing
+  the type badge. Gate 0-A weighed two options and took the cost. A THIRD
+  option — the chip on the title line, or displacing the badge — is
+  deferred to the Timer-mode design pass (the `## Timer mode, on the
+  phone` row above), which is already redesigning that row.
 
 - **RESOLVED (2026-08-31): `swapMark`'s `globalOnly: false` arm is pinned**
   — trigger pulled forward by James. The arm's only producer is synthetic,

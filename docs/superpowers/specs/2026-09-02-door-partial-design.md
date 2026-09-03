@@ -248,7 +248,7 @@ was additive and the member's is NOT:**
 | direction | outcome | mitigation |
 |---|---|---|
 | old client → new server | posts `manual` as today. **Since #273 / v0.35.0 an old client that posts NO `source` is already a 400**, whatever PR A does | none needed |
-| **new client → old server** (deploy lag; `RELEASING.md:99-103` records six merges deploying nothing for eleven hours on 2026-09-01) | `LOG_SOURCES.includes` 400s `no-reading` on field `source`; the client retries only `workoutId` → **save lost** | server deploys on merge and the client reaches phones by TestFlight later, so the window is the deploy lag only; the rollback floor row (below) forbids rolling the API back past this tag |
+| **new client → old server** (deploy lag; `RELEASING.md:99-103` records six merges deploying nothing for eleven hours on 2026-09-01) | `LOG_SOURCES.includes` 400s `no-reading` on field `source`; the client's retry is scoped to `field === "workoutId"` (`LogSession.tsx:773-783`), so this 400 does not retry → **save fails, record held on the phone, the rower retries; a write outage, not data loss — `LogSession.tsx:806-808`** | server deploys on merge and the client reaches phones by TestFlight later, so the window is the deploy lag only; the rollback floor row (below) forbids rolling the API back past this tag |
 | old client reads new row | `sourceLabel`'s switch has no `default` → blank source word, plus a `timeLabel` | cosmetic; stated in the release note |
 | new client reads old row | unchanged | — |
 
@@ -350,6 +350,14 @@ PR A is that migration.
    `storedSummary.ts:424-436` cites the warm-up skip as a live cause of a
    Σ-steps gap (verified by subject at `fcf2d4f9`; this spec first said
    `:427-433`); that comment is reconciled in the same commit.
+
+   **LANDED 2026-09-02 as:** union narrowed to `"work"`; the guard KEPT
+   behind `(seedStep.kind as string) === "warmup"` for the residual
+   population (an unlogged `MonitorRun` authored before PR #150 / v0.16.0),
+   mirroring `summaryModel.ts`'s `warmupIndex` — the whole-branch review
+   found this zero-cost shape and the controller's accept-the-divergence
+   ruling was reversed; no number moves. Removing both readers is one owed
+   change (ROADMAP rider-2 row).
 3. **RC-12's last unreconciled comment** — `onDisconnect`'s doc block at
    `domain/monitor/types.ts:630-631` (_"the phone's Bluetooth stack
    resetting"_ beside a `CORRECTED (Phase LL Task 2)` strike of the iOS
@@ -358,6 +366,13 @@ PR A is that migration.
    verifies by subject, not line. Reconciliation: the sentence states what the
    walks established (RC-12's finding), and the strike block is folded into
    it rather than left as a contradiction beneath it.
+
+   **LANDED 2026-09-02, softened per PM-5:** "what the walks established"
+   overstated it — the walks establish only the absence of our own evidence,
+   never the radio's behaviour, so the landed comment strikes both causes as
+   UNSOURCED (not disproven) and marks the Bluetooth-stack-reset case
+   UNMEASURED (our logging records no such capture; `grep -rli "bluetooth
+   stack\|stack reset" docs/monitor/sessions/` is empty).
 4. **The `source` derive-when-absent SUNSET — SHIPPED SEPARATELY, NOT IN
    PR A.** It landed as **#273 / v0.35.0 on 2026-09-02**, the same day this
    spec was approved and before PR A's plan ran. Everything this item asked

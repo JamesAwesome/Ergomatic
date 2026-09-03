@@ -1096,8 +1096,21 @@ export interface MonitorSessionDeps {
    *  to `setTimeout`/`clearTimeout`. */
   burstLingerSchedule?: (cb: () => void, ms: number) => () => void;
   /** Passed to `createPm5Driver`. `deviceName` is NOT accepted here — it
-   *  comes from the picker result, never from a caller's guess (spec's I5
-   *  ruling: no screen ever renders the `"PM5"` placeholder). */
+   *  comes from the picker result, never from a caller's guess. Spec I5's
+   *  own "no screen ever renders the placeholder" ruling HOLDS as written
+   *  (fix round 1 — an earlier pass here wrongly claimed `surfaceModel.ts`'s
+   *  `deviceCaptionFor` was an exception): `ConnectedSurface.tsx`'s only
+   *  two callers both gate its render behind a phase where `deviceName` is
+   *  never null (`ConnectedInterstitial.tsx`'s phase gate, `"ready"`
+   *  onward; `JustRow.tsx`'s own `session !== "none" || (showNumbers &&
+   *  armed)` gate), so neither caption ever paints the placeholder in
+   *  production — see `deviceCaptionFor`'s own comment
+   *  (`surfaceModel.ts`) for the full reachability argument. RC-18's
+   *  rename is consistency work, not a reachable-violation fix: the
+   *  literal both fallbacks carry is `NAMELESS_MONITOR_CAPTION`
+   *  (`"MONITOR"`), not the invented `"PM5"` this comment used to name,
+   *  kept only so a future caller that DOES reach either fallback (a bug,
+   *  per I5) never invents a brand name doing it. */
   driverOptions?: Omit<DriverOptions, "deviceName">;
 }
 
@@ -2822,11 +2835,14 @@ export function useMonitorSession(
               // The program we actually sent, not one re-derived from the
               // wire (spec §4: "nothing re-derived from bytes").
               program: identity.program,
-              // The REAL advertised name the picker returned, threaded
-              // through `createPm5Driver` by Task 1 — never the `"PM5"`
-              // placeholder (spec's I5 ruling). Read off the driver that
-              // delivered this very frame, so there is no "which driver?"
-              // question to answer here.
+              // The name the picker returned, threaded through
+              // `createPm5Driver` by Task 1 — real whenever the erg
+              // advertised one, and RC-18's `NAMELESS_MONITOR_CAPTION`
+              // (`"MONITOR"`) when it did not (an already-held device with
+              // no name, `capacitorBle.ts`'s `getConnectedDevices` arm —
+              // never invented from anything else). Read off the driver
+              // that delivered this very frame, so there is no "which
+              // driver?" question to answer here.
               deviceName: driver.capabilities.deviceName,
               // The frozen log identity `program()`'s caller built alongside
               // `identity.program` (7C Task 1) — threaded straight through,

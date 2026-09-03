@@ -656,19 +656,37 @@ export function measuredIntervalCount(
 // Monitor door
 // ---------------------------------------------------------------------
 
-/** KEEP (Phase WU). A LEGACY warm-up interval's position in
- *  `run.program.intervals`, or -1 when this run has none — which post-WU is
- *  every run built by today's code, since `buildLogSeed` (`logDraft.ts`)
- *  can no longer write `kind: "warmup"`. It stays because `LogSeed` is
- *  PERSISTED: a `MonitorRun` stored before Phase WU still carries the
- *  value, and dropping this would silently fold that run's warm-up
- *  interval into its AVG SPLIT — moving a number on a record already shown
- *  to the rower. Also -1 when there is no `logSeed` at all (a v1
- *  `MonitorRun` predating the field, `MonitorRun.logSeed`'s own doc
- *  comment). Owed removal: ROADMAP Phase WU, at the first server-touching
- *  phase after two tags have shipped. */
+/** KEEP. A LEGACY warm-up interval's position in `run.program.intervals`,
+ *  or -1 when this run has none — which is every run built by today's code,
+ *  since `buildLogSeed` (`logDraft.ts`) has not been able to write
+ *  `kind: "warmup"` since Phase WU. `LogSeed.steps[].kind` is now typed
+ *  `"work"` only (door PR A, spec §4 rider 2, narrowed the union), but a
+ *  `MonitorRun` stored before either change still carries the string
+ *  `"warmup"` at runtime once it comes back out of JSON, despite the type
+ *  saying otherwise — the same "trust the wire, not the type" reasoning
+ *  `MonitorRun`'s own `interval.type === undefined` comment relies on. The
+ *  unchecked read below is what lets this function keep finding it:
+ *  dropping this would silently fold that run's warm-up interval into its
+ *  AVG SPLIT — moving a number on a record already shown to the rower.
+ *  Also -1 when there is no `logSeed` at all (a v1 `MonitorRun` predating
+ *  the field, `MonitorRun.logSeed`'s own doc comment).
+ *
+ *  THE SIBLING READER, and why the two must move together (door PR A,
+ *  whole-branch review Important 1): `logDraft.ts`'s `buildMonitorLogSteps`
+ *  performs the IDENTICAL cast — `(seedStep.kind as string) === "warmup"` —
+ *  to skip a legacy warm-up seed step when that same run is finally LOGGED.
+ *  A fix round briefly removed that one, which would have made a saved row
+ *  carry the former warm-up position as a real measured pm5 step; the Log
+ *  door's `storedSummary.ts` recomputes AVG SPLIT from `row.steps` in
+ *  PREFERENCE to the stored column, so the SAME row would then read back a
+ *  DIFFERENT AVG SPLIT than the live summary this function keeps frozen.
+ *  The guard was RESTORED and the acceptance REVERSED before merge: both
+ *  readers honour the legacy string, so no number moves anywhere. If either
+ *  is ever retired, retire both in the same change. */
 function warmupIndex(run: MonitorRun): number {
-  return run.logSeed?.steps.findIndex((s) => s.kind === "warmup") ?? -1;
+  return (
+    run.logSeed?.steps.findIndex((s) => (s.kind as string) === "warmup") ?? -1
+  );
 }
 
 /** THE FUSED TOTAL (work + rest distance), Σ(work + rest) over ALL
@@ -1191,7 +1209,8 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
  *  reading behind them. It is NOT a close reason and must never become
  *  one: `endedBy` answers how a session closed, and the two agree only on
  *  the zero-measured case (spec's own line, and `storedSummary.ts`'s
- *  `LINK_LOST_LINE` is where a close reason renders).
+ *  `buildCloseLine` is where a close reason renders — as of the door spec
+ *  2026-09-02 that is five reasons, not just `LINK_LOST_LINE`'s one).
  *
  *  WHAT IT DOES NOT SAY: why. Three producers of the silence are
  *  undistinguished, so this names only what we can see from here — that we
@@ -1201,12 +1220,16 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
  *  sharing a string, because they answer different questions on different
  *  screens.
  *
- *  KNOWN AND ACCEPTED DIVERGENCE (Task 4 option 2, stated in the PR): the
- *  STORED row for this same session still reads `LOGGED BY HAND` —
- *  `storedSummary.ts`'s `sourceLabel` infers the source from stored
- *  columns, and nothing the manual door posts distinguishes this case from
- *  a genuine by-hand entry. Making the stored row honest needs a new
- *  stored field and a migration; see ROADMAP Phase LM. */
+ *  RETIRED DIVERGENCE (Task 4 option 2 named it; Door PR A, 2026-09-02,
+ *  §2.1 closes it): the STORED row for this same session used to read
+ *  `LOGGED BY HAND` regardless, because `storedSummary.ts`'s `sourceLabel`
+ *  had only three columns to infer from and nothing the manual door posted
+ *  distinguished this case from a genuine by-hand entry. `session_logs`
+ *  now carries a fourth `source` member, `no-reading`, and the manual
+ *  door's `handleSave` posts it for exactly this arrival
+ *  (`LogSession.tsx`) — the stored row reads this SAME word from that
+ *  column now. A row saved BEFORE this PR shipped still reads `LOGGED BY
+ *  HAND` (no backfill — spec §2.4); only a row saved after it is honest. */
 export const NO_MONITOR_READING_SOURCE = "NO MONITOR READING";
 
 function buildManualModel(
@@ -1233,9 +1256,13 @@ function buildManualModel(
 
   // Task 4: the SOURCE slot only. `timeLabel` stays absent either way —
   // §2B's own date-only fallback for a door with no wall-clock moment of
-  // its own, and the stored screen gates its own `timeLabel` on the same
-  // bucket (`storedSummary.ts`'s `buildMeta`), so adding one here would
-  // put a reading on the live screen that the log screen never shows.
+  // its own. This is now an ACCEPTED DIVERGENCE from the stored screen,
+  // not a mirrored gate: the STORED no-reading row carries a `timeLabel`
+  // by Gate 0-A decision (c) — the app witnessed the connected arrival
+  // even though it measured nothing — but this LIVE screen keeps none.
+  // Whether the live screen should gain one too is out of Door PR A's
+  // scope (`storedSummary.ts`'s `buildMeta`, §2.3, is where the stored
+  // side's own allowlist lives).
   const meta: SummaryMeta = {
     dateLabel: formatLogDate(dateIso),
     sourceLabel: connectedNoRecord

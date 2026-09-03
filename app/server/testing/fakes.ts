@@ -12,6 +12,7 @@ import type {
 } from "../stores/baselines.js";
 import {
   CursorNotFoundError,
+  PARTIAL_ENDED_BY,
   type LogInput,
   type LogPatch,
   type LogsStore,
@@ -517,21 +518,29 @@ function makeFakeLogsStore(
       // own comment): a non-numeric stored value reads back `null`
       // rather than this fake throwing, matching the real store's own
       // "never break the whole list over one bad row" contract.
+      // Door spec (2026-09-02) §1.3, Task 4: a SECOND derived key comes
+      // out of an excluded column — `partial`, the four PARTIAL clauses
+      // evaluated over the `steps` this projection drops. Real Postgres
+      // defines truth (`LOG_LIST_COLUMNS`'s `coalesce(... exists ...)`);
+      // this is the fake's honest re-statement of it, and the four
+      // `describeStoreContracts` "list rows carry partial" cases run
+      // against BOTH stores so the two cannot drift. Clause 4 is a value
+      // ALLOWLIST, never `!== "finished"`: `endedBy` is nullable and a
+      // negation would mark every legacy row partial.
       return source
         .slice(0, limit)
         .map(
-          ({
-            steps: _steps,
-            series: _series,
-            machineSummary,
-            seq: _seq,
-            ...rest
-          }) => ({
+          ({ steps, series: _series, machineSummary, seq: _seq, ...rest }) => ({
             ...rest,
             machineAvgPaceSecondsPer500m:
               typeof machineSummary?.avgPaceSecondsPer500m === "number"
                 ? machineSummary.avgPaceSecondsPer500m
                 : null,
+            partial:
+              rest.source === "pm5" &&
+              steps.length > 0 &&
+              PARTIAL_ENDED_BY.some((r) => r === rest.endedBy) &&
+              steps.some((s) => s.actualSource === undefined),
           }),
         );
     },

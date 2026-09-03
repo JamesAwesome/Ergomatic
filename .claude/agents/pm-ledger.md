@@ -4287,3 +4287,77 @@ does not match these numbers._
 - Fold-word series: #239 148, #248 274, #249 225, #258 134, #268 186,
   **#272 153 → trimmed at the gate.** The arrow-route bullet recurred
   ("Just Row → Start Timer → finish"), one gate after it was named.
+
+## TRIAD final-PR gate, 2026-09-02 (Wave F door PR A — a stored WORD's meaning)
+
+- **A read-time predicate over stored columns is a RETROACTIVE product
+  change, and nobody treated it as one.** PARTIAL is derived at read time
+  from `ended_by` (live since migration 0012) plus `steps` — no migration,
+  no backfill, and therefore every qualifying row already in the database
+  gains a marker and a History chip the moment this deploys. The spec
+  discusses "no backfill" three times, always about `log_source`; the word
+  retroactive appears nowhere in the spec, the plan, the PR body or the
+  ROADMAP, and the Try-it line describes rowing a new piece. **At any gate
+  on a derived-at-read predicate, ask which EXISTING rows change appearance
+  and count them** — one prod query, the same one RF24's machine-summary
+  count used. Contrast the enum member in the same PR, whose retro
+  population was reasoned about carefully because a migration forced the
+  question. A change that needs no migration gets no such prompt.
+- **The design gate's "a number change is a design question too" clause
+  does NOT fire on a divergence that no existing row can reach.** PR A's
+  Task 6 removed Phase WU's warm-up guard, so a saved row built from a
+  pre-v0.16.0 seed would recompute AVG SPLIT over a phantom step while the
+  live summary's `warmupIndex` stays frozen. The controller ruled ACCEPT
+  (population: a MonitorRun authored 13 tags ago, never logged, still on a
+  phone, logged after this ships — nothing already saved moves); the final
+  whole-branch review then found the zero-cost alternative in the same file
+  pair — restore the guard behind the identical `(kind as string)` cast that
+  keeps `warmupIndex` alive — and the ruling was REVERSED before merge. No
+  number moves. **Generalises: the clause keys on whether a STORED row
+  renders differently, not on whether any arithmetic changed; and before
+  accepting a moved number, ask whether the sibling reader in the same PR
+  already shows how to avoid it.**
+- **`scripts/deploy.sh` can execute unattended the rollback that
+  `RELEASING.md`'s rollback floor forbids.** `rollback()` (`:23-29`) checks
+  out the previous SHA and re-ups when the new build fails its health
+  wait — after the new container has already booted and migrated. With
+  0022 that means the column is dropped and the restored image still
+  declares `preferences.warmup`, so `GET /api/prefs` 500s while the deploy
+  log reports a successful rollback. **A rollback-floor row is a claim
+  about an OPERATOR; check whether an automated path can perform it, and
+  name that path in the row.** The 0020 row has the same exposure and does
+  not name it either. Sibling of the 2026-09-02 "before deploying and
+  before merging are the same moment here" ruling.
+- **RF14, tenth: five of six deferred minors lived only in the PR body**,
+  and the body ALSO pointed at `.superpowers/sdd/.../task-*-report.md` for
+  the Tasks 1-6 mutation tables — a path in `.git/info/exclude`, so the
+  evidence for six tasks' probes becomes unreachable at merge. Two
+  failures, one habit. **The Record block's citations get the same
+  reachability check as a ROADMAP row's.**
+- **Two ROADMAP notes-obligation rows were discharged by shipped release
+  notes and left unticked** (`:283` v0.35.0, `:288` v0.34.0). Third gate
+  running where the ROADMAP is edited by the PR that PLANS work and not by
+  the one that FINISHES it. **At every gate, grep the ROADMAP for rows
+  naming a tag that is already cut** — `git tag --sort=-v:refname | head`
+  makes it two commands.
+- **Artboards vs built captures, second measurement:** Gate 0-A rendered
+  five close-reason words; the branch commits a built capture for two
+  (`STOPPED EARLY`, and `LINK LOST` via its e2e leg). The three uncaptured
+  words include the LONGEST line, while the landscape no-wrap assertion was
+  run on the SHORTEST. Not blocked — one table, one slot, unit-pinned
+  literals, and section 4 of the artifact showed all three at portrait
+  proportions — but **when a clip/wrap gate exists, check that it measures
+  the worst case and not the convenient one.**
+- **Fold PASSES cleanly for the first time in the series: 103 words, four
+  bullets, none over 25.** Series: #228 ~270, #230 266, #239 148, #248 274,
+  #249 225, #258 134, #268 186, #272 153, **door PR A 103, unamended** —
+  111 words / five bullets after PM-1's own required sentence, still under
+  both counts. The
+  30-second rule is now enforceable by two counts and the count is being
+  hit before the gate rather than at it. Stop treating a pass as news.
+- **Release: v0.36.0 MINOR after merge** (v0.35.0 cut the same day; nothing
+  reserves .36). Notes owe the marker, `NO MONITOR READING`, `MONITOR` —
+  plus the two sentences the PR body omitted: the marker applies to
+  sessions already in the log, and old by-hand rows that were really
+  no-reading never change. No walk owed; the nameless-erg arms are
+  unobserved hardening by their own code comment (skip spoken).

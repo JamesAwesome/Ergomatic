@@ -1,7 +1,7 @@
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { isFreeRow, type LogSource } from "../../domain/types.js";
 import type { Db } from "../db/index.js";
-import { planState, sessionLogs, workouts } from "../db/schema.js";
+import { endedByEnum, planState, sessionLogs, workouts } from "../db/schema.js";
 import type { PlanKey } from "./planState.js";
 
 // From-the-log spec (2026-08-18), §3: thrown by `list()` when a caller
@@ -274,17 +274,50 @@ export interface LogPatch {
   notes?: string | null;
 }
 
+/** Door spec (2026-09-02) §1.1, clause 4: the five close reasons that name
+ *  WHO ended a session — `schema.ts`'s `endedByEnum` minus `finished`.
+ *
+ *  A value-equality ALLOWLIST, never `!== 'finished'`: `ended_by` is
+ *  nullable and `null` DOES occur on real `pm5` rows (a legacy v1/v2
+ *  `MonitorRun` logged from Today), so a negation would mark every one of
+ *  them partial. `satisfies` makes a typo a compile error rather than a
+ *  clause that silently never matches, and a future SIXTH member of the
+ *  enum renders nothing here until it is added deliberately.
+ *
+ *  The client's twin is `src/log/storedSummary.ts`'s
+ *  `PARTIAL_CLOSE_REASONS` (server code never imports from `src/` — see
+ *  `LogSeriesSample`'s own comment above). What holds the two arrays equal
+ *  is ONE assertion — `partial.integration.test.ts`'s
+ *  `expect([...PARTIAL_ENDED_BY]).toStrictEqual([...PARTIAL_CLOSE_REASONS])`,
+ *  the only place both trees are imported. NOT that file's row-by-row
+ *  agreement cases, which reach only the close reasons they SEED
+ *  (`rower`, `link-lost`, `finished`, `null`): dropping `program-dropped`,
+ *  `program-failed` or `interrupted` from this array left every gate in the
+ *  repo green while History went silent on a row whose detail screen read
+ *  `LEFT UNFINISHED · N of M intervals measured` (review round 1). The row
+ *  cases hold the RULE equal; the array assertion holds its DOMAIN equal,
+ *  and only the second one covers all five members. */
+export const PARTIAL_ENDED_BY = [
+  "rower",
+  "link-lost",
+  "program-dropped",
+  "program-failed",
+  "interrupted",
+] as const satisfies readonly (typeof endedByEnum.enumValues)[number][];
+
 // The list projection (below) explicitly OMITS `steps` AND `series`
 // (series capture spec, 2026-08-19, §3 "List projection": a 720 KB-
 // worst-case trace is dead weight for a list rendering meta + a hero
 // snippet, exactly like `steps` already was) AND the `machineSummary`
 // blob (RC-2/RC-3 wave, same size reasoning) — the drift pin in
 // `storeContracts.ts` reads "list = get - steps - series - machineSummary
-// + machineAvgPaceSecondsPer500m" (RC-5 §3, Task 4 added the one derived
-// scalar below). This is the shape every `get()` column produces, minus
-// those three, plus that one derived key, named once so `list()`'s
-// return type reads intentionally rather than as an unlabeled inline
-// object.
+// + machineAvgPaceSecondsPer500m + partial" (RC-5 §3, Task 4 added the
+// first derived scalar; the door spec's Task 4, 2026-09-02, added
+// `partial`, which answers a question about the EXCLUDED `steps` column
+// so the list does not have to carry it). This is the shape every `get()`
+// column produces, minus those three, plus those two derived keys, named
+// once so `list()`'s return type reads intentionally rather than as an
+// unlabeled inline object.
 const LOG_LIST_COLUMNS = {
   id: sessionLogs.id,
   userId: sessionLogs.userId,
@@ -356,6 +389,68 @@ const LOG_LIST_COLUMNS = {
   c2UserId: sessionLogs.c2UserId,
   completedAt: sessionLogs.completedAt,
   tz: sessionLogs.tz,
+  // Door spec (2026-09-02) §1.3: the list cannot evaluate clause 3 —
+  // `steps` is deliberately excluded from this projection (see the
+  // exclusion reasoning at the top of this object) — so the four clauses
+  // are evaluated SERVER-SIDE and the row carries one derived boolean.
+  // The shape is migration 0020's own EXISTS set predicate over the array
+  // (`drizzle/0020_wooden_millenium_guard.sql:37-40`), not the scalar
+  // `->>` cast above (a different idiom for a different question).
+  //
+  // `src/log/storedSummary.ts`'s `partialCloseReason` is the SAME rule in
+  // TypeScript, for the detail screen, which DOES carry `steps`. Two
+  // implementations of one rule is the drift class RF11 names, so
+  // `server/routes/partial.integration.test.ts` imports THAT predicate as
+  // its oracle and asserts this boolean equals it row for row, over rows
+  // seeded through `POST /api/logs`.
+  //
+  // Key ABSENCE in SQL (`not (s ? 'actualSource')`) is exactly TS's
+  // `actualSource === undefined`, because `routes/data.ts:473-480` 400s an
+  // explicit `actualSource: null` — there is no third state.
+  //
+  // `steps` needs no shape guard: the route rejects a non-array outright
+  // (`routes/data.ts:1630`, "steps must be an array") on a NOT NULL
+  // column, and migration 0020 already ran `jsonb_array_elements("steps")`
+  // over EVERY row in the table and shipped, so no stored row can be a
+  // non-array.
+  //
+  // `jsonb_array_length(...) > 0` is REDUNDANT — `exists (select 1 from
+  // jsonb_array_elements('[]'::jsonb) ...)` is already false, exactly as
+  // `[].some(...)` is in TS — and is kept as a documented short-circuit and
+  // as an explicit statement of clause 2, mirroring the TS predicate's own
+  // clause-2 comment. MEASURED, not asserted: deleting this line alone
+  // leaves the agreement test green (mutation M4.1a).
+  //
+  // The EXISTS is what enforces clause 3, and flipping it to `not exists`
+  // is what proves so (M4.1): with this length clause PRESENT the bite
+  // lands on the PARTIAL row (`true` -> `false`, and its chip word with
+  // it), because a Just Row's `[]` is already short-circuited here. Only
+  // with BOTH mutations does the Just Row itself flip `false` -> `true` —
+  // measured, not assumed, because this comment's first draft claimed the
+  // Just Row bite for the single mutation and that is not what happens.
+  //
+  // COALESCE IS LOAD-BEARING: `ended_by` is nullable (`source` and `steps`
+  // are NOT NULL), and SQL's `true and null` is NULL, not false. Without
+  // it a legacy pm5 row with no close reason reaches the client as
+  // `partial: null` while the client type says boolean. Gated by the
+  // "legacy null close" row in the agreement test (M4.2).
+  //
+  // Clause 4 reads `PARTIAL_ENDED_BY` above — an ALLOWLIST, never
+  // `<> 'finished'`, which would mark every legacy row partial. That
+  // property is UNGATEABLE in SQL and no mutation claims otherwise:
+  // `null <> 'finished'` is NULL, which the coalesce turns into the same
+  // `false` the allowlist gives, and a sixth `ended_by` value cannot be
+  // inserted at all (pgEnum — an unknown member 400s at the route and
+  // 22P02s at the DB). It rests on that constant's own comment plus the
+  // TS side's own clause-4 gate.
+  partial: sql<boolean>`coalesce(
+    ${sessionLogs.source} = 'pm5'
+    and jsonb_array_length(${sessionLogs.steps}) > 0
+    and ${inArray(sessionLogs.endedBy, [...PARTIAL_ENDED_BY])}
+    and exists (
+      select 1 from jsonb_array_elements(${sessionLogs.steps}) as s
+      where not (s ? 'actualSource')
+    ), false)`,
 };
 
 // Log-delete spec (2026-08-18), §2: the newest-wins resolution rule,

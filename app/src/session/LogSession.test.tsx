@@ -2544,6 +2544,34 @@ describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () 
     expect(screen.queryByText(/LOGGED BY HAND/)).not.toBeInTheDocument();
   });
 
+  // Door PR A (2026-09-02) §2.1: the wire write itself — this arrival
+  // posts the new `no-reading` member, not `manual`, and carries no
+  // `deviceName` (§2.2's corrected decision: the only name reachable here
+  // is a best-effort LAST-USED name, rejected in writing at
+  // `storedSummary.ts:66-73` and by PM ruling `pm-ledger.md:2710-2716`).
+  it("posts source: no-reading, with no deviceName key at all", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-no-reading-1" }), {
+          status: 201,
+        }),
+      ),
+    );
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    const posted = parsedBodies(apiFn)[0]!;
+    expect(posted.source).toBe("no-reading");
+    expect(posted).not.toHaveProperty("deviceName");
+  });
+
   it("does not claim the row was rowed BY FEEL — it shows the workout's own single target", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
@@ -3886,7 +3914,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(body.machineWorkSeconds).toBe(199.9);
   });
 
-  it("an empty or >64-char deviceName is omitted from the POST body — the save still succeeds (branch review Minor)", async () => {
+  it("an empty deviceName is substituted with MONITOR, and the pm5 door survives (Door PR A, step 6)", async () => {
     const { run: emptyRun, workout } = buildMonitorFixture({ deviceName: "" });
     saveMonitorRun(emptyRun);
     mockWorkouts([workout]);
@@ -3906,13 +3934,114 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     const body = parsedBodies(apiFn)[0]!;
+    // Door spec §3 + §4: the advertised name was unusable, but the session
+    // WAS a connected one — the door stays `pm5` and the device-name column
+    // reads the neutral caption rather than lying `manual` about a row the
+    // monitor produced (#273's interim fix, superseded by this test).
+    expect(body.source).toBe("pm5");
+    expect(body.deviceName).toBe("MONITOR");
+  });
+
+  it("a >64-char deviceName is substituted with MONITOR too, and the pm5 door survives (Door PR A, step 6)", async () => {
+    // The trade this leg gates (step 6's own comment, L7): a name over 64
+    // characters is REAL and gets replaced wholesale by the caption, so its
+    // tail is never stored — the same posture the empty-name case has
+    // always had, preferred to losing the door claim.
+    const { run: longRun, workout } = buildMonitorFixture({
+      deviceName: "PM5 " + "9".repeat(61),
+    });
+    saveMonitorRun(longRun);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-monitor-long" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.source).toBe("pm5");
+    expect(body.deviceName).toBe("MONITOR");
+  });
+
+  // RC-18 mutation M5.5, fix round 1 (an earlier title here overclaimed
+  // "the pm5 narrowing's own gate"): the `pm5` narrowing is DEAD by
+  // construction — no other door's `submit()` call ever sets
+  // `fields.deviceName` (`handleSave`'s own call never does), so the
+  // guard's outer `typeof body.deviceName === "string"` check already
+  // can only be true when `source === "pm5"`, with or without the inner
+  // narrowing. Measured (M5.5): removing ONLY the narrowing (substitute
+  // unconditionally, outer check kept) left the full client suite green —
+  // this leg included, since a timer body never reaches the guard at all.
+  // Only replacing the WHOLE guard, outer check included, made this leg
+  // red. What this pins instead is the REAL, reachable fact: the timer
+  // door's own save body never carries a `deviceName` key
+  // (`handleSave`'s `submit()` call, `:1447`). The narrowing's actual
+  // backstop, if a future door ever does attach a name, is
+  // `server/logSource.test.ts`'s pre-existing "timer with a deviceName is
+  // refused" test — independent of this file, unaffected by this PR.
+  it("the timer door's save never attaches a deviceName", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-timer-no-devicename" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    // `mockBaselines()` mocks the `useBaselines` hook so this door's own
+    // save POST is the only recorded call (unrelated pre-existing quirk:
+    // without it, an isolated run of this door's OTHER save test also
+    // picks up a stray `/api/baselines` GET — order-dependent, nothing to
+    // do with RC-18, not touched here).
+    const logsCall = apiFn.mock.calls.find(([path]) => path === "/api/logs")!;
+    const body = JSON.parse(
+      (logsCall[1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body.source).toBe("timer");
     expect("deviceName" in body).toBe(false);
-    // Just Row unconnected spec (2026-09-02): `pm5` without a `deviceName`
-    // is a contradiction the server 400s (`server/logSource.ts`), and since
-    // the v0.35.0 sunset an ABSENT `source` is a 400 too — so the guard that
-    // drops the name restates the door as `manual` (the member the server
-    // used to derive for this body) and the save still goes through.
+  });
+
+  // Same fact, the manual door's own real body (`:2144`'s `submit()` call
+  // never sets `deviceName` either) — see the timer-door leg above for
+  // what was actually measured about the narrowing.
+  it("the manual door's save never attaches a deviceName", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-no-devicename" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    const body = parsedBodies(apiFn)[0]!;
     expect(body.source).toBe("manual");
+    expect("deviceName" in body).toBe(false);
   });
 
   // Series capture spec (2026-08-19), §3: the POST body attaches `series`

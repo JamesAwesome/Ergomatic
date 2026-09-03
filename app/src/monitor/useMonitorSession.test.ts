@@ -156,13 +156,16 @@ const DEVICE_NAME = "PM5 432331249";
 // every test in this file until this fixture grew real content.
 const TEST_SEED: { logSeed: LogSeed } = {
   logSeed: {
-    // `kind: "warmup"` is deliberate, not stale: Phase WU removed the
-    // producer, but `LogSeed` is PERSISTED, so a `MonitorRun` stored
-    // before Phase WU still carries this exact value. Keeping it here
-    // exercises `buildMonitorLogSteps`' legacy skip (`logDraft.ts`) —
-    // do not "modernize" this to a plain step, that changes what the
-    // function under test emits and moves assertions below.
-    steps: [{ label: "8:00 warm-up", kind: "warmup" }],
+    // Placeholder content only — neither this file nor the hook it drives
+    // imports `summaryModel.ts` (the hook's only session import is
+    // `import type { LogSeed }`, `:63`), so `warmupIndex` (RC-5's legacy-
+    // run detection) is unreachable from here regardless of what `kind`
+    // says, and the two `buildMonitorLogSteps` calls this file makes use a
+    // SEPARATE fixture (`ONE_IDENTITY` below), never this one. So this
+    // reads `"work"`, the only value door PR A's narrowed
+    // `LogSeed.steps[].kind` union admits and the only value anything has
+    // produced since Phase WU.
+    steps: [{ label: "8:00 warm-up", kind: "work" }],
     paces: { k6: 120 },
   },
 };
@@ -537,10 +540,14 @@ const ONE_INTERVAL: WorkoutProgram = {
     },
   ],
 };
-/** A seed whose one WORK step aligns with `ONE_INTERVAL`'s one interval —
- *  `TEST_SEED`'s placeholder is a warm-up, and `buildMonitorLogSteps`
- *  skips warm-ups, so a run seeded with it has no log step for the
- *  measured interval to land in. */
+/** ONE_INTERVAL's own seed, paired 1:1 with its single interval —
+ *  `buildMonitorLogSteps` requires `logSeed.steps.length ===
+ *  program.intervals.length` (the alignment contract, `LogSeed`'s own doc
+ *  comment) or it throws. `TEST_SEED` above happens to have the same
+ *  length, but it is never paired with `ONE_INTERVAL` at any call site
+ *  below — this fixture exists so every `programAndArm(..., ONE_INTERVAL,
+ *  ...)` call below names the seed it actually goes with, rather than
+ *  relying on that coincidence. */
 const ONE_IDENTITY: RunIdentity = {
   workoutId: "walk-day-2",
   title: "1:00",

@@ -388,7 +388,13 @@ export interface MonitorRun {
 // Connect, never this record's; `useMonitorSession` creates runs and never
 // loads one. The single production reader of a program that came back out
 // of localStorage is `session/logDraft.ts`'s `buildMonitorLogSteps`, and it
-// takes warm-up-ness from `logSeed.steps[i].kind` instead.
+// never reads `type` on the loaded PROGRAM at all — it takes warm-up-ness
+// from `logSeed.steps[i].kind` instead, behind an explicit cast since door
+// PR A (spec §4 rider 2) narrowed that union to the literal `"work"` while
+// KEEPING the legacy read. The other production consumer of the same
+// field, `session/summaryModel.ts`'s `warmupIndex`, is a SEPARATE
+// mechanism that likewise reads `run.logSeed` directly and never touches
+// `run.program` or `ProgramInterval.type`.
 //
 // **So the invariant to keep is "no reader of a LOADED program consults
 // `ProgramInterval.type`", not "the stored shape is current."** Adding
