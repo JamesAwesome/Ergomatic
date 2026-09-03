@@ -1249,7 +1249,7 @@ closed with zero Concept2 contact.
       disagreement test) — DONE (1.75a); per-surface redirect URIs — DONE
       (1.75a); the authenticated native exchange — DONE across both (`POST
       /api/concept2/exchange` at 1.75a; the device return that reaches it
-      at 1.75b, #<n>, on `ASWebAuthenticationSession`, NOT a URL scheme +
+      at 1.75b, #277, on `ASWebAuthenticationSession`, NOT a URL scheme +
       `appUrlOpen`); an authenticated web callback — DONE (1.75a);
       Concept2's approval of the native `redirect_uri` — log-dev DONE
       2026-09-02, **live portal STILL OWED**; dual-route identity tests —

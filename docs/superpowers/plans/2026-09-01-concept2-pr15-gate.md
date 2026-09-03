@@ -680,7 +680,7 @@ option as settled.**
 > lacking a surface column, or mint as raceable describes the PRE-1.75a
 > code and is kept as the record the ruling was drawn from. The native
 > return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's.
-> **COMPLETED 2026-09-02 by PR1.75b (#<n>):** the native return is BUILT
+> **COMPLETED 2026-09-02 by PR1.75b (#277):** the native return is BUILT
 > on `ASWebAuthenticationSession` and walked on device; option (g)'s
 > code-side precondition is now met in full. The activation gate itself
 > stays closed on the flag flip, live-portal registration and PR2.
@@ -979,7 +979,7 @@ alone.**
 > lacking a surface column, or mint as raceable describes the PRE-1.75a
 > code and is kept as the record the ruling was drawn from. The native
 > return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's.
-> **COMPLETED 2026-09-02 by PR1.75b (#<n>):** the native return is BUILT
+> **COMPLETED 2026-09-02 by PR1.75b (#277):** the native return is BUILT
 > on `ASWebAuthenticationSession` and walked on device; option (g)'s
 > code-side precondition is now met in full. The activation gate itself
 > stays closed on the flag flip, live-portal registration and PR2.
@@ -1091,7 +1091,7 @@ principal, matching what it actually proves.
 > lacking a surface column, or mint as raceable describes the PRE-1.75a
 > code and is kept as the record the ruling was drawn from. The native
 > return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's.
-> **COMPLETED 2026-09-02 by PR1.75b (#<n>):** the native return is BUILT
+> **COMPLETED 2026-09-02 by PR1.75b (#277):** the native return is BUILT
 > on `ASWebAuthenticationSession` and walked on device; option (g)'s
 > code-side precondition is now met in full. The activation gate itself
 > stays closed on the flag flip, live-portal registration and PR2.
