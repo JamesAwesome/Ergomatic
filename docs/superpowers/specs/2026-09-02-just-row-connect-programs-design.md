@@ -1,10 +1,9 @@
 # Connect puts the erg into a Just Row session — design
 
-**Status: spec REV 2, 2026-09-02. Gate 0 PASSED on rev 1c (James: copy A is
-`The clock starts on your first stroke.`). The antagonist's full pass
-(wire semantics) is folded: the frame HELD byte for byte; the readback
-verification was FALSIFIED — rev 2 removes it and with it copy B and the
-transient state. No stored shape.**
+**Status: spec REV 2, 2026-09-02, HARDENING. Gate 0 PASSED on rev 1c
+(James: the Ready line is `The clock starts on your first stroke.`). No
+stored shape. Antagonist anchor pass folded; `harden` running (lens 1
+delta on the fixes, lens 2 on the prescribed blocks).**
 Phase JR follow-on item 2, re-confirmed by James 2026-09-02 ("i do want
 item 2"). Handoff: `docs/design/handoffs/2026-09-02-just-row-connect/`.
 
@@ -32,19 +31,21 @@ the machine did not take it.
 - **The type byte is what the machine picks for itself — and it is ALSO
   the machine's idle default, so it verifies nothing.** Decoded from
   `docs/monitor/sessions/walk-2026-08-31-justrow/just-row-pm5-recording-1788214688045.jsonl.gz`
-  (0x0031 offset 6, `parse.ts:130`): at a VIRGIN main menu `workoutType = 0`
-  (`PRE_ARM_BASELINE_STRUCTURE`, "before anything has ever been armed");
-  from the first pull `1`; and after the Menu end, 105 consecutive idle
-  frames read `type = 1, state = 0` with nothing sent by anyone. This
+  (0x0031 offset 6, `parse.ts:130`; census by
+  `docs/monitor/sessions/walk-2026-08-31-justrow/decode-0031.py`, run
+  against that file — the counts are its output, not transcribed): at a
+  VIRGIN main menu `workoutType = 0` (`PRE_ARM_BASELINE_STRUCTURE`, "before
+  anything has ever been armed"); from the first pull `1`; and after the
+  Menu end the idle frames read `type = 1, state = 0` with nothing sent by
+  anyone. This
   repo already names that shape: `statusFrames.ts:131-135`
   `EMPTY_ARM_STRUCTURE = { workoutType: 1, durationRaw: 0, durationType: 128 }`
   — "session 4a's captured empty-arm anatomy", the signature of a PM5 that
   armed NOTHING — and `driver.ts:4963` records that `sendPrepare()`'s own
-  terminate drives the machine into exactly it. Rev 1 read the first 94
-  frames of the capture and proposed `type === 1 && armed` as proof of our
-  program; the antagonist decoded the whole file. **A verification whose
+  terminate drives the machine into exactly it. **A verification whose
   preceding step manufactures its own pass condition is not a
-  verification.** The only field that would answer "is the Just Row
+  verification** — the technique that caught it is in the antagonist
+  ledger (2026-09-02). The only field that would answer "is the Just Row
   SCREEN up" is `CSAFE_PM_GET_SCREENSTATESTATUS` (CSAFE-DEF p.65 via
   §19.6: a `SetScreenState` ack means "posted for processing by the UI
   task"), a read command this codebase has never sent — out of scope
@@ -77,11 +78,12 @@ the machine did not take it.
 ## Rulings
 
 1. Send Concept2's p.80 frame, byte for byte (`buildJustRowProgram()`
-   returns exactly it; a test pins the literal including the checksum —
-   the antagonist ran the real framer over the two units and got
-   `F1 76 07 01 01 01 13 02 01 01 61 F2`, wrapper count `07`, checksum
-   `0x61`, HELD).
-2. **No readback verification** (rev 2; rev 1's was falsified above). The
+   returns exactly it; a test pins the literal including the checksum;
+   the real framer over the two units yields
+   `F1 76 07 01 01 01 13 02 01 01 61 F2` — wrapper count `07`, checksum
+   `0x61`).
+2. **No readback verification** (see Research: the readback is the idle
+   default). The
    send's outcome — acked, NAK'd, timed out, link dropped — goes to the
    ring as `free-row-program-sent` / `free-row-program-failed` with the hex
    trace, and nothing on the phone branches on it. The free row proceeds
