@@ -40,6 +40,7 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
+import { releasingSchedule } from "../test/statusSubscriptions";
 import { loadMonitorRun, MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
 import {
   resetForTests as resetHandoffStore,
@@ -379,7 +380,14 @@ function harness(
       driverOptions: {
         settleTicks: 0,
         prepareSettleTicks: 0,
-        schedule: () => (): void => undefined,
+        // `releasingSchedule` rather than a bare stub (connect-latency
+        // design spec 2026-09-03): the driver's status subscriptions now
+        // wait for the first acked CSAFE sequence or for a fallback on
+        // this very seam, and a stub that swallows every timer leaves a
+        // connect that never arms — or one whose fake never acks — hearing
+        // nothing at all. The wrapper fires that first timer and swallows
+        // the rest, exactly as before.
+        schedule: releasingSchedule(() => (): void => undefined),
       },
       // TIMER HYGIENE, the identical reasoning one field up (storage-spine
       // design spec §2's late side, Task 3): `teardown` now arms its own
@@ -1902,7 +1910,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
           driverOptions: {
             settleTicks: 0,
             prepareSettleTicks: 0,
-            schedule: () => (): void => undefined,
+            schedule: releasingSchedule(() => (): void => undefined),
           },
           // No `schedule` override here — this hook-level default
           // fallback (real `setTimeout`) is the exact seam under test.
@@ -2206,7 +2214,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: () => driverMs,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -2351,7 +2359,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: () => driverMs,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -2458,7 +2466,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -2560,7 +2568,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -2975,7 +2983,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
           driverOptions: {
             settleTicks: 0,
             prepareSettleTicks: 0,
-            schedule: driverTimer.schedule,
+            schedule: releasingSchedule(driverTimer.schedule),
           },
         },
       );
@@ -3083,7 +3091,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -3894,7 +3902,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -3999,7 +4007,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
           driverOptions: {
             settleTicks: 0,
             prepareSettleTicks: 0,
-            schedule: driverTimer.schedule,
+            schedule: releasingSchedule(driverTimer.schedule),
           },
         },
       );
@@ -4080,7 +4088,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: () => driverMs,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4221,7 +4229,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4294,7 +4302,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4371,7 +4379,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: () => driverMs,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4489,7 +4497,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4647,7 +4655,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4759,7 +4767,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4848,7 +4856,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -5382,7 +5390,7 @@ describe('Whole-branch review B1: End under a watchdog-fired banner (phase still
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -5458,7 +5466,7 @@ describe('Whole-branch review B1: End under a watchdog-fired banner (phase still
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -5668,6 +5676,7 @@ describe("RC-37: the programDropped consumer guard, outside programming/ready", 
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: clock.now,
+          schedule: releasingSchedule(),
         },
       }),
     );
@@ -6102,6 +6111,7 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: clock.now,
+          schedule: releasingSchedule(),
         },
       }),
     ).result;
@@ -6428,7 +6438,7 @@ describe("useMonitorSession: failures", () => {
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -6473,7 +6483,7 @@ describe("useMonitorSession: failures", () => {
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -7043,7 +7053,7 @@ describe("Review round 3, item 1: sessionId is collision-resistant across a full
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -7235,7 +7245,7 @@ describe("Review round 5, item 1: a cancelled pre-GATT attempt cannot clone the 
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
         burstLingerSchedule: () => (): void => undefined,
       }),
@@ -7320,7 +7330,11 @@ describe("useMonitorSession: the seams and their defaults", () => {
       useMonitorSession({
         createTransport: () => fake,
         createLog: () => log,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
     const before = Date.now();
@@ -8697,7 +8711,11 @@ describe("useMonitorSession: exportLog", () => {
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -8726,7 +8744,11 @@ describe("useMonitorSession: exportLog", () => {
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
     await connect(result);
@@ -8759,7 +8781,11 @@ describe("useMonitorSession: exportLog", () => {
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
     await connect(result);
@@ -9303,7 +9329,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
       useMonitorSession({
         createTransport: () => transport,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9354,7 +9384,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
         requestStoragePersistence: false,
       }),
     );
@@ -9387,7 +9421,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9418,7 +9456,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9452,7 +9494,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9487,7 +9533,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9823,7 +9873,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -9917,7 +9967,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -9977,7 +10027,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -10054,7 +10104,7 @@ describe("Phase LL Task 2: the banner's hysteresis, through the real hook compos
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -10261,7 +10311,7 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -10314,7 +10364,10 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       program: TWO_INTERVALS,
     });
     const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({ createTransport: () => fake }),
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        driverOptions: { schedule: releasingSchedule() },
+      }),
     );
 
     await act(async () => {
@@ -10367,7 +10420,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -10459,7 +10516,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -10528,7 +10589,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -10617,7 +10682,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -10739,7 +10808,10 @@ describe("Whole-branch review minor 1: the native lifecycle unsub race, driven w
       program: TWO_INTERVALS,
     });
     const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({ createTransport: () => fake }),
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        driverOptions: { schedule: releasingSchedule() },
+      }),
     );
 
     // ATTEMPT 1: connects (registers its own pending native listener),
@@ -11159,7 +11231,11 @@ describe("Phase LL Task 4: the continuity consumption seam, through the real hoo
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await connect(result);
     await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
@@ -11382,7 +11458,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -11509,7 +11585,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -11601,7 +11677,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -11712,7 +11788,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -11824,7 +11900,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -11966,7 +12042,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
         seriesFlushSchedule: flushTimer.schedule,
       }),
@@ -12100,7 +12176,11 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result, unmount } = renderHook(() => freshUseMonitorSession());
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -12211,7 +12291,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -12662,7 +12742,7 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -13035,7 +13115,11 @@ describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result, unmount } = renderHook(() => freshUseMonitorSession());
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -13300,6 +13384,7 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: clock.now,
+          schedule: releasingSchedule(),
         },
       }),
     );
@@ -13446,7 +13531,7 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 2), rescoped round 3 item 3: 
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -13505,7 +13590,7 @@ describe("Final whole-branch review, item 1: one burst-eligible session consumes
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );

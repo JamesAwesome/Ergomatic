@@ -77,6 +77,7 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { createEventLog } from "./eventLog";
 import { createPm5Driver } from "./driver";
+import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { createSeriesRecorder } from "./seriesRecorder.js";
 
 // ---------------------------------------------------------------------------
@@ -416,7 +417,7 @@ async function armProgram(h: Harness, p: WorkoutProgram): Promise<void> {
 async function programmed(p: WorkoutProgram): Promise<Harness> {
   const transport = stubTransport();
   const log = createEventLog();
-  const driver = createPm5Driver(transport, log, {});
+  const driver = createSubscribedDriver(transport, log, {});
   const events: MonitorEvent[] = [];
   driver.events((e) => events.push(e));
   const h: Harness = { transport, log, driver, events, program: p };

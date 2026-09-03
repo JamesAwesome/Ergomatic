@@ -35,7 +35,7 @@ import { buildRun, type EnginePhase } from "../../session/engine";
 import { totalSessionSecondsOf } from "../../session/Timer";
 import { targetSplitDisplay } from "../../session/TimerTargets";
 import { createEventLog } from "../../monitor/eventLog";
-import { createPm5Driver } from "../../monitor/driver";
+import { createSubscribedDriver } from "../../test/statusSubscriptions";
 import { parseRecording } from "../../monitor/transports/recording";
 import { createReplayTransport } from "../../monitor/transports/replay";
 import {
@@ -2981,7 +2981,7 @@ async function replaySession2(): Promise<DriverFrameSample[]> {
   await replay.transport.connect(dev.id);
 
   const log = createEventLog();
-  const driver = createPm5Driver(replay.transport, log, {
+  const driver = createSubscribedDriver(replay.transport, log, {
     deviceName: dev.name,
     now: () => replay.clock.now(),
     schedule: (cb, ms) => replay.clock.schedule(cb, ms),
@@ -3405,7 +3405,7 @@ async function replayPyramid(): Promise<
   const [dev] = await replay.transport.scan();
   await replay.transport.connect(dev.id);
   const log = createEventLog();
-  const driver = createPm5Driver(replay.transport, log, {
+  const driver = createSubscribedDriver(replay.transport, log, {
     deviceName: dev.name,
     now: () => replay.clock.now(),
     schedule: (cb, ms) => replay.clock.schedule(cb, ms),
