@@ -149,6 +149,30 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     // than a synthetic frame or two: no divergence escalation and no
     // phantom intervals across a real row with a real auto-split in it.
     expect(replayResult.divergences).toStrictEqual([]);
+
+    // THE SEND, witnessed by the ring (spec 2026-09-02, exit criterion 3).
+    // The replay transport resolves every write and never acks, so the
+    // p.80 frame goes out ONCE and its send is abandoned at the driver's
+    // deadline — `run()` drove that deadline itself, since the hook's
+    // `driverOptions.schedule` above IS `replay.clock.schedule` and the
+    // capture spans some 400 s of virtual time. The frame literal is typed
+    // from `docs/monitor/pm5-interface-notes.md:204`, never built. The
+    // hook's `exportLog()` is the same string the diagnostics door copies.
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const ringKinds = ring.map((e) => e.kind);
+    expect(
+      ring.filter((e) => e.kind === "write").map((e) => e.detail),
+    ).toStrictEqual(["f1 76 07 01 01 01 13 02 01 01 61 f2"]);
+    expect(ringKinds.indexOf("free-row-open")).toBeGreaterThanOrEqual(0);
+    expect(ringKinds.indexOf("write")).toBeGreaterThan(
+      ringKinds.indexOf("free-row-open"),
+    );
+    expect(ringKinds).toContain("free-row-program-unanswered");
+    expect(ringKinds).not.toContain("free-row-program-sent");
+    expect(ringKinds).not.toContain("free-row-program-failed");
     const record = freshStore.currentUnretired()?.run;
     expect(record).toBeDefined();
     expect(record?.mode).toBe("justrow");

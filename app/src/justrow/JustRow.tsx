@@ -306,7 +306,7 @@ export default function JustRow() {
         </h1>
         <p className="connected-body-line">
           {ready
-            ? "Nothing is programmed. The monitor keeps its own time, and the clock starts on your first stroke."
+            ? "The clock starts on your first stroke."
             : "Wake the monitor if its screen is dark."}
         </p>
         {ready && (
