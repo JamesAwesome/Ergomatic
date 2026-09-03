@@ -14503,6 +14503,13 @@ describe("Door PR B Task 3 (§5.3): the in-flight reading, banked at close", () 
     // I-B2 again, this time with a real actual in the record beside it.
     expect(run?.actuals).toHaveLength(1);
     expect(measuredIntervalCount(run!.actuals)).toBe(1);
+    // ...and the ring says `m=0`, not `m=none`: the diagnostic's fallback is
+    // `??`, which fires only on null/undefined. A `||` there would read a
+    // banked zero as "nothing was kept" — the same floor this leg exists to
+    // refuse, one layer over.
+    const written = ring(result).filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=1 m=0 s=61");
   });
 
   it("program()'s own clear: a re-armed run's close carries no stale reading from the run before it", async () => {

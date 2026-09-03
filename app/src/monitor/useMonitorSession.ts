@@ -1825,10 +1825,13 @@ export function useMonitorSession(
    *  CLOSES the run it is replacing (`program-failed`) with the reading
    *  still set — which is why its clear sits after that close, and why its
    *  leg lives with the read that can observe it (the close-site legs,
-   *  added alongside `withPartial`'s call in `closeRecord`). The same
-   *  "latent today, since no UI path re-programs" caveat `rowingStreakRef`'s
-   *  own clear carries at the top of that function applies to the SUCCESS
-   *  half; the catch half is exercised by this file's own P3b tests.
+   *  added alongside `withPartial`'s call in `closeRecord`). BOTH halves of
+   *  `program()`'s clear are gated, MEASURED (Task 3's report): the catch
+   *  half by the `program-failed` producer leg, which goes red when the
+   *  clear is moved back to the top of this function; the SUCCESS half by a
+   *  re-arm driven through this hook's own `program()` — the phase guard
+   *  admits it, so the "latent today, since no UI path re-programs" caveat
+   *  `rowingStreakRef`'s own clear carries is about the UI, not the hook.
    *  The other FIVE are DEFENSIVE and ungated by design, each stated so at
    *  its own site rather than given a test that could not go red (RF21):
    *  - the RC-37 exit: its live arm returns first, and its own guard admits
