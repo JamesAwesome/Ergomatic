@@ -1888,6 +1888,21 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **FILED (PR2 copy pass, 2026-09-03): the four device-open link failures
+  now reach no diagnosis on a plain build.** James's copy ruling made every
+  rendered string mechanical, which removed the wire token from
+  `describeFailure`'s reason line — so `noWindow`, `noContext`,
+  `contextInvalid` and `pluginError` all read "THIS DEVICE COULDN'T OPEN
+  CONCEPT2" with no code. On dev and walk builds `Concept2LinkProbe`'s
+  `outcomeDetail` still prints the kind, the plugin `code` and its
+  `message`; on a TestFlight build the probe is not compiled in and, per
+  that component's own header, those values "reach no server log". Accepted
+  for PR2: these are plumbing failures a rower cannot act on differently,
+  and the copy ruling is explicit. Owed: the last link failure surfaced in
+  the Diagnostics door (`app/src/you/Diagnostics.tsx`, whose header already
+  calls itself "the extensible home for every diagnostic tool that
+  follows"), or the same detail attached to a send/link server log. Rides
+  the next PR touching the Concept2 surface or Diagnostics. **XS**
 - **FILED (door PR A's PM gate, 2026-09-02): the server tsconfig now
   includes a client file, and no lint fence stops `server/` importing
   `src/`.** `app/tsconfig.server.json`'s `include` reads

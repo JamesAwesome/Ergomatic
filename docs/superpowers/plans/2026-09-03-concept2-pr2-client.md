@@ -472,7 +472,7 @@ describe("describeFailure (Gate 0 amendment, the LinkOutcome table)", () => {
   it("gives a declined link its own line, not the generic one", () => {
     const failure = describeFailure({ kind: "declined", stateEchoed: false });
     expect(failure?.line).toBe(
-      "You cancelled at Concept2. Nothing was linked, nothing was saved.",
+      "You cancelled at Concept2. Nothing was linked.",
     );
     expect(failure?.reason).toBe("DECLINED AT CONCEPT2");
   });
@@ -495,7 +495,7 @@ describe("describeFailure (Gate 0 amendment, the LinkOutcome table)", () => {
       stateEchoed: true,
     });
     expect(other?.line).toBe(FAILED_LINE);
-    expect(other?.reason).toBe("CONCEPT2 REFUSED THE EXCHANGE · 400");
+    expect(other?.reason).toBe("CONCEPT2 REFUSED THE LINK · 400");
   });
 
   it("carries the status into the reason for every server-hop failure", () => {
@@ -509,11 +509,25 @@ describe("describeFailure (Gate 0 amendment, the LinkOutcome table)", () => {
     ).toBe("ERGOMATIC'S SERVER DIDN'T ANSWER · 502");
   });
 
-  it("carries the plugin's own code, which reaches no server log at all", () => {
-    expect(
-      describeFailure({ kind: "pluginError", code: "cannotStart", message: "x" })
-        ?.reason,
-    ).toBe("THIS DEVICE COULDN'T OPEN CONCEPT2 · CANNOTSTART");
+  it("puts NO wire token in the reason, for any of the four device failures", () => {
+    // James, 2026-09-03: the copy is mechanical, and a token is not copy.
+    // All four members read one sentence; the failing kind and the plugin's
+    // own code stay OUT of it. The literals below are independent of the
+    // production symbols on purpose (RF21's first smell) — building the
+    // expectation from `outcome.kind` would pass whatever the code did.
+    const four: LinkOutcome[] = [
+      { kind: "noWindow" },
+      { kind: "noContext" },
+      { kind: "contextInvalid" },
+      { kind: "pluginError", code: "cannotStart", message: "x" },
+    ];
+    for (const outcome of four) {
+      const reason = describeFailure(outcome)?.reason;
+      expect(reason).toBe("THIS DEVICE COULDN'T OPEN CONCEPT2");
+      expect(reason).not.toMatch(
+        /CANNOTSTART|NOWINDOW|NOCONTEXT|CONTEXTINVALID/,
+      );
+    }
   });
 
   it("uses no em-dash in any user-facing string (house style)", () => {
@@ -1042,7 +1056,7 @@ import type { Concept2Link } from "../api/useConcept2Link";
 /** Board 1e, verbatim and gate-approved. Every failure that is not
  *  specifically about the rower's own choice reads this line. */
 export const FAILED_LINE =
-  "The connection didn't complete. Nothing was linked, nothing was saved.";
+  "The connection didn't complete. Nothing was linked.";
 
 export interface LinkFailure {
   line: string;
@@ -1108,11 +1122,11 @@ export function describeFailure(outcome: LinkOutcome): LinkFailure | null {
           };
     case "declined":
       return {
-        line: "You cancelled at Concept2. Nothing was linked, nothing was saved.",
+        line: "You cancelled at Concept2. Nothing was linked.",
         reason: "DECLINED AT CONCEPT2",
       };
     case "abandoned":
-      return { line: FAILED_LINE, reason: "THE BROWSER LEFT THE LINK" };
+      return { line: FAILED_LINE, reason: "THE BROWSER LEFT CONCEPT2" };
     case "stateMismatch":
       return {
         line: FAILED_LINE,
@@ -1131,7 +1145,7 @@ export function describeFailure(outcome: LinkOutcome): LinkFailure | null {
           }
         : {
             line: FAILED_LINE,
-            reason: `CONCEPT2 REFUSED THE EXCHANGE · ${String(outcome.status)}`,
+            reason: `CONCEPT2 REFUSED THE LINK · ${String(outcome.status)}`,
           };
     case "serverError":
       return {
@@ -1145,17 +1159,36 @@ export function describeFailure(outcome: LinkOutcome): LinkFailure | null {
       };
     case "networkError":
       return { line: FAILED_LINE, reason: "NO CONNECTION" };
+    // Four members, one sentence, and NO token appended. An earlier
+    // revision rendered `outcome.kind.toUpperCase()`, which put "NOWINDOW",
+    // "NOCONTEXT" and "CONTEXTINVALID" on a rower's screen, and
+    // `outcome.code.toUpperCase()` put a Capacitor plugin's own error code
+    // there — the same defect as the eligibility tokens, one surface over.
+    // All four mean the identical thing to the person holding the phone:
+    // this device could not open Concept2.
+    //
+    // WHERE THE DETAIL GOES, stated exactly rather than assumed. On a dev
+    // or walk build, `Concept2LinkProbe`'s `outcomeDetail` already prints
+    // the kind plus the plugin's `code` and `message` verbatim, and those
+    // builds are where these four members actually get hit. On a plain
+    // TestFlight build the probe is not compiled in (`You.tsx` gates it on
+    // `import.meta.env.DEV || VITE_ENABLE_C2_LINK_PROBE === "1"`), the link
+    // flow posts nothing to our server on this path, and the probe's own
+    // header says so: the code and message "reach no server log". So
+    // dropping the token from the copy DOES cost a production diagnosis for
+    // these four, and that is accepted here rather than papered over:
+    // James's copy ruling is explicit, the four are plumbing failures a
+    // rower cannot act on differently, and the durable fix is a Diagnostics
+    // entry carrying the last link failure — filed in ROADMAP as a
+    // follow-on rather than smuggled into this PR. Do not write a comment
+    // claiming a log that does not exist.
     case "noWindow":
     case "noContext":
     case "contextInvalid":
-      return {
-        line: FAILED_LINE,
-        reason: `THIS DEVICE COULDN'T OPEN CONCEPT2 · ${outcome.kind.toUpperCase()}`,
-      };
     case "pluginError":
       return {
         line: FAILED_LINE,
-        reason: `THIS DEVICE COULDN'T OPEN CONCEPT2 · ${outcome.code.toUpperCase()}`,
+        reason: "THIS DEVICE COULDN'T OPEN CONCEPT2",
       };
   }
 }
@@ -3650,7 +3683,7 @@ describe("Concept2Card outcomes (Gate 0 amendment 1e/1f/1g)", () => {
       await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
     );
     expect(
-      await screen.findByText("REASON: CONCEPT2 REFUSED THE EXCHANGE · 502"),
+      await screen.findByText("REASON: CONCEPT2 REFUSED THE LINK · 502"),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
@@ -4597,7 +4630,7 @@ describe("readSendResponse (409 carries THREE meanings, 422 carries TWO; never k
       readSendResponse(422, { error: "not_eligible", reason: "not_finished" }),
     ).toStrictEqual({
       kind: "failed",
-      reason: "CONCEPT2 WON'T TAKE THIS ROW · NOT FINISHED",
+      reason: "CONCEPT2 WON'T TAKE THIS ROW · DIDN'T FINISH",
     });
   });
 
@@ -4944,6 +4977,31 @@ function noWeightCopy(reason: unknown): { line: string; reason: string } {
   }
 }
 
+/** The three eligibility tokens `eligibilityFailure` can return, each with
+ *  words written for a rower rather than transliterated from the enum.
+ *  `not_monitor` is "NO MONITOR USED" because the row's `source` is not
+ *  `pm5` — nothing was connected when it was rowed; `not_finished` is
+ *  "DIDN'T FINISH" because `endedBy` is not `finished` (terminated, or no
+ *  ending recorded at all); `no_work_totals` is "NO WORK TIME OR METERS"
+ *  because `workSeconds`/`workMeters` are null, and those are the two
+ *  numbers the send block's own helper says it sends.
+ *
+ *  A switch, not a `Record`, for the reason `noWeightCopy` gives: a
+ *  `reason in TABLE` guard over a `Record<string, X>` admits
+ *  `Object.prototype` keys and the compiler hides the `undefined`. */
+function notEligibleReason(reason: unknown): string {
+  switch (reason) {
+    case "not_monitor":
+      return "NO MONITOR USED";
+    case "not_finished":
+      return "DIDN'T FINISH";
+    case "no_work_totals":
+      return "NO WORK TIME OR METERS";
+    default:
+      return "NOT ELIGIBLE";
+  }
+}
+
 /**
  * `POST /api/concept2/results/:logId`'s answer -> the block's state.
  *
@@ -5000,6 +5058,17 @@ export function readSendResponse(status: number, body: unknown): SendState {
     const copy = noWeightCopy(field(body, "reason"));
     return { kind: "noWeight", line: copy.line, reason: copy.reason };
   }
+  // A WRITTEN PHRASE PER TOKEN, never the token itself (James, 2026-09-03:
+  // "'REASON: CONCEPT2 WON'T TAKE THIS ROW · NO MONITOR USED' is a bit
+  // awkward"). An earlier revision rendered
+  // `reason.toUpperCase().replace(/_/g, " ")`, which is a machine
+  // transliteration of a wire token wearing the costume of copy: it read
+  // "NOT MONITOR" because the server's enum member is `not_monitor`, and
+  // nobody chose those words for a rower. Every token this route can send
+  // gets a phrase written for the person reading it; an unrecognised token
+  // says NOT ELIGIBLE and the token itself goes to the send's log line,
+  // where a diagnosis belongs, rather than onto the screen.
+  //
   // `not_eligible` is NOT one of the `gone` cases, and folding it in with
   // them was a defect: `unlinked` and `unavailable` mean the block's own
   // preconditions stopped holding and it should not be on screen at all. A
@@ -5011,14 +5080,11 @@ export function readSendResponse(status: number, body: unknown): SendState {
   // nobody. It is a failure, it names itself, and the divergence becomes
   // visible in the field rather than only in CI.
   if (error === "not_eligible") {
-    const reason = field(body, "reason");
     return {
       kind: "failed",
-      reason: `CONCEPT2 WON'T TAKE THIS ROW · ${
-        typeof reason === "string"
-          ? reason.toUpperCase().replace(/_/g, " ")
-          : "NOT ELIGIBLE"
-      }`,
+      reason: `CONCEPT2 WON'T TAKE THIS ROW · ${notEligibleReason(
+        field(body, "reason"),
+      )}`,
     };
   }
   if (status === 404) return { kind: "failed", reason: "THIS ROW IS GONE" };
@@ -5908,7 +5974,7 @@ describe("Concept2SendBlock refusals (amendment 2d/2e/2f)", () => {
     );
     expect(
       await screen.findByText(
-        "REASON: CONCEPT2 WON'T TAKE THIS ROW · NO WORK TOTALS",
+        "REASON: CONCEPT2 WON'T TAKE THIS ROW · NO WORK TIME OR METERS",
       ),
     ).toBeTruthy();
   });

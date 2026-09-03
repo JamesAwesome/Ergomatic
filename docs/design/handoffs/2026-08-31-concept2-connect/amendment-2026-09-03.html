@@ -711,6 +711,29 @@
           &quot;copy is final as rendered&quot; note for these strings.</td>
       </tr>
       <tr>
+        <td class="num">12</td>
+        <td>Three REASON lines end in a wire token, uppercased:
+          &quot;&hellip; &middot; NOT MONITOR&quot; from
+          <code>not_monitor</code>, and &quot;&hellip; &middot;
+          NOWINDOW&quot; / &quot;&hellip; &middot; CANNOTSTART&quot; from a
+          <code>LinkOutcome</code> kind and a Capacitor error code.</td>
+        <td><strong>Every token gets words written for a rower, or is
+          dropped.</strong> NO MONITOR USED &middot; DIDN'T FINISH &middot; NO
+          WORK TIME OR METERS for the three eligibility tokens; one sentence,
+          &quot;THIS DEVICE COULDN'T OPEN CONCEPT2&quot;, for all four
+          device-open failures. Also &quot;CONCEPT2 REFUSED THE LINK&quot;, not
+          &quot;THE EXCHANGE&quot; (an OAuth word, not a rowing one), and
+          &quot;THE BROWSER LEFT CONCEPT2&quot;.</td>
+        <td><strong>James, 2026-09-03:</strong> &quot;'REASON: CONCEPT2 WON'T
+          TAKE THIS ROW &middot; NOT MONITOR' is a bit awkward &hellip; I'd
+          check for similar prose awkwardness.&quot; It read that way because
+          nobody wrote it: the line appended
+          <code>reason.toUpperCase().replace(/_/g, " ")</code>, so an enum
+          member became copy. <strong>Cost, stated:</strong> the plugin code no
+          longer shows on a plain build, where nothing else carries it. Filed
+          in ROADMAP as a Diagnostics entry rather than kept on screen.</td>
+      </tr>
+      <tr>
         <td class="num">8</td>
         <td>2i offers only &quot;OPEN CONCEPT2 PROFILE&quot;, pointed at
           <code>{origin}/profile/{id}</code>, with one sentence for every
@@ -1119,10 +1142,9 @@
             <div class="panel">
               <p class="panel-label">THE LINK DIDN'T FINISH</p>
               <p class="panel-line">
-                The connection didn't complete. Nothing was linked, nothing was
-                saved.
+                The connection didn't complete. Nothing was linked.
               </p>
-              <p class="panel-reason">REASON: CONCEPT2 REFUSED THE EXCHANGE &middot; 502</p>
+              <p class="panel-reason">REASON: CONCEPT2 REFUSED THE LINK &middot; 502</p>
             </div>
             <div class="btn-outline" style="min-height: 52px">Try again</div>
           </div>
@@ -1134,7 +1156,7 @@
             <div class="panel">
               <p class="panel-label">THE LINK DIDN'T FINISH</p>
               <p class="panel-line">
-                You cancelled at Concept2. Nothing was linked, nothing was saved.
+                You cancelled at Concept2. Nothing was linked.
               </p>
               <p class="panel-reason">REASON: DECLINED AT CONCEPT2</p>
             </div>
@@ -1169,10 +1191,9 @@
             <div class="panel">
               <p class="panel-label">THE LINK DIDN'T FINISH</p>
               <p class="panel-line">
-                The connection didn't complete. Nothing was linked, nothing was
-                saved.
+                The connection didn't complete. Nothing was linked.
               </p>
-              <p class="panel-reason">REASON: CONCEPT2 REFUSED THE EXCHANGE &middot; 502</p>
+              <p class="panel-reason">REASON: CONCEPT2 REFUSED THE LINK &middot; 502</p>
             </div>
             <div class="btn-outline" style="min-height: 52px">Try again</div>
           </div>
@@ -1186,14 +1207,14 @@
       <tr><th>LinkOutcome</th><th>Card state</th><th>Panel line</th><th>REASON line</th></tr>
       <tr><td class="num">linked</td><td>1c</td><td>&mdash;</td><td>&mdash;</td></tr>
       <tr><td class="num">navigating</td><td>1b</td><td>Approve access on Concept2's page.</td><td>&mdash;</td></tr>
-      <tr><td class="num">declined</td><td>1e</td><td>You cancelled at Concept2. Nothing was linked, nothing was saved.</td><td>DECLINED AT CONCEPT2</td></tr>
+      <tr><td class="num">declined</td><td>1e</td><td>You cancelled at Concept2. Nothing was linked.</td><td>DECLINED AT CONCEPT2</td></tr>
       <tr><td class="num">cancelled</td><td>1a</td><td>&mdash; (returns to the unlinked card; the rower dismissed the sheet themselves)</td><td>&mdash;</td></tr>
       <tr><td class="num">abandoned</td><td>1e</td><td>board copy</td><td>THE BROWSER LEFT THE LINK</td></tr>
       <tr><td class="num">updateRequired</td><td>1g</td><td>Update Ergomatic to link your Concept2 account.</td><td>&mdash;</td></tr>
       <tr><td class="num">stateMismatch</td><td>1e</td><td>board copy</td><td>THE RETURN DIDN'T MATCH THIS ATTEMPT</td></tr>
       <tr><td class="num">malformed</td><td>1e</td><td>board copy</td><td>CONCEPT2 SENT SOMETHING WE COULDN'T READ</td></tr>
       <tr><td class="num">exchangeFailed &middot; error <code>already_linked_elsewhere</code></td><td>1e</td><td>That Concept2 account is already connected to a different Ergomatic account.</td><td>ALREADY LINKED ELSEWHERE &middot; 409</td></tr>
-      <tr><td class="num">exchangeFailed &middot; any other error</td><td>1e</td><td>board copy</td><td>CONCEPT2 REFUSED THE EXCHANGE &middot; &lt;status&gt;</td></tr>
+      <tr><td class="num">exchangeFailed &middot; any other error</td><td>1e</td><td>board copy</td><td>CONCEPT2 REFUSED THE LINK &middot; &lt;status&gt;</td></tr>
       <tr><td class="num">serverError</td><td>1e</td><td>board copy</td><td>ERGOMATIC'S SERVER DIDN'T ANSWER &middot; &lt;status&gt;</td></tr>
       <tr><td class="num">mintFailed</td><td>1e</td><td>board copy</td><td>COULDN'T START THE LINK &middot; &lt;status&gt;</td></tr>
       <tr><td class="num">networkError</td><td>1e</td><td>board copy</td><td>NO CONNECTION</td></tr>
@@ -2115,7 +2136,7 @@
               The send didn't reach Concept2.
             </p>
             <p class="panel-reason">
-              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NOT FINISHED
+              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; DIDN'T FINISH
             </p>
             <div class="btn-outline">Retry send</div>
           </div>
@@ -2128,7 +2149,7 @@
               The send didn't reach Concept2.
             </p>
             <p class="panel-reason">
-              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NO WORK TOTALS
+              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NO WORK TIME OR METERS
             </p>
             <div class="btn-outline">Retry send</div>
           </div>
@@ -2151,7 +2172,7 @@
               The send didn't reach Concept2.
             </p>
             <p class="panel-reason">
-              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NOT MONITOR
+              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NO MONITOR USED
             </p>
             <div class="btn-outline">Retry send</div>
           </div>
@@ -2160,11 +2181,19 @@
       </div>
     </div>
     <div class="callout">
-      <p><strong>The reason text is the server's own word, uppercased with its
-      underscores opened out.</strong> <code>eligibilityFailure</code> returns
-      exactly three: <code>not_monitor</code>, <code>not_finished</code>,
-      <code>no_work_totals</code> &mdash; rendered NOT MONITOR, NOT FINISHED,
-      NO WORK TOTALS. A 422 carrying no reason at all reads NOT ELIGIBLE.
+      <p><strong>A written phrase per token, never the token itself.</strong>
+      <code>eligibilityFailure</code> returns exactly three, and each has words
+      chosen for a rower: <code>not_monitor</code> &rarr; <strong>NO MONITOR
+      USED</strong> (the row's source is not the PM5, so nothing was connected
+      when it was rowed), <code>not_finished</code> &rarr; <strong>DIDN'T
+      FINISH</strong> (terminated, or no ending recorded at all),
+      <code>no_work_totals</code> &rarr; <strong>NO WORK TIME OR
+      METERS</strong> (the two numbers the send helper says it sends). A 422
+      carrying no recognisable reason reads NOT ELIGIBLE, and the token goes to
+      the send's log line rather than onto the screen. <strong>Corrected
+      2026-09-03 (change 12):</strong> an earlier drawing appended
+      <code>reason.toUpperCase().replace(/_/g, " ")</code>, so this panel read
+      &quot;NOT MONITOR&quot; &mdash; an enum member in the costume of copy.
       Retry send stays, deliberately: a rower who sees this should be able to
       try once and report what happened, and the divergence it reveals is a
       bug on our side, not a state the rower caused.</p>

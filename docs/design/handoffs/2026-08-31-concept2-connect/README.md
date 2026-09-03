@@ -162,8 +162,7 @@ WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
   and the button becomes filled `#b5341f` / `#fffdf7`, label "Tap again to
   unlink". Auto-disarms after 4 s (footnote states this).
 - **1e Link failed** (OAuth callback bounced): status NOT LINKED; sunken
-  panel THE LINK DIDN'T FINISH: "The connection didn't complete. Nothing
-  was linked, nothing was saved." (the trailing "Your weight class pick is
+  panel THE LINK DIDN'T FINISH: "The connection didn't complete. Nothing was linked." (the trailing "Your weight class pick is
   kept." is dropped 2026-09-03: there is no pick to keep) · **Try again**
   button (52px outline `#1b1a17`).
 
