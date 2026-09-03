@@ -53,14 +53,24 @@
 -- is there because `printenv` exits non-zero when the variable is ABSENT,
 -- which is the passing case and would otherwise read as a failed command.
 --
--- Expected: unset or empty, and zero, and zero. ANY OTHER ANSWER IS A STOP.
+-- Expected: an EMPTY line (or "UNSET"), and zero, and zero. Any other answer
+-- is a STOP. Note what "pass" actually looks like here, because an earlier
+-- version of this block got it wrong: inside the container the variable is
+-- ALWAYS defined — `compose.yml` passes `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`,
+-- which sets it to the empty string when the host has nothing — so `printenv`
+-- exits 0 and prints an empty line, and the `|| echo "UNSET (pass)"` arm never
+-- fires on production. Empty is OFF: the gate is
+-- `linkEnabledFlag === "1"` (`server/concept2/availability.ts`), so empty and
+-- absent are the same non-answer, the same way `C2_BASE_URL` treats them.
 --
 -- MEASURED ON THE DEPLOY HOST BY JAMES, 2026-09-03 — the two row counts, run
 -- as written above, both returned `0` (output pasted into the session, one
 -- `count | 0 | (1 row)` block per query). So this drop touches NO rows: there
 -- is no stored `weight_class` anywhere in production to lose, and no rower
 -- holds a live grant whose class the migration discards. The `printenv` half
--- is the one still OWED before merge.
+-- half came back on the same day: an EMPTY LINE with no "UNSET" arm, i.e. the
+-- variable is set-but-empty, which `computeAvailable` reads as OFF. ALL THREE
+-- CHECKS PASS: the flag is off in production, and the drop touches no rows.
 -- A `1` is a live writer whose INSERT this drop breaks; a non-zero link
 -- count is a real rower holding a live grant whose class we are about to
 -- drop, which is a design question nobody has asked.
