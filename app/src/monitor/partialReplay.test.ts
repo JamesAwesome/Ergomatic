@@ -96,7 +96,7 @@ import {
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { measuredIntervalCount } from "../session/summaryModel";
 import { loadMonitorRun, type MonitorRun } from "./monitorRun";
-import type { MonitorSession, RunIdentity } from "./useMonitorSession";
+import type { RunIdentity } from "./useMonitorSession";
 import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { withLiveness } from "./transports/liveness";
@@ -241,9 +241,11 @@ const RESTS_FINISHED_IDENTITY: RunIdentity = {
  *  no assertion below reads. */
 const FIXED_NOW = new Date("2026-08-28T09:00:00.000Z");
 
-/** Each capture's LAST tx is the terminate the rower's own End press sent at
- *  the erg. A replay cannot press a button, so nothing in these legs ever
- *  calls `driver.terminate()` and that barrier can only time out. **A
+/** Each of the two `walk-2026-08-28` captures' LAST tx is the terminate the
+ *  rower's own End press sent at the erg (leg D's natural finish has none —
+ *  its expected list is empty). A replay cannot press a button, so nothing in
+ *  legs A and B ever calls `driver.terminate()` and that barrier can only
+ *  time out. **A
  *  `toStrictEqual([])` here would be wrong**, and pinning the exact
  *  one-element array is strictly stronger than pinning nothing: it says every
  *  OTHER barrier in the file matched. Both values independently reproduce
@@ -259,7 +261,8 @@ const EXPECTED_REST_DIVERGENCE = ["tx#839 barrier timeout"];
  *  unmatchable barrier waits, never which barriers match, VERIFIED there at
  *  250 / 500 / 2000 / 4000 ms with byte-identical divergence sets. Both
  *  pinned barriers are the LAST `tx` in their capture, so a timed-out barrier
- *  cannot cascade into a mismatch on the next one. */
+ *  cannot cascade into a mismatch on the next one. Inert for legs C1/C2/D,
+ *  whose recordings contain no unmatchable barrier at all. */
 const BARRIER_TIMEOUT_MS = 250;
 
 /**
@@ -355,7 +358,7 @@ async function runReplay(
 
   if (opts.pressEnd === true) {
     act(() => {
-      void (result.current as MonitorSession).endSession();
+      void result.current.endSession();
     });
   }
 
