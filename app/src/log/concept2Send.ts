@@ -29,6 +29,17 @@ export function sentResultId(
   row: Pick<StoredLog, "c2ResultId" | "c2UserId">,
   link: Concept2Link,
 ): number | null {
+  // REDUNDANT, and measured so rather than asserted (Task 5, probe M33):
+  // deleting this line alone leaves the whole file green (23/23), because
+  // the account check below already answers `null` for every shape it
+  // catches — a row with `c2UserId: null` never equals a live link's id,
+  // and a row with `c2ResultId: null` whose account DOES match falls
+  // through and returns that same `null`. It is kept as an explicit
+  // statement of the rule ("an unsent row is not sent"), the same way
+  // `storedSummary.ts`'s `partialCloseReason` keeps its own measured-
+  // redundant clause 2 — so do NOT read a green suite after touching this
+  // line as evidence the predicate still holds. The line below is the one
+  // that enforces anything: removing IT reddens two tests (M33c).
   if (row.c2ResultId === null || row.c2UserId === null) return null;
   if (link.c2UserId === null || row.c2UserId !== link.c2UserId) return null;
   return row.c2ResultId;
