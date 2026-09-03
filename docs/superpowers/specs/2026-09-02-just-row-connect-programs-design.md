@@ -108,8 +108,16 @@ the machine did not take it.
    the driver's ONE `pendingAck` slot with the in-flight send (the ack
    matcher is arrival-order only; it never reads the ack's command byte,
    and production configures no `ackTimeout`, so an orphaned slot never
-   expires) — REFUSES with `ProgramBusyError` while it is set, exactly as
-   `program()` does. **The send is BOUNDED** (harden lens 2): production
+   expires) — REFUSES with `ProgramBusyError` while THE FREE-ROW SEND
+   holds it. Not while `program()` holds it (implementation, rev 4.1):
+   `useMonitorSession`'s teardown deliberately interleaves a terminate
+   with an in-flight `program()` ("best-effort by design — including the
+   case where a `program()` is still in flight", pinned by its "unmount
+   while programming (before armed) also terminates first" test), and
+   refusing there would leave the erg holding a workout the rower backed
+   out of. So `programInFlight` is a holder label,
+   `false | "program()" | "beginFreeRow()"`, one lifetime, and the
+   refusal reads the label. **The send is BOUNDED** (harden lens 2): production
    configures no `ackTimeout`, and the replay transport (and a PM5 that
    never answers) acks nothing, so an unbounded send would hold
    `programInFlight` for the driver's life and refuse END forever. The
@@ -158,11 +166,16 @@ the machine did not take it.
    no `nakJustRow` option. The fake keeps no write log — assertions read
    the driver's own ring (`log.entries()` kind `write`, one entry per
    chunk). **And it
-   reacts to a TERMINATE with `synthesizeTerminated` regardless of whether
-   its machine is running** — today it queues that reaction only for a
-   running machine, which is why a prepare-at-the-menu defect could not
-   go red (harden lens 1); with that, a mutation that re-adds
-   `sendPrepare()` to the detached send closes the free row in the test.
+   reacts to a TERMINATE with `synthesizeTerminated` at an idle machine
+   under a script opt-in, `terminateReactsWhileIdle`, marked synthetic**
+   — NOT by default (rev 4.1): the fake's honest default is the observed
+   one, a terminate at an armed-idle screen is accepted with no state
+   change (walk §18 s3 item 15, pinned by `fake.test.ts`), and the fake's
+   header rule forbids unobserved defaults. Today it queues that reaction
+   only for a running machine, which is why a prepare-at-the-menu defect
+   could not go red (harden lens 1); with the opt-in, a mutation that
+   re-adds `sendPrepare()` to the detached send closes the free row in
+   the test.
 5. Prose swept in the same PR (it becomes false): the `free-row-open`
    ring string "opened a free row (no program sent)" (an operator reads it
    on the walk), `beginFreeRow`'s JSDoc ("sending the machine nothing",
@@ -175,8 +188,9 @@ the machine did not take it.
 
 ## Lifetime
 
-One flag, already existing: `programInFlight`, set for the send's
-duration and cleared in `finally` (also on disconnect). The detached
+One flag, already existing: `programInFlight` (now a holder label, see
+Ruling 4), set to `"beginFreeRow()"` for the send's duration and cleared
+in `finally` (also on disconnect). The detached
 promise belongs to the driver instance; `capacitorBle.write` throws from
 `requireConnected` after a disconnect, so a teardown mid-send rejects and
 is caught. **The ring is snapshotted BEFORE unsubscribe/disconnect**
