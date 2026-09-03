@@ -381,6 +381,13 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
   });
 
   it("LEG A — end-on-interval-1: zero actuals, and the partial is the only number the row has", async () => {
+    // BITING MUTATION, in-comment like C2's and D's (Task 7 review minor,
+    // landed at Task 8's sweep): revert Task 3's read at the `closeRecord`
+    // site (`const banked = withFinalSeries`) and this leg fails with
+    // `expected undefined to strictly equal { intervalIndex: +0, meters:
+    // 15, …(1) }`. M7.3 (one number changed in `partialGateFixture.ts`)
+    // also reddens it, at the step assertion, while the route half stays
+    // green by design — see that fixture's own comment.
     const out = await runReplay(
       END_ON_INTERVAL_1,
       WALK_0828_PROGRAM,
@@ -425,6 +432,12 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
   });
 
   it("LEG B — rest-boundary: the banked boundary is untouched and the partial rides the NEXT step", async () => {
+    // BITING MUTATION: the same reverted read as leg A —
+    // `expected undefined to strictly equal { Object (intervalIndex,
+    // meters, ...) }`. What THIS leg adds over A is the coexistence: a
+    // banked `IntervalActual` on step 0 and the pair on step 1, so a write
+    // that overwrote an actual, or that keyed the pair by emitted-step
+    // position rather than program index, fails here and not in A.
     const out = await runReplay(
       REST_BOUNDARY,
       WALK_0828_PROGRAM,
@@ -500,6 +513,12 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
       { pressEnd: true },
     );
 
+    // BITING MUTATION: `withPartial`'s `reading === null` short-circuit
+    // (M3.3) — the End arm is the only producer this leg can reach, so
+    // with the read short-circuited `out.run.partial` is `undefined` and
+    // the triple below fails. The same reverted read as legs A and B also
+    // reddens it.
+    //
     // The terminate tx (seq 839) is not in the cut, so there is no barrier
     // left to time out.
     expect(out.divergences).toStrictEqual([]);
@@ -522,9 +541,10 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
 
   it("LEG C2 — I-B3 under an End close: cut mid-REST, press End, and nothing is banked", async () => {
     // The same constructed ordering as C1, one cut later. THE CUT, decoded:
-    // t <= 100000 lands 3.5 s AFTER interval 0's first resting frame (seq
-    // 414, t=76488.9 — which cleared the reading) and 36 s BEFORE interval
-    // 0's own `IntervalActual` (seq 771, t=136429.2). That 59 940 ms window
+    // t <= 100000 lands 23.5 s AFTER interval 0's first resting frame (seq
+    // 414, t=76488.9 — which cleared the reading) and 36.4 s BEFORE
+    // interval 0's own `IntervalActual` (seq 771, t=136429.2). (Both
+    // figures corrected at Task 8's sweep; this comment said 3.5 s.) That 59 940 ms window
     // is I-B3's whole reason for existing: interval 0 is COMPLETE here, and
     // a partial written now would store a completed interval as an in-flight
     // one and count it unmeasured — the inverse of the complaint this spec
@@ -580,5 +600,11 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
       expect(step.partialMeters).toBeUndefined();
       expect(step.partialSeconds).toBeUndefined();
     }
+    // I-B2's positive half on the one row that really did finish: all
+    // three intervals measured, and the count is the same
+    // `measuredIntervalCount` the lost banner and the marker read. Legs A
+    // and B assert 0 and 1 on rows that stopped; without this one, no leg
+    // here says the rule agrees with a complete row.
+    expect(measuredIntervalCount(out.run.actuals)).toBe(3);
   });
 });

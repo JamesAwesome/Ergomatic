@@ -49,8 +49,9 @@ plan widened, so it admitted `interrupted` — replaced by a local
 (2) a legal ZERO reading — RULED write-it-and-render-it, no floor, Finding 6;
 (3) every refusal was silent — two ring entries and a per-index mint
 diagnostic, Tasks 2 and 3, probed by M3.5/M2.9; (4) three of the four "gated"
-clear sites had no reachable ordering as written — Task 2 steps 1/5, now three
-gated and three defensive; (5) the I-B5 census fixture would have failed on a
+clear sites had no reachable ordering as written — Task 2 steps 1/5; the
+SHIPPED count, measured, is ONE gated (`program()`, both exits) and five
+defensive; (5) the I-B5 census fixture would have failed on a
 `link-lost` `endedBy` for a reason that is not a leak — Task 4 step 2;
 (6) `fmtDuration` rounds, so an over-target partial can read `1:00 · 197 m`
 against a `1:00` target — pinned as approved behaviour at Task 5 step 1.
@@ -372,13 +373,20 @@ Stated up front so a reviewer is not surprised. Each has its own step.
 ## The lifetime table (RF27), in the code's own symbols
 
 TWO refs (the reading, and the ring's once-per-index dedupe — harden lens 2,
-finding 3). One mint function. Six clear sites — **THREE gated by a leg
-(`program()`, `cancel()`, `beginFreeRow()`), THREE defensive and ungated by
-design (`connect()`, `teardown()`, and the RC-37 exit)** — plus two
-event-shaped clears inside the mint function itself. **The count moved from
-four/two to three/three at harden lens 2, finding 4**, by reading each site's
-PHASE GUARD rather than matching `rowingStreakRef`'s symbols: the RC-37 exit
-has no reachable ordering from a live run.
+finding 3). One mint function. Clear sites — **AS SHIPPED (corrected at Task
+8's docs sweep, against the code): ONE gated by a leg, `program()`, at BOTH
+its exits; FIVE defensive and ungated by design (`connect()`, `teardown()`,
+the RC-37 exit, `cancel()` and `beginFreeRow()`)** — plus two event-shaped
+clears inside the mint function itself. The sentence below and the gates-table
+row calling for `cancel()` and `beginFreeRow()` legs are SUPERSEDED: Task 2
+measured M2.6/M2.7 as all-green (`fail()` nulls `driverRef`, so
+`beginFreeRow()` returns at its own guard; `cancel()` tears down and nulls
+`runRef`, so no later close reads), and shipping legs that cannot go red is
+what RF21 forbids. **The count moved from
+four/two to three/three at harden lens 2, finding 4, and then to ONE/five at
+implementation** (Task 2's measured M2.6/M2.7, recorded in the ledger and
+folded here at Task 8's sweep), by reading each site's PHASE GUARD rather than
+matching `rowingStreakRef`'s symbols.
 
 | | |
 | --- | --- |
@@ -388,8 +396,8 @@ has no reachable ordering from a live run.
 | **Mint condition** | `frame.intervalIndex !== null` **and** `frame.state === "rowing"` **and** no `IntervalActual` on `runRef.current.actuals` already carries that index (I-B6 at mint) |
 | **Clear — I-B3 (a)** | inside `noteFrameForPartial`: the first `frame.state === "resting"` frame whose `intervalIndex` equals the held reading's |
 | **Clear — I-B3 (b)** | the `intervalComplete` handler, on an **ACCEPTED** actual whose `index` equals the held reading's. On an `r0` program this is the only clear and fires 180 ms after the last rowing frame; on a rested program (a) already fired ~60 s earlier |
-| **Clear — per-arm ×4** | the four sites `rowingStreakRef` clears at, by symbol: the RC-37 programDropped/ready exit in `handleEvent`; `beginFreeRow()`; `cancel()`; `program()`. (The `beginFreeRow` copy is the one this file's own comment records being MISSED before — hence "by symbol", never "by neighbourhood.") **`program()`'s clear does NOT sit beside `rowingStreakRef`'s** (harden lens 1, finding 1): that one is above the `try`, and `program()`'s catch is itself one of the five producers, so this ref clears at the two points where `program()` is DONE with the old run — after the catch's `closeRecord(true, "program-failed")`, and after a successful `await driver.program(p)`. **THREE of these four are GATED; the RC-37 exit is not** (harden lens 2, finding 4): its live arm returns first and its own guard admits only `programming`/`ready`, phases that cannot hold a reading. `cancel()` and `beginFreeRow()` are gated only through a `phase: "failed"` ordering — both guards exclude `live`/`ended` — which their legs prescribe explicitly rather than assume |
-| **Second ref — the ring dedupe** | `partialMintRefusedRef: React.RefObject<Set<number>>` (harden lens 2, finding 3). INVARIANT: *at most one `partial-mint-refused` entry per interval index per RUN.* MINT: `noteFrameForPartial`'s I-B6 refusal arm, which `add`s the index it just refused. CLEAR: `.clear()` on the line beside every one of the SIX sites that null the reading ref, and **deliberately not** in the two event-shaped clears (those fire per interval, and clearing there would re-arm the line the set exists to bound). Survives teardown / relaunch / re-arm: no / no / no |
+| **Clear — per-arm ×4** | the four sites `rowingStreakRef` clears at, by symbol: the RC-37 programDropped/ready exit in `handleEvent`; `beginFreeRow()`; `cancel()`; `program()`. (The `beginFreeRow` copy is the one this file's own comment records being MISSED before — hence "by symbol", never "by neighbourhood.") **`program()`'s clear does NOT sit beside `rowingStreakRef`'s** (harden lens 1, finding 1): that one is above the `try`, and `program()`'s catch is itself one of the five producers, so this ref clears at the two points where `program()` is DONE with the old run — after the catch's `closeRecord(true, "program-failed")`, and after a successful `await driver.program(p)`. **AS SHIPPED, ONE of these four is GATED — `program()` — and the other three are not** (corrected at Task 8's docs sweep; this cell used to say three). The RC-37 exit: its live arm returns first and its own guard admits only `programming`/`ready`, phases that cannot hold a reading. `cancel()` and `beginFreeRow()`: the `phase: "failed"` ordering their legs were to be written against does not reach them holding a reading — `fail()` nulls `driverRef`, so `beginFreeRow()` returns at its own guard, and `cancel()` tears down and nulls `runRef`, so every later `closeRecord` returns at its no-record guard. M2.6 and M2.7 were RUN and stayed green, which is the measurement behind this correction; both sites stay in the code as belt-and-braces with that reason at each one |
+| **Second ref — the ring dedupe** | `partialMintRefusedRef: React.RefObject<Set<number>>` (harden lens 2, finding 3). INVARIANT: *at most one `partial-mint-refused` entry per interval index per RUN.* MINT: `noteFrameForPartial`'s I-B6 refusal arm, which `add`s the index it just refused. CLEAR: `.clear()` on the line beside every one of the sites that null the reading ref (SEVEN lines, six sites — `program()` clears at both of its exits), and **deliberately not** in the two event-shaped clears (those fire per interval, and clearing there would re-arm the line the set exists to bound). Survives teardown / relaunch / re-arm: no / no / no |
 | **Clear — per-attempt** | `connect()`'s top-of-attempt reset block, beside `livenessRef.current = null`. `rowingStreakRef` does NOT clear here; this ref does, because a reading banked against a run this attempt cannot see must never reach a close it has nothing to do with. **DEFENSIVE and UNGATED BY DESIGN:** `runRef.current` is null once `connect()` has run, so `closeRecord` returns at its no-record guard and no supported ordering reads the ref again |
 | **Clear — per-session** | `teardown()`, beside `frameArrivalsRef.current = []`. Runs AFTER every close has already read the ref, so it can never cost a partial. **DEFENSIVE and UNGATED BY DESIGN**, same reason as `connect()` |
 | **Survives teardown** | no |
@@ -1183,10 +1191,15 @@ export function partialRefusal(
       I-B6 mint leg red **and** the `partial-mint-refused` ring leg red (the
       refusal arm is what writes it).
       **M2.4** drop `if (index === null) return;` → the D3 leg red.
-      **M2.5–M2.7** delete each of the THREE gated clear-site lines in turn
-      (`program()`, `beginFreeRow()`, `cancel()`) → its own named leg red, and
-      **only** its own. If deleting one leaves every leg green, that site has
-      no gate and the report says so rather than shipping it unproven (RF21).
+      **M2.5–M2.7** delete each of the THREE clear-site lines then believed
+      gated, in turn (`program()`, `beginFreeRow()`, `cancel()`) → its own
+      named leg red, and **only** its own. If deleting one leaves every leg
+      green, that site has no gate and the report says so rather than
+      shipping it unproven (RF21). **THAT IS WHAT HAPPENED, and this is the
+      instruction working:** M2.5 (`program()`) bit; M2.6 and M2.7 stayed
+      green, so `beginFreeRow()` and `cancel()` ship as DEFENSIVE with their
+      unreachability stated at each site and no leg. One gated site, five
+      defensive.
       The clears at `connect()`, `teardown()` and **the RC-37 exit** carry no
       mutation because they carry no leg — all three are declared defensive
       under **Ungated by design** (harden lens 1 finding 5; harden lens 2
@@ -2268,7 +2281,7 @@ const WALK_0828_PROGRAM: WorkoutProgram = {
 | The End arm banks a live reading (the only POSITIVE End-arm gate) | `partialReplay.test.ts` leg **C1** (cut at `e.t <= 76200`, between the last rowing frame at t=76039 and the first resting frame at t=76489) | **M3.3** — `withPartial`'s `reading === null` short-circuit → C1 red |
 | 7a reads the SHARED declaration, not a local literal | `partialReplay.test.ts`, importing `src/session/partialGateFixture.ts` | **M7.3** change one number in the fixture module → 7a red. The route half stays GREEN by design (it round-trips the fixture); **measured**, and see Task 7 step 5 for why no single mutation reddens both |
 | I-B3 (b): the accepted actual ends the bout | `useMonitorSession.test.ts` | delete the `intervalComplete` clear |
-| THREE gated clear sites, one leg each (`program()`, `cancel()`, `beginFreeRow()` — each leg naming the phase route that reaches it) | `useMonitorSession.test.ts` | **M2.5–M2.7** delete each line in turn → **only** its own leg red |
+| ONE gated clear site, `program()`, at BOTH exits — SHIPPED count, corrected at Task 8's sweep from the three this row first named | `useMonitorSession.test.ts` | **M2.5** delete it → its own leg red. **M2.6/M2.7 (`cancel()`, `beginFreeRow()`) were run and stayed GREEN**: both are defensive, their unreachability is stated at each site, and neither carries a leg (RF21) |
 | `program()`'s clear survives its own `program-failed` close | `useMonitorSession.test.ts`, the `program-failed` leg | **M3.4** move that clear to the top of `program()` → the `program-failed` leg red |
 | The mint sits BELOW the continuity check | `useMonitorSession.test.ts` continuity leg | move `noteFrameForPartial(frame)` above `applyContinuityCheck` → the reset banks the dishonest frame |
 | Five producers land the partial | `useMonitorSession.test.ts` | **M3.1** empty `PARTIAL_WRITE_REASONS` (`[] as const`) → all five red, `finished` green |
@@ -2345,8 +2358,9 @@ This PR keeps the metres you rowed into the interval you stopped in.
 - Every mutation from the gates table with its exact failure text, including
   the one that proves I-B3: with the `resting` clear deleted, a COMPLETED
   interval is stored as a partial reading 196.6 m / 59.74 s.
-- The lifetime table (two refs, six clear sites by symbol — three gated,
-  three defensive — and two event clears).
+- The lifetime table (two refs; ONE gated clear site — `program()`, both
+  exits — five defensive, and two event clears, one of which lives inside the
+  accepted-commit branch).
 - The ZERO-partial ruling (controller, 2026-09-02): a `rowing` frame with
   `d=0` is in the corpus, so `0 m · 0:00` is a real reading and is WRITTEN
   and RENDERED, with no floor. Cost if wrong: a noisy row in a sub-second
@@ -2374,9 +2388,10 @@ This PR keeps the metres you rowed into the interval you stopped in.
   partial would count toward "kept" (it does not).
 - Risk note (what I'd have asked a reviewer to probe): the ref's lifetime.
   Six clear sites plus two event-shaped clears, and a missed one banks one
-  run's metres onto another's record. THREE carry a leg and a mutation;
-  `connect()`, `teardown()` and the RC-37 exit are declared defensive and
-  ungated, each with the phase guard that makes it unreachable. The sharpest
+  run's metres onto another's record. ONE carries a leg and a mutation
+  (`program()`, both exits); `connect()`, `teardown()`, the RC-37 exit,
+  `cancel()` and `beginFreeRow()` are declared defensive and ungated, each
+  with the phase guard that makes it unreachable. The sharpest
   one is `program()`, whose clear must NOT sit where its sibling ref's does,
   because its own catch is one of the five producers. The replay legs are the
   only ones driven by real wire bytes.
@@ -2405,7 +2420,7 @@ This PR keeps the metres you rowed into the interval you stopped in.
 | §5.2 I-B4 | Stale re-emission under-counts; stated, not gated | Global Constraints |
 | §5.2 I-B5 | No summing reader sees the keys; census as a SCRIPT | 4 |
 | §5.2 I-B6 | Never for an interval already carrying an actual, checked at write time | 1 (record), 2 (mint), 4 (read side) |
-| §5.3 | The ref, its mint, six clear sites by symbol (three gated, three defensive), plus the ring's per-index dedupe ref | 2 |
+| §5.3 | The ref, its mint, its clear sites by symbol (SHIPPED: one gated, five defensive), plus the ring's per-index dedupe ref | 2 |
 | §5.3 | ONE read in `closeRecord` covering four producers + the continuity reset's own | 3 |
 | §5.3 | `interrupted` writes none | stated; `completeInterruptedRun`'s only caller is outside the hook |
 | §5.4 | The lost banner's `kept === 0` arm | 6 |
