@@ -50,7 +50,16 @@ export function loadTodayPick(
   planKey: string | null,
   doneN: number | null,
 ): string | null {
-  const raw = localStorage.getItem(TODAY_PICK_KEY);
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(TODAY_PICK_KEY);
+  } catch {
+    // Storage-denial spec (2026-09-03) §1 I-1/I-2 — see `session/run.ts`'s
+    // `loadRun` for the full rationale; identical shape, this key. This
+    // loader never clears on a mismatch either way, so I-3 needs no
+    // separate call-out here.
+    return null;
+  }
   if (raw === null) return null;
   let parsed: unknown;
   try {
