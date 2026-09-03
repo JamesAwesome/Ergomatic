@@ -10012,3 +10012,84 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
     }
   });
 });
+
+// ── Wave E PR2, Surface 2: the log-detail Send block's control heights ─────
+//
+// WHAT THIS PROVES, exactly (RF26): that the `.c2-send-action` and
+// `.c2-send-linkout` rules in the shipped `index.css` give those controls
+// the heights the amendment's §2 frames draw, in a real engine, in both
+// orientations — 48px for the outline action (the page's `.btn-outline`
+// default, which is what the Send block's four buttons carry: unlike every
+// `.btn-outline` inside a `c2card`, none of them takes an inline override)
+// and 44px for the link row (`.send-linkrow`).
+//
+// WHY IT EXISTS: D1, one surface over. `.c2-card-retry` shipped at 48px for
+// four review rounds — 4px shorter than every frame that draws it — because
+// nothing measured a control's box. The reviewer found it by measuring the
+// PAGE; this measures the BUILD.
+//
+// The expected numbers are the amendment's own CSS transcribed as
+// INDEPENDENT literals, never read back off `index.css`, so retuning the
+// stylesheet cannot retune the test with it (RF21).
+//
+// THE FIXTURES ARE THE COMPONENT'S OWN OUTPUT, and that is gated rather
+// than asserted: `Concept2SendBlock.test.tsx`'s "the e2e fixtures ARE this
+// block's output" compares each committed file against the component's
+// `innerHTML` in full, so any drift — a renamed class, a moved button, a
+// reworded status — reddens there.
+//
+// WHAT IT DOES NOT PROVE: that the block is reachable on a real log row.
+// It is not, in this stack — `compose.yml`'s `C2_LINK_ENABLED:
+// ${C2_LINK_ENABLED:-}` is exported by neither `e2e.sh` nor
+// `screenshots.sh`, so `GET /api/concept2/link` answers `{available:false}`
+// and this block renders `null` on every screen in this suite. The
+// end-to-end version is owed at Task 11.
+//
+// Boxes are read off `<button>`s, which are not inline (RF21's own
+// measurement error: an inline element reports 0 for every box metric).
+test.describe("Concept2 send block: the control heights §2 draws", () => {
+  async function loadBlock(page: Page, fixture: string): Promise<void> {
+    const markup = readFileSync(
+      path.join(process.cwd(), "e2e/fixtures", fixture),
+      { encoding: "utf-8" },
+    ).replace(/>\s+</g, "><");
+    await page.goto("/", { waitUntil: "load" });
+    await page.waitForFunction(
+      () =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--page")
+          .trim() !== "",
+    );
+    await page.evaluate((html) => {
+      document.body.innerHTML = `<div class="app-shell">${html}</div>`;
+    }, markup);
+    await expect(page.locator(".c2-send")).toBeVisible();
+  }
+
+  test("every control clears the height its own frame draws, in both orientations", async ({
+    page,
+  }) => {
+    const cases: [string, string, number][] = [
+      // 2a: the outline action, at `.btn-outline`'s own 48px.
+      ["c2-send-idle.html", ".c2-send-action", 48],
+      // 2c: the link row, at `.send-linkrow`'s 44px.
+      ["c2-send-sent.html", ".c2-send-linkout", 44],
+      // 2i draws BOTH, and its Send again is the same outline control the
+      // callout says it is ("the button 2e already uses for Retry send,
+      // unchanged").
+      ["c2-send-no-weight.html", ".c2-send-linkout", 44],
+      ["c2-send-no-weight.html", ".c2-send-action", 48],
+    ];
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      for (const [fixture, selector, expected] of cases) {
+        await loadBlock(page, fixture);
+        const box = await page.locator(selector).boundingBox();
+        if (box === null) throw new Error(`${selector} had no box`);
+        expect(box.height).toBe(expected);
+        // And the house floor, which is the reason any of this matters.
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+    }
+  });
+});

@@ -10476,3 +10476,144 @@ section:not(.news-pinned) .news-row:last-of-type {
     justify-content: flex-end;
   }
 }
+
+/* Wave E PR2, Surface 2 (board 2a-2e + Gate 0 amendment 2f/2h/2i). Same
+   house card as `.c2-card`, at the amendment's own `.sendcard` values:
+   14px/16px padding, 10px gap, `--surface` ground, 1px `--rule`,
+   `--radius`.
+
+   Contrast, computed (RF6) with the WCAG relative-luminance formula over
+   tokens.css's own hexes, never eyeballed:
+     --ink   on --surface 17.11:1  (CONCEPT2 label, lit status)
+     --ink-2 on --surface 10.81:1  (the send lines)
+     --ink-3 on --surface  7.43:1  (helper, REASON, disabled action label)
+     --ink-4 on --surface  5.29:1  (RESULT / WEIGHT CLASS feet, dim status)
+     --accent on --surface  5.94:1 (both link-outs)
+   All clear the 4.5:1 AA floor. Nothing on this block sits on
+   `--surface-sunken`, so the `--ink-4` 4.48:1 failure that forces
+   `.c2-card-panel-reason` up to `--ink-3` does not reach here.
+
+   The link-out's accent is accent's FIFTH job, outside the four
+   docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md names. Recorded as a
+   DEVIATIONS row rather than given its own token (Gate 0 amendment §5,
+   James's ruling): the four-meaning rule exists to stop accent meaning
+   "selected" or a fifth workout type, and one link-out on one screen is a
+   different exception. */
+.c2-send {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.c2-send-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.c2-send-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.c2-send-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+/* Carried by every state from 2c on — NOT by 2b SENDING, which the page
+   draws as a bare `.c2status` exactly like 2a. See the component's own
+   `statusLit`. */
+.c2-send-status-on {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.c2-send-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.c2-send-helper {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.c2-send-reason {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.c2-send-foot {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+
+/* 48px, which is the class's OWN default and not an oversight: the
+   amendment's `.btn-outline` rule is `min-height: 48px`, and — unlike
+   every `.btn-outline` inside a `c2card`, which carries an inline
+   `min-height: 52px` — the four Send-block buttons the page draws
+   (`Send to Concept2`, `Sending to Concept2 …`, `Retry send`,
+   `Send again`) carry no inline override at all. `.c2-card`'s own block
+   comment already records that measurement. D1 one surface over was a 4px
+   error nothing measured; the e2e height gate on these two classes is why
+   this one cannot repeat.
+
+   15px 600-weight is NOT WCAG "large text" (18.66px bold / 24px), so the
+   4.5:1 floor applies and is met: --ink on --surface, 17.11:1. */
+.c2-send-action {
+  min-height: 48px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Reachable from ONE condition: the send in flight (2b). The LABEL carries
+   the state as well as the border, because a border-only distinction would
+   be a 1.73:1 signal (--rule-3 on --surface); --ink-3 on --surface is
+   7.43:1. */
+.c2-send-action:disabled {
+  border-color: var(--rule-3);
+  color: var(--ink-3);
+}
+
+/* The page's `.send-linkrow`, at its own 44px. A BUTTON styled as a link,
+   not an anchor — see the component for why. Left-aligned and full width,
+   so the whole row is the target rather than just the words. */
+.c2-send-linkout {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
