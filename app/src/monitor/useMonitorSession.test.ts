@@ -13818,6 +13818,68 @@ describe("beginFreeRow (the free row's own arm)", () => {
   });
 
   /**
+   * THE TEARDOWN MUST NOT HANG UP FIRST (delta pass on PR #278) — the same
+   * defect as the walk's finding 4, reached down the other path.
+   *
+   * END at `ready` inside the send window closes the record, flips to
+   * `ended`, opens the 2000 ms burst hold, releases, navigates away and
+   * unmounts `JustRow` — and teardown at `ended` is NOT the armed branch,
+   * so it hangs up with a bare `driver.disconnect()` while `endSession`'s
+   * own `await driver.terminate()` is still suspended on the free-row
+   * send. Measured on the walk's ring 1, those two land about 170 ms
+   * apart. A hang-up that wins aborts the terminate write (Apple:
+   * `cancelPeripheralConnection(_:)` is nonblocking and "any pending
+   * commands ... may not complete"), the terminate rejects, and
+   * `endSession`'s catch swallows it — the erg is left in the Just Row
+   * session, silently, which is what this PR exists to stop.
+   *
+   * The production gap between END and the unmount is the burst hold's
+   * 2000 ms; here it is the same turn. The INTERLEAVING is identical and
+   * is the whole subject — the unmount arrives while the terminate is
+   * suspended, before it has written a byte. `delayWrites(50)` is what
+   * holds it there: the fake defers each write's returned promise while
+   * still answering inline, so the send is provably mid-flight.
+   *
+   * `writesAtHangUp` is read INSIDE the transport's own `disconnect()`,
+   * the only place that can say what had actually reached the wire at the
+   * moment the radio went away.
+   */
+  it("an unmount while END's terminate is still waiting out the send does not hang up first — the terminate frame is on the wire before the radio goes", async () => {
+    const { result, fake, transport, unmount } = harness(freeRowScript());
+    await connect(result);
+    const hangUp = transport.disconnect.bind(transport);
+    let writesAtHangUp = -1;
+    transport.disconnect = async (): Promise<void> => {
+      writesAtHangUp = transport.wireWrites;
+      return hangUp();
+    };
+    fake.delayWrites(50);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.phase).toBe("ready");
+    const writesAtReady = transport.wireWrites;
+
+    await act(async () => {
+      // Returns with `terminate()` already entered and suspended on the
+      // send — `endSession` runs synchronously as far as its own
+      // `await driver.terminate()`.
+      const ending = result.current.endSession();
+      unmount();
+      await ending;
+      await flush();
+    });
+
+    // Exactly one terminate, from `endSession` — teardown at `ended` is
+    // not the armed branch and adds none.
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    expect(transport.disconnects).toBe(1);
+    // ...and it was out before the hang-up. Without the driver's wait this
+    // reads `writesAtReady`: the radio went away with the frame still owed.
+    expect(writesAtHangUp).toBe(writesAtReady + 1);
+  });
+
+  /**
    * REVIEW #2 on PR #259: a fresh connect attempt must not inherit the
    * previous connection's device name. A raw disconnect deliberately
    * RETAINS it (the lost frames render it), but the name is the one

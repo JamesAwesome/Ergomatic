@@ -12536,6 +12536,77 @@ describe("beginFreeRow", () => {
     expect(kinds(log)).toContain("terminate-sent");
   });
 
+  /**
+   * THE HANG-UP CANNOT OVERTAKE THE TERMINATE (delta pass on PR #278).
+   * Waiting the send out gave `terminate()` something it never had before:
+   * a suspension BEFORE it writes anything. The app's own teardown hangs
+   * up on a timer that knows nothing about it — measured on the walk's
+   * ring 1, END at `ready` reaches `disconnect()` about 170 ms after the
+   * deadline would release the terminate, which is not a margin, it is a
+   * coin toss. A hang-up that wins aborts the write (Apple:
+   * `cancelPeripheralConnection(_:)` is nonblocking and "any pending
+   * commands ... may not complete"), the terminate rejects, and both hook
+   * callers swallow it — leaving the erg in the Just Row session, which is
+   * the defect this PR exists to fix, one path over.
+   *
+   * The stub never acks, so the ONLY thing that can release the terminate
+   * here is the deadline: the wait `disconnect()` takes is pinned at its
+   * full ceiling, which is also the proof that the ceiling is what bounds
+   * it. `writesAtHangUp` is read INSIDE the transport's own `disconnect()`
+   * — the one place that can say what had reached the wire at the moment
+   * the radio went away.
+   */
+  it("disconnect() does not overtake a terminate that still owes its write — the hang-up waits out the deadline first", async () => {
+    const base = stubTransport();
+    const written = (): number =>
+      base.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID).length;
+    let writesAtHangUp = -1;
+    const transport = {
+      ...base,
+      async disconnect(): Promise<void> {
+        writesAtHangUp = written();
+        return base.disconnect();
+      },
+    };
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { settleTicks: 0 });
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    driver.beginFreeRow();
+    const afterJustRow = written();
+    // Suspended on the send: nothing of it is on the wire yet.
+    const ending = driver.terminate().catch(() => undefined);
+    const hangingUp = driver.disconnect();
+
+    // INDEPENDENT literals, never the driver's constant (RF21). Held at
+    // 4999, released at 5000 — the same pin the test above uses, applied
+    // here to the HANG-UP rather than to the terminate.
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(writesAtHangUp).toBe(-1);
+    expect(kinds(log)).toContain("disconnect-deferred");
+
+    await vi.advanceTimersByTimeAsync(1);
+    await hangingUp;
+
+    // The terminate frame was on the wire BEFORE the radio went away.
+    expect(writesAtHangUp).toBe(afterJustRow + 1);
+    const ring = kinds(log);
+    const requested = ring.indexOf("disconnect-requested");
+    const deferred = ring.indexOf("disconnect-deferred");
+    const terminateWrite = log
+      .entries()
+      .findIndex((e) => e.kind === "write" && e.detail === TERMINATE_FRAME_HEX);
+    expect(deferred).toBeGreaterThan(requested);
+    expect(terminateWrite).toBeGreaterThan(deferred);
+
+    // Housekeeping: the stub's `disconnect()` fires no drop callback, so
+    // release the terminate's still-pending ack by hand rather than
+    // leaving a promise dangling past the test.
+    transport.fireDisconnect("hung up");
+    await ending;
+  });
+
   it("the free row stays open through the send on a fake that reacts to ANY terminate — because nothing in the send is one", async () => {
     // The fake's default reaction to a terminate at an idle machine is a
     // plain accept (§18 s3 item 15), which is exactly why a prepare

@@ -915,8 +915,21 @@ const FINISH_GRACE_MS = 3000;
  *  first written against, and the one the walk falsified for THIS frame).
  *  3000 ms left under a second of margin over a 2.06 s worst case; 5000 ms
  *  is ~2.4x the slowest ack observed. It is a ceiling, not a delay: every
- *  ack that lands clears the flag the moment it arrives, so raising it
- *  costs nothing on a machine that answers.
+ *  ack that lands clears the flag the moment it arrives.
+ *
+ *  RAISING IT IS NOT FREE, and this comment used to say it was — written,
+ *  as the delta pass on PR #278 pointed out, on the one constant that
+ *  exists for machines that do NOT answer. On a machine that never acks,
+ *  this number is exactly how long `terminate()` sits before it writes,
+ *  and that wait races the app's own teardown. Measured on the walk's ring
+ *  1: END at `ready` closes the record, opens the 2000 ms burst hold
+ *  (`handoff-released` +68915 -> `disconnect-requested` +70940 = 2025 ms),
+ *  releases, navigates, and unmounts — reaching `disconnect()` at about
+ *  write+5.17 s against a terminate released at write+5.00 s. About 170 ms
+ *  apart. The ordering is held by `terminateWritesOwed` (a hang-up waits
+ *  for a terminate that still owes its write), NOT by this number, which
+ *  is why the number did not move to buy margin. Anyone raising it further
+ *  is lengthening that wait, not padding a safety factor.
  *
  *  While it holds, an END or a Cancel from the app WAITS for the send
  *  rather than being refused (`terminate()`'s own comment) — bounded here,
@@ -1420,6 +1433,68 @@ export function createPm5Driver(
    *  whenever no free-row send is in flight, which is every workout
    *  session and every free row after its send settles. */
   let freeRowSendSettled: Promise<void> | null = null;
+  /** HOW MANY `terminate()` calls have entered but not yet put their frame
+   *  on the wire (or given up trying). `disconnect()` refuses to hang up
+   *  while this is non-zero — see `awaitTerminateWrites` just below.
+   *
+   *  WHY IT EXISTS (the delta pass on PR #278, 2026-09-03). `terminate()`
+   *  can now SUSPEND before it writes anything: it waits out
+   *  `freeRowSendSettled`, up to `FREE_ROW_PROGRAM_DEADLINE_MS`. That wait
+   *  races the hook's own teardown, which hangs up. Measured against the
+   *  walk's ring 1 (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`):
+   *  END at `ready` flips to `ended`, opens the 2000 ms burst hold
+   *  (`handoff-released` +68915 -> `disconnect-requested` +70940 = 2025 ms
+   *  in that ring), releases, navigates, unmounts `JustRow`, and teardown
+   *  calls `disconnect()` at about write+5.17 s — while the terminate is
+   *  still suspended until write+5.00 s. About 170 ms of margin, on the
+   *  wrong side of a wait nobody tuned for it. If the hang-up wins, the
+   *  resumed terminate writes to a dead transport, rejects, and the hook's
+   *  best-effort catch swallows it: the erg stays in the Just Row session,
+   *  which is the exact defect this PR exists to fix, one path over.
+   *
+   *  Apple's own contract is why a hang-up can abort a write rather than
+   *  merely reorder it: `cancelPeripheralConnection(_:)` is nonblocking and
+   *  "any pending commands ... may not complete" (`CBCentralManager`
+   *  reference) — the same citation `useMonitorSession.ts`'s `fail()` gives
+   *  for chaining ITS disconnect behind a terminate. This is that rule
+   *  generalized to the driver, where it holds for every caller of
+   *  `disconnect()` rather than the two hook paths that remembered.
+   *
+   *  LIFETIME. Mint: `terminate()`'s entry, one site, one increment per
+   *  call. Clear: that call's own release, run exactly once (the closure
+   *  latches), from `sendSequence`'s `onFrameWritten` when the frame is on
+   *  the wire, or from `terminate()`'s `finally` if the call failed or was
+   *  abandoned before it could write. A counter rather than a boolean so
+   *  two overlapping terminates cannot mask each other, and so this file
+   *  owes no claim about callers never overlapping. Survives nothing: it
+   *  belongs to the driver instance, and a driver does not outlive its
+   *  connection. */
+  let terminateWritesOwed = 0;
+  /** Resolves when `terminateWritesOwed` reaches zero — `null` whenever it
+   *  is already zero, so `disconnect()` awaits nothing in the ordinary
+   *  case. One deferred shared by however many terminates are owed. */
+  let terminateWritesDrained: Promise<void> | null = null;
+  let releaseTerminateWrites: (() => void) | null = null;
+
+  /** Called by `terminate()` on entry; the returned function is that
+   *  call's own release, idempotent. */
+  function noteTerminateWriteOwed(): () => void {
+    terminateWritesOwed += 1;
+    terminateWritesDrained ??= new Promise<void>((resolve) => {
+      releaseTerminateWrites = resolve;
+    });
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      terminateWritesOwed -= 1;
+      if (terminateWritesOwed > 0) return;
+      const resolve = releaseTerminateWrites;
+      releaseTerminateWrites = null;
+      terminateWritesDrained = null;
+      resolve?.();
+    };
+  }
   let raw: Partial<RawPm5Status> = {};
   // The last RAW machine interval index this driver has actually SEEN on
   // 0x0033 (Interval Count) — deliberately the UNNORMALIZED value (not
@@ -5807,9 +5882,26 @@ export function createPm5Driver(
   async function sendSequence(
     sequence: Uint8Array[][],
     completionKind: string,
-    options_: { isPrepareStep?: boolean; fetchErrorTypeOnNak?: boolean } = {},
+    options_: {
+      isPrepareStep?: boolean;
+      fetchErrorTypeOnNak?: boolean;
+      /** Fired once every chunk of a frame has been handed to the
+       *  transport, BEFORE that frame's ack is awaited. `terminate()` is
+       *  the only caller: it is how `disconnect()`'s wait ends at the
+       *  moment the bytes are out rather than at the moment the machine
+       *  answers — an ack whose only production exit, when the PM5 has
+       *  gone quiet, is that very disconnect (`t.onDisconnect`'s M-3
+       *  hatch). Called per frame; `terminate()` sends one, and the
+       *  release it passes is idempotent, so a multi-frame caller would
+       *  simply see the first frame's dispatch. */
+      onFrameWritten?: () => void;
+    } = {},
   ): Promise<void> {
-    const { isPrepareStep = false, fetchErrorTypeOnNak = false } = options_;
+    const {
+      isPrepareStep = false,
+      fetchErrorTypeOnNak = false,
+      onFrameWritten,
+    } = options_;
     // Fix-round 2: purge anything left over from a PREVIOUS sequence
     // before this one's own first frame ever asks the buffer for
     // anything — see `discardStaleAcks`'s own comment. Once, here, not
@@ -5850,6 +5942,7 @@ export function createPm5Driver(
         log.record("write", hex);
         await t.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
       }
+      onFrameWritten?.();
 
       const outcome = await ackPromise;
 
@@ -6303,29 +6396,49 @@ export function createPm5Driver(
       // uninterrupted stretch. The finals are a snapshot of the run this
       // call is ending; taking it before a wait that can last a deadline
       // would date it.
-      if (freeRowSendSettled !== null) {
-        await freeRowSendSettled;
-      }
-      // TERMINATE-DISPATCH FINALS (Task 7, "one terminal path" — spec 1's
-      // re-walk: "the ring ended at the terminate write"). The END/cancel
-      // path's own terminated status frame — the trigger `maybeEmitFrame`'s
-      // terminal branch waits for — routinely arrives AFTER the hook's
-      // teardown has already stashed and hung up the radio, so waiting for
-      // it here would lose the `final-totals` entry the same way it did
-      // before this task. Writing it from THIS call instead means the
-      // caller-initiated ending's own totals are in the ring before this
-      // promise even resolves, however long the machine's own frame takes.
       //
-      // Guarded on an OPEN run (`recordFinalTotals`'s own doc comment):
-      // nothing to summarize before `program()` ever opened one, and a run
-      // the machine's own frame already closed already told its one story
-      // through that call site — this never re-tells a shorter version of
-      // it.
-      if (activeRun !== null && !activeRun.closed) {
-        recordFinalTotals(activeRun);
+      // THE HANG-UP CANNOT OVERTAKE THIS (delta pass, PR #278). Because
+      // this call can suspend below before it has written a byte, it
+      // registers the write it OWES first — `disconnect()` waits for that
+      // debt to clear before it hangs up, so the ordering holds no matter
+      // how long the wait runs or which caller fires the hang-up.
+      // `terminateWritesOwed`'s own comment carries the measured race.
+      const terminateWritten = noteTerminateWriteOwed();
+      try {
+        if (freeRowSendSettled !== null) {
+          await freeRowSendSettled;
+        }
+        // TERMINATE-DISPATCH FINALS (Task 7, "one terminal path" — spec 1's
+        // re-walk: "the ring ended at the terminate write"). The END/cancel
+        // path's own terminated status frame — the trigger `maybeEmitFrame`'s
+        // terminal branch waits for — routinely arrives AFTER the hook's
+        // teardown has already stashed and hung up the radio, so waiting for
+        // it here would lose the `final-totals` entry the same way it did
+        // before this task. Writing it from THIS call instead means the
+        // caller-initiated ending's own totals are in the ring before this
+        // promise even resolves, however long the machine's own frame takes.
+        //
+        // Guarded on an OPEN run (`recordFinalTotals`'s own doc comment):
+        // nothing to summarize before `program()` ever opened one, and a run
+        // the machine's own frame already closed already told its one story
+        // through that call site — this never re-tells a shorter version of
+        // it.
+        if (activeRun !== null && !activeRun.closed) {
+          recordFinalTotals(activeRun);
+        }
+        await sendSequence(buildTerminate(), "terminate-sent", {
+          onFrameWritten: terminateWritten,
+        });
+        await settleAfterTerminate();
+      } finally {
+        // Belt to `onFrameWritten`'s braces: a call that threw before its
+        // write — a builder throw, a transport that rejects the write
+        // itself — still owes nothing, and leaving the debt standing would
+        // hang the next `disconnect()` instead of merely ordering it. The
+        // release is idempotent, so the ordinary path runs it twice to no
+        // effect.
+        terminateWritten();
       }
-      await sendSequence(buildTerminate(), "terminate-sent");
-      await settleAfterTerminate();
     },
 
     events(cb: (e: MonitorEvent) => void): () => void {
@@ -6348,6 +6461,23 @@ export function createPm5Driver(
 
     async disconnect(): Promise<void> {
       log.record("disconnect-requested", "caller-initiated");
+      // A TERMINATE STILL OWED ITS WRITE GOES FIRST (delta pass, PR #278 —
+      // `terminateWritesOwed`'s own comment carries the measured race and
+      // Apple's "any pending commands ... may not complete"). The wait is
+      // bounded by exactly what `terminate()` can block on before it
+      // writes: `freeRowSendSettled`, itself capped at
+      // `FREE_ROW_PROGRAM_DEADLINE_MS`. It deliberately does NOT cover the
+      // rest of `terminate()` — its ack and its settle ticks, whose only
+      // production exit (no `ackTimeout` is configured) is the
+      // `t.onDisconnect` hatch this very call is about to fire. Waiting on
+      // those would not be a longer bound; it would be a deadlock.
+      if (terminateWritesOwed > 0) {
+        log.record(
+          "disconnect-deferred",
+          `${terminateWritesOwed} terminate write(s) still owed — holding the hang-up`,
+        );
+        await terminateWritesDrained;
+      }
       // The caller is done with this driver, so its one timer goes with it
       // either way (fast-follow Task 2) — draining rather than merely
       // cancelling (Task 7) answers it first, using whatever evidence this
