@@ -604,19 +604,31 @@ test("a stopped connected piece shows the in-flight interval's own metres beside
   await expect(page.locator(".summary-row-partial")).toHaveCount(1);
 });
 
-// THE NO-CLIP GATE (Task 5's own review finding 4, and RF21's two smells).
-// `.summary-row-partial` is a `flex: 0 0 auto` block-level flex ITEM with
-// `white-space: nowrap` — the item's own value, never a descendant's,
-// because the shrink algorithm reads the ITEM. That also means its own
-// `scrollWidth`/`clientWidth` can never disagree (a non-shrinking item is
-// sized to its content), so a `scrollWidth <= clientWidth` assertion on it
-// is decoration: MEASURED this session, it stays green with a five-digit
-// metre value that visibly overruns the row. The gate that can actually go
-// red is CONTAINMENT — the cell's right edge against the row's own content
-// box — and that is what this leg asserts. The row itself is deliberately
-// NOT the subject: `.summary-row-offset` is `flex: 1; min-width: 0` and
-// ellipsises first, so the row absorbs the overflow and reads clean while
-// the cell beside it is off the edge.
+// THE NO-CLIP GATE (Task 5's own review finding 4). What it asserts is
+// CONTAINMENT — the pair's box inside the row's own content box, on one
+// line — and the three sentences below say why, because the obvious
+// assertion is decoration here and this leg was written the obvious way
+// first (RF21).
+//
+// MEASURED at 375x812 against the real stack, not reasoned:
+// `.summary-row-partial`'s own `scrollWidth`/`clientWidth` agreed exactly
+// (117/117) even under a deliberately absurd `12345 m · 59:59` pair, and
+// went on agreeing with `flex: 0 0 auto` relaxed to `0 1 auto` — the row
+// runs about 1px from its widest natural content, and
+// `.summary-row-offset` (`flex: 1; min-width: 0`, ellipsised) absorbs the
+// whole deficit before anything else is asked to give. So a
+// `scrollWidth <= clientWidth` assertion on this cell cannot go red, and
+// shipping one would be a green check that retires the suspicion. The
+// non-shrink and the `nowrap` are pinned where they CAN fail —
+// `PostWorkoutSummary.test.tsx`'s CSS-rule legs, which read both
+// declarations off this very selector, on the flex ITEM itself.
+//
+// The ROW is deliberately not the subject either (the reviewer's own
+// wording): the offset cell ellipsises first, so the row keeps reading
+// clean while the cell beside it walks off the edge — which is exactly
+// what this leg's biting mutation produces. M8.1c: `.summary-row-offset`'s
+// `min-width: 0` -> `90px`, the yielding cell stops yielding ->
+// `Expected: <= 355.5, Received: 359.40625`.
 test("the in-flight pair is not clipped at the narrowest supported portrait (375x812)", async ({
   page,
 }) => {

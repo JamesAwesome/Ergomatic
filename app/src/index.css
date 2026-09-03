@@ -9544,15 +9544,20 @@ section:not(.news-pinned) .news-row:last-of-type {
    column, right-aligned, never wrapping.
 
    `flex: 0 0 auto` plus `nowrap` ON THE FLEX ITEM ITSELF — RF21's own recorded failure was a `min-width` placed on a
-   CHILD of the flex item, where the shrink algorithm never reads it. The
-   e2e no-clip assertion Task 8 adds will measure THIS element's
-   `scrollWidth` against its `clientWidth` — it does not exist yet, and
-   this sentence is a requirement on that task, not a gate that is already
-   running. This element is a block-level flex item, so both figures are
-   real when it does (an inline element reports 0 for both, RF21's second
-   smell).
+   CHILD of the flex item, where the shrink algorithm never reads it.
+   These two declarations are gated by `PostWorkoutSummary.test.tsx`'s
+   own CSS-rule legs, which read them off THIS selector and carry their
+   own mutations.
    `.summary-row-offset` beside it is `flex: 1; min-width: 0` and already
-   ellipsises, so it is what yields the space. VALUES APPROVED at Gate
+   ellipsises, so it is what yields the space. That yield order is what
+   Task 8's e2e leg gates (`log.spec.ts`, "not clipped at the narrowest
+   supported portrait"), by CONTAINMENT — the cell's box inside the row's
+   content box. Measured while writing it, and recorded here because the
+   earlier version of this comment asked for the wrong assertion: this
+   element's own `scrollWidth` and `clientWidth` agree at every value
+   tried, including an absurd `12345 m · 59:59`, because the offset cell
+   absorbs the deficit first — so a `scrollWidth <= clientWidth`
+   assertion here could never have gone red. VALUES APPROVED at Gate
    0-B (James, 2026-09-02). Contrast computed, not eyeballed (RF6):
    `--ink-2` (#3f3c35) on `--page` (#f4f1e8) is 9.75:1 and on `--surface`
    (#fffdf7) is 10.81:1, both clear of the 4.5:1 AA floor. */
