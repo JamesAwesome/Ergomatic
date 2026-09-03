@@ -66,7 +66,9 @@ import {
   completeContinuityReset,
   completeMonitorRun,
   createMonitorRun,
+  partialRefusal,
   recordActual,
+  withPartial,
   type CloseReason,
   type MonitorRun,
 } from "./monitorRun";
@@ -2512,8 +2514,49 @@ export function useMonitorSession(
       }
       if (run.completedAt !== null) return;
       const withFinalSeries = withSeries(run);
-      const next = completeMonitorRun(
+      // Door spec (2026-09-02) §5.3: THE ONE READ, covering FOUR of the five
+      // producers of an allowlisted `endedBy` — the End arm (`rower` or
+      // `link-lost` by `linkGone`), `endByMachine`'s `terminated` arm (the
+      // PM5's own Menu, and the arm every committed capture exercises because
+      // a replay cannot press a button), the live `programDropped` arm, and
+      // `program()`'s catch. Gated inside `withPartial` on I-B1/I-B3/I-B6,
+      // never per arm. The fifth producer (the continuity reset) never
+      // reaches this function and carries the same read at its own commit.
+      //
+      // BELOW the `completedAt !== null` guard above, deliberately: that
+      // guard is what makes "a partial cannot be written twice" (§5.2)
+      // unrepresentable rather than merely unlikely.
+      const banked = withPartial(
         withFinalSeries,
+        endedBy,
+        lastRowingFrameRef.current,
+      );
+      // Harden lens 2, finding 3: EVERY refusal above is otherwise silent,
+      // and "it kept nothing" is precisely the report a rower files. One
+      // entry either way, at the one site that knows — the same
+      // `sessionRef.current?.log.record` idiom `close-no-record` above uses.
+      // `partialRefusal` names the reason from the SAME gates `withPartial`
+      // applied (`monitorRun.ts`, pinned to agree exhaustively by that
+      // file's own M1.4 leg), so the ring can never disagree with the record
+      // it is explaining.
+      const refusal = partialRefusal(
+        withFinalSeries,
+        endedBy,
+        lastRowingFrameRef.current,
+      );
+      if (refusal === null) {
+        sessionRef.current?.log.record(
+          "partial-written",
+          `idx=${banked.partial?.intervalIndex ?? "none"} m=${banked.partial?.meters ?? "none"} s=${banked.partial?.seconds ?? "none"}`,
+        );
+      } else {
+        sessionRef.current?.log.record(
+          "partial-refused",
+          `reason=${refusal} idx=${lastRowingFrameRef.current?.intervalIndex ?? "none"}`,
+        );
+      }
+      const next = completeMonitorRun(
+        banked,
         { terminated, endedBy },
         nowDate(),
       );
@@ -3150,15 +3193,46 @@ export function useMonitorSession(
           // exists, so comparing against ITS result here would make every
           // live frame with recorder data look like a fresh reset.
           const withFinalSeries = withSeries(closed);
-          // Hand-off store design spec §1, plan Task 3: `withFinalSeries`
-          // is always a NEW object relative to the run this hook held
-          // before the reset (`closed !== runRef.current` already proved
-          // that; `withSeries` either returns `closed` itself or a further
-          // spread of it), so this always reaches the store — never a
-          // no-op commit. `completeContinuityReset` is one of the writer
-          // gates this task makes PURE; this call site is its own
-          // committer, same discipline as `closeRecord`'s.
-          applyProducerCommit(withFinalSeries);
+          // Door spec §5.3, THE FIFTH PRODUCER. `completeContinuityReset` is
+          // a pure transform committed here, never through `closeRecord`, so
+          // a read installed only there would miss this close entirely.
+          // `closed.endedBy` is `"link-lost"` (`monitorRun.ts`'s
+          // `completeContinuityReset`); the `??` is a total-function
+          // fallback, not a case this reaches.
+          const banked = withPartial(
+            withFinalSeries,
+            closed.endedBy ?? "link-lost",
+            lastRowingFrameRef.current,
+          );
+          // Harden lens 2, finding 3 — the SAME two ring entries as
+          // `closeRecord`'s, because this close is just as silent and is the
+          // one a link-loss report will be about.
+          const refusal = partialRefusal(
+            withFinalSeries,
+            closed.endedBy ?? "link-lost",
+            lastRowingFrameRef.current,
+          );
+          if (refusal === null) {
+            sessionRef.current?.log.record(
+              "partial-written",
+              `idx=${banked.partial?.intervalIndex ?? "none"} m=${banked.partial?.meters ?? "none"} s=${banked.partial?.seconds ?? "none"}`,
+            );
+          } else {
+            sessionRef.current?.log.record(
+              "partial-refused",
+              `reason=${refusal} idx=${lastRowingFrameRef.current?.intervalIndex ?? "none"}`,
+            );
+          }
+          // Hand-off store design spec §1, plan Task 3: the committed value
+          // is always a NEW object relative to the run this hook held before
+          // the reset (`closed !== runRef.current` already proved that;
+          // `withSeries` either returns `closed` itself or a further spread
+          // of it, and `withPartial` either returns ITS input or a further
+          // spread again), so this always reaches the store — never a no-op
+          // commit. `completeContinuityReset` is one of the writer gates
+          // this task makes PURE; this call site is its own committer, same
+          // discipline as `closeRecord`'s.
+          applyProducerCommit(banked);
           // Same two steps `closeRecord` always takes after its own
           // completion write: the 30s flush timer would otherwise keep
           // firing into a record that can never accept another write, and

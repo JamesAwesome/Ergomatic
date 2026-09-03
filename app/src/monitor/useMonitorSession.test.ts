@@ -53,6 +53,7 @@ import {
 } from "./handoffStore";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
+import { measuredIntervalCount } from "../session/summaryModel";
 import {
   createFakeTransport,
   type FakeBoundaryEvent,
@@ -5996,12 +5997,11 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
    *  transport (the RC-37 block's own ack sequence: a refused prepare —
    *  never-observed on hardware, `sendPrepare` swallows anything but a
    *  disconnect — then the real send's own `"ok"` ack, then a fresh armed
-   *  readback for `verifyArmed`), then rows: one live frame carrying
-   *  banked distance (the hook's own READY -> LIVE gate) and one completed
-   *  interval actual over a real 0x0037/0x0038 pair — leg (a)'s own "≥1
-   *  completed interval actual". Returns once `phase === "live"` with the
-   *  actual recorded. */
-  async function driveLiveWithActual(
+   *  readback for `verifyArmed`), then rows one live frame carrying banked
+   *  distance (the hook's own READY -> LIVE gate). Returns once
+   *  `phase === "live"`, with NO interval actual banked —
+   *  `driveLiveWithActual` below adds that. */
+  async function driveLive(
     result: Session,
     transport: ReturnType<typeof rawTransport>,
   ): Promise<void> {
@@ -6046,7 +6046,19 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
       transport.notify(GENERAL_STATUS_UUID, liveFrame(30, 100));
     });
     expect(result.current.phase).toBe("live");
+  }
 
+  /** `driveLive` plus interval 0's own completed actual over a real
+   *  0x0037/0x0038 pair — leg (a)'s own "at least one completed interval
+   *  actual". Split out of `driveLive` above for door PR B Task 3's own
+   *  `program-dropped` leg, which needs a live run with NO actual banked:
+   *  I-B6 retires the in-flight reading the moment that interval's actual
+   *  lands, so a drop taken after this call has nothing left to bank. */
+  async function driveLiveWithActual(
+    result: Session,
+    transport: ReturnType<typeof rawTransport>,
+  ): Promise<void> {
+    await driveLive(result, transport);
     act(() => {
       transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(0, 30, 100));
       transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(0, 22));
@@ -6133,6 +6145,44 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
     // wire itself, the same before/after idiom this file's other
     // `wireWrites` assertions already use.
     expect(receiveWrites()).toBe(writesBeforeDrop);
+  });
+
+  // Door PR B Task 3 (door-partial design spec §5.3): the THIRD of the five
+  // partial producers, living here rather than in Task 3's own describe block
+  // because a `programDropped` needs `driver.ts`'s armedWatch driven to a
+  // genuine structural mismatch, and the fake transport cannot be scripted to
+  // report a wrong armed structure (this block's own header says why). No
+  // actual is banked in this leg on purpose: I-B6 retires the in-flight
+  // reading the moment its interval's own actual lands, so `driveLive` — not
+  // `driveLiveWithActual` — is what leaves a reading for the drop to bank.
+  it("(a2) door PR B: a live drop banks the in-flight reading as a partial, as endedBy program-dropped", async () => {
+    const transport = rawTransport();
+    const clock = manualClock();
+    const result = buildSession(transport, clock);
+    await driveLive(result, transport);
+
+    triggerLiveDrop(transport, clock, 30, 100);
+
+    expect(result.current.phase).toBe("ended");
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("program-dropped");
+    // `liveFrame(30, 100)`'s own reading: interval 0, 100 m, 30 s. The three
+    // wrong-structure WaitToBegin ticks that follow are not rowing frames and
+    // mint nothing over it.
+    expect(stored?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    // I-B2: still not an `IntervalActual`.
+    expect(stored?.actuals).toStrictEqual([]);
+    const ringEntries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const written = ringEntries.filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=0 m=100 s=30");
   });
 
   it("(b) a denied durable write on the live drop's close enters held-error — the ended patch, not a healthy release", async () => {
@@ -11622,6 +11672,119 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
   }, 15000);
 
   // -------------------------------------------------------------------
+  // Door PR B Task 3 (door-partial design spec §5.3): THE FIFTH PRODUCER.
+  // The continuity reset commits through `applyProducerCommit` directly and
+  // never touches `closeRecord`, so a read installed only there would miss
+  // this close entirely — the one close a link-loss report is most likely to
+  // be about. Lives in this block because the reset needs the real driver +
+  // real captured bytes composition its siblings above already build.
+  // -------------------------------------------------------------------
+  it("door PR B: the continuity reset banks the LAST HONEST reading as a partial — the fifth producer, at its own commit", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    // The LAST HONEST frame: real hardware bytes, mid-session, rowing —
+    // elapsed 5970/100 s and distance 2441/10 m, straight off
+    // `REAL_TAIL_HEX`'s own leading six bytes. This is what the reset has to
+    // preserve.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    expect(lifecycleCb).toBeDefined();
+    resumeAfterGap(lifecycleCb!);
+    expect(result.current.frameSilence).toBe(true);
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("ended");
+
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("link-lost");
+    // I-B4: a link-lost close banks what was LAST RECEIVED. The frame that
+    // TRIPS the reset is by definition the dishonest one (10.0 m / 1.0 s
+    // here — a machine that went backwards), and `handleFrame`'s live branch
+    // mints AFTER the reset commit precisely so it can never be the reading
+    // banked.
+    expect(stored?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 244.1,
+      seconds: 59.7,
+    });
+    expect(stored?.actuals).toStrictEqual([]);
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const written = exported.filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=0 m=244.1 s=59.7");
+  }, 15000);
+
+  // -------------------------------------------------------------------
   // Whole-branch review minor 2: the continuity reset was closing the
   // record through `completeContinuityReset` directly — a pure transform
   // that never touches `withSeries`/`stopSeriesFlush`/the recorder at
@@ -13853,5 +14016,429 @@ describe("Door PR B Task 2 (§5.3, I-B6): the mint refusal, diagnosed once per i
     expect(
       entries.filter((e) => e.kind === "partial-mint-refused"),
     ).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Door PR B Task 3 (door-partial design spec 2026-09-02, §5.1/§5.2/§5.3): THE
+// READ, at both close sites. Task 2 minted `lastRowingFrameRef` and cleared it
+// on I-B3's two events, but nothing read it — so seven of that task's own legs
+// asserted on `MonitorRun.partial`, a field no code path could write yet, and
+// four of its mutations came back green for that reason alone (its report §2).
+// They are folded in here, where the reads make them observable.
+//
+// Every leg drives the REAL hook to a REAL close and reads `loadMonitorRun()`
+// (or, where the store deliberately refuses the close write, the ring — which
+// is written either way, and is the SECOND observable harden lens 2 finding 3
+// exists for).
+// ---------------------------------------------------------------------------
+
+describe("Door PR B Task 3 (§5.3): the in-flight reading, banked at close", () => {
+  /** The one rowing frame every positive leg's reading comes from:
+   *  interval 0, 100 m, 30 s. Numbers chosen so a leg asserting the pair
+   *  cannot pass on a coincidence with the boundary actual's own (200 m /
+   *  60 s) or with a zero. */
+  function rowingAtZero(atMs = 100): FakeTimelineEvent {
+    return status(atMs, {
+      elapsedSeconds: 30,
+      distanceMeters: 100,
+      programIntervalIndex: 0,
+    });
+  }
+
+  /** Interval 0's own `IntervalActual`, the I-B3 half-two clear's trigger. */
+  function boundaryAtZero(atMs: number): FakeBoundaryEvent {
+    return {
+      atMs,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 60,
+        distanceMeters: 200,
+        avgSpm: 24,
+        avgHeartRateBpm: 142,
+        restDistanceMeters: 0,
+      },
+      cumulativeElapsedSeconds: 60,
+      cumulativeDistanceMeters: 200,
+    };
+  }
+
+  function ring(result: Session): { kind: string; detail: string }[] {
+    return JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+  }
+
+  /** Connects and arms `TWO_INTERVALS` over the fake, ready to be ticked. */
+  async function armed(
+    events: FakeTimelineEvent[],
+  ): Promise<ReturnType<typeof harness>> {
+    const h = harness({ program: TWO_INTERVALS, events });
+    await connect(h.result);
+    await programAndArm(h.result, h.fake, TWO_INTERVALS, TWO_IDENTITY);
+    return h;
+  }
+
+  // -----------------------------------------------------------------------
+  // The five producers, one leg each (plus the natural finish, which is the
+  // negative). The continuity reset — the fifth — needs the real driver +
+  // real-bytes composition and lives with its siblings in the Phase LL Task 4
+  // F3/I6 block above; the live `programDropped` arm needs a hand-rolled
+  // structural mismatch and lives in the Wave F PR 1 Task 2 block above. Both
+  // are named here so a reader looking for "five producers" finds all five.
+  // -----------------------------------------------------------------------
+
+  it("producer 1 — End with the link up banks the in-flight reading, as endedBy rower", async () => {
+    const { result, fake } = await armed([rowingAtZero()]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("rower");
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    // I-B2: a partial is NEVER an `IntervalActual`. "N intervals kept" does
+    // not move for it — a partial single-interval piece is still kept = 0.
+    expect(run?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(run!.actuals)).toBe(0);
+    // §5.1: the ring says what the record shows, at the site that knows.
+    const written = ring(result).filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=0 m=100 s=30");
+  });
+
+  it("producer 2 — End after the link is gone banks it too, as endedBy link-lost", async () => {
+    const { result, fake } = await armed([rowingAtZero()]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    // `linkGone`'s first disjunct (`phase === "disconnected"`). The
+    // `frameSilence` disjunct is the same one line of `endSession` and is
+    // already pinned by the whole-branch B1 block above; what this leg is
+    // about is that the reading survives to a link-lost close at all —
+    // I-B4's "a link-lost close banks what was LAST RECEIVED".
+    act(() => {
+      fake.injectDisconnect();
+    });
+    expect(result.current.phase).toBe("disconnected");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("link-lost");
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    expect(run?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(run!.actuals)).toBe(0);
+  });
+
+  it("producer 3 — a machine TERMINATE (the PM5's own Menu) banks it, as endedBy rower", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      status(200, {
+        workoutState: WORKOUTSTATE_TERMINATE,
+        elapsedSeconds: 40,
+        distanceMeters: 130,
+        spm: 0,
+        currentSplit: 0,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("rower");
+    // The TERMINATE frame itself carries `intervalIndex: null` (no interval
+    // is "current" while terminated — `pm5/parse.ts`'s own business rule),
+    // so it mints nothing and the reading banked is the last ROWING one.
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    expect(run?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(run!.actuals)).toBe(0);
+  });
+
+  it("producer 4 — program() failing over an open run banks it, as endedBy program-failed", async () => {
+    const { result, fake, transport } = await armed([rowingAtZero()]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    // The P3b block's own setup, for its own reason: a real PM answers
+    // `program()`'s leading Terminate by reporting `terminated`, which would
+    // close the run through the ORDINARY path before the rejection surfaces.
+    // Lose that one notification and the run is genuinely still open when the
+    // reject lands — the state P3b (and this producer) is about.
+    transport.deaf = true;
+    fake.injectNak(0);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    expect(result.current.phase).toBe("failed");
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("program-failed");
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    expect(run?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(run!.actuals)).toBe(0);
+  });
+
+  it("the natural finish banks NOTHING — I-B1 is an allowlist, and finished is not on it", async () => {
+    const { result, fake } = await armed([rowingAtZero(), finishedAt(200)]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("finished");
+    expect(run?.partial).toBeUndefined();
+    // THE POINT of the ring half: the reading was STILL HELD at this close
+    // (idx=0) — nothing retired it — so the only thing that refused the
+    // partial is the close reason itself. A `reason=no-reading` here would
+    // mean this leg proved something else.
+    const refused = ring(result).filter((e) => e.kind === "partial-refused");
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.detail).toBe("reason=finished idx=0");
+  });
+
+  // -----------------------------------------------------------------------
+  // I-B3 / I-B6 / D3 — the mint and its clears, all of which assert on
+  // `partial` and so could not go red until the reads above existed
+  // (Task 2 report §2, and mutations M2.1/M2.2/M2.4 which were green there).
+  // -----------------------------------------------------------------------
+
+  it("I-B3 (a): a resting frame carrying the held index retires the reading — the close banks nothing", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      // The work bout for interval 0 is over. On a rested program this
+      // fires ~60 s BEFORE interval 0's own actual (MEASURED at 59 940 ms,
+      // `walk-2026-08-28/rest-boundary-recording.jsonl.gz`), and an End
+      // during that rest would otherwise store a COMPLETED interval as a
+      // partial and count it unmeasured.
+      status(200, {
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 45,
+        distanceMeters: 150,
+        programIntervalIndex: 0,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("rower");
+    expect(run?.partial).toBeUndefined();
+    // The C2-shaped ordering's own ring entry (§5.1): "it kept nothing" is
+    // exactly the report a rower files, and this is the line that answers it.
+    const refused = ring(result).filter((e) => e.kind === "partial-refused");
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.detail).toBe("reason=no-reading idx=none");
+  });
+
+  it("I-B3 (b): a resting frame for a DIFFERENT interval leaves the reading alone", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      // Interval 1's rest, arriving while interval 0's reading is the one
+      // held. The clear is keyed on the index, never on "any rest frame" —
+      // a rest for someone else's interval says nothing about this bout.
+      status(200, {
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 45,
+        distanceMeters: 150,
+        programIntervalIndex: 1,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(loadMonitorRun()?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+  });
+
+  it("I-B6: the interval's own actual retires the reading — a banked index never becomes a partial", async () => {
+    const { result, fake } = await armed([rowingAtZero(), boundaryAtZero(200)]);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.actuals).toHaveLength(1);
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    // Without this, a close in the 810 ms lag window writes
+    // `partialMeters: 0` beside `actualMeters: 200` — the same interval,
+    // twice, once as a completed reading and once as a piece of one.
+    expect(run?.partial).toBeUndefined();
+    expect(run?.actuals).toHaveLength(1);
+    expect(measuredIntervalCount(run!.actuals)).toBe(1);
+  });
+
+  it("D3: a rowing frame whose index the program cannot explain mints nothing — the close banks the last INDEXED reading", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      // `toProgramIndex(5, "rowing", 2)` is `null`: a candidate more than
+      // one step outside the program's range is not explained by the
+      // forward-attribution rule at all. Absence over invention, the rule
+      // `logDraft` already applies to null-index actuals.
+      status(200, {
+        elapsedSeconds: 99,
+        distanceMeters: 999,
+        programIntervalIndex: 5,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    // 999/99 would be the D3 frame's own numbers. The record must carry the
+    // last frame that knew which interval it belonged to.
+    expect(loadMonitorRun()?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+  });
+
+  it("a zero-distance reading banks as 0 metres, never floored away — the pair is what the machine last said", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      boundaryAtZero(200),
+      // Interval 1's first rowing frame: the machine's interval-scoped
+      // distance is back at 0 while the elapsed clock runs on. A rower who
+      // presses End here rowed 0 m of interval 1, and that is what the row
+      // has to say — a floor would silently promote "nothing yet" to
+      // "nothing at all".
+      status(300, {
+        elapsedSeconds: 61,
+        distanceMeters: 0,
+        programIntervalIndex: 1,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 1,
+      meters: 0,
+      seconds: 61,
+    });
+    // I-B2 again, this time with a real actual in the record beside it.
+    expect(run?.actuals).toHaveLength(1);
+    expect(measuredIntervalCount(run!.actuals)).toBe(1);
+  });
+
+  it("program()'s own clear: a re-armed run's close carries no stale reading from the run before it", async () => {
+    // Run 1 rows interval 0 and holds 100 m / 30 s.
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      // Run 2's first frame, after the re-arm: it opens the record (the
+      // READY -> LIVE gate needs banked distance, and 40 is banked) but
+      // carries a D3 null index, so it mints NOTHING. That is the one
+      // reachable ordering in which a stale reading could survive into a
+      // second run's close — every other first-frame shape mints over it.
+      status(200, {
+        elapsedSeconds: 12,
+        distanceMeters: 40,
+        programIntervalIndex: 5,
+      }),
+    ]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("rower");
+    // 100/30 is run 1's reading. Run 2 never took one.
+    expect(run?.partial).toBeUndefined();
+  });
+
+  it("a boundary the STORE refused leaves the reading alive — the close still banks it (RF25)", async () => {
+    const { result, fake } = await armed([rowingAtZero(), boundaryAtZero(200)]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    // Race the store directly underneath the hook's own
+    // `lastAcceptedRevisionRef` — the file's own established idiom for
+    // making `applyProducerCommit` refuse. From here the hook's every
+    // producer commit is stale, the boundary's included.
+    const current = currentUnretiredHandoffForTest();
+    expect(current).not.toBeNull();
+    expect(
+      commitHandoffForTest(current!.sessionKey, current!.revision, {
+        ...current!.run,
+        title: "RACED — not the hook's own write",
+      }).accepted,
+    ).toBe(true);
+
+    tick(fake, 100);
+    // The GATE took the actual; the STORE did not. `runRef` is unchanged,
+    // so the record does not own it.
+    expect(result.current.actuals).toHaveLength(0);
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    // The close write is refused by the same stale revision, so the DURABLE
+    // record cannot show the partial here — the ring is the observable, and
+    // it is the one that discriminates: retiring the reading on a refused
+    // commit would lose it twice over (the record owns no actual AND the
+    // close finds no reading), which is exactly RF25's shape.
+    expect(loadMonitorRun()?.title).toBe("RACED — not the hook's own write");
+    expect(loadMonitorRun()?.completedAt).toBeNull();
+    const entries = ring(result);
+    const written = entries.filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=0 m=100 s=30");
+    expect(entries.filter((e) => e.kind === "partial-refused")).toHaveLength(0);
   });
 });
