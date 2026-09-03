@@ -1211,9 +1211,16 @@ describe("PostWorkoutSummary — the in-flight pair on a partial step row (§5.1
   it("renders the pair in the slot the dash occupies, and drops the dash on THAT row only", () => {
     renderSummary({ model: partialModel() });
     const partial = rowByIndex(3);
-    expect(partial.querySelector(".summary-row-partial")?.textContent).toBe(
-      "250 m · 1:03",
-    );
+    // A DIRECT CHILD of `.summary-row`, which is the flex CONTAINER — so
+    // `index.css`'s `flex: 0 0 auto` lands on the flex ITEM and the shrink
+    // algorithm actually reads it. RF21's recorded failure was a
+    // declaration placed on a DESCENDANT, where it is inert; a plain
+    // `querySelector` here would match a wrapped span just as happily and
+    // was MEASURED to stay green under exactly that mutation (M5.4b in the
+    // task report), which is why this is `:scope >`.
+    expect(
+      partial.querySelector(":scope > .summary-row-partial")?.textContent,
+    ).toBe("250 m · 1:03");
     expect(partial.querySelector(".summary-row-dash")).toBeNull();
 
     // The unreached row keeps exactly what it has today — the dash, and
