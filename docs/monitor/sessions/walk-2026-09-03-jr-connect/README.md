@@ -50,12 +50,23 @@ wire-side reading of the same state.
    code, not the listed prose. Same class for END: `endSession` swallows the
    terminate's rejection, so an END inside the send window would end the
    record and leave the erg armed.
+   **FIXED in `b74c65a0`** (same PR): `cancel()`'s armed predicate and
+   `teardown`'s both drop the `mode === "justrow"` exclusion, so Cancel and
+   an unmount at `ready` terminate a free row; and `driver.terminate()` now
+   WAITS for the free-row send to settle instead of refusing it, so an END
+   inside the window reaches the erg too. Pinned at the hook (the layer that
+   can reach it), plus a door test that the Ready screen's Cancel button
+   actually calls `session.cancel()`.
 5. **Ack latency is ~2 s, not ~90 ms.** write→ack: 1968 / 2060 / 1788 ms
    (three rings). The spec's "~90 ms ack seen on hardware" was a workout
    program's ack; the Just Row frame's ack arrives after the three
    `notify-first` lines. `FREE_ROW_PROGRAM_DEADLINE_MS = 3000` leaves ~1 s of
    margin, and the Ready screen is up (first `frame`) ~0.8 s before the ack:
    a Cancel or END in that window meets the send still in flight.
+   **FIXED in `b74c65a0`** (same PR): the deadline is 5000 ms — ~2.4x the
+   slowest ack measured here — and it is a ceiling, not a delay, since an
+   ack that lands clears the flag on arrival. The "~90 ms" figure is
+   corrected at the constant itself and in spec rev 5.
 6. Observation: ring 1 latched once (`gap=4258ms`) while James photographed
    with the app backgrounded; recovery was clean, no banner reported.
 
