@@ -4350,7 +4350,9 @@ does not match these numbers._
   the worst case and not the convenient one.**
 - **Fold PASSES cleanly for the first time in the series: 103 words, four
   bullets, none over 25.** Series: #228 ~270, #230 266, #239 148, #248 274,
-  #249 225, #258 134, #268 186, #272 153, **door PR A 103, unamended.** The
+  #249 225, #258 134, #268 186, #272 153, **door PR A 103, unamended** —
+  111 words / five bullets after PM-1's own required sentence, still under
+  both counts. The
   30-second rule is now enforceable by two counts and the count is being
   hit before the gate rather than at it. Stop treating a pass as news.
 - **Release: v0.36.0 MINOR after merge** (v0.35.0 cut the same day; nothing

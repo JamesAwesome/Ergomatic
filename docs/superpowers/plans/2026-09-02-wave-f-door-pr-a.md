@@ -1668,6 +1668,14 @@ migration, per the spec. Its rationale is written there.)
       // and no reader re-runs `buildMonitorLogSteps` over STORED rows, so
       // saved data is untouched.
       ```
+
+      **LANDED 2026-09-02 as:** union narrowed to `"work"`; the guard KEPT
+      behind `(seedStep.kind as string) === "warmup"` for the residual
+      population (an unlogged `MonitorRun` authored before PR #150 /
+      v0.16.0), mirroring `summaryModel.ts`'s `warmupIndex` — the
+      whole-branch review found this zero-cost shape and the controller's
+      accept-the-divergence ruling above was reversed; no number moves.
+      Removing both readers is one owed change (ROADMAP rider-2 row).
 - [ ] **Step 4: Reconcile `storedSummary.ts:424-436`**, which cites the
       warm-up skip as a LIVE cause of the Σ-steps gap. After this change the
       null-index actual is the only remaining cause. Replace the claim; do not
@@ -1690,6 +1698,14 @@ migration, per the spec. Its rationale is written there.)
       `:643-646` and is what the new text builds on).
       **Verify by SUBJECT, not by line** (`grep -n "Bluetooth stack" app/domain/monitor/types.ts`)
       — the ROADMAP's numbers have been stale twice on this exact comment.
+
+      **LANDED 2026-09-02, softened per PM-5:** the landed comment does not
+      say "it covers neither" — that overstated what the walks establish.
+      Both causes are struck as UNSOURCED (not disproven), and the
+      Bluetooth-stack-reset case is marked UNMEASURED (our logging records
+      no such capture; `grep -rli "bluetooth stack\|stack reset"
+      docs/monitor/sessions/` is empty) — the walks establish only the
+      absence of our own evidence, never the radio's behaviour.
       **Note:** RC-12's other named site, `schema.ts:165-167`'s
       `distance_meters` claim, is ALREADY corrected (the CORRECTED block sits
       at `schema.ts:237-251`); `docs/history/phase-rc.md:2056-2058` is the
