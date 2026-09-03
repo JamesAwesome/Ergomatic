@@ -350,6 +350,60 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     // No residue of the account just removed: the identity line is gone.
     expect(screen.queryByText(/jamesawesome/)).toBeNull();
   });
+
+  it("leaves no failed attempt on screen once the unlink lands", async () => {
+    // THE TEST THE BRIEF'S M21 NEEDED AND DID NOT HAVE. The brief asserts
+    // that removing `setOutcome(null)` from `unlink()`'s success branch
+    // reddens "a relink offers Connect again"; measured against that test,
+    // it does not, and cannot — the outcome that survives there is
+    // `{kind:"linked"}`, which `describeFailure` answers `null` for and
+    // nothing else on the card reads, so the residue is unobservable.
+    //
+    // The residue IS observable one state over. A RECONNECT that fails sets
+    // `outcome` while the card is still LINKED, where every failure panel
+    // is gated shut by `!link.linked`. The unlink then opens that gate:
+    // without the clear, the freshly unlinked card renders the OLD
+    // attempt's panel and a Try again, describing an attempt against an
+    // account this device no longer has.
+    let linked = true;
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        linked = false;
+        return new Response(null, { status: 204 });
+      }
+      return new Response(
+        JSON.stringify(
+          linked
+            ? { ...LINKED, needsReauth: true }
+            : { available: true, linked: false },
+        ),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "declined",
+      stateEchoed: false,
+    }));
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "RECONNECT CONCEPT2" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Unlink Concept2" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
+    // Positive observable first, then the absences (RF21's async rule).
+    await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" });
+    expect(screen.queryByText("THE LINK DIDN'T FINISH")).toBeNull();
+    expect(
+      screen.queryByText("You cancelled at Concept2. Nothing was linked."),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
 });
 
 describe("Concept2Card outcomes (Gate 0 amendment 1e/1f/1g)", () => {
