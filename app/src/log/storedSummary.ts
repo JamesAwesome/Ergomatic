@@ -130,6 +130,14 @@ export interface StoredLogStep {
   // hands it, so EVERY stored pm5 row would misread as "predates the
   // split" forever, regardless of when it was actually saved.
   actualSpm?: number;
+  /** Door spec (2026-09-02) §5.1 — the READ shape of the in-flight pair.
+   *  The third of the three `LogStep` declarations task (0) widens (write:
+   *  `session/logDraft.ts`; server: `server/stores/logs.ts`; read: here),
+   *  and the one the partial step row renders from. Never summed: every
+   *  reader in this file that adds step actuals reads
+   *  `actualMeters`/`actualSeconds` and nothing else (§5.2 I-B5). */
+  partialMeters?: number;
+  partialSeconds?: number;
 }
 
 /** `GET /api/logs/:id`'s full row (spec §3) — the from-the-log view's own

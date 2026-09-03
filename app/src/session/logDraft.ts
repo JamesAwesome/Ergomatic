@@ -214,6 +214,20 @@ export interface LogStep {
    *  all — its measured value lives in `spm` instead (see that field's
    *  own doc comment, and `spmIsMeasured` below). */
   actualSpm?: number;
+  /** Door spec (2026-09-02) §5.1: OUR reading of the interval that was
+   *  still in flight when a connected session closed short — the last
+   *  rowing frame's own 0x0031 distance, never an `IntervalActual`.
+   *  Written ONLY by `buildMonitorLogSteps` below, only on a step with NO
+   *  `actualSource`, and only from `MonitorRun.partial`. NEW KEY NAMES on
+   *  purpose (§5.1): a partial carried in `actualMeters` would reach an
+   *  older server as the number without its marker and enter every sum
+   *  forever. Never summed, never paced (§5.2 I-B5). */
+  partialMeters?: number;
+  /** The same reading's ELAPSED time, not rowing time — the PM5 has no
+   *  paused state and its clock runs whether or not the rower pulls
+   *  (`domain/monitor/types.ts`). Paired with `partialMeters` above:
+   *  `buildMonitorLogSteps` writes both or neither. */
+  partialSeconds?: number;
 }
 
 /** THE ROW-LOCAL DISCRIMINANT for a pre-split monitor row (Phase LT spec 1,

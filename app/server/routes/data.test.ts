@@ -10,6 +10,7 @@ import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { PREFERENCES_DEFAULTS } from "../stores/preferences.js";
 import { makeFakeStores } from "../testing/fakes.js";
 import { createDataRouter, type Stores } from "./data.js";
+import { PARTIAL_STEP_LEG_A } from "../../src/session/partialGateFixture.js";
 
 // In-memory fakes, keyed by userId, mirroring the real stores' signatures
 // exactly, live in app/server/testing/fakes.ts (shared with other server
@@ -2794,6 +2795,77 @@ describe("GET/POST /api/logs", () => {
       });
       expect(res.status).toBe(400);
       expect(res.body.field).toBe("steps");
+    });
+
+    // Door spec (2026-09-02) §5.1: the in-flight pair survives the route.
+    // RF24 — this leg starts at the PRODUCER (the POST body) and asserts
+    // after the READER (the GET), because both halves being well tested is
+    // exactly the condition that hides a broken seam.
+    it("round-trips partialMeters/partialSeconds through POST -> GET", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [{ ...PARTIAL_STEP_LEG_A }],
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.steps[0]).toStrictEqual({ ...PARTIAL_STEP_LEG_A });
+    });
+
+    it("rejects a half-pair: partialMeters with no partialSeconds", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", partialMeters: 37.6 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toBe(
+        "steps[0]: partialMeters and partialSeconds must both be present or both be absent",
+      );
+    });
+
+    it("rejects a half-pair: partialSeconds with no partialMeters", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", partialSeconds: 10.9 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toBe(
+        "steps[0]: partialMeters and partialSeconds must both be present or both be absent",
+      );
+    });
+
+    it("rejects a negative partialMeters, naming the field", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", partialMeters: -1 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toBe(
+        "steps[0]: partialMeters must be a number, >= 0",
+      );
+    });
+
+    it("rejects a negative partialSeconds, naming the field", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", partialSeconds: -1 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toBe(
+        "steps[0]: partialSeconds must be a number, >= 0",
+      );
     });
 
     // Split-band boundary: pm5's own bound is "> 0 and <= 6000", not >= 0.
