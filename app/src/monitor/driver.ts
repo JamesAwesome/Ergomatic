@@ -1533,6 +1533,15 @@ export function createPm5Driver(
   // exact shape instead of catching it).
   let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
+  /** §2 (rowingActive design spec, 2026-09-03). The last RAW rowing-state
+   *  byte this driver logged, and whether it has logged one at all. Two
+   *  fields, not one, because "never seen" and "seen, and it was 0" are
+   *  different facts and a single `number | null` conflates them.
+   *  Per-driver by construction, exactly like `lastLoggedFrameState` above:
+   *  a new driver is a new detector, so an old byte can never pair with a
+   *  new trace. */
+  let lastRawRowingState: number | null = null;
+  let rawRowingStateLogged = false;
   /** The last raw 0x0031 payload, byte-for-byte — see the 0x0031 handler's
    *  own comment; read by the terminal-raw entry and, since Task 8, by
    *  `suspicious-terminal` too (the same bytes, deliberately — see that
@@ -2785,6 +2794,31 @@ export function createPm5Driver(
       log.record(
         "frame",
         `state=${frame.state} elapsed=${frame.elapsedSeconds} distance=${frame.distanceMeters} rowingActive=${frame.rowingActive} spm=${frame.spm}`,
+      );
+    }
+    // §2 (rowingActive design spec, 2026-09-03). The raw byte, on this
+    // driver's FIRST frame and on every change after. Deliberately NOT
+    // folded into the `frame` entry above: that one fires on a state-WORD
+    // change, which is exactly the trigger a mid-work stop does not pull —
+    // the 2026-09-03 resume-edge walk's committed ring carries 6 `frame`
+    // entries across a real stop and says nothing about the byte. The
+    // first-frame entry is what makes an ABSENCE mean something: no entry
+    // means this build carries no instrument, exactly one means the byte
+    // never moved (walk 2026-08-26's entire session), N+1 means N changes.
+    // `rawRowingState` is optional on the type, so an unreported byte
+    // renders `unknown` and is never claimed as a change against a number —
+    // same defensive posture, and same reason, as the `?? "unknown"` on
+    // `useMonitorSession.ts`'s `resume-first-frame` entry.
+    const rawRowingState = frame.rawRowingState ?? null;
+    if (!rawRowingStateLogged || rawRowingState !== lastRawRowingState) {
+      const previous = rawRowingStateLogged
+        ? (lastRawRowingState ?? "unknown")
+        : "none";
+      rawRowingStateLogged = true;
+      lastRawRowingState = rawRowingState;
+      log.record(
+        "raw-rowing-state",
+        `previous=${previous} value=${rawRowingState ?? "unknown"} state=${frame.state} elapsed=${frame.elapsedSeconds} distance=${frame.distanceMeters}`,
       );
     }
     emit({ kind: "frame", frame });
