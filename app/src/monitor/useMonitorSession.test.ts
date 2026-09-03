@@ -13636,3 +13636,121 @@ function freeRowScriptForDebug(): FakeScript {
     ],
   };
 }
+
+// Door spec (2026-09-02) §5.2 I-B6 / §5.3, plan Task 2. The MINT-side
+// refusal, and the only part of Task 2's ref that is observable at Task 2's
+// own layer: `noteFrameForPartial` writes this entry itself, whereas every
+// other leg of the ref's lifetime is observable only through the read Task 3
+// installs in `closeRecord` and at the continuity commit (see this task's
+// report — the mint/zero-mint/I-B3/D3-null/clear-site legs and mutations
+// M2.1/M2.2/M2.4/M2.5-M2.7 belong to Task 3, where a partial can actually
+// be written).
+//
+// THE SHAPE IS SYNTHETIC AND SAYS SO (brief step 1, Finding 7): no committed
+// capture contains the window, but `MonitorFrame.intervalIndex` lags the
+// machine's own interval reset by up to 810 ms
+// (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`, antagonist ledger), so
+// a rowing frame CAN carry the index of an interval whose actual is already
+// banked. These are real bytes through the fake's real encoding — the script
+// authors OUR program index and `toMachineIndex` puts the machine's own
+// number on the wire, so `toProgramIndex` is exercised end to end.
+describe("Door PR B Task 2 (§5.3, I-B6): the mint refusal, diagnosed once per interval index", () => {
+  /** Interval 0's boundary lands, and then TWO more rowing frames still
+   *  carry index 0 — the lag window, twice over. */
+  function laggingScript(): FakeScript {
+    return {
+      program: TWO_INTERVALS,
+      events: [
+        status(100, {
+          elapsedSeconds: 30,
+          distanceMeters: 100,
+          programIntervalIndex: 0,
+        }),
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSpm: 24,
+            avgHeartRateBpm: 142,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 200,
+        },
+        status(300, {
+          elapsedSeconds: 61,
+          distanceMeters: 204,
+          programIntervalIndex: 0,
+        }),
+        status(400, {
+          elapsedSeconds: 62,
+          distanceMeters: 208,
+          programIntervalIndex: 0,
+        }),
+      ],
+    };
+  }
+
+  it("two consecutive rowing frames carrying a banked index write EXACTLY ONE partial-mint-refused entry", async () => {
+    const { result, fake } = harness(laggingScript());
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+    expect(result.current.actuals).toHaveLength(1);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    // `filter(...).length`, never `find` — `find` stays green under a
+    // duplicate and the duplicate IS the failure mode this dedupe exists
+    // for (the refusal arm is per-FRAME, and the ring is ~1 Hz of budget).
+    const refusals = entries.filter((e) => e.kind === "partial-mint-refused");
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]?.detail).toBe("reason=actual-banked idx=0");
+    // I-B6's own consequence: the banked actual is untouched by the frames
+    // that were refused.
+    expect(loadMonitorRun()?.actuals).toStrictEqual([
+      expect.objectContaining({ index: 0, distanceMeters: 200 }),
+    ]);
+  });
+
+  it("an ordinary live run, no actual banked yet: nothing is refused", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, {
+          elapsedSeconds: 30,
+          distanceMeters: 100,
+          programIntervalIndex: 0,
+        }),
+        status(200, {
+          elapsedSeconds: 31,
+          distanceMeters: 104,
+          programIntervalIndex: 0,
+        }),
+      ],
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+    }[];
+    expect(
+      entries.filter((e) => e.kind === "partial-mint-refused"),
+    ).toHaveLength(0);
+  });
+});
