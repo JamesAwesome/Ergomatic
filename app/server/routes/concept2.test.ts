@@ -2692,6 +2692,20 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     // real sends: this case is about the WINDOW, not about the writer.
     // "never reads its OWN write back as the rower's declaration on the
     // next send" is the one that starts upstream of the producer.
+    //
+    // The profile is stubbed to derive the OPPOSITE class on purpose. A
+    // narrower page does not error — it silently answers `H` from the
+    // profile for a rower who declared `L`, which is the production defect
+    // in one line. Without this stub the fallback hits an unstubbed
+    // `fetchMe` and the test would go red on a 500, catching the mutant for
+    // the wrong reason.
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jmorelli",
+      weight: 8200,
+      gender: "M",
+    });
     vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 51 });
     const { app, logs } = buildApp({ store, client });
     vi.spyOn(logs, "sentC2ResultIds").mockResolvedValue(
