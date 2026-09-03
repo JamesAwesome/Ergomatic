@@ -989,6 +989,16 @@ export function createLogsStore(db: Db) {
     // `session_logs_user_id_idx`; no new index (the per-user row count here
     // is the rower's own log, and the eligible population measured on prod
     // was 6 of 20 rows).
+    //
+    // The `isNotNull(c2ResultId)` clause is DEFENCE IN DEPTH and is stated
+    // as such rather than sold as a gate: `recordC2Result` is the only
+    // writer of either column and writes both in one statement, so a row
+    // with a matching non-null `c2_user_id` always has a non-null
+    // `c2_result_id` — no supported path can produce the row this clause
+    // excludes, and the contract suite's own probe for it stays GREEN when
+    // the clause is deleted (task-3-report.md, mutation M-null-guard). It
+    // stays because the `as number` cast below would otherwise be a lie the
+    // compiler cannot see.
     async sentC2ResultIds(
       userId: string,
       c2UserId: number,
