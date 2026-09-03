@@ -20,9 +20,9 @@ Files: `app/domain/monitor/pm5/commands.ts` (`WORKOUTTYPE_JUSTROW = 0x01` with t
 - [ ] Implement; green; commit; probe: change the type byte to `0x00` → red on the literal.
 
 ### Task 2: the bounded detached send in `beginFreeRow()` (driver + fake)
-Files: `app/src/monitor/driver.ts` (`beginFreeRow`: open the run as today; `const seq = buildJustRowProgram()` BEFORE `programInFlight = true`; then `void Promise.race([sendSequence(seq, "free-row-program-sent"), deadline(FREE_ROW_PROGRAM_DEADLINE_MS)]).then(…record sent / unanswered…, (err) => log.record("free-row-program-failed", err instanceof ProgramRejectionError ? err.hexTrace : String(err))).finally(() => { programInFlight = false; })` with `FREE_ROW_PROGRAM_DEADLINE_MS = 3000` a named literal; `terminate()` gains a `ProgramBusyError` refusal while `programInFlight === "beginFreeRow()"` (holder label; `program()`'s hold stays terminable for the hook's unmount interleave); NO `sendPrepare()`; sweep the prose the spec lists), `app/src/monitor/transports/fake.ts` (accept the frame like a workout program; `synthesizeTerminated` reacts to a terminate at an idle machine under the `terminateReactsWhileIdle` script opt-in; NAK via the existing `failNextProgramFrame: "reject"`). Tests: the free-row driver suite from #259, reading `log.entries()`.
-- [ ] Failing tests: (1) ring order — `free-row-open` before the first `write`; (2) the `write` entries are exactly the p.80 frame, none equal to `f1 76 04 13 02 01 02 60 f2`; `free-row-program-sent` present; (3) `failNextProgramFrame: "reject"` → run still open, `free-row-program-failed` with a hex trace; (4) `fake.delayWrites(50)` then `await expect(driver.terminate()).rejects.toThrow(ProgramBusyError)`, then the send completes; (5) ack withheld → after the deadline `free-row-program-unanswered`, and `terminate()` then resolves; (6) terminate-reacting fake → the free row stays open through the send.
-- [ ] Implement; green; commit; probes (record failure texts): re-add `sendPrepare()` → (2)+(6) red; drop `programInFlight` → (4) red; drop the deadline → (5) hangs/red; move the send above the run assignment → (1) red.
+Files: `app/src/monitor/driver.ts` (`beginFreeRow`: open the run as today; `const seq = buildJustRowProgram()` BEFORE `programInFlight = true`; then `void Promise.race([sendSequence(seq, "free-row-program-sent"), deadline(FREE_ROW_PROGRAM_DEADLINE_MS)]).then(…record sent / unanswered…, (err) => log.record("free-row-program-failed", err instanceof ProgramRejectionError ? err.hexTrace : String(err))).finally(() => { programInFlight = false; })` with `FREE_ROW_PROGRAM_DEADLINE_MS = 5000` a named literal (**rev 5, after the 2026-09-03 walk measured write→ack at 1968/2060/1788 ms**; it was 3000 against a workout program's ~90 ms ack); `terminate()` AWAITS the send's own settled promise `freeRowSendSettled` while it is non-null (**rev 5: it REFUSED with `ProgramBusyError` until the walk found Cancel leaving the erg in the Just Row session — finding 4**; `program()`'s hold stays terminable for the hook's unmount interleave, unchanged); NO `sendPrepare()`; sweep the prose the spec lists), `app/src/monitor/transports/fake.ts` (accept the frame like a workout program; `synthesizeTerminated` reacts to a terminate at an idle machine under the `terminateReactsWhileIdle` script opt-in; NAK via the existing `failNextProgramFrame: "reject"`). Tests: the free-row driver suite from #259, reading `log.entries()`.
+- [ ] Failing tests: (1) ring order — `free-row-open` before the first `write`; (2) the `write` entries are exactly the p.80 frame, none equal to `f1 76 04 13 02 01 02 60 f2`; `free-row-program-sent` present; (3) `failNextProgramFrame: "reject"` → run still open, `free-row-program-failed` with a hex trace; (4) `fake.delayWrites(50)` then `driver.terminate()` — the ring reads p.80 write, its ack, `free-row-program-sent`, THEN the terminate write (rev 5); (5) ack withheld → a mid-window `terminate()` is unwritten and unsettled at 4999 ms, and at 5000 ms the deadline logs `free-row-program-unanswered` and the terminate goes out; (6) terminate-reacting fake → the free row stays open through the send.
+- [ ] Implement; green; commit; probes (record failure texts): re-add `sendPrepare()` → (2)+(6) red; drop the `await freeRowSendSettled` → (4) red (the terminate write precedes `free-row-program-sent`); drop the deadline → (5) hangs/red; move the send above the run assignment → (1) red.
 
 ### Task 3: the Ready line + replay + e2e
 Files: `app/src/justrow/JustRow.tsx:306` (the line), `JustRow.test.tsx`, `app/src/monitor/justRowReplay.test.ts` (the replay never acks: assert the free row still opens/completes, the ring holds one `write` of the p.80 frame and `free-row-program-unanswered` after the deadline, and neither `-sent` nor `-failed`), `app/e2e/justrow.spec.ts` (the connected flow shows the new line AND `/you/diagnostics/monitor-logs`'s COPY export carries `free-row-program-sent` for the session — the ring is the only thing an e2e can see), no capture: copy-only change (James's rule); `justrow-ready.png` is refreshed by the next layout capture.
@@ -34,3 +34,27 @@ Files: `app/src/justrow/JustRow.tsx:306` (the line), `JustRow.test.tsx`, `app/sr
 
 ### Task 5: the walk leg (James at the erg, `/hardware-walk`, PHONE walk — no recordings)
 - [ ] Build from the branch (`pnpm ios:build` with the derived client id; Xcode Run). Control: PM5 power-cycled to a virgin menu (ring shows type 0); photo of the PM5 BEFORE connect; connect from the door; photo of PM5 + phone in one frame BEFORE the first stroke; pull; end; log. Negative leg: reconnect right after a Menu end. Record the split cadence as an observation. Walk record under `docs/monitor/sessions/walk-<date>-jr-connect/`.
+
+### Task 6 (rev 5, ADDED by the walk): Cancel and END must undo the arm
+Walk `docs/monitor/sessions/walk-2026-09-03-jr-connect/`, findings 4 and 5.
+The frame works (control leg PASSED, `workoutType` 0 → ack → 1); what does
+not is leaving: Cancel on the Ready screen left the PM5 in the Just Row
+session the app had just armed, and an END inside the send window would
+have done the same silently.
+Files: `app/src/monitor/driver.ts` (`terminate()` waits on
+`freeRowSendSettled` instead of throwing `ProgramBusyError`; the deadline
+becomes 5000 ms against the walk's measured 1968/2060/1788 ms write→ack),
+`app/src/monitor/useMonitorSession.ts` (`cancel()`'s armed predicate and
+`teardown`'s both drop `identityRef.current.mode !== "justrow"`),
+`driver.test.ts`, `useMonitorSession.test.ts`, `JustRow.test.tsx`.
+- [ ] Failing tests: driver — the ordering (p.80 write, ack,
+      `free-row-program-sent`, terminate write) and the bounded wait
+      (unwritten at 4999 ms, out at 5000 ms). Hook — `cancel()` at ready
+      on a free row puts the terminate literal on the wire after the ack;
+      an unmount does too; `endSession()` mid-send does too. Door — the
+      ready frame's Cancel calls `session.cancel()`.
+- [ ] Implement; green; commit; probes (record failure texts): restore the
+      refusal → the driver ordering test red; drop the `await` → the
+      terminate write precedes `free-row-program-sent`; restore the
+      `mode !== "justrow"` exclusion → the hook tests red; delete
+      `void session.cancel()` from the door's Cancel → the door test red.

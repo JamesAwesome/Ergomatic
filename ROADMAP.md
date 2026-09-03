@@ -198,10 +198,11 @@ slate.
   OPEN 5, the p.80 JustRow frame at `docs/monitor/pm5-interface-notes.md:204`,
   RC-38 rides with it.** **IMPLEMENTED (PR #278, 2026-09-02; spec
   `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`
-  rev 4.1, Gate 0 rev 1c): `beginFreeRow()` opens the run, then sends the
+  rev 5, Gate 0 rev 1c): `beginFreeRow()` opens the run, then sends the
   p.80 frame ALONE — no prepare, since a terminate with a run open is the
   row's own END — as a DETACHED send bounded by
-  `FREE_ROW_PROGRAM_DEADLINE_MS` (3 s); its outcome goes to the ring
+  `FREE_ROW_PROGRAM_DEADLINE_MS` (5 s, raised from 3 s by the walk's
+  measured write→ack of 1968/2060/1788 ms); its outcome goes to the ring
   (`free-row-program-sent`/`-unanswered`/`-failed`) and nothing on the
   phone branches on it. The earlier cost line here ("gains a reject path
   and an ack gate") was half wrong: there is a reject PATH but no ack
@@ -211,17 +212,22 @@ slate.
   `The clock starts on your first stroke.` (the shipped `Nothing is
   programmed…` line became false and is gone). Gates: `commands.test.ts`
   pins the frame literal; `driver.test.ts` the ring order, the no-prepare
-  literal, NAK, busy-END and deadline paths; `justRowReplay.test.ts` the
+  literal, NAK, the terminate-waits ordering and deadline paths;
+  `justRowReplay.test.ts` the
   unanswered send over the 08-31 capture; `e2e/justrow.spec.ts` reads
-  `free-row-program-sent` off the diagnostics door's copied ring. WALK
-  LEG OWED (plan Task 5), and James reviews after it: a CONTROL (PM5
-  power-cycled to a virgin menu — the first `structure` ring line reads
-  `workoutType=0` — photographed before connect, then PM5 + phone in one
-  frame before the first stroke) and a NEGATIVE leg (reconnect right
-  after a Menu end, the PM5 sitting at type 1: does the screen change?).
-  Split cadence of the programmed row vs the menu-entered 5:00 is an
-  observation to record, not a gate. RC-38's disposition is under Phase
-  PROTO.**
+  `free-row-program-sent` off the diagnostics door's copied ring.
+  **WALK RUN 2026-09-03** (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`,
+  three sessions with the control): the frame DOES drive the erg —
+  `workoutType` 0 at the virgin menu, ack at 1.97 s, type 1 89 ms later,
+  and the PM5's own Just Row screen photographed. It also found the
+  defect James saw: **Cancel on the Ready screen left the erg in the Just
+  Row session** (`cancel()` excluded `mode === "justrow"` from its
+  terminate on the now-false ground that "a free row armed nothing"), and
+  END inside the send window did the same silently. FIXED in this PR:
+  `terminate()` WAITS OUT the free-row send instead of refusing it
+  (bounded by the deadline above), and both Cancel and an unmount at
+  `ready` terminate a free row exactly as they do a programmed one. RC-38's
+  disposition is under Phase PROTO.**
 - **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
   infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
   James ruled TIME ONLY; Gate 0 PASSED on rev 2e

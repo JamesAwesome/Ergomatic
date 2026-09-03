@@ -13380,19 +13380,31 @@ describe("beginFreeRow (the free row's own arm)", () => {
     expect(run?.verificationBytes).toBeDefined();
   });
 
+  /** The two frame literals, TYPED from `docs/monitor/pm5-interface-notes.md`
+   *  (§12 example 2 and §13 — the same pair `driver.test.ts`'s own free-row
+   *  block uses), never derived from the builders. */
+  const JUST_ROW_FRAME_HEX = "f1 76 07 01 01 01 13 02 01 01 61 f2";
+  const TERMINATE_FRAME_HEX = "f1 76 04 13 02 01 02 60 f2";
+
   /**
-   * CANCEL MUST NOT TERMINATE A ROW WE NEVER PROGRAMMED (the antagonist
-   * pass's own smaller finding, landed here because the free-row arm is
-   * what makes it reachable). `cancel()`'s armed predicate is "phase is
-   * programming or ready", and its own comment says why it terminates
-   * there: "it terminates what we armed". A free row sits at `ready`
-   * having armed NOTHING — and the terminate would reach the machine's
-   * own row. Worst case is a rower who began pulling before the motion
-   * gate fired (up to ~5 frames at the walk's measured 1 Hz): their row
-   * dies on the erg because they tapped Cancel in an app that was only
-   * ever watching.
+   * CANCEL UNDOES THE ARM — a free row's included (walk
+   * `docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4).
+   *
+   * This test used to assert the OPPOSITE ("cancel() at ready sends NO
+   * terminate on a free row — we armed nothing"), and it was right when it
+   * was written: `beginFreeRow()` sent no bytes then. Since spec
+   * 2026-09-02 it sends the PM5 Concept2's p.80 frame, which puts the
+   * monitor into a Just Row session — so a free row at `ready` IS armed,
+   * by us, and a Cancel that leaves it there strands the rower in front of
+   * a machine the app started a session on and then walked away from.
+   * James watched exactly that happen at the erg.
+   *
+   * The ORDER is asserted, not merely the presence: the terminate must
+   * follow the p.80 write AND its ack, because the driver shares one
+   * `pendingAck` slot between them (which is why `driver.ts`'s
+   * `terminate()` waits on `freeRowSendSettled` rather than racing it).
    */
-  it("cancel() at ready sends NO terminate on a free row — we armed nothing", async () => {
+  it("cancel() at ready TERMINATES a free row: the terminate frame follows the p.80 write and its ack", async () => {
     const { result, transport } = harness(freeRowScript());
     await connect(result);
     act(() => {
@@ -13406,8 +13418,97 @@ describe("beginFreeRow (the free row's own arm)", () => {
       await flush();
     });
 
-    expect(transport.wireWrites).toBe(writesAtReady);
+    // Exactly one more frame on the wire, and the ring says which.
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const justRowWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === JUST_ROW_FRAME_HEX,
+    );
+    const ack = ring.findIndex((e, i) => e.kind === "ack" && i > justRowWrite);
+    const terminateWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === TERMINATE_FRAME_HEX,
+    );
+    expect(justRowWrite).toBeGreaterThanOrEqual(0);
+    expect(ack).toBeGreaterThan(justRowWrite);
+    expect(terminateWrite).toBeGreaterThan(ack);
+    expect(ring.map((e) => e.kind)).toContain("terminate-sent");
     expect(transport.disconnects).toBe(1);
+  });
+
+  /**
+   * THE OTHER EXIT FROM `ready`, owing the same undo. `cancel()` is the
+   * button; an unmount is the tab bar. `teardown`'s own armed guard carried
+   * the identical free-row exclusion, written to match `cancel()`'s and
+   * citing it by name — so the walk's finding falsified both at once, and
+   * fixing only the one James happened to press would have left the same
+   * stranded monitor one gesture away.
+   */
+  it("an unmount at ready terminates a free row too — the tab-bar exit is not a free pass", async () => {
+    const { result, transport, unmount } = harness(freeRowScript());
+    await connect(result);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    await act(async () => {
+      await flush();
+    });
+    expect(result.current.phase).toBe("ready");
+    const writesAtReady = transport.wireWrites;
+
+    await act(async () => {
+      unmount();
+      await flush();
+    });
+
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    expect(transport.disconnects).toBe(1);
+  });
+
+  /**
+   * END INSIDE THE SEND WINDOW. `endSession` swallows the terminate's
+   * rejection, so while `terminate()` REFUSED during the free-row send an
+   * END in the first seconds ended the app's row and told the erg nothing —
+   * the walk's finding 4, one button over, and invisible because the
+   * swallow is silent by design. `driver.terminate()` now waits the send
+   * out (bounded by its own deadline), so the terminate reaches the wire
+   * AFTER the p.80 ack instead of never.
+   *
+   * `delayWrites(50)` is what makes the window real: it holds each write's
+   * returned promise open for 50 real ms while the fake still answers
+   * inline, so `sendSequence` is provably mid-flight when END arrives.
+   */
+  it("endSession() while the free-row send is still in flight still terminates — after the p.80 ack, not instead of it", async () => {
+    const { result, fake, transport } = harness(freeRowScript());
+    await connect(result);
+    fake.delayWrites(50);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.phase).toBe("ready");
+    const writesAtReady = transport.wireWrites;
+
+    await act(async () => {
+      await result.current.endSession();
+      await flush();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const ringKinds = ring.map((e) => e.kind);
+    const sent = ringKinds.indexOf("free-row-program-sent");
+    const terminateWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === TERMINATE_FRAME_HEX,
+    );
+    expect(sent).toBeGreaterThanOrEqual(0);
+    expect(terminateWrite).toBeGreaterThan(sent);
+    expect(ringKinds).toContain("terminate-sent");
   });
 
   /**

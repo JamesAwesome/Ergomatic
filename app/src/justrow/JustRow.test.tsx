@@ -359,6 +359,9 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
   const keepAwakeOff = vi.fn().mockResolvedValue(undefined);
   const beginFreeRow = vi.fn();
   const connect = vi.fn().mockResolvedValue(undefined);
+  /** Shared so a test can assert the door actually CALLS it — see the
+   *  ready-frame Cancel test at the bottom of this describe. */
+  const cancel = vi.fn().mockResolvedValue(undefined);
 
   function mockSession(overrides: Record<string, unknown>) {
     // resetModules FIRST: JustRow was statically imported at this file's
@@ -385,7 +388,7 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
         program: vi.fn().mockResolvedValue(undefined),
         beginFreeRow,
         endSession: vi.fn().mockResolvedValue(undefined),
-        cancel: vi.fn().mockResolvedValue(undefined),
+        cancel,
         retryHandoffSave: vi.fn().mockResolvedValue(undefined),
         proceedHandoff: vi.fn().mockResolvedValue(undefined),
         exportLog: vi.fn().mockReturnValue("[]"),
@@ -539,6 +542,34 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
     expect(
       screen.getByRole("button", { name: "Try again" }),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * THE READY FRAME'S CANCEL REACHES THE SESSION, not just the screen.
+   *
+   * Above this seam the button does two things — `session.cancel()` and
+   * `setStarted(false)` — and only the second one is visible: drop the
+   * first and the door still returns to its unstarted frame, looking
+   * exactly right, while the erg keeps the Just Row session
+   * `beginFreeRow()` put it in. That is the walk's finding 4 wearing a
+   * different cause (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`),
+   * and the hook's own cancel tests cannot see it: they call `cancel()`
+   * themselves. This is the one assertion that the BUTTON does.
+   */
+  it("Cancel on the ready frame calls session.cancel(), not only setStarted(false)", async () => {
+    mockSession({ phase: "ready", deviceName: "PM5 432331249" });
+    await renderMocked();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(
+      screen.getByRole("heading", { name: "Ready when you pull" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    // ...and the door is back to its unstarted frame, the once-latch
+    // cleared, so the two halves of the handler are pinned together.
+    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
   });
 });
 

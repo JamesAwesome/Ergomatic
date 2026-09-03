@@ -3913,13 +3913,16 @@ export function useMonitorSession(
         // never pulled" case is unchanged by this task).
         if (driver === null) return;
         const phase = stateRef.current.phase;
-        // Phase JR PR 2: same free-row exclusion as `cancel()`'s own armed
-        // predicate, same reasoning — an unmount at `ready` on a free row
-        // must not terminate the machine's own row.
+        // No free-row exclusion here either, for the reason `cancel()`'s
+        // own armed predicate now gives in full: since spec 2026-09-02 a
+        // free row IS armed — `beginFreeRow()` puts the monitor into a Just
+        // Row session — so leaving through the tab bar at `ready` owes the
+        // erg the same undo that Cancel does. The two exits were written to
+        // match each other and still do; only the fact underneath them
+        // changed (walk `walk-2026-09-03-jr-connect`, finding 4).
         if (
           !alreadyTerminated &&
-          (phase === "programming" || phase === "ready") &&
-          identityRef.current.mode !== "justrow"
+          (phase === "programming" || phase === "ready")
         ) {
           bestEffort(
             driver.terminate().finally(() => bestEffort(driver.disconnect())),
@@ -5149,16 +5152,25 @@ export function useMonitorSession(
     // open until `live`). The handoff's "nothing lost" is amended in
     // DEVIATIONS accordingly: nothing OF OURS is lost, and the erg is left
     // terminated rather than armed with an orphan.
-    // Phase JR PR 2: a free row is EXCLUDED from the terminate — the line
-    // above says why it exists ("it terminates what we armed") and a free
-    // row armed nothing, so the terminate would reach the machine's OWN
-    // row. Worst case is a rower who began pulling before the motion gate
-    // fired (~5 frames at the walk's measured 1 Hz): their row dies on the
-    // erg because they tapped Cancel in an app that was only watching.
+    // A FREE ROW IS ARMED TOO, since spec 2026-09-02: `beginFreeRow()`
+    // sends the PM5 Concept2's p.80 frame, which puts the monitor into a
+    // Just Row session on the rower's behalf. So the line above applies to
+    // it unchanged — "it terminates what we armed" — and Cancel undoes the
+    // arm exactly as it does for a workout.
+    //
+    // This used to EXCLUDE `mode === "justrow"`, on the reasoning that "a
+    // free row armed nothing". That was true before the p.80 send and
+    // false after it, and the walk found the cost the same day
+    // (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4):
+    // James tapped Cancel on the Ready screen and the PM5 sat there in the
+    // Just Row session the app had just put it in, with nothing on the
+    // wire to undo it. The old worst case still stands and is still
+    // accepted — a rower who began pulling before the motion gate fired
+    // (up to ~5 frames at the walk's measured 1 Hz) loses that row on the
+    // erg — but it is now the SAME trade the programmed path already
+    // makes, rather than a reason to leave the machine armed.
     const armed =
-      driver !== null &&
-      (phase === "programming" || phase === "ready") &&
-      identityRef.current.mode !== "justrow";
+      driver !== null && (phase === "programming" || phase === "ready");
     if (armed) {
       try {
         await driver.terminate();

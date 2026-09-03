@@ -1,9 +1,13 @@
 # Connect puts the erg into a Just Row session — design
 
-**Status: spec REV 4, 2026-09-02 — HARDENED (both lenses run, folded;
-one ledger entry). Gate 0 PASSED on rev 1c (James: the Ready line is
-`The clock starts on your first stroke.`). No stored shape. Ready for
-the plan to execute.**
+**Status: spec REV 5, 2026-09-03 — BUILT, WALKED, and revised BY the walk
+(`docs/monitor/sessions/walk-2026-09-03-jr-connect/`). The walk's control
+leg PASSED (the p.80 frame drives the erg) and its findings 4 and 5 are
+folded here: `terminate()` WAITS the free-row send out instead of refusing
+it, Cancel and unmount undo the arm, and the deadline is 5000 ms against
+a MEASURED ack latency. Rev 4 (2026-09-02) was hardened, both lenses run,
+one ledger entry. Gate 0 PASSED on rev 1c (James: the Ready line is
+`The clock starts on your first stroke.`). No stored shape.**
 Phase JR follow-on item 2, re-confirmed by James 2026-09-02 ("i do want
 item 2"). Handoff: `docs/design/handoffs/2026-09-02-just-row-connect/`.
 
@@ -104,33 +108,61 @@ the machine did not take it.
    watchdog) stay: a JustRow program has no interval structure. **The
    send holds `programInFlight`** for its duration (harden lens 1): that
    flag already gates `program()`'s re-entry and the RC-37 watch, and
-   `terminate()` — which today has no re-entrancy guard and would share
+   `terminate()` — which has no re-entrancy guard and would share
    the driver's ONE `pendingAck` slot with the in-flight send (the ack
    matcher is arrival-order only; it never reads the ack's command byte,
    and production configures no `ackTimeout`, so an orphaned slot never
-   expires) — REFUSES with `ProgramBusyError` while THE FREE-ROW SEND
-   holds it. Not while `program()` holds it (implementation, rev 4.1):
+   expires) — **WAITS for the free-row send to settle before it writes**
+   (rev 5). Not refuses. `programInFlight` stays a holder label,
+   `false | "program()" | "beginFreeRow()"`, one lifetime, because it
+   still gates `program()`'s re-entry and the RC-37 watch; the WAIT reads
+   a second value minted beside it, the send's own settled promise
+   (`freeRowSendSettled`, §Lifetime), which resolves on ack, NAK,
+   deadline or disconnect. `program()`'s hold is not waited on:
    `useMonitorSession`'s teardown deliberately interleaves a terminate
    with an in-flight `program()` ("best-effort by design — including the
    case where a `program()` is still in flight", pinned by its "unmount
    while programming (before armed) also terminates first" test), and
-   refusing there would leave the erg holding a workout the rower backed
-   out of. So `programInFlight` is a holder label,
-   `false | "program()" | "beginFreeRow()"`, one lifetime, and the
-   refusal reads the label. **The send is BOUNDED** (harden lens 2): production
+   blocking there would leave the erg holding a workout the rower backed
+   out of.
+
+   **Rev 4.1 said REFUSES, and the 2026-09-03 walk priced it**
+   (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4): James
+   tapped Cancel on the Ready screen, the refusal threw, the hook swallowed
+   it, and the PM5 sat in the Just Row session the app had just armed
+   (ring 3 ends `disconnect-requested` with no terminate write). A refusal
+   is only safe when some caller can act on it; both callers here
+   (`cancel`, `endSession`) are best-effort and swallow, so the refusal
+   could only ever mean "the erg is not told". The wait is bounded by the
+   deadline below, so it can never mean "hang".
+
+   **And the arm is now UNDONE at both exits** (rev 5): `cancel()`'s armed
+   predicate and `teardown`'s both excluded `mode === "justrow"` on the
+   ground that "a free row armed nothing" — true before this spec, false
+   after it. Both exclusions go. Cancel on the Ready screen, and an unmount
+   at `ready` (the tab bar), terminate a free row exactly as they do a
+   programmed one; the accepted worst case is the one the programmed path
+   already accepts, a rower who began pulling inside the motion gate's ~5
+   frames losing that row on the erg.
+
+   **The send is BOUNDED** (harden lens 2): production
    configures no `ackTimeout`, and the replay transport (and a PM5 that
    never answers) acks nothing, so an unbounded send would hold
-   `programInFlight` for the driver's life and refuse END forever. The
+   `programInFlight` for the driver's life and a terminate would wait on it
+   forever. The
    send races its ack against a deadline of `FREE_ROW_PROGRAM_DEADLINE_MS`
-   (a named literal, 3000 ms — three status ticks at the walk's measured
-   1 Hz, well past the ~90 ms ack seen on hardware); on the deadline the
+   (a named literal, **5000 ms**); on the deadline the
    send is abandoned, `free-row-program-unanswered` is recorded, and the
-   flag clears. What END does DURING the window is stated truthfully:
-   the hook's `endSession` flips to `ended` before awaiting
-   `driver.terminate()` and swallows its rejection, so an END inside the
-   window ends the app's row while the erg is not told — the same outcome
-   as an END over a lost link, bounded here to three seconds; the walk
-   confirms an END from the app after the window stops the PM5.
+   flag clears. **The number is MEASURED, not reasoned** (rev 5): rev 4.1
+   set 3000 ms against "the ~90 ms ack seen on hardware", which was a
+   WORKOUT program's ack; the walk timed the Just Row frame's own ack at
+   **1968 / 2060 / 1788 ms** across three sessions (its finding 5 — the ack
+   arrives after the PM's three `notify-first` lines), leaving 3000 ms
+   under a second of margin. 5000 ms is ~2.4x the slowest observed, and it
+   is a ceiling rather than a delay: an ack that lands clears the flag when
+   it arrives. What END does DURING the window is now the same as outside
+   it: `endSession` flips to `ended`, then awaits `driver.terminate()`,
+   which waits out the send and writes the terminate after its ack.
 
 ## Mechanism
 
@@ -143,22 +175,30 @@ the machine did not take it.
    relies on: it opens `activeRun` (with `freeRow: true`, so both opt-outs
    hold throughout) and returns as today. It additionally FIRES a detached
    send — the sequence is BUILT before the flag is set, then
-   `programInFlight = true; void Promise.race([sendSequence(seq, "free-row-program-sent"), deadline(FREE_ROW_PROGRAM_DEADLINE_MS)]).then(onSettled, onFailed).finally(() => { programInFlight = false; })`
+   `programInFlight = "beginFreeRow()"; freeRowSendSettled = Promise.race([sendSequence(seq, "free-row-program-sent"), deadline(FREE_ROW_PROGRAM_DEADLINE_MS)]).then(onSettled, onFailed).finally(() => { programInFlight = false; freeRowSendSettled = null; })`
    — NO prepare, whose only effects are ring entries. `onFailed` records
    `free-row-program-failed` with `err instanceof ProgramRejectionError ?
    err.hexTrace : String(err)` (the transport's own rejections — the
    fake's "unexpected write" and `capacitorBle`'s post-disconnect throw —
    are plain `Error`s with no `hexTrace`), never throws itself (a throwing
-   handler on a `void` chain is an unhandled rejection), and the deadline
+   handler leaves the stored chain rejected, and nothing may reject at a
+   caller that only wants to know the send is OVER), and the deadline
    branch records `free-row-program-unanswered`. `sendSequence` runs
    synchronously to its first `await`, so the write is issued INSIDE
    `beginFreeRow()` — after the run is open, which is the ordering that
-   matters. No state, no promise surfaced, so
+   matters. No state, and the promise is surfaced to ONE reader inside the
+   driver (`terminate()`, ruling 4) and to nobody outside it, so
    the hook's synchronous `ready` flip (`useMonitorSession.ts:4773-4775`,
    "one indivisible step") and `JustRow.tsx`'s once-latch are untouched
    and the arm effect cannot re-trigger. Every rejection, NAK, timeout and
    disconnect is caught and logged; a disconnect mid-send is already the
    hook's link-lost path.
+2b. `useMonitorSession.ts` (rev 5): `cancel()`'s armed predicate and
+   `teardown`'s both drop their `identityRef.current.mode !== "justrow"`
+   exclusion, so a free row at `programming`/`ready` is terminated on the
+   way out by either exit. Nothing else about either path changes:
+   `alreadyTerminated` still stops the two from writing twice, and both
+   still swallow the terminate's failure.
 3. `JustRow.tsx`: the Ready body line becomes James's line. No branch.
 4. Fake transport: accepts the p.80 frame like a workout program (acks);
    the NAK case rides the fake's EXISTING `failNextProgramFrame: "reject"`
@@ -188,9 +228,25 @@ the machine did not take it.
 
 ## Lifetime
 
-One flag, already existing: `programInFlight` (now a holder label, see
-Ruling 4), set to `"beginFreeRow()"` for the send's duration and cleared
-in `finally` (also on disconnect). The detached
+Two driver-closure values, one lifetime, one mint site, one clear site —
+both minted in `beginFreeRow()` after the run is open and the sequence
+built, both cleared in the send chain's own `finally`:
+
+| value | is | mint | clear | survives |
+| --- | --- | --- | --- | --- |
+| `programInFlight` | the holder label `false \| "program()" \| "beginFreeRow()"` (pre-existing; gates `program()`'s re-entry and the RC-37 watch) | `beginFreeRow()`, set to `"beginFreeRow()"` | the chain's `finally`, back to `false` | nothing — a second `beginFreeRow()` with a run open is refused before the mint, so neither value can be overwritten while live |
+| `freeRowSendSettled` | the send's own settled promise, `Promise<void> \| null`; resolves (never rejects) on ack, NAK, deadline or disconnect | same statement | same `finally`, back to `null` | as above |
+
+INVARIANTS, not mechanisms. (a) While a free-row send is live, a
+`terminate()` writes no byte until that send has settled — one ack slot,
+one conversation at a time. (b) That wait is bounded: it can never outlast
+`FREE_ROW_PROGRAM_DEADLINE_MS`. (c) Neither value outlives its send, and
+neither outlives the driver — a driver does not outlive its connection, so
+nothing here survives a teardown, a relaunch or a re-arm. (d) A
+`terminate()` already suspended on the chain holds its own reference and
+resumes normally after the clear.
+
+The detached
 promise belongs to the driver instance; `capacitorBle.write` throws from
 `requireConnected` after a disconnect, so a teardown mid-send rejects and
 is caught. **The ring is snapshotted BEFORE unsubscribe/disconnect**
@@ -213,13 +269,22 @@ teardown-timed failure.
    `free-row-program-sent` is logged; with `failNextProgramFrame: "reject"`
    the run is still open and `free-row-program-failed` carries the hex
    trace; with `fake.delayWrites(50)` holding the write open, `terminate()`
-   rejects with `ProgramBusyError` and the send still completes (without
-   the guard `terminate()` RESOLVES today — the ack slot is overwritten
-   unchecked — so the assertion bites); with the ack withheld, the
-   deadline fires, `free-row-program-unanswered` is logged, and a
-   `terminate()` afterwards is accepted (mutation: remove the deadline →
-   red); a mutation that re-adds `sendPrepare()` closes the free row on
-   the terminate-reacting fake (red).
+   WAITS (rev 5) — the ring reads p.80 write, its ack,
+   `free-row-program-sent`, THEN the terminate write, in that order (drop
+   the await and the terminate write precedes the send's completion, since
+   the fake's ack lands inline while its write promise is held — so the
+   `free-row-program-sent` position is the assertion that bites); with the
+   ack withheld, a `terminate()` issued mid-window is still unwritten and
+   unsettled at 4999 ms, and at 5000 ms the deadline fires,
+   `free-row-program-unanswered` is logged and the terminate goes out
+   (independent literals, never the constant); a mutation that re-adds
+   `sendPrepare()` closes the free row on the terminate-reacting fake (red).
+2b. Hook (rev 5, the layer that can reach it): at `ready` on a free row,
+   `cancel()` puts the terminate literal on the wire AFTER the p.80 write
+   and its ack, and so does an unmount; an `endSession()` fired while the
+   send is still in flight (`delayWrites`) writes its terminate after
+   `free-row-program-sent`. Mutation for each: restore the
+   `mode !== "justrow"` exclusion → red.
 3. Replay over the 08-31 capture (observe-only; the replay transport
    resolves writes and never acks): the free row still opens and
    completes exactly as today, the ring holds ONE `write` of the p.80

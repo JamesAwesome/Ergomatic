@@ -12431,59 +12431,105 @@ describe("beginFreeRow", () => {
     expect(kinds(log).at(-1)).toBe("free-row-ignored");
   });
 
-  it("refuses terminate() with ProgramBusyError while the send is in flight — and the send still completes afterwards", async () => {
+  /**
+   * TERMINATE DURING THE SEND WAITS — it does not refuse (spec rev 5).
+   * It refused until the 2026-09-03 walk, and the cost was the walk's
+   * finding 4: Cancel on the Ready screen threw here, the hook swallowed
+   * the rejection, and the PM5 stayed in the Just Row session the app had
+   * just armed. The wait is bounded by the send's own deadline (the test
+   * below holds that end), so "wait" can never mean "hang".
+   *
+   * The ORDER is the assertion, read off the ring: the p.80 write, its
+   * ack, the send's own completion entry, and only THEN the terminate
+   * write. `free-row-program-sent` is the entry that bites — the ack lands
+   * synchronously inside `write()` (the fake's own honest asymmetry:
+   * `delayWrites` defers the returned promise, never the notification), so
+   * a terminate that skipped the wait would still land after the ACK while
+   * landing before the send finished.
+   */
+  it("terminate() during the send WAITS for it: the ring shows the p.80 write, its ack and the send's completion BEFORE the terminate write", async () => {
     const { fake, log, driver } = freeRowFake();
-    // Holds the write's own promise open for 50 ms (the ack has already
-    // landed synchronously) so `sendSequence` is provably still running
-    // when END arrives. Without the flag, `terminate()` RESOLVES here: its
-    // `awaitAck` overwrites the single `pendingAck` slot unchecked.
+    // Holds each write's own promise open for 50 ms so `sendSequence` is
+    // provably still running when END arrives. Without the wait,
+    // `terminate()` proceeds immediately and its `awaitAck` overwrites the
+    // single `pendingAck` slot unchecked.
     fake.delayWrites(50);
 
     driver.beginFreeRow();
-    await expect(driver.terminate()).rejects.toThrow(ProgramBusyError);
-    expect(kinds(log)).not.toContain("terminate-sent");
-
+    const ending = driver.terminate();
+    // Two windows, one per delayed write: the p.80's, then the
+    // terminate's — the terminate's cannot even start until the first has
+    // settled, which is the property under test.
     await vi.advanceTimersByTimeAsync(50);
-    await waitUntil(() => kinds(log).includes("free-row-program-sent"));
-    expect(kinds(log)).toContain("free-row-program-sent");
+    await vi.advanceTimersByTimeAsync(50);
+    await ending;
+
+    const ring = log.entries();
+    const justRowWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === JUST_ROW_FRAME_HEX,
+    );
+    const ack = ring.findIndex((e, i) => e.kind === "ack" && i > justRowWrite);
+    const sent = ring.findIndex((e) => e.kind === "free-row-program-sent");
+    const terminateWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === TERMINATE_FRAME_HEX,
+    );
+    expect(justRowWrite).toBeGreaterThanOrEqual(0);
+    expect(ack).toBeGreaterThan(justRowWrite);
+    expect(sent).toBeGreaterThan(ack);
+    expect(terminateWrite).toBeGreaterThan(sent);
+    expect(kinds(log)).toContain("terminate-sent");
   });
 
-  it("abandons an unanswered send at the deadline: `free-row-program-unanswered`, and terminate() is accepted from then on", async () => {
+  it("abandons an unanswered send at the deadline — and a terminate issued mid-window waits exactly that long, then goes out", async () => {
     // The stub never acks — the replay transport's shape, and a PM5 that
     // never answers. Production configures no `ackTimeout`, so without the
-    // deadline `programInFlight` would hold for the driver's life and END
-    // would be refused forever (harden lens 2).
+    // deadline `programInFlight` would hold for the driver's life and the
+    // wait below would never end (harden lens 2). This test is the OTHER
+    // half of the one above: that one proves terminate waits, this one
+    // proves the wait is bounded.
     const transport = stubTransport();
     const log = createEventLog();
     const driver = createPm5Driver(transport, log, { settleTicks: 0 });
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
     transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
 
+    const written = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+
     driver.beginFreeRow();
-    await expect(driver.terminate()).rejects.toThrow(ProgramBusyError);
+    const afterJustRow = written();
+    // Issued INSIDE the window, while the send still holds the slot.
+    let ended = false;
+    const ending = driver.terminate().then(() => {
+      ended = true;
+    });
 
     // INDEPENDENT literals, never the driver's constant (RF21: a test that
-    // imports the number it gates retunes itself with it). Held at 2999,
-    // released at 3000.
-    await vi.advanceTimersByTimeAsync(2999);
+    // imports the number it gates retunes itself with it). Held at 4999,
+    // released at 5000.
+    await vi.advanceTimersByTimeAsync(4999);
     expect(kinds(log)).not.toContain("free-row-program-unanswered");
+    // Still waiting: nothing of the terminate has reached the wire, and its
+    // promise has not settled.
+    expect(written()).toBe(afterJustRow);
+    expect(ended).toBe(false);
+
     await vi.advanceTimersByTimeAsync(1);
     await waitUntil(() => kinds(log).includes("free-row-program-unanswered"));
     expect(kinds(log)).toContain("free-row-program-unanswered");
     expect(kinds(log)).not.toContain("free-row-program-sent");
     expect(kinds(log)).not.toContain("free-row-program-failed");
-
-    const written = (): number =>
-      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-        .length;
-    const before = written();
-    const pending = driver.terminate();
-    await waitUntil(() => written() > before);
+    // Released BY the deadline: the terminate write is now on the wire.
+    // Its own promise still waits on the ack this stub only sends when
+    // told, which is the next two lines.
+    await waitUntil(() => written() > afterJustRow);
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
       buildAckFrame({ frameStatus: "ok" }),
     );
-    await pending;
+    await ending;
+    expect(ended).toBe(true);
     expect(kinds(log)).toContain("terminate-sent");
   });
 
