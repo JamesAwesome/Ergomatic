@@ -600,7 +600,7 @@ rower's work silently.
         Gate 0-A was APPROVED by James on 2026-09-02 before any task ran.
         **PR B (the stored NUMBER) is IMPLEMENTED on branch
         `wave-f-door-b`, 2026-09-03** — the item below carries what it
-        shipped; its PR number is owed here at merge.
+        shipped as **PR #279**.
       - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
         in-flight interval's metres in NEW step keys (`partialMeters`/
         `partialSeconds`), never `actualMeters` — an older server drops
@@ -634,7 +634,7 @@ rower's work silently.
       NEW step keys and the row shows it beside the dash; no hero, tier, total
       or "N intervals kept" moves (I-B2/I-B5). The five replay legs drive real
       wire bytes from three committed captures. Gate 0-B approved 2026-09-02.
-      **The PR number is owed here at merge.**
+      **PR #279.**
       On a single-interval workout — the tester's own 2000 m "Beam Sea" — any
       mid-row loss gives `kept = 0`, which was the MAJORITY outcome of walk
       leg B, not an oddity. **The spec states explicitly whether correct resume
