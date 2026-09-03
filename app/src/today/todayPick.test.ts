@@ -64,6 +64,29 @@ describe("saveTodayPick / loadTodayPick", () => {
     expect(loadTodayPick("2026-08-01", "sprint", 11)).toBeNull();
   });
 
+  // Storage-denial spec (2026-09-03) §1, I-1/I-2 — same idiom
+  // `session/run.ts`'s own leg. This loader never clears on a mismatch
+  // either way, so there is no "nothing cleared" half to assert here
+  // (unlike run.ts/draft.ts).
+  it("returns null when the storage GETTER itself throws (storage-denial spec §1 I-1/I-2)", () => {
+    saveTodayPick(base);
+    const real = Storage.prototype.getItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(function (this: Storage, key: string): string | null {
+        if (key === TODAY_PICK_KEY) {
+          throw new DOMException("storage is denied", "SecurityError");
+        }
+        return real.call(this, key);
+      });
+    try {
+      expect(loadTodayPick("2026-08-01", "sprint", 11)).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(loadTodayPick("2026-08-01", "sprint", 11)).toBe("w-42");
+  });
+
   it("returns null for garbage JSON", () => {
     localStorage.setItem(TODAY_PICK_KEY, "{not json");
     expect(loadTodayPick("2026-08-01", "sprint", 11)).toBeNull();

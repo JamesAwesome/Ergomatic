@@ -136,7 +136,16 @@ export function saveDraft(d: SessionDraft): boolean {
  *  and no default, so it emits no phase for one — exactly what the strip
  *  achieved. Indices stay self-consistent because nothing is spliced. */
 export function loadDraft(): SessionDraft | null {
-  const raw = localStorage.getItem(DRAFT_KEY);
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(DRAFT_KEY);
+  } catch {
+    // Storage-denial spec (2026-09-03) §1 I-1/I-2/I-3 — see
+    // `session/run.ts`'s `loadRun` for the full rationale; identical
+    // shape, this key. Bare catch: the getter's non-throwing failure
+    // paths surface as a TypeError, not a SecurityError.
+    return null;
+  }
   if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);

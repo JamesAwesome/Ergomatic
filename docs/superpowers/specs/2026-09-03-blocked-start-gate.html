@@ -1,0 +1,371 @@
+<title>Blocked Start Gate 0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --d-ground: #f6f7f9; --d-panel: #ffffff; --d-ink: #151820; --d-ink-2: #3b424f;
+    --d-muted: #5c6472; --d-hair: #e3e6eb; --d-accent: #2f5d8a; --d-accent-soft: #e8eff6;
+    --d-good: #1c6b4f; --d-good-soft: #e6f2ec; --d-bad: #a3341f; --d-bad-soft: #f7ebe8;
+    --d-shadow: 0 1px 2px rgba(21,24,32,.06), 0 8px 24px rgba(21,24,32,.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --d-ground: #101318; --d-panel: #171b22; --d-ink: #e7eaef; --d-ink-2: #b9c0cc;
+      --d-muted: #8d95a3; --d-hair: #272d37; --d-accent: #7fadda; --d-accent-soft: #1b2733;
+      --d-good: #62c39c; --d-good-soft: #16261f; --d-bad: #e08a72; --d-bad-soft: #2a1a16;
+      --d-shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --d-ground: #101318; --d-panel: #171b22; --d-ink: #e7eaef; --d-ink-2: #b9c0cc;
+    --d-muted: #8d95a3; --d-hair: #272d37; --d-accent: #7fadda; --d-accent-soft: #1b2733;
+    --d-good: #62c39c; --d-good-soft: #16261f; --d-bad: #e08a72; --d-bad-soft: #2a1a16;
+    --d-shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.45);
+  }
+  body { background: var(--d-ground); color: var(--d-ink); font-family: "Archivo", system-ui, sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 52px 24px 90px; display: flex; flex-direction: column; gap: 44px; }
+  .eyebrow { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--d-accent); margin: 0 0 10px; }
+  h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 700; letter-spacing: -.025em; line-height: 1.1; margin: 0 0 12px; text-wrap: balance; }
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.015em; margin: 0 0 6px; text-wrap: balance; }
+  h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 12px; max-width: 68ch; color: var(--d-ink-2); }
+  p:last-child { margin-bottom: 0; }
+  strong { color: var(--d-ink); }
+  .rule { height: 1px; background: var(--d-hair); border: 0; margin: 0; }
+  .strip { overflow-x: auto; padding: 4px 4px 14px; margin: 0 -4px; }
+  .frames { display: flex; gap: 26px; align-items: flex-start; width: max-content; }
+  .col { display: flex; flex-direction: column; gap: 10px; max-width: 372px; }
+  .col-l { max-width: 720px; }
+  .lab { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .cap { font-size: 12px; line-height: 1.45; color: var(--d-muted); margin: 0; max-width: 372px; }
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: 10px; letter-spacing: .1em; }
+  .tag-rec { background: var(--d-good-soft); color: var(--d-good); }
+  .tag-bad { background: var(--d-bad-soft); color: var(--d-bad); }
+  .tag-alt { background: var(--d-accent-soft); color: var(--d-accent); }
+  .decision { background: var(--d-panel); border: 1px solid var(--d-hair); border-left: 3px solid var(--d-accent); border-radius: 4px; padding: 16px 18px; margin: 0 0 14px; }
+  .decision h3 { margin: 0 0 6px; }
+  .decision p { font-size: 14px; margin: 0 0 8px; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .9em; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--d-hair); vertical-align: top; }
+  th { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted); }
+  td.num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .pass { color: var(--d-good); font-weight: 600; }
+  .fail { color: var(--d-bad); font-weight: 600; }
+  .note { font-size: 13px; color: var(--d-muted); margin: 8px 0 0; }
+  .warn { background: var(--d-bad-soft); border-left: 3px solid var(--d-bad); border-radius: 4px; padding: 14px 16px; margin: 14px 0 0; }
+  .warn p { color: var(--d-ink-2); }
+  .warn h3 { color: var(--d-bad); }
+
+  /* ------------------------------------------------------------------
+     App frame. Tokens copied VERBATIM from app/src/theme/tokens.css;
+     every rule below is copied from app/src/index.css by class name,
+     values unchanged, EXCEPT the pieces marked NEW — the ones this gate
+     is asking about. Fixed light: the app ships no dark theme.
+     ------------------------------------------------------------------ */
+  .e {
+    --page:#f4f1e8; --surface:#fffdf7; --surface-sunken:#efeade;
+    --ink:#1b1a17; --ink-2:#3f3c35; --ink-3:#57544c; --ink-4:#6f6a5f; --ink-5:#a09a8c;
+    --rule:#d8d3c4; --rule-2:#ded8c9; --rule-3:#c9c3b2;
+    --accent:#b5341f; --accent-hover:#9c2c19; --marker:#7d5510;
+    --on-color:#fffdf7; --radius:2px; --tap:44px;
+    --font-serif:"Newsreader", Georgia, serif;
+    --font-sans:"Archivo", system-ui, sans-serif;
+    --font-mono:"IBM Plex Mono", ui-monospace, monospace;
+    background: var(--page); color: var(--ink); font-family: var(--font-sans);
+    border: 1px solid var(--d-hair); border-radius: 10px; overflow: hidden;
+    box-shadow: var(--d-shadow);
+  }
+  .e-portrait { width: 372px; height: 640px; }
+  .e-short { width: 372px; height: 300px; }
+  .e-land { width: 720px; height: 340px; }
+
+  /* .screen — index.css:448 (safe-area terms resolve to 0 here). */
+  .e-screen { max-width: 480px; margin: 0 auto; padding: 6px 20px 20px; height: 100%; box-sizing: border-box; }
+
+  .e-eyebrow { margin: 0 0 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; color: var(--ink-3); }
+  .e-title { font-family: var(--font-serif); font-weight: 500; font-size: 31px; margin: 4px 0 0; line-height: 1.15; }
+  .e-meta { margin: 6px 0 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; color: var(--ink-3); }
+  .e-hr { border: none; border-top: 2px solid var(--ink); margin: 14px 0 20px; }
+
+  /* .countdown-screen — index.css:3964. min-height formula omitted (the
+     artboard's fixed frame height stands in for "fills the viewport"); the
+     flex centering, gap and text-align are the real declarations. */
+  .e-countdown-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+  /* .mono-status — index.css:961, verbatim. */
+  .e-mono-status { font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; color: var(--ink-3); margin: 0; }
+  /* .button-outline — index.css:162, verbatim (font-size 16px is the
+     inherited body default the real rule's `font: inherit` resolves to). */
+  .e-btn-outline { min-height: 44px; padding: 0 16px; background: transparent; border: 1px solid var(--ink); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-sans); font-size: 16px; }
+  /* .countdown-label / -number / -next — index.css:4022-4051, verbatim. */
+  .e-countdown-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .2em; color: var(--ink-4); margin: 0; }
+  .e-countdown-number { font-family: var(--font-mono); font-size: 140px; font-weight: 500; color: var(--accent); line-height: 1; letter-spacing: -.05em; font-variant-numeric: tabular-nums; margin: 0; }
+  .e-countdown-next { font-family: var(--font-serif); font-style: italic; font-size: 20px; color: var(--ink-3); margin: 0; }
+  /* .countdown-actions / -cancel / -skip — index.css:4053-4091, verbatim. */
+  .e-countdown-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .e-countdown-cancel, .e-countdown-skip { display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; }
+  .e-countdown-cancel { color: var(--ink-3); background: transparent; border: 1px solid var(--rule); }
+  .e-countdown-skip { border: none; background: var(--accent); color: var(--on-color); }
+
+  /* .button-l2 / .baseline-error — index.css:297 / :1764, verbatim.
+     WorkoutDetail's Start Timer is full-width in situ (page column); here
+     it is shown at its natural inline size for a tighter comparison frame. */
+  .e-button-l2 { min-height: 52px; width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--ink); color: var(--ink); font-family: var(--font-sans); font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .e-baseline-error { color: var(--accent); font-size: 13px; margin: 4px 0 0; font-family: var(--font-sans); }
+
+  /* --- ConnectedSurface's ended state (frame 4, reference only). ---
+     .connected-surface-ended / .connected-status-label / -serif-line /
+     .connected-keep-on / .action-stack / .button-l1 — index.css:5843-6086,
+     :5881, :216, :254, verbatim. */
+  .e-connected-ended { display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+  .e-connected-status-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .18em; color: var(--ink-3); margin: 0; }
+  .e-connected-serif-line { font-family: var(--font-serif); font-size: 36px; color: var(--ink); margin: 0; }
+  .e-connected-keep-on { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; color: var(--marker); background: var(--surface-sunken); border-left: 3px solid var(--marker); padding: 8px 10px; margin: 0; }
+  .e-action-stack { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+  .e-button-l1 { min-height: 56px; background: var(--accent); border: none; color: var(--on-color); font-family: var(--font-sans); font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Gate 0 &middot; Wave F &middot; storage-denial spec, blocked start</p>
+  <h1>The screen you meet when the phone won&rsquo;t keep the run</h1>
+  <p><span class="mono">Countdown.tsx</span> builds and saves a <span class="mono">SessionRun</span> the instant baselines and preferences are ready (the mount effect, line&nbsp;219&#8209;220), then starts counting down. <span class="mono">saveRun</span> already returns a <span class="mono">boolean</span> for exactly this (<span class="mono">run.ts:184</span>, the same shape <span class="mono">saveDraft</span> uses) &mdash; the effect calls it and throws the result away, so a rower whose phone refuses the write watches a countdown start anyway, over a run that was never saved. This is <strong>AUD&#8209;015</strong>, already named in <span class="mono">CLAUDE.md</span>&rsquo;s recurring-failure&nbsp;25 as a shipped instance of &ldquo;a lower layer reports a durability failure and its caller proceeds as if persistence succeeded.&rdquo; This gate is the screen that replaces &ldquo;proceeds anyway&rdquo;: the SAME shape <span class="mono">Countdown.tsx</span> already renders twice, for its own baselines/preferences load failures, with one new message and its existing Cancel button added.</p>
+  <p class="note">Tokens are <span class="mono">app/src/theme/tokens.css</span> verbatim; every frame class is copied from <span class="mono">app/src/index.css</span> by name with unchanged values (each block above says which lines). Frames are 372&times;640 portrait and 720&times;340 landscape, the sizes Gate 0-A/B used. Fixture: <strong>Tropical Wave</strong>, the seeded 5&nbsp;&times;&nbsp;500&nbsp;m at 2k&#8239;+&#8239;2 workout Gate 0-B already used, so its numbers (<span class="mono">1:52.0</span> target split) carry over unchanged. Every ratio below is the WCAG relative-luminance formula, computed with the same script Gate 0-A/B used. <strong>Nothing is implemented.</strong></p>
+</header>
+
+<hr class="rule">
+
+<section>
+  <h2>What I am asking you to approve</h2>
+  <p>Four decisions. The frames are the argument; these are the asks. <strong>Every word is a draft you can reword</strong> &mdash; the shape is what needs your eyes.</p>
+
+  <div class="decision">
+    <h3>(a) The message&rsquo;s words</h3>
+    <p><span class="mono">Countdown.tsx</span>&rsquo;s two existing failures read <span class="mono">Couldn&rsquo;t load your baselines.</span> and <span class="mono">Couldn&rsquo;t load your preferences.</span> &mdash; same shape, same length, no second sentence (the button already says what to do). This is a third member of that family: <strong class="mono">Couldn&rsquo;t keep your session on this phone.</strong></p>
+    <p><strong>Word choice, not invention.</strong> &ldquo;Keep&rdquo; is already the app&rsquo;s own word for a session record surviving a phone (<span class="mono">ConnectedSurface.tsx</span>&rsquo;s <span class="mono">COULD NOT KEEP THE RECORD ON THIS PHONE.</span>, the lost banner&rsquo;s <span class="mono">N intervals kept.</span> / <span class="mono">Nothing kept.</span>) &mdash; reusing it here says the same true thing a rower has already been told once before, rather than teaching a second word for one idea. No technical term appears: not <span class="mono">storage</span>, not <span class="mono">quota</span>, not <span class="mono">localStorage</span>.</p>
+  </div>
+
+  <div class="decision">
+    <h3>(b) Retry + Cancel as the pair, and why &ldquo;Row anyway&rdquo; is deliberately absent</h3>
+    <p>The two controls are the same instances the screen already has: <span class="mono">.button-outline</span> Retry (this failure&rsquo;s own shape) and <span class="mono">.countdown-cancel</span> Cancel (the counting screen&rsquo;s own, unchanged &mdash; same handler, same copy). No third button.</p>
+    <p><strong>&ldquo;Row anyway&rdquo; would mean starting the countdown over a run that exists only in memory, never written.</strong> Both screens that come next read their run from storage at mount, once, and never fall back to anything held in memory: <span class="mono">Timer.tsx:376</span> (<span class="mono">useState(() =&gt; loadRun())</span>) and <span class="mono">LogSession.tsx:1232</span> (the identical lazy read). <span class="mono">Timer.tsx:493</span> is explicit about what a missing run does &mdash; <span class="mono">if (run === null &hellip;) return &lt;Navigate to="/today" replace /&gt;</span>. A rower who rowed anyway would count down, start pulling, and get bounced to Today the moment they next reload, backgrounded the phone, or the live timer itself re-reads &mdash; silently, with no session behind it. Cancel, which already exists and already clears both the draft and any run cleanly, is the only honest second control.</p>
+  </div>
+
+  <div class="decision">
+    <h3>(c) Retry restarts the count, it does not resume one</h3>
+    <p>Retry re-invokes the same build effect &mdash; <span class="mono">buildRun</span> + <span class="mono">saveRun</span> &mdash; the way <span class="mono">baselinesState.retry</span> already does for its own error today. <span class="mono">buildRun</span> stamps <span class="mono">startedAtMs</span> at the instant it runs (<span class="mono">Countdown.tsx:203&#8209;204</span>), so a Retry that lands is, structurally, the exact case the component&rsquo;s own doc comment already names and accepts: <em>&ldquo;a reload while counting down rebuilds and re&#8209;saves the run and restarts the count &hellip; this is deliberate (spec Resilience&nbsp;4).&rdquo;</em> Nothing new is invented to make this true; it falls out of the effect that already exists.</p>
+  </div>
+
+  <div class="decision">
+    <h3>(d) Which vocabulary wins &mdash; this message, or the shipped start-error&rsquo;s</h3>
+    <table>
+      <thead><tr><th></th><th>Copy</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">Proposed</td><td class="mono">Couldn&rsquo;t keep your session on this phone.</td><td><span class="mono">Countdown.tsx</span>, the RUN write, <span class="mono">.mono-status</span></td></tr>
+        <tr><td class="mono">Shipped <span class="tag tag-bad">today</span></td><td class="mono">Couldn&rsquo;t start this session. Try again.</td><td><span class="mono">WorkoutDetail.tsx</span> / <span class="mono">useStartWorkout.ts</span>, the DRAFT write, <span class="mono">.baseline-error</span></td></tr>
+      </tbody>
+    </table>
+    <p><strong>Recommended: the proposed wording, not the shipped one.</strong> &ldquo;Couldn&rsquo;t start this session&rdquo; is generic enough to mean almost any failure; &ldquo;keep&rdquo; names the one thing that is actually true (the phone would not hold on to the record) and matches the word ConnectedSurface&rsquo;s own failure already taught testers. &ldquo;Try again.&rdquo; is dropped as a trailing sentence here because, unlike WorkoutDetail&rsquo;s inline error, this screen&rsquo;s own Retry button already says what to do &mdash; the same reason neither of Countdown&rsquo;s existing two failures carries a second sentence either. Section&nbsp;3 puts both live, side by side, so this is not a comparison on paper.</p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>1 &middot; Countdown today, mid-count</h2>
+  <p>Tropical Wave, phase&nbsp;0, 4&nbsp;seconds into a 10&#8209;second count (the shipped default, <span class="mono">server/db/schema.ts:433</span>). Real markup, <span class="mono">Countdown.tsx:382&#8209;412</span>, unchanged by this gate &mdash; shown so frames&nbsp;2 and&nbsp;6 have the ordinary screen to compare against.</p>
+  <div class="strip">
+    <div class="frames">
+      <div class="col">
+        <div class="lab">Today <span class="tag tag-alt">unchanged</span></div>
+        <div class="e e-portrait">
+          <div class="e-screen e-countdown-screen">
+            <p class="e-countdown-label">GET ON THE HANDLE</p>
+            <p class="e-countdown-number">6</p>
+            <p class="e-countdown-next">1:52.0</p>
+            <div class="e-countdown-actions">
+              <button type="button" class="e-countdown-cancel" id="probe-cancel-1">CANCEL</button>
+              <button type="button" class="e-countdown-skip">SKIP &rsaquo;</button>
+            </div>
+          </div>
+        </div>
+        <p class="cap">The run already saved (its write succeeded), the count already running. Nothing here changes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>2 &middot; The blocked start</h2>
+  <p>Same draft, same mount &mdash; but this time <span class="mono">saveRun(run)</span> in the build effect returns <span class="mono">false</span>. The effect never calls <span class="mono">setBuilt</span>, so no count starts (there is no run to time), and the render falls into a third error branch, identical in shape to the two already on this screen.</p>
+  <div class="strip">
+    <div class="frames">
+      <div class="col">
+        <div class="lab">Proposed <span class="tag tag-rec">the third failure branch</span></div>
+        <div class="e e-portrait">
+          <div class="e-screen e-countdown-screen">
+            <p class="e-mono-status" id="probe-message">Couldn&rsquo;t keep your session on this phone.</p>
+            <div class="e-countdown-actions">
+              <button type="button" class="e-btn-outline" id="probe-retry">Retry</button>
+              <button type="button" class="e-countdown-cancel" id="probe-cancel-2">CANCEL</button>
+            </div>
+          </div>
+        </div>
+        <p class="cap">One line, mono, <span class="mono">--ink-3</span> &mdash; the exact type <span class="mono">Couldn&rsquo;t load your baselines.</span> already uses. The two controls sit in <span class="mono">.countdown-actions</span>, the same flex row the counting screen already uses for Cancel + Skip &mdash; no new wrapper class.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>3 &middot; Two failures, side by side &mdash; which is which</h2>
+  <p>Both are real, shipped-or-proposed error states that can fire for the <em>same</em> attempt to start Tropical Wave. They are not duplicates of one idea; they are two different writes, one screen apart, and each one knows something the other does not.</p>
+  <div class="strip">
+    <div class="frames">
+      <div class="col">
+        <div class="lab">WorkoutDetail <span class="tag tag-bad">shipped today</span> &middot; the DRAFT write</div>
+        <div class="e e-short">
+          <div class="e-screen" style="padding-top:20px;">
+            <p class="e-eyebrow">TROPICAL WAVE</p>
+            <div class="e-button-l2">Start Timer</div>
+            <p class="e-baseline-error">Couldn&rsquo;t start this session. Try again.</p>
+          </div>
+        </div>
+        <p class="cap"><span class="mono">useStartWorkout.ts</span>&rsquo;s <span class="mono">confirmReplace</span>: <span class="mono">saveDraft(draft)</span> fails, before any run exists. The rower is still on the workout&rsquo;s own detail page, has not committed to anything yet, and every other control on the page (Connect, nudges, the type chip) is still right there. Pressing Start Timer again re-runs the same check.</p>
+      </div>
+      <div class="col">
+        <div class="lab">Countdown <span class="tag tag-rec">this gate</span> &middot; the RUN write</div>
+        <div class="e e-short">
+          <div class="e-screen e-countdown-screen" style="padding-top:20px;">
+            <p class="e-mono-status">Couldn&rsquo;t keep your session on this phone.</p>
+            <div class="e-countdown-actions">
+              <button type="button" class="e-btn-outline">Retry</button>
+              <button type="button" class="e-countdown-cancel">CANCEL</button>
+            </div>
+          </div>
+        </div>
+        <p class="cap"><span class="mono">Countdown.tsx</span>&rsquo;s build effect: <span class="mono">saveRun(run)</span> fails, one screen <em>later</em> &mdash; the draft already saved, the rower already pressed Start and left the workout page behind. There is no page to fall back to here; Cancel is the only way out, and it is the same Cancel the counting screen already ships (clears the draft and any run, returns to the workout or Today).</p>
+      </div>
+    </div>
+  </div>
+  <p class="note"><strong>What each screen knows that the other does not.</strong> WorkoutDetail knows the rower has not committed &mdash; nothing downstream expects a run yet, so its own retry is just &ldquo;press Start again.&rdquo; Countdown knows the opposite: the draft is real, <span class="mono">startedAt</span> is stamped, and the rower believes they are seconds from rowing. Its failure is later in the sequence and closer to the erg, which is why decision&nbsp;(b) above treats &ldquo;proceed anyway&rdquo; as unsafe here in a way WorkoutDetail&rsquo;s own retry never had to consider.</p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>4 &middot; For reference only &mdash; NOT a candidate</h2>
+  <p><span class="mono">ConnectedSurface.tsx:495</span>&rsquo;s post-row failure, already shipped (Wave&nbsp;F PR&nbsp;1 / AUD&#8209;016). Shown so the &ldquo;keep&rdquo; word&rsquo;s reuse in decision&nbsp;(a) is visibly grounded, and so this gate does not accidentally reinvent a third rendering for one idea. This is a <strong>different moment</strong>: the workout is already OVER, real interval data may already exist, and the failed write is the <em>closing</em> record rather than the run that was about to start. No change proposed here.</p>
+  <div class="strip">
+    <div class="frames">
+      <div class="col">
+        <div class="lab">ConnectedSurface, ended <span class="tag tag-alt">shipped, unchanged</span></div>
+        <div class="e e-portrait">
+          <div class="e-screen e-connected-ended">
+            <p class="e-connected-status-label">SESSION ENDED</p>
+            <p class="e-connected-serif-line">Wrapping up</p>
+            <p class="e-connected-keep-on">COULD NOT KEEP THE RECORD ON THIS PHONE.</p>
+            <div class="e-action-stack">
+              <button type="button" class="e-button-l2">Retry</button>
+              <button type="button" class="e-button-l1">Log it anyway</button>
+            </div>
+          </div>
+        </div>
+        <p class="cap">Gold <span class="mono">--marker</span>, not this gate&rsquo;s <span class="mono">--ink-3</span> mono line &mdash; and a real &ldquo;Log it anyway&rdquo; exists here, because by this point real interval data may already be sitting in memory (§5&rsquo;s receipts). Work already done, out of scope for this gate.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>5 &middot; Landscape</h2>
+  <p><span class="mono">.countdown-screen</span> has no landscape reflow &mdash; only its <span class="mono">min-height</span> formula changes (index.css:4014&#8209;4019); the flex-centered single column is identical in both orientations. Frame&nbsp;2, unscaled, in the 720&times;340 frame.</p>
+  <div class="strip">
+    <div class="frames">
+      <div class="col col-l">
+        <div class="lab">Landscape &middot; the blocked start</div>
+        <div class="e e-land">
+          <div class="e-screen e-countdown-screen">
+            <p class="e-mono-status">Couldn&rsquo;t keep your session on this phone.</p>
+            <div class="e-countdown-actions">
+              <button type="button" class="e-btn-outline">Retry</button>
+              <button type="button" class="e-countdown-cancel">CANCEL</button>
+            </div>
+          </div>
+        </div>
+        <p class="cap">Same content, same type, same two controls &mdash; only the frame is wider and shorter.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>6 &middot; What Retry does &mdash; decision (c), rendered</h2>
+  <p>The blocked state, then the same draft after Retry lands: a fresh <span class="mono">buildRun</span>/<span class="mono">saveRun</span> pair, a new <span class="mono">startedAtMs</span>, and the count opens at the configured total (10&nbsp;seconds) &mdash; not wherever a stalled count would have been.</p>
+  <div class="strip">
+    <div class="frames">
+      <div class="col">
+        <div class="lab">Before &middot; blocked</div>
+        <div class="e e-portrait">
+          <div class="e-screen e-countdown-screen">
+            <p class="e-mono-status">Couldn&rsquo;t keep your session on this phone.</p>
+            <div class="e-countdown-actions">
+              <button type="button" class="e-btn-outline">Retry</button>
+              <button type="button" class="e-countdown-cancel">CANCEL</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="lab">After Retry lands <span class="tag tag-rec">full count, not resumed</span></div>
+        <div class="e e-portrait">
+          <div class="e-screen e-countdown-screen">
+            <p class="e-countdown-label">GET ON THE HANDLE</p>
+            <p class="e-countdown-number">10</p>
+            <p class="e-countdown-next">1:52.0</p>
+            <div class="e-countdown-actions">
+              <button type="button" class="e-countdown-cancel">CANCEL</button>
+              <button type="button" class="e-countdown-skip">SKIP &rsaquo;</button>
+            </div>
+          </div>
+        </div>
+        <p class="cap">10, the configured <span class="mono">countdownSeconds</span> default &mdash; the same number frame&nbsp;1 counted down FROM, not the number it would have reached if the write had merely been slow.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2>Contrast, computed</h2>
+  <p>Every text/background and functional-boundary pairing the new state (frames&nbsp;2, 3, 5, 6) uses. WCAG 2.x relative luminance, the same script Gate 0-A/B used. Floor is 4.5:1 for body text, 3:1 for &ge;18.66&nbsp;px bold or &ge;24&nbsp;px text, and 3:1 for a non-text UI-component boundary that carries meaning on its own (WCAG 1.4.11).</p>
+  <table>
+    <thead><tr><th>Element</th><th>Pairing</th><th>Size</th><th>Ratio</th><th>Floor</th><th></th></tr></thead>
+    <tbody>
+      <tr><td><strong>NEW</strong> &mdash; the blocked-start message</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">12px</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Retry, text + border (existing <span class="mono">.button-outline</span>)</td><td class="mono">--ink #1b1a17 on --page #f4f1e8</td><td class="num">16px</td><td class="num">15.41:1</td><td class="num">4.5 / 3:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Cancel text (existing <span class="mono">.countdown-cancel</span>)</td><td class="mono">--ink-3 #57544c on --page #f4f1e8</td><td class="num">12px</td><td class="num">6.69:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Cancel border (existing, pre-dates this gate)</td><td class="mono">--rule #d8d3c4 on --page #f4f1e8</td><td class="num">1px</td><td class="num">1.32:1</td><td class="num">3:1</td><td class="fail">FAIL &mdash; see note</td></tr>
+      <tr><td>WorkoutDetail&rsquo;s own error (frame&nbsp;3, existing, for comparison)</td><td class="mono">--accent #b5341f on --page #f4f1e8</td><td class="num">13px</td><td class="num">5.35:1</td><td class="num">4.5:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Start Timer, text + border (existing <span class="mono">.button-l2</span>)</td><td class="mono">--ink #1b1a17 on --surface #fffdf7</td><td class="num">16px/600</td><td class="num">17.11:1</td><td class="num">4.5 / 3:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Countdown numeral, frames&nbsp;1/6 (existing, unchanged)</td><td class="mono">--accent #b5341f on --page #f4f1e8</td><td class="num">140px/500</td><td class="num">5.35:1</td><td class="num">3:1</td><td class="pass">PASS</td></tr>
+    </tbody>
+  </table>
+  <p class="note"><strong>The Cancel-border FAIL is not new and not this gate&rsquo;s to fix.</strong> <span class="mono">.countdown-cancel</span>&rsquo;s <span class="mono">1px solid var(--rule)</span> border ships today, unchanged, on the counting screen&rsquo;s own Cancel+Skip row (frame&nbsp;1). It is reused here verbatim, not introduced by this gate. Flagging it rather than fixing it: the button remains identifiable without the border (48&#8239;px min-height, its own 6.69:1 text, and &mdash; in frame&nbsp;2 &mdash; sitting directly beside a bordered Retry it visually pairs with), so this is a pre-existing residual, the same shape Gate&nbsp;0-B&rsquo;s own &ldquo;where these frames are approximations&rdquo; section flagged two of.</p>
+  <p class="note"><strong>Hit targets, measured on the rendered frame</strong> (<span class="mono">getBoundingClientRect</span>, not arithmetic; see the report for the exact numbers) <strong>&mdash; both clear 44&times;44 in every dimension that matters</strong> (width is content-sized past the 44px floor on both; height is the declared <span class="mono">min-height</span>, unmodified by content). No control this gate adds a new visual language to &mdash; Retry and Cancel are both pre-existing, unchanged components.</p>
+  <p class="note"><strong>No new colour.</strong> One token carries the new state: <span class="mono">--ink-3</span> for the message, the exact ink <span class="mono">Couldn&rsquo;t load your baselines.</span> already uses. Retry and Cancel are pixel-identical to their existing selves.</p>
+</section>
+
+</div>

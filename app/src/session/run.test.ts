@@ -82,6 +82,35 @@ describe("saveRun / loadRun / clearRun", () => {
     expect(loadRun()).toBeNull();
   });
 
+  // Storage-denial spec (2026-09-03) §1, I-1/I-2 — same idiom
+  // `monitorRun.test.ts`'s "returns null when the storage GETTER itself
+  // throws" already established for `loadMonitorRun`; this is the same
+  // gate for the loader AUD-011's remaining set names first. Bare catch
+  // deliberately: the getter's own non-throwing failure paths (no
+  // document, storage disabled) surface as a TypeError, not a
+  // SecurityError, which a typed catch would let escape.
+  it("returns null when the storage GETTER itself throws — denial reads as absent, and nothing is cleared (storage-denial spec §1 I-1/I-2/I-3)", () => {
+    const run = freshRun();
+    saveRun(run);
+    const real = Storage.prototype.getItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(function (this: Storage, key: string): string | null {
+        if (key === RUN_KEY) {
+          throw new DOMException("storage is denied", "SecurityError");
+        }
+        return real.call(this, key);
+      });
+    try {
+      expect(loadRun()).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    // ...and the record is still there once the denial lifts (I-3): an
+    // absent READ must never have been a destructive one.
+    expect(loadRun()).toStrictEqual(run);
+  });
+
   it("returns null and clears the key for garbage JSON", () => {
     localStorage.setItem(RUN_KEY, "{not json");
     expect(loadRun()).toBeNull();

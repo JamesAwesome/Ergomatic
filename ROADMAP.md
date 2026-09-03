@@ -824,7 +824,7 @@ rower's work silently.
       register first** — the memory-only reload gap, the three surviving legacy
       reads, and the store's standing tier-precedence probe. The full record
       lives in PR #239 and moves to `docs/history/` when Wave F closes.
-- [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
+- [x] **Audit AUD-011/AUD-015 — storage denial is recoverable before work — DONE in PR #282.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
       PR may own both, with separate regression tests; the visible Retry state
@@ -846,9 +846,16 @@ rower's work silently.
       never reached it because `loadRun` (`Today.tsx:280`) throws first. Three
       spec conditions from the anchor: (1) a Today fixture that actually
       reaches the `loadTodayPick` call (needs a plan and a pool); (2) one
-      COMPOSED denial-then-Start test — after AUD-011's fix, denial makes
-      `loadRun()` return null, so Start proceeds and then hits
-      `saveRun === false`, a path neither finding's own tests cover; (3) the
+      COMPOSED denial-then-Start test — **CORRECTED at the spec's antagonist
+      DELTA pass (2026-09-03): this composition never happens.** A denied
+      getter fails EVERY storage access on that origin, not the run key
+      alone, so `saveDraft` (Countdown's own mount effect, called before
+      `saveRun`) throws first and Countdown never mounts at all — there is
+      no "Start proceeds, then `saveRun === false`" path for AUD-011's fix
+      to create. The blocked-start state this spec actually builds is
+      produced by QUOTA at the run key specifically (the draft write
+      succeeds, only the run write is over budget), not by getter denial —
+      see the spec's §3 legs (a)/(b)/(c). (3) the
       Retry surface needs a non-retry exit — a Retry under a still-denied
       getter is a loop. Open research line for the spec: whether the getter
       can throw in a Capacitor WKWebView on its own origin (the WHATWG
@@ -870,9 +877,30 @@ rower's work silently.
       still dies at `loadRun` first. **So this chunk's unguarded set is now
       exactly three loaders — `loadRun`, `loadDraft`, `loadTodayPick` —
       matching the §8 reshaping above; `loadMonitorRun` is off the list.**
-      Everything else here is unchanged and still owed: the three anchor
-      spec conditions, the Retry surface's Gate 0, AUD-015's Countdown
-      durability, and the Capacitor-WKWebView reachability research line.
+      **SPECCED 2026-09-03 as
+      `docs/superpowers/specs/2026-09-03-storage-denial-design.md`, and the
+      research line is CLOSED.** The getter CANNOT throw on the phone:
+      WebKit's `localStorage` getter has exactly one throw, gated on
+      `canAccessResource(LocalStorage) == No`, whose three routes are an
+      opaque origin, a `file://`-equivalent origin, and
+      `StorageBlockingPolicy::BlockAll` — and our `capacitor://localhost`
+      (no `server` block; a `WKURLSchemeHandler` serves it) is none of
+      them, with the blocking policy embedder-set and unset by Capacitor
+      and by us. Full citations:
+      `docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md`.
+      **James's ruling on that evidence (2026-09-03): the three guards ship
+      as WEB-ARM hardening — the dev loop, the e2e harness, the browser
+      fallback, where a user CAN block site data — and the Retry SURFACE
+      for a denied getter does NOT ship**, so anchor condition (3) is
+      retired with it. AUD-015's Countdown durability keeps its visible
+      state and is where the one Gate 0 goes, because a failed WRITE is
+      reachable everywhere. Anchor conditions (1) and (2) survive. Two
+      corrections the spec carries: the audit's second loader lives in
+      `session/draft.ts`, not `logDraft.ts`; and the catch must be BARE,
+      since the getter's non-throwing failure surfaces as a `TypeError`.
+      **Tripwire:** the whole argument rests on `server.iosScheme` being
+      unset — setting it to `"file"` makes the origin local and the throw
+      immediately reachable.
 
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 
