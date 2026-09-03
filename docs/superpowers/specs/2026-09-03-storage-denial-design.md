@@ -1,7 +1,8 @@
 # Storage denial is recoverable before work (AUD-011 / AUD-015)
 
 **Date:** 2026-09-03 · **Wave:** F · **Class:** not TRIAD (no stored shape,
-no number's meaning, no auth) · **Status:** DRAFT, awaiting James's review ·
+no number's meaning, no auth) · **Status:** DRAFT, awaiting James's review; hardened 2026-09-03 (lens 1 —
+two claims falsified and folded, see §1 scope, §2 and §3) ·
 **Gate 0:** ONE, on the Countdown blocked-start state (it changes what a
 rower reads and what happens when they press Start).
 
@@ -65,11 +66,19 @@ closed at PR #239. Those three are the whole remaining set.
   deferred clear, and these three inherit that rule.
 
 **Scope, stated because the research earned it:** these guards defend the
-web arm — the dev loop, the Playwright harness, and the browser fallback —
-where a user CAN block site data. On iOS they are unreachable hardening,
-and the comment at each site says so, with the tripwire: **every argument
-here rests on `server.iosScheme` being unset. Setting it to `"file"` makes
-the origin local and the throw immediately reachable.**
+**dev loop and the browser fallback**, where a user can block site data
+(Safari's "Block all cookies", Chrome/Firefox site-data blocking). The
+Playwright harness is where the denial is SIMULATED, not a context that
+blocks storage on its own — no test sets one. On iOS the guards are
+unreachable hardening.
+
+**The tripwire goes where the change would be made:** a line in
+`app/capacitor.config.ts` (which today has no `server` block at all),
+repeated in one line at each loader — **every argument here rests on
+`server.iosScheme` being unset; setting it to `"file"` makes the origin
+local and the throw immediately reachable.** A comment living only at the
+three loaders is not on the path an agent editing the Capacitor config
+walks (RF18).
 
 ## §2 — The blocked start (AUD-015)
 
@@ -78,21 +87,44 @@ the origin local and the throw immediately reachable.**
 write fails, Timer's own guard sends the rower back to Today with nothing
 said.
 
-- **I-4** Countdown does not leave for Timer unless the active run is
-  durable. On `saveRun(run) === false` it stays, and says so.
-- **I-5** The rower is never trapped: the state offers **Retry** (attempt
-  the write again) and **Row anyway** (proceed with a memory-only run,
-  stated as such). This is the same shape PR #239 shipped for the
-  hand-off's `COULD NOT KEEP THE RECORD ON THIS PHONE.` state, and it
-  reuses that state's vocabulary rather than inventing a second one.
-- **I-6** "Row anyway" does not lie: it names what the rower gives up (the
-  row is not kept on this phone if the app closes), in the notes' voice,
-  not a technical word.
+- **I-4** Countdown does not leave for Timer unless the run it just wrote
+  READS BACK. `saveRun`'s boolean means only that `setItem` did not throw —
+  there is no read-back in it (`app/src/session/run.ts`). So Countdown
+  confirms with the consumer's own loader, once, at the one place it
+  matters: `saveRun(run) === true` AND `loadRun() !== null`. Either failure
+  holds the start. (No supported producer of a true-but-absent write was
+  found; the check is one call and makes the invariant deterministic
+  instead of promised.)
+- **I-5 The state offers Retry and Cancel — never "Row anyway"** (James,
+  2026-09-03, on the lens-1 finding). A memory-only run cannot be rowed:
+  `Timer` and `LogSession` both re-read it with `useState(() => loadRun())`
+  at mount and bounce to Today when it is null, so "proceed anyway" would
+  reproduce AUD-015's own symptom one navigation later. The free-row door
+  has already ruled this way for the identical failure — `JustRow.tsx`'s
+  `StartTimerAction`: _"A failed write … says so inline and destroys
+  nothing (RF25); navigating to a Timer with nothing behind it would bounce
+  to Today with no word."_ Cancel is the exit that already exists on this
+  screen; the draft survives it. **If a memory-only run is ever wanted it
+  is a two-tier read inside `run.ts` with its own RF27 lifetime table, and
+  it is not this PR.**
+- **I-6 A successful Retry REBUILDS the run at the moment the write lands**
+  (`buildRun(draft, baselines, new Date())`), never re-writes the run built
+  at mount. `buildRun` stamps `startedAt`/`phaseStartedAt` from the instant
+  it is handed and nothing restamps downstream, so re-writing the original
+  would charge every second the rower spent reading this state to phase 1 —
+  bounded today by the countdown's own 10 s, unbounded once a hold exists.
 
 **Gate 0 (the only one):** the rendered Countdown blocked-start state, both
 orientations, against the current Countdown, with the two controls at
-44 px and every colour pairing's contrast ratio stated as a number. The
-copy is approved there, not here — the strings above are drafts.
+44 px and every colour pairing's contrast ratio stated as a number. **It is
+shown BESIDE the start-error that already exists one screen earlier** —
+`"Couldn't start this session. Try again."`, set identically by
+`useStartWorkout.confirmReplace`, `WorkoutDetail.handleRowInstead` and
+`JustRow`'s `StartTimerAction` — so James chooses between two vocabularies
+for one fact rather than approving a third (RF23). The post-row
+`COULD NOT KEEP THE RECORD ON THIS PHONE.` state is a different moment (a
+record of work already done) and is the weaker precedent. The copy is
+approved at the gate, not here — the strings above are drafts.
 
 ## §3 — The composed test the anchor asked for
 
@@ -104,15 +136,29 @@ written; the third is retired by James's ruling.
    mount) throws first. The fixture needs a plan and a pool so the call is
    reached, and the leg asserts Today renders with a denied getter rather
    than crashing.
-2. **One COMPOSED denial-then-Start test.** After I-1, a denied getter
-   makes `loadRun()` return `null`, so Start PROCEEDS and then meets
-   `saveRun === false` — a path neither finding's own tests cover, and the
-   reason these two ship together. The leg drives Today → Start → the
-   blocked state, under one denial.
+2. **The blocked start's producer is QUOTA, not the getter denial — and
+   the two findings do NOT compose.** The original condition said a denied
+   getter lets Start proceed to a failed `saveRun`. Walked forward, that is
+   unreachable: the denial the research cites fails EVERY access, so
+   `useStartWorkout.confirmReplace`'s `saveDraft` returns `false` first and
+   shows its existing inline error — Countdown never mounts. Two legs
+   replace it:
+   - **Quota at the run key.** `setItem` throws for `RUN_KEY` only (the
+     draft write succeeds, the run write does not — quota's actual shape,
+     live in this app: `e2e/seriesStorage.spec.ts` pins a ~720 KB
+     `MonitorRun`, and the log history and the 500-entry session-log ring
+     sit beside it). Drive the Start door to the blocked state.
+   - **Whole-storage denial stops one screen earlier.** Assert what a
+     rower actually gets: `useStartWorkout`'s `startError`, and Countdown
+     never reached. This is the leg that keeps the corrected story true.
+   **Every injection is key-scoped**, in unit, e2e and capture alike — a
+   blanket `Storage.prototype.setItem` denial makes the blocked state
+   unreachable (see above), so a blanket probe would go green against a
+   screen that never rendered. `handoffStoreReplay.test.ts` already has the
+   key-scoped spy to copy.
 3. ~~A Retry surface for the denied getter needs a non-retry exit.~~
-   **RETIRED:** no such surface ships (the ruling above). The non-retry
-   exit still exists where it is reachable — "Row anyway" on the blocked
-   start, I-5.
+   **RETIRED:** no such surface ships. The exit on the blocked start is
+   Cancel (I-5).
 
 ## §4 — What the research settled, so nothing re-derives it
 
@@ -155,11 +201,22 @@ One PR, four tasks, no migration and no stored shape.
    boolean again → red.
 3. The two composed tests from §3.
 4. e2e + captures (the blocked state, both orientations), the ROADMAP tick,
-   the release note line if the state is tester-visible (it is: a rower who
-   fills their phone now reads a sentence instead of bouncing).
+   the release note line (tester-visible: a rower whose phone is full now
+   reads a sentence instead of bouncing). **The capture follows the
+   `connected-ended-error` precedent** — a fixture HTML emitted by a
+   component test (`toMatchFileSnapshot` into `e2e/fixtures/`) and rendered
+   by `screenshots.spec.ts` — rather than driving a live quota failure
+   through the stack.
 
 **Gates skipped, spoken:** no PM open gate (the scope is this spec and
 James ruled it item by item); the antagonist pass on the plan is a DELTA
-against the research's vetted ground — no novel mechanism, no session state,
-no stored shape; no PM final gate (not TRIAD, and nothing a tester receives
-beyond one blocked-start state whose copy Gate 0 approves).
+against this spec's hardened ground — **and that skip is only correct
+because "Row anyway" is out**: the memory tier it needed would have been a
+new session lifetime, which takes a full pass. No PM final gate (not TRIAD,
+and nothing a tester receives beyond one blocked-start state whose copy
+Gate 0 approves).
+
+**Not spent on this PR, named:** `clearRun`/`clearDraft` call `removeItem`
+unguarded. Under the getter-denial class they would throw, but every call
+site is gated behind a loaded run or draft, which is `null` under that
+denial — hardening debt with no supported producer, deliberately left.
