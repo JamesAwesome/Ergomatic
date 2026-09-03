@@ -6779,3 +6779,97 @@ plan's own tools and never with the REPO's.
   difference is the CSAFE frame-toggle bit — the same alternation this repo
   once invented a wrong mechanism to explain (interface-notes §19.2, D1
   withdrawn). Corrected in `b78d9a0f`.
+
+### 2026-09-03 — Connect-latency spec (full pass; new ground, no vetted ground)
+
+- **CLAIM: "the ~2 s connect delay is the PM5 or CSAFE processing, not our
+  queue." FALSIFIED, by a controlled comparison already sitting in the
+  corpus.** The byte-identical CSAFE Terminate frame
+  `f1 76 04 13 02 01 02 60 f2` acks in **1698-2058 ms at connect (n=10)** and
+  **136-224 ms mid-session on an empty queue (n=2)** — same command, same
+  characteristic, same device. **Technique: before theorising about a
+  latency, grep the corpus for the SAME BYTES issued in a different queue
+  state.** A repo whose rings log raw hex contains its own controlled
+  experiment; the spec argued from vendor source and an ordering anecdote and
+  never looked. Corroborated by two independent per-op measurements agreeing
+  at ~90-180 ms: chunk-to-chunk write spacing on an empty queue
+  (91/177/180/182 ms) and `notify-first` spacing during the drain (176 and
+  361 ms = exactly 1 and 2 queue slots, matching the subscribe order).
+
+- **CLAIM: "the web arm shows a WORSE gap with no Capacitor queue, so the
+  queue may not be the cause." Resolved, not left open.** On native the
+  plugin's `connect` does not resolve until service AND characteristic
+  discovery completes — it resolves from `setOnConnected`, whose own log line
+  reads "Connected to peripheral. Waiting for service discovery." So
+  discovery is paid inside `transport.connect()`, before the ring's t0; on
+  web it is not. **Technique: when two platform arms disagree about a
+  latency, find where each pays for GATT DISCOVERY before concluding anything
+  about what comes after.** A disanalogy that reads as a falsifier is often a
+  difference in where the clock starts.
+
+- **CLAIM: "reordering the queue programs the erg sooner — a free row, and
+  every programmed workout too." FALSIFIED for the programmed half, by
+  reading the endpoint the rower actually sees.** `program()` is two
+  sequences (a prepare, then a five-chunk programming frame), and the erg's
+  screen changes at the SECOND ack: 2700-2969 ms, not the 1800 ms first ack
+  the census measures. Under the spec's own release trigger ("once the first
+  CSAFE write has been issued") the eight deferred subscribes land BETWEEN
+  the prepare's ack and the chunk writes, and the programmed path ends up
+  ~400 ms SLOWER; releasing after the first SEQUENCE instead makes it ~1.1 s
+  faster. **Technique: for any latency fix, ask which ACK the user's evidence
+  is attached to, then count the queue positions of everything between the
+  first write and that ack.** A saving measured at the first ack of a
+  multi-sequence protocol is a saving the user never sees. **Second-order:
+  the spec's own ordering gate stays GREEN across that regression** — "write
+  before subscribes" remains true while the thing gets slower. A gate that
+  asserts the change rather than the outcome is RF21 with a passing mutation.
+
+- **CLAIM: "no frame the driver would have delivered before is dropped."
+  HOLDS for the rower, FALSE for the instrument.** The liveness watchdog is
+  safe by prior design — it arms at the FIRST 0x0031, "never at `subscribe()`
+  time and never at connect time" — but `JustRowObserver` connects and NEVER
+  arms ("because it never programs the erg"), so it always takes the fallback
+  and every future capture loses its head. **Technique: for any "nothing
+  consumes X before Y" claim, grep for the caller that never reaches Y at
+  all.** The exception to an invariant about arming is the screen that does
+  not arm — and here it was the instrument the project verifies itself with
+  (RF19's shape, one layer up).
+
+- **Deferred-subscribe scheduler, three lifetime holes an RF27 table would
+  have caught.** (1) The transport's `subscribe()` calls its connected-guard
+  SYNCHRONOUSLY and throws when the device id is null — unreachable today
+  because the subscribes run microseconds after connect resolves, reachable
+  after deferral via a walked producer (a cancel during connect), with
+  `createPm5Driver` exposing no dispose to hang the cancel on. (2) A double
+  release genuinely double-subscribes: the transport's fan-out `Set` gets a
+  NEW closure per registration, so it cannot dedupe — every status handler
+  then runs twice, halving tick-counted waits and duplicating frame
+  emissions. (3) "subscribed on every connect, exactly once, whether or not
+  an arm ever comes" literally requires subscribing after teardown.
+  **Technique: for any state that moves a synchronous call into an
+  asynchronous window, re-read the callee's FIRST LINE — the precondition it
+  used to get for free is the one the deferral removes.**
+
+- **Vendor knob not considered.** `BleClient` ships `disableQueue()` and the
+  spec invented a scheduler without recording it. It is probably wrong (the
+  driver's chunked CSAFE writes all target one characteristic and the native
+  callback map is keyed by operation and characteristic, so concurrent
+  same-characteristic writes collide) — but that reasoning IS the
+  research-trigger answer. **Technique: before designing around a library's
+  behaviour, grep its public surface for a switch that turns that behaviour
+  off, and record why you didn't use it.**
+
+- **Held under attack (vetted ground for this work):** the plugin serializes
+  BOTH `write` and `startNotifications`, and the native side resolves a
+  subscribe only after the CCCD round trip, so every slot is a real radio
+  round trip; Core Bluetooth's own per-peripheral serialization reinforces
+  rather than defeats the reorder (both layers are order-preserving, so the
+  fix works even if the ~180 ms is the connection interval rather than the JS
+  queue — the causal claim is not load-bearing); the driver is created at
+  exactly ONE site so the state is per-connect; neither arm path waits on a
+  frame (the free-row door gates on `deviceName`, the interstitial on
+  `phase === "pairing"`, set BEFORE connect) so there is no deadlock;
+  `DriverOptions.schedule` exists so the fallback is testable; production
+  configures no `ackTimeout`, so the tick-denominated bounds are not newly
+  exposed; and the ten-call count and subscribe order in the spec are exactly
+  what the driver enqueues.
