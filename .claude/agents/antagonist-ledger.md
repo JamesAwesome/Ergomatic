@@ -6419,9 +6419,15 @@ plan's own tools and never with the REPO's.
   RF5 = 5. **Every cell of the census table verified against a live run** — all
   twelve rows, all residual counts, no drift. The leader-strip red proof re-run
   corpus-wide: diff is exactly one line and `never a real link` survives. And
-  CLAUDE.md's own `pnpm exec vitest run --project client <file>` footgun is STALE
-  against vitest 4's `projects` config — jsdom loads, 4/4 pass — so the plan's three
-  uses of that form are correct. **Nit: step 3b's example read-line says "all 19
+  CLAUDE.md's own `pnpm exec vitest run --project client <file>` footgun was
+  called STALE here — **WRONG, corrected at #277's PM gate (2026-09-02):** the
+  footgun is REAL and its mechanism is the dropped `NODE_OPTIONS=--no-experimental-webstorage`
+  that `package.json`'s `test` script sets (the bare form produced 1582 false
+  failures across client+unit against a green head; the two-file spot check
+  passed by luck of file selection). The plan's uses carry the `NODE_OPTIONS=`
+  prefix, which is why they were correct; the diagnosis ("jsdom loads, vitest 4")
+  was not. `.claude/agent-briefing.md` already carried the right mechanism —
+  a pass contradicted a standing in-repo rule and nobody grepped. **Nit: step 3b's example read-line says "all 19
   surviving `browserFinished` hits"; the table sums to 25.**
 
 ### 2026-09-02 — Wave E PR1.75b IMPLEMENTATION (lessons found by review, not by the 11 plan passes)
