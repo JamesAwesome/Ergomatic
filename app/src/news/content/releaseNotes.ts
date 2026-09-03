@@ -5,6 +5,42 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.36.0 (2026-09-03): range v0.35.0..main accounted per RF15
+    // (`git log v0.35.0..origin/main --oneline`, NO `--merges` — main is
+    // squash-merged and that form returns empty), plus this PR. Five
+    // merges in range:
+    //   #276 door PR A — item 3 (the chip, the count, and the stored
+    //     no-reading word). It made v0.24.0's item-4 promise concrete
+    //     ("from the next release on"); this is that release, so the
+    //     sentence lands here rather than only in that correction.
+    //   #274 timer mode + three free-row copy notes — item 4.
+    //   #271 (the door spec re-scope) and #275 (the harden skill and the
+    //     plan-authoring rules): documents and process, nothing a rower
+    //     can see.
+    //   #277 (Wave E PR1.75b, the native half of the Concept2 activation
+    //     shape): dark by its own fold — no surface reaches it until
+    //     PR2, and its own memory line says no tag until then.
+    // Items 1 and 2 are this PR (door PR B).
+    //
+    // ITEM 2 CARRIES THE CORRECTION IN FULL, the worked example v0.24.0's
+    // own item 5 set: a correction appended to an old version's entry has
+    // an audience of zero, so the withdrawal is written where people will
+    // read it and v0.24.0's shipped string is left alone. Shipped notes
+    // are history.
+    //
+    // IF MORE MERGES LAND BEFORE THE TAG, re-run the range and account
+    // for them here — this list was accounted at door PR B's head, not at
+    // a cut tag.
+    version: "v0.36.0",
+    date: "2026-09-03",
+    items: [
+      "Stop a connected piece partway through an interval and that interval's row now shows what you actually did, 250 m · 1:03, instead of a dash. It is the last thing the erg told us before you stopped, so it is yours to see. It is never added into your totals, your average split, or the count of intervals kept: those still only count intervals you finished.",
+      "'Nothing kept.' has left the three screens that said it: the lost-monitor banner, the line the end-of-session screen shows when the erg drops a workout, and the log door's strip. With a part-rowed interval now showing its own metres, the phrase was about to be denying something on the screen underneath it. (Corrected 2026-09-03: v0.24.0 said the banner 'says how much survived: 2 intervals kept., or Nothing kept. when there is nothing'. The first half stands. The second is withdrawn: with nothing kept the banner now shows LOST THE MONITOR alone and promises nothing about what survived.)",
+      "Your history says which sessions did not finish. A session you stopped early wears a STOPPED EARLY chip in the list, and opening it reads 'STOPPED EARLY · 2 of 5 intervals measured'; a session the link died in reads LINK LOST, and one the erg dropped reads PROGRAM DROPPED. And the promise v0.24.0 made is kept: a connected session the app never heard a pull in is now stored as exactly that and reads NO MONITOR READING in your history. Rows saved before this release still read LOGGED BY HAND, and always will.",
+      "The timer screen has one END, in the same place whichever way up you hold the phone, and the empty band that used to sit under it is gone. Three smaller things with it: the Just Row door's band reads 'Start a free row session.', a saved row with a time but no distance now prints TIME m:ss under its name in History, and with no plan active the save button just says Save.",
+    ],
+  },
+  {
     // v0.35.0 (2026-09-02): range v0.34.0..main = #272 (substitution) plus
     // this PR (the `source` sunset + these notes), accounted per RF15
     // (`git log v0.34.0..origin/main --oneline`). Item 1 is #272 and
