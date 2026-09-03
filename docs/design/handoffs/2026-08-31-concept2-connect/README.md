@@ -58,6 +58,18 @@ not rewrite it.
   is the sole discovery surface.
 - **Non-qualifying rows** (manual, terminated, no work/rest columns): the
   block does not render, ever.
+- **Mechanism note, added 2026-09-02 (PR1.75b), reconciliation only — no
+  copy changes.** "The system browser" below (Interactions & Behavior;
+  the 1a footnote "OPENS CONCEPT2 IN YOUR BROWSER"; 1b's "Approve access
+  in the browser") described PR1.5's original `@capacitor/browser` +
+  background-return arm, since retired. The shipped native mechanism is
+  `ASWebAuthenticationSession`: an in-app system sheet that resolves via
+  a promise, not a background hop the app detects on return. The rendered
+  copy stays as gate-approved (Fidelity: do not rewrite) — "browser" still
+  reads accurately to a rower, since Concept2's own consent page is what's
+  shown — but PR2 must wire states 1a-1e against `linkFlow`'s promise
+  result, not a foreground-refetch/backgrounding lifecycle. Cancel (1b)
+  now means dismissing the sheet, not backgrounding the app.
 
 ## Screens / States
 

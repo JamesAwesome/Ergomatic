@@ -1,5 +1,10 @@
 # Wave E PR1.5 — Native Link Flow Implementation Plan
 
+**HISTORICAL — 2026-09-02:** the `Browser.open` + `browserFinished` return
+arm this plan built was retired at PR1.75b
+(`2026-09-02-concept2-pr175b-native.md`, Task 3's census). Kept as the
+record of what was built and why.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The native half of the Concept2 link hop: open the authorize URL in the system browser, and give PR2 a return-to-app refresh seam (shipped as `useReturnToApp` — renamed from the working title "foreground re-fetch" at fix round 3 once `browserFinished`, a non-foreground signal, turned out equally load-bearing) so the app learns the link outcome when the rower returns. Branch A only — no URL scheme, no `appUrlOpen` handler (that leg is **PR1.75**, fix round 15 — see below). Plus the evidence package for the account-injection ruling — RULED at this PR's design gate (James, 2026-09-01): ACCEPT the bounded residual for the dark plumbing; **REAFFIRMED (James, 2026-09-01) on fix round 15's corrected bound census** — fully authenticated option (g), now PR1.75's owned scope, gates `C2_LINK_ENABLED=1` (ROADMAP register + gate doc §6).
