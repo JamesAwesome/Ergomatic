@@ -6174,8 +6174,10 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
       meters: 100,
       seconds: 30,
     });
-    // I-B2: still not an `IntervalActual`.
+    // I-B2: still not an `IntervalActual`. "N intervals kept" does not move
+    // for a partial.
     expect(stored?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(stored!.actuals)).toBe(0);
     const ringEntries = JSON.parse(result.current.exportLog()) as {
       kind: string;
       detail: string;
@@ -11773,7 +11775,9 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
       meters: 244.1,
       seconds: 59.7,
     });
+    // I-B2, at the fifth producer too.
     expect(stored?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(stored!.actuals)).toBe(0);
 
     const exported = JSON.parse(result.current.exportLog()) as {
       kind: string;
