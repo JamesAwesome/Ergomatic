@@ -9943,10 +9943,17 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
   test("a state with nothing to DO (1g) gives its panel the full card width", async ({
     page,
   }) => {
-    // `.c2-card-act:empty { display: none }`, measured rather than asserted
-    // about. The tell column must span the body's whole content width, in
-    // both orientations — a 50% track held open for an empty column is
-    // exactly what this rule exists to prevent.
+    // `.c2-card-act:empty { display: none }`, measured on what it actually
+    // buys. The first draft of this test asserted `toBeHidden()` on the act
+    // column and that the tell column spanned the body width, and DELETING
+    // THE RULE LEFT BOTH GREEN (probe M38): 1g is single-column anyway, so
+    // an empty flex child is already full width, and Playwright counts a
+    // zero-height box as hidden. Both assertions were decoration.
+    //
+    // The rule's real effect is the trailing 12px flex GAP an empty child
+    // would add under the panel — so the deciding assertion is the body's
+    // own height against its one visible column's, plus the computed
+    // `display`, which is the property the rule sets.
     for (const vp of [PHONE_LANDSCAPE, PHONE_PORTRAIT]) {
       await page.setViewportSize(vp);
       await loadCard(page, "c2-card-update-required.html");
@@ -9954,7 +9961,13 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
       const body = await page.locator(".c2-card-body").boundingBox();
       if (tell === null || body === null) throw new Error("no box");
       expect(tell.width).toBeCloseTo(body.width, 0);
-      await expect(page.locator(".c2-card-act")).toBeHidden();
+      // No trailing gap: the body is exactly as tall as its one column.
+      expect(body.height).toBeCloseTo(tell.height, 0);
+      expect(
+        await page
+          .locator(".c2-card-act")
+          .evaluate((el) => getComputedStyle(el).display),
+      ).toBe("none");
     }
   });
 });
