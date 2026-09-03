@@ -789,6 +789,43 @@ describe("Countdown — the blocked start (AUD-015, storage-denial spec §2)", (
   });
 });
 
+// Storage-denial spec (2026-09-03) §3 leg 1 (antagonist ledger,
+// 2026-09-03 DELTA pass) — quota at the RUN key, through the REAL
+// `run.ts`/`draft.ts` (not the mocked seam the describe block above
+// uses). `saveDraft` succeeds for real (`DRAFT_KEY` untouched), so this
+// is the actual "draft committed, countdown reached, THEN the write
+// fails" ordering the anchor asked for — RF24's shape, starting
+// upstream of the failing write. KEY-SCOPED ON PURPOSE: a blanket
+// `setItem` denial would deny `DRAFT_KEY` too and never reach Countdown
+// at all — that is the OTHER leg
+// (`useStartWorkout.test.tsx`'s "surfaces an inline error and does not
+// navigate when saveDraft fails (quota)"), already shipped, and this
+// leg would be a mirror of it if it used a blanket denial too.
+describe("Countdown — quota at the run key, real storage (storage-denial spec §3)", () => {
+  it("shows the blocked-start state when the real setItem throws for the run key only", async () => {
+    mockAdapters();
+    saveDraft(hoarfrostDraft());
+    const realSetItem = Storage.prototype.setItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(function (this: Storage, key: string, value: string) {
+        if (key === RUN_KEY) {
+          throw new DOMException("quota exceeded", "QuotaExceededError");
+        }
+        return realSetItem.call(this, key, value);
+      });
+    try {
+      await renderCountdown();
+      expect(
+        await screen.findByText("Couldn't keep your session on this phone."),
+      ).toBeInTheDocument();
+      expect(loadRun()).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 // PHASE WU deleted the describe that stood here, `Countdown — the warm-up
 // setting reaches buildRun` (three cases: a prepended TIME warm-up, a
 // DISTANCE one plus its trailing rest, and the OFF default). `buildRun` has
