@@ -3108,7 +3108,8 @@ describe("EST LEFT (Phase LL) — the wire premise, verified against a real capt
   // OWN accumulated clock (`sessionElapsedSeconds`, what `elapsedSeconds`
   // used to subtract before this task) credits far less than the wall
   // time that actually passed — because 0x0031's per-interval clock
-  // freezes whenever `rowingActive` goes false, and a rower sitting
+  // freezes through a REST (NARROWED 2026-09-03 — rowingActive design spec
+  // §4: it keeps running through a mid-WORK stop), and a rower sitting
   // through a rest is exactly that. `restSeconds` (0x0032's Rest Time),
   // the field this task's fix reads instead, is measured here to credit
   // close to the FULL wall time — the reason the fix works at all. **If

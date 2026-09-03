@@ -1169,9 +1169,12 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // wire's own driver-accumulated clock — is what this used to subtract,
   // and it is WRONG whenever a rower sits through a rest motionless: the
   // PM5's own per-interval clock (what that accumulation is built from)
-  // freezes to the centisecond the instant `rowingActive` goes false, so
-  // the countdown stopped moving while real time kept passing (James's own
-  // report: TOTAL LEFT finished ~a minute high). The replacement sums
+  // freezes to the centisecond through a REST (NARROWED 2026-09-03 —
+  // rowingActive design spec §4; measured at
+  // `docs/monitor/sessions/walk-2026-09-03-resume-edge/`, the clock KEEPS
+  // RUNNING through a mid-WORK stop, the case the next paragraph below
+  // names), so the countdown stopped moving while real time kept passing
+  // (James's own report: TOTAL LEFT finished ~a minute high). The replacement sums
   // every COMPLETED phase's own PROGRAMMED length, plus a LIVE term for
   // whichever phase is current: the machine's own Rest Time countdown
   // (`frame.restSeconds`, 0x0032 offsets 13-15) during a rest — which

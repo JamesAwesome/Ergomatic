@@ -469,7 +469,7 @@ rower's work silently.
       waiting on it.** The cited hook line numbers moved with PR #239; the
       handler is `useMonitorSession.ts`'s `programDropped` case, found by
       name rather than by line.
-- [ ] **Handle `programDropped` while a run is live** (from the
+- [x] **Handle `programDropped` while a run is live** (from the
       pocketed-phone re-diagnosis above). Small and deterministic, warranted
       whatever the full ring says — the detector already fires; only the
       live arm swallows it, and that arm has NO test
@@ -706,13 +706,23 @@ rower's work silently.
       invariants, a lifetime table for the in-flight reading, its own Gate
       0-B, and one replay owed before its plan (when `IntervalActual` N
       arrives — work→rest boundary or end of rest).
-- [ ] **`rowingActive` is falsified but not dangerous.** Owed: (a) one test
-      pinning `surfaceModel.ts:915`'s `midSessionMirror` byte-half — measured,
-      deleting it leaves 5,357 tests / 191 files green, so nothing gates it
-      today; (b) a reconciled comment; (c) a diagnostic carrying the raw byte,
-      since `parse.ts:608`'s strict `rowingState === 1` makes any non-1 read
-      `false` and the next occurrence still will not say which. No behaviour
-      change proposed. **S**
+- [x] **`rowingActive` is falsified but not dangerous — DONE in this PR
+      (2026-09-03, `2026-09-03-rowing-active-design.md`).** Owed: (a) one
+      test pinning `midSessionMirror`'s byte half (`surfaceModel.test.ts` —
+      cited by symbol, not the stale `surfaceModel.ts:915`) — the
+      measurement below was itself stale; RE-MEASURED on `c2182ef5`:
+      deleting `frame.rowingActive === false &&` gives `Test Files 1 failed
+      | 230 passed (231)`, caught only by
+      `ConnectedSurface.screens.test.tsx`'s RC-24 snapshot as an HTML diff,
+      which is why the explicit model-layer pin was still owed; (b) a
+      reconciled comment — ALREADY DONE, at `types.ts`'s `restSeconds`
+      block, narrowed at its own site by #280's walk; (c) a diagnostic
+      carrying the raw byte, since `parse.ts:608`'s strict
+      `rowingState === 1` makes any non-1 read `false` and the next
+      occurrence would otherwise still not say which — DONE, `driver.ts`
+      now logs a `raw-rowing-state` ring entry on the driver's first frame
+      and on every change after (spec §2, invariants I-2/I-3). No
+      behaviour change. **S**
       **(d) SETTLED 2026-09-03 at the resume-edge walk
       (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`): the clock
       RUNS through a mid-work stop.** With the rower sitting still, elapsed
@@ -722,9 +732,10 @@ rower's work silently.
       false" is correct only for its own measured REST — corrected at its
       site by this walk. Door PR B's `partialSeconds` is therefore interval
       elapsed INCLUDING idle time, exactly as `2026-09-02-door-partial-design.md`
-      §5.1 concluded; no shipped behaviour changes. **(c) is still open —
-      the ring carries no raw-byte diagnostic, so the byte's own value
-      through the stop remains unobserved.** The original text, for the
+      §5.1 concluded; no shipped behaviour changes. **(c) is now DONE too —
+      this PR's `driver.ts` ring carries the raw byte on the first frame and
+      on every change, so the next occurrence will say which value it
+      was.** The original text, for the
       record: `domain/monitor/types.ts:134` claims `MonitorFrame.elapsedSeconds`
       "FREEZES whenever `rowingActive` goes false", measured through a REST;
       `types.ts:189-191` says the wire has no paused state at all; and
