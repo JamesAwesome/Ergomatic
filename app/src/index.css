@@ -10218,17 +10218,30 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
-/* The page's own `.btn-outline`, matched declaration for declaration
-   (fix round 2, F7): 48px and 15px, not the 52px/16px an earlier revision
-   shipped for both outline buttons. 1e's "Try again" is a plain
-   `.btn-outline` on the page; 1i's "Retry" is the same button with an
-   inline `min-height: 52px`, which is `.c2-card-retry-tall` below — and it
-   is why §4's own prose reads "Retry 48, 1i's Retry 52".
+/* The page's outline button as the FRAMES draw it, 52px and 15px.
+
+   MEASURED (fix round 4, D1), because the previous revision of this comment
+   got it backwards from the page's prose instead of its markup: every
+   `.btn-outline` inside a `c2card` frame carries an inline
+   `min-height: 52px` — SEVEN of them, four "Try again" and three "Retry",
+   with zero bare ones. The only unstyled `.btn-outline`s on the page are
+   the You-row "Sign out" chips (44px) and Surface 2's Send block, all
+   outside the card. So the class's own 48px default never reaches a
+   Concept2 card button, and shipping `min-height: 48px` here made 1e's
+   Try again 4px shorter than every frame that draws it.
+   `.c2-card-retry-tall` existed to carry the 52px for 1i alone and is
+   deleted with the premise that invented it.
+
+   §4's summary prose said "Retry 48, 1i's Retry 52". No frame draws a 48px
+   Retry, so that sentence had no referent — and it is what this rule got
+   aligned to instead of the drawings. Corrected on the page in the same
+   commit; the frames are the authority, a summary sentence is not.
+
    15px 600-weight is NOT WCAG "large text" (that needs 18.66px bold or
    24px), so the 4.5:1 floor still applies and is met: --ink on --surface,
    17.11:1. No input is involved, so the 16px iOS-zoom rule does not. */
 .c2-card-retry {
-  min-height: 48px;
+  min-height: 52px;
   background: transparent;
   border: 1px solid var(--ink);
   border-radius: 0;
@@ -10236,10 +10249,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-family: var(--font-sans);
   font-size: 15px;
   font-weight: 600;
-}
-
-.c2-card-retry-tall {
-  min-height: 52px;
 }
 
 /* Board 1c/1d. Accent's third canonical job, a destructive control
@@ -10264,22 +10273,28 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--on-color);
 }
 
-/* Landscape: the two-column card interior, for the SIX frames the amendment
-   draws that way and no others (fix round 2, F1).
+/* Landscape: the two-column card interior, for the SEVEN frames the
+   amendment draws that way and no others (fix round 2, F1; census refreshed
+   in fix round 4, D2).
 
    MEASURED over the page, not read off it. A script over every
    `class="frame land"` block reports `grid-template-columns: 1fr 1fr;
-   gap: 20px` on 1a, 1c, 1f, 1f-b, 1i and 1j, and NO grid on 1b, 1d, 1e and
-   1g — four un-gridded frames, not two. It also reports that 1d's landscape
-   frame DRAWS A HAIRLINE. A previous revision of this block asserted the
-   opposite of both, and shipped 1d and 1e as two columns with 1d's hairline
-   suppressed; 1d is badged UNCHANGED on the page, i.e. inherited from the
-   approved board, so that was a silent redraw of approved work.
+   gap: 20px` on 1a, 1c, 1f, 1f-b, 1f-c, 1i and 1j, and NO grid on 1b, 1d, 1e
+   and 1g — four un-gridded frames, not two. It also reports that 1d's
+   landscape frame DRAWS A HAIRLINE. A previous revision of this block
+   asserted the opposite of both, and shipped 1d and 1e as two columns with
+   1d's hairline suppressed; 1d is badged UNCHANGED on the page, i.e.
+   inherited from the approved board, so that was a silent redraw of approved
+   work. A later one said SIX and went stale the day 1f-c was drawn — a
+   census in a comment is a measurement with an expiry date, so re-run the
+   script when a frame is added.
 
    Everything here is therefore scoped to `.c2-card-body-split`, which the
-   component applies from an explicit enumeration of those frames
-   (`Concept2Card.tsx`'s `singleColumn`). The scoping is what keeps 1b, 1d,
-   1e and 1g single-column and 1d's hairline visible.
+   component applies from a predicate over state, not a list of frame ids
+   (`Concept2Card.tsx`'s `singleColumn` and its comment: single column iff
+   the rower is armed to unlink, or is unlinked and an attempt has just
+   opened, failed, or hit a build too old to link). The scoping is what keeps
+   1b, 1d, 1e and 1g single-column and 1d's hairline visible.
 
    `grid-template-columns: 1fr 1fr` — the page's own declaration, verbatim.
    The earlier `grid-auto-flow: column` + `grid-auto-columns: 1fr` was there
@@ -10293,8 +10308,19 @@ section:not(.news-pinned) .news-row:last-of-type {
    height clause. `padding`/`gap` are NOT overridden here — the page has no
    landscape override at all and renders `.c2card` at 16px/12px in both
    orientations; an earlier revision shipped 14px/16px and 10px, which were
-   invented (F7). The 8px tell / 10px act inner gaps below ARE the page's,
-   read off the inline styles of its own landscape column wrappers.
+   invented (F7).
+
+   THE INNER GAPS, with one departure stated as one (fix round 4, D3). The
+   10px act gap IS the page's, uniformly: every landscape act wrapper it
+   draws (1a, 1f, 1f-b, 1f-c) is 10px. The 8px tell gap is the page's in FOUR
+   of five — 1c, 1f-b, 1f-c and 1j — while 1a's tell wrapper is 10px, and
+   1f and 1i have no tell wrapper at all (a bare panel). We ship 8px for
+   every split state, so 1a's telling column is 2px tighter than its frame.
+   Taken deliberately rather than matched: reproducing it needs a per-state
+   gap rule, which is the per-frame special-casing this scoping exists to
+   avoid, for a 2px difference between two lines of text. Cheap to overrule —
+   one rule keyed off the unlinked-idle state — if a reviewer wants the frame
+   exactly.
 
    `align-items: center` uniformly, including 1a, which is the one gridded
    frame without it. Reviewed and closed with no action: the page's act

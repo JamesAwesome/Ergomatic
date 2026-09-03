@@ -1478,7 +1478,9 @@
       where 1f alone leaves it above the grid. That is the shipped card's one
       rule showing through &mdash; what the card TELLS the rower goes left, what
       it ASKS them to DO goes right &mdash; and it is the reading this page's
-      other four gridded frames (1a, 1c, 1i, 1j) already take.
+      other five gridded frames (1a, 1c, 1f-c, 1i, 1j) already take. (Six, with
+      1f-b itself: SEVEN frames on this page are gridded in landscape, and 1f
+      is the only one of them that puts telling content above the grid.)
     </p>
 
     <h3>1f-c Needs re-auth, on a build too old to link <span class="badge b-new">NEW STATE</span></h3>
@@ -2907,9 +2909,18 @@
       all &mdash; it has no REASON line.
     </p>
     <p class="lede">
-      Every tappable in every frame is &ge; 44px: Connect / Reconnect / Send /
-      Retry 48, 1i's Retry 52, Unlink 52, the link-out rows (View on Concept2,
-      and 2i's OPEN CONCEPT2 PROFILE) 44, Delete 44. <strong>2i introduces no
+      Every tappable in every frame is &ge; 44px: Connect / Reconnect / Send 48,
+      <strong>every outline button inside a card &mdash; both Try again and
+      Retry &mdash; 52</strong>, Unlink 52, the link-out rows (View on Concept2,
+      and 2i's OPEN CONCEPT2 PROFILE) 44, Delete 44.
+      <em>Corrected in Task 4's fix round 4:</em> this sentence used to read
+      "Retry 48, 1i's Retry 52", and no frame on this page draws a 48px Retry.
+      All seven <code>.btn-outline</code>s inside a card frame carry an inline
+      <code>min-height: 52px</code> (four Try agains, three Retrys, zero bare);
+      the only unstyled ones are the You-row Sign out chips at 44px, outside
+      the card. The build had been aligned to this sentence rather than to the
+      drawings and shipped 1e's Try again 4px short. <strong>The frames are
+      the authority; a summary sentence is not.</strong> <strong>2i introduces no
       new colour pairing</strong> &mdash; its panel label and line are the
       sunken panel's <code>--ink</code> (14.50:1), its REASON is
       <code>--ink-3</code> on <code>--surface-sunken</code> (6.30:1), and its

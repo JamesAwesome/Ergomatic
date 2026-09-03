@@ -9834,7 +9834,7 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
 //
 // WHICH STATES ARE WHICH IS MEASURED, NOT READ. A script over every
 // `class="frame land"` block in `amendment-2026-09-03.html` reports a
-// two-column grid on 1a, 1c, 1f, 1f-b, 1i and 1j and no grid on 1b, 1d, 1e
+// two-column grid on 1a, 1c, 1f, 1f-b, 1f-c, 1i and 1j and no grid on 1b, 1d, 1e
 // and 1g, and reports that 1d's landscape frame DRAWS a hairline. A previous
 // revision of this file asserted that no landscape frame draws one and that
 // only 1b and 1g are un-gridded; both were false, and the hairline test here
@@ -9929,8 +9929,9 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
     page,
   }) => {
     // Scoped to the split body only: the 20px column gap has taken over the
-    // job of marking the break, which is why 1a, 1c, 1f, 1i and 1j draw no
-    // hairline in landscape while 1d does.
+    // job of marking the break, which is why all seven gridded frames
+    // (1a, 1c, 1f, 1f-b, 1f-c, 1i, 1j) draw no hairline in landscape while
+    // 1d does.
     await page.setViewportSize(PHONE_LANDSCAPE);
     await loadCard(page, "c2-card-unlinked.html");
     await expect(page.locator(".c2-card-hair")).toBeHidden();

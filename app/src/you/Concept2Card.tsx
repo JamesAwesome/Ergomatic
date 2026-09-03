@@ -245,7 +245,7 @@ export default function Concept2Card({ email }: { email: string }) {
           <div className="c2-card-act">
             <button
               type="button"
-              className="c2-card-retry c2-card-retry-tall"
+              className="c2-card-retry"
               onClick={() => void reload()}
             >
               Retry
@@ -283,17 +283,33 @@ export default function Concept2Card({ email }: { email: string }) {
       ? "WAITING"
       : "NOT LINKED";
 
-  // WHICH STATES THE PAGE DRAWS AS TWO COLUMNS (fix round 2, F1). Not a
-  // principle — an enumeration, and it is stated as one because the page is
-  // not internally consistent and the ruling is that the page wins: 1i (read
-  // failed) is gridded while 1e (link failed) is not, and both are "one panel
-  // and one button".
+  // WHICH STATES THE PAGE DRAWS AS TWO COLUMNS (fix round 2, F1).
+  //
+  // THE PREDICATE, in words: a card is single column exactly when the rower
+  // is ARMED to unlink, or is unlinked and an attempt has just done
+  // something — opened, failed, or hit a build too old to link. Everything
+  // settled — unlinked at rest, linked, needs-reauth, read-failed,
+  // unlink-refused — is two columns. It is written as a predicate over state
+  // rather than a list of frame ids on purpose: it partitions all eleven
+  // drawn frames correctly AND answers the two states the page never drew
+  // (an in-flight attempt on the reauth card, and 1f-c before it was drawn),
+  // which a frame list cannot do.
+  //
+  // It is NOT derived from a design principle, and that distinction is worth
+  // keeping: the page is not internally consistent — 1i (read failed) is
+  // gridded while 1e (link failed) is not, and both are "one panel and one
+  // button" — so this predicate is fitted to the drawings, not to a rule
+  // they follow. The ruling is that the page wins.
   //
   // MEASURED, not read. A script over every `class="frame land"` block in
   // `amendment-2026-09-03.html` reports a two-column grid for 1a, 1c, 1f,
-  // 1f-b, 1i and 1j, and no grid for 1b, 1d, 1e and 1g. An earlier revision
-  // of this file asserted "1b and 1g are exactly the two the page does not
-  // grid"; that was wrong by two, and it shipped 1d and 1e split.
+  // 1f-b, 1f-c, 1i and 1j — SEVEN since fix round 3 drew 1f-c — and no grid
+  // for 1b, 1d, 1e and 1g. Two earlier revisions of this comment were wrong
+  // about that census: the first claimed "1b and 1g are exactly the two the
+  // page does not grid" (wrong by two, and it shipped 1d and 1e split), and
+  // the second went stale the moment 1f-c was drawn. Re-run the script when
+  // a frame is added; a census in a comment is a measurement with an expiry
+  // date.
   const singleColumn =
     armed || (!link.linked && (opening || updateRequired || failure !== null));
 
