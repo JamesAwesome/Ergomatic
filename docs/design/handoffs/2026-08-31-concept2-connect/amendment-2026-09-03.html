@@ -2364,8 +2364,8 @@
       different meanings at <code>server/routes/concept2.ts:614/618/897</code>):</p>
     <table class="kv">
       <tr><th>Response</th><th>State</th><th>REASON line</th></tr>
-      <tr><td class="num">200 <code>{resultId}</code></td><td>2c Sent</td><td>&mdash;</td></tr>
-      <tr><td class="num">409 <code>duplicate</code></td><td>2d Already there</td><td>&mdash;</td></tr>
+      <tr><td class="num">200 <code>{resultId}</code></td><td>2c Sent <em>(a 200 whose body carries no numeric <code>resultId</code> is not a send &mdash; it falls to 2e, one row down from the bottom)</em></td><td>&mdash;</td></tr>
+      <tr><td class="num">409 <code>duplicate</code></td><td>2d Already there <em>(likewise: no numeric <code>c2ResultId</code> means nothing was recorded and there is nothing to link to &mdash; 2e)</em></td><td>&mdash;</td></tr>
       <tr><td class="num">409 <code>needs_reauth</code></td><td>2f</td><td>&mdash;</td></tr>
       <tr><td class="num">409 <code>unlinked</code></td><td>block disappears (re-read the link; the rower unlinked in another tab)</td><td>&mdash;</td></tr>
       <tr><td class="num">422 <code>not_eligible</code></td><td><strong>2h</strong> (the client predicate and the server's disagree &mdash; the server wins, and the rower is told so rather than watching the block vanish)</td><td>CONCEPT2 WON'T TAKE THIS ROW &middot; &lt;REASON&gt;</td></tr>
@@ -2375,7 +2375,27 @@
       <tr><td class="num">400 <code>tz &hellip;</code></td><td>2e</td><td>COULDN'T READ THIS DEVICE'S TIME ZONE</td></tr>
       <tr><td class="num">404</td><td>2e</td><td>THIS ROW IS GONE</td></tr>
       <tr><td class="num">network throw</td><td>2e</td><td>NO CONNECTION</td></tr>
+      <tr><td class="num">a 200 or a 409 <code>duplicate</code> with no numeric id in the body</td><td>2e</td><td>CONCEPT2 SENT SOMETHING WE COULDN'T READ</td></tr>
+      <tr><td class="num">any other status</td><td>2e</td><td>COULDN'T SEND THIS ROW &middot; &lt;status&gt;</td></tr>
     </table>
+    <p class="lede">
+      <em>The last two rows are new in Task 5's fix round 1, and they draw
+      strings the build already produced.</em> The catch-all is the direct
+      sibling of 1e's <code>mintFailed</code> row (COULDN'T START THE LINK
+      &middot; &lt;status&gt;), and it is REACHABLE, not defensive: the upload
+      route carries two middlewares ahead of its own handler
+      (<code>server/routes/concept2.ts</code>'s
+      <code>router.post("/api/concept2/results/:logId", requireUser,
+      refuseAmbiguousAuth, &hellip;)</code>) and each answers before any
+      <code>body.error</code> this table knows exists &mdash; an expired or
+      absent session 401s <code>{error:"unauthenticated"}</code>, and a bearer
+      that disagrees with the cookie beside it 400s
+      <code>{error:"ambiguous_auth"}</code> with no <code>field</code>, so it
+      lands here and not in the tz row above. The malformed row reuses the sentence 1e already renders for
+      <code>malformed</code> on the sibling surface &mdash; the build had been
+      inventing two of its own for the two shapes, and a rower cannot act on
+      them differently. Which shape it was belongs in the send's log line.
+    </p>
 
     <h3>2h Concept2 won't take this row <span class="badge b-new">NEW STATE</span></h3>
     <p class="lede">
@@ -2910,17 +2930,28 @@
     </p>
     <p class="lede">
       Every tappable in every frame is &ge; 44px: Connect / Reconnect / Send 48,
-      <strong>every outline button inside a card &mdash; both Try again and
+      <strong>every LIVE outline button inside a card &mdash; both Try again and
       Retry &mdash; 52</strong>, Unlink 52, the link-out rows (View on Concept2,
       and 2i's OPEN CONCEPT2 PROFILE) 44, Delete 44.
       <em>Corrected in Task 4's fix round 4:</em> this sentence used to read
       "Retry 48, 1i's Retry 52", and no frame on this page draws a 48px Retry.
-      All seven <code>.btn-outline</code>s inside a card frame carry an inline
-      <code>min-height: 52px</code> (four Try agains, three Retrys, zero bare);
-      the only unstyled ones are the You-row Sign out chips at 44px, outside
-      the card. The build had been aligned to this sentence rather than to the
+      All seven <strong>live</strong> in-card outline buttons carry an inline
+      <code>min-height: 52px</code> (four Try agains, three Retrys, zero bare).
+      <em>Corrected again in Task 5's fix round 1:</em> that sentence said
+      "all seven <code>.btn-outline</code>s inside a card frame", which is an
+      absolute over a mechanical class, and a nesting-aware scan of this page
+      counts <strong>eight</strong>. The eighth is the inert, struck
+      <code>Cancel</code> at 44px in the 1b/1d block under "REMOVED FROM THE
+      BOARD, SHOWN STRUCK FOR THE RECORD" &mdash; not a live control, which is
+      why the substance holds and only the count was wrong. The remaining
+      in-card buttons are all live and all 52. Outside the card sit the
+      thirteen You-row Sign out chips, which carry their OWN inline 44px
+      (the earlier wording called them "unstyled" three words before quoting
+      that number), and Surface 2's Send block, which carries none.
+      The build had been aligned to this sentence rather than to the
       drawings and shipped 1e's Try again 4px short. <strong>The frames are
-      the authority; a summary sentence is not.</strong> <strong>2i introduces no
+      the authority; a summary sentence is not &mdash; and an absolute over a
+      class the page can grow is a census that will go stale again.</strong> <strong>2i introduces no
       new colour pairing</strong> &mdash; its panel label and line are the
       sunken panel's <code>--ink</code> (14.50:1), its REASON is
       <code>--ink-3</code> on <code>--surface-sunken</code> (6.30:1), and its

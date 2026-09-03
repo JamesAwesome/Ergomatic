@@ -9951,10 +9951,18 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
     // PAGE; this measures the BUILD against the same numbers.
     //
     // The numbers are the amendment's own inline styles, transcribed, not
-    // read back off `index.css`: all seven `.btn-outline`s inside a `c2card`
-    // frame carry `min-height: 52px`, `.btn-primary` is 48px and
-    // `.btn-danger` is 52px. Independent literals, so retuning the CSS
-    // cannot retune the test with it (RF21).
+    // read back off `index.css`: all seven LIVE in-card outline buttons
+    // carry `min-height: 52px`, `.btn-primary` is 48px and `.btn-danger` is
+    // 52px. Independent literals, so retuning the CSS cannot retune the
+    // test with it (RF21).
+    //
+    // "LIVE" corrected at Task 5 fix round 1 (F3): this comment said
+    // "all seven `.btn-outline`s inside a `c2card` frame", and a
+    // nesting-aware scan of the page counts EIGHT. The eighth is the inert,
+    // struck "Cancel" at 44px under "REMOVED FROM THE BOARD, SHOWN STRUCK
+    // FOR THE RECORD" — a drawing of a deleted control, which is why none of
+    // the three cases below moves. An absolute over a mechanical class is a
+    // census, and this one had already gone stale in the round that wrote it.
     const cases: [string, string, number][] = [
       ["c2-card-unlinked.html", ".c2-card-primary", 48],
       ["c2-card-armed.html", ".c2-card-danger", 52],

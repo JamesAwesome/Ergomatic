@@ -24,23 +24,30 @@ export function isSendable(
  *  when the row's `c2_user_id` matches the live link's". A row carrying
  *  account A's result id, read while account B is linked, is NOT sent for
  *  this rower — the link-out would point at a row the current grant cannot
- *  see. Re-derived on every render (invariant I3), never cached. */
+ *  see. Re-derived on every render (invariant I3), never cached.
+ *
+ *  ONE line does the work, and a second null guard is deliberately ABSENT.
+ *  An earlier revision opened with
+ *  `if (row.c2ResultId === null || row.c2UserId === null) return null;`,
+ *  which reads like a check and is not one: deleting it alone left this
+ *  file green (Task 5 probe M33, 23/23), because the account line below is
+ *  already total over every shape it caught — a row whose `c2UserId` is
+ *  null never equals a live link's id, and a row whose `c2ResultId` is null
+ *  but whose account matches falls through and returns that same null.
+ *  That is an unfalsifiable guard sold as a check, which is worse than no
+ *  guard, and it is the SAME question `server/stores/logs.ts`'s
+ *  `sentC2ResultIds` answered in this PR when it deleted its own
+ *  `isNotNull(c2_result_id)` for the identical reason. `recordC2Result` is
+ *  the only writer of either column and writes both in one statement, so no
+ *  supported path produces a half-null row. One question, one answer.
+ *
+ *  The line that IS load-bearing is the account check: removing it reddens
+ *  two tests (probe M33c), one of them the only pin on `link.c2UserId ===
+ *  null`. */
 export function sentResultId(
   row: Pick<StoredLog, "c2ResultId" | "c2UserId">,
   link: Concept2Link,
 ): number | null {
-  // REDUNDANT, and measured so rather than asserted (Task 5, probe M33):
-  // deleting this line alone leaves the whole file green (23/23), because
-  // the account check below already answers `null` for every shape it
-  // catches — a row with `c2UserId: null` never equals a live link's id,
-  // and a row with `c2ResultId: null` whose account DOES match falls
-  // through and returns that same `null`. It is kept as an explicit
-  // statement of the rule ("an unsent row is not sent"), the same way
-  // `storedSummary.ts`'s `partialCloseReason` keeps its own measured-
-  // redundant clause 2 — so do NOT read a green suite after touching this
-  // line as evidence the predicate still holds. The line below is the one
-  // that enforces anything: removing IT reddens two tests (M33c).
-  if (row.c2ResultId === null || row.c2UserId === null) return null;
   if (link.c2UserId === null || row.c2UserId !== link.c2UserId) return null;
   return row.c2ResultId;
 }
@@ -232,6 +239,24 @@ function notEligibleReason(reason: unknown): string {
   }
 }
 
+/** THE SENTENCE THE PAGE ALREADY DRAWS for "the answer arrived and we could
+ *  not read it" — the amendment's §1e outcome table renders `malformed` as
+ *  exactly this string
+ *  (`docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-03.html`,
+ *  the `LinkOutcome` table's `malformed` row), for the sibling surface's
+ *  identical shape.
+ *
+ *  Fix round 1 (F2). Two reasons used to live here — CONCEPT2 ANSWERED
+ *  WITHOUT A RESULT ID for a 200 with no numeric `resultId`, and CONCEPT2
+ *  REJECTED A DUPLICATE WITHOUT AN ID for a 409 `duplicate` with no numeric
+ *  `c2ResultId` — and both were sentences this project invented, drawn on no
+ *  design artifact. They also drew a distinction a rower cannot act on
+ *  differently: in both cases Concept2's answer reached us and did not carry
+ *  the one number the state needs, and the only move is to try again. WHICH
+ *  of the two it was belongs in the send's log line, where an operator needs
+ *  it, not on a screen. One approved sentence replaces both. */
+const MALFORMED_ANSWER = "CONCEPT2 SENT SOMETHING WE COULDN'T READ";
+
 /**
  * `POST /api/concept2/results/:logId`'s answer -> the block's state.
  *
@@ -246,10 +271,7 @@ export function readSendResponse(status: number, body: unknown): SendState {
   if (status === 200) {
     const resultId = field(body, "resultId");
     if (typeof resultId !== "number") {
-      return {
-        kind: "failed",
-        reason: "CONCEPT2 ANSWERED WITHOUT A RESULT ID",
-      };
+      return { kind: "failed", reason: MALFORMED_ANSWER };
     }
     // The class and its producer are read DEFENSIVELY, not required: an
     // older server (mid rolling deploy) answers a bare `{resultId}`, and a
@@ -274,10 +296,7 @@ export function readSendResponse(status: number, body: unknown): SendState {
     // nothing was recorded — that is a failure, not a duplicate.
     return typeof resultId === "number"
       ? { kind: "duplicate", resultId }
-      : {
-          kind: "failed",
-          reason: "CONCEPT2 REJECTED A DUPLICATE WITHOUT AN ID",
-        };
+      : { kind: "failed", reason: MALFORMED_ANSWER };
   }
   if (error === "needs_reauth") return { kind: "reauth" };
   if (error === "unlinked" || error === "unavailable") return { kind: "gone" };

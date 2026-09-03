@@ -263,6 +263,36 @@ describe("readSendResponse (409 carries THREE meanings, 422 carries TWO; never k
     ]);
   });
 
+  it("renders each no-weight SENTENCE word for word, not just a REASON word", () => {
+    // Fix round 1, F1. Every assertion on `line` before this one was
+    // NEGATIVE (`.not.toContain("logbook")`, `.not.toContain("—")`) or a
+    // single fragment, so all three sentences could be replaced with junk
+    // and the file stayed green — the reviewer did exactly that and got 23
+    // passed. A manual grep by the author against the amendment is not a
+    // gate; this is. Transcribed from
+    // `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-03.html`
+    // (§2i's three drawn frames), as independent literals — never read back
+    // off the module that produces them (RF21's "a test that imports the
+    // constant it exists to gate proves nothing about it").
+    const lines = (
+      [
+        "no_weight",
+        "unreadable_weight",
+        "implausible_weight",
+        "no_gender",
+      ] as const
+    ).map((reason) => {
+      const state = readSendResponse(422, { error: "no_weight_class", reason });
+      return state.kind === "noWeight" ? state.line : state.kind;
+    });
+    expect(lines).toStrictEqual([
+      "Concept2 needs a weight class. Your Concept2 profile has no weight set.",
+      "Concept2 needs a weight class. We couldn't read the weight on your Concept2 profile.",
+      "Concept2 needs a weight class. We couldn't read the weight on your Concept2 profile.",
+      "Concept2 needs a weight class. We couldn't work one out from your Concept2 profile.",
+    ]);
+  });
+
   it("never blames the rower's weight for a number OUR unit inference could not classify", () => {
     // An implausible number is most likely our own unit being wrong
     // (observation 24), so the copy says what WE could not do.
@@ -301,9 +331,24 @@ describe("readSendResponse (409 carries THREE meanings, 422 carries TWO; never k
     expect(lines.join(" ")).not.toContain("—");
   });
 
-  it("degrades a malformed 200 rather than rendering SENT with no id", () => {
-    expect(readSendResponse(200, {}).kind).toBe("failed");
-    expect(readSendResponse(409, { error: "duplicate" }).kind).toBe("failed");
+  it("degrades a malformed 200 rather than rendering SENT with no id, and says so in the sentence the page already draws", () => {
+    // The `kind` half is the behaviour; the `reason` half is fix round 1's
+    // F1/F2. These two were the last rendered strings reached only through
+    // `.kind === "failed"`, and they used to be two INVENTED sentences
+    // ("CONCEPT2 ANSWERED WITHOUT A RESULT ID", "CONCEPT2 REJECTED A
+    // DUPLICATE WITHOUT AN ID") on no design artifact. They now collapse to
+    // the one the amendment's §1e outcome table already renders for
+    // `malformed` on the sibling surface — a rower cannot act on the two
+    // differently, and which it was belongs in the log line. Literal
+    // transcribed from the page, not read off the module.
+    expect(readSendResponse(200, {})).toStrictEqual({
+      kind: "failed",
+      reason: "CONCEPT2 SENT SOMETHING WE COULDN'T READ",
+    });
+    expect(readSendResponse(409, { error: "duplicate" })).toStrictEqual({
+      kind: "failed",
+      reason: "CONCEPT2 SENT SOMETHING WE COULDN'T READ",
+    });
   });
 
   it("uses no em-dash in any reason or line (house style)", () => {

@@ -10221,14 +10221,28 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* The page's outline button as the FRAMES draw it, 52px and 15px.
 
    MEASURED (fix round 4, D1), because the previous revision of this comment
-   got it backwards from the page's prose instead of its markup: every
+   got it backwards from the page's prose instead of its markup: every LIVE
    `.btn-outline` inside a `c2card` frame carries an inline
    `min-height: 52px` — SEVEN of them, four "Try again" and three "Retry",
-   with zero bare ones. The only unstyled `.btn-outline`s on the page are
-   the You-row "Sign out" chips (44px) and Surface 2's Send block, all
-   outside the card. So the class's own 48px default never reaches a
-   Concept2 card button, and shipping `min-height: 48px` here made 1e's
-   Try again 4px shorter than every frame that draws it.
+   with zero bare ones.
+
+   CORRECTED (Task 5 fix round 1, F3): the word "live" is load-bearing and
+   was missing. A nesting-aware scan counts EIGHT `.btn-outline`s inside a
+   `c2card`, not seven. The eighth is the inert, struck "Cancel" at 44px in
+   the 1b/1d block the page marks "REMOVED FROM THE BOARD, SHOWN STRUCK FOR
+   THE RECORD" — a drawing of a control that no longer exists, so it changes
+   nothing about this rule, but "SEVEN of them" was an absolute over a
+   mechanical class and the class already had an eighth member. Written, of
+   all rounds, in the one whose subject was a census going stale.
+
+   The other `.btn-outline`s on the page are the You-row "Sign out" chips —
+   THIRTEEN of them, each carrying its OWN inline `min-height: 44px`, so
+   "unstyled" was the wrong word for them and this comment used it three
+   words before quoting that number — and Surface 2's Send block, which
+   genuinely carries none. All outside the card. So the class's own 48px
+   default never reaches a Concept2 card button, and shipping
+   `min-height: 48px` here made 1e's Try again 4px shorter than every frame
+   that draws it.
    `.c2-card-retry-tall` existed to carry the 52px for 1i alone and is
    deleted with the premise that invented it.
 
