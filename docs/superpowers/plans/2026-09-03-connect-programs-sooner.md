@@ -39,14 +39,19 @@ workout path.
 **Files:** `app/src/monitor/driver.ts`, `app/src/monitor/driver.test.ts`.
 
 **Shape.** `createPm5Driver` today enqueues, synchronously: the sample-rate
-write, the CSAFE response subscribe, then eight status subscribes (0x0032,
-0x0033, 0x0038, 0x0031, 0x0037, 0x0039, 0x003A, 0x003F). Collect the eight
+write, the CSAFE response subscribe, then NINE status subscribe CALLS over eight
+characteristics (0x0032, 0x0033, 0x0038, 0x0031, 0x0037, 0x0039, 0x003A,
+0x003F, and 0x0031 a second time — the transport folds the second into the
+existing set without a second native call, so it costs no queue slot but IS
+a call the ordering tests count). Collect them
 into one `subscribeStatus()` closure that is NOT called at construction.
 Call it exactly once, from whichever comes first:
 
-- the first completed CSAFE sequence, hooked where `sendSequence` resolves
-  its `ackPromise` (the `onFrameWritten` hook already there is the WRONG
-  point per the spec: it fires before the ack);
+- the first completed NON-PREPARE CSAFE sequence, hooked where `sendSequence`
+  resolves its `ackPromise` (the `onFrameWritten` hook already there is the
+  WRONG point: it fires before the ack). NOT the prepare: `program()` sends a
+  prepare first, and releasing on it puts the subscribes exactly where the
+  spec's regression paragraph forbids (modelled ~3.2 s, worse than today).
 - a fallback on `options.schedule`, with the delay a named constant.
 
 **Invariants (spec's own, restated as the tests below):** exactly once per
@@ -61,8 +66,8 @@ other native call; the ring says which path released.
       2. multi-sequence: over a real two-sequence `program()`, no status
          subscribe sits between the prepare's ack and the chunk writes;
       3. no arm: connect, never arm, advance `schedule` past the fallback,
-         exactly eight status subscribes;
-      4. idempotence: arm AND fallback both fire, still exactly eight;
+         exactly nine status subscribe calls;
+      4. idempotence: arm AND fallback both fire, still exactly nine;
       5. teardown in the gap: disconnect before either release, zero status
          subscribes and no throw;
       6. the ring names `arm` on the normal path and `fallback` on (3).
@@ -78,7 +83,7 @@ other native call; the ring says which path released.
 
 Its head position exists to set frame cadence, and cadence cannot matter
 before any status subscription exists. Move it into `subscribeStatus()`,
-ahead of the eight. Invariant 1 tightens from "at most two" to "at most one".
+ahead of the nine. Invariant 1 tightens from "at most two" to "at most one".
 
 - [ ] Extend Task 1's ordering test: the program write is enqueued behind
       exactly ONE other native call, the CSAFE response subscribe.
