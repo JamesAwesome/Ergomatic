@@ -196,7 +196,21 @@ export function saveRun(r: SessionRun): boolean {
  *  malformed shape -> null + clear, and the DRAFT survives since it's a
  *  separate key this function never touches). */
 export function loadRun(): SessionRun | null {
-  const raw = localStorage.getItem(RUN_KEY);
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(RUN_KEY);
+  } catch {
+    // Storage-denial spec (2026-09-03) §1 I-1/I-2/I-3: the GETTER itself
+    // can throw (WHATWG: a SecurityError on the attribute access fails
+    // EVERY access to this origin's storage, not just this call) — read as
+    // absent, same as an empty key, and never cleared: there is nothing
+    // readable to judge here, unlike the malformed-JSON catch below, which
+    // keeps clearing exactly as it does today. Bare catch, not a
+    // SecurityError-typed one — the getter's own non-throwing failure
+    // paths (no document, a closed page, storage disabled) surface as a
+    // TypeError, which a typed catch would let escape (research doc §1).
+    return null;
+  }
   if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);

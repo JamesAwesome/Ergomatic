@@ -454,6 +454,30 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     expect(loadDraft()).toBeNull();
   });
 
+  // Storage-denial spec (2026-09-03) §1, I-1/I-2 — same idiom
+  // `session/run.ts`'s own "returns null when the storage GETTER itself
+  // throws" leg. Bare catch: the getter's own non-throwing failure
+  // paths surface as a TypeError, not a SecurityError.
+  it("returns null when the storage GETTER itself throws — denial reads as absent, and nothing is cleared (storage-denial spec §1 I-1/I-2/I-3)", () => {
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-denied"));
+    saveDraft(d);
+    const real = Storage.prototype.getItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(function (this: Storage, key: string): string | null {
+        if (key === DRAFT_KEY) {
+          throw new DOMException("storage is denied", "SecurityError");
+        }
+        return real.call(this, key);
+      });
+    try {
+      expect(loadDraft()).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(loadDraft()).toStrictEqual(d);
+  });
+
   it("returns null and clears the key for garbage JSON", () => {
     localStorage.setItem(DRAFT_KEY, "{not json");
     expect(loadDraft()).toBeNull();

@@ -6873,3 +6873,104 @@ plan's own tools and never with the REPO's.
   configures no `ackTimeout`, so the tick-denominated bounds are not newly
   exposed; and the ten-call count and subscribe order in the spec are exactly
   what the driver enqueues.
+
+### 2026-09-03 — Storage-denial spec (AUD-011 / AUD-015), DELTA pass
+
+- **CLAIM: "a denied getter makes `loadRun()` return null, so Start PROCEEDS and
+  then meets `saveRun === false`" — one denial, one composed path.** FALSE. The
+  denial the spec cites fails EVERY access, so the first writer on that path
+  (`useStartWorkout.confirmReplace`'s `saveDraft`) returns false and shows its
+  existing inline error; the screen the composed test targets never mounts.
+  **Technique: a composed test's ordering is settled by walking the path FORWARD
+  from the user's press and listing every persist call and its branch, not
+  backward from the two findings you want to join. Ask which single fault
+  reaches BOTH legs; if the answer is "a different one for each", they do not
+  compose — and name the fault that actually reaches the second leg (here:
+  quota, where `setItem` throws and `getItem` does not).**
+- **CLAIM: a "proceed anyway" button lets the rower row with a memory-only
+  run.** FALSE as scoped. `Timer` and `LogSession` both re-read the record with
+  `useState(() => loadRun())` at mount and bounce to Today when it is null, so
+  the offer reproduces the very symptom it fixes, one navigation later.
+  **Technique: for any "proceed without persisting" offer, grep the destination
+  route AND every screen downstream of it for `useState(() => load*())` — a
+  memory-only value is only real if every reader on the remaining journey can
+  see it. If making them see it means a module-level memory tier, that is a new
+  session lifetime (RF27) and the antagonist skip that called the change
+  "no session state" is wrong.**
+- **CLAIM: "Countdown does not leave for Timer unless the active run is
+  DURABLE."** NARROWED. The boolean means "`setItem` did not throw" — no
+  read-back. **Technique: a persist function's boolean earns the word "durable"
+  only by reading the value back THROUGH THE CONSUMER'S OWN LOADER; when the
+  consumer is one screen away and reads at mount, calling that loader once at
+  the producer is the cheapest deterministic check available (RF24 in
+  production form, not test form).**
+- **Found, not in the spec: state stamped BEFORE a new blocking state keeps
+  ticking behind it.** `buildRun` stamps `phaseStartedAt` at Countdown's build
+  effect and nothing restamps, so every second spent in a new error state is
+  charged to phase 1 — bounded today by the 10 s countdown, unbounded once a
+  Retry screen exists. **Technique: for every new state that HOLDS a rower on a
+  screen, list the timestamps already stamped upstream of it and say which are
+  re-stamped when the hold ends. A "Retry" that re-writes the object built
+  before the hold silently ships the dwell as elapsed time.**
+- **Attacked and HELD:** the "these three loaders are the whole remaining set"
+  census — every other `localStorage`/`sessionStorage` getter under `app/src`
+  is inside a `try`, including the one that looks like a counterexample
+  (`LogSession.readMonitorLogStash`, bare, but reached only through
+  `readMonitorLogStashSafely`). **Technique for census claims: grep the API, not
+  the wrapper names, then check each hit's ENCLOSING block and each bare hit's
+  CALL SITES — a bare getter behind a `…Safely` wrapper is guarded, and a
+  wrapper-name grep would have produced a false finding here.**
+
+## 2026-09-03 — `rowingActive`: pin the surviving use, put the raw byte in the ring (lens 1, single pass)
+
+- **CLAIM: "`midSessionMirror` is the byte's only remaining behavioural use."**
+  FALSE. `useMonitorSession.ts`'s ready gate reads `frame.rowingActive` in
+  `declared` — the leg that OPENS the session record, whose failure mode is a lost
+  session, not a wrong hero. It is separately pinned (its own test feeds five
+  `rowingState: 0` frames and asserts `phase === "ready"` on four of them), which
+  is why the spec's WORK was right and only its sentence was wrong.
+  **Technique: a spec that says "the only remaining X" gets the grep, not the
+  citation — `grep -rn <field> app/src | grep -v '\.test\.'` — and each hit is
+  then checked for whether it is GATED, not for whether it exists. "Only consumer"
+  and "only UNGATED consumer" are different claims and specs conflate them.**
+- **CLAIM: "the diagnostic is worth building for the timing, not for the value —
+  the byte takes only 0 and 1 across 7,777 frames."** The measurement reproduced
+  exactly; the inference is survivorship. Every recording in the corpus is from a
+  session where the byte behaved, and the interface notes say in as many words
+  that the ONE misbehaving session *"kept no `.jsonl.gz` recording"* and *"cannot
+  distinguish 'the machine said Inactive' from 'the machine said something we do
+  not decode'"*. **Technique: for any "our corpus has never contained X", ask
+  whether the corpus COULD contain X — find the session that motivated the worry
+  and check it is actually in the denominator. A bound computed over the
+  well-behaved cases bounds nothing.**
+- **Found, not in the spec: a change-only detector is silent on a stuck value.**
+  I-2 ("record when the byte changes") emits ZERO entries for the walk-2026-08-26
+  session — one value, all session, no changes — and an operator then cannot tell
+  "never moved" from "instrument absent". **Technique: for every on-CHANGE
+  instrument, run it mentally against the pathological session it was built for.
+  If the answer is "no entries", the invariant owes a first-frame entry so that
+  absence proves something. State it as an entry-count invariant (0 = not running,
+  1 = never moved, N+1 = N changes), never as a transition rule.**
+- **Technique for ring/log budgets: a percentage of FRAMES is the wrong unit.**
+  The spec's "1.2% of frames" said nothing about a 500-entry ring that fills in
+  TIME. Re-measuring the same corpus in wall-clock windows gave the usable
+  numbers — worst whole-file 2.7 changes/min, worst 60 s window 6 — against
+  `driver.ts`'s own recorded precedent (~2 frames/s evicted the whole ring in
+  ~4 minutes) and a real committed ring (68 entries for a whole 100 s session).
+  Conclusion unchanged, argument now falsifiable.
+- **Attacked and HELD: `PAUSED_FRAME_HOLD`'s comment, after a walk that looked
+  like it invalidated it.** The 2026-09-03 walk measured the CLOCK through a
+  mid-work stop; the comment claims the BYTE through a mid-piece stop is
+  unobserved. Different quantities. **Technique: when a walk "settles" a question
+  near a comment, name the quantity the walk measured and the quantity the comment
+  claims before touching it — RF11's mirror rule applied to prose.** (Corpus
+  search did turn up one partial: a stop at an interval's END shows the byte going
+  1→0 within 0.53 s of the last distance increase, `step-3-…second-rest` seq
+  755-758. A stop WITH resumption remains unobserved.)
+- **Technique that found the partial reconciliation: grep the WITHDRAWN WORDS, not
+  the corrected file.** A comment was correctly narrowed at its own site and the
+  withdrawn sentence survived in three other live files — including one
+  (`summaryModel.ts`) that quotes it by LINE NUMBER as evidence for a residual the
+  same walk had settled. `grep -rn "freezes whenever\|FREEZES whenever" app docs
+  ROADMAP.md` takes ten seconds and is the difference between "(b) is done" and
+  "(b) is done in one of four places".

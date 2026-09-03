@@ -469,7 +469,7 @@ rower's work silently.
       waiting on it.** The cited hook line numbers moved with PR #239; the
       handler is `useMonitorSession.ts`'s `programDropped` case, found by
       name rather than by line.
-- [ ] **Handle `programDropped` while a run is live** (from the
+- [x] **Handle `programDropped` while a run is live** (from the
       pocketed-phone re-diagnosis above). Small and deterministic, warranted
       whatever the full ring says — the detector already fires; only the
       live arm swallows it, and that arm has NO test
@@ -706,25 +706,37 @@ rower's work silently.
       invariants, a lifetime table for the in-flight reading, its own Gate
       0-B, and one replay owed before its plan (when `IntervalActual` N
       arrives — work→rest boundary or end of rest).
-- [ ] **`rowingActive` is falsified but not dangerous.** Owed: (a) one test
-      pinning `surfaceModel.ts:915`'s `midSessionMirror` byte-half — measured,
-      deleting it leaves 5,357 tests / 191 files green, so nothing gates it
-      today; (b) a reconciled comment; (c) a diagnostic carrying the raw byte,
-      since `parse.ts:608`'s strict `rowingState === 1` makes any non-1 read
-      `false` and the next occurrence still will not say which. No behaviour
-      change proposed. **S**
+- [x] **`rowingActive` is falsified but not dangerous — DONE in this PR
+      (2026-09-03, `2026-09-03-rowing-active-design.md`).** Owed: (a) one
+      test pinning `midSessionMirror`'s byte half (`surfaceModel.test.ts` —
+      cited by symbol, not the stale `surfaceModel.ts:915`) — the
+      measurement below was itself stale; RE-MEASURED on `c2182ef5`:
+      deleting `frame.rowingActive === false &&` gives `Test Files 1 failed
+      | 230 passed (231)`, caught only by
+      `ConnectedSurface.screens.test.tsx`'s RC-24 snapshot as an HTML diff,
+      which is why the explicit model-layer pin was still owed; (b) a
+      reconciled comment — ALREADY DONE, at `types.ts`'s `restSeconds`
+      block, narrowed at its own site by #280's walk; (c) a diagnostic
+      carrying the raw byte, since `parse.ts:608`'s strict
+      `rowingState === 1` makes any non-1 read `false` and the next
+      occurrence would otherwise still not say which — DONE, `driver.ts`
+      now logs a `raw-rowing-state` ring entry on the driver's first frame
+      and on every change after (spec §2, invariants I-2/I-3). No
+      behaviour change. **S**
       **(d) SETTLED 2026-09-03 at the resume-edge walk
       (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`): the clock
       RUNS through a mid-work stop.** With the rower sitting still, elapsed
       went 80.52 s → 92.11 s (+11.6 s) while distance went 247.1 → 249.6 m
-      (coast, then nothing). So `types.ts:189-191` holds for the mid-WORK
+      (coast, then nothing). So `MonitorFrame.state`'s own "no paused state
+      on the wire" note holds for the mid-WORK
       case and `types.ts:134`'s "FREEZES whenever `rowingActive` goes
       false" is correct only for its own measured REST — corrected at its
       site by this walk. Door PR B's `partialSeconds` is therefore interval
       elapsed INCLUDING idle time, exactly as `2026-09-02-door-partial-design.md`
-      §5.1 concluded; no shipped behaviour changes. **(c) is still open —
-      the ring carries no raw-byte diagnostic, so the byte's own value
-      through the stop remains unobserved.** The original text, for the
+      §5.1 concluded; no shipped behaviour changes. **(c) is now DONE too —
+      this PR's `driver.ts` ring carries the raw byte on the first frame and
+      on every change, so the next occurrence will say which value it
+      was.** The original text, for the
       record: `domain/monitor/types.ts:134` claims `MonitorFrame.elapsedSeconds`
       "FREEZES whenever `rowingActive` goes false", measured through a REST;
       `types.ts:189-191` says the wire has no paused state at all; and
@@ -824,7 +836,7 @@ rower's work silently.
       register first** — the memory-only reload gap, the three surviving legacy
       reads, and the store's standing tier-precedence probe. The full record
       lives in PR #239 and moves to `docs/history/` when Wave F closes.
-- [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
+- [x] **Audit AUD-011/AUD-015 — storage denial is recoverable before work — DONE in PR #282.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
       PR may own both, with separate regression tests; the visible Retry state
@@ -846,9 +858,16 @@ rower's work silently.
       never reached it because `loadRun` (`Today.tsx:280`) throws first. Three
       spec conditions from the anchor: (1) a Today fixture that actually
       reaches the `loadTodayPick` call (needs a plan and a pool); (2) one
-      COMPOSED denial-then-Start test — after AUD-011's fix, denial makes
-      `loadRun()` return null, so Start proceeds and then hits
-      `saveRun === false`, a path neither finding's own tests cover; (3) the
+      COMPOSED denial-then-Start test — **CORRECTED at the spec's antagonist
+      DELTA pass (2026-09-03): this composition never happens.** A denied
+      getter fails EVERY storage access on that origin, not the run key
+      alone, so `saveDraft` (Countdown's own mount effect, called before
+      `saveRun`) throws first and Countdown never mounts at all — there is
+      no "Start proceeds, then `saveRun === false`" path for AUD-011's fix
+      to create. The blocked-start state this spec actually builds is
+      produced by QUOTA at the run key specifically (the draft write
+      succeeds, only the run write is over budget), not by getter denial —
+      see the spec's §3 legs (a)/(b)/(c). (3) the
       Retry surface needs a non-retry exit — a Retry under a still-denied
       getter is a loop. Open research line for the spec: whether the getter
       can throw in a Capacitor WKWebView on its own origin (the WHATWG
@@ -870,9 +889,30 @@ rower's work silently.
       still dies at `loadRun` first. **So this chunk's unguarded set is now
       exactly three loaders — `loadRun`, `loadDraft`, `loadTodayPick` —
       matching the §8 reshaping above; `loadMonitorRun` is off the list.**
-      Everything else here is unchanged and still owed: the three anchor
-      spec conditions, the Retry surface's Gate 0, AUD-015's Countdown
-      durability, and the Capacitor-WKWebView reachability research line.
+      **SPECCED 2026-09-03 as
+      `docs/superpowers/specs/2026-09-03-storage-denial-design.md`, and the
+      research line is CLOSED.** The getter CANNOT throw on the phone:
+      WebKit's `localStorage` getter has exactly one throw, gated on
+      `canAccessResource(LocalStorage) == No`, whose three routes are an
+      opaque origin, a `file://`-equivalent origin, and
+      `StorageBlockingPolicy::BlockAll` — and our `capacitor://localhost`
+      (no `server` block; a `WKURLSchemeHandler` serves it) is none of
+      them, with the blocking policy embedder-set and unset by Capacitor
+      and by us. Full citations:
+      `docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md`.
+      **James's ruling on that evidence (2026-09-03): the three guards ship
+      as WEB-ARM hardening — the dev loop, the e2e harness, the browser
+      fallback, where a user CAN block site data — and the Retry SURFACE
+      for a denied getter does NOT ship**, so anchor condition (3) is
+      retired with it. AUD-015's Countdown durability keeps its visible
+      state and is where the one Gate 0 goes, because a failed WRITE is
+      reachable everywhere. Anchor conditions (1) and (2) survive. Two
+      corrections the spec carries: the audit's second loader lives in
+      `session/draft.ts`, not `logDraft.ts`; and the catch must be BARE,
+      since the getter's non-throwing failure surfaces as a `TypeError`.
+      **Tripwire:** the whole argument rests on `server.iosScheme` being
+      unset — setting it to `"file"` makes the origin local and the throw
+      immediately reachable.
 
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 
@@ -2143,6 +2183,41 @@ Each needs erg time or a deliberate recording session.
   file, which is what rules out a regression and keeps this row's "cause
   UNKNOWN, capture the next one" instruction standing. `concept2.test.ts`
   ran 8/8 green in isolation, so it does not reproduce alone.
+  **A CLIENT-project flake joined the set on 2026-09-03** (the `rowingActive`
+  branch, across four full runs): `ConnectedSurface.screens.test.tsx > screen
+  fixtures for pnpm screenshots > pane C, the grid mid-rest (RC-24)` failed
+  once as a SNAPSHOT mismatch and passed on an identical re-run minutes later,
+  on an unchanged tree. This row's title says "unit-project" and its whole
+  inference section reasons about supertest against in-memory fakes — neither
+  covers a jsdom snapshot in the `client` project, so the row's SCOPE is
+  widened here rather than the observation being filed under a mechanism it
+  does not share. What is OBSERVED: one failure, one identical green re-run,
+  no code change between them. What is INFERENCE and explicitly unchosen: the
+  same parallel-worker load theory, or snapshot serialisation racing a
+  concurrent write. **Same standing instruction: capture the next one's full
+  diff rather than re-running past it.**
+- **`retest.spec.ts` is not idempotent across runs on a KEPT stack — the
+  e2e suite passes on a fresh database and fails on a reused one.** Found
+  2026-09-03 on the `rowingActive` branch, and DIAGNOSED rather than
+  re-run past. `retest.spec.ts:121` ("declining the offer keeps the
+  baselines untouched") failed twice in a row — reproducible, not a flake —
+  expecting the heading `Set your 2k baseline?` and landing on Today
+  instead. It is not that branch's doing: the only e2e-reachable file it
+  touches is `transports/fake.ts`, verified to have **0 non-comment changed
+  lines** against base. **The mechanism:** `pnpm e2e` leaves the stack up
+  (`E2E_KEEP` defaults to `1`) and `e2e.sh` tears down with
+  `docker compose down` and NO `-v`, so the per-worktree `pgdata` volume
+  survives every run. A test asserting "you have not set a baseline yet" is
+  exactly the shape that breaks once an earlier run in the same stack set
+  one. **Proof:** `docker compose -p <stack> down -v`, then `pnpm e2e` →
+  `455 passed (2.4m)`, against `454 passed / 1 failed` twice on the reused
+  volume. **Why it matters beyond one test:** CI is unaffected (fresh
+  containers every job), so this only ever bites a human or agent iterating
+  locally — and it bites as a mystery failure in a spec they did not touch,
+  which is the most expensive shape a false red can take. The fix is either
+  a test that seeds its own precondition instead of assuming a virgin
+  database, or an `e2e.sh` that resets the schema between runs; the first is
+  narrower and is the one to try. **S**
 - **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
   can no longer rot independently.** The class was two independent literals —
   `news.spec.ts`'s (CI-gated, bumped by every notes PR) and

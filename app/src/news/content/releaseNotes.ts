@@ -5,10 +5,13 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    // v0.36.0 (2026-09-03): range v0.35.0..main accounted per RF15
-    // (`git log v0.35.0..origin/main --oneline`, NO `--merges` — main is
-    // squash-merged and that form returns empty), plus this PR. Five
-    // merges in range:
+    // v0.36.0 (2026-09-03): range v0.35.0..main RE-ACCOUNTED at AUD-011/015's
+    // own PR-open head per RF15 (`git log v0.35.0..origin/main --oneline`,
+    // NO `--merges` — main is squash-merged and that form returns empty).
+    // EIGHT merges in range now (was five when this entry was first
+    // written at door PR B's head; #278 and #280 both landed after, and
+    // #280 was still missing after the pass that caught #278 — the
+    // whole-branch review of THIS PR found it):
     //   #276 door PR A — item 3 (the chip, the count, and the stored
     //     no-reading word). It made v0.24.0's item-4 promise concrete
     //     ("from the next release on"); this is that release, so the
@@ -20,7 +23,15 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     //   #277 (Wave E PR1.75b, the native half of the Concept2 activation
     //     shape): dark by its own fold — no surface reaches it until
     //     PR2, and its own memory line says no tag until then.
-    // Items 1 and 2 are this PR (door PR B).
+    //   #280 (the 2026-09-03 resume-edge walk): a walk record, a ROADMAP
+    //     closure, a spec line and one narrowed comment in `domain/`.
+    //     Nothing a rower can see, so no item is owed — named here because
+    //     this file's convention is that every merge in range is
+    //     accounted, with its reason, not silently dropped.
+    //   #278 (JR item 2, walk-gated 2026-09-03) — item 5: Connect now
+    //     actually programs the erg for a Just Row session instead of
+    //     doing nothing, and the Ready line changed with it.
+    // Items 1 and 2 are door PR B. Item 6 is this PR (AUD-011/AUD-015).
     //
     // ITEM 1 STATES ITS OWN RETROACTIVITY, and item 3 states the opposite
     // one, because the two changes are of different kinds and shipped one
@@ -37,11 +48,11 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     // are history.
     //
     // IF MORE MERGES LAND BEFORE THE TAG, re-run the range and account
-    // for them here — this list was accounted at door PR B's head, not at
-    // a cut tag. **The `date` below is provisional for the same reason**
-    // and is RE-STAMPED at the tag: it is the day this entry was written,
-    // not a day a release happened, and every other entry in this file
-    // carries the date its tag was actually cut.
+    // for them here — this list was accounted at AUD-011/015's own PR-open
+    // head, not at a cut tag. **The `date` below is provisional for the
+    // same reason** and is RE-STAMPED at the tag: it is the day this entry
+    // was written, not a day a release happened, and every other entry in
+    // this file carries the date its tag was actually cut.
     version: "v0.36.0",
     date: "2026-09-03",
     items: [
@@ -49,6 +60,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "'Nothing kept.' has left the three screens that said it: the lost-monitor banner, the line the end-of-session screen shows when the erg drops a workout, and the log door's strip. With a part-rowed interval now showing its own metres, the phrase was about to be denying something on the screen underneath it. (Corrected 2026-09-03: v0.24.0 said the banner 'says how much survived: 2 intervals kept., or Nothing kept. when there is nothing'. The first half stands. The second is withdrawn: with nothing kept the banner now shows LOST THE MONITOR alone and promises nothing about what survived.)",
       "Your history says which sessions did not finish. A session you stopped early wears a STOPPED EARLY chip in the list, and opening it reads 'STOPPED EARLY · 2 of 5 intervals measured'; a session the link died in reads LINK LOST, and one the erg dropped reads PROGRAM DROPPED. This is read off what was already saved, so sessions already in your log get it the moment you update: nothing was rewritten, they simply say what they always were. And the promise v0.24.0 made is kept: a connected session the app never heard a pull in is now stored as exactly that and reads NO MONITOR READING in your history. Rows saved before this release still read LOGGED BY HAND, and always will. One more: an erg that never told us its name is now saved as the connected session it was and reads MONITOR, instead of being filed as logged by hand.",
       "The timer screen has one END, in the same place whichever way up you hold the phone, and the empty band that used to sit under it is gone. Three smaller things with it: the Just Row door's band reads 'Start a free row session.', a saved row with a time but no distance now prints TIME m:ss under its name in History, and with no plan active the save button just says Save.",
+      "Connect on the Just Row door now actually puts your monitor into a Just Row session instead of leaving it on its own menu: it leaves the menu the moment you connect, and the line under READY reads 'The clock starts on your first stroke.' instead of saying nothing was programmed.",
+      "If your phone can't keep the session record when you press Start, you now see 'Couldn't keep your session on this phone.' with a Retry button, instead of the countdown finishing and dropping you back where you started with no explanation.",
     ],
   },
   {
