@@ -10025,6 +10025,214 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin: 8px 0 0;
 }
 
+/* Wave E PR2, Surface 1 (board 1a-1e + Gate 0 amendment 1f-1j). House card
+   idiom: --surface ground, 1px --rule, 2px radius, 16px padding, 12px gap
+   — the board's own values, which are tokens.css's verbatim.
+
+   Contrast, computed (WCAG relative luminance), NOT eyeballed (RF6):
+   --ink on --surface 17.11:1 · --ink-2 on --surface 10.81:1 · --ink-3 on
+   --surface 7.43:1 · --ink-4 on --surface 5.29:1 · --ink on
+   --surface-sunken 14.50:1 · --ink-3 on --surface-sunken 6.30:1 ·
+   --accent on --surface 5.94:1 · --on-color on --accent 5.94:1 ·
+   --on-color on --ink 17.11:1. All clear the 4.5:1 AA floor.
+
+   THE ONE VALUE THIS BLOCK REFUSES: --ink-4 on --surface-sunken measures
+   4.48:1 and FAILS. The panel's muted line (.c2-card-panel-reason) is
+   therefore --ink-3, not the --ink-4 every other muted line on this card
+   uses. Anything added to .c2-card-panel later inherits that constraint. */
+.c2-card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.c2-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.c2-card-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.c2-card-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+.c2-card-status-on {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Gate 0 amendment 1c. `overflow-wrap: anywhere` for the same reason
+   `.you-identity` carries `min-width: 0` (You.tsx's own comment): a long
+   address must not push this card a whole line taller. */
+.c2-card-identity {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.c2-card-explain {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.c2-card-helper {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.c2-card-foot {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+
+.c2-card-hair {
+  margin: 0;
+  border: 0;
+  height: 1px;
+  background: var(--rule-2);
+}
+
+.c2-card-panel {
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.c2-card-panel-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.c2-card-panel-line {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* --ink-3, NOT --ink-4: see this block's own header. 6.30:1 on
+   --surface-sunken, against 4.48:1 for the value it would otherwise
+   inherit from .c2-card-foot's family. */
+.c2-card-panel-reason {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.c2-card-primary {
+  min-height: 48px;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--on-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+/* Reachable from ONE condition only: `busy`, an attempt already in flight
+   (Concept2Card.tsx's Connect and RECONNECT both read `disabled={busy}`).
+   The board's original "until a class is picked, Connect is dimmed and
+   inert" is retired — ruling (i), 2026-09-03, removed the question, so
+   Connect is live on first paint and this rule paints a tap that is
+   already working, never a control waiting on an answer.
+   The LABEL carries the state as well as the border, because a
+   border-only distinction would be a 1.73:1 signal (--rule-3 on
+   --surface); --ink-3 on --surface is 7.43:1. */
+.c2-card-primary:disabled {
+  background: transparent;
+  border-color: var(--rule-3);
+  color: var(--ink-3);
+}
+
+.c2-card-retry {
+  min-height: 52px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Board 1c/1d. Accent's third canonical job, a destructive control
+   (docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md), so it needs no
+   dispensation — unlike the log row's link-out, which is recorded as a
+   DEVIATIONS row (this PR's Task 13). Outlined at rest, filled when armed:
+   index.css's own "4 · destructive" comment sets that vocabulary. */
+.c2-card-danger {
+  min-height: 52px;
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.c2-card-danger-armed {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-color);
+}
+
+/* Landscape tightens the card's own padding and gap so a 390px-tall
+   viewport keeps the head, the body and the control in one screen.
+
+   IT DOES NOT RE-FLOW THE CARD INTERIOR, and that is a known gap rather
+   than a decision: the approved amendment's landscape frames for 1a, 1c,
+   1f, 1i and 1j each wrap the card's body in a two-column grid (copy left,
+   control right — `amendment-2026-09-03.html`, the five
+   `grid-template-columns: 1fr 1fr` frames), and this component renders every
+   state as direct flex children of `.c2-card` with no wrapper to grid.
+   Doing it properly means a per-state wrapper element in the JSX, since the
+   split differs by state; it is recorded in the task report rather than
+   half-done here. Portrait — the frames every one of those states was
+   approved in — matches the design exactly. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .c2-card {
+    padding: 14px 16px;
+    gap: 10px;
+  }
+}
+
 /* ── PHASE JR PR 2: THE FREE ROW ─────────────────────────────────────────
    Gate 0 board `docs/design/handoffs/2026-09-01-just-row/`, approved
    2026-09-01. Every value here is lifted from an existing idiom rather
