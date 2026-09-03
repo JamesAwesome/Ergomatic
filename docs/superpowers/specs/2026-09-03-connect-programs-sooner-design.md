@@ -72,39 +72,163 @@ the link is up: `JustRow.tsx` says so in its own comment ("THE ARM FIRES
 ONCE THE LINK IS UP, not at the press"), and the interstitial arms the same
 way. So the program write is enqueued a tick later and drains last.
 
+## The controlled experiment (PRIMARY, and stronger than the argument above)
+
+The corpus already contains the experiment, on bytes rather than reasoning.
+The CSAFE Terminate frame `f1 76 04 13 02 01 02 60 f2` is byte-identical
+wherever it is sent, on the same characteristic, to the same monitor:
+
+| When it is sent | Ack | n |
+| --- | --- | --- |
+| At connect, behind the driver's ten calls | 1698-2058 ms | 10 |
+| Mid-session, on an empty queue | 136-224 ms | 2 |
+
+Same command, same device, eight to fifteen times apart. That disposes of
+"the PM5 is slow to answer" and "CSAFE processing costs two seconds"
+without any appeal to vendor source.
+
+Two further measurements agree on a per-call cost of roughly 90 to 180 ms:
+chunk-to-chunk write spacing on an empty queue (91, 177, 180, 182 ms in
+`walk-2026-08-23/ring-phone-1-btoff-at-ready.json`), and `notify-first`
+spacing during the drain (176 ms and 361 ms, exactly one and two slots,
+matching the subscribe order in `driver.ts`). Ten slots at ~180 ms is
+~1800 ms, which is the gap. WHY a slot costs ~180 ms is an INFERENCE we do
+not adopt: it is consistent with a ~90 ms connection interval at one or two
+intervals per operation, but nothing in our stack reports the negotiated
+interval.
+
+## Why the web arm is worse, and why that is a confirmation
+
+On web the ack arrives BEFORE any status notification, so the write was not
+behind the subscribes there, and the gap is still worse. The difference is
+where each stack pays for GATT discovery. On native the plugin's `connect`
+does not resolve until service and characteristic discovery finish -- its
+own log line reads "Connected to peripheral. Waiting for service
+discovery." So on native that cost is paid inside `transport.connect()`,
+before the driver exists and before the ring's first entry. On web it is
+not. The native claim survives; the web cause stays unread and unclaimed.
+
+## The fix does not depend on our causal claim
+
+Both candidate explanations -- the plugin's JS queue and Core Bluetooth's
+own per-peripheral serialization -- are order-preserving. Moving the
+program write from the eleventh slot to the third wins under either. The
+vendor-source argument explains the size of the win; it is not load-bearing
+for the win existing.
+
 ## What changes
 
-**The driver stops enqueueing its status subscriptions at construction,
-and enqueues them once the first CSAFE write has been issued -- or after a
-short fallback, whichever comes first.** The CSAFE response subscription
-and the sample-rate write stay at the head, because the first is what
-hears the ack and the second is what sets the frame cadence.
+**The driver stops enqueueing its status subscriptions at construction, and
+enqueues them once the first CSAFE SEQUENCE has been acked -- or after a
+fallback, whichever comes first.** The CSAFE response subscription stays at
+the head, because it is what hears the ack.
+
+**The release point is after the SEQUENCE, not after the first write, and
+that choice is worth about 1.5 seconds on the programmed path.** A free row
+sends one frame, so the two triggers are the same for it. A workout sends
+two sequences: a prepare, then the programming frame in five chunks, and
+the erg's screen changes on the SECOND ack, measured at 2700-2969 ms rather
+than the 1800 ms first ack. Releasing on the first write issued would put
+the eight subscriptions between the prepare's ack and the chunk writes,
+which cannot be enqueued until that ack lands, and the programmed path
+would end up roughly 400 ms SLOWER than today. Releasing after the sequence
+completes puts it at roughly 1600 ms, about 1.1 seconds better.
+
+**The sample-rate write moves behind the program write too.** It was at the
+head to set the frame cadence, and that reason expires with this change:
+cadence only matters once status notifications exist, and those are now
+deferred past the program. The order becomes response subscription, program
+write, sample-rate write, then the eight status subscriptions, and the
+first CSAFE write sits behind exactly one other call rather than two.
 
 One producer keeps sending the program: `program()` and `beginFreeRow()`
-are untouched. Nothing new writes to the wire, and no argument threads a
-program into the driver's constructor.
+are untouched. Nothing new writes to the wire, and no program threads
+through the driver's constructor.
 
-**Invariants, not mechanism:**
+**The fallback records which path fired.** A ring entry names an
+arm-triggered release and a fallback release differently, because a
+fallback release silently restores the old behaviour and nothing else in
+the ring would distinguish the two.
 
-1. The first CSAFE program write is enqueued behind at most two other
-   native calls, on every connect, whatever arms it.
-2. Every status characteristic this driver subscribes today is subscribed
-   on every connect, exactly once, whether or not an arm ever comes.
-3. No frame the driver would have delivered before is dropped, because no
-   run is open until the arm and the PM5 re-sends status continuously.
+### The vendor knob, considered and rejected
+
+`BleClient` ships `disableQueue()`. We do not use it. The driver's chunked
+CSAFE writes all target one characteristic, and the plugin's native
+callback map is keyed by operation and characteristic, so two concurrent
+writes to the same characteristic would collide on one callback slot.
+Recording the rejection is the point: the switch exists and a reader will
+find it.
+
+## Lifetime of the deferral state (RF27)
+
+| | |
+| --- | --- |
+| **What it is** | Whether this driver has enqueued its status subscriptions yet |
+| **Minted** | Once, at `createPm5Driver`, per connect. The driver is constructed at exactly one site, inside the hook's `connect()`, so a second connect gets a fresh driver and fresh state |
+| **Released by** | The first CSAFE sequence's ack, or the fallback on the driver's own `schedule` seam |
+| **Cleared** | Never re-armed within a driver's life |
+| **Survives teardown** | Nothing. A release attempt after the transport has disconnected must not call subscribe |
+
+**Invariants, not mechanisms:**
+
+1. The first CSAFE program write is enqueued behind at most one other
+   native call, on every connect, whatever arms it.
+2. Every status characteristic is subscribed exactly once per connect,
+   whether the arm comes, the fallback fires, or both -- and NOT AT ALL
+   after the session has torn down.
+3. No frame any SHIPPING screen would have delivered before is lost.
+   Scoped deliberately: the dev-only observer connects and never arms, so
+   it always takes the fallback and its captures start later by that
+   much. That is a recording instrument, and the walk lab is where it
+   runs.
 4. The fallback fires from the driver's own `schedule` seam, so tests
    drive it rather than waiting.
+5. A release that arrives after teardown is a no-op, not a throw.
+
+**Three hazards the table exists to close, all real:**
+
+- **The synchronous throw.** The transport's `subscribe` calls its
+  connected-guard synchronously and throws when the device id is null.
+  Today that is unreachable, because the subscriptions run microseconds
+  after connect resolves. Deferral makes it reachable through a producer
+  the 3 September walk actually exercised, a cancel during connect, and
+  the driver exposes no dispose to hang the cancellation on.
+- **Double release double-subscribes.** The transport folds a second
+  subscriber into a set of callbacks, and each status registration passes
+  a NEW closure, so the set cannot dedupe. Both handlers would then run on
+  every notification, halving every tick-counted wait and duplicating
+  frame emissions. Invariant 2 needs something that enforces it.
+- **Teardown during the gap** is why invariant 2 carries its final clause.
+  Without it, "subscribed on every connect whether or not an arm comes"
+  literally demands subscribing after the session is gone.
 
 ## What this does NOT claim
 
-It does not make the PM5 faster. The ack still costs its own round trip,
-measured in the census as the gap that remains once the queue is empty. The claim
-is only that we stop making the erg wait behind our own bookkeeping.
+It does not make the PM5 faster. The ack still costs its own round trips.
+The claim is that we stop making the erg wait behind our own bookkeeping.
 
-## Gates
+Every post-fix figure in this spec is MODELLED from the ~180 ms slot cost
+applied to observed queue positions. Only a walk settles them, and the walk
+reads the SECOND ack on the programmed path, not the first.
 
-The plugin queue is invisible to every transport double we own, so no unit
-or e2e gate can measure the saving. The gate is ordering, at the driver:
-a transport that records the order it was called in, asserting the program
-write is enqueued before the status subscriptions. The saving itself is a
-walk number, read off the ring the same way the table above was.
+## Gates, and what each proves
+
+**The ordering gate.** A recording transport asserts the driver enqueues
+the program write ahead of its status subscriptions. It bites: revert the
+deferral and it goes red. The strongest thing it may claim is exactly
+that -- the driver's enqueue order. It may NOT claim the erg is programmed
+sooner, because the plugin's queue is invisible to every transport double
+we own and that consequence rests on vendor source.
+
+**The multi-sequence gate, which the ordering gate cannot replace.** A
+recording transport over a real `program()`, asserting the eight
+subscriptions do not sit between the prepare's ack and the chunk writes.
+Without it the release-point regression above ships under a green
+ordering assertion.
+
+**Three more, all cheap on the `schedule` seam:** the no-arm path
+subscribes exactly eight times; an arm plus a fallback still subscribes
+eight times; a teardown inside the gap issues no subscribe at all.
+
+**The saving itself is a walk number**, read off the ring by the census
+script, at the second ack.
