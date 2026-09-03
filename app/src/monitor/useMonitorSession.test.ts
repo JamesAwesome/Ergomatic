@@ -13403,6 +13403,13 @@ describe("beginFreeRow (the free row's own arm)", () => {
    * follow the p.80 write AND its ack, because the driver shares one
    * `pendingAck` slot between them (which is why `driver.ts`'s
    * `terminate()` waits on `freeRowSendSettled` rather than racing it).
+   *
+   * WHAT THIS TEST CAN AND CANNOT SEE (measured, not assumed): restoring
+   * the `mode !== "justrow"` exclusion in `cancel()` ALONE leaves it green,
+   * because `cancel()`'s own `teardown(armed, driver)` call then sends the
+   * terminate instead. The biting mutation is both exclusions together —
+   * the state the walk caught — and the unmount test below is what pins
+   * `teardown`'s half on its own.
    */
   it("cancel() at ready TERMINATES a free row: the terminate frame follows the p.80 write and its ack", async () => {
     const { result, transport } = harness(freeRowScript());

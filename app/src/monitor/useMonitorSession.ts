@@ -5169,6 +5169,17 @@ export function useMonitorSession(
     // (up to ~5 frames at the walk's measured 1 Hz) loses that row on the
     // erg — but it is now the SAME trade the programmed path already
     // makes, rather than a reason to leave the machine armed.
+    //
+    // THE TWO EXITS ARE ONE INVARIANT WITH ONE OBSERVABLE, and a probe
+    // proved it: restoring the exclusion HERE alone leaves every test
+    // green, because this function's own `teardown(armed, driver)` call a
+    // few lines down reaches the same phase with the same driver and sends
+    // the terminate itself (`alreadyTerminated` would be `false`). So do
+    // not read a green suite as licence to put this back — the biting
+    // mutation is both exclusions together, which is the state the walk
+    // caught. This site keeps its own terminate because `cancel()`'s
+    // contract is to have DONE it (awaited, with `alreadyTerminated: true`
+    // stopping the repeat), not to leave it to a cleanup.
     const armed =
       driver !== null && (phase === "programming" || phase === "ready");
     if (armed) {
