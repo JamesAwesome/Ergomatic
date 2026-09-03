@@ -303,7 +303,14 @@ export interface MonitorRun {
    *
    * Written ONCE, at close, by `withPartial` below — never by
    * `completeMonitorRun` (which is the wire-event closer and has no frame
-   * in hand) and never after `completedAt` is set.
+   * in hand). `withPartial` itself carries no `completedAt` guard of its
+   * own (fix-round review, finding 5) — "never after `completedAt` is set"
+   * is an invariant its ONE caller owns: `closeRecord`
+   * (`useMonitorSession.ts`, Task 3) reads a partial before it calls the
+   * completion writer, and `closeRecord` already returns early on
+   * `completedAt !== null` ("A partial cannot be written twice", door spec
+   * §5.2) — so no caller this codebase has ever reaches `withPartial` with
+   * an already-closed run in the first place.
    */
   partial?: { intervalIndex: number; meters: number; seconds: number };
   /**
@@ -1219,7 +1226,12 @@ export function withPartial(
   if (!PARTIAL_WRITE_REASONS.some((r) => r === endedBy)) return run;
   if (reading === null) return run;
   if (run.actuals.some((a) => a.index === reading.intervalIndex)) return run;
-  return { ...run, partial: reading };
+  // Fix-round review, finding 3: a fresh object, never an alias of the
+  // caller's own `reading` — the caller (`closeRecord`, Task 3) builds
+  // `reading` from a live `MonitorFrame` it keeps reading after this call
+  // returns, and this record must never observe a later mutation of that
+  // object through its own `partial` field.
+  return { ...run, partial: { ...reading } };
 }
 
 /**

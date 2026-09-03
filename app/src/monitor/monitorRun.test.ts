@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
-import type { CloseReason } from "./monitorRun";
 import {
   compileProgram,
   type WorkoutProgram,
@@ -34,6 +33,7 @@ import {
   MONITOR_RUN_KEY,
   type MonitorRun,
   type MachineSummaryDetail,
+  type CloseReason,
 } from "./monitorRun";
 import {
   SERIES_SAMPLE_CAP,
@@ -2159,31 +2159,55 @@ describe("withPartial / partialRefusal: the in-flight partial gate (door spec §
 
   const reading = { intervalIndex: 1, meters: 300, seconds: 60 };
 
-  // door spec §5.2 I-B1, as an ALLOWLIST — one `it.each` over ALL SIX
-  // members of `CloseReason | "interrupted"` so a future widening of
-  // either union cannot silently skip a member. Four accept and return a
-  // NEW object; two refuse (`"finished"` AND `"interrupted"`) and return
-  // the SAME reference. Mutations M1.1a/M1.1b (task-1-report.md) prove
-  // the two refused members are independently gated, not one negation.
-  it.each([
-    ["rower", true],
-    ["link-lost", true],
-    ["program-dropped", true],
-    ["program-failed", true],
-    ["finished", false],
-    ["interrupted", false],
-  ] satisfies [CloseReason | "interrupted", boolean][])(
-    "endedBy: %s -> writes partial: %s",
-    (endedBy, shouldWrite) => {
-      const run = freshMonitorRun();
-      const after = withPartial(run, endedBy, reading);
-      // Ternaries inside the expect arguments, not a conditional gating
-      // the assertion (vitest/no-conditional-expect) — the SAME two
-      // properties are checked on every row, refused or written.
-      expect(after === run).toBe(!shouldWrite);
-      expect(after.partial).toStrictEqual(shouldWrite ? reading : undefined);
-    },
-  );
+  function baseRunWithBankedActual(): MonitorRun {
+    const built = createMonitorRun(
+      {
+        workoutId: "fl-workout-id",
+        title: "Filling Low",
+        program: fillingLowProgram(),
+        deviceName: "PM5 12345",
+        logSeed: TEST_SEED,
+      },
+      t0,
+    );
+    return recordActual(built, actual1); // actual1.index === 0
+  }
+
+  // door spec §5.2 I-B1, as an ALLOWLIST — a `Record<CloseReason |
+  // "interrupted", boolean>` rather than a plain tuple array, so TypeScript
+  // itself enforces exhaustiveness: this literal missing a key, or
+  // carrying a key the union doesn't have, is a COMPILE ERROR (fix-round
+  // review, finding 2 — a plain array or `it.each` tuple list checks
+  // nothing; a seventh `CloseReason` member would still leave six rows and
+  // a green suite). Four accept and return a NEW object; two refuse
+  // (`"finished"` AND `"interrupted"`) and return the SAME reference.
+  // Mutations M1.1a/M1.1b (task-1-report.md) prove the two refused members
+  // are independently gated, not one negation; the fix-round mutation
+  // (deleting a key here) proves the exhaustiveness itself — recorded in
+  // task-1-fix-report.md.
+  const SHOULD_WRITE_PARTIAL: Record<CloseReason | "interrupted", boolean> = {
+    rower: true,
+    "link-lost": true,
+    "program-dropped": true,
+    "program-failed": true,
+    finished: false,
+    interrupted: false,
+  };
+
+  it.each(
+    Object.entries(SHOULD_WRITE_PARTIAL) as [
+      CloseReason | "interrupted",
+      boolean,
+    ][],
+  )("endedBy: %s -> writes partial: %s", (endedBy, shouldWrite) => {
+    const run = freshMonitorRun();
+    const after = withPartial(run, endedBy, reading);
+    // Ternaries inside the expect arguments, not a conditional gating
+    // the assertion (vitest/no-conditional-expect) — the SAME two
+    // properties are checked on every row, refused or written.
+    expect(after === run).toBe(!shouldWrite);
+    expect(after.partial).toStrictEqual(shouldWrite ? reading : undefined);
+  });
 
   // I-B3: the caller passes `null` once the in-flight interval's work
   // bout has ended; `withPartial` does not re-derive that from timing —
@@ -2199,17 +2223,7 @@ describe("withPartial / partialRefusal: the in-flight partial gate (door spec §
   // boundary timing. Built from a real `createMonitorRun` + `recordActual`
   // (RF3), never a hand-built literal.
   it("refuses when run.actuals already carries that interval's own actual (I-B6)", () => {
-    const built = createMonitorRun(
-      {
-        workoutId: "fl-workout-id",
-        title: "Filling Low",
-        program: fillingLowProgram(),
-        deviceName: "PM5 12345",
-        logSeed: TEST_SEED,
-      },
-      t0,
-    );
-    const withActual = recordActual(built, actual1); // actual1.index === 0
+    const withActual = baseRunWithBankedActual();
     const collidingReading = { intervalIndex: 0, meters: 50, seconds: 10 };
 
     const after = withPartial(withActual, "rower", collidingReading);
@@ -2222,17 +2236,7 @@ describe("withPartial / partialRefusal: the in-flight partial gate (door spec §
   // check is keyed on the specific interval index, not "any actuals
   // present at all".
   it("still writes a partial for a DIFFERENT interval than the one already banked", () => {
-    const built = createMonitorRun(
-      {
-        workoutId: "fl-workout-id",
-        title: "Filling Low",
-        program: fillingLowProgram(),
-        deviceName: "PM5 12345",
-        logSeed: TEST_SEED,
-      },
-      t0,
-    );
-    const withActual = recordActual(built, actual1); // index 0
+    const withActual = baseRunWithBankedActual();
     const nonCollidingReading = { intervalIndex: 1, meters: 300, seconds: 60 };
 
     const after = withPartial(withActual, "rower", nonCollidingReading);
@@ -2241,13 +2245,20 @@ describe("withPartial / partialRefusal: the in-flight partial gate (door spec §
     expect(after.partial).toStrictEqual(nonCollidingReading);
   });
 
-  // `partialRefusal` is a SECOND reading of the same `PARTIAL_WRITE_REASONS`
-  // const, written so the ring can name WHY nothing was banked without
-  // `withPartial` changing shape. This leg pins the two predicates to
-  // agree EXHAUSTIVELY: for every close reason and every reading state,
-  // `partialRefusal(...) === null` iff `withPartial(...)` actually wrote
-  // (returned a NEW reference). Mutation M1.4 makes the two disagree.
-  it("partialRefusal agrees with withPartial exhaustively, across all six close reasons and every reading state", () => {
+  // Fix-round review, finding 4: I-B6's check is `a.index ===
+  // reading.intervalIndex`, and `null === 0` is false — a null-index
+  // actual (the D3/divergence shape `IntervalActual.index`'s own doc
+  // comment names: "this actual's own interval identity is unknown," never
+  // interval 0) must never be mistaken for "interval 0 is already banked".
+  it("a null-index actual in run.actuals does not block a partial for interval 0", () => {
+    const nullIndexActual: IntervalActual = {
+      index: null,
+      elapsedSeconds: 12,
+      distanceMeters: 40,
+      avgSplit: null,
+      avgSpm: null,
+      avgHeartRateBpm: null,
+    };
     const built = createMonitorRun(
       {
         workoutId: "fl-workout-id",
@@ -2258,27 +2269,74 @@ describe("withPartial / partialRefusal: the in-flight partial gate (door spec §
       },
       t0,
     );
-    const withActual = recordActual(built, actual1); // banks index 0
+    const withNullIndexActual = recordActual(built, nullIndexActual);
+    const readingForZero = { intervalIndex: 0, meters: 300, seconds: 60 };
 
-    const closeReasons: (CloseReason | "interrupted")[] = [
-      "finished",
-      "rower",
-      "link-lost",
-      "program-failed",
-      "program-dropped",
-      "interrupted",
-    ];
-    const readingStates: (typeof reading | null)[] = [
-      null,
-      reading, // index 1 — not banked
-      { intervalIndex: 0, meters: 50, seconds: 10 }, // collides with actual1
+    const after = withPartial(withNullIndexActual, "rower", readingForZero);
+
+    expect(after).not.toBe(withNullIndexActual);
+    expect(after.partial).toStrictEqual(readingForZero);
+  });
+
+  // Exhaustiveness for THIS table too (fix-round review, finding 2, second
+  // site): derived from `SHOULD_WRITE_PARTIAL`'s own keys rather than a
+  // second hand-typed list, so there is exactly one place a sixth close
+  // reason could be forgotten, and TypeScript catches it there.
+  const ALL_CLOSE_REASONS = Object.keys(SHOULD_WRITE_PARTIAL) as (
+    CloseReason | "interrupted"
+  )[];
+
+  type ReadingCase = "absent" | "clear" | "colliding";
+  const readingCases: { case: ReadingCase; reading: typeof reading | null }[] =
+    [
+      { case: "absent", reading: null },
+      { case: "clear", reading }, // index 1 — not banked
+      {
+        case: "colliding",
+        reading: { intervalIndex: 0, meters: 50, seconds: 10 },
+      }, // collides with actual1
     ];
 
-    for (const endedBy of closeReasons) {
-      for (const r of readingStates) {
-        const wrote = withPartial(withActual, endedBy, r) !== withActual;
+  // Fix-round review, finding 1: this table is stated INDEPENDENTLY of
+  // `withPartial`/`partialRefusal`'s own gate order — it is the door
+  // spec's §5.3 taxonomy, transcribed once, not re-derived from the
+  // functions under test. Swapping which string names which refusal cause
+  // in production (e.g. "no-reading" <-> "actual-banked") keeps every
+  // OTHER test in this file green; only this table's per-cell string
+  // assertion catches it (fix-round mutation, recorded in
+  // task-1-fix-report.md).
+  function expectedReasonFor(
+    endedBy: CloseReason | "interrupted",
+    readingCase: ReadingCase,
+  ): "finished" | "interrupted" | "no-reading" | "actual-banked" | null {
+    if (endedBy === "finished") return "finished";
+    if (endedBy === "interrupted") return "interrupted";
+    if (readingCase === "absent") return "no-reading";
+    if (readingCase === "colliding") return "actual-banked";
+    return null;
+  }
+
+  // `partialRefusal` is a SECOND reading of the same allowlist, written so
+  // the ring can name WHY nothing was banked without `withPartial`
+  // changing shape. This leg pins BOTH halves of that contract: (a)
+  // `partialRefusal` returns `null` exactly when `withPartial` actually
+  // wrote (a NEW reference), for all six close reasons × three reading
+  // states, AND (b) the non-null reason it returns is the SPECIFIC name
+  // `expectedReasonFor` above assigns — not merely "some non-null
+  // value". Mutation M1.4 (task-1-report.md) makes (a) disagree; the
+  // fix-round string-swap mutation makes (b) disagree while (a) stays
+  // green.
+  it("partialRefusal names the specific refusal reason, agreeing with withPartial's write/refuse call, in every cell — all six close reasons x three reading states", () => {
+    const withActual = baseRunWithBankedActual();
+
+    for (const endedBy of ALL_CLOSE_REASONS) {
+      for (const { case: readingCase, reading: r } of readingCases) {
+        const expected = expectedReasonFor(endedBy, readingCase);
         const refusal = partialRefusal(withActual, endedBy, r);
-        expect(refusal === null).toBe(wrote);
+        const wrote = withPartial(withActual, endedBy, r) !== withActual;
+
+        expect(refusal).toBe(expected);
+        expect(wrote).toBe(expected === null);
       }
     }
   });
