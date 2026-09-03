@@ -1,0 +1,10 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 393, "h": 852, "title": "A · programmed (verified)" },
+    { "file": "Unverified.dc.html", "x": 520, "y": 0, "w": 393, "h": 852, "title": "B · not verified (today's line)" }
+  ],
+  "annotations": [
+    { "id": "what", "x": 0, "y": -180, "w": 910, "text": "CONNECT PUTS THE ERG INTO A JUST ROW SESSION. The only thing that changes on the phone is one line of the Ready frame, and it branches on what the machine reports back: A when the PM5 confirms the Just Row program (its readback flips to the type it uses for its own Just Row), B — today's line, unchanged — when it does not. The erg's own screen is the real change; the walk leg photographs it beside copy A.\n\nCONTRAST: ink-2 on page (body line) 9.74 · marker on sunken (strip) 5.50 · ink on page 15.41 · on-color on accent 5.94." }
+  ],
+  "launch": { "view": "canvas" }
+}
