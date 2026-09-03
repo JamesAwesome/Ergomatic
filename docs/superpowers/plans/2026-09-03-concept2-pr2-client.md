@@ -1415,7 +1415,7 @@ describe("openReadOnlyUrl", () => {
 
   Both titles keep their wording: the native one still describes the `linkClient` declaration, and the web one still describes minting WITHOUT it. Neither title mentioned the class, so neither is stale.
 
-  5. **Every `startLink({...})` call in the file loses its argument.** `git grep -c "startLink({" -- src/adapters/linkFlow.test.ts` returns **22** at head `8bfb2e41`; the implementer re-runs it and reports the count against the tree it edits. This is a mechanical edit and `pnpm typecheck` is what proves it complete — an argument passed to a zero-parameter function is an error, so none can survive silently.
+  5. **Every `startLink({...})` call in the file loses its argument.** `git grep -c "startLink({" -- src/adapters/linkFlow.test.ts` returned **22** at head `8bfb2e41`, and returns **23** at `bf27f043` — Task 1 added a call site. **Corrected 2026-09-03 by the Task 2 review, which re-ran it:** Task 2's report copied the 22 forward and labelled it as measured at its own base, which it was not. The implementer re-runs the command and reports the count against the tree it edits; do not carry either number forward. This is a mechanical edit and `pnpm typecheck` is what proves it complete — an argument passed to a zero-parameter function is an error, so none can survive silently.
 
   6. **The exchange stub's response shape loses `weightClass` too**, in the same file: `jsonResponse(200, { linked: true, c2UserId: 2211, weightClass: "H" })` becomes `jsonResponse(200, { linked: true, c2UserId: 2211 })`. This is a stub of `POST /api/concept2/exchange`, whose real response Task 3 changes; a stub that keeps sending a field the server no longer emits is a fixture that has stopped looking like production (RF3).
 
