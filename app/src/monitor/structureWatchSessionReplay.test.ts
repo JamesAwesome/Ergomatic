@@ -26,6 +26,7 @@ import type { RunIdentity } from "./useMonitorSession";
 import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
+import { releasingSchedule } from "../test/statusSubscriptions";
 
 const SESSIONS_DIR = import.meta.url
   .replace(/^file:\/\//, "")
@@ -143,7 +144,7 @@ async function runReplay(): Promise<SessionReplayOutcome> {
       now: () => FIXED_NOW,
       driverOptions: {
         now: () => replay.clock.now(),
-        schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+        schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
       },
     }),
   );

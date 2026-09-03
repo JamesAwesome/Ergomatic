@@ -26,7 +26,7 @@ import type { MonitorFrame } from "../../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { createEventLog } from "../../monitor/eventLog";
-import { createPm5Driver } from "../../monitor/driver";
+import { createSubscribedDriver } from "../../test/statusSubscriptions";
 import { createFakeTransport } from "../../monitor/transports/fake";
 import {
   createRecordingTransport,
@@ -127,7 +127,7 @@ function buildRealDriverLog(): string {
       },
     ],
   });
-  const driver = createPm5Driver(fake, log, {
+  const driver = createSubscribedDriver(fake, log, {
     deviceName: DEVICE,
     settleTicks: 0,
     prepareSettleTicks: 0,

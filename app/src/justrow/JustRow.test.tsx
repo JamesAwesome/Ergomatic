@@ -13,6 +13,11 @@ import {
   currentUnretired as currentUnretiredHandoff,
   resetForTests as resetHandoffStoreForTests,
 } from "../monitor/handoffStore";
+import {
+  RECEIVE_CHARACTERISTIC_UUID,
+  TRANSMIT_CHARACTERISTIC_UUID,
+} from "../../domain/monitor/pm5/uuids.js";
+import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
 import JustRow from "./JustRow";
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
@@ -440,6 +445,68 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
     expect(beginFreeRow).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * GATE 0, 2026-09-03 — THE SENDING CARD (`docs/design/handoffs/
+   * 2026-09-03-free-row-sending/`, PASSED).
+   *
+   * The third state of this door, between "Connecting to monitor" and
+   * "Ready when you pull": the p.80 Just Row program is on the wire and the
+   * erg has not answered yet. It exists because the door used to skip it —
+   * "Ready when you pull" appeared milliseconds after Connect while the erg
+   * was still on its menu, which is a promise about our own function call
+   * rather than about the machine.
+   *
+   * Every value is lifted from the two cards either side of it and from the
+   * workout's own programming card: no new colour, type size or component.
+   */
+  it("renders Gate 0's sending card while the program is still in flight", async () => {
+    // `phase: "programming"` is what `beginFreeRow()` now leaves behind
+    // (spec 2026-09-03 Part 2), and `deriveProgram` turns it into
+    // `axes.program === "sending"` — the axis this screen reads. AXES,
+    // NEVER `session.phase`, is this component's own rule.
+    mockSession({ phase: "programming", deviceName: "PM5 432331249" });
+    await renderMocked();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    // The status label graduates from "JUST ROW" to the device, because by
+    // now there IS a device and it IS connected.
+    expect(screen.getByText("PM5 432331249 · CONNECTED")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Starting your row" }),
+    ).toBeInTheDocument();
+
+    // The workout's own three-line checklist, one word changed.
+    expect(
+      screen.getByText("FOUND", { selector: ".connected-checklist-done" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("CONNECTED", { selector: ".connected-checklist-done" }),
+    ).toBeInTheDocument();
+    // THE THIRD LINE IS CURRENT, not merely present: "done" here would say
+    // the erg had answered, which is the exact claim this card exists to
+    // stop making.
+    expect(
+      screen.getByText("STARTING THE ROW", {
+        selector: ".connected-checklist-current",
+      }),
+    ).toBeInTheDocument();
+
+    // And it is NOT the ready card. Both halves: the promise is not made,
+    // and the lead action that belongs to it is not offered.
+    expect(
+      screen.queryByRole("heading", { name: "Ready when you pull" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Show me the numbers" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("KEEP YOUR PHONE SCREEN ON")).toBeNull();
+
+    // Cancel only, on the shipped class (Gate 0's own correction: the
+    // buttons are the app's, not a redrawing of them).
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    expect(cancelButton).toHaveClass("button-l2");
+  });
+
   it("holds the wake lock from Connect and releases it on Cancel", async () => {
     mockSession({ phase: "pairing", deviceName: null });
     await renderMocked();
@@ -600,6 +667,19 @@ describe("JustRow: Lost → Try again through the real hook", () => {
     let disconnectCb: ((reason: string) => void) | null = null;
     let connectCalls = 0;
     let releaseSecondConnect: (() => void) | null = null;
+    // THE STUB ANSWERS ITS CSAFE FRAMES, and it has to (spec 2026-09-03
+    // Part 2). It used to `write: async () => undefined` and
+    // `subscribe: () => () => undefined` — a transport that takes bytes and
+    // never says anything back — which was harmless while `beginFreeRow()`
+    // flipped to Ready on its own. Now the door WAITS for the monitor's
+    // answer, so a stub that never answers holds it on the sending card
+    // until the 5-second deadline: a real second of a real phone's life
+    // this test would be asserting away. The ack it sends is the one the
+    // PM5 sends (`buildAckFrame`'s default is `frameStatus: "ok"`,
+    // `slaveState: "ready"`), delivered on the transmit characteristic the
+    // driver subscribes to, in a microtask so it can never arrive inside
+    // the write that provoked it.
+    const subs = new Map<string, (bytes: Uint8Array) => void>();
     const transport = {
       scan: async () => [{ id: "pm5-1", name: "PM5 432331249" }],
       connect: async () => {
@@ -610,8 +690,15 @@ describe("JustRow: Lost → Try again through the real hook", () => {
           });
         }
       },
-      write: async () => undefined,
-      subscribe: () => () => undefined,
+      write: async (uuid: string) => {
+        if (uuid !== RECEIVE_CHARACTERISTIC_UUID) return;
+        const answer = subs.get(TRANSMIT_CHARACTERISTIC_UUID);
+        if (answer) queueMicrotask(() => answer(buildAckFrame()));
+      },
+      subscribe: (uuid: string, cb: (bytes: Uint8Array) => void) => {
+        subs.set(uuid, cb);
+        return () => subs.delete(uuid);
+      },
       disconnect: async () => undefined,
       onDisconnect: (cb: (reason: string) => void) => {
         disconnectCb = cb;
@@ -691,5 +778,91 @@ describe("JustRow: Lost → Try again through the real hook", () => {
     expect(
       await screen.findByRole("heading", { name: "Ready when you pull" }),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * CANCEL FROM THE SENDING CARD UNDOES THE ARM ON THE ERG — the invariant
+   * the 3 September walk established for the READY card
+   * (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4: James
+   * tapped Cancel and the PM5 sat in the Just Row session the app had just
+   * put it in, with nothing on the wire to undo it), and it has to hold
+   * from the NEW card too — which is the one the rower now sees FIRST, and
+   * for longer than the ready card was ever on screen alone.
+   *
+   * Recurring failure 23's shape, avoided: a new state on a surface is a
+   * new way to reach everything the old states reached, and the suite's
+   * coverage of that surface is silently scoped to the old ways in. So the
+   * Cancel test is driven through the new card, not just the old one.
+   *
+   * REAL HOOK, REAL DRIVER, REAL BYTES. The terminate frame is a literal
+   * typed from `docs/monitor/pm5-interface-notes.md` §13, never derived
+   * from the builder it is checking.
+   */
+  it("Cancel from the SENDING card terminates the free row on the erg", async () => {
+    const TERMINATE_FRAME_HEX = "f1 76 04 13 02 01 02 60 f2";
+    const subs = new Map<string, (bytes: Uint8Array) => void>();
+    const wire: string[] = [];
+    // The ack is HELD, which is what makes the sending card reachable: an
+    // ack that lands inline arms the door before a test can press anything.
+    // `releaseAcks()` opens the gate, and from then on every frame — the
+    // terminate's included — is answered as the PM5 answers it.
+    let acksOpen = false;
+    const held: (() => void)[] = [];
+    const answer = (): void => {
+      subs.get(TRANSMIT_CHARACTERISTIC_UUID)?.(buildAckFrame());
+    };
+    const transport = {
+      scan: async () => [{ id: "pm5-1", name: "PM5 432331249" }],
+      connect: async () => undefined,
+      write: async (uuid: string, bytes: Uint8Array) => {
+        if (uuid !== RECEIVE_CHARACTERISTIC_UUID) return;
+        wire.push(
+          [...bytes].map((b) => b.toString(16).padStart(2, "0")).join(" "),
+        );
+        if (acksOpen) queueMicrotask(answer);
+        else held.push(answer);
+      },
+      subscribe: (uuid: string, cb: (bytes: Uint8Array) => void) => {
+        subs.set(uuid, cb);
+        return () => subs.delete(uuid);
+      },
+      disconnect: async () => undefined,
+      onDisconnect: () => () => undefined,
+    };
+    vi.resetModules();
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: () => transport,
+    }));
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(() => (): void => undefined),
+    }));
+
+    const { default: JustRow } = await import("./JustRow");
+    render(
+      <MemoryRouter initialEntries={["/justrow"]}>
+        <JustRow />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    // The card under test, reached the way a rower reaches it.
+    expect(
+      await screen.findByRole("heading", { name: "Starting your row" }),
+    ).toBeInTheDocument();
+    expect(wire).not.toContain(TERMINATE_FRAME_HEX);
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    // `terminate()` waits the p.80 send out rather than racing it (one
+    // `pendingAck` slot), so the erg's answer has to arrive before the
+    // terminate can go — exactly as it would on a real radio.
+    await act(async () => {
+      acksOpen = true;
+      for (const a of held.splice(0)) a();
+      for (let i = 0; i < 200; i += 1) await Promise.resolve();
+    });
+
+    // THE ASSERTION THE WALK BOUGHT: the machine is not left holding a Just
+    // Row session the rower has already backed out of.
+    expect(wire).toContain(TERMINATE_FRAME_HEX);
   });
 });

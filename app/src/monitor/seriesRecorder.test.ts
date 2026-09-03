@@ -13,7 +13,7 @@ import type { MonitorFrame } from "../../domain/monitor/types.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { fromHexString, parseRecording } from "./transports/recording.js";
 import { createEventLog } from "./eventLog.js";
-import { createPm5Driver } from "./driver.js";
+import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { createReplayTransport } from "./transports/replay.js";
 import { createSeriesRecorder, SERIES_SAMPLE_CAP } from "./seriesRecorder.js";
 
@@ -97,7 +97,7 @@ async function loadCaptureFrames(
   await replay.transport.connect(dev.id);
 
   const log = createEventLog();
-  const driver = createPm5Driver(replay.transport, log, {
+  const driver = createSubscribedDriver(replay.transport, log, {
     deviceName: dev.name,
     now: () => replay.clock.now(),
     schedule: (cb, ms) => replay.clock.schedule(cb, ms),

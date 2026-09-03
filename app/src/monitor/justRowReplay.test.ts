@@ -51,6 +51,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport } from "./transports/replay";
 import { withLiveness } from "./transports/liveness";
+import { releasingSchedule } from "../test/statusSubscriptions";
 
 const SESSIONS_DIR = import.meta.url
   .replace(/^file:\/\//, "")
@@ -128,7 +129,9 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
         now: () => FIXED_NOW,
         driverOptions: {
           now: () => replay.clock.now(),
-          schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+          schedule: releasingSchedule((cb, ms) =>
+            replay.clock.schedule(cb, ms),
+          ),
         },
       }),
     );

@@ -101,7 +101,10 @@ import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
  *  or frame field — never by a timer and never by an optimistic guess —
  *  with ONE deliberate exception, `"programming"`, which flips
  *  SYNCHRONOUSLY at the top of `program()` before anything is awaited (the
- *  double-fire pin; see `program` below).
+ *  double-fire pin; see `program` below) and, since spec 2026-09-03 Part 2,
+ *  at the end of `beginFreeRow()` for the same reason in the other
+ *  direction: it is the state that says a send is on the wire and no answer
+ *  has come back yet, and the free row now has one of those too.
  *
  *  There is no `"choosing"`: the platform's chooser owns the interaction
  *  while `picking` — on iOS it is the plugin's in-process list sheet over
@@ -237,13 +240,17 @@ const ANONYMOUS_RUN: RunIdentity = {
  *  **RECONCILED, Phase JR PR 2.** This used to read: "None can — `live` is
  *  downstream of `ready`, which is downstream of the `armed` event, which
  *  only `program()` produces." The last clause is no longer true.
- *  `beginFreeRow()` is a SECOND producer of `ready`, reaching it with
- *  nothing awaited (its p.80 send is detached), so `ready` now has two
- *  doors rather than one.
+ *  `beginFreeRow()` is a SECOND producer of `ready`, so `ready` now has two
+ *  doors rather than one. (This clause used to add "reaching it with
+ *  nothing awaited (its p.80 send is detached)"; spec 2026-09-03 Part 2
+ *  retired that half — the free row reaches `ready` on the driver's `armed`
+ *  event, exactly as a workout does.)
  *
- *  The conclusion survives the correction: this value is still never read,
- *  because both doors seed `identityRef` before flipping the phase. It
- *  exists so the ref has no null state to branch on. */
+ *  The conclusion survives both corrections: this value is still never read,
+ *  because both doors seed `identityRef` before flipping the phase — the
+ *  free row's now to `"programming"` rather than straight to `"ready"`,
+ *  which is strictly earlier. It exists so the ref has no null state to
+ *  branch on. */
 const NO_IDENTITY: FreeRowIdentity = {
   program: { intervals: [] },
   ...ANONYMOUS_RUN,
@@ -968,14 +975,16 @@ export interface MonitorSession {
    *  header). */
   connect(): Promise<void>;
   program(p: WorkoutProgram, identity: RunIdentity): Promise<void>;
-  /** Phase JR PR 2: arms for the machine's OWN free row — reaches `ready`
-   *  synchronously and files the record under a Just Row identity
-   *  (`workoutId: null`, `mode: "justrow"`). `program()`'s counterpart.
-   *  Since spec 2026-09-02 the driver also sends the PM5 Concept2's p.80
-   *  Just Row program as a DETACHED send (ring entries only — nothing here
-   *  awaits or branches on it), so the erg leaves its menu when the link
-   *  comes up. A no-op while a programmed session is
-   *  `programming`/`ready`/`live`. */
+  /** Phase JR PR 2: arms for the machine's OWN free row, filing the record
+   *  under a Just Row identity (`workoutId: null`, `mode: "justrow"`).
+   *  `program()`'s counterpart, and since spec 2026-09-03 Part 2 its
+   *  counterpart in TIMING too: this returns at `"programming"` and `ready`
+   *  arrives on the driver's `armed` event, when the PM5's p.80 Just Row
+   *  send settles. (It used to reach `ready` synchronously and call the
+   *  send DETACHED — "nothing here awaits or branches on it" — which is
+   *  what let the door promise a row the erg had not started.) All three
+   *  settle outcomes arm, by Gate 0's fall-through ruling. A no-op while a
+   *  programmed session is `programming`/`ready`/`live`. */
   beginFreeRow(): void;
   /** The rower's End. Idempotent, and idempotent specifically against a
    *  terminal event racing it (spec §2). */
@@ -3543,9 +3552,61 @@ export function useMonitorSession(
         return;
       }
       if (event.kind === "armed") {
-        // The driver emits this only after `verifyArmed` has confirmed the
-        // machine is holding OUR program (structure and all) — so "ready"
-        // means ready, not "the ack came back".
+        // A FREE ROW'S ARM CAN OUTLIVE THE ROWER'S INTEREST IN IT, and this
+        // guard is a REAL FINDING from spec 2026-09-03 Part 2's own test
+        // round rather than defensive tidiness. Both arms flip to
+        // `"programming"` and wait; the difference is who holds the wait.
+        // `program()` is still suspended on its own `await` when its emit
+        // fires, so nothing can have moved on. `beginFreeRow()` RETURNS
+        // with the send still running, so END, Cancel, a link drop or an
+        // unmount can all land first — and without this line the settle
+        // then flips a session that is already `ended` back to `ready`.
+        // The free-row suite caught exactly that, on the
+        // END-inside-the-send-window test: "expected 'ready' to be
+        // 'ended'".
+        //
+        // KEYED ON THE EVENT, NEVER ON THE PHASE ALONE, and that is
+        // measured too: the first draft refused every `armed` outside
+        // `"programming"` and broke two re-arm tests, because a `program()`
+        // dispatched right after a finish is still pumping the machine's
+        // own terminal frames when its arm lands — `"ended"` is a LEGAL
+        // arrival phase for the programmed arm and an illegal one for the
+        // free row's. The event says which it is.
+        //
+        // It is the spec's third detection clause said one more time
+        // ("Once Ended (any closer), the observer NEVER re-opens ... A new
+        // row requires a new user action") — `beginFreeRow()` and
+        // `JustRow.tsx`'s once-latch already state it at the two doors
+        // BEFORE the wire; this states it at the answer coming back.
+        //
+        // The ring, not silence: a refused settle is exactly what a walk
+        // wants to see, because it says the rower left before the erg
+        // answered.
+        if (
+          event.freeRow === true &&
+          stateRef.current.phase !== "programming"
+        ) {
+          sessionRef.current?.log.record(
+            "armed-ignored",
+            `free-row send settled at phase ${stateRef.current.phase} — the row was already over, so nothing is armed`,
+          );
+          return;
+        }
+        // TWO ARMS, TWO ACCEPTANCE POINTS, and this comment used to describe
+        // only the first: "The driver emits this only after `verifyArmed`
+        // has confirmed the machine is holding OUR program (structure and
+        // all) — so 'ready' means ready, not 'the ack came back'."
+        //
+        // That is still exactly right for `program()`. It is NOT right for
+        // `beginFreeRow()`, which since spec 2026-09-03 Part 2 emits this
+        // same event when its p.80 send SETTLES — the ack, and on
+        // fall-through a rejection or the deadline too. The difference is
+        // not an inconsistency to fix: a readback for a free row would be
+        // decoration, because `workoutType = 1` is the PM5's own idle
+        // default (`driver.ts`'s `beginFreeRow` carries the hardware
+        // citation). So the workout is confirmed by READBACK and the free
+        // row by ACK, and both mean the same thing to everything below:
+        // the monitor has had its say and the rower may pull.
         //
         // Hand-off store design spec §5's "armed acceptance" row, plan
         // Task 5 review fix round: THE ACCEPTANCE POINT. `ConnectAction.tsx`
@@ -5068,22 +5129,33 @@ export function useMonitorSession(
   /**
    * PHASE JR PR 2 — the free row's arm, and `program()`'s counterpart.
    *
-   * Reaches `ready` with nothing awaited: the row is the machine's own
-   * Just Row, and there is nothing to verify. Since spec 2026-09-02 the
-   * driver's `beginFreeRow()` does send Concept2's p.80 Just Row program
-   * so the PM5 leaves its menu — but as a DETACHED send whose only
-   * effects are ring entries (`free-row-program-sent`/`-unanswered`/
-   * `-failed`); this hook neither awaits nor reads its outcome, by ruling
-   * (the erg's own screen is the acknowledgment). Everything downstream is
-   * inherited unchanged — `handleFrame`'s own `"ready"` branch opens the
-   * record on the first rowing frame with distance, which IS the spec's
-   * "user intent plus motion" rule (the tap on Just Row was the intent).
+   * **THE FREE ROW WAITS FOR THE MONITOR, like a workout does** (spec
+   * 2026-09-03 Part 2, Gate 0 PASSED). This used to read "Reaches `ready`
+   * with nothing awaited ... this hook neither awaits nor reads its
+   * outcome, by ruling (the erg's own screen is the acknowledgment)" and
+   * flipped to `ready` on the line after `driver.beginFreeRow()`. The door
+   * therefore said "Ready when you pull" milliseconds after Connect while
+   * the erg was still on its menu — the one thing a workout never does.
+   * This now flips to `"programming"`, and `ready` arrives on the driver's
+   * `armed` event, which the driver emits when its p.80 send SETTLES.
    *
-   * SYNCHRONOUS, unlike `program()`: no promise is awaited, which makes
-   * the phase flip and the identity seed one indivisible step, so no frame
-   * can arrive between them. That synchronous flip is load-bearing
-   * (`JustRow.tsx`'s once-latch and `deriveProgram` rely on it); an async
-   * rewrite would reopen the arm-effect re-trigger it closes.
+   * FALL-THROUGH, not a failure card (approved with Gate 0): all three
+   * settle outcomes — acked, rejected, unanswered at the deadline — reach
+   * `ready`, because a free row needs nothing from the monitor to be
+   * rowable and a failure card would block a row that would have worked.
+   * The ring still records which way it went
+   * (`free-row-program-sent`/`-unanswered`/`-failed`).
+   *
+   * STILL SYNCHRONOUS WHERE IT WAS LOAD-BEARING. The paragraph this
+   * replaces said the `ready` flip and the identity seed were "one
+   * indivisible step, so no frame can arrive between them", and that
+   * property is kept: the identity seed and the `"programming"` flip are
+   * still consecutive synchronous statements, and no frame opens a record
+   * before `ready` anyway (`handleFrame`'s own `"ready"` branch). The
+   * re-trigger it also closed is likewise kept — `deriveProgram
+   * ("programming")` is `"sending"`, not `"none"`, so `JustRow.tsx`'s arm
+   * effect stops matching on this same tick, before its once-latch is even
+   * consulted.
    *
    * **The guard is not defensive tidiness.** Without it, calling this
    * during a programmed session silently rewrites `identityRef` to the Just
@@ -5188,7 +5260,12 @@ export function useMonitorSession(
       mode: "justrow",
     };
     driver.beginFreeRow();
-    update({ phase: "ready", error: null });
+    // `"programming"`, never `"ready"` — the driver's `armed` event owns
+    // that flip now (this function's own doc comment). Ordering after the
+    // driver call is safe rather than load-bearing: the driver's emit hangs
+    // off a `.finally()` on a promise chain, so it cannot land before this
+    // statement runs however the send goes.
+    update({ phase: "programming", error: null });
   }, [fail, update]);
 
   const program = useCallback(

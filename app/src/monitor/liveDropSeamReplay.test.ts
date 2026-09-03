@@ -77,6 +77,7 @@ import {
   type ReplayResult,
 } from "./transports/replay";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
+import { releasingSchedule } from "../test/statusSubscriptions";
 
 const SESSIONS_DIR = import.meta.url
   .replace(/^file:\/\//, "")
@@ -290,7 +291,7 @@ async function runLiveDropReplay(): Promise<LiveDropOutcome> {
       now: () => FIXED_NOW,
       driverOptions: {
         now: () => clock.now(),
-        schedule: (cb, ms) => clock.schedule(cb, ms),
+        schedule: releasingSchedule((cb, ms) => clock.schedule(cb, ms)),
       },
     }),
   );

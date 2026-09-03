@@ -59,7 +59,7 @@ import {
   type SurfaceStatus,
 } from "../workout/connected/surfaceModel";
 import { createEventLog, type MonitorEventLog } from "./eventLog";
-import { createPm5Driver } from "./driver";
+import { createSubscribedDriver } from "../test/statusSubscriptions";
 import {
   fromHexString,
   parseRecording,
@@ -328,7 +328,7 @@ async function replaySession(
   await replay.transport.connect(dev.id);
 
   const log = createEventLog();
-  const driver = createPm5Driver(replay.transport, log, {
+  const driver = createSubscribedDriver(replay.transport, log, {
     deviceName: dev.name,
     now: () => replay.clock.now(),
     schedule: (cb, ms) => replay.clock.schedule(cb, ms),

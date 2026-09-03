@@ -24,6 +24,7 @@ import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { Baselines } from "../../domain/types.js";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import { deriveAxes } from "../monitor/connectedAxes";
+import ChecklistLine from "./ChecklistLine";
 import ConnectionLogSheet from "./connected/ConnectionLogSheet";
 import { DASH } from "./connected/surfaceModel";
 import {
@@ -133,23 +134,6 @@ const LINK_LOST_NO_RUN_ERROR: ConnectedError = {
   reason: "disconnected",
   detail: "The link to the monitor failed.",
 };
-
-function ChecklistLine({
-  label,
-  state,
-}: {
-  label: string;
-  state: "done" | "current" | "pending";
-}) {
-  return (
-    <p className={`connected-checklist-line connected-checklist-${state}`}>
-      <span className="connected-checklist-marker" aria-hidden="true">
-        {state === "done" ? "✓" : ""}
-      </span>
-      {label}
-    </p>
-  );
-}
 
 export interface ConnectedInterstitialProps {
   program: WorkoutProgram;

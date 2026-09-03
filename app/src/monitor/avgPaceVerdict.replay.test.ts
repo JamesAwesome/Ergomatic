@@ -58,7 +58,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { createEventLog } from "./eventLog";
-import { createPm5Driver } from "./driver";
+import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 
@@ -136,7 +136,7 @@ describe("createPm5Driver: the live average-pace verdict, replayed off a real re
     await replay.transport.connect(dev.id);
 
     const log = createEventLog();
-    const driver = createPm5Driver(replay.transport, log, {
+    const driver = createSubscribedDriver(replay.transport, log, {
       deviceName: dev.name,
       now: () => replay.clock.now(),
       schedule: (cb, ms) => replay.clock.schedule(cb, ms),

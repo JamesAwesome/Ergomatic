@@ -47,12 +47,18 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     // read it and v0.24.0's shipped string is left alone. Shipped notes
     // are history.
     //
-    // IF MORE MERGES LAND BEFORE THE TAG, re-run the range and account
-    // for them here — this list was accounted at AUD-011/015's own PR-open
-    // head, not at a cut tag. **The `date` below is provisional for the
-    // same reason** and is RE-STAMPED at the tag: it is the day this entry
-    // was written, not a day a release happened, and every other entry in
-    // this file carries the date its tag was actually cut.
+    // RE-ACCOUNTED AT THE TAG (RF15), `git log v0.35.0..main --oneline`,
+    // TWELVE merges in range. The eight above, plus the three that landed
+    // after AUD-011/015's head:
+    //   #281 (the harden skill's Codex adapter): one file under
+    //     `.agents/`, reachable by no rower.
+    //   #284 (the rowing-state byte in the ring): its own PR body says
+    //     "Nothing you can see changes. No screen, number or saved row
+    //     reads differently." A diagnostic for the next time that byte
+    //     lies to us, plus a test and a comment sweep.
+    //   #283 (connect programs the erg sooner, and the free row waits for
+    //     it) — item 7 below, walk-measured 2026-09-03.
+    // The date below is the day the tag was cut.
     version: "v0.36.0",
     date: "2026-09-03",
     items: [
@@ -61,6 +67,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Your history says which sessions did not finish. A session you stopped early wears a STOPPED EARLY chip in the list, and opening it reads 'STOPPED EARLY · 2 of 5 intervals measured'; a session the link died in reads LINK LOST, and one the erg dropped reads PROGRAM DROPPED. This is read off what was already saved, so sessions already in your log get it the moment you update: nothing was rewritten, they simply say what they always were. And the promise v0.24.0 made is kept: a connected session the app never heard a pull in is now stored as exactly that and reads NO MONITOR READING in your history. Rows saved before this release still read LOGGED BY HAND, and always will. One more: an erg that never told us its name is now saved as the connected session it was and reads MONITOR, instead of being filed as logged by hand.",
       "The timer screen has one END, in the same place whichever way up you hold the phone, and the empty band that used to sit under it is gone. Three smaller things with it: the Just Row door's band reads 'Start a free row session.', a saved row with a time but no distance now prints TIME m:ss under its name in History, and with no plan active the save button just says Save.",
       "Connect on the Just Row door now actually puts your monitor into a Just Row session instead of leaving it on its own menu: it leaves the menu the moment you connect, and the line under READY reads 'The clock starts on your first stroke.' instead of saying nothing was programmed.",
+      "Your erg now takes its program almost as soon as you tap Connect. It used to sit on its old screen for about two seconds first, on every connect this app has ever made, because the app was making ten other Bluetooth calls before it got to the one that matters. Measured at the erg on 3 September: a free row lands in a fifth of a second, and a programmed workout reaches the erg about a second sooner than it did.",
+      "The Just Row door no longer says it is ready before your erg is. It used to show 'Ready when you pull' the instant you tapped Connect, while the monitor was still on its menu. Now it shows a short 'Starting your row' step until the erg has taken the program, the way a programmed workout already waited. If the monitor never answers, the door goes to ready anyway, so you can always start the row on the erg itself.",
       "If your phone can't keep the session record when you press Start, you now see 'Couldn't keep your session on this phone.' with a Retry button, instead of the countdown finishing and dropping you back where you started with no explanation.",
     ],
   },

@@ -50,7 +50,7 @@ import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
 import { createEventLog, type MonitorEventLog } from "./eventLog";
-import { createPm5Driver } from "./driver";
+import { createSubscribedDriver } from "../test/statusSubscriptions";
 import {
   fromHexString,
   parseRecording,
@@ -458,7 +458,7 @@ async function replaySession(
   await replay.transport.connect(dev.id);
 
   const log = createEventLog();
-  const driver = createPm5Driver(replay.transport, log, {
+  const driver = createSubscribedDriver(replay.transport, log, {
     deviceName: dev.name,
     now: () => replay.clock.now(),
     schedule: (cb, ms) => replay.clock.schedule(cb, ms),

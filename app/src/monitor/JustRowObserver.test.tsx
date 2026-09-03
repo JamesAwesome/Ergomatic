@@ -18,6 +18,7 @@ import { buildRun } from "../session/engine";
 import JustRowObserver from "./JustRowObserver";
 import { createFakeTransport } from "./transports/fake";
 import type { MonitorSessionDeps } from "./useMonitorSession";
+import { releasingSchedule } from "../test/statusSubscriptions";
 
 const DEVICE_NAME = "PM5 432331249";
 const originalStorageDescriptor = Object.getOwnPropertyDescriptor(
@@ -142,7 +143,7 @@ function observeTransport(
 function deps(transport: Transport | null): MonitorSessionDeps {
   return {
     createTransport: () => transport,
-    driverOptions: { schedule: () => () => undefined },
+    driverOptions: { schedule: releasingSchedule(() => () => undefined) },
   };
 }
 

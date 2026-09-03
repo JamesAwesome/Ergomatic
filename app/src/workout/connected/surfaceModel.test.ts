@@ -35,7 +35,7 @@ import { buildRun, type EnginePhase } from "../../session/engine";
 import { totalSessionSecondsOf } from "../../session/Timer";
 import { targetSplitDisplay } from "../../session/TimerTargets";
 import { createEventLog } from "../../monitor/eventLog";
-import { createPm5Driver } from "../../monitor/driver";
+import { createSubscribedDriver } from "../../test/statusSubscriptions";
 import { parseRecording } from "../../monitor/transports/recording";
 import { createReplayTransport } from "../../monitor/transports/replay";
 import {
@@ -523,6 +523,37 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
     expect(m.pace.absent).toBe(false);
     expect(m.rate.display).toBe("0");
     expect(m.rate.judgement).toBe("within");
+    expect(m.rate.absent).toBe(false);
+  });
+
+  it("the byte half: a frame inside the reset window does NOT mirror when the byte reads true", () => {
+    const target = firstWorkPhase();
+    const m = model({
+      status: "live",
+      linkLost: false,
+      frame: frame({
+        state: "rowing",
+        intervalIndex: 1,
+        // The mirror image of the guard test BELOW. Distance stays INSIDE
+        // the reset window (the walk's own 0.8, the same frame the mirror
+        // test uses), isolating the BYTE half of the discriminator: a
+        // mutant that dropped only `frame.rowingActive === false` would
+        // still pass if this test also advanced the distance out of the
+        // window.
+        rowingActive: true,
+        distanceMeters: 0.8,
+        spm: target.spm! + 10,
+        currentSplit: target.targetSplit! - 10,
+      }),
+    });
+    // Positive values, not `not.toBe("0:00.0")`: the mirror substitutes a
+    // specific pair, so asserting the judged pair is present says more
+    // than asserting the mirrored one is absent.
+    expect(m.pace.display).toBe(fmtSplit(target.targetSplit! - 10));
+    expect(m.pace.judgement).toBe("faster");
+    expect(m.pace.absent).toBe(false);
+    expect(m.rate.display).toBe(String(target.spm! + 10));
+    expect(m.rate.judgement).toBe("faster");
     expect(m.rate.absent).toBe(false);
   });
 
@@ -2981,7 +3012,7 @@ async function replaySession2(): Promise<DriverFrameSample[]> {
   await replay.transport.connect(dev.id);
 
   const log = createEventLog();
-  const driver = createPm5Driver(replay.transport, log, {
+  const driver = createSubscribedDriver(replay.transport, log, {
     deviceName: dev.name,
     now: () => replay.clock.now(),
     schedule: (cb, ms) => replay.clock.schedule(cb, ms),
@@ -3077,7 +3108,8 @@ describe("EST LEFT (Phase LL) — the wire premise, verified against a real capt
   // OWN accumulated clock (`sessionElapsedSeconds`, what `elapsedSeconds`
   // used to subtract before this task) credits far less than the wall
   // time that actually passed — because 0x0031's per-interval clock
-  // freezes whenever `rowingActive` goes false, and a rower sitting
+  // freezes through a REST (NARROWED 2026-09-03 — rowingActive design spec
+  // §4: it keeps running through a mid-WORK stop), and a rower sitting
   // through a rest is exactly that. `restSeconds` (0x0032's Rest Time),
   // the field this task's fix reads instead, is measured here to credit
   // close to the FULL wall time — the reason the fix works at all. **If
@@ -3405,7 +3437,7 @@ async function replayPyramid(): Promise<
   const [dev] = await replay.transport.scan();
   await replay.transport.connect(dev.id);
   const log = createEventLog();
-  const driver = createPm5Driver(replay.transport, log, {
+  const driver = createSubscribedDriver(replay.transport, log, {
     deviceName: dev.name,
     now: () => replay.clock.now(),
     schedule: (cb, ms) => replay.clock.schedule(cb, ms),

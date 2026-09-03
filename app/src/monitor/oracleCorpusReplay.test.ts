@@ -82,7 +82,7 @@ import {
   parseRecording,
   type ParsedRecording,
 } from "./transports/recording";
-import { createPm5Driver } from "./driver";
+import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 
 /** Same path-surgery idiom as `avgPaceVerdict.replay.test.ts`/
@@ -395,7 +395,7 @@ async function replayThroughDriver(
   await replay.transport.connect(dev.id);
 
   const log = createEventLog();
-  const driver = createPm5Driver(replay.transport, log, {
+  const driver = createSubscribedDriver(replay.transport, log, {
     deviceName: dev.name,
     now: () => replay.clock.now(),
     schedule: (cb, ms) => replay.clock.schedule(cb, ms),

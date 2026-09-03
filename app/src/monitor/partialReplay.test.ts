@@ -99,6 +99,7 @@ import { loadMonitorRun, type MonitorRun } from "./monitorRun";
 import type { RunIdentity } from "./useMonitorSession";
 import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
+import { releasingSchedule } from "../test/statusSubscriptions";
 import { withLiveness } from "./transports/liveness";
 
 /** Same path-surgery idiom as `lifecycleReplay.test.ts`/`burstReplay.test.ts`
@@ -340,7 +341,7 @@ async function runReplay(
       schedule: (cb, ms) => replay.clock.schedule(cb, ms),
       driverOptions: {
         now: () => replay.clock.now(),
-        schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+        schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
       },
     }),
   );

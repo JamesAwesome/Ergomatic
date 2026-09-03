@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseRecording } from "../monitor/transports/recording.js";
 import { createReplayTransport } from "../monitor/transports/replay.js";
-import { createPm5Driver } from "../monitor/driver.js";
+import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { createEventLog } from "../monitor/eventLog.js";
 import { createSeriesRecorder } from "../monitor/seriesRecorder.js";
 import type { Sample, SeriesData } from "../monitor/seriesRecorder.js";
@@ -60,7 +60,7 @@ async function loadCaptureFrames(
   await replay.transport.connect(dev.id);
 
   const log = createEventLog();
-  const driver = createPm5Driver(replay.transport, log, {
+  const driver = createSubscribedDriver(replay.transport, log, {
     deviceName: dev.name,
     now: () => replay.clock.now(),
     schedule: (cb, ms) => replay.clock.schedule(cb, ms),
