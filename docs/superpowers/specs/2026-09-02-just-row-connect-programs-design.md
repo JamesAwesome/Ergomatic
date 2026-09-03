@@ -230,7 +230,7 @@ teardown-timed failure.
 4. Door: the body line reads James's line, verbatim; `Nothing is
    programmed` appears nowhere (grep). E2E on the fake: the connected
    flow shows the line AND the diagnostics door (`/you/diagnostics/monitor-logs`)
-   lists `free-row-program-sent` for that session — the only place an
+   carries `free-row-program-sent` in its COPY export for that session (the door lists sessions and event counts, never lines; rev 4.2) — the only place an
    e2e can see a detached send (nothing on the flow branches on it).
 5. **Walk leg, with a CONTROL (the antagonist's shape, since pulling from
    the menu enters Just Row anyway and a terminate may leave the monitor
