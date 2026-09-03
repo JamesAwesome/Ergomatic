@@ -12,8 +12,11 @@ row. The lost banner stops saying "Nothing kept." when something now is.
 
 **Architecture:** One session-scoped ref (`lastRowingFrameRef`) minted on
 every rowing frame of the live run and cleared the moment that interval's
-work bout ends; one pure gate (`withPartial`) applied at TWO close sites
-covering FIVE producers; a new optional `MonitorRun.partial` (no `v` bump);
+work bout ends, plus a second (`partialMintRefusedRef`) that bounds one
+diagnostic to once per interval; one pure gate (`withPartial`, over a
+four-member allowlist) and its reason-namer (`partialRefusal`, which is what
+the session ring records) applied at TWO close sites covering FIVE producers;
+a new optional `MonitorRun.partial` (no `v` bump);
 two new optional `LogStep` keys carried through THREE type declarations and
 the route's explicit field list; one new formatter (`partialRowLabel`) that
 both row builders call; one renderer change; one banner arm.
@@ -39,6 +42,18 @@ fixture module; (4) the pair had no both-or-absent check — Task 0 step 4,
 probed by M0.3; (5) `connect()`/`teardown()` are defensive and get no leg —
 Task 2 steps 1/5 and the **Ungated by design** list. One of finding 3's own
 clauses is corrected against a measurement, at Task 7 step 5's M7.3.
+**Lens 2 (the prescribed code read AS CODE) found six**, also folded, and one
+of them was BLOCKING: (1) `withPartial`'s gate was a NEGATION over a type this
+plan widened, so it admitted `interrupted` — replaced by a local
+`PARTIAL_WRITE_REASONS` allowlist, Task 1 step 3, probed by M1.1a/M1.1b;
+(2) a legal ZERO reading — RULED write-it-and-render-it, no floor, Finding 6;
+(3) every refusal was silent — two ring entries and a per-index mint
+diagnostic, Tasks 2 and 3, probed by M3.5/M2.9; (4) three of the four "gated"
+clear sites had no reachable ordering as written — Task 2 steps 1/5, now three
+gated and three defensive; (5) the I-B5 census fixture would have failed on a
+`link-lost` `endedBy` for a reason that is not a leak — Task 4 step 2;
+(6) `fmtDuration` rounds, so an over-target partial can read `1:00 · 197 m`
+against a `1:00` target — pinned as approved behaviour at Task 5 step 1.
 
 **Gate 0-B: APPROVED by James, 2026-09-02.** The artboard is
 `docs/superpowers/specs/2026-09-02-door-gate-b.html`; the spec's own §6 now
@@ -106,9 +121,14 @@ each one already cost somebody a round somewhere.
   the hand-off store's durable bytes) and only then on the posted step.
   `isMonitorRun` has no unknown-key check (its own comment: the positive
   conjunction tolerates new fields), so **no `v` bump**.
-- **I-B1** — a partial is written only on a close with `endedBy ≠ finished`.
-  Tier B2 (`isReconstructableClose` = `finished | null | undefined`) therefore
-  never sees one, and its GATED population stays provably historical.
+- **I-B1** — a partial is written only on a close whose `endedBy` is one of
+  the FOUR WIRE-CLOSE reasons: `rower`, `link-lost`, `program-dropped`,
+  `program-failed`. **Stated as a list, never as `≠ finished`** (harden lens
+  2, finding 1): `withPartial`'s parameter type also admits `interrupted`,
+  which §5.3 says writes none, so a negation would be wrong by one member.
+  Tier B2 (`isReconstructableClose` = `finished | null | undefined`)
+  therefore never sees one, and its GATED population stays provably
+  historical.
 - **I-B2** — a partial is NEVER an `IntervalActual`. `measuredIntervalCount`
   reads `run.actuals`, so "N intervals kept" does not move; a partial
   single-interval piece is still `kept = 0`.
@@ -172,11 +192,18 @@ each one already cost somebody a round somewhere.
   interval number _"will change depending on where you are in the interval"_,
   so the machine reports the QUANTITY but cannot ATTRIBUTE it. **The first
   implementer to see that event must not reach for it.**
-- **Allowlists, never negations, for anything user-visible.** PR A's
-  `PARTIAL_CLOSE_REASONS` is the five-member allowlist and is UNCHANGED by
-  this PR. `withPartial`'s own gate is `endedBy === "finished"` → refuse,
-  which is correct there because its input is a `CloseReason` the caller
-  already has in hand (never a stored `null`).
+- **Allowlists, never negations — ON THE PRODUCER, not only on the render**
+  (harden lens 2, finding 1). PR A's `PARTIAL_CLOSE_REASONS` is the
+  five-member RENDER-side allowlist and is UNCHANGED by this PR.
+  `withPartial`'s own gate is a SECOND, FOUR-member allowlist declared local
+  to `monitorRun.ts` (`PARTIAL_WRITE_REASONS`, Task 1 step 3), and it is
+  deliberately not a negation: `withPartial`'s input is
+  `CloseReason | "interrupted"`, so an `endedBy === "finished"` → refuse gate
+  would ADMIT `interrupted` — the one member §5.3 says writes none. The two
+  lists differ by exactly that member, each says so at its own site, and
+  neither imports the other (the import would cycle: `monitorRun` →
+  `storedSummary` → `summaryModel` → `monitorRun`, and `summaryModel` takes
+  a VALUE from `monitorRun`, so the cycle is a runtime one).
 - **Every new assertion gets a NAMED mutation with the failure text it must
   produce** (RF21), recorded in the task report. **Commit the real change
   BEFORE running any mutation probe** (RF22) so every revert is a no-op
@@ -311,7 +338,27 @@ Stated up front so a reviewer is not surprised. Each has its own step.
    program transcription: every programming tx (seq 15–19) MATCHED, so a wrong
    field would have added a second divergence.
 
-6. **The I-B6 window is not present in either 08-28 capture.** Measured:
+6. **A ZERO partial is legal, and the ruling is WRITE IT AND RENDER IT — no
+   floor** (harden lens 2, finding 2; **controller ruling, 2026-09-02**).
+   A `rowing` frame with `distanceMeters: 0` is in the corpus — it is
+   interval N>1's first rowing frame
+   (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`, `state=rowing idx=0
+   d=0` at t=80957, the same frame the ledger's 810 ms-lag entry decodes).
+   Nothing in §5 refuses it, so `{ meters: 0, seconds: ~0 }` can be banked and
+   the row renders `0 m · 0:00`.
+   **RULING: that is correct and stays.** "The rower entered interval N and
+   stopped at once" is an honest thing for a row to say, and the repo's
+   absence-over-invention rule cuts the OTHER way here — the reading is real,
+   so suppressing it would be the invention. **No minimum-distance guard is
+   added anywhere in this PR.**
+   **Cost if wrong:** a noisy row in a sub-second window — a rower who
+   pressed End within a stroke of an interval boundary sees `0 m · 0:00`
+   instead of a dash. **Reversible by a floor** (one condition in
+   `withPartial`), with no stored-shape change, so it is a cheap thing to be
+   wrong about and an expensive thing to guess at. Task 2 step 1 carries the
+   mint leg; Task 5 step 1 carries the render leg and the `aria-label`.
+
+7. **The I-B6 window is not present in either 08-28 capture.** Measured:
    0x0033's `intervalCount` moves 0→1 during the rest (t=76494), so the first
    rowing frame of interval 1 (t=136699) already carries index 1 — there is no
    lagged frame to re-mint onto. The lag lives on
@@ -324,9 +371,14 @@ Stated up front so a reviewer is not surprised. Each has its own step.
 
 ## The lifetime table (RF27), in the code's own symbols
 
-One ref. One mint function. Six clear sites — FOUR gated by a leg, two
-(`connect()`, `teardown()`) defensive and ungated by design — plus two
-event-shaped clears inside the mint function itself.
+TWO refs (the reading, and the ring's once-per-index dedupe — harden lens 2,
+finding 3). One mint function. Six clear sites — **THREE gated by a leg
+(`program()`, `cancel()`, `beginFreeRow()`), THREE defensive and ungated by
+design (`connect()`, `teardown()`, and the RC-37 exit)** — plus two
+event-shaped clears inside the mint function itself. **The count moved from
+four/two to three/three at harden lens 2, finding 4**, by reading each site's
+PHASE GUARD rather than matching `rowingStreakRef`'s symbols: the RC-37 exit
+has no reachable ordering from a live run.
 
 | | |
 | --- | --- |
@@ -336,7 +388,8 @@ event-shaped clears inside the mint function itself.
 | **Mint condition** | `frame.intervalIndex !== null` **and** `frame.state === "rowing"` **and** no `IntervalActual` on `runRef.current.actuals` already carries that index (I-B6 at mint) |
 | **Clear — I-B3 (a)** | inside `noteFrameForPartial`: the first `frame.state === "resting"` frame whose `intervalIndex` equals the held reading's |
 | **Clear — I-B3 (b)** | the `intervalComplete` handler, on an **ACCEPTED** actual whose `index` equals the held reading's. On an `r0` program this is the only clear and fires 180 ms after the last rowing frame; on a rested program (a) already fired ~60 s earlier |
-| **Clear — per-arm ×4** | the four sites `rowingStreakRef` clears at, by symbol: the RC-37 programDropped/ready exit in `handleEvent`; `beginFreeRow()`; `cancel()`; `program()`. (The `beginFreeRow` copy is the one this file's own comment records being MISSED before — hence "by symbol", never "by neighbourhood.") **`program()`'s clear does NOT sit beside `rowingStreakRef`'s** (harden lens 1, finding 1): that one is above the `try`, and `program()`'s catch is itself one of the five producers, so this ref clears at the two points where `program()` is DONE with the old run — after the catch's `closeRecord(true, "program-failed")`, and after a successful `await driver.program(p)` |
+| **Clear — per-arm ×4** | the four sites `rowingStreakRef` clears at, by symbol: the RC-37 programDropped/ready exit in `handleEvent`; `beginFreeRow()`; `cancel()`; `program()`. (The `beginFreeRow` copy is the one this file's own comment records being MISSED before — hence "by symbol", never "by neighbourhood.") **`program()`'s clear does NOT sit beside `rowingStreakRef`'s** (harden lens 1, finding 1): that one is above the `try`, and `program()`'s catch is itself one of the five producers, so this ref clears at the two points where `program()` is DONE with the old run — after the catch's `closeRecord(true, "program-failed")`, and after a successful `await driver.program(p)`. **THREE of these four are GATED; the RC-37 exit is not** (harden lens 2, finding 4): its live arm returns first and its own guard admits only `programming`/`ready`, phases that cannot hold a reading. `cancel()` and `beginFreeRow()` are gated only through a `phase: "failed"` ordering — both guards exclude `live`/`ended` — which their legs prescribe explicitly rather than assume |
+| **Second ref — the ring dedupe** | `partialMintRefusedRef: React.RefObject<Set<number>>` (harden lens 2, finding 3). INVARIANT: *at most one `partial-mint-refused` entry per interval index per RUN.* MINT: `noteFrameForPartial`'s I-B6 refusal arm, which `add`s the index it just refused. CLEAR: `.clear()` on the line beside every one of the SIX sites that null the reading ref, and **deliberately not** in the two event-shaped clears (those fire per interval, and clearing there would re-arm the line the set exists to bound). Survives teardown / relaunch / re-arm: no / no / no |
 | **Clear — per-attempt** | `connect()`'s top-of-attempt reset block, beside `livenessRef.current = null`. `rowingStreakRef` does NOT clear here; this ref does, because a reading banked against a run this attempt cannot see must never reach a close it has nothing to do with. **DEFENSIVE and UNGATED BY DESIGN:** `runRef.current` is null once `connect()` has run, so `closeRecord` returns at its no-record guard and no supported ordering reads the ref again |
 | **Clear — per-session** | `teardown()`, beside `frameArrivalsRef.current = []`. Runs AFTER every close has already read the ref, so it can never cost a partial. **DEFENSIVE and UNGATED BY DESIGN**, same reason as `connect()` |
 | **Survives teardown** | no |
@@ -620,11 +673,12 @@ consts of the shared gate fixture (step 0). Nothing else.
 
 ---
 
-## Task 1: `MonitorRun` carries the partial, and the one pure gate
+## Task 1: `MonitorRun` carries the partial, and the pure gate (plus its reason-namer)
 
 **Files:**
-- Modify: `app/src/monitor/monitorRun.ts` (`MonitorRun`, plus a new exported
-  `withPartial`)
+- Modify: `app/src/monitor/monitorRun.ts` (`MonitorRun`, plus a new local
+  `PARTIAL_WRITE_REASONS` and two new exported functions, `withPartial` and
+  `partialRefusal`)
 - Test: `app/src/monitor/monitorRun.test.ts`
 
 **Interfaces produced:**
@@ -637,6 +691,15 @@ export function withPartial(
   endedBy: CloseReason | "interrupted",
   reading: { intervalIndex: number; meters: number; seconds: number } | null,
 ): MonitorRun;
+
+/** Harden lens 2, finding 3: the same three gates, as a NAME rather than a
+ *  return value, so the two close sites can say in the ring WHY nothing was
+ *  banked. `null` means "nothing refused". */
+export function partialRefusal(
+  run: MonitorRun,
+  endedBy: CloseReason | "interrupted",
+  reading: { intervalIndex: number; meters: number; seconds: number } | null,
+): "finished" | "interrupted" | "no-reading" | "actual-banked" | null;
 ```
 
 - [ ] **Step 1: the failing legs**, in `monitorRun.test.ts`:
@@ -646,16 +709,30 @@ export function withPartial(
         field's.
       - `saveMonitorRun` → `loadMonitorRun` round-trips `partial` byte for
         byte. **Start at the writer, assert after the reader** (RF24).
-      - `withPartial` refuses on `endedBy: "finished"` (I-B1) — returns the
-        SAME object reference.
+      - **The close-reason leg, as an allowlist** (harden lens 2, finding 1):
+        `withPartial` ACCEPTS on each of the FOUR wire-close reasons
+        (`rower`, `link-lost`, `program-dropped`, `program-failed`) and
+        returns a NEW object whose `partial` is the reading; it REFUSES
+        `"finished"` **AND** `"interrupted"`, returning the SAME object
+        reference. Write it as one `it.each` over all six members of
+        `CloseReason | "interrupted"` so a future widening of either union
+        cannot silently skip a member. **Two mutations, one per refusal:**
+        M1.1a and M1.1b at step 4.
       - `withPartial` refuses a `null` reading (I-B3's caller contract) —
         same reference.
       - `withPartial` refuses when `run.actuals` already carries that index
         (I-B6) — same reference. Build the run from a real
         `createMonitorRun` + `recordActual`, never a hand-built literal
         (RF3).
-      - `withPartial` accepts on each of the five allowlisted close reasons
-        and returns a NEW object whose `partial` is the reading.
+      - **`partialRefusal` agrees with `withPartial`, exhaustively.** For
+        each of the six close reasons, and for `reading === null` /
+        `reading` set / `reading` colliding with a banked actual,
+        `partialRefusal(...) === null` **iff** `withPartial(...) !== run`.
+        This leg exists because the allowlist predicate is written twice
+        (once in each function, over the ONE shared const) so the ring can
+        name a reason without `withPartial` changing shape — and two copies
+        of a predicate is exactly the drift class this repo keeps paying
+        for. Mutation: **M1.4**.
 - [ ] **Step 2: run; verify red.** `withPartial is not a function`. **Quote it.**
 - [ ] **Step 3: implement.** Add the field after `verificationBytes?`:
 
@@ -682,18 +759,49 @@ export function withPartial(
         partial?: { intervalIndex: number; meters: number; seconds: number };
       ```
 
-      and the gate, immediately above `completeContinuityReset`:
+      and the gate, immediately above `completeContinuityReset`. **The
+      allowlist is LOCAL, and that is deliberate** (harden lens 2, finding
+      1): importing PR A's `PARTIAL_CLOSE_REASONS` from
+      `src/log/storedSummary.ts` would close a runtime import cycle —
+      `monitorRun` → `storedSummary` → `summaryModel` → `monitorRun`, the
+      last hop being `summaryModel`'s VALUE import of
+      `measuredSessionSeconds`. The two lists are the same list minus
+      `"interrupted"`, by design, and each site says so.
 
       ```ts
+      /** Door spec (2026-09-02) §5.2 I-B1 — the FOUR close reasons that WRITE
+       *  a partial, as a value-equality ALLOWLIST. Deliberately NOT
+       *  `endedBy !== "finished"`: `withPartial`'s input is
+       *  `CloseReason | "interrupted"`, and a negation would admit
+       *  `"interrupted"` — §5.3's "Today's unlogged row writes none".
+       *
+       *  This is `storedSummary.ts`'s `PARTIAL_CLOSE_REASONS` MINUS
+       *  `"interrupted"`, by design, and it is a second local declaration
+       *  rather than an import ON PURPOSE: importing that const here closes a
+       *  runtime cycle (`monitorRun` -> `storedSummary` -> `summaryModel` ->
+       *  `monitorRun`, the last hop a VALUE import of
+       *  `measuredSessionSeconds`). If a sixth close reason is ever added,
+       *  BOTH lists are edited; the render list keeps `"interrupted"` and this
+       *  one never gains it. */
+      const PARTIAL_WRITE_REASONS = [
+        "rower",
+        "link-lost",
+        "program-dropped",
+        "program-failed",
+      ] as const;
+
       /**
        * Door spec (2026-09-02) §5.2 — the in-flight reading's gate, as ONE pure
        * function so both close sites (`useMonitorSession.ts`'s `closeRecord` and
        * its continuity-reset commit) apply the identical rule rather than two
        * copies of it.
        *
-       * - **I-B1** — nothing is banked on a `"finished"` close. Tier B2
-       *   (`storedSummary.ts`'s `isReconstructableClose`) therefore never sees a
-       *   partial and its GATED population stays provably historical.
+       * - **I-B1** — banked only on the FOUR wire-close reasons, as an
+       *   ALLOWLIST (`PARTIAL_WRITE_REASONS` above), never as
+       *   `endedBy !== "finished"`: this function's parameter type also admits
+       *   `"interrupted"`, and §5.3 says an interrupted close writes none. Tier
+       *   B2 (`storedSummary.ts`'s `isReconstructableClose`) therefore never
+       *   sees a partial and its GATED population stays provably historical.
        * - **I-B3** — the caller passes `null` once the in-flight interval's WORK
        *   BOUT has ended; this function does not re-derive that from timing.
        * - **I-B6** — never for an interval that already carries an
@@ -712,22 +820,67 @@ export function withPartial(
         endedBy: CloseReason | "interrupted",
         reading: { intervalIndex: number; meters: number; seconds: number } | null,
       ): MonitorRun {
-        if (endedBy === "finished") return run;
+        if (!PARTIAL_WRITE_REASONS.some((r) => r === endedBy)) return run;
         if (reading === null) return run;
         if (run.actuals.some((a) => a.index === reading.intervalIndex)) return run;
         return { ...run, partial: reading };
+      }
+
+      /**
+       * Door spec §5.3 + harden lens 2, finding 3 — the SAME three gates, as a
+       * NAME. Every refusal above is silent, and a rower who reports "it kept
+       * nothing" leaves a diagnostics ring with no line saying why; both close
+       * sites in `useMonitorSession.ts` record this reason (`partial-refused`)
+       * so the answer is in the export rather than re-derived from a timeline.
+       *
+       * Written as a second reading of the SAME `PARTIAL_WRITE_REASONS` const
+       * rather than folded into `withPartial`'s return type, so `withPartial`
+       * keeps the plain `MonitorRun` signature both close sites already hand
+       * straight on. The two predicates are pinned to agree EXHAUSTIVELY by
+       * `monitorRun.test.ts`'s own leg (M1.4) — a duplicated predicate with no
+       * agreement gate is the drift class this repo keeps paying for.
+       */
+      export function partialRefusal(
+        run: MonitorRun,
+        endedBy: CloseReason | "interrupted",
+        reading: { intervalIndex: number; meters: number; seconds: number } | null,
+      ): "finished" | "interrupted" | "no-reading" | "actual-banked" | null {
+        if (!PARTIAL_WRITE_REASONS.some((r) => r === endedBy)) {
+          return endedBy === "finished" ? "finished" : "interrupted";
+        }
+        if (reading === null) return "no-reading";
+        if (run.actuals.some((a) => a.index === reading.intervalIndex)) {
+          return "actual-banked";
+        }
+        return null;
       }
       ```
       **`isMonitorRun` gains NO check for this field** — write-once and
       identity are the writer's job, not the validator's, the same ruling
       `summaryTotals` already carries.
-- [ ] **Step 4: green, then MUTATE.**
-      **M1.1** — delete `if (endedBy === "finished") return run;`. The I-B1
-      leg goes red (`expected { …, partial: {…} } to be` the same reference).
+- [ ] **Step 4: green, then MUTATE. TWO mutations on the close-reason gate,
+      one per refused member** (harden lens 2, finding 1 — one probe cannot
+      distinguish "refuses `finished`" from "refuses everything outside the
+      list", and it was the `interrupted` half that the old negation got
+      wrong).
+      **M1.1a** — drop `"finished"` handling by widening the list:
+      `PARTIAL_WRITE_REASONS` gains `"finished"`. The `finished` refusal leg
+      goes red (`expected { …, partial: {…} } to be` the same reference); the
+      `interrupted` refusal leg stays GREEN, which is the point.
+      **M1.1b** — add `"interrupted"` to `PARTIAL_WRITE_REASONS`. The
+      `interrupted` refusal leg goes red; the `finished` leg stays green.
+      **If either mutation reddens the other's leg, the two are not
+      independent and the report says so** rather than shipping one probe for
+      two members.
       **M1.2** — delete the `run.actuals.some(...)` line. The I-B6 leg goes
       red.
       **M1.3** — add `partial: undefined` handling to `isMonitorRun` as a
       REJECTION (`value.partial === undefined`). The tolerance leg goes red.
+      **M1.4** — make `partialRefusal` disagree with `withPartial`: change its
+      first line to `if (endedBy === "finished")`. The exhaustive agreement
+      leg goes red on the `interrupted` row (`partialRefusal` returns `null`
+      where `withPartial` refused). This is the probe that the duplicated
+      predicate cannot drift.
       Restore each; re-run; green.
 - [ ] **Step 5: scoped gates.** `pnpm lint && pnpm typecheck && pnpm format:check`
       and `pnpm test --project client` (`monitorRun.test.ts` is a client
@@ -751,6 +904,17 @@ export function withPartial(
       transport, asserting on `loadMonitorRun()?.partial` after a close:
       - **The mint:** a rowing frame with a non-null index, then a close →
         the partial is that frame's `distanceMeters`/`elapsedSeconds`.
+      - **The ZERO mint, and it is a WRITE** (harden lens 2, finding 2 —
+        controller ruling, recorded at Finding 6 below): a `rowing` frame
+        with `distanceMeters: 0` is in the corpus — it is interval N>1's
+        FIRST rowing frame (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`,
+        `state=rowing idx=0 d=0` at t=80957, the ledger's own 810 ms-lag
+        observation). Such a frame, then a close → the partial is
+        `{ meters: 0, seconds: <that frame's own `elapsedSeconds`> }`, NOT
+        `undefined`. **There is no floor and no minimum-distance guard
+        anywhere in this plan**; a zero reading is the honest statement that
+        the rower entered the interval and stopped at once. Task 5 step 1
+        carries its render leg.
       - **I-B3 (a):** …then a `resting` frame carrying the SAME index, then a
         close → no partial.
       - **I-B3 (b):** …then an accepted `intervalComplete` for the same
@@ -759,20 +923,56 @@ export function withPartial(
         rowing frame carrying `intervalIndex: 0` (the 810 ms lag shape), then
         a close → **no partial**, and the interval's `actualMeters` is
         untouched. **This is the synthetic leg §8.2 prescribes; no committed
-        capture contains the window** (Finding 6).
+        capture contains the window** (Finding 7).
       - **A null-index rowing frame** (the D3 divergence) → no partial.
-      - **FOUR clear-site legs, one per symbol** — after minting a reading,
-        drive the hook through each of `program()`, `beginFreeRow()`,
-        `cancel()` and the RC-37 programDropped/ready exit, then close and
-        assert no partial. **Name the symbol in each test title**, so a future
-        reader can tell which site a red leg means.
-      - **`connect()` and `teardown()` get NO leg: they are DEFENSIVE**
-        (harden lens 1, finding 5). No supported ordering closes a record
-        after either — `runRef.current` is `null` once each has run, so
-        `closeRecord` returns at its own no-record guard and nothing reads the
-        ref again. Their clears stay in the code as belt-and-braces, say so in
-        their own `// §5.3:` comments, and are listed under **Ungated by
-        design** rather than given a leg that could not go red (RF21).
+      - **The mint refusal is DIAGNOSED, once per interval index** (harden
+        lens 2, finding 3). Drive TWO consecutive rowing frames carrying an
+        index that already has an accepted actual (the same synthetic 810 ms
+        lag shape as the I-B6 leg above), then `teardown()`, then read the
+        export the way this file's `close-no-record` leg does. Assert
+        **exactly one** entry with `kind === "partial-mint-refused"` and
+        `detail === "reason=actual-banked idx=0"` —
+        `entries.filter(...).length === 1`, never `find`, because `find` stays
+        green under a duplicate and the duplicate is the whole failure mode.
+        Mutation: **M2.9**.
+      - **THREE clear-site legs, one per symbol — and each one names the
+        PHASE ORDERING that reaches it** (harden lens 2, finding 4; this was
+        four legs, and the fourth had no reachable ordering). Reading each
+        site's phase guard rather than matching the sibling ref's symbols is
+        what changed the count:
+        - **`program()`** — no phase guard but the `"programming"`
+          double-fire pin, so it is reachable straight from `live`: mint a
+          reading, call `program()` with a fresh program, then close and
+          assert no partial. This is the ordinary one.
+        - **`cancel()`** — guarded `if (phase === "live" || phase ===
+          "ended") return;`, so it can NEVER run while a reading is live on
+          its own. The reachable ordering, prescribed explicitly: drive to
+          `live` and mint, then reach `phase: "failed"` with the run still
+          open and the ref still set — `program()`'s `driver === null` early
+          return (`fail({ reason: "transport-missing" })`) is the documented
+          path and clears nothing by design — then `cancel()`, then close,
+          then assert no partial.
+        - **`beginFreeRow()`** — guarded against
+          `programming | ready | live | ended`, same reachability and the
+          same prescribed ordering as `cancel()`.
+        **Name the symbol AND the phase route in each test title**, so a
+        future reader can tell which site a red leg means and how it was
+        reached.
+      - **THREE sites get NO leg: they are DEFENSIVE** — `connect()` and
+        `teardown()` (harden lens 1, finding 5) and **the RC-37
+        programDropped/ready exit** (harden lens 2, finding 4). For
+        `connect()`/`teardown()`: no supported ordering closes a record after
+        either, since `runRef.current` is `null` once each has run, so
+        `closeRecord` returns at its own no-record guard. For the RC-37 exit:
+        its own LIVE arm returns first (`if (phase === "live") { …
+        closeRecord(true, "program-dropped"); … return; }`), and the exit arm
+        below it is gated `if (phase !== "programming" && phase !== "ready")
+        return;` — neither phase can hold a reading, because every route from
+        `live`/`ended` back to `ready` passes `program()`'s or
+        `beginFreeRow()`'s own clear. All three stay in the code as
+        belt-and-braces, say so in their own `// §5.3:` comments, and are
+        listed under **Ungated by design** rather than given a leg that could
+        not go red (RF21).
 - [ ] **Step 2: run; verify red.** **Quote the failure.**
 - [ ] **Step 3: declare the ref and the mint function**, immediately after
       `rowingStreakRef`:
@@ -792,8 +992,12 @@ export function withPartial(
          *  exit in `handleEvent`, `beginFreeRow()`, `cancel()`, and `program()` —
          *  the last of those NOT beside `rowingStreakRef`'s own clear, because
          *  `program()`'s catch is itself one of the five producers; see that
-         *  function); and, DEFENSIVELY and for this ref only, `connect()` and
-         *  `teardown()`. SIX sites, found by symbol; FOUR of them carry a leg.
+         *  function); and, DEFENSIVELY, `connect()` and `teardown()`. SIX
+         *  sites, found by symbol; THREE of them carry a leg — `program()`,
+         *  `cancel()` and `beginFreeRow()`. The RC-37 exit joins
+         *  `connect()`/`teardown()` as defensive: its live arm returns before
+         *  it, and its own guard admits only `programming`/`ready`, neither of
+         *  which can hold a reading (harden lens 2, finding 4).
          *  SURVIVES teardown / relaunch / re-arm: no / no / no. */
         const lastRowingFrameRef = useRef<{
           intervalIndex: number;
@@ -801,9 +1005,27 @@ export function withPartial(
           seconds: number;
         } | null>(null);
 
+        /** Harden lens 2, finding 3: the interval indices whose MINT this run
+         *  has already refused, so the diagnostic below is written ONCE per
+         *  interval rather than once per frame. The refusal is per-frame and
+         *  the ring is ~1 Hz of budget; an unguarded record would push every
+         *  other entry out of the export the moment I-B6 bites.
+         *
+         *  INVARIANT: at most one `partial-mint-refused` entry per interval
+         *  index per RUN. Same lifetime as `lastRowingFrameRef` above at the
+         *  six per-run/per-attempt sites (it is `.clear()`ed on the same line
+         *  each of them nulls the ref), and deliberately NOT cleared by the
+         *  two event-shaped clears inside `noteFrameForPartial` — those fire
+         *  per interval, and clearing there would re-arm the very log line
+         *  this exists to bound. Survives teardown / relaunch / re-arm: no /
+         *  no / no. */
+        const partialMintRefusedRef = useRef<Set<number>>(new Set());
+
         /** §5.3's mint and its two event-shaped clears, in one place so the
          *  lifetime is readable as a unit rather than reconstructed from call
-         *  sites. Reads refs only — `[]` deps are honest. */
+         *  sites. Reads refs only — `[]` deps are honest, `sessionRef`
+         *  included (the ring is reached through a ref, exactly as every other
+         *  `sessionRef.current?.log.record` site in this file reaches it). */
         const noteFrameForPartial = useCallback((frame: MonitorFrame): void => {
           const index = frame.intervalIndex;
           if (index === null) return;
@@ -826,6 +1048,20 @@ export function withPartial(
           // close — belt and braces, and the close-time check is the durable one
           // because it reads the record the partial is about to be written to.
           if (runRef.current?.actuals.some((a) => a.index === index) === true) {
+            // Harden lens 2, finding 3: say so, ONCE per interval index. This
+            // arm is the 810 ms lag window and it is per-FRAME — the Set is
+            // what keeps ~1 Hz of refusals from evicting the rest of the ring
+            // (`partialMintRefusedRef`'s own doc comment carries the
+            // invariant). A different entry kind from the close sites'
+            // `partial-refused`: this one says a reading was never taken, that
+            // one says a reading was never banked.
+            if (!partialMintRefusedRef.current.has(index)) {
+              partialMintRefusedRef.current.add(index);
+              sessionRef.current?.log.record(
+                "partial-mint-refused",
+                `reason=actual-banked idx=${index}`,
+              );
+            }
             return;
           }
           lastRowingFrameRef.current = {
@@ -862,15 +1098,28 @@ export function withPartial(
       mint above the continuity check would bank the very frame whose
       dishonesty caused the reset.
 - [ ] **Step 5: the six clear sites, by symbol — five of them beside an
-      existing reset, and `program()` NOT.** For the five, put the line
-      immediately beside the existing per-run/per-attempt reset it belongs
-      with, with a one-line `// §5.3:` comment naming why:
+      existing reset, and `program()` NOT.** For the five, put the lines
+      immediately beside the existing per-run/per-attempt reset they belong
+      with, with a one-line `// §5.3:` comment naming why. **Every one of the
+      six clears BOTH pieces of state on adjacent lines** —
+      `lastRowingFrameRef.current = null;` and
+      `partialMintRefusedRef.current.clear();` — because the dedupe set's
+      invariant is per-RUN and a set that outlived its run would silence the
+      next run's first refusal:
       - the RC-37 programDropped/ready exit in `handleEvent` — beside
-        `rowingStreakRef.current = null;` / `lastContinuityRef.current = null;`
+        `rowingStreakRef.current = null;` / `lastContinuityRef.current = null;`.
+        **DEFENSIVE and ungated by design** (harden lens 2, finding 4): the
+        live arm a few lines above returns first, and this arm's own guard is
+        `if (phase !== "programming" && phase !== "ready") return;` — neither
+        phase can hold a reading, because every route from `live`/`ended` back
+        to `ready` passes `program()`'s or `beginFreeRow()`'s clear. Its
+        comment says exactly that.
       - `beginFreeRow()` — beside its `rowingStreakRef.current = null;`
         (**its comment must note this is the copy the file itself records
-        being missed before**)
-      - `cancel()` — beside its `rowingStreakRef.current = null;`
+        being missed before**). GATED, and its leg reaches it through
+        `phase: "failed"` — see step 1.
+      - `cancel()` — beside its `rowingStreakRef.current = null;`. GATED, same
+        `failed`-phase route.
       - `connect()` — beside `livenessRef.current = null;`, DEFENSIVE, with
         the note that `rowingStreakRef` deliberately does NOT clear here and
         that no supported ordering closes a record after a fresh attempt
@@ -901,6 +1150,7 @@ export function withPartial(
       // `update({ phase: "programming" })` above moves `stateRef` off both before
       // the first await (this function's own double-fire pin says so).
       lastRowingFrameRef.current = null;
+      partialMintRefusedRef.current.clear();
       ```
 
       The `driver === null` early return deliberately clears nothing: that
@@ -930,15 +1180,21 @@ export function withPartial(
       **M2.1** delete the `resting` clear → the I-B3 (a) leg red.
       **M2.2** delete the accepted-actual clear → the I-B3 (b) leg red.
       **M2.3** delete the `runRef.current?.actuals.some(...)` guard → the
-      I-B6 mint leg red.
+      I-B6 mint leg red **and** the `partial-mint-refused` ring leg red (the
+      refusal arm is what writes it).
       **M2.4** drop `if (index === null) return;` → the D3 leg red.
-      **M2.5–M2.8** delete each of the FOUR gated clear-site lines in turn
-      (`program()`, `beginFreeRow()`, `cancel()`, the RC-37 exit) → its own
-      named leg red, and **only** its own. If deleting one leaves every leg
-      green, that site has no gate and the report says so rather than shipping
-      it unproven (RF21). `connect()`'s and `teardown()`'s clears carry no
-      mutation because they carry no leg — they are declared defensive under
-      **Ungated by design** instead (finding 5).
+      **M2.5–M2.7** delete each of the THREE gated clear-site lines in turn
+      (`program()`, `beginFreeRow()`, `cancel()`) → its own named leg red, and
+      **only** its own. If deleting one leaves every leg green, that site has
+      no gate and the report says so rather than shipping it unproven (RF21).
+      The clears at `connect()`, `teardown()` and **the RC-37 exit** carry no
+      mutation because they carry no leg — all three are declared defensive
+      under **Ungated by design** (harden lens 1 finding 5; harden lens 2
+      finding 4).
+      **M2.9** delete the mint-refusal dedupe (`if
+      (!partialMintRefusedRef.current.has(index))` and its `add`), leaving the
+      bare `record` call → the ONCE-PER-INDEX leg from step 1 red (a second
+      entry appears), every other leg green.
       **M2.11** move the live-branch `noteFrameForPartial(frame)` ABOVE the
       continuity check → Task 3's continuity leg goes red (run it after Task 3
       and record it there).
@@ -971,9 +1227,36 @@ export function withPartial(
       Each of the six positive legs also asserts `run.actuals` and
       `measuredIntervalCount(run.actuals)` are **unchanged** by the partial
       (I-B2).
+
+      **Plus TWO ring legs** (harden lens 2, finding 3), read the way
+      `useMonitorSession.test.ts` already reads the ring — after `teardown()`,
+      `JSON.parse(localStorage.getItem("ergomatic:last-session-log")!)` and
+      `.find((e) => e.kind === …)`, exactly the `close-no-record` leg's idiom
+      in this same file:
+      - a natural finish (`endByMachine(false)`) with a live reading held
+        writes `partial-refused` with `detail === "reason=finished idx=0"`;
+      - an End close taken AFTER I-B3 has cleared the reading (the C2-shaped
+        ordering — a `resting` frame for the held index, then `endSession()`)
+        writes `partial-refused` with `detail === "reason=no-reading idx=none"`;
+      - and any ONE of the five positive legs additionally asserts a
+        `partial-written` entry whose detail names the same index and numbers
+        the record carries.
+
+      **`reason=actual-banked` and `reason=interrupted` get NO leg at this
+      layer, and the reason is reachability, not laziness** (RF21 — a gate
+      that cannot go red is decoration): the `intervalComplete` handler's own
+      clear (Task 2 step 6) retires the reading in the SAME handler that banks
+      the actual, so no supported ordering reaches `closeRecord` holding a
+      reading whose index already has an actual; and no hook path passes
+      `"interrupted"` — `completeInterruptedRun` runs outside the hook, and the
+      continuity site's `closed.endedBy` is always `"link-lost"`. Both are
+      covered at the PURE layer instead (Task 1's `withPartial`/`partialRefusal`
+      legs, M1.1b and M1.2) and are listed under **Ungated by design**. The
+      MINT-side `actual-banked` is genuinely reachable — Task 2's synthetic
+      810 ms-lag frame — and carries its own leg there.
 - [ ] **Step 2: run; verify red.** **Quote the failure.**
 - [ ] **Step 3: import and apply, inside `closeRecord`.** Add `withPartial,`
-      to the `./monitorRun` import list, then:
+      and `partialRefusal,` to the `./monitorRun` import list, then:
 
       ```ts
             const withFinalSeries = withSeries(run);
@@ -990,6 +1273,30 @@ export function withPartial(
               endedBy,
               lastRowingFrameRef.current,
             );
+            // Harden lens 2, finding 3: EVERY refusal above is otherwise
+            // silent, and "it kept nothing" is precisely the report a rower
+            // files. One entry either way, at the one site that knows — the
+            // same `sessionRef.current?.log.record` idiom `close-no-record`
+            // above uses. `partialRefusal` names the reason from the SAME
+            // gates `withPartial` applied (`monitorRun.ts`, pinned to agree
+            // exhaustively by M1.4), so the ring can never disagree with the
+            // record it is explaining.
+            const refusal = partialRefusal(
+              withFinalSeries,
+              endedBy,
+              lastRowingFrameRef.current,
+            );
+            if (refusal === null) {
+              sessionRef.current?.log.record(
+                "partial-written",
+                `idx=${banked.partial?.intervalIndex ?? "none"} m=${banked.partial?.meters ?? "none"} s=${banked.partial?.seconds ?? "none"}`,
+              );
+            } else {
+              sessionRef.current?.log.record(
+                "partial-refused",
+                `reason=${refusal} idx=${lastRowingFrameRef.current?.intervalIndex ?? "none"}`,
+              );
+            }
             const next = completeMonitorRun(
               banked,
               { terminated, endedBy },
@@ -1011,22 +1318,51 @@ export function withPartial(
                   closed.endedBy ?? "link-lost",
                   lastRowingFrameRef.current,
                 );
+                // Harden lens 2, finding 3 — the SAME two ring entries as
+                // `closeRecord`'s, because this close is just as silent and
+                // is the one a link-loss report will be about.
+                const refusal = partialRefusal(
+                  withFinalSeries,
+                  closed.endedBy ?? "link-lost",
+                  lastRowingFrameRef.current,
+                );
+                if (refusal === null) {
+                  sessionRef.current?.log.record(
+                    "partial-written",
+                    `idx=${banked.partial?.intervalIndex ?? "none"} m=${banked.partial?.meters ?? "none"} s=${banked.partial?.seconds ?? "none"}`,
+                  );
+                } else {
+                  sessionRef.current?.log.record(
+                    "partial-refused",
+                    `reason=${refusal} idx=${lastRowingFrameRef.current?.intervalIndex ?? "none"}`,
+                  );
+                }
       ```
       and change the commit below it from `applyProducerCommit(withFinalSeries)`
       to `applyProducerCommit(banked)`. **`withFinalSeries` stays as its own
       const** so the surrounding comment about `withSeries` returning a new
       object remains true of the thing it describes.
 - [ ] **Step 5: green, then MUTATE.**
-      **M3.1** invert `withPartial`'s gate to `if (endedBy !== "finished")
-      return run;` → all five positive legs red, `finished` leg still green.
-      Record the exact text of one.
+      **M3.1** empty the allowlist — `const PARTIAL_WRITE_REASONS = [] as
+      const;` → all five positive legs red, `finished` leg still green, **and
+      the `partial-written` ring leg red too** (it becomes a `partial-refused
+      reason=interrupted` entry, since an empty list makes every non-`finished`
+      member fall to that arm). Record the exact text of one. This replaces the
+      old `endedBy !== "finished"` inversion, which no longer exists to invert
+      (harden lens 2, finding 1).
       **M3.2** revert step 4 (`applyProducerCommit(withFinalSeries)`) → **only**
       the continuity leg red. If any other leg also reddens, the continuity leg
       is not isolated and the report says so.
       **M3.3** replace `lastRowingFrameRef.current` with `null` at the
       `closeRecord` site only → the four `closeRecord` legs red, the continuity
       leg green — the discriminating probe that the two sites are genuinely
-      two.
+      two. **Second observable** (harden lens 2, finding 3): the same mutation
+      turns that site's ring entry into `partial-refused reason=no-reading
+      idx=none`, so the diagnostics say what the record shows.
+      **M3.5** delete BOTH `sessionRef.current?.log.record` calls at the
+      `closeRecord` site → the two ring legs red, every `run.partial`
+      assertion still green — which is the proof that the ring is a SECOND
+      observable and not a restatement of the first.
       **M3.4** move `program()`'s clear back to the TOP of `program()`, beside
       `rowingStreakRef.current = null;` → the `program-failed` leg goes red,
       because the arm empties the ref before its own catch closes the run it
@@ -1067,7 +1403,16 @@ export function withPartial(
       `it` that takes a realistic seeded `StoredLog` and asserts that adding
       `partialMeters`/`partialSeconds` to one of its steps changes **nothing**
       about `buildStoredSummary(row)`'s heroes, total line, caption, or
-      `measuredElapsedSeconds` for that step. One `expect` comparing the whole
+      `measuredElapsedSeconds` for that step.
+      **PIN THE FIXTURE'S `endedBy` TO `"rower"`, and say why in the test's
+      own comment** (harden lens 2, finding 5). Task 5 step 5b makes `caption`
+      a FUNCTION of `endedBy`: on a `link-lost` row carrying a partial it
+      legitimately becomes `INTERVAL N · LAST READING BEFORE THE LINK WENT`.
+      A `link-lost` fixture here would therefore fail this census for a reason
+      that is not a leak — the caption moved BY DESIGN — and the fix would be
+      to widen the assertion, which is exactly how a real leak gets waved
+      through. A non-`link-lost` close keeps `caption` invariant, so the
+      census stays a leak detector. One `expect` comparing the whole
       summary object with and without the keys — which covers
       `stepActualSums`, `tierBAvgSplitSeconds`, the `hasStepActuals`
       predicate, `buildStoredRest`, `buildStoredTotalLine` and
@@ -1119,6 +1464,18 @@ export function withPartial(
           // `actual === undefined` restates I-B6 on the read side: the writer
           // (`withPartial`) already refuses an interval that carries an actual,
           // and a step can never show both.
+          //
+          // A `run.partial` whose index matches NO emitted step is dropped
+          // SILENTLY, and that is deliberate (harden lens 2, finding 3, which
+          // otherwise puts a ring entry on every refusal). This function runs
+          // OUTSIDE the hook — there is no `sessionRef` here, and giving a
+          // pure builder that `summaryModel.ts` and `LogSession.tsx` call on
+          // every render a diagnostics dependency would be the wrong trade.
+          // It is also unreachable under Task 2's `program()` placement: the
+          // index is minted from `frame.intervalIndex`, which `toProgramIndex`
+          // derives from the SAME `run.program` this loop iterates, and the
+          // ref clears at every re-arm — so a partial can only carry an index
+          // this program has.
           const partial = run.partial;
           if (
             partial !== undefined &&
@@ -1192,6 +1549,27 @@ partial replaces that dash. **ONE renderer serves both doors**
         absent) → `250 m · 1:03`.
       - on a TIME interval (`seconds` set) → `2:10 · 480 m`.
       - with only one of the two keys → `undefined` (the pair is a unit).
+      - **A ZERO pair renders, and reads `0 m · 0:00`** (harden lens 2,
+        finding 2 — controller ruling at Finding 6). On a DISTANCE interval
+        (`seconds` absent) `{ partialMeters: 0, partialSeconds: 0 }` →
+        `0 m · 0:00`, and the row's `aria-label` reads
+        `Interval 1: <label>, stopped at 0 m · 0:00`. **There is no floor**:
+        the reading is real (interval N's first rowing frame is `d=0` in the
+        corpus), so absence would be invention. Pin the exact string, not a
+        `toBeDefined()` — the failure this leg exists for is a future
+        `if (meters === 0) return undefined;`.
+      - **`fmtDuration` ROUNDS, and an over-target partial can therefore read
+        exactly like a completed interval** (harden lens 2, finding 6). Leg
+        at exactly `{ partialMeters: 196.6, partialSeconds: 59.74 }` on a
+        TIME interval whose target is `60` → **`1:00 · 197 m`**, against a
+        `1:00` target in the same row. This is BY DESIGN, and the test's own
+        comment says so: the tell is the row's shape, not its numbers — a
+        partial row carries no pace and no rate cell (the leg two bullets
+        down asserts their absence), which Gate 0-B decision (d) approved.
+        `fmtDuration(59.74 / 60)` is `1:00` because `splitParts` does
+        `Math.round(minutes * 60)` (`domain/duration.ts`), and
+        `Math.round(196.6)` is `197`. Those are C1's own measured triple
+        (Task 7 step 3), so this is the string a real capture produces.
       - `monitorWorkRows` and `buildRows` both put the SAME string on the
         same step for the same data — one test, both builders, one expected
         value. **This is the leg that catches a second copy of the format.**
@@ -1745,8 +2123,9 @@ const WALK_0828_PROGRAM: WorkoutProgram = {
       stale copies: change what the hook banks and 7a forces the declaration
       to be updated, which re-points the route leg in the same edit. No single
       mutation reddens both, and the plan does not pretend one does.
-      **M7.2** delete `withPartial`'s `endedBy === "finished"` gate and add a
-      fourth leg replaying a naturally finished capture — or, if no committed
+      **M7.2** add `"finished"` to `PARTIAL_WRITE_REASONS` (harden lens 2,
+      finding 1 — there is no `endedBy === "finished"` gate to delete any
+      more) and add a fourth leg replaying a naturally finished capture — or, if no committed
       capture finishes naturally, state that in the report and rely on Task 3's
       `finished` hook leg instead. **Do not invent a capture.**
 
@@ -1878,17 +2257,21 @@ const WALK_0828_PROGRAM: WorkoutProgram = {
 | A HALF-pair 400s, naming both members | `data.test.ts` | **M0.3** delete the both-or-absent check → `expected 201 to be 400` |
 | `isMonitorRun` tolerates the new field | `monitorRun.test.ts` | add a positive check for `partial` → the tolerance leg red |
 | `MonitorRun.partial` round-trips storage | `monitorRun.test.ts` | drop the field from the save path → read-back leg red |
-| I-B1: no partial on `finished` | `monitorRun.test.ts` + hook | delete `withPartial`'s `endedBy === "finished"` guard |
+| I-B1: banked on the FOUR wire-close reasons, refused on `finished` AND `interrupted` | `monitorRun.test.ts` (an `it.each` over all six members) + hook | **M1.1a** add `"finished"` to `PARTIAL_WRITE_REASONS` → the `finished` leg red, the `interrupted` leg green; **M1.1b** add `"interrupted"` → the `interrupted` leg red, the `finished` leg green. Two members, two probes (harden lens 2, finding 1) |
+| `partialRefusal` cannot drift from `withPartial` | `monitorRun.test.ts`, exhaustive over the six reasons × three reading states | **M1.4** change `partialRefusal`'s first line to `if (endedBy === "finished")` → the `interrupted` row red |
+| The ring says WHY nothing was banked | `useMonitorSession.test.ts`, reading the stashed export | **M3.5** delete both `log.record` calls at the `closeRecord` site → the two ring legs red, every `run.partial` assertion green |
+| The mint refusal is logged ONCE per interval index | `useMonitorSession.test.ts`, `filter(...).length === 1` | **M2.9** delete the `partialMintRefusedRef` dedupe → that leg red (a second entry appears) |
+| A ZERO partial is written and rendered | `useMonitorSession.test.ts` mint leg + `summaryModel.test.ts` `0 m · 0:00` leg | add `if (meters === 0) return undefined;` to `partialRowLabel` → the render leg red; add the same floor to `withPartial` → the mint leg red |
 | I-B6 at the record | `monitorRun.test.ts` | delete `run.actuals.some(...)` |
 | I-B6 at the mint (the 810 ms lag) | `useMonitorSession.test.ts`, SYNTHETIC frame | delete `noteFrameForPartial`'s `runRef.current?.actuals.some(...)` |
 | I-B3 (a): a `resting` frame ends the bout | `useMonitorSession.test.ts` **and** `partialReplay.test.ts` leg **C2** | **M7.1** delete the `resting` clear → **measured:** C2 banks `{ intervalIndex: 0, meters: 196.6, seconds: 59.74 }`, a COMPLETED interval stored as a partial |
 | The End arm banks a live reading (the only POSITIVE End-arm gate) | `partialReplay.test.ts` leg **C1** (cut at `e.t <= 76200`, between the last rowing frame at t=76039 and the first resting frame at t=76489) | **M3.3** — `withPartial`'s `reading === null` short-circuit → C1 red |
 | 7a reads the SHARED declaration, not a local literal | `partialReplay.test.ts`, importing `src/session/partialGateFixture.ts` | **M7.3** change one number in the fixture module → 7a red. The route half stays GREEN by design (it round-trips the fixture); **measured**, and see Task 7 step 5 for why no single mutation reddens both |
 | I-B3 (b): the accepted actual ends the bout | `useMonitorSession.test.ts` | delete the `intervalComplete` clear |
-| FOUR gated clear sites, one leg each | `useMonitorSession.test.ts` | **M2.5–M2.8** delete each line in turn → **only** its own leg red |
+| THREE gated clear sites, one leg each (`program()`, `cancel()`, `beginFreeRow()` — each leg naming the phase route that reaches it) | `useMonitorSession.test.ts` | **M2.5–M2.7** delete each line in turn → **only** its own leg red |
 | `program()`'s clear survives its own `program-failed` close | `useMonitorSession.test.ts`, the `program-failed` leg | **M3.4** move that clear to the top of `program()` → the `program-failed` leg red |
 | The mint sits BELOW the continuity check | `useMonitorSession.test.ts` continuity leg | move `noteFrameForPartial(frame)` above `applyContinuityCheck` → the reset banks the dishonest frame |
-| Five producers land the partial | `useMonitorSession.test.ts` | invert `withPartial`'s gate to `endedBy !== "finished"` → all five red, `finished` green |
+| Five producers land the partial | `useMonitorSession.test.ts` | **M3.1** empty `PARTIAL_WRITE_REASONS` (`[] as const`) → all five red, `finished` green |
 | The continuity reset is a SECOND site | `useMonitorSession.test.ts` | revert its commit to `applyProducerCommit(withFinalSeries)` → **only** the continuity leg red |
 | The two sites are genuinely two | `useMonitorSession.test.ts` | pass `null` at the `closeRecord` site only → four red, continuity green |
 | The step keys are keyed on the PROGRAM index | `logDraft.test.ts` (legacy warm-up fixture) | `partial.intervalIndex === i` → `=== out.length` |
@@ -1911,12 +2294,26 @@ const WALK_0828_PROGRAM: WorkoutProgram = {
 `Number.isFinite` half of the route's bounds (NaN/Infinity cannot reach it over
 JSON); `heroDistanceMeters`'s I-B5 leg (its input type has no `steps`); the
 old-server direction of the additive matrix (a hand-written copy of the old
-allowlist would be a mirror — §8.2's own ruling); and **`connect()`'s and
+allowlist would be a mirror — §8.2's own ruling); **`connect()`'s and
 `teardown()`'s clears of `lastRowingFrameRef`** (harden lens 1, finding 5) —
 no supported ordering closes a record after either, since `runRef.current` is
-null by then and `closeRecord` returns at its no-record guard, so a leg for
-them could not go red (RF21). They stay in the code as belt-and-braces, and
-their `// §5.3:` comments say exactly this.
+null by then and `closeRecord` returns at its no-record guard; **the RC-37
+programDropped/ready exit's clear** (harden lens 2, finding 4) — its live arm
+returns first and its own guard admits only `programming`/`ready`, phases that
+cannot hold a reading, because every route from `live`/`ended` back to `ready`
+passes `program()`'s or `beginFreeRow()`'s clear; **`partial-refused
+reason=actual-banked` at the two CLOSE sites** (harden lens 2, finding 3) — the
+`intervalComplete` handler's own clear retires the reading in the SAME handler
+that banks the actual, so no supported ordering reaches a close holding one
+(the MINT-side `actual-banked` IS reachable and carries its own leg);
+**`partial-refused reason=interrupted`** — no hook path passes `"interrupted"`
+(`completeInterruptedRun` runs outside the hook, the continuity site's
+`endedBy` is always `"link-lost"`), so its gate is Task 1's pure-layer M1.1b;
+and **`buildMonitorLogSteps` dropping a `run.partial` whose index matches no
+emitted step** — it runs outside the hook with no ring in reach, and is
+unreachable under Task 2's `program()` placement. Every one of these could not
+go red as a leg (RF21). They stay in the code as belt-and-braces, and their
+comments say exactly this.
 
 ---
 
@@ -1948,8 +2345,18 @@ This PR keeps the metres you rowed into the interval you stopped in.
 - Every mutation from the gates table with its exact failure text, including
   the one that proves I-B3: with the `resting` clear deleted, a COMPLETED
   interval is stored as a partial reading 196.6 m / 59.74 s.
-- The lifetime table (one ref, six clear sites by symbol — four gated, two
-  defensive — and two event clears).
+- The lifetime table (two refs, six clear sites by symbol — three gated,
+  three defensive — and two event clears).
+- The ZERO-partial ruling (controller, 2026-09-02): a `rowing` frame with
+  `d=0` is in the corpus, so `0 m · 0:00` is a real reading and is WRITTEN
+  and RENDERED, with no floor. Cost if wrong: a noisy row in a sub-second
+  window; reversible by one condition in `withPartial`, no stored-shape
+  change. Recorded because it is a product decision nobody was asked about.
+- Diagnostics: every partial refusal now names its reason in the session ring
+  (`partial-refused reason=… idx=…` at both close sites, `partial-written` on
+  the write, `partial-mint-refused` once per interval index). Which of those
+  reasons have a reachable ordering, and which are ungated by design, is in
+  the gates table.
 - The I-B5 census as its SCRIPT's output, base and head.
 - Per-file coverage rows for every touched file. Contrast: `--ink-2` on the
   row's ground, computed, stated as a number.
@@ -1967,8 +2374,9 @@ This PR keeps the metres you rowed into the interval you stopped in.
   partial would count toward "kept" (it does not).
 - Risk note (what I'd have asked a reviewer to probe): the ref's lifetime.
   Six clear sites plus two event-shaped clears, and a missed one banks one
-  run's metres onto another's record. FOUR carry a leg and a mutation;
-  `connect()`/`teardown()` are declared defensive and ungated. The sharpest
+  run's metres onto another's record. THREE carry a leg and a mutation;
+  `connect()`, `teardown()` and the RC-37 exit are declared defensive and
+  ungated, each with the phase guard that makes it unreachable. The sharpest
   one is `program()`, whose clear must NOT sit where its sibling ref's does,
   because its own catch is one of the five producers. The replay legs are the
   only ones driven by real wire bytes.
@@ -1991,13 +2399,13 @@ This PR keeps the metres you rowed into the interval you stopped in.
 | §5.1 | A link-lost close banks what was LAST RECEIVED, and the copy says so | 3 (the read), 5 (the copy, Gate 0-B) |
 | §5.1 | No split/pace/rate derived from the pair | 5 (with its own absence leg) |
 | §5.1 | A `rowing` frame with `intervalIndex: null` writes nothing | 2 |
-| §5.2 I-B1 | Only on `endedBy ≠ finished`; tier B2 never sees one | 1, 3 |
+| §5.2 I-B1 | Banked only on the FOUR wire-close reasons, as an ALLOWLIST (`finished` AND `interrupted` refused); tier B2 never sees one | 1, 3 |
 | §5.2 I-B2 | Never an `IntervalActual`; `measuredIntervalCount` unchanged | asserted in 3 and 7 |
 | §5.2 I-B3 | Work bout ends at the first `resting` frame OR the actual, whichever first | 2, gated by 7's leg **C2** |
 | §5.2 I-B4 | Stale re-emission under-counts; stated, not gated | Global Constraints |
 | §5.2 I-B5 | No summing reader sees the keys; census as a SCRIPT | 4 |
 | §5.2 I-B6 | Never for an interval already carrying an actual, checked at write time | 1 (record), 2 (mint), 4 (read side) |
-| §5.3 | The ref, its mint, six clear sites by symbol (four gated, two defensive) | 2 |
+| §5.3 | The ref, its mint, six clear sites by symbol (three gated, three defensive), plus the ring's per-index dedupe ref | 2 |
 | §5.3 | ONE read in `closeRecord` covering four producers + the continuity reset's own | 3 |
 | §5.3 | `interrupted` writes none | stated; `completeInterruptedRun`'s only caller is outside the hook |
 | §5.4 | The lost banner's `kept === 0` arm | 6 |
@@ -2032,10 +2440,11 @@ structurally without either importing the other — the same idiom
 
 ## Measurements appendix — what was RUN, and against what
 
-Everything below was executed this session in
-`/Users/james/projects/github/jamesawesome/Ergomatic-wt-door-b/app` at head
-`a50e06f3`, with `PATH="$HOME/.local/share/nvm/v26.5.0/bin:$PATH"` (Node
-v26.5.0). No number in this plan was reasoned to.
+Everything below was executed in
+`/Users/james/projects/github/jamesawesome/Ergomatic-wt-door-b/app` with
+`PATH="$HOME/.local/share/nvm/v26.5.0/bin:$PATH"` (Node v26.5.0). **Each pass
+names its own head** — the wire facts and passes 1-2 at `a50e06f3`/`89a534f1`,
+the lens-2 pass at `5eff6078`. No number in this plan was reasoned to.
 
 **Wire facts, decoded with this repo's own `parseRecording` +
 `domain/monitor/pm5/parse.ts` through a throwaway `pnpm exec tsx` script
@@ -2064,6 +2473,55 @@ f1 76 55 18 01 00 01 01 08 17 01 00 03 05 00 00 00 17 70 04
 which match the recorded tx seq 15–19 **exactly, checksum `1c` included**, in
 both captures. (`targetSplit: 152` was found by bisection: the recorded
 `3b 60` = 15200 = 152 × 100; `120` produces `2e e0`.)
+
+**The paste test, pass 3 (after the harden LENS 2 fold), run 2026-09-02 at
+`5eff6078`.** Every block this fold CHANGED was extracted to its real path in
+this worktree — `monitorRun.ts`'s `partial` field, `PARTIAL_WRITE_REASONS`,
+`withPartial` and `partialRefusal`; the two `LogStep` key pairs;
+`summaryModel.ts`'s `partialRowLabel`; and in `useMonitorSession.ts` the two
+refs, `noteFrameForPartial` with its dedupe record, both mint call sites, all
+six clear sites, the accepted-actual clear, and both close sites' read plus
+ring records — and the repo's own gates run over the result:
+
+- `pnpm typecheck` — **PASS** (`E2E TypeScript membership: 19/19`).
+- `pnpm lint` — **PASS**, clean, no new suppressions. **One measured
+  requirement:** without `noteFrameForPartial` in `handleFrame`'s dependency
+  array, `eslint` emits
+  `react-hooks/exhaustive-deps ... missing dependency: 'noteFrameForPartial'`
+  — so Task 2 step 4's "add it to the dependency array" is a gate, not a
+  style note.
+- `pnpm format:check` — **PASS**. No new Prettier facts: the prescribed blocks
+  need no re-wrapping, and the only warning this pass produced was a
+  mis-indented paste at the `connect()` site, not a property of the text.
+- `pnpm test --project unit` — **`Test Files 58 passed (58)`,
+  `Tests 1792 passed | 1 skipped (1793)`**.
+- `pnpm test --project client` — **`Test Files 171 passed (171)`,
+  `Tests 4695 passed (4695)`.** Fully green, which is the expected result for
+  this fold: it adds no user-visible copy (Task 6, the only reddening task, was
+  not part of this pass).
+
+**Measured on the pasted tree, with a throwaway `pnpm exec tsx` script:**
+
+| Input | `partialRowLabel` output |
+| --- | --- |
+| `{196.6, 59.74}`, `seconds: 60` | **`1:00 · 197 m`** — harden lens 2, finding 6. `fmtDuration` rounds (`splitParts` does `Math.round(minutes * 60)`), so a partial can read exactly like a completed interval against its own `1:00` target |
+| `{0, 0}`, `seconds: undefined` | **`0 m · 0:00`** — the zero mint, Finding 6's ruling |
+| `{0, 0}`, `seconds: 60` | `0:00 · 0 m` |
+| `{250, 63}`, `seconds: undefined` | `250 m · 1:03` (Gate 0-B (a), unchanged) |
+| `{480, 130}`, `seconds: 180` | `2:10 · 480 m` (Gate 0-B (b), unchanged) |
+
+**The allowlist finding, PROBED not argued.** The same script drove
+`withPartial` and `partialRefusal` over all six close reasons × three reading
+states (18 rows). With the folded allowlist gate: **0 disagreements**, and
+`interrupted` refuses in all three rows. With the gate reverted to the ORIGINAL
+`if (endedBy === "finished") return run;`: the `interrupted` + live-reading row
+flips to **`wrote=true`** — the negation banks a partial on the one close §5.3
+says writes none. That single row is the whole of finding 1, and it is also
+M1.4's expected failure.
+
+Every touched source file was then restored from a pre-edit copy taken before
+the pass began; `git checkout` was not used anywhere (RF22), and
+`git status --porcelain` shows only this plan file and the ledger.
 
 **The paste test, pass 2 (after the harden fold), run 2026-09-02 at
 `89a534f1`.** Every prescribed implementation block in Tasks 0–6 plus Task 0

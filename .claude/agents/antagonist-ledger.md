@@ -6563,3 +6563,17 @@ plan's own tools and never with the REPO's.
   ask which FILE the symbol is declared in; if the answer is two, grep the repo
   for a test that already crosses that boundary before believing it cannot be
   crossed.**
+- **2026-09-02, PR B's PLAN (harden lens 2, the prescribed code read as code):
+  settle "does the pnpm-swallows-flags footgun apply to THIS flag?" with a
+  deliberately invalid flag, not by reasoning from the documented case.**
+  `pnpm test --project unit --reporter=totally-bogus-reporter` errors inside
+  vitest if pnpm forwarded it and passes silently if it did not — one bounded
+  command, no full suite. Used to clear Task 6's `-u` invocation. The sibling
+  technique on the same pass: **for any ref whose clear sites are listed "by
+  symbol", read each site's PHASE GUARD before writing its leg** — three of
+  PR B's four "gated" sites turned out unreachable in the only phase the ref
+  can be non-null, which no amount of symbol-matching would have shown. And
+  the class-1 catch: a write gate written as a NEGATION over a type the same
+  plan WIDENED (`CloseReason | "interrupted"`) admitted the member the spec
+  says writes none — "allowlists, never negations" applies to the guard on the
+  producer, not only to the render.
