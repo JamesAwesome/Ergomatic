@@ -8,9 +8,10 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     // v0.36.0 (2026-09-03): range v0.35.0..main RE-ACCOUNTED at AUD-011/015's
     // own PR-open head per RF15 (`git log v0.35.0..origin/main --oneline`,
     // NO `--merges` — main is squash-merged and that form returns empty).
-    // Seven merges in range now (was five when this entry was first
-    // written at door PR B's head; #278 landed after and was missing until
-    // this pass):
+    // EIGHT merges in range now (was five when this entry was first
+    // written at door PR B's head; #278 and #280 both landed after, and
+    // #280 was still missing after the pass that caught #278 — the
+    // whole-branch review of THIS PR found it):
     //   #276 door PR A — item 3 (the chip, the count, and the stored
     //     no-reading word). It made v0.24.0's item-4 promise concrete
     //     ("from the next release on"); this is that release, so the
@@ -22,6 +23,11 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     //   #277 (Wave E PR1.75b, the native half of the Concept2 activation
     //     shape): dark by its own fold — no surface reaches it until
     //     PR2, and its own memory line says no tag until then.
+    //   #280 (the 2026-09-03 resume-edge walk): a walk record, a ROADMAP
+    //     closure, a spec line and one narrowed comment in `domain/`.
+    //     Nothing a rower can see, so no item is owed — named here because
+    //     this file's convention is that every merge in range is
+    //     accounted, with its reason, not silently dropped.
     //   #278 (JR item 2, walk-gated 2026-09-03) — item 5: Connect now
     //     actually programs the erg for a Just Row session instead of
     //     doing nothing, and the Ready line changed with it.
