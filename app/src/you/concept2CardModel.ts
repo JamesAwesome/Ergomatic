@@ -6,9 +6,16 @@ import type { Concept2Link } from "../api/useConcept2Link";
 export const FAILED_LINE =
   "The connection didn't complete. Nothing was linked.";
 
+/** `reason` is a plain `string`, not `string | null`. Every member that
+ *  `describeFailure` answers with a `LinkFailure` at all carries a REASON in
+ *  the Gate 0 amendment's outcome table; the members whose REASON column
+ *  reads em-dash are exactly the ones that answer `null` for the WHOLE
+ *  object, and the card renders no panel for them. A nullable `reason` would
+ *  be a second, unreachable way to say "no detail" that no caller could
+ *  observe and no test could cover (review F6). */
 export interface LinkFailure {
   line: string;
-  reason: string | null;
+  reason: string;
 }
 
 /** Gate 0 amendment 1c. Same order the Linked callback page uses

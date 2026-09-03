@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 
 /** The client's own view of `GET /api/concept2/link`
@@ -33,6 +33,13 @@ export interface Concept2Link {
   logbookBaseUrl: string | null;
 }
 
+/** The answer for "this deployment has no Concept2" — amendment 1h, which
+ *  renders NOTHING at all. It is also what a body we cannot read degrades
+ *  to, so a corruption here does not fail loudly: flipping `available` to
+ *  `true` would put the whole Concept2 card on a flag-off deployment, and
+ *  the only consumer that can catch it is a test asserting all six fields
+ *  as literals (review F2 — `useConcept2Link.test.ts`'s
+ *  "LINK_UNAVAILABLE is the flag-off answer"). */
 export const LINK_UNAVAILABLE: Concept2Link = {
   available: false,
   linked: false,
@@ -116,11 +123,24 @@ export interface LinkReadFailure {
  * genuinely carried. Letting it fall to the outer `.catch` would print
  * REASON: NO CONNECTION over a request that plainly connected.
  *
- * `failed` exists because a dropped request must not leave a stale `link`
- * on screen reading as a state nobody observed. It is NOT the same thing
- * as `available: false`: the server saying "this deployment has no
- * Concept2" is a capability answer and renders nothing, while a read that
- * failed is a fault the rower can retry (Gate 0 amendment 1h vs 1i).
+ * `failed` and `link` are INDEPENDENT, and a failed re-read deliberately
+ * leaves the last good `link` in place rather than clearing it. Amendment
+ * 1i owns that rule: it draws a failed read as its own panel
+ * (COULDN'T READ CONCEPT2, a REASON line, a Retry) and the card branches on
+ * `failed` BEFORE it renders any link state, so a retained `link` is never
+ * on screen while `failed` is set. Clearing it would throw away the only
+ * thing a successful Retry can restore, and would make a transient 502 look
+ * like an unlink. `failed` is also NOT the same thing as `available: false`:
+ * the server saying "this deployment has no Concept2" is a capability answer
+ * and renders nothing (1h), while a read that failed is a fault the rower
+ * can retry (1i).
+ *
+ * A newer read always wins, whatever order the answers arrive in. Foreground
+ * can fire `pageshow` and `visibilitychange` back to back, so two reads are
+ * genuinely in flight at once; without the generation ref below, the SLOWER
+ * of them applies last and a stale answer overwrites a fresh one (review
+ * F7). The ref is bumped at the START of every request and each response
+ * checks it is still the newest before touching state.
  *
  * `pageshow` and `visibilitychange` (invariant I5, observation 19): the
  * web arm's `startLink` unloads the document, and the rower comes back by
@@ -138,30 +158,44 @@ export function useConcept2Link(): {
 } {
   const [link, setLink] = useState<Concept2Link | null>(null);
   const [failed, setFailed] = useState<LinkReadFailure | null>(null);
+  /** Monotonic per-request token. A ref, not state: bumping it must not
+   *  re-render, and every read has to see the value the PREVIOUS read wrote
+   *  in the same tick. Lifetime: minted once per hook instance at mount,
+   *  incremented once per `reload()` call, never reset — a re-arm after a
+   *  failure is just another increment, and unmount discards it with the
+   *  component. Nothing outside this hook can read or write it. */
+  const generation = useRef(0);
 
-  const reload = useCallback(
-    () =>
-      api("/api/concept2/link")
-        .then(async (res) => {
-          if (!res.ok) {
-            setFailed({ status: res.status });
-            return;
-          }
-          let body: unknown;
-          try {
-            body = (await res.json()) as unknown;
-          } catch {
-            setFailed({ status: res.status });
-            return;
-          }
-          setLink(normalizeLink(body));
-          setFailed(null);
-        })
-        .catch(() => {
-          setFailed({ status: null });
-        }),
-    [],
-  );
+  const reload = useCallback(() => {
+    const mine = ++generation.current;
+    const superseded = () => mine !== generation.current;
+    return api("/api/concept2/link")
+      .then(async (res) => {
+        if (superseded()) return;
+        if (!res.ok) {
+          setFailed({ status: res.status });
+          return;
+        }
+        let body: unknown;
+        try {
+          body = (await res.json()) as unknown;
+        } catch {
+          if (superseded()) return;
+          setFailed({ status: res.status });
+          return;
+        }
+        // Re-checked AFTER the body await as well as before it: `res.json()`
+        // settles on a later task, and a foreground burst can start a newer
+        // read inside that window.
+        if (superseded()) return;
+        setLink(normalizeLink(body));
+        setFailed(null);
+      })
+      .catch(() => {
+        if (superseded()) return;
+        setFailed({ status: null });
+      });
+  }, []);
 
   useEffect(() => {
     void reload();

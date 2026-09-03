@@ -38,6 +38,25 @@ afterEach(() => {
   }
 });
 
+describe("LINK_UNAVAILABLE (the flag-off answer, amendment 1h)", () => {
+  it("is all six fields spelled out, so a corrupted one cannot pass silently", () => {
+    // Review F2: `available` could be flipped to `true` with 27 tests green,
+    // because every assertion about it was written as
+    // `toStrictEqual(LINK_UNAVAILABLE)` — the symbol comparing to itself. A
+    // corrupted constant would render the whole Concept2 card on a
+    // deployment where the feature is switched OFF. Nothing else in the repo
+    // imports this constant, so this literal is the only gate it has.
+    expect(LINK_UNAVAILABLE).toStrictEqual({
+      available: false,
+      linked: false,
+      c2UserId: null,
+      c2Username: null,
+      needsReauth: false,
+      logbookBaseUrl: null,
+    });
+  });
+});
+
 describe("normalizeLink (GET /api/concept2/link's three response shapes)", () => {
   it("reads a flag-off 200 as unavailable, never as unlinked", () => {
     // `routes/concept2.ts`'s `if (!available())` arm answers
@@ -45,14 +64,29 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
     // matrix's one non-403 row) — this is a capability read, not an
     // action"), so a flag-off server would otherwise read exactly like an
     // unlinked one. `Concept2LinkProbe.tsx` names the same trap.
-    expect(normalizeLink({ available: false })).toStrictEqual(LINK_UNAVAILABLE);
+    //
+    // The expectation is an object LITERAL, not `LINK_UNAVAILABLE` (F2):
+    // comparing the function's output to the constant it returns proves the
+    // two agree, never that either is right.
+    expect(normalizeLink({ available: false })).toStrictEqual({
+      available: false,
+      linked: false,
+      c2UserId: null,
+      c2Username: null,
+      needsReauth: false,
+      logbookBaseUrl: null,
+    });
   });
 
   it("reads available-but-unlinked", () => {
-    const link = normalizeLink({ available: true, linked: false });
-    expect(link.available).toBe(true);
-    expect(link.linked).toBe(false);
-    expect(link.c2UserId).toBeNull();
+    expect(normalizeLink({ available: true, linked: false })).toStrictEqual({
+      available: true,
+      linked: false,
+      c2UserId: null,
+      c2Username: null,
+      needsReauth: false,
+      logbookBaseUrl: null,
+    });
   });
 
   it("reads the full linked shape", () => {
@@ -141,12 +175,47 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
   });
 
   it("reads a non-object body as unavailable", () => {
-    expect(normalizeLink(null)).toStrictEqual(LINK_UNAVAILABLE);
-    expect(normalizeLink("nope")).toStrictEqual(LINK_UNAVAILABLE);
+    // Literals again, not the constant (F2).
+    const unavailable = {
+      available: false,
+      linked: false,
+      c2UserId: null,
+      c2Username: null,
+      needsReauth: false,
+      logbookBaseUrl: null,
+    };
+    expect(normalizeLink(null)).toStrictEqual(unavailable);
+    expect(normalizeLink("nope")).toStrictEqual(unavailable);
   });
 });
 
 describe("useConcept2Link read failures (Gate 0 amendment 1i)", () => {
+  // The three `expect(result.current.link).toBeNull()` assertions below are
+  // COLD-START assertions and nothing more: the hook has never had a link, so
+  // `null` is the initial value, not a consequence of the failure. They are
+  // kept because a cold-start failure is a real state the card draws, but the
+  // contract that a failure does not DESTROY a link lives in its own test at
+  // the end of this block (review F3).
+
+  it("reads the route the server actually serves", async () => {
+    // Nothing else in this file looks at the path — the mock answers any
+    // argument — so a typo in `api("/api/concept2/link")` would ship with
+    // every one of these tests green. Same shape as F2's finding, one
+    // constant over.
+    const api = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ available: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    renderHook(() => useConcept2Link());
+    await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
+    expect(api).toHaveBeenCalledWith("/api/concept2/link");
+  });
+
   it("reports the STATUS of a refused read, so the card can print a discriminator", async () => {
     // `api()` resolves on any status (`src/api.ts` — it does not throw on
     // non-2xx), so a 502 arrives as a normal resolution and has to be
@@ -231,6 +300,146 @@ describe("useConcept2Link read failures (Gate 0 amendment 1i)", () => {
     });
     expect(result.current.failed).toBeNull();
     expect(result.current.link?.available).toBe(true);
+  });
+
+  it("KEEPS the last good link when a later read fails, and sets `failed` beside it", async () => {
+    // Review F3, and the contract the three cold-start assertions above
+    // cannot reach: they all start from `link === null`, so they would pass
+    // against a hook that cleared `link` on every failure AND against one
+    // that never touched it.
+    //
+    // Amendment 1i is the owner of this rule. A failed read is drawn as its
+    // own panel (COULDN'T READ CONCEPT2 + a REASON + Retry) and the card
+    // branches on `failed` before it renders any link state, so the retained
+    // link is never on screen while `failed` is set. Clearing it would throw
+    // away the only thing a successful Retry restores, and a transient 502
+    // would read to the rower as an unlink.
+    let ok = true;
+    const api = vi.fn(async () =>
+      ok
+        ? new Response(
+            JSON.stringify({ available: true, linked: true, c2UserId: 2211 }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          )
+        : new Response("gone", { status: 502 }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    await waitFor(() => expect(result.current.link).not.toBeNull());
+    expect(result.current.link?.c2UserId).toBe(2211);
+
+    ok = false;
+    await act(async () => {
+      await result.current.reload();
+    });
+    expect(result.current.failed?.status).toBe(502);
+    expect(result.current.link?.linked).toBe(true);
+    expect(result.current.link?.c2UserId).toBe(2211);
+  });
+});
+
+describe("useConcept2Link: a newer read always wins (review F7)", () => {
+  it("drops a stale response that lands after a newer one, rather than overwriting it", async () => {
+    // Foreground can fire `pageshow` and `visibilitychange` back to back, so
+    // two reads are genuinely in flight at once and the network decides the
+    // order they answer in. Without the generation ref, the SLOWER answer
+    // applies last: here the older read is a 502, so the card would show
+    // COULDN'T READ over a link the newer read had already confirmed.
+    //
+    // Deterministic, not raced (RF21's concurrency corollary): the responses
+    // are held in an array and released BY HAND, newest first.
+    const releases: ((res: Response) => void)[] = [];
+    const api = vi.fn(
+      async () =>
+        new Promise<Response>((resolve) => {
+          releases.push(resolve);
+        }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    await waitFor(() => expect(releases).toHaveLength(1));
+
+    // A second read starts while the first is still unanswered.
+    let second: Promise<void>;
+    await act(async () => {
+      second = result.current.reload();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(releases).toHaveLength(2));
+
+    // The NEWER read answers first, with the truth.
+    await act(async () => {
+      releases[1]!(
+        new Response(
+          JSON.stringify({ available: true, linked: true, c2UserId: 2211 }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      await second;
+    });
+    expect(result.current.link?.c2UserId).toBe(2211);
+    expect(result.current.failed).toBeNull();
+
+    // The OLDER read answers late, with a failure. It must be discarded.
+    await act(async () => {
+      releases[0]!(new Response("gone", { status: 502 }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.failed).toBeNull();
+    expect(result.current.link?.c2UserId).toBe(2211);
+  });
+
+  it("drops a stale SUCCESS too, not only a stale failure", async () => {
+    // The same guard from the other side: an older read whose body parses
+    // fine must not overwrite a newer answer either. This is the arm that
+    // needs the second `superseded()` check, the one AFTER `res.json()`
+    // settles.
+    const releases: ((res: Response) => void)[] = [];
+    const api = vi.fn(
+      async () =>
+        new Promise<Response>((resolve) => {
+          releases.push(resolve);
+        }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    await waitFor(() => expect(releases).toHaveLength(1));
+
+    let second: Promise<void>;
+    await act(async () => {
+      second = result.current.reload();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(releases).toHaveLength(2));
+
+    await act(async () => {
+      releases[1]!(
+        new Response(JSON.stringify({ available: true, linked: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      await second;
+    });
+    expect(result.current.link?.linked).toBe(false);
+
+    // The older read says LINKED. It is stale, and must not be applied.
+    await act(async () => {
+      releases[0]!(
+        new Response(
+          JSON.stringify({ available: true, linked: true, c2UserId: 999 }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.link?.linked).toBe(false);
+    expect(result.current.link?.c2UserId).toBeNull();
   });
 });
 
