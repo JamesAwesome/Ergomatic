@@ -4072,8 +4072,7 @@ export default function Concept2Card({ email }: { email: string }) {
 
       {link.linked && !link.needsReauth && !armed && (
         <p className="c2-card-helper">
-          Finished monitor rows can be sent from the log. Send state shows on
-          each row.
+          Finished monitor rows can be sent from the log.
         </p>
       )}
 
@@ -4161,8 +4160,7 @@ export default function Concept2Card({ email }: { email: string }) {
       {!link.linked && !opening && !updateRequired && failure === null && (
         <>
           <p className="c2-card-explain">
-            Sends finished monitor rows to your Concept2 logbook. Manual, per
-            row, from the log.
+            Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.
           </p>
           <hr className="c2-card-hair" />
           {/* Ruling (i): nothing is asked here. The hairline still marks
@@ -4188,7 +4186,7 @@ export default function Concept2Card({ email }: { email: string }) {
             CONNECT TO CONCEPT2
           </button>
           <p className="c2-card-foot">
-            OPENS CONCEPT2 IN YOUR BROWSER &middot; YOU COME BACK HERE
+            OPENS CONCEPT2 IN YOUR BROWSER
           </p>
         </>
       )}
@@ -4903,17 +4901,17 @@ function field(body: unknown, key: string): unknown {
  *  control opens the PROFILE and copy must never name a destination its
  *  control cannot reach. */
 const NO_WEIGHT_SET = {
-  line: "Concept2 needs a weight class on every result, and your Concept2 profile has no weight set. Set it there, then send this row again.",
+  line: "Concept2 needs a weight class. Your Concept2 profile has no weight set.",
   reason: "SET YOUR WEIGHT ON CONCEPT2",
 };
 
 const WEIGHT_UNREADABLE = {
-  line: "Concept2 needs a weight class on every result, and we couldn't read the weight on your Concept2 profile. Open Concept2 to check it, then send this row again.",
+  line: "Concept2 needs a weight class. We couldn't read the weight on your Concept2 profile.",
   reason: "COULDN'T READ YOUR CONCEPT2 WEIGHT",
 };
 
 const CLASS_UNDERIVABLE = {
-  line: "Concept2 needs a weight class on every result, and we couldn't work one out from your Concept2 profile. Open Concept2 to check it, then send this row again.",
+  line: "Concept2 needs a weight class. We couldn't work one out from your Concept2 profile.",
   reason: "COULDN'T GET A CLASS FROM CONCEPT2",
 };
 
@@ -5698,8 +5696,13 @@ describe("Concept2SendBlock stored sent state (spec anchor F8)", () => {
     // rolling deploy is the named case. Gating the id on the BUTTON's
     // condition made a SENT row render "Accepted by Concept2." and nothing
     // else: no id, no link, and no way for a tester to say which row
-    // landed. The sub-line also drops its "OPENS YOUR CONCEPT2 LOGBOOK"
-    // half, which would name a destination that is not on screen.
+    // landed. The id line reads the same in both frames now that the copy
+    // is mechanical, so the button's ABSENCE is the only difference — which
+    // is why the id and the button are asserted separately rather than
+    // through one combined string. An earlier revision also asserted that
+    // the sub-line dropped an "OPENS YOUR CONCEPT2 LOGBOOK" half; that half
+    // no longer exists in either frame, so that assertion could not fail
+    // and is deleted rather than kept for the coverage (RF21).
     mockApi({ link: { ...LINKED, logbookBaseUrl: null } });
     await renderBlock(eligibleRow({ c2ResultId: 339, c2UserId: 2211 }));
     expect(await screen.findByText("Accepted by Concept2.")).toBeTruthy();
@@ -5707,7 +5710,6 @@ describe("Concept2SendBlock stored sent state (spec anchor F8)", () => {
     expect(
       screen.queryByRole("button", { name: "View on Concept2 →" }),
     ).toBeNull();
-    expect(screen.queryByText(/OPENS YOUR CONCEPT2 LOGBOOK/)).toBeNull();
   });
 
   it("renders the OFFER for a row accepted by a DIFFERENT account", async () => {
@@ -6159,8 +6161,7 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
           the row and renders SENT above instead. */}
       {state === "duplicate" && (
         <p className="c2-send-line">
-          Concept2 already has this row: same date, time and distance. Nothing
-          changed.
+          Concept2 already has this row: same date, time and distance.
         </p>
       )}
 
@@ -6192,7 +6193,7 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
       {resultId !== null && (
         <p className="c2-send-foot">
           {url !== null ? (
-            <>RESULT {resultId} &middot; OPENS YOUR CONCEPT2 LOGBOOK</>
+            <>RESULT {resultId}</>
           ) : (
             <>RESULT {resultId}</>
           )}
@@ -6218,8 +6219,7 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
 
       {state === "reauth" && (
         <p className="c2-send-line">
-          Concept2 stopped accepting this link. Reconnect on the You tab, then
-          send this row again.
+          Concept2 stopped accepting this link. Reconnect on the You tab.
         </p>
       )}
 
@@ -6271,7 +6271,7 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
       {state === "failed" && send.kind === "failed" && (
         <>
           <p className="c2-send-line">
-            The send didn&apos;t reach Concept2. This row is unchanged.
+            The send didn&apos;t reach Concept2.
           </p>
           <p className="c2-send-reason">REASON: {send.reason}</p>
           <button

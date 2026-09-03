@@ -60,6 +60,15 @@ gate-approved (Gate 0, James, 2026-08-31). Recreate pixel-perfectly with the
 app's existing card idiom. All user-facing copy is approved as rendered: do
 not rewrite it.
 
+**Copy exception, James 2026-09-03 (amendment change 11):** "check the prose
+and make it a bit more mechanical." Every rendered string now says what is
+true, once, and drops any second clause that reassured the rower or restated
+a control already on screen. So "OPENS CONCEPT2 IN YOUR BROWSER · YOU COME
+BACK HERE" became "OPENS CONCEPT2 IN YOUR BROWSER", the id line became
+"RESULT 339", and the send failure became "The send didn't reach Concept2."
+`amendment-2026-09-03.html` is the authority for the current strings; where
+this file still quotes an older one, the amendment wins.
+
 ## Approved amendments (reflected in the board)
 
 - **~~Weight class ask is CONDITIONAL~~ — WITHDRAWN, and its open
@@ -123,25 +132,21 @@ label `CONCEPT2` (11px, 600, letter-spacing 0.16em, `#1b1a17`) left; mono
 status right (11px, letter-spacing 0.12em: muted `#6f6a5f` for NOT LINKED /
 WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
 
-- **1a Unlinked** (in situ on You, 390×844): explainer "Sends finished
-  monitor rows to your Concept2 logbook. Manual, per row, from the log." ·
+- **1a Unlinked** (in situ on You, 390×844): explainer "Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log." ·
   hairline `#ded8c9` · **[WITHDRAWN 2026-09-03: the WEIGHT CLASS section,
   its 2-column segmented control, its "Concept2 requires a weight class.
   Asked once, at connect." ask, its 61.5/75 kg helper, and the dimmed-
   Connect-until-picked rule are all GONE. The ruling removed the question,
   so the control, its explanation and the state it gated no longer exist.
-  In their place: one helper line, "Your weight class comes from your
-  Concept2 profile." (12px `#57544c`).]** · primary CONNECT TO CONCEPT2
+  In their place: one helper line, "Your weight class comes from Concept2." (12px `#57544c`).]** · primary CONNECT TO CONCEPT2
   button (48px, `#1b1a17` fill, `#fffdf7` mono 12px 600 0.16em), **live on
-  first paint** · footnote "OPENS CONCEPT2 IN YOUR BROWSER · YOU COME BACK
-  HERE" (11px mono `#6f6a5f`, centered).
+  first paint** · footnote "OPENS CONCEPT2 IN YOUR BROWSER" (11px mono `#6f6a5f`, centered).
 - **1b Waiting / just returned**: sunken panel (`#efeade`,
   `1px solid #d8d3c4`, 12px 14px padding) — WAITING FOR CONCEPT2: "Approve
   access in the browser. On return, this card confirms the link." + Cancel
   button (44px, outline `1px solid #1b1a17`). Just-returned variant:
   CONFIRMING THE LINK: "Checking the link with Concept2." (no Cancel).
-- **1c Linked**: LINKED ✓ status; helper "Finished monitor rows can be sent
-  from the log. Send state shows on each row." (12px `#57544c`); hairline;
+- **1c Linked**: LINKED ✓ status; helper "Finished monitor rows can be sent from the log." (12px `#57544c`); hairline;
   **Unlink Concept2** button (52px, outline `1px solid #b5341f`, text
   `#b5341f` 16px 600). No weight class shown — and as of 2026-09-03 none
   exists to show, on this card or any other. **Gate 0 amendment,
@@ -181,15 +186,13 @@ card,
 - **2c Sent** (persists on the row): status SENT (`#1b1a17` 600); line
   "Accepted by Concept2 · Aug 27, 11:31" (13px `#3f3c35`); link-out
   **View on Concept2 →** (14px 600 `#b5341f`, 44px hit row); footnote
-  "RESULT 339 · OPENS YOUR CONCEPT2 LOGBOOK" (11px mono `#6f6a5f`). Store
+  "RESULT 339" (11px mono `#6f6a5f`). Store
   Concept2's result id on the row. The logbook is the rower's: a row
   deleted over there 404s and our record stands. Sent renders only when
   the row's Concept2 account matches the live link.
 - **2d Duplicate** (Concept2 rejected as matching): status ALREADY THERE;
-  "Concept2 already has this row: same date, time and distance. Nothing
-  changed."; link-out **Open your Concept2 logbook →**. No retry.
-- **2e Failed** (retryable): status SEND FAILED; "The send didn't reach
-  Concept2. This row is unchanged."; **Retry send** button (48px outline
+  "Concept2 already has this row: same date, time and distance."; link-out **Open your Concept2 logbook →**. No retry.
+- **2e Failed** (retryable): status SEND FAILED; "The send didn't reach Concept2."; **Retry send** button (48px outline
   `#1b1a17`).
 
 ### Landscape (3a-3b)
