@@ -422,6 +422,23 @@ ship a tester nothing, so they release alongside C rather than alone — two
 consecutive empty release notes is how the invisible-but-necessary wave gets
 skipped.
 
+**SLATE COMPLETE 2026-09-03.** All twelve items above are ticked; item 2
+(#278) was the last, and its walk found the connect latency that #283 then
+fixed.
+
+- [x] **Connect programs the erg sooner, and the free row waits for it
+      (#283, 2026-09-03).** Not a slate item: item 2's walk exposed it.
+      Every connect this app has ever made waited ~1.7-2.1 s between our
+      first CSAFE write and the PM5's ack, because `createPm5Driver`
+      enqueued ten native calls before the program write on the plugin's
+      single FIFO queue. The driver now defers its status subscriptions
+      until the first non-prepare sequence is acked. **Walked 2026-09-03**
+      (`docs/monitor/sessions/walk-2026-09-03-connect-sooner/`): free row
+      202 ms, programmed workout's erg screen 1799 ms against a prior
+      2700-2969 ms. Part 2 in the same PR: the free row waits for the
+      monitor like a workout does, with the Gate 0 "Starting your row"
+      card. **Spec** `docs/superpowers/specs/2026-09-03-connect-programs-sooner-design.md`.
+
 ---
 
 ## Wave F — Lifecycle: the app stops losing rows
