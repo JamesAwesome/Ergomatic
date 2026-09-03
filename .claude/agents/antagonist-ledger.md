@@ -5920,3 +5920,56 @@ same way.
   which field reports the display — and check whether the primary source
   names a command for it that the design silently skipped.** (James had
   already cut the claim from the copy before the pass landed.)
+
+## harden run, 2026-09-02 (Just Row: connect programs the erg — rev 2 → 4)
+
+- **A synchronous opener that fires a detached wire send inverts the ordering
+  the safe path depended on.** The spec argued its two `freeRow` opt-outs held
+  "throughout" the send; `grep -n freeRow driver.ts` returns exactly two guard
+  sites, and the run-CLOSING terminal branch has none — while the send's first
+  byte was `buildTerminate()`, now sent with a run OPEN. `program()` is safe
+  only by ordering (prepare before `activeRun` exists). **Technique: for any
+  newly detached send, list the state the send's own bytes drive the machine
+  INTO, then grep every reader of that state for the new opt-out — a guard
+  census is cheaper and more complete than reading the branches the spec
+  names.** (Fix: no prepare.)
+- **The fake could not go red on it, and its own doc says why:** it queues the
+  terminate reaction only for a RUNNING machine. **Technique: before believing
+  a prescribed gate, read the FAKE's trigger condition for the machine reaction
+  the defect needs.** (Fix: the fake reacts regardless of running state.)
+- **"Two senders, one ack slot" is answered by naming the distinguishing
+  VALUE** — the ack carries the command byte, the matcher never reads it, and
+  the timeout that would clean up a collision (`ackTimeout`) is not configured
+  in production. **Technique: find the identity field on the wire and check
+  whether the matcher reads it; then check whether the cleanup timeout is
+  CONFIGURED, not merely available.** (Fix: `programInFlight` across the
+  send; `terminate()` refuses meanwhile.)
+- **A fire-and-forget with a `finally` inherits the promise's liveness.** The
+  replay transport resolves writes and never acks; production sets no ack
+  timeout; so the flag cleared in `finally` would stay set for the driver's
+  life and END would be refused forever. **Technique: for any detached send,
+  ask which transport NEVER answers, then trace whether `finally` can run at
+  all.** (Fix: a named deadline races the send.)
+- **"X happens before Y returns" must be walked to the first `await`.**
+  `sendSequence` issues its write synchronously inside the caller, so the
+  prescribed "no write before return" assertion could never pass. **Technique:
+  before writing an ordering assertion, walk the async callee to its first
+  `await`; everything above it runs inside the caller.** (Fix: assert ring
+  order instead.)
+- **Enumerate the error CLASSES a catch receives by listing every `await` in
+  the callee**, not its `throw new` sites — the transport's plain rejection
+  carried no `hexTrace`, so the prescribed record would have said `undefined`.
+- **A gate on a detached effect must read the ring, not the flow:** nothing
+  on the connected flow branches on the send, so every UI assertion is blind
+  to it; the diagnostics door is the only e2e-visible witness.
+- **A "no state, only ring entries" design still has a lifetime:** the ring is
+  snapshotted BEFORE unsubscribe/disconnect, so a failure recorded after
+  teardown is unreachable. Stated in the spec; the walk does not rely on it.
+- **Attacked and NOT broken:** a stray 0x0039 from a terminated old workout
+  cannot be filed against the free row (`noteSummary` needs `lastIndex >= 0`;
+  `{intervals: []}` gives `-1`); the walk's type-0 control is readable on the
+  phone (the ring's `structure` entry carries the raw type); no
+  `UIBackgroundModes` in `Info.plist`, so a backgrounded send suspends rather
+  than half-writes; the arm effect cannot re-trigger (no log subscribers, and
+  re-entry hits `free-row-ignored`); the p.80 literal through `packPayload` is
+  one chunk, `f1 76 07 01 01 01 13 02 01 01 61 f2`.

@@ -1,10 +1,9 @@
 # Connect puts the erg into a Just Row session — design
 
-**Status: spec REV 3, 2026-09-02. Gate 0 PASSED on rev 1c (James: the
-Ready line is `The clock starts on your first stroke.`). No stored shape.
-Antagonist anchor pass folded (rev 2); `harden` lens 1 folded (rev 3 —
-the prepare step is GONE and the send holds `programInFlight`); lens 2
-next.**
+**Status: spec REV 4, 2026-09-02 — HARDENED (both lenses run, folded;
+one ledger entry). Gate 0 PASSED on rev 1c (James: the Ready line is
+`The clock starts on your first stroke.`). No stored shape. Ready for
+the plan to execute.**
 Phase JR follow-on item 2, re-confirmed by James 2026-09-02 ("i do want
 item 2"). Handoff: `docs/design/handoffs/2026-09-02-just-row-connect/`.
 
@@ -110,8 +109,20 @@ the machine did not take it.
    matcher is arrival-order only; it never reads the ack's command byte,
    and production configures no `ackTimeout`, so an orphaned slot never
    expires) — REFUSES with `ProgramBusyError` while it is set, exactly as
-   `program()` does. END during the ~one-frame send window is therefore a
-   no-op the rower retries, never a collided ack.
+   `program()` does. **The send is BOUNDED** (harden lens 2): production
+   configures no `ackTimeout`, and the replay transport (and a PM5 that
+   never answers) acks nothing, so an unbounded send would hold
+   `programInFlight` for the driver's life and refuse END forever. The
+   send races its ack against a deadline of `FREE_ROW_PROGRAM_DEADLINE_MS`
+   (a named literal, 3000 ms — three status ticks at the walk's measured
+   1 Hz, well past the ~90 ms ack seen on hardware); on the deadline the
+   send is abandoned, `free-row-program-unanswered` is recorded, and the
+   flag clears. What END does DURING the window is stated truthfully:
+   the hook's `endSession` flips to `ended` before awaiting
+   `driver.terminate()` and swallows its rejection, so an END inside the
+   window ends the app's row while the erg is not told — the same outcome
+   as an END over a lost link, bounded here to three seconds; the walk
+   confirms an END from the app after the window stops the PM5.
 
 ## Mechanism
 
@@ -123,8 +134,18 @@ the machine did not take it.
 2. `driver.ts` `beginFreeRow()` stays SYNCHRONOUS in everything the hook
    relies on: it opens `activeRun` (with `freeRow: true`, so both opt-outs
    hold throughout) and returns as today. It additionally FIRES a detached
-   send — `programInFlight = true; void sendSequence(buildJustRowProgram(), "free-row-program-sent").catch(log …).finally(() => { programInFlight = false; })`
-   — NO prepare, whose only effects are ring entries. No state, no promise surfaced, so
+   send — the sequence is BUILT before the flag is set, then
+   `programInFlight = true; void Promise.race([sendSequence(seq, "free-row-program-sent"), deadline(FREE_ROW_PROGRAM_DEADLINE_MS)]).then(onSettled, onFailed).finally(() => { programInFlight = false; })`
+   — NO prepare, whose only effects are ring entries. `onFailed` records
+   `free-row-program-failed` with `err instanceof ProgramRejectionError ?
+   err.hexTrace : String(err)` (the transport's own rejections — the
+   fake's "unexpected write" and `capacitorBle`'s post-disconnect throw —
+   are plain `Error`s with no `hexTrace`), never throws itself (a throwing
+   handler on a `void` chain is an unhandled rejection), and the deadline
+   branch records `free-row-program-unanswered`. `sendSequence` runs
+   synchronously to its first `await`, so the write is issued INSIDE
+   `beginFreeRow()` — after the run is open, which is the ordering that
+   matters. No state, no promise surfaced, so
    the hook's synchronous `ready` flip (`useMonitorSession.ts:4773-4775`,
    "one indivisible step") and `JustRow.tsx`'s once-latch are untouched
    and the arm effect cannot re-trigger. Every rejection, NAK, timeout and
@@ -132,8 +153,11 @@ the machine did not take it.
    hook's link-lost path.
 3. `JustRow.tsx`: the Ready body line becomes James's line. No branch.
 4. Fake transport: accepts the p.80 frame like a workout program (acks);
-   a scripted `nakJustRow` option answers a real NAK (`(status & 0x30) ===
-   0x10`, §19.1) so the failed-send ring entry has a producer. **And it
+   the NAK case rides the fake's EXISTING `failNextProgramFrame: "reject"`
+   hook (its own comment forbids "a second way to ASK for a reject"), so
+   no `nakJustRow` option. The fake keeps no write log — assertions read
+   the driver's own ring (`log.entries()` kind `write`, one entry per
+   chunk). **And it
    reacts to a TERMINATE with `synthesizeTerminated` regardless of whether
    its machine is running** — today it queues that reaction only for a
    running machine, which is why a prepare-at-the-menu defect could not
@@ -167,21 +191,33 @@ teardown-timed failure.
 1. `buildJustRowProgram()` through the real framer equals
    `F1 76 07 01 01 01 13 02 01 01 61 F2` (a literal, not derived from the
    constants).
-2. Driver on the fake transport: `beginFreeRow()` returns synchronously
-   with the run open and `phase` flipped BEFORE any byte is written
-   (asserted by ordering); ONLY the p.80 frame is written (no terminate —
-   asserted on the fake's write log) and `free-row-program-sent` is
-   logged; with `nakJustRow` the run is still open and
-   `free-row-program-failed` carries the hex trace; `terminate()` called
-   mid-send rejects with `ProgramBusyError` and the send's ack still
-   resolves the send; a mutation that re-adds `sendPrepare()` closes the
-   free row on the terminate-reacting fake (red); a mutation that drops
-   `programInFlight` lets the mid-send `terminate()` through (red).
-3. Replay over the 08-31 capture (observe-only; the capture carries no
-   acks): the free row still opens and completes exactly as today — the
-   send's failure is a ring entry, never a behaviour change (RF24).
+2. Driver on the fake transport: the ring's `free-row-open` entry precedes
+   its first `write` entry (ordering; mutation: move the send above the
+   `activeRun` assignment → red); the ring's `write` entries hold exactly
+   the p.80 frame and NO terminate — pinned against the terminate literal
+   `f1 76 04 13 02 01 02 60 f2` (the one `commands.test.ts` already uses);
+   `free-row-program-sent` is logged; with `failNextProgramFrame: "reject"`
+   the run is still open and `free-row-program-failed` carries the hex
+   trace; with `fake.delayWrites(50)` holding the write open, `terminate()`
+   rejects with `ProgramBusyError` and the send still completes (without
+   the guard `terminate()` RESOLVES today — the ack slot is overwritten
+   unchecked — so the assertion bites); with the ack withheld, the
+   deadline fires, `free-row-program-unanswered` is logged, and a
+   `terminate()` afterwards is accepted (mutation: remove the deadline →
+   red); a mutation that re-adds `sendPrepare()` closes the free row on
+   the terminate-reacting fake (red).
+3. Replay over the 08-31 capture (observe-only; the replay transport
+   resolves writes and never acks): the free row still opens and
+   completes exactly as today, the ring holds ONE `write` of the p.80
+   frame and, after the deadline, `free-row-program-unanswered` — and NO
+   `free-row-program-sent`/`-failed` (RF24; note `run()` cannot see an
+   unrecorded write, so this test's value is the ring, not the replay's
+   divergence check).
 4. Door: the body line reads James's line, verbatim; `Nothing is
-   programmed` appears nowhere (grep).
+   programmed` appears nowhere (grep). E2E on the fake: the connected
+   flow shows the line AND the diagnostics door (`/you/diagnostics/monitor-logs`)
+   lists `free-row-program-sent` for that session — the only place an
+   e2e can see a detached send (nothing on the flow branches on it).
 5. **Walk leg, with a CONTROL (the antagonist's shape, since pulling from
    the menu enters Just Row anyway and a terminate may leave the monitor
    at type 1):** (a) power-cycle the PM5 to a virgin main menu; the ring
