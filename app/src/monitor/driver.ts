@@ -2810,6 +2810,21 @@ export function createPm5Driver(
     // same defensive posture, and same reason, as the `?? "unknown"` on
     // `useMonitorSession.ts`'s `resume-first-frame` entry.
     const rawRowingState = frame.rawRowingState ?? null;
+    // `!rawRowingStateLogged` is UNREACHABLE today and is kept deliberately —
+    // recorded here rather than left for a reviewer to re-derive (RF21). A
+    // mutation dropping this disjunct leaves all three legs green, because
+    // `lastRawRowingState` starts `null` and every byte a real frame can
+    // carry differs from `null`, so the first frame records via the second
+    // disjunct anyway. It is not decoration: `MonitorFrame.rawRowingState` is
+    // OPTIONAL on the type, and a producer that omitted it would make
+    // `rawRowingState` null on frame one — at which point this disjunct is
+    // the only thing keeping I-2 ("a session that produced any frame records
+    // the byte at least once") true, and without it an absent entry would
+    // stop meaning "no instrument". Unreachable ONLY because
+    // `pm5/parse.ts`'s `toMonitorFrame` is the sole `MonitorFrame` producer
+    // and always sets the field from a required wire byte; if a bare
+    // producer is ever built, this is the guard that survives it and the
+    // test leg to add is a first frame with `rawRowingState: undefined`.
     if (!rawRowingStateLogged || rawRowingState !== lastRawRowingState) {
       const previous = rawRowingStateLogged
         ? (lastRawRowingState ?? "unknown")
