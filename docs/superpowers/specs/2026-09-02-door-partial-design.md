@@ -440,9 +440,14 @@ not "so far":** `endSession`'s `linkGone` includes frame silence, so the
 banked reading can be arbitrarily old. Gate 0-B approves that reading with
 that word, or the copy changes.
 
-**The pair is elapsed, not rowing time — and the residual is UNSETTLED**
-(PM final gate, 2026-09-03; this section originally stated it flat, on one
-citation, while the same file contradicts itself 55 lines apart).
+**The pair is elapsed, not rowing time — SETTLED 2026-09-03 by the
+resume-edge walk** (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`:
+with the rower still, elapsed ran 80.52 s → 92.11 s while distance sat at
+247.1 → 249.6 m). The residual the PM gate marked UNSETTLED is discharged
+in favour of this section's conclusion, on this device and this run: the
+clock runs through a mid-WORK stop, and `types.ts:134`'s freeze claim is
+true only of its own measured REST. The two citations below are kept
+because the discriminator between them is what the walk went to find.
 
 - `domain/monitor/types.ts:189-191`, the WIRE-DOC claim, tagged C4/H1:
   _"There is NO paused state on the wire — mid-workout the clock runs
