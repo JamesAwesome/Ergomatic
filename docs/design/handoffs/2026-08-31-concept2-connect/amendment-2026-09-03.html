@@ -1299,8 +1299,151 @@
       class survives (<code>server/routes/concept2.ts:545</code> returns it beside
       <code>needsReauth</code>), so the button mints straight from it. That is
       also the PII bound holding: exit criterion 3 says the flow carries exactly
-      one new attribute, asked once.
+      one new attribute, asked once. <strong>Except when there is nothing to
+      mint from</strong> &mdash; see 1k, immediately below.
     </p>
+
+    <h3>1k Needs re-auth, stored class unreadable <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      1f with one thing missing, and it is the thing RECONNECT mints from.
+      <code>normalizeLink</code> degrades any <code>weightClass</code> that is
+      not exactly <code>"H"</code> or <code>"L"</code> to <code>null</code> &mdash;
+      the empty string included, and any value a future server spells
+      differently. 1f as drawn above then renders CONCEPT2 STOPPED ACCEPTING
+      THIS LINK over a button that <strong>can never be pressed</strong>, with
+      no REASON line and no other route out that the copy offers. Every other
+      failure on this card carries a discriminator; this one carried none.
+    </p>
+    <p class="lede">
+      The fix asks the one question again, and only in this case. The chrome is
+      1f's, unchanged; the control is 1a's <code>OptionGroup</code>, unchanged;
+      one new line of copy sits between them. Ordinary reconnects still ask
+      nothing, so exit criterion 3's &quot;asked once&quot; holds for every
+      rower whose stored class is readable &mdash; which is all of them, until
+      one is not.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1k &middot; PORTRAIT &middot; nothing picked, RECONNECT inert</p>
+        <div class="frame">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link and weight class are kept. Reconnect to send rows
+                again.
+              </p>
+            </div>
+            <p class="wc-label">WEIGHT CLASS</p>
+            <p class="c2explain">
+              Your stored weight class couldn't be read. Pick it again to
+              reconnect.
+            </p>
+            <div class="wc-grid">
+              <div class="wc-opt">Heavyweight</div>
+              <div class="wc-opt">Lightweight</div>
+            </div>
+            <div class="btn-primary dim">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">1k &middot; PORTRAIT &middot; Heavyweight picked, RECONNECT live</p>
+        <div class="frame">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link and weight class are kept. Reconnect to send rows
+                again.
+              </p>
+            </div>
+            <p class="wc-label">WEIGHT CLASS</p>
+            <p class="c2explain">
+              Your stored weight class couldn't be read. Pick it again to
+              reconnect.
+            </p>
+            <div class="wc-grid">
+              <div class="wc-opt sel">Heavyweight</div>
+              <div class="wc-opt">Lightweight</div>
+            </div>
+            <div class="btn-primary">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide">1k &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div class="panel">
+                  <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+                  <p class="panel-line">
+                    Your link and weight class are kept. Reconnect to send rows
+                    again.
+                  </p>
+                </div>
+                <p class="c2explain">
+                  Your stored weight class couldn't be read. Pick it again to
+                  reconnect.
+                </p>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <p class="wc-label">WEIGHT CLASS</p>
+                <div class="wc-grid">
+                  <div class="wc-opt sel">Heavyweight</div>
+                  <div class="wc-opt">Lightweight</div>
+                </div>
+                <div class="btn-primary">RECONNECT CONCEPT2</div>
+                <div class="btn-danger">Unlink Concept2</div>
+              </div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>The one new sentence, and why it is not a REASON line.</strong>
+      &quot;Your stored weight class couldn't be read. Pick it again to
+      reconnect.&quot; sits where 1a's &quot;Concept2 requires a weight class.
+      Asked once, at connect.&quot; sits, in the same
+      <code>--ink</code>-on-<code>--surface</code> body size (17.11:1). It
+      explains the ask rather than reporting a fault: the rower has nothing to
+      retry and nothing to diagnose, and the panel above already carries the
+      failure. A mono REASON here would be a second failure line for one
+      failure.</p>
+    </div>
 
     <h3>1g Update required <span class="badge b-new">NEW STATE</span></h3>
     <p class="lede">
@@ -1801,6 +1944,75 @@
       Ergomatic with the row still on screen. The row is 44px tall.</p>
     </div>
 
+    <h3>2c-b Sent, with no link-out <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      The same SENT row, drawn on a deployment whose
+      <code>GET /api/concept2/link</code> carried no
+      <code>logbookBaseUrl</code> &mdash; an older image mid rolling deploy, or
+      an origin that arrived empty. The link-out cannot be built, and that part
+      is fine. What was NOT fine is that the result id was gated on the
+      link-out's own condition, so this row rendered
+      <strong>&quot;Accepted by Concept2.&quot; and nothing else</strong>: no
+      id, no link, and no way for a tester to say WHICH row landed.
+      Amendment change 4 removed the timestamp on the grounds that &quot;the
+      result id below is the durable evidence&quot; &mdash; so this was that
+      evidence disappearing.
+    </p>
+    <p class="lede">
+      The id now renders on its own condition. The sub-line drops its
+      &quot;OPENS YOUR CONCEPT2 LOGBOOK&quot; half in this frame, because that
+      half names a destination that is not on screen: <strong>RESULT 339</strong>
+      alone, same mono, same <code>--ink-4</code> (5.29:1 on
+      <code>--surface</code>).
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2c-b &middot; PORTRAIT &middot; beside 2c, for comparison</p>
+        <div class="frame">
+          <p class="board-cap">2c &middot; the ordinary case</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line">Accepted by Concept2.</p>
+            <div class="send-linkrow">View on Concept2 &rarr;</div>
+            <p class="c2foot" style="text-align: left">
+              RESULT 339 &middot; OPENS YOUR CONCEPT2 LOGBOOK
+            </p>
+          </div>
+          <p class="board-cap" style="margin-top: 16px">2c-b &middot; no origin from the server</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line">Accepted by Concept2.</p>
+            <p class="c2foot" style="text-align: left">RESULT 339</p>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">2c-b &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <div class="ghost short">HEROES &middot; INTERVALS &middot; MACHINE CONFIRMED &middot; TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line">Accepted by Concept2.</p>
+            <p class="c2foot" style="text-align: left">RESULT 339</p>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
     <h3>2d Duplicate <span class="badge b-changed">CHANGED</span></h3>
     <p class="lede">
       Body copy is the board's. The link-out changes from the generic "Open your
@@ -1956,13 +2168,103 @@
       <tr><td class="num">409 <code>duplicate</code></td><td>2d Already there</td><td>&mdash;</td></tr>
       <tr><td class="num">409 <code>needs_reauth</code></td><td>2f</td><td>&mdash;</td></tr>
       <tr><td class="num">409 <code>unlinked</code></td><td>block disappears (re-read the link; the rower unlinked in another tab)</td><td>&mdash;</td></tr>
-      <tr><td class="num">422 <code>not_eligible</code></td><td>block disappears (the client predicate and the server's disagree &mdash; the server wins)</td><td>&mdash;</td></tr>
+      <tr><td class="num">422 <code>not_eligible</code></td><td><strong>2h</strong> (the client predicate and the server's disagree &mdash; the server wins, and the rower is told so rather than watching the block vanish)</td><td>CONCEPT2 WON'T TAKE THIS ROW &middot; &lt;REASON&gt;</td></tr>
       <tr><td class="num">403 <code>unavailable</code></td><td>block disappears (flag flipped off mid-session)</td><td>&mdash;</td></tr>
       <tr><td class="num">502 <code>c2_error</code></td><td>2e</td><td>CONCEPT2 ERROR &middot; 502</td></tr>
       <tr><td class="num">400 <code>tz &hellip;</code></td><td>2e</td><td>COULDN'T READ THIS DEVICE'S TIME ZONE</td></tr>
       <tr><td class="num">404</td><td>2e</td><td>THIS ROW IS GONE</td></tr>
       <tr><td class="num">network throw</td><td>2e</td><td>NO CONNECTION</td></tr>
     </table>
+
+    <h3>2h Concept2 won't take this row <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      A <code>422 not_eligible</code>. The board and the table above folded
+      this in with <code>unlinked</code> and <code>unavailable</code> as
+      &quot;the block disappears&quot;, and for those two that is right: they
+      mean the block's own preconditions stopped holding &mdash; the rower
+      unlinked in another tab, or the flag went off &mdash; and there is
+      nothing to say and nothing to retry.
+    </p>
+    <p class="lede">
+      <strong>A 422 is a different fact.</strong> It means the client mirror of
+      the eligibility fence and the server's own copy answered
+      <em>differently about the same row</em> &mdash; the exact drift the
+      cross-tree seam test exists to detect. Drawn as absence, the rower taps
+      Send and watches a control that was there a second ago simply stop
+      existing, and the divergence is reported to nobody. It gets the 2e
+      chrome, the 2e copy, and a REASON that names what Concept2 objected to.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2h &middot; PORTRAIT &middot; two of the three server reasons</p>
+        <div class="frame">
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SEND FAILED</span>
+            </div>
+            <p class="send-line">
+              The send didn't reach Concept2. This row is unchanged.
+            </p>
+            <p class="panel-reason">
+              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NOT FINISHED
+            </p>
+            <div class="btn-outline">Retry send</div>
+          </div>
+          <div class="sendcard" style="margin-top: 14px">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SEND FAILED</span>
+            </div>
+            <p class="send-line">
+              The send didn't reach Concept2. This row is unchanged.
+            </p>
+            <p class="panel-reason">
+              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NO WORK TOTALS
+            </p>
+            <div class="btn-outline">Retry send</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">2h &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <div class="ghost short">HEROES &middot; INTERVALS &middot; MACHINE CONFIRMED &middot; TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SEND FAILED</span>
+            </div>
+            <p class="send-line">
+              The send didn't reach Concept2. This row is unchanged.
+            </p>
+            <p class="panel-reason">
+              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NOT MONITOR
+            </p>
+            <div class="btn-outline">Retry send</div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>The reason text is the server's own word, uppercased with its
+      underscores opened out.</strong> <code>eligibilityFailure</code> returns
+      exactly three: <code>not_monitor</code>, <code>not_finished</code>,
+      <code>no_work_totals</code> &mdash; rendered NOT MONITOR, NOT FINISHED,
+      NO WORK TOTALS. A 422 carrying no reason at all reads NOT ELIGIBLE.
+      Retry send stays, deliberately: a rower who sees this should be able to
+      try once and report what happened, and the divergence it reveals is a
+      bug on our side, not a state the rower caused.</p>
+      <p><strong>The table above is corrected in the same breath:</strong> its
+      <code>422 not_eligible</code> row now reads &quot;2h&quot; with the
+      REASON line, not &quot;block disappears&quot;.</p>
+    </div>
 
     <h3>2g Absent <span class="badge b-same">UNCHANGED</span></h3>
     <p class="lede">
@@ -2257,7 +2559,19 @@
       <li>Ruling (iii): the reworded 401/403 callback lines (§3).</li>
       <li>The new states: 1f needs-reauth, 1g update-required, 1h unavailable,
         <strong>1i the read failed</strong>, <strong>1j the unlink was
-        refused</strong>, 2f row-level reconnect, and the REASON lines.</li>
+        refused</strong>, <strong>1k needs-reauth with an unreadable stored
+        class</strong>, 2f row-level reconnect, <strong>2c-b sent with no
+        link-out</strong>, <strong>2h Concept2 won't take this row</strong>,
+        and the REASON lines.</li>
+      <li><strong>The three states added 2026-09-03, each because the state is
+        REACHABLE and the earlier drawing of it was wrong rather than
+        missing:</strong> 1k replaces a RECONNECT button that could never be
+        pressed; 2c-b replaces a SENT row that showed no result id at all when
+        the server sent no logbook origin; 2h replaces a block that vanished
+        under the rower's finger when the two eligibility predicates
+        disagreed. Each one costs a line of copy or a control that already
+        exists elsewhere on the same card &mdash; none introduces a new
+        idiom.</li>
       <li><strong>1h's split into 1h and 1i specifically</strong> &mdash; an
         earlier revision drew a refused read as absence, and separating them is
         the one change on this page that alters what a rower is TOLD rather than

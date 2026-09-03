@@ -6518,3 +6518,58 @@ plan's own tools and never with the REPO's.
   non-2xx; the `busy` widening against the contract census (it parses case
   LABELS, not returns); the measured logbook origin; and every REASON string
   present in the Gate 0 amendment.
+
+#### Lens 2 techniques (the same engagement, code-reader lens)
+
+- **A gate can pin the wrong reader.** `webauth-contract.test.ts` holds the
+  `GET /link` response equal to the DEV PROBE's interface, which no rower sees;
+  the product reader is `normalizeLink`, and every test that touched it either
+  hand-built the body or CAST the route's. Believed because the gate exists and
+  is green. Settled by asking, of each gate, WHICH consumer it compares against
+  — then renaming a key and watching the whole suite stay green while the card
+  would render `account #2211` forever.
+- **A fix that re-reads the wrong state.** The bfcache fix re-read the LINK,
+  but the frozen panel is drawn from the ATTEMPT (`outcome`/`busy`), so it fixed
+  only the case where the link succeeded and left the DECLINED case frozen
+  exactly as before. Believed because the observation and the fix both said
+  "re-read on restore". Settled by reading the JSX predicate that draws the
+  stuck panel and asking which state it actually keys on.
+- **An absent/empty/valued rule applied to one field and not its neighbour.**
+  The plan WROTE the rule for `c2Username` and left `logbookBaseUrl` guarded on
+  `typeof` alone, with `??` on the server env read — an empty origin builds a
+  RELATIVE url that opens on our own domain. Settled by running the plan's own
+  stated rule over every vendor string in the same response, mechanically, as a
+  table.
+- **A conjunction that hides one of its conjuncts.** The result id rendered
+  inside `url !== null && resultId !== null`, so the deployment case that kills
+  the link-out also killed the id — the evidence an earlier amendment change had
+  just declared durable. Settled by asking, for each `&&` in a render guard,
+  what each side can independently be false for.
+- **"The block disappears" used for two different facts.** `unlinked` (a
+  precondition lapsed) and `not_eligible` (the two predicates disagree) were
+  folded into one state, so the divergence a whole seam test exists to catch
+  would reach the rower as a control vanishing under their finger. Settled by
+  reading each error code's PRODUCER and asking who is wrong when it fires.
+- **A degraded field disabling the only control that reads it.** `normalizeLink`
+  maps an unrecognised `weightClass` to `null`, and RECONNECT was wired to it
+  alone — a permanently dead button under a failure message, on a card where
+  every other failure carries a reason. Settled by tracing each normalizer's
+  degrade path to the control that consumes the degraded value.
+- **A client field that can cost a rower their row (TRIAD).** `POST /api/logs`
+  400s on any `tz` outside the SERVER image's zone list; before PR2 no client
+  sent the field, so the branch had never fired. Believed safe because the
+  validator predates the producer. Settled by asking what happens the first time
+  the field is actually sent, and by whom the disagreeing list is owned — ours.
+  The route's own sibling (`checkCompletedAt` returning `{ok:true, value:null}`)
+  already modelled the answer.
+- **A "precedent" that is erased at runtime.** The cross-tree import cited
+  `import type`, which compiles to nothing; the new imports are runtime ones and
+  nothing in the repo resolved a `.js` specifier into `src/*.ts` at runtime.
+  Settled by writing a one-line scratch test and running it — it DOES resolve,
+  and the trap is that the specifier is relative to the FILE's directory, so the
+  same string is right from `server/routes/` and wrong from `server/`.
+- **A mutation hidden by a gate the covering scenario flips.** M21c targeted a
+  panel rendered under `link.linked && unlinkFailed !== null`, and its scenario
+  made `link.linked` false — so the mutant was invisible regardless. Settled by
+  asking, for every probe, which RENDER CONDITION stands between the mutated
+  state and the assertion, and whether the test's own scenario satisfies it.

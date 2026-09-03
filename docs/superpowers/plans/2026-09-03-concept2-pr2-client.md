@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Hardened 2026-09-03: lens 1 + paste-test folded** (`.claude/skills/harden/SKILL.md`).
+**Hardened 2026-09-03** (`.claude/skills/harden/SKILL.md`): both lenses and both paste-test placements are folded, and this is the final revision before implementation. Every prescribed block below has been placed at its real path and run — see the receipt.
 
 Written 2026-09-03 in worktree `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr2` (branch `wave-e-pr2-client`, base main `3e15378e`). Every `file:line` below was read in this worktree at that head. PR1 (#—), PR1.5, PR1.75a (#269) and PR1.75b (#277) are all merged; the server, the native plugin and `adapters/linkFlow.ts` all exist and are what this PR builds on.
 
@@ -53,24 +53,25 @@ Each line is quoted from the spec (§ named), the board, or the standing rules (
 
 ## Paste-test receipt (agent briefing, "Plan authoring")
 
-Every prescribed code block below was extracted to its REAL path in the worktree, at head `0401ab61`, and run through the repo's own gates — client AND server, tests included, with Docker up for the integration project. The tree was restored afterwards (`git status --short` and `git diff --stat` both empty at `0401ab61`).
+Every prescribed code block below was extracted to its REAL path in the worktree at head `df20687c` (branch `wave-e-pr2-client`, `git status --short` empty before the placement and again after the restore) and run through the repo's own gates — client AND server, tests included, with Docker up for the integration project.
 
 | Gate | Command | Result |
 | --- | --- | --- |
-| typecheck | `pnpm typecheck` | 0 errors |
-| lint | `pnpm lint` | 0 problems |
-| format | `pnpm format:check` | clean; `pnpm format` reflowed nothing |
-| unit | `pnpm test --project unit` | 58 files, 1797 passed, 1 skipped |
-| client | `pnpm test --project client` | 176 files, 4757 passed |
-| integration | `pnpm test --project integration` | 24 files, 369 passed |
-| bundle | `pnpm build` then `pnpm dist:grep` | PASS, 8/8 needles absent |
-| bundle, red proof | `VITE_ENABLE_C2_LINK_PROBE=1 pnpm build` then `pnpm dist:grep` | exit 1, naming the eighth needle |
-| bundle, restored | `pnpm build` then `pnpm dist:grep` | PASS again |
-| product card present | `grep -rl "CONNECT TO CONCEPT2" dist/client` | present, as designed |
-| shell blocks | `bash -n` over every prescribed block | syntax-clean |
-| mutations | 40 prescribed probes, applied and reverted one at a time | 34 bit; M1, M15, M21, M14 did not, and are rewritten below; M39/M40's covering test is now written out in full |
+| typecheck | `pnpm typecheck` | 0 errors; `E2E TypeScript membership: 19/19` |
+| lint | `pnpm lint` | 0 problems, no new suppressions |
+| format | `pnpm format` then `pnpm format:check` | `All matched files use Prettier code style!` |
+| unit | `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit` | 58 files, 1801 passed, 1 skipped |
+| client | the same command, `--project client` | 177 files, 4788 passed |
+| integration | the same command, `--project integration` (Docker up) | 25 files, 373 passed |
+| the server build-config pin | `pnpm exec tsc -p tsconfig.server.build.json --noEmit` | 0 errors, and M40c run in full — see Task 10 step 0 |
 
-**The receipt covers the server.** The earlier scoped-lint receipt (five client source files only) is what hid `vitest/prefer-strict-equal` and `vitest/no-conditional-expect` firing on this plan's own TEST blocks, and hid three server ripples entirely: `scripts/webauth-contract.test.ts`'s pinned key list, `src/monitor/Concept2LinkProbe.tsx`'s `LinkStatus` interface, and `server/db/schema.integration.test.ts`'s migration-boundary block. All three are now named in the tasks that cause them.
+Both summary lines ("Test Files" and "Tests") were read for every run — a file that fails to LOAD collects zero tests and still reads green on one of them.
+
+**What this receipt does NOT cover, named rather than carried silently:** the `pnpm build` / `pnpm dist:grep` rows. They were measured on an earlier tree, nothing in this revision touches a needle or the probe flag, and a bundle claim is settled by producing the artifact, never by inheriting a table row (RF12). Task 9 runs them and records its own numbers; do not cite this receipt for them.
+
+**The receipt covers the server.** An earlier scoped-lint receipt (five client source files only) is what hid `vitest/prefer-strict-equal` and `vitest/no-conditional-expect` firing on this plan's own TEST blocks, and hid three server ripples entirely: `scripts/webauth-contract.test.ts`'s pinned key list, `src/monitor/Concept2LinkProbe.tsx`'s `LinkStatus` interface, and `server/db/schema.integration.test.ts`'s migration-boundary block. All three are now named in the tasks that cause them.
+
+**And it covers the whole placement, not a delta.** Every task's blocks were placed together, because most of them only compile together — which is how the placement found the things a per-block check cannot see: a comment inside `LinkStatus`'s braces registering as a phantom key on the contract gate (Task 3 step 6b), an `unlink()` that left its arm live after a refusal and broke two of this plan's own prescribed tests (Task 4 step 3), a `You.test.tsx` harness whose `./api` factory has to delegate to global `fetch` or an unrelated baseline test stops finding its own field (Task 8), and a Just Row assertion literal taken from the TIMER fixture's clock rather than the monitor one's (Task 6 step 1).
 
 Every prescribed block that the run CHANGED is written below as it ran green, not as it was first drafted.
 
@@ -114,6 +115,10 @@ Numbered so review can cite them. Each is a place where an authority this plan i
 
 18. **`c2Username` can arrive as the empty string, and `??` does not catch it.** `client.ts`'s `fetchMe` returns `username: typeof data?.username === "string" ? data.username : null` — an empty string is a string, so `""` passes straight through. `routes/concept2.ts:408` then writes `me.username ?? \`#${me.c2UserId}\`` into the Linked callback page, which renders `Concept2  is now connected to …` for that value, under a comment claiming the page "never renders an empty identity". The card's `identityLine` would inherit the same hole through `??`. **Absent / empty / valued applies to every vendor-supplied STRING that reaches a rendered surface** — Task 1 and Task 3 both guard on `!== ""`, not on nullishness.
 
+22. **The same hole is open one field over, on `logbookBaseUrl`, and both ends of it are ours.** `server/index.ts` reads `process.env.C2_BASE_URL ?? "https://log-dev.concept2.com"` — `??`, so `C2_BASE_URL=""` in a deploy env passes straight through — and `normalizeLink` (Task 1) guarded the field on `typeof` alone while guarding `c2Username` two lines above on `!== ""`. The result is `c2ResultUrl("", 2211, 339)` -> `/profile/2211/log/339`, a RELATIVE url: the web arm opens it as a new tab on **Ergomatic's own origin**, and the native arm hands it to `SFSafariViewController` as a bare path. **Task 3 changes the env read to `||` and Task 1 guards the field on `!== ""`.** This is observation 18's own lesson applied to the neighbouring field rather than restated: the rule was already written down and the second field still shipped without it.
+
+23. **A 200 whose body is not JSON is a third read outcome, and folding it into the second loses the status.** `useConcept2Link`'s `.catch` reports `{status: null}`, which the card renders as `REASON: NO CONNECTION` — over a request that plainly connected. A proxy or an old image answering an HTML error page mid rolling deploy is the named case (`adapters/linkFlow.ts:124-127`). **Task 1 catches the parse SEPARATELY and reports the status the response actually carried.** Consequence for the mutation table, measured rather than reasoned: once the parse has its own arm, M6c (drop the `if (!res.ok)` guard) stops biting against a 502 with an HTML body — the mutant now reports 502 from the inner catch. What still bites it is a non-2xx whose body IS valid JSON, so Task 1 carries that test and M6c points at it.
+
 19. **A back-forward-cache restore re-shows the card with no mount, so a mount-only read can freeze it mid-attempt.** On web, `startLink` resolves `navigating` and `openExternalUrl` unloads the document (`adapters/webNavigate.ts`); the card's only re-read is `useConcept2Link`'s mount effect. If the browser RESTORES the page from the bfcache on Back instead of reloading it, no mount runs, the effect does not re-fire, and the rower is looking at a buttonless OPENING CONCEPT2 panel over a link that has already succeeded. `useReturnToApp` was deleted on the reasoning "native resolves in a promise, web unloads" — true of native, and true of web only until a restore happens. **Task 1 subscribes to `pageshow`** (which fires on a restore as well as a load — the one event that does) and to `visibilitychange`, and re-reads on both.
 
 20. **`upsertLink`'s input shape reaches 53 call sites through three builders, not the three fixtures observation 6 measured.** Those two measurements are of DIFFERENT types: observation 6 counts `StoredLog` literals, and a required `c2Username` on `upsertLink`'s input is a separate blast radius — `LINK_INPUT`/`freshLink` (`server/routes/concept2.test.ts`), `link()` (`server/stores/concept2.integration.test.ts`) and `makeFakeConcept2Store` (`server/testing/fakes.ts`). **Task 3 makes the input field OPTIONAL, defaulting to `null` internally.** The stored COLUMN and the `getLink` projection stay required-and-nullable; only the writer's input is optional, so a call site that has no username does not have to say so.
@@ -132,7 +137,9 @@ Each is a named binary. **Task 0 presents these with the amendment; implementati
 | **iv** | Does the product card replace the dev probe's readout? | **A** probe unchanged, dev-only. **B** product card absorbs it. | **A.** The probe is the only instrument that can reach the Swift plugin, it prints things no rower should see (`Callback carried state`, raw outcome kinds, plugin error codes), and its literal is a `dist-grep` needle proving it is absent from production builds. B would put a walk instrument in a shipping bundle. | B needs the needle retired from `dist-grep.sh:127` and a new argument for why a diagnostic readout belongs on a rower's screen. Not recommended and not planned. |
 | **v** | e2e fake-Concept2 scope | **A** `page.route` interception in Playwright + one real cross-layer seam test at the integration layer. **B** a fake C2 HTTP service in compose, `C2_LINK_ENABLED=1` in the e2e overlay. | **A.** B costs a fake Concept2 HTTP service, an image for it, and `C2_LINK_ENABLED=1` exported from `scripts/e2e.sh` — for coverage that Task 10's integration test already provides at the layer that matters (server writes → client predicate reads, over real Postgres). A's `page.route` has in-repo precedent (`e2e/onboarding.spec.ts:379-383`, `e2e/log.spec.ts:1015`). **Correction, folded 2026-09-03:** B does NOT require editing `scripts/compose-env.test.sh` — that script lives at the repo root and renders `docker compose config` in its OWN environment, so an `export` inside `e2e.sh` never reaches it and its `C2_LINK_ENABLED: ""` assertion keeps passing. The gate is not the obstacle; the service, the image and the OAuth-shaped fake are. | B is the only way to exercise the web OAuth hop end to end. It is a legitimate want; it is its own PR, and this plan names it as a follow-on rather than smuggling it in. |
 
-Two further items the amendment asks James to approve but which need no code branch: the six copy/shape changes in its §0, and the new states it draws — 1f needs-reauth, 1g update-required, 1h unavailable, **1i the read failed**, **1j the unlink was refused**, 2f row-level reconnect, and the REASON lines. **1i is the one that changes what a rower is TOLD** rather than how something looks: an earlier revision of the amendment drew a refused read as absence, which says "this deployment has no Concept2" to a rower whose deployment does.
+Two further items the amendment asks James to approve but which need no code branch: the six copy/shape changes in its §0, and the new states it draws — 1f needs-reauth, 1g update-required, 1h unavailable, **1i the read failed**, **1j the unlink was refused**, **1k needs-reauth with an unreadable stored class**, 2f row-level reconnect, **2c-b sent with no link-out**, **2h Concept2 won't take this row**, and the REASON lines.
+
+**Three of those were added on 2026-09-03, and each replaces a state the earlier drawing got WRONG rather than one it merely lacked:** 1k replaces a RECONNECT button that could never be pressed (`normalizeLink` degrades an unreadable class to `null`, and the button was wired to it alone); 2c-b replaces a SENT row that showed no result id at all when the server sent no logbook origin — the durable evidence an earlier amendment change had just declared load-bearing; and 2h replaces a block that vanished under the rower's finger on a 422, which is the one answer meaning our two eligibility predicates disagree. **1i is the one that changes what a rower is TOLD** rather than how something looks: an earlier revision of the amendment drew a refused read as absence, which says "this deployment has no Concept2" to a rower whose deployment does.
 
 ## Wire contract summary (what this PR builds against)
 
@@ -151,7 +158,7 @@ One route outside the Concept2 namespace is in scope, because Task 6 is its firs
 | --- | --- | --- |
 | `POST /api/logs` (`routes/data.ts:1705-1715`, `:1754-1755`) | `completedAt` (ISO 8601 string or null) · `tz` (canonical IANA zone or null) | 400 `field:"completedAt"` on a malformed stamp; 400 `field:"tz"` on anything not in `Intl.supportedValuesOf("timeZone")` plus `"UTC"`. A PARSEABLE stamp outside the plausible band is NOT a refusal: `checkCompletedAt` returns `{ok:true, value:null}` and the save survives with no stamp. |
 
-`adapters/linkFlow.ts`'s `startLink({weightClass}) → LinkOutcome`, 16 members (`:79-106`), 17 after Task 2's `busy` split is counted by source. Every member's card treatment is tabulated in the amendment's §1e.
+`adapters/linkFlow.ts`'s `startLink({weightClass}) → LinkOutcome`, **17 members** (`:79-106`: linked, navigating, declined, malformed, stateMismatch, exchangeFailed, serverError, mintFailed, updateRequired, busy, cancelled, abandoned, noWindow, noContext, contextInvalid, pluginError, networkError). Task 2's `busy` split WIDENS that member rather than adding one, so the count is unchanged by this PR. Every member's card treatment is tabulated in the amendment's §1e.
 
 Eligibility, server-side and authoritative (`server/concept2/mapping.ts:60-72`): `source === "pm5"` AND `endedBy === "finished"` AND `workSeconds !== null` AND `workMeters !== null`. **Measured audience:** 6 of 20 prod rows pass this fence (`docs/monitor/c2-crossconnect-2026-09/README.md`, "Eligible-population count", recounted at #244 finding 4).
 
@@ -164,18 +171,20 @@ Every piece of state this PR introduces, with its mint site, its clear sites, an
 - **I3.** A row's sent state is a fact about the row and the LIVE link together. It is re-derived on every render from `(row.c2ResultId, row.c2UserId, link.c2UserId)` and is never cached across a link change.
 - **I4.** The weight-class draft is transient and per-mount. It is never persisted, never sent except in a mint body, and is cleared by a successful unlink so a relink asks again.
 - **I5.** The card's view of the link is refreshed on every occasion the DOCUMENT becomes visible to the rower again, not only on mount. A restore that skips mounting must not leave a stale panel on screen (observation 19). The refresh is idempotent: it re-reads and re-renders, and it never mints, retries or cancels anything.
+- **I5b.** After a RESTORE, no attempt state from before the document unloaded is still on screen. Re-reading the link alone does not discharge I5, because the panel the rower is stuck behind is drawn from the ATTEMPT (`outcome`/`busy`), not from the link: a restore preserves the JS heap, so a web attempt the rower DECLINED comes back with `outcome` still `navigating` and renders a buttonless OPENING CONCEPT2 panel with no Try again, forever. The half that fixes the succeeded case and the half that fixes the declined case are two different pieces of state and both are owed.
 - **I6.** Every failure the rower can act on carries a discriminator. A read that failed says so and offers a retry; an unlink that failed says the link is unchanged. Neither is allowed to render as its own success, and neither is allowed to render as `unavailable`, which means something else entirely.
 
 | State | Owner | Mint site | Clear sites | Survives unmount? | Survives relaunch? | Survives a link change? |
 | --- | --- | --- | --- | --- | --- | --- |
 | `link` (`Concept2Link \| null`) | `useConcept2Link` | mount effect's `reload()`, and every later `reload()` | replaced by every successful `reload()`; `null` only before the first read resolves | no | no | it IS the link |
 | `failed` (`LinkReadFailure \| null`) | `useConcept2Link` | a non-`ok` response, or the `reload()` catch | set to `null` by any successful `reload()` | no | no | n/a |
+| the attempt-clear `pageshow` listener (I5b) | `Concept2Card` | a mount-only effect with an empty dep array | that effect's cleanup (`removeEventListener`), on unmount and on nothing else | no | no | n/a: it clears an attempt, it does not hold a link |
 | the `pageshow` + `visibilitychange` listeners | `useConcept2Link` | the same effect that runs the first `reload()`, via `window.addEventListener` | that effect's cleanup (`removeEventListener` for both), which runs on unmount and on nothing else — the effect's dep array is `[reload]` and `reload` is a `useCallback` with an empty dep array, so it is minted once per mount | no — removed on unmount, which is what stops a dead card re-reading | no | n/a: it observes the link, it does not hold one |
 | `weightClass` draft | `Concept2Card` | the rower's tap on the radiogroup | successful unlink; unmount | no | no | reset on unlink (I4) |
-| `outcome` (`LinkOutcome \| null`) | `Concept2Card` | `startLink` resolving | set to `null` at the start of each `connect()`; cleared by a successful unlink; unmount | no | no | superseded by the next attempt |
-| `busy` | `Concept2Card` | `connect()` / `unlink()` entry | those functions' `finally` — every exit, never only the happy one | no | no | n/a |
+| `outcome` (`LinkOutcome \| null`) | `Concept2Card` | `startLink` resolving | set to `null` at the start of each `connect()`; cleared by a successful unlink; cleared on `pageshow` (I5b); unmount | no | no | superseded by the next attempt |
+| `busy` | `Concept2Card` | `connect()` / `unlink()` entry | those functions' `finally` — every exit, never only the happy one; and `pageshow` (I5b), for the case where the document unloaded mid-attempt and no `finally` ever ran | no | no | n/a |
 | `unlinkFailed` (`number \| null`, the refusing status) | `Concept2Card` | `unlink()`'s `else` branch, and its `catch` | set to `null` at the start of every `unlink()`; a successful unlink; unmount | no | no | n/a |
-| `armed` + `disarmRef` timer | `Concept2Card` | `arm()` (one tap) | `disarm()` (second tap or successful unlink), the 4 s timeout, and the unmount cleanup (`useEffect(() => disarm, [disarm])`) | **no — cleared on unmount, which is I2's whole point** | no | n/a |
+| `armed` + `disarmRef` timer | `Concept2Card` | `arm()` (one tap) | `disarm()` in `unlink()`'s `finally` — EVERY exit, refusals included, because "a second tap" is I2's own first disarmer and it has already happened — plus the 4 s timeout and the unmount cleanup (`useEffect(() => disarm, [disarm])`) | **no — cleared on unmount, which is I2's whole point** | no | n/a |
 | `send` (`SendState`) | `Concept2SendBlock` | `post()` entry | replaced by each response; unmount | no | no | recomputed against the fresh link (I3) |
 | `linkInFlight` | `adapters/linkFlow.ts` module scope | `startLink` entry (`:289`) | `startLink`'s `finally` (`:328-332`) | **yes — module scope survives component unmount** | no (a WebView reload destroys the module) | n/a |
 
@@ -185,7 +194,7 @@ Every piece of state this PR introduces, with its mint site, its clear sites, an
 
 - `window.open` (Task 2, web arm only) — universally available; the native arm never reaches it.
 - `visibilitychange` / `document.visibilityState` (Task 1) — **already shipped in this app at this floor**: `src/adapters/appLifecycle.ts:76-80` and `src/adapters/keepAwake.ts` both subscribe to it on the web arm, on builds that have been through TestFlight. In-repo precedent, not a claim about WebKit (PRIMARY, this repo).
-- `pageshow` (Task 1) — no in-repo precedent, and no primary WebKit availability line is quoted here, so treat its presence as UNCONFIRMED at the floor (INFERENCE only). **The design does not depend on it:** the listener is a pure additive refresh, so if `pageshow` never fires the card behaves exactly as it does today — a mount-only read — and nothing regresses. That is why it ships without a floor citation rather than waiting for one. The implementer states in the task report whether the e2e Back case (Task 11) actually observed the refresh, which is the only evidence this repo can produce for it.
+- `pageshow` (Task 1's hook AND Task 4's card) — no in-repo precedent, and no primary WebKit availability line is quoted here, so treat its presence as UNCONFIRMED at the floor (INFERENCE only). **The design does not depend on it:** both listeners are purely additive, so if `pageshow` never fires the card behaves exactly as it does today — a mount-only read, and an attempt panel that clears on the next mount — and nothing regresses. **`visibilitychange` is deliberately NOT used for the attempt clear**, only for the link re-read: it fires whenever the app returns to the foreground, including the instant the native consent sheet dismisses, unordered against `startLink`'s promise resolving — so clearing there would race `setOutcome` and could wipe the failure panel a declined native link had just drawn. `pageshow` cannot fire while an attempt is live in the same document, which is exactly why it is the safe one. That is why it ships without a floor citation rather than waiting for one. The implementer states in the task report whether the e2e Back case (Task 11) actually observed the refresh, which is the only evidence this repo can produce for it.
 
 ---
 
@@ -197,7 +206,7 @@ Every piece of state this PR introduces, with its mint site, its clear sites, an
 - Already written: `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-03.html`
 
 **Interfaces:**
-- Produces: James's ruling on (i)-(v), on the amendment's six copy/shape changes, and on every new state it draws (1f, 1g, 1h, 1i, 1j, 2f, and the REASON lines). Every task below cites the amendment for its copy.
+- Produces: James's ruling on (i)-(v), on the amendment's six copy/shape changes, and on every new state it draws (1f, 1g, 1h, 1i, 1j, **1k**, 2f, **2c-b**, **2h**, and the REASON lines). Every task below cites the amendment for its copy.
 
 - [ ] **Step 1: Present the rendered artifact.** Open `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-03.html` in a browser beside the approved board (`Concept2 connect.dc.html`). Both orientations are rendered at real proportions in the file itself; no scaling, no description substitutes for opening it.
 
@@ -368,12 +377,37 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { normalizeLink, LINK_UNAVAILABLE } from "./useConcept2Link";
 
+// `document.visibilityState` is replaced with `Object.defineProperty`, which
+// `vi.restoreAllMocks()` does NOT undo — the stub would leak to every later
+// test in this file. Capture the original descriptor once and put it back in
+// `afterEach`, the same shape `adapters/appLifecycle.test.ts` and
+// `adapters/keepAwake.test.ts` already use.
+const VISIBILITY_DESCRIPTOR = Object.getOwnPropertyDescriptor(
+  Document.prototype,
+  "visibilityState",
+);
+
+function stubVisibility(value: DocumentVisibilityState): void {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => value,
+  });
+}
+
 beforeEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
 });
 afterEach(() => {
   vi.doUnmock("../api");
+  delete (document as unknown as Record<string, unknown>).visibilityState;
+  if (VISIBILITY_DESCRIPTOR !== undefined) {
+    Object.defineProperty(
+      Document.prototype,
+      "visibilityState",
+      VISIBILITY_DESCRIPTOR,
+    );
+  }
 });
 
 describe("normalizeLink (routes/concept2.ts:519-548's three response shapes)", () => {
@@ -426,6 +460,21 @@ describe("normalizeLink (routes/concept2.ts:519-548's three response shapes)", (
     expect(link.c2Username).toBeNull();
   });
 
+  it("reads an EMPTY logbook origin as no origin, so no link-out is built on our own domain", () => {
+    // The same absent/empty/valued rule as the username above, one field
+    // over. `server/index.ts` reads `C2_BASE_URL || <default>`, but a `""`
+    // arriving here anyway must not survive: `c2ResultUrl("", 2211, 339)`
+    // is `/profile/2211/log/339`, a RELATIVE url that opens on Ergomatic's
+    // own origin.
+    const link = normalizeLink({
+      available: true,
+      linked: true,
+      c2UserId: 2211,
+      logbookBaseUrl: "",
+    });
+    expect(link.logbookBaseUrl).toBeNull();
+  });
+
   it("degrades every unknown field rather than trusting it", () => {
     const link = normalizeLink({
       available: true,
@@ -454,12 +503,53 @@ describe("useConcept2Link read failures (Gate 0 amendment 1i)", () => {
     // non-2xx), so a 502 arrives as a normal resolution and has to be
     // turned into a failure explicitly. The status is what a tester
     // reporting "the Concept2 card is broken" carries back.
-    const api = vi.fn(async () => new Response("<html>502</html>", { status: 502 }));
+    const api = vi.fn(
+      async () => new Response("<html>502</html>", { status: 502 }),
+    );
     vi.doMock("../api", () => ({ api }));
     const { useConcept2Link } = await import("./useConcept2Link");
     const { result } = renderHook(() => useConcept2Link());
     await waitFor(() => expect(result.current.failed).not.toBeNull());
     expect(result.current.failed?.status).toBe(502);
+    expect(result.current.link).toBeNull();
+  });
+
+  it("refuses a non-2xx that carries a perfectly good JSON body, rather than parsing it as a link", async () => {
+    // The probe that gives `if (!res.ok)` something to guard. A 401 whose
+    // body is JSON parses fine, so the ok-check is the ONLY thing standing
+    // between an auth refusal and `normalizeLink` quietly reading it as
+    // "no Concept2 on this deployment".
+    const api = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: "unauthorized" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    await waitFor(() => expect(result.current.failed).not.toBeNull());
+    expect(result.current.failed?.status).toBe(401);
+    expect(result.current.link).toBeNull();
+  });
+
+  it("keeps the STATUS when a 200 answers with something that is not JSON at all", async () => {
+    // A proxy or an old image mid rolling deploy answers 200 with HTML.
+    // The connection plainly worked, so REASON: NO CONNECTION would be a
+    // lie; the parse failure is caught on its own and reports 200.
+    const api = vi.fn(
+      async () =>
+        new Response("<html>hello</html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    await waitFor(() => expect(result.current.failed).not.toBeNull());
+    expect(result.current.failed?.status).toBe(200);
     expect(result.current.link).toBeNull();
   });
 
@@ -530,19 +620,13 @@ describe("useConcept2Link re-reads when the document comes back (observation 19,
     renderHook(() => useConcept2Link());
     await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
 
-    Object.defineProperty(document, "visibilityState", {
-      configurable: true,
-      get: () => "hidden",
-    });
+    stubVisibility("hidden");
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
     expect(api).toHaveBeenCalledTimes(1);
 
-    Object.defineProperty(document, "visibilityState", {
-      configurable: true,
-      get: () => "visible",
-    });
+    stubVisibility("visible");
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
@@ -570,7 +654,7 @@ describe("useConcept2Link re-reads when the document comes back (observation 19,
 });
 ```
 
-  The `document.visibilityState` override idiom above is the repo's own — `src/adapters/appLifecycle.test.ts:12-30` and `src/adapters/keepAwake.test.ts:12-46` both do exactly this. Reuse it rather than inventing a third.
+  The `document.visibilityState` override idiom above is the repo's own — `src/adapters/appLifecycle.test.ts:12-30` and `src/adapters/keepAwake.test.ts:12-46` both do exactly this. Reuse it rather than inventing a third — **including the half that puts it back.** `vi.restoreAllMocks()` does not undo an `Object.defineProperty`, so a stub left in place leaks to every later test in the file; the block above captures `Document.prototype`'s original descriptor once and restores it in `afterEach`, which is what those two files do and what an earlier draft of this block left out.
 
 - [ ] **Step 2: Run them and confirm they fail.**
 
@@ -607,7 +691,7 @@ export interface Concept2Link {
   c2Username: string | null;
   needsReauth: boolean;
   /** The Concept2 ORIGIN this deployment talks to, echoed from the
-   *  server's own `C2_BASE_URL` (`server/index.ts:119`). The client cannot
+   *  server's own `C2_BASE_URL` (`server/index.ts`). The client cannot
    *  know whether it is `log.concept2.com` or `log-dev.concept2.com`, and
    *  a hardcoded guess 404s the View-on-Concept2 link-out for the whole
    *  sandbox phase (plan observation 5). */
@@ -649,8 +733,19 @@ export function normalizeLink(body: unknown): Concept2Link {
         ? raw.c2Username
         : null,
     needsReauth: raw.needsReauth === true,
+    // The SAME absent/empty/valued treatment as `c2Username` one field up,
+    // and for a sharper reason: `server/index.ts` reads
+    // `process.env.C2_BASE_URL || "https://log-dev.concept2.com"`, and a
+    // `""` that reached here anyway would build
+    // `/profile/2211/log/339` — a RELATIVE url, which the web arm opens as
+    // a new tab on ERGOMATIC's own origin and the native arm hands to
+    // `SFSafariViewController` as a bare path. A link-out that silently
+    // points at ourselves is worse than no link-out, so `""` degrades to
+    // `null` and the button does not render.
     logbookBaseUrl:
-      typeof raw.logbookBaseUrl === "string" ? raw.logbookBaseUrl : null,
+      typeof raw.logbookBaseUrl === "string" && raw.logbookBaseUrl !== ""
+        ? raw.logbookBaseUrl
+        : null,
   };
 }
 
@@ -679,8 +774,12 @@ export interface LinkReadFailure {
  *
  * `api()` does not throw on a non-2xx (`src/api.ts`), so a 401 or a 502
  * arrives here as an ordinary resolution and is turned into a failure
- * explicitly. Without that, `res.json()` on an HTML error body would throw
- * into the `catch` and lose the status on the way.
+ * explicitly. THREE outcomes, not two, because a 200 whose body is not
+ * JSON is a real case (a proxy or an old image answering an HTML error
+ * page mid rolling deploy — `adapters/linkFlow.ts:124-127` names it): the
+ * parse is caught SEPARATELY so it reports the status the response
+ * genuinely carried. Letting it fall to the outer `.catch` would print
+ * REASON: NO CONNECTION over a request that plainly connected.
  *
  * `failed` exists because a dropped request must not leave a stale `link`
  * on screen reading as a state nobody observed. It is NOT the same thing
@@ -713,7 +812,13 @@ export function useConcept2Link(): {
             setFailed({ status: res.status });
             return;
           }
-          const body = (await res.json()) as unknown;
+          let body: unknown;
+          try {
+            body = (await res.json()) as unknown;
+          } catch {
+            setFailed({ status: res.status });
+            return;
+          }
           setLink(normalizeLink(body));
           setFailed(null);
         })
@@ -791,7 +896,7 @@ export function identityLine(link: Concept2Link, email: string): string {
  * `LinkOutcome` -> the card's failure copy. The table this implements is
  * the Gate 0 amendment's §1e; nothing here invents a string.
  *
- * TOTAL over the union with no `default`, deliberately: a seventeenth
+ * TOTAL over the union with no `default`, deliberately: an eighteenth
  * member is a compile error here rather than a silent fall-through to a
  * generic message, which is the same mechanism `domain/types.ts`'s
  * `LogSource` switches rely on (that type's own comment: "total over
@@ -890,12 +995,13 @@ git commit -m "Wave E PR2: the link hook and the card's pure failure model"
   | M1 | `normalizeLink`: DELETE the whole `if (raw.available !== true) return LINK_UNAVAILABLE;` line | "reads a flag-off 200 as unavailable" — the mutant falls through to the `linked` check and returns `{...LINK_UNAVAILABLE, available: true}`. **Rewritten:** the draft's version (`raw.available === false && raw.linked === undefined`) was run and DID NOT BITE — the fixture is `{available:false}` with no `linked` key, which the mutated guard still catches, so all five tests stayed green |
   | M2 | `normalizeLink`: drop the `typeof raw.c2UserId === "number"` guard, returning `raw.c2UserId as number` | "degrades every unknown field" |
   | M2b | `normalizeLink`: weaken the username guard to `typeof raw.c2Username === "string"` (drop `&& raw.c2Username !== ""`) | "reads an EMPTY username as no username" |
+  | M2c | `normalizeLink`: weaken the ORIGIN guard the same way (drop `&& raw.logbookBaseUrl !== ""`) | "reads an EMPTY logbook origin as no origin, so no link-out is built on our own domain" — observation 22's client end. RUN: red on exactly that test, 14 others green |
   | M3 | `describeFailure`: return `null` for `busy` unconditionally (the pre-split behaviour) | "separates the two busy sources" |
   | M4 | `describeFailure`: return `FAILED_LINE` for `declined` | "gives a declined link its own line" |
   | M5 | `identityLine`: swap to `` `Ergomatic ${email} · Concept2 ${c2}` `` | "names the Concept2 username and the Ergomatic email, in the callback page's order" |
   | M6 | `identityLine`: return `` `Concept2 ${link.c2Username ?? ""} · …` `` | "falls back to the numeric account" |
   | M6b | `identityLine`: weaken the guard to `link.c2Username !== null ? link.c2Username : …` (drop the `!== ""` clause) | "falls back for an EMPTY username too" |
-  | M6c | `useConcept2Link`: drop the `if (!res.ok)` arm, so a 502 falls through to `res.json()` | "reports the STATUS of a refused read" — the mutant reaches the `catch` and reports `status: null` |
+  | M6c | `useConcept2Link`: drop the `if (!res.ok)` arm | **"refuses a non-2xx that carries a perfectly good JSON body"**, NOT the 502-with-HTML test beside it. Measured (observation 23): once the JSON parse has its own `catch` reporting `res.status`, a mutant that drops the ok-check still reports 502 for an HTML body, and the older test stays green against broken code. A 401 whose body parses cleanly is the case where the guard is the only thing between an auth refusal and `normalizeLink` reading it as "no Concept2 here". RUN: red on exactly that test |
   | M6d | `useConcept2Link`: remove the `pageshow` listener registration | "re-reads on pageshow" |
   | M6e | `useConcept2Link`: drop the `document.visibilityState === "visible"` condition, re-reading on every `visibilitychange` | "re-reads when the document becomes visible, and NOT when it becomes hidden" |
   | M6f | `useConcept2Link`: return no cleanup from the effect | "stops listening when the card unmounts" |
@@ -983,26 +1089,61 @@ describe("openReadOnlyUrl", () => {
 });
 ```
 
-  Append to `app/src/adapters/linkFlow.test.ts` — and fix the **two assertions already in that file** that compare against a bare `{kind:"busy"}` and break the moment the member gains `source`. Find them with `git grep -n '"busy"' app/src/adapters/linkFlow.test.ts` and add the field each one's scenario actually produces. This is a consequence of the union change, not a separate defect, and it is named here because the paste-test hit it and the earlier draft's Files list did not predict it.
+  `app/src/adapters/linkFlow.test.ts` takes THREE changes, not the "fix the two assertions" one sentence an earlier draft carried. Find the existing sites with `git grep -n '"busy"' app/src/adapters/linkFlow.test.ts`.
+
+  1. **The `it.each` plugin-rejection table cannot express the new shape, so `busy` comes OUT of it.** That block runs six rejection codes through ONE shared assertion (`toStrictEqual({ kind })`), and there is no way to give the `busy` row an extra `source` field without breaking the other five. Delete its `["busy", "busy"]` row and give the case its own test:
 
 ```ts
-it("the JS guard's busy names itself, so the card can tell it from the plugin's", async () => {
-  // linkFlow.ts:148-155 requires the two to render differently. Before this
-  // change the union could not express it: both returned bare {kind:"busy"}.
-  const api = vi.fn(
-    async () =>
-      new Promise<Response>(() => {
-        /* never resolves: the first attempt stays in flight */
+  it("the PLUGIN's busy names its own source, so the card can tell it from the JS guard's", async () => {
+    // Pulled out of the table above: that block shares ONE
+    // `toStrictEqual({ kind })` assertion across six rows, which cannot
+    // express the extra `source` field without breaking the other five.
+    // linkFlow.ts's own `case "busy"` comment requires the two sources to
+    // render differently; before PR2 the union could not say which was
+    // which.
+    vi.doMock("../platform", () => ({ isNative: () => true }));
+    mockApi(MINT_OK);
+    mockPlugin(
+      vi.fn(async () => {
+        const err = new Error("rejected") as Error & { code: string };
+        err.code = "busy";
+        throw err;
       }),
-  );
-  vi.doMock("../api", () => ({ api }));
-  vi.doMock("../platform", () => ({ isNative: () => false }));
-  vi.resetModules();
-  const { startLink } = await import("./linkFlow");
-  void startLink({ weightClass: "H" });
-  const second = await startLink({ weightClass: "H" });
-  expect(second).toStrictEqual({ kind: "busy", source: "guard" });
-});
+    );
+    vi.resetModules();
+    const { startLink } = await import("./linkFlow");
+
+    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+      kind: "busy",
+      source: "sheet",
+    });
+  });
+```
+
+  2. **The concurrent-call assertion is fixed in place** — the one reading `expect(second).toStrictEqual({ kind: "busy" })` becomes `{ kind: "busy", source: "guard" }`.
+
+  3. **And the new web-arm test is appended** to the `startLink on web` describe:
+
+```ts
+  it("the JS guard's busy names itself, so the card can tell it from the plugin's", async () => {
+    // linkFlow.ts's `case "busy"` comment requires the two to render
+    // differently. Before this change the union could not express it: both
+    // returned a bare {kind:"busy"}.
+    const api = vi.fn(
+      async () =>
+        new Promise<Response>(() => {
+          // never resolves: the first attempt stays in flight
+        }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../platform", () => ({ isNative: () => false }));
+    vi.resetModules();
+    const { startLink } = await import("./linkFlow");
+
+    void startLink({ weightClass: "H" });
+    const second = await startLink({ weightClass: "H" });
+    expect(second).toStrictEqual({ kind: "busy", source: "guard" });
+  });
 ```
 
 - [ ] **Step 2: Run and confirm failure.**
@@ -1122,7 +1263,8 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit sc
 - Modify: **`app/scripts/webauth-contract.test.ts`** — its pinned `GET /link` key list AND its own `LinkStatus` interface. Named because the paste-test's full `unit` run found it, and no earlier draft of this plan mentioned the file at all (observation 21).
 - Modify: **`app/src/monitor/Concept2LinkProbe.tsx`** — the dev probe's `LinkStatus` interface, the other side of that same gate. The probe's BEHAVIOUR is unchanged (ruling iv); only its type declaration gains the two fields, because the gate holds it equal to the route.
 - Modify: **`app/server/db/schema.integration.test.ts`** — the migration-0021 describe block's two `db.insert(concept2Links)` calls (see step 7).
-- Test: `app/server/routes/concept2.test.ts` (append; ALSO fix its `buildApp` harness literal — see step 6), `app/server/stores/concept2.integration.test.ts` (its `link()` builder is the second of the three)
+- Modify: **`app/server/index.ts`** — a second change beside threading the origin: the env read becomes `||`, not `??` (observation 22).
+- Test: `app/server/routes/concept2.test.ts` (append; ALSO fix its `buildApp` harness literal, its `freshLink` override type, one pre-existing `toStrictEqual` response assertion and one pre-existing rendered-page assertion — see steps 5b and 6b), `app/server/stores/concept2.integration.test.ts` (its `link()` builder is the second of the three; its override type widens too)
 
 **Interfaces:**
 - Produces: `concept2_links.c2_username text` (nullable); `GET /api/concept2/link` gains `c2Username: string | null` and `logbookBaseUrl: string` on the linked-and-available response.
@@ -1138,80 +1280,96 @@ gh pr list --json number,headRefName,files --jq '.[] | {number, headRefName, dri
 ```
   **Measured at `0401ab61`:** `_journal.json`'s last entry is `0022_melodic_purple_man`, so **0023 is the next free index**. That is a fact about a moving target — re-run the three commands at generate time AND again immediately before opening the PR. A competing index means deleting this migration and regenerating off new main, never a journal merge.
 
-- [ ] **Step 2: Write the failing route test.** Append to `app/server/routes/concept2.test.ts`:
+- [ ] **Step 2: Write the failing route tests.** These are written against the file's REAL helpers, read at this head: `buildApp({ store, client, available })` returning `{ app, store, logs, client, setAvailable }`, `mintAndGetState(app)` (web/cookie by default), `asA` (bearer) and `asACookie` (cookie), `freshLink(overrides)` over `LINK_INPUT` (whose `c2UserId` is 2211), `makeStubClient()` and `stubHappyExchange(client)`. **There is nothing named `makeApp` or `mintState` in this file** — an earlier draft's blocks called both, which is why its M12/M12b/M12c probes gated tests that could not be pasted or run.
+
+  The first three go in the `link (GET/DELETE /api/concept2/link)` describe, immediately before `"GET: needsReauth reflects a set needsReauthAt"`:
 
 ```ts
-it("GET /link names the linked Concept2 username and the logbook origin", async () => {
-  // The username discharges the account-injection detect-identity treatment
-  // (ROADMAP's C2 row: the card "naming which account the link goes to"
-  // ships with PR2). The origin exists because the client cannot know
-  // whether this deployment talks to log.concept2.com or log-dev
-  // (plan observation 5), and a wrong origin 404s the link-out silently.
-  await store.upsertLink(USER_ID, {
-    c2UserId: 2211,
-    c2Username: "jamesawesome",
-    accessToken: "a",
-    refreshToken: "r",
-    expiresAt: new Date(Date.now() + 86_400_000),
-    weightClass: "H",
+  it("GET /link names the linked Concept2 username and the logbook origin", async () => {
+    // The username discharges the account-injection detect-identity
+    // treatment (ROADMAP's C2 row: the card "naming which account the link
+    // goes to" ships with PR2). The origin exists because the client cannot
+    // know whether this deployment talks to log.concept2.com or log-dev
+    // (plan observation 5), and a wrong origin 404s the link-out silently.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(
+      userA.id,
+      freshLink({ c2Username: "jamesawesome" }),
+    );
+    const { app } = buildApp({ store });
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      available: true,
+      linked: true,
+      c2UserId: 2211,
+      c2Username: "jamesawesome",
+      logbookBaseUrl: LOGBOOK_BASE_URL,
+    });
+    expect(res.body).not.toHaveProperty("accessToken");
+    expect(res.body).not.toHaveProperty("refreshToken");
   });
-  const res = await request(app).get("/api/concept2/link").set(auth(USER_ID));
-  expect(res.status).toBe(200);
-  expect(res.body).toMatchObject({
-    available: true,
-    linked: true,
-    c2UserId: 2211,
-    c2Username: "jamesawesome",
-    logbookBaseUrl: "https://log-dev.concept2.test",
+
+  it("GET /link reports a null username rather than omitting the field", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink({ c2Username: null }));
+    const { app } = buildApp({ store });
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.c2Username).toBeNull();
   });
-  expect(res.body).not.toHaveProperty("accessToken");
-  expect(res.body).not.toHaveProperty("refreshToken");
-});
 
-it("GET /link reports a null username rather than omitting the field", async () => {
-  await store.upsertLink(USER_ID, {
-    c2UserId: 2211,
-    c2Username: null,
-    accessToken: "a",
-    refreshToken: "r",
-    expiresAt: new Date(Date.now() + 86_400_000),
-    weightClass: "H",
+  it("GET /link leaks neither new field while the flag is off", async () => {
+    const { app } = buildApp({ available: false });
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body).toStrictEqual({ available: false });
   });
-  const res = await request(app).get("/api/concept2/link").set(auth(USER_ID));
-  expect(res.body.c2Username).toBeNull();
-});
-
-it("GET /link leaks neither field while the flag is off", async () => {
-  const dark = makeApp({ available: () => false });
-  const res = await request(dark).get("/api/concept2/link").set(auth(USER_ID));
-  expect(res.body).toStrictEqual({ available: false });
-});
-
-it("a real callback exchange stores the username GET /link then reports", async () => {
-  // M12's covering test, and it did not exist in any earlier draft — the
-  // paste-test had to write one before it could probe the write site at
-  // all. This one starts at the WRITER (the callback handler) rather than
-  // at `store.upsertLink`, which is what makes it a check on the route's
-  // own `c2Username: me.username || null` argument rather than on the
-  // store's ability to hold a string.
-  const app = makeApp({ me: { ok: true, c2UserId: 2211, username: "jamesawesome" } });
-  await request(app).get(`/api/concept2/callback?code=c&state=${await mintState(app)}`);
-  const res = await request(app).get("/api/concept2/link").set(auth(USER_ID));
-  expect(res.body.c2Username).toBe("jamesawesome");
-});
-
-it("stores NO username rather than an empty one when Concept2 sends a blank", async () => {
-  // M12b. `""` is what `client.ts`'s fetchMe passes through for a blank
-  // field (observation 18); `??` would store it and the card would render
-  // a gap where the account name belongs.
-  const app = makeApp({ me: { ok: true, c2UserId: 2211, username: "" } });
-  await request(app).get(`/api/concept2/callback?code=c&state=${await mintState(app)}`);
-  const res = await request(app).get("/api/concept2/link").set(auth(USER_ID));
-  expect(res.body.c2Username).toBeNull();
-});
 ```
 
-  `makeApp`'s `me` override and `mintState` are named here as the shapes this file already has for driving a full callback exchange — **read the file's existing helpers and use their real names and signatures** rather than these. If no helper can drive a callback end to end, that is itself the finding: say so, and put the two tests in `concept2.integration.test.ts` instead, where the exchange path is already exercised.
+  `freshLink`'s override type is `Partial<typeof LINK_INPUT & { expiresAt: Date }>`, so it must widen to admit the new field: `Partial<typeof LINK_INPUT & { expiresAt: Date; c2Username: string | null }>`.
+
+  The two WRITE-SITE tests go in the callback describe, beside its existing `"a username-less fetchMe falls back to the numeric id"` case, because they start at the WRITER (the callback handler) rather than at `store.upsertLink` — which is what makes them a check on the route's own `c2Username: me.username || null` argument rather than on the store's ability to hold a string:
+
+```ts
+  it("a real callback exchange stores the username GET /link then reports", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jamesawesome",
+    });
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    const done = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(done.status).toBe(200);
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.c2Username).toBe("jamesawesome");
+  });
+
+  it("stores NO username rather than an empty one when Concept2 sends a blank", async () => {
+    // `""` is what `client.ts`'s fetchMe passes through for a blank field
+    // (observation 18); `??` would store it and the card would render a gap
+    // where the account name belongs.
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "",
+    });
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.c2Username).toBeNull();
+  });
+```
 
 - [ ] **Step 3: Run it, confirm it fails** (`pnpm exec vitest run --project unit server/routes/concept2.test.ts` with the `NODE_OPTIONS` prefix), expecting a type error on `c2Username` and a missing `logbookBaseUrl` in the response.
 
@@ -1287,24 +1445,49 @@ it("stores NO username rather than an empty one when Concept2 sends a blank", as
 
   This is the same defect class as the card's, one seam over, and it lives in the same file as the write sites above — fixing it here is what makes the empty-username guard a CLASS fix rather than an instance fix. `callbackPage.ts` itself is unchanged: it escapes and renders whatever it is handed.
 
-  Add the covering test to `app/server/concept2/callbackPage.test.ts`'s neighbour, `routes/concept2.test.ts` (the route owns the fallback, the page owns the escaping):
+  **This change turns an EXISTING committed test red, and the plan names the file and the string rather than letting the implementer discover it.** `routes/concept2.test.ts`'s `"a username-less fetchMe falls back to the numeric id on the Linked page (observation 3)"` asserts, verbatim:
 
 ```ts
-it("names the numeric account the SAME way the card does when Concept2 sends no username", async () => {
-  // Two shapes, one fallback: absent and empty are both "no identity".
-  const rendered = await Promise.all(
-    [null, ""].map(async (username) => {
-      const app = makeApp({ me: { ok: true, c2UserId: 2211, username } });
-      const res = await request(app).get(`/api/concept2/callback?code=c&state=${await mintState(app)}`);
-      return res.text;
-    }),
-  );
-  expect(rendered[0]).toContain("Concept2 account #2211 is now connected to");
-  expect(rendered[1]).toContain("Concept2 account #2211 is now connected to");
-});
+    expect(res.text.replace(/<[^>]+>/g, "")).toContain(
+      "Concept2 #2211 is now connected to Ergomatic a@x.com.",
+    );
 ```
 
-  (`makeApp`/`mintState` are this file's own existing helpers — read them before writing the call, rather than assuming these names.)
+  Update that expected string to `"Concept2 account #2211 is now connected to Ergomatic a@x.com."`. Two neighbours that DO NOT change, checked rather than assumed: `server/concept2/callbackPage.test.ts` and `server/routes/concept2.integration.test.ts` both drive the page with a REAL username, so neither touches the fallback branch.
+
+  Then add the covering test for the new spelling, beside it in the callback describe (the route owns the fallback, `callbackPage.ts` owns the escaping):
+
+```ts
+  it("names the numeric account the SAME way the card does when Concept2 sends no username", async () => {
+    // Two shapes, one fallback: absent and empty are both "no identity",
+    // and both must read `account #2211` — the exact spelling the card's
+    // `identityLine` uses, so a rower meets one identity, not two.
+    const rendered: string[] = [];
+    for (const username of [null, ""] as const) {
+      const store = makeFakeConcept2Store();
+      const client = makeStubClient();
+      stubHappyExchange(client);
+      vi.mocked(client.fetchMe).mockResolvedValue({
+        ok: true,
+        c2UserId: 2211,
+        username,
+      });
+      const { app } = buildApp({ store, client });
+      const state = await mintAndGetState(app);
+      const res = await asACookie(
+        request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+      );
+      rendered.push(res.text.replace(/<[^>]+>/g, ""));
+    }
+    expect(
+      rendered.map((text) =>
+        text.includes("Concept2 account #2211 is now connected to"),
+      ),
+    ).toStrictEqual([true, true]);
+  });
+```
+
+  A `for` loop with one assertion on the mapped array, never `expect` inside the loop — `vitest/no-conditional-expect` and this plan's own mapped-assertion rule. Each iteration needs its OWN `store`/`client`, because a second callback against a store that already holds the link takes a different branch.
 
 - [ ] **Step 6: Return both fields.** `Concept2RouterDeps` gains:
 
@@ -1344,17 +1527,67 @@ it("names the numeric account the SAME way the card does when Concept2 sends no 
       });
 ```
 
-  Thread `logbookBaseUrl` from `app/server/index.ts`'s existing `c2BaseUrl` (`:119`) through `app/server/app.ts`'s `AppDeps.concept2`, exactly as `webRedirectUri` is threaded today.
+  Thread `logbookBaseUrl` from `app/server/index.ts`'s existing `c2BaseUrl` through `app/server/app.ts`'s `AppDeps.concept2`, exactly as `webRedirectUri` is threaded today.
+
+  **And change that env read from `??` to `||` in the same step** (observation 22) — it is the server end of the same absent/empty/valued rule Task 1 applies to the wire end, and splitting the two halves across tasks is how one of them ships alone:
+
+```ts
+// `||`, not `??` (Wave E PR2): `C2_BASE_URL=""` in a deploy env is a
+// STRING and survives `??`, and an empty origin builds a RELATIVE
+// View-on-Concept2 URL that opens on Ergomatic's own domain. Absent and
+// empty are the same non-answer here, and both take the default.
+const c2BaseUrl = process.env.C2_BASE_URL || "https://log-dev.concept2.com";
+```
 
 - [ ] **Step 6b: Update BOTH sides of the contract gate, and the two test harness literals.** None of these were in the plan before the paste-test ran the full `unit` project; each is a hard failure, not a warning.
 
   1. **`app/scripts/webauth-contract.test.ts`** — the test "the probe's LinkStatus interface names exactly the keys GET /api/concept2/link emits" carries an INDEPENDENT pinned literal list (`["available","c2UserId","linked","needsReauth","weightClass"]`, sorted) as well as a set comparison, "without it, deleting a key from BOTH files at once would keep the set equality green" (that test's own comment). Add `c2Username` and `logbookBaseUrl` to the pinned list, in sort order. Read `linkResponseKeys()` before writing the response literal: it strips `//` comments, then matches `res.json({...})` with `[^{}]*` and pulls keys with `(?:^|[{,])\s*(\w+)\s*:` — so an ES2015 shorthand key is not a key to it, and a nested object literal inside the response would break the read entirely.
-  2. **`app/src/monitor/Concept2LinkProbe.tsx`** — add the same two fields to its `LinkStatus` interface, which is what `linkStatusKeys()` parses. The probe's behaviour, copy and CSS are untouched (ruling iv); this is a type declaration the gate above holds equal to the route.
-  3. **`app/server/routes/concept2.test.ts`'s `buildApp`** and **`app/server/routes/concept2.integration.test.ts`'s `baseDeps`** — both construct a `Concept2RouterDeps` literal and must now supply `logbookBaseUrl`. Use a value that is obviously not production (`"https://log-dev.concept2.test"`) so M11's hardcode mutation has something to disagree with.
+  2. **`app/src/monitor/Concept2LinkProbe.tsx`** — add the same two fields (`c2Username?: string | null;` and `logbookBaseUrl?: string;`) to its `LinkStatus` interface, which is what `linkStatusKeys()` parses. The probe's behaviour, copy and CSS are untouched (ruling iv); this is a type declaration the gate above holds equal to the route.
+
+     **PUT NO `//` COMMENT INSIDE THAT INTERFACE'S BRACES.** `linkStatusKeys()` reads the body with `/([A-Za-z_$][\w$]*)\??:/g` and does NOT strip comments, unlike its sibling `linkResponseKeys()` which does. Measured: a comment beginning `// Wave E PR2: two fields the PRODUCT card reads` made the gate fail with a phantom key `"PR2"` in the emitted-vs-declared diff — a red gate for a reason that has nothing to do with the contract, and a confusing one to debug. The explanation belongs in the interface's own preceding doc comment, and that comment should say so, so the next person adding a field does not repeat it.
+  3. **`app/server/routes/concept2.test.ts`'s `buildApp`** and **`app/server/routes/concept2.integration.test.ts`'s `baseDeps`** — both construct a `Concept2RouterDeps` literal and must now supply `logbookBaseUrl`. Use a value that is obviously not production (`"https://log-dev.concept2.test"`, named as a `LOGBOOK_BASE_URL` constant beside the file's existing `WEB_REDIRECT_URI`) so M11's hardcode mutation has something to disagree with. **`concept2.test.ts` builds a SECOND such literal**, in its `createApp wiring (RF24: the seam the router-level tests skip)` describe, which constructs `AppDeps.concept2` directly rather than going through `buildApp` — it needs the field too, and `pnpm typecheck` is what names it.
+  4. **`app/server/routes/concept2.test.ts`'s `"GET: available, linked — carries c2UserId, tokens never serialized"`** — a pre-existing test that pins the whole response with `toStrictEqual` against a hardcoded five-key literal. It goes red the moment either new key is added, regardless of anything else in this plan, and no earlier draft's Files list named it. Add `c2Username: null` (that test calls `freshLink()` with no username override) and `logbookBaseUrl: LOGBOOK_BASE_URL`. Being pinned strictly is the point of that test; loosening it to `toMatchObject` would give up the leak check it exists for.
 
 - [ ] **Step 6c: Convert the migration-boundary block's two inserts to raw SQL.** `app/server/db/schema.integration.test.ts` has a describe block that deliberately caps a real database at migration 0021 to prove an older deployment still works. Drizzle's typed `.insert(concept2Links).values(...)` builder emits EVERY declared column in its generated SQL, including ones the call never names — so the moment `c2_username` joins the schema, those two inserts reference a column that database genuinely does not have, and the block goes red without anything about it changing.
 
   **This is not a new technique; the file already carries it.** That block's own existing comment says "raw SQL because the typed builder already declares `surface`, which this table does not have yet". Apply the same treatment to the two `concept2Links` inserts, with a comment naming `c2_username` the way that one names `surface`. Do NOT relax the migration cap to make it pass — the cap is what the block tests.
+
+  **The conversion forces a matching change to the block's OWN assertion, which is easy to miss.** Today the second insert's unique-violation is asserted through the typed builder, so the real Postgres text lives on `.cause` and the assertion reads `.rejects.toMatchObject({ cause: { message: expect.stringMatching(/concept2_links_c2_user_id_unique/) } })` — the file's own comment explains why. Once BOTH inserts are raw `pool.query()`, pg's error IS the top-level `.message`, and the assertion becomes `.rejects.toThrow(/concept2_links_c2_user_id_unique/)` — matching the `surface` precedent a few lines above, which is the technique this step already cites but whose assertion-shape consequence it did not.
+
+- [ ] **Step 6d: The store's own round-trip, with its OWN c2UserIds.** Append to `app/server/stores/concept2.integration.test.ts`'s `upsertLink / getLink / deleteLink` describe. Widen its local `link()` builder's override type with `c2Username: string | null`, then:
+
+```ts
+    it("round-trips c2Username, and stores null when the caller gives none", async () => {
+      // Wave E PR2. Two users, two c2UserIds, because D1's UNIQUE on
+      // `c2_user_id` is GLOBAL and every test in this describe block shares
+      // one Postgres schema — `link()`'s own default (555) is already held
+      // by `userA` from the first test in the file, so reusing it here
+      // would 409 rather than assert anything.
+      const store = createConcept2Store(db);
+      const named = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-named",
+        email: "named@c2-store.test",
+        name: "N",
+      });
+      const anon = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-anon",
+        email: "anon@c2-store.test",
+        name: "A",
+      });
+      await store.upsertLink(
+        named.id,
+        link({ c2UserId: 608, c2Username: "jamesawesome" }),
+      );
+      // No `c2Username` key at all: the input field is OPTIONAL and the
+      // COLUMN is required-and-nullable, which is the asymmetry the store's
+      // own comment records.
+      await store.upsertLink(anon.id, link({ c2UserId: 609 }));
+      expect((await store.getLink(named.id))?.c2Username).toBe("jamesawesome");
+      expect((await store.getLink(anon.id))?.c2Username).toBeNull();
+    });
+```
+
+  The file's own header states the "every test that lands a link uses its own c2UserId" rule, and its `link()` default makes it trivial to violate by accident — a first draft of exactly this test did, and 409'd instead of asserting.
 
 - [ ] **Step 7: Run the server gates.**
 
@@ -1392,6 +1625,12 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project integra
 - Consumes: `useConcept2Link` (Task 1), `describeFailure`/`identityLine` (Task 1), `startLink`'s widened `LinkOutcome` (Task 2), `OptionGroup` (`src/onboarding/OptionGroup.tsx`, unchanged).
 - Produces: `default Concept2Card({ email }: { email: string })`, `UNLINK_DISARM_MS`.
 
+**Three things in this task's component are NOT in the board or in an earlier draft, and each is a state a rower can actually reach.** They are called out here rather than left to be discovered in the diff:
+
+1. **The card clears its own attempt state on `pageshow` (invariant I5b, amendment 1k's sibling).** Task 1's hook re-reads the LINK on a bfcache restore, which fixes the case where the link SUCCEEDED. It does nothing for the case where the rower DECLINED: the panel they are stuck behind is drawn from `outcome`/`busy`, and a restore preserves the JS heap, so a declined web attempt comes back showing a buttonless OPENING CONCEPT2 panel with no Try again, forever. That is the exact state observation 19 exists to prevent, and re-reading the link alone leaves it standing. `pageshow` ONLY, never `visibilitychange` — the component's own comment carries the reason, and the lifetime table's Web-API list states it too.
+2. **A needs-reauth card whose stored class is unreadable asks for it again (amendment 1k).** `normalizeLink` degrades any `weightClass` that is not exactly `"H"`/`"L"` — `""` included — to `null`, and a RECONNECT wired to `link.weightClass` alone is then permanently disabled under CONCEPT2 STOPPED ACCEPTING THIS LINK, with no reason line and no route out that the copy offers. `reconnectClass = link.weightClass ?? weightClass` plus the ask, rendered only when the stored class is genuinely missing, so exit criterion 3's "asked once" still holds for every ordinary reconnect.
+3. **`unlink()` disarms in its `finally`, on EVERY exit.** Invariant I2 names "a second tap" as its first disarmer and the second tap has already happened; disarming only on success leaves a live `Tap again to unlink` sitting under a REASON line, where one stray tap re-fires a DELETE the rower never decided to repeat. Measured: with the disarm on the success path only, TWO of this task's own prescribed tests fail — both look for `Unlink Concept2` after a refused DELETE and find `Tap again to unlink` instead.
+
 **RF8:** the weight-class control is `OptionGroup`, the house roving-tabindex radiogroup, reused — not a fourth hand-rolled one. Its `value: V | null` state is exactly what board 1a needs ("Until a class is picked, Connect is dimmed and inert"), and `OptionGroup.tsx:9-12` records that this nothing-selected case is its own, already covered by its own keyboard tests.
 
 **RF23 enumeration (the board's §"RF23 note" asks for it on the log row; it applies here too).** What already sits on You and could offer or write the same thing: `BaselineEditor` (writes baselines), `RetestShortcut` (navigates to a test), `ResetBaselineSetup` (destroys baselines), the DIAGNOSTICS row (navigates), `Concept2LinkProbe` (dev-only; DOES offer a real link). **The probe is the one overlap and it is deliberate and dev-only** — it never ships in a release build (`dist-grep.sh:127`'s eighth needle), so no rower ever sees two Connect buttons. Nothing on You offers a weight class, an unlink, or a Concept2 link in a production build. No existing offer is displaced.
@@ -1400,7 +1639,13 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project integra
 
 ```tsx
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, act, waitFor, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  act,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { LinkOutcome } from "../adapters/linkFlow";
 
@@ -1453,9 +1698,7 @@ describe("Concept2Card availability (spec §Architecture 8: a capability gate, n
     // The earlier draft awaited a `c2-probe-settled` testid that no
     // prescribed component ever renders, and the paste-test measured M14
     // NOT BITING against it.
-    await waitFor(() =>
-      expect(api).toHaveBeenCalledWith("/api/concept2/link"),
-    );
+    await waitFor(() => expect(api).toHaveBeenCalledWith("/api/concept2/link"));
     expect(screen.queryByText("CONCEPT2")).toBeNull();
   });
 });
@@ -1466,7 +1709,9 @@ describe("Concept2Card read failed (Gate 0 amendment 1i)", () => {
     // `{available:false}` means "this deployment has no Concept2" and
     // renders nothing. A failed read means "we could not find out", which
     // is a fault, is retryable, and would be a lie if drawn as absence.
-    const api = vi.fn(async () => new Response("<html>502</html>", { status: 502 }));
+    const api = vi.fn(
+      async () => new Response("<html>502</html>", { status: 502 }),
+    );
     vi.doMock("../api", () => ({ api }));
     vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
     await renderCard();
@@ -1520,19 +1765,25 @@ describe("Concept2Card unlinked (board 1a, Gate 0 amendment change 1)", () => {
       name: "CONNECT TO CONCEPT2",
     });
     expect(connect).toBeDisabled();
-    expect(screen.getByRole("radiogroup", { name: "Weight class" })).toBeTruthy();
+    expect(
+      screen.getByRole("radiogroup", { name: "Weight class" }),
+    ).toBeTruthy();
     await userEvent.click(screen.getByRole("radio", { name: "Heavyweight" }));
     expect(connect).not.toBeDisabled();
   });
 
   it("sends the picked class to startLink, and nothing else", async () => {
-    const startLink = vi.fn(
-      async (): Promise<LinkOutcome> => ({ kind: "navigating" }),
-    );
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "navigating",
+    }));
     mount({ available: true, linked: false }, startLink);
     await renderCard();
-    await userEvent.click(await screen.findByRole("radio", { name: "Lightweight" }));
-    await userEvent.click(screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }));
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Lightweight" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
     // Exit criterion 3: exactly ONE new user attribute crosses the wire.
     expect(startLink).toHaveBeenCalledWith({ weightClass: "L" });
   });
@@ -1560,7 +1811,9 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Unlink Concept2" }),
     );
-    expect(screen.getByRole("button", { name: "Tap again to unlink" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    ).toBeTruthy();
     expect(
       api.mock.calls.filter((c) => c[1]?.method === "DELETE"),
     ).toHaveLength(0);
@@ -1572,7 +1825,9 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Unlink Concept2" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Tap again to unlink" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
     const deletes = api.mock.calls.filter((c) => c[1]?.method === "DELETE");
     expect(deletes).toHaveLength(1);
     expect(deletes[0]?.[0]).toBe("/api/concept2/link");
@@ -1591,20 +1846,28 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     // timer machinery and was stable across three repeated runs.
     mount(LINKED);
     await renderCard();
-    const unlink = await screen.findByRole("button", { name: "Unlink Concept2" });
+    const unlink = await screen.findByRole("button", {
+      name: "Unlink Concept2",
+    });
     vi.useFakeTimers();
     fireEvent.click(unlink);
-    expect(screen.getByRole("button", { name: "Tap again to unlink" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    ).toBeTruthy();
     // INDEPENDENT literals, never the production constant (RF21's own
     // "a test that imports the constant it exists to gate proves nothing").
     act(() => {
       vi.advanceTimersByTime(3999);
     });
-    expect(screen.getByRole("button", { name: "Tap again to unlink" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    ).toBeTruthy();
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.getByRole("button", { name: "Unlink Concept2" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Unlink Concept2" }),
+    ).toBeTruthy();
   });
 
   it("says the link is unchanged when the DELETE is refused, instead of appearing to do nothing", async () => {
@@ -1612,7 +1875,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     // `finally` and nothing else: the arm clears, the card re-renders
     // LINKED, and the rower's second tap looks like it silently failed —
     // or worse, like it worked and the card is wrong.
-    const api = vi.fn(async (path: string, init?: RequestInit) =>
+    const api = vi.fn(async (_path: string, init?: RequestInit) =>
       init?.method === "DELETE"
         ? new Response("nope", { status: 500 })
         : new Response(JSON.stringify(LINKED), {
@@ -1626,7 +1889,9 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Unlink Concept2" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Tap again to unlink" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
     expect(
       await screen.findByText("Couldn't unlink. Your link is unchanged."),
     ).toBeTruthy();
@@ -1638,7 +1903,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
   it("clears the unlink failure when a later unlink succeeds", async () => {
     let deleteOk = false;
     let linked = true;
-    const api = vi.fn(async (path: string, init?: RequestInit) => {
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
       if (init?.method === "DELETE") {
         if (deleteOk) linked = false;
         return new Response(null, { status: deleteOk ? 204 : 500 });
@@ -1654,15 +1919,23 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Unlink Concept2" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Tap again to unlink" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
     await screen.findByText("Couldn't unlink. Your link is unchanged.");
     deleteOk = true;
-    await userEvent.click(screen.getByRole("button", { name: "Unlink Concept2" }));
-    await userEvent.click(screen.getByRole("button", { name: "Tap again to unlink" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Unlink Concept2" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
     expect(
       await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
     ).toBeTruthy();
-    expect(screen.queryByText("Couldn't unlink. Your link is unchanged.")).toBeNull();
+    expect(
+      screen.queryByText("Couldn't unlink. Your link is unchanged."),
+    ).toBeNull();
   });
 
   it("a relink asks for the weight class again, rather than reusing the one picked for the account just removed (invariant I4)", async () => {
@@ -1673,7 +1946,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     // drives the real sequence: pick a class, connect, unlink, and find
     // Connect inert again.
     let linked = false;
-    const api = vi.fn(async (path: string, init?: RequestInit) => {
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
       if (init?.method === "DELETE") {
         linked = false;
         return new Response(null, { status: 204 });
@@ -1685,38 +1958,55 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     });
     const startLink = vi.fn(async (): Promise<LinkOutcome> => {
       linked = true;
-      return { kind: "linked", c2UserId: 2211, weightClass: "H", stateEchoed: true };
+      return {
+        kind: "linked",
+        c2UserId: 2211,
+        weightClass: "H",
+        stateEchoed: true,
+      };
     });
     vi.doMock("../api", () => ({ api }));
     vi.doMock("../adapters/linkFlow", () => ({ startLink }));
     await renderCard();
-    await userEvent.click(await screen.findByRole("radio", { name: "Heavyweight" }));
-    await userEvent.click(screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }));
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Heavyweight" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
     await screen.findByText("LINKED ✓");
-    await userEvent.click(screen.getByRole("button", { name: "Unlink Concept2" }));
-    await userEvent.click(screen.getByRole("button", { name: "Tap again to unlink" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Unlink Concept2" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
     const connect = await screen.findByRole("button", {
       name: "CONNECT TO CONCEPT2",
     });
     expect(connect).toBeDisabled();
-    expect(screen.getByRole("radiogroup", { name: "Weight class" })).toBeTruthy();
+    expect(
+      screen.getByRole("radiogroup", { name: "Weight class" }),
+    ).toBeTruthy();
   });
 });
 
 describe("Concept2Card outcomes (Gate 0 amendment 1e/1f/1g)", () => {
   it("renders the failure line and its REASON", async () => {
-    const startLink = vi.fn(
-      async (): Promise<LinkOutcome> => ({
-        kind: "exchangeFailed",
-        status: 502,
-        error: "c2_error",
-        stateEchoed: true,
-      }),
-    );
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "exchangeFailed",
+      status: 502,
+      error: "c2_error",
+      stateEchoed: true,
+    }));
     mount({ available: true, linked: false }, startLink);
     await renderCard();
-    await userEvent.click(await screen.findByRole("radio", { name: "Heavyweight" }));
-    await userEvent.click(screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }));
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Heavyweight" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
     expect(
       await screen.findByText("REASON: CONCEPT2 REFUSED THE EXCHANGE · 502"),
     ).toBeTruthy();
@@ -1724,45 +2014,60 @@ describe("Concept2Card outcomes (Gate 0 amendment 1e/1f/1g)", () => {
   });
 
   it("renders the update-required panel with no retry, because retrying this build cannot work", async () => {
-    const startLink = vi.fn(
-      async (): Promise<LinkOutcome> => ({ kind: "updateRequired" }),
-    );
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "updateRequired",
+    }));
     mount({ available: true, linked: false }, startLink);
     await renderCard();
-    await userEvent.click(await screen.findByRole("radio", { name: "Heavyweight" }));
-    await userEvent.click(screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }));
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Heavyweight" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
     expect(
-      await screen.findByText("Update Ergomatic to link your Concept2 account."),
+      await screen.findByText(
+        "Update Ergomatic to link your Concept2 account.",
+      ),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   it("re-reads the server after every attempt instead of trusting the outcome (invariant I1)", async () => {
-    const startLink = vi.fn(
-      async (): Promise<LinkOutcome> => ({
-        kind: "linked",
-        c2UserId: 2211,
-        weightClass: "H",
-        stateEchoed: true,
-      }),
-    );
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "linked",
+      c2UserId: 2211,
+      weightClass: "H",
+      stateEchoed: true,
+    }));
     // The server disagrees: it still says unlinked. The card must believe
     // the server, which is exactly what Concept2LinkProbe.tsx:173-176
     // says this surface exists to surface.
     const { api } = mount({ available: true, linked: false }, startLink);
     await renderCard();
-    await userEvent.click(await screen.findByRole("radio", { name: "Heavyweight" }));
-    await userEvent.click(screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }));
-    expect(
-      api.mock.calls.filter((c) => c[0] === "/api/concept2/link"),
-    ).toHaveLength(2);
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Heavyweight" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
+    // `waitFor`, not a bare assertion: `connect()` awaits `startLink` and
+    // THEN `reload()`, and `userEvent`'s act wrapper does not guarantee both
+    // microtask hops have flushed by the time the click resolves. A bare
+    // count here makes M19 (delete the `await reload()`) bite intermittently
+    // instead of reliably, which is a probe that proves nothing.
+    await waitFor(() =>
+      expect(
+        api.mock.calls.filter((c) => c[0] === "/api/concept2/link"),
+      ).toHaveLength(2),
+    );
     expect(screen.queryByText(/Concept2 jamesawesome/)).toBeNull();
   });
 
   it("reconnects from the STORED weight class and asks nothing (exit criterion 3)", async () => {
-    const startLink = vi.fn(
-      async (): Promise<LinkOutcome> => ({ kind: "navigating" }),
-    );
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "navigating",
+    }));
     mount({ ...LINKED, weightClass: "L", needsReauth: true }, startLink);
     await renderCard();
     await userEvent.click(
@@ -1770,6 +2075,116 @@ describe("Concept2Card outcomes (Gate 0 amendment 1e/1f/1g)", () => {
     );
     expect(startLink).toHaveBeenCalledWith({ weightClass: "L" });
     expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+});
+
+describe("Concept2Card needs re-auth with no readable class (Gate 0 amendment 1k)", () => {
+  it("asks the class again rather than offering a RECONNECT nothing can press", async () => {
+    // `normalizeLink` degrades any weightClass that is not exactly "H"/"L"
+    // — `""` included — to null. Wiring RECONNECT to `link.weightClass`
+    // alone then renders CONCEPT2 STOPPED ACCEPTING THIS LINK above a
+    // button that can never be pressed, with no reason line and no other
+    // route out except unlinking, which the copy does not offer.
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "navigating",
+    }));
+    mount({ ...LINKED, needsReauth: true, weightClass: null }, startLink);
+    await renderCard();
+    const reconnect = await screen.findByRole("button", {
+      name: "RECONNECT CONCEPT2",
+    });
+    expect(reconnect).toBeDisabled();
+    expect(
+      screen.getByRole("radiogroup", { name: "Weight class" }),
+    ).toBeTruthy();
+    await userEvent.click(screen.getByRole("radio", { name: "Lightweight" }));
+    expect(reconnect).not.toBeDisabled();
+    await userEvent.click(reconnect);
+    expect(startLink).toHaveBeenCalledWith({ weightClass: "L" });
+  });
+
+  it("still asks NOTHING when the stored class IS readable (exit criterion 3)", async () => {
+    mount({ ...LINKED, needsReauth: true, weightClass: "L" });
+    await renderCard();
+    await screen.findByRole("button", { name: "RECONNECT CONCEPT2" });
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+});
+
+describe("Concept2Card comes back from Concept2 (observation 19, invariant I5)", () => {
+  it("a restore mid-attempt leaves a reachable card, not a frozen OPENING panel", async () => {
+    // The web arm resolves `navigating` and unloads the document. A
+    // back-forward-cache restore runs NO mount, and it preserves the JS
+    // heap — so `outcome` is still `{kind:"navigating"}` and the card is
+    // still drawing a buttonless OPENING CONCEPT2 panel over a link that
+    // did NOT succeed (the rower declined, or the exchange failed). Re-
+    // reading the link alone does not fix that: the panel is drawn from
+    // `outcome`, not from `link`.
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "navigating",
+    }));
+    mount({ available: true, linked: false }, startLink);
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Heavyweight" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
+    expect(await screen.findByText("OPENING CONCEPT2")).toBeTruthy();
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pageshow"));
+    });
+    expect(
+      await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("OPENING CONCEPT2")).toBeNull();
+  });
+});
+
+describe("Concept2Card unlink failure does not latch (Gate 0 amendment 1j)", () => {
+  it("clears the previous REASON the moment a new unlink starts", async () => {
+    // Without the clear at the top of `unlink()`, the panel from the FIRST
+    // refusal sits over the second attempt while it is still in flight —
+    // a stale status line describing a request that is not the one running.
+    let attempt = 0;
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        attempt += 1;
+        if (attempt === 1) return new Response("nope", { status: 500 });
+        return new Promise<Response>(() => {
+          // never resolves: the second unlink stays in flight
+        });
+      }
+      return new Response(JSON.stringify(LINKED), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Unlink Concept2" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
+    await screen.findByText("REASON: THE SERVER ANSWERED 500");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Unlink Concept2" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("REASON: THE SERVER ANSWERED 500")).toBeNull(),
+    );
+    expect(
+      screen.queryByText("Couldn't unlink. Your link is unchanged."),
+    ).toBeNull();
   });
 });
 ```
@@ -1788,17 +2203,14 @@ import {
   type LinkOutcome,
   type WeightClass,
 } from "../adapters/linkFlow";
-import {
-  useConcept2Link,
-  type LinkReadFailure,
-} from "../api/useConcept2Link";
+import { useConcept2Link, type LinkReadFailure } from "../api/useConcept2Link";
 import OptionGroup from "../onboarding/OptionGroup";
 import { describeFailure, identityLine } from "./concept2CardModel";
 
 /**
  * Wave E PR2, Surface 1 (board `docs/design/handoffs/2026-08-31-concept2-
  * connect/README.md` states 1a-1e, amended 2026-09-03 by
- * `amendment-2026-09-03.html` states 1f-1j). The rower's only door to the
+ * `amendment-2026-09-03.html` states 1f-1k). The rower's only door to the
  * Concept2 link: connect, see which account is linked, unlink.
  *
  * NO PLATFORM CONDITIONAL LIVES HERE. `adapters/linkFlow.ts` owns the one
@@ -1836,7 +2248,9 @@ export default function Concept2Card({ email }: { email: string }) {
   const [weightClass, setWeightClass] = useState<WeightClass | null>(null);
   const [outcome, setOutcome] = useState<LinkOutcome | null>(null);
   const [busy, setBusy] = useState(false);
-  const [unlinkFailed, setUnlinkFailed] = useState<LinkReadFailure | null>(null);
+  const [unlinkFailed, setUnlinkFailed] = useState<LinkReadFailure | null>(
+    null,
+  );
   const [armed, setArmed] = useState(false);
   const disarmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1852,6 +2266,37 @@ export default function Concept2Card({ email }: { email: string }) {
   // leaving You. Returning `disarm` as the effect's cleanup is what
   // guarantees it, including for the timer.
   useEffect(() => disarm, [disarm]);
+
+  // Invariant I5's OTHER half. `useConcept2Link` re-reads the link on a
+  // back-forward-cache restore; on its own that fixes only the case where
+  // the link SUCCEEDED, because the panel the rower is stuck behind is
+  // drawn from `outcome`/`busy`, not from `link`. A restore preserves the
+  // JS heap, so a web attempt that was declined or failed comes back with
+  // `outcome` still `{kind:"navigating"}` and `busy` possibly still `true`
+  // — a buttonless OPENING CONCEPT2 panel with no Try again, forever.
+  // Clearing the attempt state on the same event is what makes the card
+  // reachable again.
+  //
+  // `pageshow` ONLY, deliberately, and NOT `visibilitychange`. `pageshow`
+  // is the restore event and it cannot fire while an attempt is genuinely
+  // live in this document — a restore means the document was unloaded and
+  // came back, which on the web arm is exactly the stuck case, and on the
+  // native arm never happens (the consent sheet is a native view over a
+  // live WebView; nothing navigates). `visibilitychange` fires whenever
+  // the app returns to the foreground, INCLUDING the moment the native
+  // sheet dismisses — a tick before or after `startLink`'s promise
+  // resolves, unordered — so clearing there would race `setOutcome` and
+  // could wipe the failure panel a declined native link just drew.
+  useEffect(() => {
+    const clearAttempt = () => {
+      setOutcome(null);
+      setBusy(false);
+    };
+    window.addEventListener("pageshow", clearAttempt);
+    return () => {
+      window.removeEventListener("pageshow", clearAttempt);
+    };
+  }, []);
 
   function arm() {
     if (disarmRef.current !== null) clearTimeout(disarmRef.current);
@@ -1890,7 +2335,6 @@ export default function Concept2Card({ email }: { email: string }) {
       // line for DELETE /api/logs/:id: "an error toast for an operation
       // that succeeded" is the defect being avoided).
       if (res.ok || res.status === 404) {
-        disarm();
         setOutcome(null);
         // Invariant I4: a relink asks again rather than silently reusing
         // the class the rower picked for an account they just removed.
@@ -1908,6 +2352,12 @@ export default function Concept2Card({ email }: { email: string }) {
     } catch {
       setUnlinkFailed({ status: null });
     } finally {
+      // Invariant I2 names three disarmers and "a second tap" is the first
+      // of them — so the arm is spent on EVERY exit, not only the happy
+      // one. Disarming only on success leaves a live "Tap again to unlink"
+      // sitting under a REASON line, where one stray tap re-fires a DELETE
+      // the rower has not decided to repeat.
+      disarm();
       setBusy(false);
     }
   }
@@ -1962,6 +2412,16 @@ export default function Concept2Card({ email }: { email: string }) {
   const updateRequired =
     outcome !== null && outcome.kind === "updateRequired" && !link.linked;
 
+  // Amendment 1k. The stored class is normally what reconnect mints from,
+  // and asking again would break exit criterion 3's "asked once". But
+  // `normalizeLink` degrades any `weightClass` that is not exactly "H" or
+  // "L" — including `""` and a value a future server renames — to `null`,
+  // and a RECONNECT button wired to `link.weightClass` alone is then
+  // permanently disabled with nothing on screen saying why. Falling back
+  // to the draft turns a dead end into one tap, and it asks for the class
+  // only in the case where we genuinely do not have one.
+  const reconnectClass = link.weightClass ?? weightClass;
+
   const status = link.linked
     ? link.needsReauth
       ? "RECONNECT NEEDED"
@@ -1997,12 +2457,27 @@ export default function Concept2Card({ email }: { email: string }) {
               Your link and weight class are kept. Reconnect to send rows again.
             </p>
           </div>
+          {link.weightClass === null && (
+            <>
+              <p className="c2-card-section">WEIGHT CLASS</p>
+              <p className="c2-card-explain">
+                Your stored weight class couldn&apos;t be read. Pick it again to
+                reconnect.
+              </p>
+              <OptionGroup
+                options={WEIGHT_OPTIONS}
+                value={weightClass}
+                onChange={setWeightClass}
+                ariaLabel="Weight class"
+              />
+            </>
+          )}
           <button
             type="button"
             className="c2-card-primary"
-            disabled={busy || link.weightClass === null}
+            disabled={busy || reconnectClass === null}
             onClick={() => {
-              if (link.weightClass !== null) void connect(link.weightClass);
+              if (reconnectClass !== null) void connect(reconnectClass);
             }}
           >
             RECONNECT CONCEPT2
@@ -2144,7 +2619,7 @@ export default function Concept2Card({ email }: { email: string }) {
 - [ ] **Step 4: Append the CSS.** In `app/src/index.css`, after the `.you-*` block. **Tokens only, never raw hex** (agent briefing). Every pairing's ratio is the amendment's §4 table, recomputed here rather than taken on faith:
 
 ```css
-/* Wave E PR2, Surface 1 (board 1a-1e + Gate 0 amendment 1f-1j). House card
+/* Wave E PR2, Surface 1 (board 1a-1e + Gate 0 amendment 1f-1k). House card
    idiom: --surface ground, 1px --rule, 2px radius, 16px padding, 12px gap
    — the board's own values, which are tokens.css's verbatim.
 
@@ -2414,11 +2889,14 @@ pnpm format:check
   | M16 | `disabled={busy}` on the Connect button (drop the `weightClass === null` clause) | "asks the weight class unconditionally and keeps Connect inert" |
   | M17 | make the first Unlink tap call `unlink()` directly | "does not delete on the first tap" |
   | M18 | change `UNLINK_DISARM_MS` to `8000` | "disarms on its own after 4 s" — this is the probe that proves the deadline test uses INDEPENDENT literals rather than the production constant (RF21) |
-  | M19 | delete the `await reload()` from `connect()` | "re-reads the server after every attempt" |
+  | M19 | delete the `await reload()` from `connect()` | "re-reads the server after every attempt". That test's count assertion is wrapped in `waitFor`, deliberately: `connect()` awaits `startLink` and THEN `reload()`, and `userEvent`'s act wrapper does not guarantee both microtask hops have flushed when the click resolves — a bare count makes this probe bite intermittently, which is a probe that proves nothing |
   | M20 | reconnect passes `weightClass` (the draft) instead of `link.weightClass` | "reconnects from the STORED weight class" |
   | M21 | remove `setWeightClass(null)` from `unlink()` | "a relink asks for the weight class again". **The covering test is rewritten** as a connect → unlink flow: against the earlier draft's LINKED-from-mount card the draft class was never set, so this mutation changed nothing observable and the probe could not bite |
   | M21b | delete the `else { setUnlinkFailed(...) }` branch from `unlink()`, leaving only the `finally` | "says the link is unchanged when the DELETE is refused" |
-  | M21c | set `unlinkFailed` but do NOT clear it at the top of `unlink()` | "clears the unlink failure when a later unlink succeeds" — a latched failure would sit over a card whose link is genuinely gone |
+  | M21c | remove the `pageshow` listener registration from the attempt-clear effect | **"a restore mid-attempt leaves a reachable card, not a frozen OPENING panel"**. This is the probe REWRITTEN: its earlier form ("set `unlinkFailed` but do not clear it at the top of `unlink()`") could not bite at all, because the panel it targets is gated `link.linked && unlinkFailed !== null` and the covering scenario made `link.linked` false anyway — the gate hid the mutant. RUN: red on exactly that test, 20 others green |
+  | M21d | drop `setUnlinkFailed(null)` from the top of `unlink()` | "clears the previous REASON the moment a new unlink starts". The `link.linked` gate makes a latched failure unobservable AFTER a successful unlink, so that is not the case to test; what IS observable is a stale REASON sitting over the NEXT attempt while it is still in flight. RUN: red on exactly that test |
+  | M21e | move `disarm()` out of `unlink()`'s `finally` and back onto the success path only | "clears the unlink failure when a later unlink succeeds" AND "clears the previous REASON the moment a new unlink starts" — both go looking for `Unlink Concept2` after a refusal and find an armed control. RUN: 2 failed, 19 passed |
+  | M-1k | `reconnectClass = link.weightClass` (drop the `?? weightClass` fallback) and stop rendering the ask | "asks the class again rather than offering a RECONNECT nothing can press" |
 
 ---
 
@@ -2561,12 +3039,33 @@ describe("readSendResponse (409 carries THREE meanings; never key on status)", (
     });
   });
 
-  it("treats an eligibility or availability refusal as the block disappearing, never as a failure the rower retries", () => {
-    expect(
-      readSendResponse(422, { error: "not_eligible", reason: "not_finished" }),
-    ).toStrictEqual({ kind: "gone" });
+  it("treats an availability or unlink refusal as the block disappearing, never as a failure the rower retries", () => {
+    // These two mean the block's own preconditions stopped holding: the
+    // flag flipped off, or the rower unlinked in another tab. There is
+    // nothing to retry and nothing to say.
     expect(readSendResponse(403, { error: "unavailable" })).toStrictEqual({
       kind: "gone",
+    });
+    expect(readSendResponse(409, { error: "unlinked" })).toStrictEqual({
+      kind: "gone",
+    });
+  });
+
+  it("SHOWS an eligibility refusal, because it means the two predicates disagree", () => {
+    // Split from the case above deliberately. A 422 is not a precondition
+    // lapsing, it is the client's mirror of `eligibilityFailure` and the
+    // server's own copy answering differently about the same row — the one
+    // divergence the cross-tree seam test exists to catch. A block that
+    // vanishes on tap reports it to nobody.
+    expect(
+      readSendResponse(422, { error: "not_eligible", reason: "not_finished" }),
+    ).toStrictEqual({
+      kind: "failed",
+      reason: "CONCEPT2 WON'T TAKE THIS ROW · NOT FINISHED",
+    });
+    expect(readSendResponse(422, { error: "not_eligible" })).toStrictEqual({
+      kind: "failed",
+      reason: "CONCEPT2 WON'T TAKE THIS ROW · NOT ELIGIBLE",
     });
   });
 
@@ -2672,10 +3171,15 @@ export type SendState =
   | { kind: "sent"; resultId: number }
   | { kind: "duplicate"; resultId: number }
   | { kind: "reauth" }
-  /** The block's own preconditions stopped holding mid-session (unlinked
-   *  in another tab, the flag flipped off, the server disagreeing about
-   *  eligibility). The block disappears; it never shows a retry for
-   *  something retrying cannot fix. */
+  /** The block's own preconditions stopped holding mid-session: unlinked
+   *  in another tab, or the flag flipped off. The block disappears; it
+   *  never shows a retry for something retrying cannot fix.
+   *
+   *  `not_eligible` is deliberately NOT one of these. It means the client
+   *  predicate and the server's disagree about the SAME row — a fault on
+   *  our side, not a precondition lapsing — and it is drawn as a `failed`
+   *  with its own reason (amendment 2h), so the divergence is visible in
+   *  the field and not only in CI. */
   | { kind: "gone" }
   | { kind: "failed"; reason: string };
 
@@ -2717,12 +3221,26 @@ export function readSendResponse(status: number, body: unknown): SendState {
         };
   }
   if (error === "needs_reauth") return { kind: "reauth" };
-  if (
-    error === "unlinked" ||
-    error === "not_eligible" ||
-    error === "unavailable"
-  ) {
-    return { kind: "gone" };
+  if (error === "unlinked" || error === "unavailable") return { kind: "gone" };
+  // `not_eligible` is NOT one of those, and folding it in with them was a
+  // defect: `unlinked` and `unavailable` mean the block's own preconditions
+  // stopped holding and it should not be on screen at all. A 422 means the
+  // CLIENT predicate and the SERVER predicate disagree about this row —
+  // exactly the drift `server/routes/concept2Send.integration.test.ts`
+  // exists to detect — and drawing it as the block silently vanishing on
+  // tap shows the rower a control that was there a second ago and now is
+  // not, while telling nobody. It is a failure, it names itself, and the
+  // divergence becomes visible in the field rather than only in CI.
+  if (error === "not_eligible") {
+    const reason = field(body, "reason");
+    return {
+      kind: "failed",
+      reason: `CONCEPT2 WON'T TAKE THIS ROW · ${
+        typeof reason === "string"
+          ? reason.toUpperCase().replace(/_/g, " ")
+          : "NOT ELIGIBLE"
+      }`,
+    };
   }
   if (status === 404) return { kind: "failed", reason: "THIS ROW IS GONE" };
   if (status === 400 && field(body, "field") === "tz") {
@@ -2752,6 +3270,7 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client 
   | M24 | `sentResultId`: drop the `row.c2UserId !== link.c2UserId` clause | "returns null when the row was accepted by a DIFFERENT account" |
   | M25 | `readSendResponse`: branch on `status === 409` before reading `error` | "tells the three 409s apart by body.error" |
   | M26 | `readSendResponse`: return `{kind:"sent", resultId: 0}` for a bodyless 200 | "degrades a malformed 200" |
+  | M28b | `readSendResponse`: fold `not_eligible` back in with `unlinked`/`unavailable` as `{kind:"gone"}` | "SHOWS an eligibility refusal, because it means the two predicates disagree". `unlinked` and `unavailable` mean the block's own preconditions lapsed and it should not be on screen; a 422 means the client mirror of `eligibilityFailure` and the server's own copy answered differently about the SAME row, which is the one divergence the cross-tree seam test exists to catch — and a block that vanishes on tap reports it to nobody. RUN: red on exactly that test |
   | M27 | `c2ResultUrl`: swap `c2UserId` and `resultId` | "builds /profile/{c2_user_id}/log/{result_id}" |
 
 ---
@@ -2766,7 +3285,8 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client 
 - Create: `app/src/session/completionStamp.ts` (+ `.test.ts`)
 - Modify: `app/src/session/LogSession.tsx` (`LogFormFields` gains two optional keys; `handleMonitorSave` sets them)
 - Modify: `app/src/justrow/JustRowLog.tsx` (the monitor door's `submit` call — the app's OTHER `source: "pm5"` producer)
-- Test: `app/src/session/LogSession.test.tsx` (append), `app/src/justrow/JustRowLog.test.tsx` (append), `app/server/routes/completedAt.integration.test.ts` (append the seam case)
+- Modify: **`app/server/routes/data.ts`** — `POST /api/logs` degrades an unrecognised `tz` instead of refusing the request (step 4b; this is the TRIAD half that protects the rower's own row)
+- Test: `app/src/session/LogSession.test.tsx` (append), `app/src/justrow/JustRowLog.test.tsx` (append), `app/server/routes/completedAt.integration.test.ts` (append the seam case AND replace its tz-refusal case), **`app/server/routes/data.test.ts`** (its `it.each` tz-refusal block is rewritten — step 4b)
 - Modify (Task 13): `app/server/db/schema.ts`'s `tz` comment, and the parent spec's mapping row
 
 **Interfaces:**
@@ -2848,41 +3368,92 @@ describe("completionStamp (Wave E PR2: the producer server/db/schema.ts's tz com
 });
 ```
 
-  Append to `app/src/session/LogSession.test.tsx` — read the file's existing monitor-door harness and reuse it; these are the assertions, not a new harness:
+  Append to `app/src/session/LogSession.test.tsx`, at the end of the `monitor door wire shape` describe. These use the file's OWN harness, read at this head — `buildMonitorFixture()`/`buildSessionFixture()`, `saveMonitorRun`, `mockWorkouts`, `mockBaselines`, `mockApi`, `renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor")` for the monitor door and `renderLog()` for the timer door, `chooseHeldAndPain()`, `SAVE_BUTTON`, and `parsedBodies(apiFn)`:
 
 ```tsx
-it("the monitor door posts the run's close stamp and this device's zone", async () => {
-  // Observation 17: PR1 shipped the validator and no producer, so this
-  // pair has never crossed the wire. Without it every Concept2 upload
-  // carries the SAVE clock as its date.
-  // …render the monitor door over a MonitorRun with a known `completedAt`,
-  // tap Save, then:
-  const body = JSON.parse(String(logsCall[1].body)) as Record<string, unknown>;
-  expect(body.completedAt).toBe(RUN.completedAt);
-  expect(body.tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
-});
+  it("the monitor door posts the run's close stamp and this device's zone", async () => {
+    // Observation 17: PR1 shipped the validator and no producer, so this
+    // pair has never crossed the wire. Without it every Concept2 upload
+    // carries the SAVE clock as its date, minutes to hours after the row
+    // was rowed and by however long the rower sat on the summary screen.
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-monitor-stamp" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-it("the timer door posts NEITHER field, because a timer row can never be uploaded", async () => {
-  // The fence is `source !== "pm5" -> not_monitor`. Posting a zone on a
-  // row nothing can read it from is one more stored attribute for nothing.
-  // …render the session door, tap Save, then:
-  const body = JSON.parse(String(logsCall[1].body)) as Record<string, unknown>;
-  expect(body).not.toHaveProperty("completedAt");
-  expect(body).not.toHaveProperty("tz");
-});
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.completedAt).toBe(run.completedAt);
+    expect(body.tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  });
+
+  it("the timer door posts NEITHER field, because a timer row can never be uploaded", async () => {
+    // The fence is `source !== "pm5" -> not_monitor`. Posting a zone on a
+    // row nothing can read it from is one more stored attribute for
+    // nothing, against the standing "ask as little as we can" ruling.
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-timer-no-stamp" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.source).toBe("timer");
+    expect("completedAt" in body).toBe(false);
+    expect("tz" in body).toBe(false);
+  });
 ```
 
-  And to `app/src/justrow/JustRowLog.test.tsx` — that file already has a `/api/logs` body reader (`fn.mock.calls.find(([path]) => path === "/api/logs")`) and a fixture with a known `completedAt`; use both:
+  And to `app/src/justrow/JustRowLog.test.tsx`, using its own `mockApi`/`commitHandoff`/`closedFreeRow`/`renderDoor`/`savedBody`:
 
 ```tsx
-it("the Just Row MONITOR door posts the close stamp too, not just the session door's", async () => {
-  // The class, not the instance: this is the app's other `source: "pm5"`
-  // producer, over the same `MonitorRun` record, behind the same
-  // eligibility fence.
-  expect(body.completedAt).toBe("2026-09-02T21:52:34.000Z");
-  expect(body.tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
-});
+  it("the Just Row MONITOR door posts the close stamp too, not just the session door's", async () => {
+    // The class, not the instance: this is the app's other `source: "pm5"`
+    // producer, over the same `MonitorRun` record, behind the same
+    // eligibility fence. Fixing only `LogSession.tsx` would leave a free
+    // row that ends `finished` uploading with its save clock as C2's date.
+    const fn = mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    commitHandoff(closedFreeRow().startedAt, null, closedFreeRow());
+    await renderDoor();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      const body = savedBody(fn);
+      // `closedFreeRow`'s own literal — the MONITOR fixture's close
+      // stamp, not `completedTimerRun`'s, which is a different clock on a
+      // door that posts neither field. Written out, never read back
+      // through the production path.
+      expect(body.completedAt).toBe("2026-09-01T09:10:20.000Z");
+      expect(body.tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    });
+  });
 ```
+
+  **That literal is the MONITOR fixture's, and an earlier draft used the TIMER fixture's by mistake** (`completedTimerRun`'s default `2026-09-02T21:52:34.000Z`, which belongs to a door that posts neither field). `closedFreeRow` closes at `2026-09-01T09:10:20.000Z`. Two same-shaped fixtures in one file, one of them irrelevant to the door under test: read the builder the test actually calls.
 
 - [ ] **Step 2: Run them and confirm they fail.**
 
@@ -2954,11 +3525,44 @@ export function completionStamp(run: { completedAt: string | null }): {
 
   And the identical line in `app/src/justrow/JustRowLog.tsx`'s `handleSave`, inside the `source: "pm5"` branch, spread from `run` (`const { run } = entry;` is already in scope there).
 
+- [ ] **Step 4b: Make `POST /api/logs` degrade an unrecognised zone instead of refusing the save — TRIAD, and the invariant it exists to hold is:** **a Concept2 field can never cost a rower their row.**
+
+  Before this task no client ever sent `tz`, so `tzError`'s 400 branch has never fired in production. After it, BOTH monitor doors send the field on every save, and that branch is reached by every rowed session. `tzError` checks membership of the SERVER image's `Intl.supportedValuesOf("timeZone")` — a list that legitimately differs from the phone's across an app-store build and a server image (`Europe/Kyiv`/`Europe/Kiev`, `America/Nuuk`/`America/Godthab` are the ordinary tzdata skew) — and **the disagreeing list is ours.** A 400 there turns a completed workout into a failed save over a field that exists only to date a THIRD PARTY's copy of it.
+
+  The route's own sibling already models the right posture: an implausible `completedAt` is `{ok: true, value: null}`, not a refusal. Do the same. In `app/server/routes/data.ts`, add a normalizer beside `tzError`:
+
+```ts
+/** The value `tz` is STORED as once it has passed `tzError`. Separate from
+ *  the check because `POST /api/logs` degrades rather than refuses (see its
+ *  own note at the call site) and still must not store `""` or `undefined`
+ *  as if either were a zone. */
+export function normalizeTz(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+```
+
+  and replace the `POST /api/logs` refusal with a degrade (the `tz` key in the `stores.logs.create` call becomes the bare `tz`):
+
+```ts
+    const tz = tzError(body.tz) === null ? normalizeTz(body.tz) : null;
+```
+
+  **The STRICT check stays where a refusal costs nothing** — the upload route (`server/routes/concept2.ts`), whose 400 `field:"tz"` refuses one Concept2 send and leaves the rower's own record untouched. That asymmetry is the whole point and the code comment says it.
+
+  **This contradicts two committed tests, and they are REPLACED, not deleted:**
+
+  - `app/server/routes/data.test.ts`'s `it.each` block titled `"rejects an invalid tz (%s) with 400, field named"` becomes `"degrades an invalid tz (%s) to null and SAVES the row"`, asserting `201` and reading the stored row back through `stores.logs.get(userA.id, res.body.id)` to confirm `tz` is `null`. Add a fourth row to its table: the EMPTY STRING, which is a string and would survive a `?? null`.
+  - `app/server/routes/completedAt.integration.test.ts`'s `"rejects a non-IANA tz with 400, field named — nothing is persisted"` becomes two cases against the real column: `tz: "Not/AZone"` -> 201 with `tz` null, and `tz: ""` -> 201 with `tz` null. Both post an ELIGIBLE pm5 body (`source: "pm5"`, `deviceName`, `endedBy: "finished"`, both work columns) — the file's `logBody()` helper defaults to `source: "manual"`, and a bare `source: "pm5"` override without a `deviceName` 400s for an unrelated reason and reads exactly like this change failing.
+
+  Both rewrites carry a comment naming the invariant, so the next reader does not "restore" the refusal.
+
 - [ ] **Step 5: Add the seam case — one test that starts upstream of the producer.** Append to `app/server/routes/completedAt.integration.test.ts`, which already stands up a migrated container, the real stores and the real route. Its existing cases prove the COLUMN round-trips; this one proves the client's own body reaches `buildC2Payload`'s accurate branch:
 
 ```ts
+// `formatC2Date` as well as `buildC2Payload` — the last assertion calls it,
+// and an earlier draft imported only the second, which does not compile.
 import { completionStamp } from "../../src/session/completionStamp.js";
-import { buildC2Payload } from "../concept2/mapping.js";
+import { buildC2Payload, formatC2Date } from "../concept2/mapping.js";
 
 it("a row posted with the CLIENT's own completion stamp gives Concept2 the workout's end, not the save clock", async () => {
   // RF24: this test starts UPSTREAM of the writer. The body is built with
@@ -2968,16 +3572,24 @@ it("a row posted with the CLIENT's own completion stamp gives Concept2 the worko
   // server can store two fields, which `completedAt.integration.test.ts`
   // already proved, and say nothing about whether anything sends them.
   const closed = "2026-09-01T09:10:20.000Z";
-  const post = await request(app)
+  const bearer = await bearerToken();
+  const created = await request(app)
     .post("/api/logs")
-    .set(auth(USER_ID))
-    .send({
-      /* …the file's existing eligible pm5 body… */
-      ...completionStamp({ completedAt: closed }),
-    });
+    .set("Authorization", bearer)
+    .send(
+      logBody({
+        source: "pm5",
+        deviceName: "PM5 432331249 Row",
+        endedBy: "finished",
+        workSeconds: 1234.5,
+        workMeters: 5000,
+        ...completionStamp({ completedAt: closed }),
+      }),
+    );
+  expect(created.status).toBe(201);
   const detail = await request(app)
-    .get(`/api/logs/${String(post.body.id)}`)
-    .set(auth(USER_ID));
+    .get(`/api/logs/${String(created.body.id)}`)
+    .set("Authorization", bearer);
   const row = detail.body as Record<string, unknown>;
   expect(row.completedAt).not.toBeNull();
   expect(row.tz).not.toBeNull();
@@ -3010,7 +3622,7 @@ it("a row posted with the CLIENT's own completion stamp gives Concept2 the worko
 });
 ```
 
-  Read `buildC2Payload`'s real `SessionLogRow` shape before writing that literal (`server/concept2/mapping.ts`) — it is an independent structural mirror of the stored row, not the Drizzle type, and its `loggedAt` is `Date` while the JSON body's is a string.
+  `bearerToken()` and `logBody()` are that file's own helpers, read at this head — it authenticates through `POST /api/auth/native` and builds its body from a `logBody(extra)` that defaults to `source: "manual"`, so the eligible-pm5 fields are passed as the override. `buildC2Payload`'s `SessionLogRow` is an independent structural mirror of the stored row, not the Drizzle type, and its `loggedAt` is `Date` while the JSON body's is a string.
 
 - [ ] **Step 6: Run the gates.** This task touches `app/src/` AND `app/server/` (a test), so both rows of the briefing's gate table apply.
 
@@ -3033,10 +3645,14 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project integra
   | M43 | `handleMonitorSave`: remove the `...completionStamp(monitorRun)` spread | "the monitor door posts the run's close stamp and this device's zone" |
   | M44 | `JustRowLog.tsx`'s monitor door: remove the same spread | "the Just Row MONITOR door posts the close stamp too" — **and if this one does not bite, the Just Row door has no covering test and the class fix is an instance fix**; say so rather than accepting the green |
   | M45 | the session/timer door: ADD the spread (a mutation that makes the code do MORE, not less) | "the timer door posts NEITHER field" — the probe that proves the no-post rows are asserted rather than merely unmentioned |
+  | M46 | `routes/data.ts`: restore the refusal (`badRequest(res, tzErr, "tz"); return;`) in place of the degrade | BOTH rewritten blocks — `data.test.ts`'s four-row `it.each` and the two integration cases. This is the probe for the TRIAD invariant itself: with the refusal back, an unrecognised zone loses the whole save |
+  | M47 | `normalizeTz`: drop the `!== ""` clause | the empty-string rows of the same two blocks — `""` is a string, so `typeof` alone stores it and the column holds a value that is not a zone |
 
 - [ ] **Step 8: Record what a walk must see.** This task changes a number on a permanent third-party record, so the design's exit evidence gains one observation, and it is not discharged by any gate in this repo (Task 14, and the walk card that carries exit criterion 2):
 
   > **The date Concept2 shows for an uploaded row equals the moment the rower STOPPED ROWING, not the moment they tapped Save.** The precondition that makes a NO possible: sit on the summary screen for a measurable interval — three minutes is plenty — before tapping Save, then read the C2 logbook entry's own date against the PM5's end-of-piece time. Without that deliberate gap the two clocks agree to within the noise and the observation proves nothing.
+
+  Step 4b adds no walk observation of its own and should not: no gate in this repo can produce a phone whose tzdata disagrees with the server's, and the degrade is invisible when they agree. What it DOES owe the record is a line in the PR: the route now stores `null` where it used to 400, so a row saved from a device with an unknown zone uploads with `loggedAt`/`effectiveTz` — the same fallback every pre-PR2 row takes — instead of not existing.
 
 ---
 
@@ -3062,8 +3678,9 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project integra
 
 ```tsx
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 import type { StoredLog } from "./storedSummary";
 
 afterEach(() => {
@@ -3083,21 +3700,50 @@ const LINKED = {
   logbookBaseUrl: "https://log-dev.concept2.com",
 };
 
-/** RF3: a REAL stored row, from `FromTheLog.test.tsx`'s own `storedRow`
- *  builder over the seeded library workout (SEA_FRET), never a hand-built
- *  minimum. Import that builder rather than copying it — a copy drifts
- *  from production the day the type changes, which is exactly how a whole
- *  phase's `wu`/`r` branch shipped with an accessibility defect. */
+/** RF3: a REAL stored row over a seeded library workout (SEA_FRET), never
+ *  a hand-built minimum.
+ *
+ *  DUPLICATED locally rather than imported from `FromTheLog.test.tsx`,
+ *  which is this file's own established precedent for a small fixture and
+ *  is NOT merely a style choice: importing a `.test.tsx` MODULE executes
+ *  every top-level `describe`/`it` in it a second time, registered inside
+ *  THIS file's run. Measured: the two files together collect 140 tests
+ *  instead of 77, and this file alone collects 77 instead of 14.
+ *  `FromTheLog.test.tsx` says the same thing about its own
+ *  `realisticSeries` fixture. */
+const SEA_FRET = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret")!;
+
 function eligibleRow(over: Partial<StoredLog> = {}): StoredLog {
-  return storedRow({
+  return {
+    id: "log-1",
+    workoutId: null,
+    workoutTitle: SEA_FRET.title,
+    workoutType: SEA_FRET.type,
+    loggedAt: "2026-08-18T18:57:00.000Z",
+    held: null,
+    pain: null,
+    notes: null,
+    thumbs: null,
+    deviceName: "PM5 432331249",
     source: "pm5",
+    c2ResultId: null,
+    c2UserId: null,
+    steps: [],
+    avgSplitSeconds: 130,
+    timeSeconds: 1550,
+    distanceMeters: 6000,
+    planKey: null,
+    planIndex: null,
+    machineWorkSeconds: null,
+    machineWorkMeters: null,
+    machineSummary: null,
+    restSeconds: null,
+    restMeters: null,
     endedBy: "finished",
     workSeconds: 1234.5,
     workMeters: 5000,
-    c2ResultId: null,
-    c2UserId: null,
     ...over,
-  });
+  };
 }
 
 /** One `api` mock for both endpoints this component talks to: the link
@@ -3108,7 +3754,7 @@ function mockApi(opts: {
   send?: { status: number; body?: unknown; text?: string };
 }) {
   const openReadOnlyUrl = vi.fn();
-  const api = vi.fn(async (path: string, init?: RequestInit) => {
+  const api = vi.fn(async (path: string, _init?: RequestInit) => {
     if (path === "/api/concept2/link") {
       return new Response(JSON.stringify(opts.link ?? LINKED), {
         status: opts.linkStatus ?? 200,
@@ -3118,7 +3764,10 @@ function mockApi(opts: {
     const send = opts.send ?? { status: 200, body: { resultId: 339 } };
     return new Response(send.text ?? JSON.stringify(send.body ?? {}), {
       status: send.status,
-      headers: { "Content-Type": send.text === undefined ? "application/json" : "text/html" },
+      headers: {
+        "Content-Type":
+          send.text === undefined ? "application/json" : "text/html",
+      },
     });
   });
   vi.doMock("../api", () => ({ api }));
@@ -3177,7 +3826,9 @@ describe("Concept2SendBlock absence (board: not linked -> nothing on the row)", 
     for (const shape of shapes) {
       const { api } = mockApi({});
       await renderBlock(eligibleRow(shape));
-      await waitFor(() => expect(api).toHaveBeenCalledWith("/api/concept2/link"));
+      await waitFor(() =>
+        expect(api).toHaveBeenCalledWith("/api/concept2/link"),
+      );
       seen.push(screen.queryByText("CONCEPT2")?.textContent ?? null);
       cleanup();
     }
@@ -3244,6 +3895,23 @@ describe("Concept2SendBlock stored sent state (spec anchor F8)", () => {
     ).toBeNull();
   });
 
+  it("keeps the result id when the server sends no logbook origin, and promises no link", async () => {
+    // `url` is null whenever `logbookBaseUrl` is — an older image mid
+    // rolling deploy is the named case. Gating the id on the BUTTON's
+    // condition made a SENT row render "Accepted by Concept2." and nothing
+    // else: no id, no link, and no way for a tester to say which row
+    // landed. The sub-line also drops its "OPENS YOUR CONCEPT2 LOGBOOK"
+    // half, which would name a destination that is not on screen.
+    mockApi({ link: { ...LINKED, logbookBaseUrl: null } });
+    await renderBlock(eligibleRow({ c2ResultId: 339, c2UserId: 2211 }));
+    expect(await screen.findByText("Accepted by Concept2.")).toBeTruthy();
+    expect(screen.getByText("RESULT 339")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "View on Concept2 →" }),
+    ).toBeNull();
+    expect(screen.queryByText(/OPENS YOUR CONCEPT2 LOGBOOK/)).toBeNull();
+  });
+
   it("renders the OFFER for a row accepted by a DIFFERENT account", async () => {
     // The current grant cannot see account 999's row, so "sent" would point
     // at something this rower cannot open (anchor F8's own case).
@@ -3291,7 +3959,9 @@ describe("Concept2SendBlock refusals (amendment 2d/2e/2f)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Send to Concept2" }),
     );
-    expect(await screen.findByText("REASON: CONCEPT2 ERROR · 502")).toBeTruthy();
+    expect(
+      await screen.findByText("REASON: CONCEPT2 ERROR · 502"),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry send" })).toBeTruthy();
   });
 
@@ -3304,6 +3974,28 @@ describe("Concept2SendBlock refusals (amendment 2d/2e/2f)", () => {
     await waitFor(() => expect(screen.queryByText("CONCEPT2")).toBeNull());
   });
 
+  it("SAYS SO when the server refuses the row as ineligible, instead of vanishing on tap", async () => {
+    // The client mirror of `eligibilityFailure` said yes and the server's
+    // own copy said no about the SAME row. Drawing that as the block
+    // disappearing shows the rower a control that was there a second ago
+    // and now is not, and reports the divergence to nobody.
+    mockApi({
+      send: {
+        status: 422,
+        body: { error: "not_eligible", reason: "no_work_totals" },
+      },
+    });
+    await renderBlock(eligibleRow());
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Send to Concept2" }),
+    );
+    expect(
+      await screen.findByText(
+        "REASON: CONCEPT2 WON'T TAKE THIS ROW · NO WORK TOTALS",
+      ),
+    ).toBeTruthy();
+  });
+
   it("survives a non-JSON error body without throwing", async () => {
     // The rolling-deploy case `adapters/linkFlow.ts:124-127` names: an old
     // image answering with HTML.
@@ -3312,42 +4004,82 @@ describe("Concept2SendBlock refusals (amendment 2d/2e/2f)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Send to Concept2" }),
     );
-    expect(await screen.findByText("REASON: CONCEPT2 ERROR · 502")).toBeTruthy();
+    expect(
+      await screen.findByText("REASON: CONCEPT2 ERROR · 502"),
+    ).toBeTruthy();
   });
 });
 ```
 
-  Two things to settle against the real files before running this, rather than assuming: `storedRow`'s real name and signature in `FromTheLog.test.tsx` (export it if it is currently module-private), and whether `cleanup` needs importing from `@testing-library/react` or is already automatic under this project's vitest config.
+  **`storedRow` is DUPLICATED into this file, not imported from `FromTheLog.test.tsx`, and that is a correctness fix rather than a style preference.** Exporting it and importing the `.test.tsx` MODULE executes every top-level `describe`/`it` in `FromTheLog.test.tsx` a SECOND time, registered inside this file's own run: measured, the two files together collect 140 tests instead of 77, and this file alone collects 77 instead of 14. `FromTheLog.test.tsx` already states the same house convention on its own `realisticSeries` fixture ("duplicated per this file's own established precedent of NOT sharing small fixtures across test files"). The local copy pulls `SEA_FRET` from `LIBRARY_WORKOUTS` the same way, so it is still a real library workout (RF3) and not a hand-built minimum.
+
+  `cleanup` DOES need importing from `@testing-library/react` — the non-qualifying loop calls it between renders.
 
   **What "renders SENT on mount" proves, and what it does not.** It hands the component a row that already carries `c2ResultId`/`c2UserId` and asserts the RENDER. It says nothing about whether anything ever writes those columns, or whether a written row reads back that way — the mocked `api` sits downstream of every producer in the system. That is not a weakness to fix here; it is the division of labour RF24 asks for, and **Task 10 owns the seam.** The same caution applies to the `log-concept2-sent.png` capture, which injects the two fields with `page.route` on `**/api/logs/*` rather than seeding the column: in a C2-dark stack the only writer of `c2_result_id` is a route that 403s, so a "seed the column and reload" capture cannot exist at all (Task 11). State both limits in the task report rather than letting a green suite and a good-looking screenshot read as end-to-end evidence.
 
-  And append to `app/src/log/FromTheLog.test.tsx`:
+  And `app/src/log/FromTheLog.test.tsx` takes TWO changes, one of them to a test that already exists.
+
+  **1. Fix the call-count regression IN PLACE.** This file's `"shows an error message with a Retry"` test ends `expect(apiMock).toHaveBeenCalledTimes(2)`, and the new component's own `GET /api/concept2/link` on every ready-state mount makes it three. Scope the assertion to the endpoint it is about; do NOT loosen it to a range, which would give up the thing it exists for (that Retry makes exactly ONE more attempt at the log, not two):
 
 ```tsx
-it("places the Concept2 block between the plan footer and Delete session", async () => {
-  // DOCUMENT ORDER, not presence: presence alone passes with the block
-  // anywhere on the screen, which is what M31 exists to prove.
-  // …render a linked, eligible row through this file's existing harness…
-  const footer = screen.getByText(/Logged to/);
-  const block = screen.getByRole("region", { name: "CONCEPT2" });
-  const del = screen.getByRole("button", { name: /Delete session/ });
-  const before = Node.DOCUMENT_POSITION_FOLLOWING;
-  expect(footer.compareDocumentPosition(block) & before).toBeTruthy();
-  expect(block.compareDocumentPosition(del) & before).toBeTruthy();
-});
+    // SCOPED to the endpoint this test is about, never a bare total.
+    // Wave E PR2 mounts `Concept2SendBlock` on the ready state, and its
+    // hook reads `GET /api/concept2/link` on every mount — a third call
+    // through the same `api` mock, which a bare `toHaveBeenCalledTimes(2)`
+    // reads as a regression.
+    const logCalls = apiMock.mock.calls.filter(([path]) =>
+      String(path).startsWith("/api/logs/log-1"),
+    );
+    expect(logCalls).toHaveLength(2);
+```
 
-it("makes NO extra /api/logs request by mounting the Concept2 block", async () => {
-  // A REGRESSION this PR causes, found by the paste-test: this file's
-  // "shows an error message with a Retry" test asserted `apiMock` had been
-  // called exactly twice, and the new component's own
-  // `GET /api/concept2/link` on every ready-state mount makes it three.
-  // Fix the existing assertion by SCOPING it to the endpoint it is about,
-  // never by loosening it to a range — and pin the scoping here so a later
-  // change cannot quietly reintroduce a broad count.
-  const logCalls = apiMock.mock.calls.filter(([path]) =>
-    String(path).startsWith("/api/logs/log-1"),
-  );
-  expect(logCalls).toHaveLength(2);
+  (An earlier draft prescribed this fix as a SECOND standalone `it()`, which is unexecutable: its body references an `apiMock` that exists only inside the existing test's scope. The prose was right about what to do; the block was in the wrong place.)
+
+  **2. Append the placement test**, in its own describe. The fixture MUST carry a plan: `view.planFooter` is conditional, so a planless row has no `Logged to` line and the test throws before it can measure order.
+
+```tsx
+describe("Concept2 send block placement (Wave E PR2, Surface 2)", () => {
+  const LINKED = {
+    available: true,
+    linked: true,
+    weightClass: "H",
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+  };
+
+  it("places the Concept2 block between the plan footer and Delete session", async () => {
+    // ORDER, not presence: presence alone passes with the block anywhere
+    // on the screen, which is what M31 exists to prove.
+    mockApi((path) =>
+      path === "/api/concept2/link"
+        ? new Response(JSON.stringify(LINKED), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        : new Response(
+            JSON.stringify(
+              storedRow({
+                planKey: "sprint",
+                planIndex: 11,
+                source: "pm5",
+                endedBy: "finished",
+                workSeconds: 1234.5,
+                workMeters: 5000,
+              }),
+            ),
+            { status: 200 },
+          ),
+    );
+    await renderFromTheLog();
+    const footer = await screen.findByText(/^Logged to/);
+    const block = await screen.findByRole("region", { name: "CONCEPT2" });
+    const del = screen.getByRole("button", { name: /Delete session/ });
+    const before = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(footer.compareDocumentPosition(block) & before).toBeTruthy();
+    expect(block.compareDocumentPosition(del) & before).toBeTruthy();
+  });
 });
 ```
 
@@ -3492,7 +4224,9 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
           `c2_user_id` and no acceptance clock), and printing `loggedAt`
           here would put the save time under a line naming a different
           event. The result id below is the durable evidence. */}
-      {state === "sent" && <p className="c2-send-line">Accepted by Concept2.</p>}
+      {state === "sent" && (
+        <p className="c2-send-line">Accepted by Concept2.</p>
+      )}
 
       {/* Amendment change 5: this state is SESSION-TRANSIENT. The route
           records the colliding id before answering (`routes/concept2.ts:
@@ -3505,23 +4239,39 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
         </p>
       )}
 
-      {url !== null && resultId !== null && (
-        <>
-          {/* A BUTTON, not an anchor: inside the Capacitor WebView a plain
-              `<a href>` drives the WebView itself to concept2.com with no
-              way back (`adapters/externalBrowser.ts`'s own note on
-              `openReadOnlyUrl`). 44px hit row. */}
-          <button
-            type="button"
-            className="c2-send-linkout"
-            onClick={() => void openReadOnlyUrl(url)}
-          >
-            View on Concept2 →
-          </button>
-          <p className="c2-send-foot">
-            RESULT {resultId} &middot; OPENS YOUR CONCEPT2 LOGBOOK
-          </p>
-        </>
+      {/* A BUTTON, not an anchor: inside the Capacitor WebView a plain
+          `<a href>` drives the WebView itself to concept2.com with no way
+          back (`adapters/externalBrowser.ts`'s own note on
+          `openReadOnlyUrl`). 44px hit row. */}
+      {url !== null && (
+        <button
+          type="button"
+          className="c2-send-linkout"
+          onClick={() => void openReadOnlyUrl(url)}
+        >
+          View on Concept2 →
+        </button>
+      )}
+
+      {/* The id renders on `resultId` ALONE, never on the link-out's
+          condition. `url` is null whenever `logbookBaseUrl` is — an older
+          server mid rolling deploy, or an origin that arrived empty — and
+          gating the id on the button meant a SENT row rendering
+          "Accepted by Concept2." and nothing else: no id, no link, no way
+          for a tester to say WHICH row landed. Amendment change 4 removed
+          the timestamp on the grounds that "the result id below is the
+          durable evidence", so this is that evidence disappearing.
+          With no link-out the sub-line drops "OPENS YOUR CONCEPT2
+          LOGBOOK", which would promise a destination that is not on
+          screen. */}
+      {resultId !== null && (
+        <p className="c2-send-foot">
+          {url !== null ? (
+            <>RESULT {resultId} &middot; OPENS YOUR CONCEPT2 LOGBOOK</>
+          ) : (
+            <>RESULT {resultId}</>
+          )}
+        </p>
       )}
 
       {state === "reauth" && (
@@ -3691,6 +4441,7 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
   | M32 | `openReadOnlyUrl` swapped for `openExternalUrl` | "opens the result through the read-only adapter" |
   | M33 | render `Accepted by Concept2 · {row.loggedAt}` | "renders SENT with the result id and NO timestamp" |
   | M34 | drop the `send.kind === "duplicate"` arm from `state`, so a 409 renders as SENT | "renders ALREADY THERE with the colliding result's own link" |
+  | M34b | gate the result-id line on the link-out's condition again (`{resultId !== null && url !== null && (`) | "keeps the result id when the server sends no logbook origin, and promises no link". `url` is null whenever `logbookBaseUrl` is — an older image mid rolling deploy, or an origin that arrived empty — and with the id gated on the button a SENT row rendered `Accepted by Concept2.` and nothing else: no id, no link, no way for a tester to say WHICH row landed. Amendment change 4 dropped the timestamp on the grounds that "the result id below is the durable evidence", so this is that evidence disappearing. RUN: red on exactly that test |
 
 ---
 
@@ -3705,33 +4456,75 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
 
 **Placement:** after `ResetBaselineSetup` (`You.tsx:89`) and before the dev-only probe (`:97-101`), which itself stays above the DIAGNOSTICS row (`:102-115`, whose comment requires it stay the LAST child). So the order becomes: BASELINES · RetestShortcut · ResetBaselineSetup · **Concept2Card** · [dev probe] · DIAGNOSTICS.
 
-- [ ] **Step 1: Write the failing tests.** `You.test.tsx` already neutralises the probe wholesale (`You.test.tsx:13`, `vi.mock("./monitor/Concept2LinkProbe", …)`); do NOT neutralise the product card the same way — the point is that it renders.
+- [ ] **Step 1: Change the file's harness FIRST, then write the tests.** `You.test.tsx` already neutralises the dev probe wholesale (`vi.mock("./monitor/Concept2LinkProbe", …)`); do NOT neutralise the product card the same way — the point is that it renders.
+
+  **There is no `api` mock in this file to "add the endpoint to".** Read at this head: `renderYou(user = {...})` takes a USER object, not an options bag; the file mocks only the probe; and one test stubs global `fetch` for its own purposes. Once `Concept2Card` mounts, EVERY test in the file runs `api("/api/concept2/link")` through the real `src/api.ts`, the rejection lands after the assertions, `setFailed` fires outside `act()`, and the read-failed panel — which renders the text `CONCEPT2` — appears in tests that never asked for it. **Task 8 owns a harness change for the whole file**, and the whole file is re-run, not just the three new cases.
 
 ```tsx
-// This file's existing harness mocks `./api` and renders <You user={...} />;
-// reuse it. `linkBody` below is whatever that harness needs to make
-// `GET /api/concept2/link` answer — add the endpoint to its `api` mock
-// rather than mocking `./api/useConcept2Link`, which would test the mock.
+// Wave E PR2: You now mounts the PRODUCT Concept2 card, whose hook reads
+// `GET /api/concept2/link` on every mount. That read has to be answered for
+// the WHOLE FILE, not only in the new cases.
+//
+// `./api` is mocked rather than `./api/useConcept2Link`, which would test
+// the mock. `src/api.ts` exports exactly one symbol, so this factory is
+// total. The card's DEFAULT answer is `{available:false}` — the state every
+// deployment is in today — so no existing test's screen changes; a case
+// that wants a card sets `c2Link.body` first.
+//
+// EVERY OTHER PATH IS DELEGATED TO GLOBAL `fetch`, which is what the real
+// `api()` does. That is not tidiness: this file's baseline-reset test
+// stubs `fetch` and counts `/api/baselines` GETs through it, so a factory
+// that answered everything itself would silently break it (measured: the
+// editor never loads and its `2k split` field is never found).
+//
+// `vi.hoisted` because `vi.mock`'s factory is hoisted above ordinary
+// declarations: a plain `const` referenced inside it throws "Cannot access
+// before initialization".
+const c2Link = vi.hoisted(() => ({ body: { available: false } as unknown }));
 
-it("renders the Concept2 card between the baseline reset and the diagnostics row", async () => {
-  // DOCUMENT ORDER, not presence: the DIAGNOSTICS row's own comment
-  // (You.tsx:102-115) requires it stay the LAST child, and presence alone
-  // would pass with the card sitting below it.
-  await renderYou({ link: { available: true, linked: false } });
-  const card = await screen.findByRole("region", { name: "CONCEPT2" });
-  const reset = screen.getByRole("button", { name: /Reset baseline setup/i });
-  const diagnostics = screen.getByRole("link", { name: /DIAGNOSTICS/ });
-  const following = Node.DOCUMENT_POSITION_FOLLOWING;
-  expect(reset.compareDocumentPosition(card) & following).toBeTruthy();
-  expect(card.compareDocumentPosition(diagnostics) & following).toBeTruthy();
+vi.mock("./api", () => ({
+  api: vi.fn(async (path: string, init?: RequestInit) =>
+    path === "/api/concept2/link"
+      ? new Response(JSON.stringify(c2Link.body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      : fetch(path, init),
+  ),
+}));
+
+beforeEach(() => {
+  c2Link.body = { available: false };
+  vi.mocked(api).mockClear();
 });
+```
 
-it("passes the signed-in rower's own email to the card, so the identity line names both principals", async () => {
-  // Gate 0 amendment 1c. The card cannot fetch this: `Me` is You's prop,
-  // and the whole point of the line is that it names BOTH principals.
-  await renderYou({
-    user: { email: "james@jamestheaweso.me", name: "James Awesome" },
-    link: {
+  (`api` is imported at the top of the file for `vi.mocked(api)`; `waitFor` and `beforeEach` join the existing imports.)
+
+  Then the three cases:
+
+```tsx
+describe("You: the Concept2 card", () => {
+  const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+
+  it("renders the Concept2 card between the baseline reset and the diagnostics row", async () => {
+    // DOCUMENT ORDER, not presence: the DIAGNOSTICS row's own comment
+    // requires it stay the LAST child, and presence alone would pass with
+    // the card sitting below it.
+    c2Link.body = { available: true, linked: false };
+    renderYou(user);
+    const card = await screen.findByRole("region", { name: "CONCEPT2" });
+    const reset = screen.getByRole("button", { name: /Reset baseline setup/i });
+    const diagnostics = screen.getByRole("link", { name: /DIAGNOSTICS/ });
+    const following = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(reset.compareDocumentPosition(card) & following).toBeTruthy();
+    expect(card.compareDocumentPosition(diagnostics) & following).toBeTruthy();
+  });
+
+  it("passes the signed-in rower's own email to the card, so the identity line names both principals", async () => {
+    // Gate 0 amendment 1c. The card cannot fetch this: `Me` is You's prop,
+    // and the whole point of the line is that it names BOTH principals.
+    c2Link.body = {
       available: true,
       linked: true,
       weightClass: "H",
@@ -3739,30 +4532,34 @@ it("passes the signed-in rower's own email to the card, so the identity line nam
       c2Username: "jamesawesome",
       needsReauth: false,
       logbookBaseUrl: "https://log-dev.concept2.com",
-    },
+    };
+    renderYou({ id: "u1", email: "james@jamestheaweso.me", name: "James A" });
+    expect(
+      await screen.findByText(
+        "Concept2 jamesawesome · Ergomatic james@jamestheaweso.me",
+      ),
+    ).toBeTruthy();
   });
-  expect(
-    await screen.findByText(
-      "Concept2 jamesawesome · Ergomatic james@jamestheaweso.me",
-    ),
-  ).toBeTruthy();
-});
 
-it("renders no Concept2 card at all when the server reports the surface unavailable", async () => {
-  // The whole-screen half of Task 4's unit case: You itself must not
-  // reserve space, add a heading, or draw a hairline for an absent card.
-  // Awaiting a POSITIVE observable first — a section of You that is always
-  // there — so the absence is asserted against a settled screen and not
-  // against a render that has not happened yet.
-  const { api } = await renderYou({ link: { available: false } });
-  expect(await screen.findByText("BASELINES")).toBeTruthy();
-  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/concept2/link"));
-  expect(screen.queryByRole("region", { name: "CONCEPT2" })).toBeNull();
-  expect(screen.queryByText("CONNECT TO CONCEPT2")).toBeNull();
+  it("renders no Concept2 card at all when the server reports the surface unavailable", async () => {
+    // The whole-screen half of Concept2Card's own unit case: You itself
+    // must not reserve space, add a heading, or draw a hairline for an
+    // absent card. Awaiting POSITIVE observables first — a section of You
+    // that is always there, and the card's own mount read — so the absence
+    // is asserted against a settled screen rather than one that has not
+    // rendered yet.
+    renderYou(user);
+    expect(await screen.findByText("BASELINES")).toBeTruthy();
+    await waitFor(() =>
+      expect(vi.mocked(api)).toHaveBeenCalledWith("/api/concept2/link"),
+    );
+    expect(screen.queryByRole("region", { name: "CONCEPT2" })).toBeNull();
+    expect(screen.queryByText("CONNECT TO CONCEPT2")).toBeNull();
+  });
 });
 ```
 
-  `renderYou` above stands for this file's existing render helper — read it and use its real name and options. Two selectors to verify rather than assume before running: whether `ResetBaselineSetup` exposes a button with that accessible name, and whether the DIAGNOSTICS row is a `<Link>` (role `link`) or something else. Both are one `git grep` each, and both have burned agents here before (the briefing's aria-label note).
+  Two selectors verified rather than assumed: `ResetBaselineSetup` does expose a button named `Reset baseline setup`, and the DIAGNOSTICS row is a `<Link>` (role `link`, `href="/you/diagnostics"`) — both read at this head, both places agents have lost time here before (the briefing's aria-label note).
 
 - [ ] **Step 2: Run, confirm failure, then edit `You.tsx`.** Add the import and, after the `<ResetBaselineSetup …/>` element:
 
@@ -3837,7 +4634,18 @@ grep -rl "CONNECT TO CONCEPT2" dist/client; echo "expected 0 (the literal IS in 
 
 **Why.** RF24, verbatim: "The check is not 'are the gates green' — it is 'which test STARTS upstream of the producer?' For any A-writes-then-B-reads seam, one test must begin before A and assert after B." The seam here is `POST /api/concept2/results/:logId` writes `c2_result_id`/`c2_user_id` → the log detail screen reads them off `GET /api/logs/:id` and renders SENT. Every other gate in this PR enters the pipe below the break: `Concept2SendBlock.test.tsx` mocks the API, `concept2Send.test.ts` hands the predicate a hand-built row, `concept2.test.ts` stops at the route's own response. **Nothing mounts the reader after the producer writes** — which is exactly the shape that let `MACHINE CONFIRMED · WORK ONLY` reach zero of sixteen production rows through three green gates.
 
-The cross-tree import is not novel: `app/server/routes/partial.integration.test.ts:32` already does `import type { RecentLog } from "../../src/api/useRecentLogs.js"` and compares the server's SQL predicate against the client's TypeScript one in one file, with that file's own comment (`:54-62`) explaining the exception to "server code never imports from the client tree".
+The cross-tree import has a type-only precedent — `app/server/routes/partial.integration.test.ts` does `import type { RecentLog } from "../../src/api/useRecentLogs.js"`, with its own comment explaining the exception to "server code never imports from the client tree". **But a `import type` is ERASED, and this file's reaches are RUNTIME ones**, so the precedent does not settle whether the specifier resolves. That was measured rather than assumed.
+
+**Precondition, VERIFIED (2026-09-03, worktree `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr2`, head `df20687c`, Docker up).** A scratch file at `app/server/routes/__c2pr2_resolver_probe.integration.test.ts` importing `{ PARTIAL_CLOSE_REASONS, historyChipWord }` from `"../../src/log/storedSummary.js"` and reading both at runtime:
+
+```bash
+cd /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr2/app
+NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project integration server/routes/__c2pr2_resolver_probe.integration.test.ts
+```
+
+Output: `Test Files  1 passed (1)` / `Tests  1 passed (1)`. **The `.js` specifier DOES resolve to `src/*.ts` at runtime under the `integration` project, from `server/routes/`.** The scratch file was deleted afterwards and `git status --short` came back empty. No redesign is needed and Task 6/10 keep their imports as written.
+
+**One trap that cost a first attempt, worth stating because it looks exactly like a resolver failure:** the specifier is relative to the FILE'S OWN DIRECTORY. From `app/server/routes/x.ts`, `../../src/…` is `app/src/…`; from `app/server/x.ts` the same string is `<repo>/src/…`, which does not exist and reports `Cannot find module`. Both of this plan's cross-tree files live in `server/routes/`, which is why `../../` is right for them — do not copy the specifier one directory up without recounting.
 
 - [ ] **Step 0: The config change this import chain forces — and the narrower one that keeps the shipped server honest.** The precedent file solved a type-only reach across the boundary by adding `src/vite-env.d.ts` to `tsconfig.server.json`'s `include` (its own comment says why). This file's chain goes further: `src/log/concept2Send.js` → `src/api/useConcept2Link.js` → `src/adapters/linkFlow.js` → `src/adapters/externalBrowser.js` → `src/adapters/webNavigate.js`, which uses `window`. `tsconfig.server.json` has `"lib": ["ES2023"]`, so `tsc -p tsconfig.server.json --noEmit` fails on it.
 
@@ -3855,38 +4663,297 @@ The cross-tree import is not novel: `app/server/routes/partial.integration.test.
   "compilerOptions": { "lib": ["ES2023"] },
   ```
 
-  **Prove the pin, do not assert it** (RF21: a gate nobody made go red is decoration). Add `const x = document.title;` to any file under `app/server/`, run `pnpm exec tsc -p tsconfig.server.build.json`, confirm it FAILS, remove it, confirm it passes. Record both outputs in the task report. If it does not fail, the pin is not doing anything and this step is not done.
+  **Prove the pin, do not assert it** (RF21: a gate nobody made go red is decoration). RUN, measured 2026-09-03 at head `df20687c`: appending `const __c2pr2_probe = document.title;` to `app/server/index.ts` and running `pnpm exec tsc -p tsconfig.server.build.json --noEmit` gives TWO errors —
+
+  ```
+  server/index.ts(171,7): error TS6133: '__c2pr2_probe' is declared but its value is never read.
+  server/index.ts(171,23): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+  ```
+
+  **Read TS2584, not the error count.** TS6133 is `noUnusedLocals` firing on the probe variable and fires with or without the pin; TS2584 is the pin doing its job. Removing the `"lib": ["ES2023"]` line and re-running leaves TS6133 alone — `document` is now accepted — which is M40c biting. Restore the pin, remove the probe line (with an editor, NOT `git checkout --`, since `server/index.ts` also carries this task's real `logbookBaseUrl` edit — RF22), and confirm 0 errors. Record all three outputs in the task report.
 
 - [ ] **Step 1: Write the test.** Runnable code, not a skeleton: the earlier draft's four `it()` bodies were prose, so nothing here could be pasted, run, or made to fail.
 
 ```ts
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  beforeEach,
+  afterAll,
+  vi,
+} from "vitest";
+import {
+  PostgreSqlContainer,
+  type StartedPostgreSqlContainer,
+} from "@testcontainers/postgresql";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import request from "supertest";
-// Header, following partial.integration.test.ts:54-62's own precedent for
-// the cross-tree import: this file is a TEST, not server code, and its
-// entire purpose is to hold the two trees' views of one seam equal. A
-// hand-copied predicate here would be a third mirror and would agree with
-// whichever side it was copied from.
-import { isSendable, sentResultId } from "../../src/log/concept2Send.js";
-import type { StoredLog } from "../../src/log/storedSummary.js";
-import type { Concept2Link } from "../../src/api/useConcept2Link.js";
+import type pg from "pg";
+import { createApp } from "../app.js";
+import { baseDeps } from "../testDeps.js";
+import { createDb, type Db } from "../db/index.js";
+import { createSessionStore } from "../auth/sessions.js";
+import { createUserStore } from "../auth/users.js";
+import { createArticleReadsStore } from "../stores/articleReads.js";
+import { createBaselinesStore } from "../stores/baselines.js";
+import { createLogsStore } from "../stores/logs.js";
+import { createPlanStateStore } from "../stores/planState.js";
+import { createPreferencesStore } from "../stores/preferences.js";
+import { createTestHistoryStore } from "../stores/testHistory.js";
+import { createWorkoutsStore } from "../stores/workouts.js";
+import { createConcept2Store } from "../stores/concept2.js";
+import { createC2Client } from "../concept2/client.js";
 import { eligibilityFailure } from "../concept2/mapping.js";
+import type { Stores } from "./data.js";
+// The CLIENT's own predicates and its own wire PARSER, imported across the
+// tree boundary — the precedent is `routes/partial.integration.test.ts`,
+// whose header explains the exception to "server code never imports from
+// the client tree": this file is a TEST, and its entire purpose is to hold
+// the two trees' views of one seam equal. A hand-copied predicate here
+// would be a third mirror and would agree with whichever side it was
+// copied from.
+//
+// `normalizeLink` matters as much as the predicates. Every other gate that
+// reads `GET /api/concept2/link` compares its keys against the DEV PROBE's
+// interface (`scripts/webauth-contract.test.ts`), which no rower ever sees;
+// the product reader is `normalizeLink`, and casting the route's body to
+// `Concept2Link` here would let the route rename a key while every suite
+// stayed green and the card silently rendered `account #2211` forever.
+import { isSendable, sentResultId } from "../../src/log/concept2Send.js";
+import { normalizeLink } from "../../src/api/useConcept2Link.js";
+import type { StoredLog } from "../../src/log/storedSummary.js";
 
-// The container / migrate / real-stores / real-app harness is the one
-// `completedAt.integration.test.ts` and `endedBy.integration.test.ts`
-// already use — copy that beforeAll/afterAll block verbatim rather than
-// inventing a third shape. `postLog`, `linkAccount` and `c2Stub` below are
-// this file's own small helpers over it.
+function jsonResponse(status: number, body: unknown): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => "application/json" },
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
+  } as unknown as Response;
+}
+
+function tokenBody() {
+  return {
+    access_token: "at-send-seam",
+    token_type: "Bearer",
+    expires_in: 604800,
+    refresh_token: "rt-send-seam",
+  };
+}
+
+function meBody(c2UserId: number, username: string) {
+  return { data: { id: c2UserId, username } };
+}
+
+// RAW lines 1-26 shape (docs/monitor/c2-crossconnect-2026-09/
+// raw-output.txt): a 201 nests the new result under `data`.
+function created201(id: number, c2UserId: number) {
+  return { data: { id, user_id: c2UserId } };
+}
+
+// The 409's colliding id is TOP LEVEL, not under `data` — read off
+// `concept2/client.ts`'s own `postResult` before writing this, and the same
+// shape `concept2.integration.test.ts` transcribes as `RAW_409_BODY`. A
+// `{message, data:{id}}` body would make `postResult` return `c2_error`
+// instead of `duplicate`, and the durable-recovery write this test exists
+// to gate would never happen — the test would prove only that a malformed
+// 409 is refused.
+function duplicate409(id: number) {
+  return { message: "Duplicate Result", id, status: 409 };
+}
+
+const WEB_REDIRECT_URI = "https://ergomatic.example/api/concept2/callback";
+const LOGBOOK_BASE_URL = "https://log-dev.concept2.test";
+
+function finishedLogBody(extra: Record<string, unknown> = {}) {
+  return {
+    workoutId: null,
+    workoutTitle: "Steady State",
+    workoutType: "AT",
+    held: null,
+    pain: null,
+    notes: null,
+    steps: [{ label: "2000 m" }],
+    deviceName: "PM5 432331249 Row",
+    source: "pm5",
+    endedBy: "finished",
+    workSeconds: 254.8,
+    workMeters: 935,
+    restSeconds: 120,
+    restMeters: 274,
+    machineSummary: { avgStrokeRate: 24, workoutType: 8 },
+    completedAt: "2026-08-25T21:42:03.110Z",
+    tz: "America/New_York",
+    ...extra,
+  };
+}
+
+// D1 makes `concept2_links.c2_user_id` UNIQUE for the whole database, and
+// every test in this file shares one container. Each linking test therefore
+// gets its OWN id — the sibling file's header states the same rule, and
+// reusing one literal across three `it()`s is exactly how a later test's
+// callback answers 409 Already linked instead of the outcome it asserts.
+const C2_USER_SENT = 700339;
+const C2_USER_DUP = 700340;
+const C2_USER_FIRST = 700341;
+const C2_USER_SECOND = 700342;
 
 describe("the Concept2 send seam: the route writes, the log detail reads (RF24)", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let app: ReturnType<typeof createApp>;
+  let sessions: ReturnType<typeof createSessionStore>;
+  let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+    await migrate(db, { migrationsFolder: "drizzle" });
+
+    const stores: Stores = {
+      baselines: createBaselinesStore(db),
+      workouts: createWorkoutsStore(db),
+      logs: createLogsStore(db),
+      planState: createPlanStateStore(db),
+      preferences: createPreferencesStore(db),
+      testHistory: createTestHistoryStore(db),
+      articleReads: createArticleReadsStore(db),
+    };
+
+    fetchMock = vi.fn();
+    const client = createC2Client(
+      {
+        baseUrl: LOGBOOK_BASE_URL,
+        clientId: "send-seam-client-id",
+        clientSecret: "send-seam-client-secret",
+      },
+      fetchMock,
+    );
+    sessions = createSessionStore(db);
+
+    app = createApp(
+      baseDeps({
+        sessions,
+        users: createUserStore(db),
+        allowlist: new Set([
+          "send-eligibility@c2send.test",
+          "send-sent@c2send.test",
+          "send-dup@c2send.test",
+          "send-relink@c2send.test",
+        ]),
+        nativeVerifier: async (idToken: string) => ({
+          sub: idToken,
+          email: `${idToken}@c2send.test`,
+          emailVerified: true,
+          name: idToken,
+        }),
+        stores,
+        concept2: {
+          available: () => true,
+          store: createConcept2Store(db),
+          client,
+          webRedirectUri: WEB_REDIRECT_URI,
+          logbookBaseUrl: LOGBOOK_BASE_URL,
+        },
+      }),
+    );
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+
+  async function signIn(
+    idToken: string,
+  ): Promise<{ bearer: string; userId: string }> {
+    const minted = await request(app)
+      .post("/api/auth/native")
+      .send({ idToken });
+    expect(minted.status).toBe(200);
+    return {
+      bearer: `Bearer ${minted.body.token}`,
+      userId: minted.body.user.id,
+    };
+  }
+
+  /** The SUPPORTED producer of a link: a real mint plus a real callback
+   *  exchange, never a direct `store.upsertLink`. */
+  async function linkAccount(opts: {
+    userId: string;
+    c2UserId: number;
+    username: string;
+  }): Promise<void> {
+    const { token } = await sessions.createSession(opts.userId);
+    const cookie = `erg_session=${token}`;
+    fetchMock.mockImplementation(async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.endsWith("/oauth/access_token")) {
+        return jsonResponse(200, tokenBody());
+      }
+      if (url.endsWith("/api/users/me")) {
+        return jsonResponse(200, meBody(opts.c2UserId, opts.username));
+      }
+      throw new Error(`unexpected fetch url while linking: ${url}`);
+    });
+    const minted = await request(app)
+      .post("/api/concept2/connect")
+      .set("Cookie", cookie)
+      .send({ weightClass: "H" });
+    expect(minted.status).toBe(200);
+    const done = await request(app)
+      .get(
+        `/api/concept2/callback?state=${String(minted.body.state)}&code=abc123`,
+      )
+      .set("Cookie", cookie);
+    expect(done.status).toBe(200);
+    fetchMock.mockReset();
+  }
+
+  /** The SUPPORTED producer of a row: `POST /api/logs`, never an insert. */
+  async function postLog(
+    bearer: string,
+    over: Record<string, unknown> = {},
+  ): Promise<string> {
+    const created = await request(app)
+      .post("/api/logs")
+      .set("Authorization", bearer)
+      .send(finishedLogBody(over));
+    expect(created.status).toBe(201);
+    return created.body.id as string;
+  }
+
+  async function readRow(bearer: string, logId: string): Promise<StoredLog> {
+    const detail = await request(app)
+      .get(`/api/logs/${logId}`)
+      .set("Authorization", bearer);
+    expect(detail.status).toBe(200);
+    return detail.body as StoredLog;
+  }
+
+  /** The link as the CARD reads it: through the production parser, off the
+   *  real route's body. */
+  async function readLink(bearer: string) {
+    const res = await request(app)
+      .get("/api/concept2/link")
+      .set("Authorization", bearer);
+    expect(res.status).toBe(200);
+    return normalizeLink(res.body);
+  }
+
   it("the eligibility predicate the CLIENT renders on and the one the SERVER enforces agree, row for row", async () => {
-    // M39/M40's covering test, and it did NOT exist in any earlier draft:
-    // the paste-test could not run either probe, because the shape-by-shape
-    // comparison they gate was written as prose rather than as code.
-    //
     // Every shape goes in through POST /api/logs — the SUPPORTED producer,
     // never a direct insert — and comes back through GET /api/logs/:id, so
     // both predicates read a row the database actually stored.
+    const { bearer } = await signIn("send-eligibility");
     const shapes: { name: string; over: Record<string, unknown> }[] = [
       { name: "pm5 finished with both work columns", over: {} },
       { name: "pm5 finished, no workSeconds", over: { workSeconds: null } },
@@ -3897,30 +4964,36 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
       { name: "pm5 program failed", over: { endedBy: "program-failed" } },
       { name: "pm5 program dropped", over: { endedBy: "program-dropped" } },
       { name: "pm5 with no close reason at all", over: { endedBy: null } },
-      { name: "timer", over: { source: "timer", deviceName: undefined } },
-      { name: "manual", over: { source: "manual", deviceName: undefined } },
-      { name: "no-reading", over: { source: "no-reading", deviceName: undefined } },
+      {
+        name: "timer",
+        over: { source: "timer", deviceName: undefined, endedBy: null },
+      },
+      {
+        name: "manual",
+        over: { source: "manual", deviceName: undefined, endedBy: null },
+      },
+      {
+        name: "no-reading",
+        over: { source: "no-reading", deviceName: undefined, endedBy: null },
+      },
     ];
 
-    const rows = await Promise.all(
-      shapes.map(async ({ over }) => {
-        const id = await postLog(over);
-        const detail = await request(app)
-          .get(`/api/logs/${id}`)
-          .set(auth(USER_ID));
-        return detail.body as StoredLog;
-      }),
-    );
+    const rows: StoredLog[] = [];
+    for (const { over } of shapes) {
+      rows.push(await readRow(bearer, await postLog(bearer, over)));
+    }
 
     // Ordered lists, so a disagreement names the SHAPE rather than just
     // failing a boolean. Both sides are computed from the same stored row.
-    const client = rows.map((row, i) => `${shapes[i]!.name}: ${String(isSendable(row))}`);
+    const client = rows.map(
+      (row, i) => `${shapes[i]!.name}: ${String(isSendable(row))}`,
+    );
     const server = rows.map(
       (row, i) =>
         `${shapes[i]!.name}: ${String(
           eligibilityFailure({
             source: row.source,
-            endedBy: row.endedBy,
+            endedBy: row.endedBy ?? null,
             workSeconds: row.workSeconds,
             workMeters: row.workMeters,
           }) === null,
@@ -3930,8 +5003,8 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
 
     // Pinned as an INDEPENDENT literal as well as compared: without it,
     // dropping the same clause from BOTH predicates would keep the
-    // equality green and prove nothing (the shape `webauth-contract.
-    // test.ts` already guards against on its own key list).
+    // equality green and prove nothing (the shape
+    // `webauth-contract.test.ts` already guards against on its key list).
     expect(client).toStrictEqual([
       "pm5 finished with both work columns: true",
       "pm5 finished, no workSeconds: false",
@@ -3951,101 +5024,108 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
   it("a row sent through the real route reads back as SENT to the client's own predicate", async () => {
     // STARTS UPSTREAM of the writer: nothing below is seeded into the
     // column, and no response is hand-built.
-    await linkAccount({ c2UserId: 2211, c2Username: "jamesawesome" });
-    const logId = await postLog({});
-    // 201 {id: 339} is PR0's real sandbox response shape, transcribed from
-    // docs/monitor/c2-crossconnect-2026-09/raw-output.txt.
-    c2Stub.mockResolvedValueOnce(
-      new Response(JSON.stringify({ data: { id: 339, user_id: 2211 } }), {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-      }),
+    const { bearer, userId } = await signIn("send-sent");
+    await linkAccount({
+      userId,
+      c2UserId: C2_USER_SENT,
+      username: "jamesawesome",
+    });
+    const logId = await postLog(bearer);
+    fetchMock.mockImplementation(async () =>
+      jsonResponse(201, created201(339, C2_USER_SENT)),
     );
     const sent = await request(app)
       .post(`/api/concept2/results/${logId}`)
-      .set(auth(USER_ID))
+      .set("Authorization", bearer)
       .send({ tz: "Europe/London" });
     expect(sent.status).toBe(200);
 
-    const detail = await request(app)
-      .get(`/api/logs/${logId}`)
-      .set(auth(USER_ID));
-    const row = detail.body as StoredLog;
-    const linkRes = await request(app)
-      .get("/api/concept2/link")
-      .set(auth(USER_ID));
-    // The link comes from the ROUTE, not from a literal: a hand-written
-    // `Concept2Link` here would let the two sides disagree about
-    // `c2UserId` and this test would never notice.
-    const link = linkRes.body as Concept2Link;
+    const row = await readRow(bearer, logId);
+    // The link comes from the ROUTE, through the PRODUCTION PARSER: a
+    // hand-written `Concept2Link` here would let the two sides disagree
+    // about `c2UserId` and this test would never notice, and a bare cast
+    // would let a renamed key reach the card as `undefined`.
+    const link = await readLink(bearer);
+    expect(link.c2Username).toBe("jamesawesome");
+    expect(link.logbookBaseUrl).toBe(LOGBOOK_BASE_URL);
     expect(sentResultId(row, link)).toBe(339);
   });
 
   it("a 409 duplicate reaches the client's predicate as SENT too, because the route records it (RF25)", async () => {
-    // The durable-recovery path (routes/concept2.ts:890-898): the route
-    // writes the colliding id BEFORE responding, so the next mount reads
-    // SENT off the row. Drop that write and the rower is told "already
-    // there" once and then shown an unsent row forever.
-    await linkAccount({ c2UserId: 2211, c2Username: "jamesawesome" });
-    const logId = await postLog({});
-    c2Stub.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ message: "duplicate", data: { id: 512 } }),
-        { status: 409, headers: { "Content-Type": "application/json" } },
-      ),
+    // The durable-recovery path: the route writes the colliding id BEFORE
+    // responding, so the next mount reads SENT off the row. Drop that write
+    // and the rower is told "already there" once and then shown an unsent
+    // row forever.
+    const { bearer, userId } = await signIn("send-dup");
+    await linkAccount({
+      userId,
+      c2UserId: C2_USER_DUP,
+      username: "dupuser",
+    });
+    const logId = await postLog(bearer);
+    fetchMock.mockImplementation(async () =>
+      jsonResponse(409, duplicate409(512)),
     );
     const sent = await request(app)
       .post(`/api/concept2/results/${logId}`)
-      .set(auth(USER_ID))
+      .set("Authorization", bearer)
       .send({ tz: "Europe/London" });
     expect(sent.status).toBe(409);
     expect(sent.body.error).toBe("duplicate");
 
-    const detail = await request(app)
-      .get(`/api/logs/${logId}`)
-      .set(auth(USER_ID));
-    const linkRes = await request(app)
-      .get("/api/concept2/link")
-      .set(auth(USER_ID));
-    expect(
-      sentResultId(detail.body as StoredLog, linkRes.body as Concept2Link),
-    ).toBe(512);
+    const row = await readRow(bearer, logId);
+    const link = await readLink(bearer);
+    expect(sentResultId(row, link)).toBe(512);
   });
 
   it("a row accepted by a DIFFERENT Concept2 account reads back as NOT sent", async () => {
     // Spec anchor F8. The stored row is unchanged; what changed is which
     // account is live, and the link-out would point at a row this grant
     // cannot open.
-    await linkAccount({ c2UserId: 2211, c2Username: "jamesawesome" });
-    const logId = await postLog({});
-    c2Stub.mockResolvedValueOnce(
-      new Response(JSON.stringify({ data: { id: 339, user_id: 2211 } }), {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-      }),
+    const { bearer, userId } = await signIn("send-relink");
+    await linkAccount({
+      userId,
+      c2UserId: C2_USER_FIRST,
+      username: "first",
+    });
+    const logId = await postLog(bearer);
+    fetchMock.mockImplementation(async () =>
+      jsonResponse(201, created201(339, C2_USER_FIRST)),
     );
-    await request(app)
+    const sent = await request(app)
       .post(`/api/concept2/results/${logId}`)
-      .set(auth(USER_ID))
+      .set("Authorization", bearer)
       .send({ tz: "Europe/London" });
-
-    await request(app).delete("/api/concept2/link").set(auth(USER_ID));
-    await linkAccount({ c2UserId: 9999, c2Username: "someone-else" });
-
-    const detail = await request(app)
-      .get(`/api/logs/${logId}`)
-      .set(auth(USER_ID));
-    const linkRes = await request(app)
-      .get("/api/concept2/link")
-      .set(auth(USER_ID));
+    expect(sent.status).toBe(200);
     expect(
-      sentResultId(detail.body as StoredLog, linkRes.body as Concept2Link),
-    ).toBeNull();
+      sentResultId(await readRow(bearer, logId), await readLink(bearer)),
+    ).toBe(339);
+
+    const removed = await request(app)
+      .delete("/api/concept2/link")
+      .set("Authorization", bearer);
+    expect(removed.status).toBe(204);
+    await linkAccount({
+      userId,
+      c2UserId: C2_USER_SECOND,
+      username: "second",
+    });
+
+    const row = await readRow(bearer, logId);
+    const link = await readLink(bearer);
+    expect(link.c2UserId).toBe(C2_USER_SECOND);
+    expect(sentResultId(row, link)).toBeNull();
   });
 });
 ```
 
-  **Read before writing, do not assume:** the upload route's real 409-duplicate body shape and how it reads the colliding id out of C2's answer (`routes/concept2.ts`, the `:890-898` region) — the stub above must produce what the route actually parses, or the test proves only that a 409 is a 409. Same for `linkAccount`: `concept2.integration.test.ts:206-214` already injects a `vi.fn()` fetch for the C2 hop, and `c2Stub` should be that same seam, not a new one.
+  **Three things in that file were read out of the code rather than assumed, and each would have made a green test that proves nothing:**
+
+  1. **The 409's colliding id is TOP LEVEL.** `concept2/client.ts`'s `postResult` reads `(parsed as {id?: unknown})?.id`; the nested `data.id` path is the 201-success shape only. An earlier draft's stub answered `{ message: "duplicate", data: { id: 512 } }`, which makes `postResult` return `c2_error` instead of `duplicate` — the durable-recovery write never happens and the test proves only that a malformed 409 is refused. The sibling file already transcribes the real shape as `RAW_409_BODY = { message: "Duplicate Result", id: 85560, status: 409 }`.
+  2. **Every linking test needs its OWN `c2UserId`.** D1's UNIQUE on `c2_user_id` is global and all four tests share one container, so a single reused literal makes the second test's callback answer 409 Already linked rather than the outcome it asserts. Hence the four named constants.
+  3. **The link is read through `normalizeLink`, not cast.** A cast is what let observation 21's class survive one file over: every other gate on this response compares its keys to the DEV PROBE's interface, and the product reader is `normalizeLink`. With a cast, renaming `c2Username` on the route leaves the whole suite green while the card renders `account #2211` forever.
+
+  `linkAccount` drives the SUPPORTED producer — a real mint plus a real callback exchange over the stubbed `fetch` — never `store.upsertLink`; the same seam `concept2.integration.test.ts` already injects.
 
 - [ ] **Step 2: Run it** (`--project integration`, Docker required). **Step 3: commit, then probe.**
 
@@ -4055,7 +5135,8 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
   | M38 | `routes/concept2.ts`'s duplicate branch: remove the write before responding | "a 409 duplicate reaches the client's predicate as SENT too" |
   | M39 | `mapping.ts`'s `eligibilityFailure`: drop the `endedBy !== "finished"` clause | "the eligibility predicate … agree, row for row" — the comparison AND the pinned literal both go red. **Neither M39 nor M40 could be run in the paste-test**, because the test they gate existed only as prose |
   | M40 | `concept2Send.ts`'s `isSendable`: accept `"no-reading"` as well as `"pm5"` | same test, from the other side |
-  | M40b | drop the `endedBy` clause from BOTH predicates at once | the pinned literal list. This is the probe that proves the comparison is not a mirror — without the literal, two identically-wrong predicates agree perfectly |
+  | M40b | drop the `endedBy` clause from BOTH predicates at once | the pinned literal list. This is the probe that proves the comparison is not a mirror — without the literal, two identically-wrong predicates agree perfectly. RUN: red on exactly that test |
+  | M40d | rename the route's response key (`c2Username:` -> `c2username:`) | "a row sent through the real route reads back as SENT to the client's own predicate" — the assertion on `link.c2Username`. This is the probe that proves the seam is read through the PRODUCT parser and not through a cast; before `normalizeLink` was wired in here, this rename left every suite in the repo green. RUN: red on exactly that test |
   | M40c | `tsconfig.server.build.json`: remove the explicit `"lib": ["ES2023"]` | step 0's `document.title` probe stops failing, i.e. the shipped server can now reach browser globals |
 
 ---
@@ -4107,7 +5188,7 @@ pnpm screenshots
 ```
   Then read each new PNG and describe what is in it in the task report (RF7: "open the image and look at it"). A capture showing an empty card or a fallback dash is a failure of this step, not of a later review.
 
-- [ ] **Step 5: Commit, then probe.** At least: make the card render while `available:false` and confirm the invisibility test goes red; shrink a tappable to 40px and confirm the structural assertion goes red; remove the `pageshow` listener from Task 1's hook and report what the Back case does — **if it still passes, that case is measuring the browser reloading rather than restoring, and it is not evidence for I5**; make the read-failed panel `return null` and confirm the 1i case goes red.
+- [ ] **Step 5: Commit, then probe.** At least: make the card render while `available:false` and confirm the invisibility test goes red; shrink a tappable to 40px and confirm the structural assertion goes red; remove the `pageshow` listener from Task 1's hook and report what the Back case does — **if it still passes, that case is measuring the browser reloading rather than restoring, and it is not evidence for I5**; make the read-failed panel `return null` and confirm the 1i case goes red. **There are TWO `pageshow` listeners now** — the hook's link re-read and the card's attempt clear (invariant I5b) — so remove them one at a time and say which case each one reddens; removing only the hook's leaves the declined-attempt case passing and would read as evidence the card is fine when it is not.
 
 ---
 
@@ -4119,7 +5200,7 @@ pnpm screenshots
 - Modify: `app/server/concept2/callbackPage.ts`
 - Test: `app/server/concept2/callbackPage.test.ts`
 
-- [ ] **Step 1: Write the failing test.**
+- [ ] **Step 1: Write the failing tests.** Both use mapped assertions rather than an `expect` inside a loop (`vitest/no-conditional-expect`, and this plan's own rule — a conditional expect silently asserts NOTHING when its condition is false, which for a "no anchors anywhere" claim is the failure mode being tested for).
 
 ```ts
 it("names no destination the page cannot take you to", () => {
@@ -4135,27 +5216,31 @@ it("names no destination the page cannot take you to", () => {
   expect(wrongAccount.html).toContain(
     "Sign in as that account in this browser, or start a new link from the account you&#39;re using.",
   );
-  for (const kind of ["notSignedIn", "wrongAccount"] as const) {
-    expect(renderCallbackPage(kind).html).not.toMatch(/\bhere\b/);
-  }
+  expect(
+    (["notSignedIn", "wrongAccount"] as const).map((kind) =>
+      /\bhere\b/.test(renderCallbackPage(kind).html),
+    ),
+  ).toStrictEqual([false, false]);
 });
 
 it("still emits no anchor and no subresource on any page", () => {
   // The constraint the rewording must not quietly relax.
-  for (const kind of [
+  const kinds = [
     "alreadyLinked", "expired", "incomplete", "notSignedIn",
     "wrongAccount", "unavailable", "failed",
-  ] as const) {
-    const { html } = renderCallbackPage(kind);
-    expect(html).not.toMatch(/<a\b/);
-    expect(html).not.toMatch(/<link\b/);
-    expect(html).not.toMatch(/<img\b/);
-    expect(html).not.toMatch(/<script\b/);
-  }
+  ] as const;
+  expect(
+    kinds.map((kind) => {
+      const { html } = renderCallbackPage(kind);
+      return [/<a\b/, /<link\b/, /<img\b/, /<script\b/].some((re) =>
+        re.test(html),
+      );
+    }),
+  ).toStrictEqual(kinds.map(() => false));
 });
 ```
 
-- [ ] **Step 2: Apply the copy.** Delete the `SIGN_IN_HERE` constant and its comment; the two `action` strings become literals:
+- [ ] **Step 2: Apply the copy.** Delete the `SIGN_IN_HERE` constant (keeping the no-anchors comment above it, which is about the template and not about the word); the two `action` strings become literals. **`callbackPage.test.ts`'s own `cases` table pins both sentences verbatim** and goes red on this change — update its `notSignedIn` and `wrongAccount` rows in the same edit, `you&#39;re` entity included, or the two new tests below pass while the table fails.
 
 ```ts
   notSignedIn: {
@@ -4234,13 +5319,15 @@ done
   1. **`app/server/routes/concept2.ts:64-67`** — the "Until PR1.75b ships the ASWebAuthenticationSession plugin nothing on the device can receive it — the design's named intentional interval" comment. PR1.75b merged as `3e15378e`. Rewrite to record that the redirect is live on device and that live-portal registration is the remaining cutover step.
   2. **The parent spec's `weight_class` premise** — "GET /api/users/me returns 13 fields, none of them weight (V10)". Replace with the MEASURED list (sixteen fields, `weight` present, no `weight_class`), the date and provenance of the measurement (1.75a plan observation 3, live log-dev response 2026-09-02), and the conclusion that survives: `weight` is a mass, `weight_class` is C2's competition binary, and deriving one from the other needs a unit we have not measured and a gender-specific threshold. **Correct the claim where it was ARGUED and everywhere it was USED** — the board's conditional-ask amendment cites it.
   3. **The board's `LogRow.tsx` pointer** — the handoff README's "About the Design Files" section. Correct to `FromTheLog.tsx` with observation 1's reason.
-  4. **The board's approved-amendments list** — record the six Gate 0 changes and every new state the amendment draws (1f, 1g, 1h, 1i, 1j, 2f, and the REASON lines), with the amendment file's path, so the README describes the surface as built.
+  4. **The board's approved-amendments list** — record the six Gate 0 changes and every new state the amendment draws (1f, 1g, 1h, 1i, 1j, **1k**, 2f, **2c-b**, **2h**, and the REASON lines), with the amendment file's path, so the README describes the surface as built.
   5. **`docs/design/DEVIATIONS.md`** — a row for the link-out's accent (observation 15 / amendment §5), naming the four canonical meanings, this fifth use, the ruling, and why a token was not minted. DEVIATIONS documents CURRENT STATE (RF9), so write it as the state, not as a history.
   6. **`app/src/adapters/externalBrowser.ts:1-6`** — its header says "PR2's read-only 'View on Concept2' link-out is the next one". It is no longer next; it is here, and it takes `openReadOnlyUrl`, not `openExternalUrl`. Reconcile.
 
   9. **`app/server/db/schema.ts`'s `tz` comment** — *"tz: the client's IANA zone; posted at save from PR2 on, or written by the upload route's first legacy send"*. As of Task 6 the first clause is TRUE for the first time, and the second is what happens to rows saved before this build. Rewrite it to say which is which as of this head, and name Task 6's `completionStamp` as the producer, so the next reader can find it in one grep instead of discovering there is none. The `completedAt` half of the same comment gets the same treatment.
 
   10. **The parent spec's mapping row** — it describes the `loggedAt`/`effectiveTz` branch as the "fallback for legacy rows". Before Task 6 that was not a fallback, it was the ONLY path, and the sentence has been describing an intention rather than the code since PR1 merged. Correct it where it is ARGUED and everywhere it is USED: state that the paired branch went live with PR2's client producer, that "legacy" means rows saved by a build predating it, and that the two are distinguishable in the database by `completed_at IS NULL`.
+
+  12. **`POST /api/logs`'s tz refusal, wherever it is described as a refusal.** Task 6 step 4b makes an unrecognised zone a DEGRADE on that route while the upload route keeps its strict 400, and two committed tests said the opposite in their own titles. Add `"tz must be an IANA timezone name"`, `"rejects an invalid tz"` and `"rejects a non-IANA tz"` to step 1's phrase census and reconcile every hit: the spec's own §Stored shapes line if it names the refusal, `server/db/schema.ts`'s `tz` comment (which item 9 below already rewrites), and the two test titles themselves. The invariant sentence — **a Concept2 field can never cost a rower their row** — goes in the spec beside the mapping row, not only in a code comment, because it is a product rule and the next person to tighten a validator needs to meet it.
 
   11. **`app/server/routes/concept2.ts:405-407`'s "never renders an empty identity" comment** — Task 3 step 5b makes that claim true; until then it sat above a `??` that could render exactly one. Reconcile it to say WHY (`||`, because an empty string is a string), rather than deleting it: the claim is the useful part and the guard is what earns it.
   7. **`ROADMAP.md`'s Wave E PR2 checkbox** (`:1275-1278`) — tick it, and add the follow-ons this PR names rather than leaving them in the PR body (RF14): (a) the fake-Concept2 e2e service that ruling (v) declined; (b) the conditional weight-class ask, if ruling (i) went to A, as the two-phase-link design it would need; (c) **the delete-vs-sent question** raised in Task 7's RF23 enumeration — deleting a row that is already on Concept2 leaves the Concept2 row standing, which matches the unlink copy's position but is nowhere stated to the rower at the delete confirm; (d) **rows saved before Task 6** carry `completed_at IS NULL` and will always upload with their save clock as C2's date — there is no backfill and there cannot be one, since the close instant was never recorded. Say so as a known, permanent property of pre-PR2 rows rather than letting a future reader read it as a bug.
@@ -4290,10 +5377,14 @@ This PR puts Concept2 in front of the rower: link an account on You, send a fini
 
 **Spec coverage.** §Surfaces 1 (You card: unlinked, waiting, linked, unlink-confirm, link-failed) → Tasks 4 and 8. §Surfaces 2 (log row: idle, sending, sent with link-out, duplicate, failed; non-qualifying and not-linked absence) → Tasks 5 and 7. §Architecture 4 (`GET`/`DELETE /link`) → Tasks 1, 3, 4. §Architecture 5 (upload route, 409 recovery) → Tasks 5, 7, 10. §Architecture 8 (availability as a capability gate) → Tasks 4, 7, 11. §Stored shapes (sent-state authority, F8) → Tasks 5 and 10; (the close stamp, anchor K3) → Task 6. Exit criterion 3 (one new PII attribute) → Task 4's tests. Exit criterion 2 (a linked user sends an eligible row ON THE PHONE, with duplicate and failure each observed for real) → **NOT discharged by this PR: it needs a device walk against a flag-on server, and that walk is a separate card.** Named here rather than implied. Task 6 adds one observation to that walk (its step 8), and it is the only one with a stated precondition that makes a NO possible.
 
-**Gaps, stated.** (a) The web OAuth hop is exercised by no automated gate — ruling (v) declines the fake-Concept2 service and Task 11 says so in the spec header. (b) The native arm is reachable by no gate in this repo (RF19); `Concept2LinkProbe` plus a walk is the whole instrument, and this PR does not add one. (c) Exit criterion 2 above. (d) `pageshow`'s availability at the deployment floor is unconfirmed by any primary source; the design degrades to a mount-only read if it never fires, and Task 11's Back case is the only evidence this repo can produce (see the lifetime table's Web-API list). (e) Rows saved before Task 6 carry no close stamp and will upload with their save clock forever — no backfill is possible, because the instant was never recorded.
+**Gaps, stated.** (a0) The `pnpm build` / `pnpm dist:grep` claims were not re-measured in this revision; Task 9 runs them and records its own numbers, and the paste-test receipt says so rather than carrying an inherited row. (a) The web OAuth hop is exercised by no automated gate — ruling (v) declines the fake-Concept2 service and Task 11 says so in the spec header. (b) The native arm is reachable by no gate in this repo (RF19); `Concept2LinkProbe` plus a walk is the whole instrument, and this PR does not add one. (c) Exit criterion 2 above. (d) `pageshow`'s availability at the deployment floor is unconfirmed by any primary source; the design degrades to a mount-only read if it never fires, and Task 11's Back case is the only evidence this repo can produce (see the lifetime table's Web-API list). (e) Rows saved before Task 6 carry no close stamp and will upload with their save clock forever — no backfill is possible, because the instant was never recorded. (f) Task 6 step 4b's degrade cannot be observed on any device this project can produce: it fires only when the phone's zone list and the server image's disagree, and every gate here runs both on one machine. What the change is defended by is the invariant, not an observation — a refusal on that route costs a rower a completed workout, and the field it refuses over exists only to date a third party's copy of it.
 
 **Type consistency.** `Concept2Link` is defined once (Task 1) and consumed by Tasks 3, 4, 5, 7, 10. `LinkReadFailure` once (Task 1), consumed by Task 4 for BOTH the failed read and the failed unlink — one spelling of "what went wrong on the wire", so `reasonFor` has one caller shape rather than two. `SendState` once (Task 5), consumed by Task 7. `LinkOutcome`'s `busy` member is widened in Task 2 and read in Task 1's `describeFailure` — **land Task 2 before or with Task 1**, since `describeFailure`'s `busy` arm does not compile against the current union. `isSendable`/`sentResultId` are named identically in Tasks 5, 7 and 10. `logbookBaseUrl` is the same name in the server response (Task 3), the client type (Task 1) and the URL builder (Task 5). `completionStamp` (Task 6) is imported by the client door that posts and by the server test that gates the seam — it has no imports of its own, deliberately, so the cross-tree hop drags nothing with it.
 
 **Ordering.** Task 2 before or with Task 1 (the union). **Task 6 before Task 7**: Task 7 puts a Send button in front of a rower, and every row sent before Task 6 exists carries the wrong date on a record that cannot be re-dated. Task 3 before Task 4 (the card reads `c2Username`). Task 10 after Tasks 5 and 7 (it imports both trees' predicates). Everything else is independent.
 
-**Completeness of the prescribed code.** Every `it()` body in this plan is runnable code. The earlier draft carried prose bodies in three files — the send block's, You's, and the seam test's — and the cost was measurable: the paste-test could not run any of those three, M39 and M40 had no covering test to bite, and the two seam-shaped defects the plan most needed gating were the ones with no executable gate. Where a block still needs something read before it will run (a harness helper's real name, a route's real 409 body), the step says so explicitly and names the file to read.
+**Completeness of the prescribed code.** Every `it()` body in this plan is runnable code, and "runnable" means it was RUN: the whole prescribed set was placed at its real paths at head `df20687c`, compiled, linted and executed together, and every block below is written as it ran green. Where a block depends on a harness helper, the plan now names that helper by its REAL name read at this head — `buildApp`/`mintAndGetState`/`asACookie`/`freshLink` in `concept2.test.ts`, `buildMonitorFixture`/`parsedBodies`/`renderManualLog` in `LogSession.test.tsx`, `closedFreeRow`/`savedBody`/`commitHandoff` in `JustRowLog.test.tsx`, `bearerToken`/`logBody` in `completedAt.integration.test.ts`, `renderFromTheLog`/`storedRow`/`mockApi` in `FromTheLog.test.tsx` — rather than a plausible-sounding stand-in. An earlier draft invented `makeApp` and `mintState`, which is why three of its mutation probes gated tests that could not be pasted.
+
+**What the placement changed, and why none of it is bookkeeping.** Each of these is a block that would have failed in a task round: a comment inside `LinkStatus`'s braces reads as a key to the contract gate (Task 3 step 6b); `unlink()` disarming only on success broke two of this plan's own tests and contradicted invariant I2 (Task 4); `You.test.tsx`'s `./api` factory has to delegate to global `fetch` or an unrelated baseline test loses its own field (Task 8); the Just Row assertion literal belonged to the TIMER fixture, not the monitor one (Task 6); `Concept2SendBlock.test.tsx` importing `FromTheLog.test.tsx` re-registers 63 foreign tests inside its own run (Task 7); and four prescribed `vi.fn(async (path, init) => …)` mocks tripped `noUnusedParameters` on the parameter each one does not read.
+
+**Mutation adequacy is stated per probe, not asserted in aggregate.** Every probe added or rewritten in this revision carries the exact test it must redden and, where it was run, the observed result. Two probes were REWRITTEN because they could not bite as specified — M21c (the panel it targeted was hidden by a `link.linked` gate the covering scenario flipped) and M6c (a sibling change to the read path meant the mutant still reported the right status against the old test) — and both now name a different, reachable case rather than being deleted or left green.
