@@ -1273,11 +1273,21 @@ closed with zero Concept2 contact.
       decided, the app-wide path only logs `auth_disagreement` and
       `/api/concept2/*` alone refuses.
 - [ ] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
-      (Connect + H/L ask + Unlink) and the log row's Send action with
+      (Connect + Unlink; it asks nothing) and the log row's Send action with
       sent/duplicate/failed states and a View-on-Concept2 link-out. **M**
-- [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open: the
-      `weight_class` gate is answered by the link flow (RULED — a binary H/L
-      asked only at C2 link time, never at onboarding, and it is PII); the
+      Also carries the 2026-09-03 weight-class ruling: migration 0023 drops
+      `weight_class` from both Concept2 tables and the send path derives the
+      class from the linked Concept2 profile. **TRIAD** (stored shape + what
+      a number means on a third party's record).
+- [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open and
+      RE-RULED 2026-09-03: the `weight_class` gate is answered by Concept2's
+      own profile, not by the link flow. James: "I don't want that set in our
+      app. I want it to be set on Concept2's side." This SUPERSEDES the
+      2026-08-22 ruling ("a binary H/L asked only at C2 link time"). The app
+      asks nothing and stores nothing; the send path derives H/L from the
+      profile's `weight` + `gender`. Measured 2026-09-03 on log-dev: a result
+      POSTed without `weight_class` is refused 422, and `GET /api/users/me`
+      carries `weight` and `gender` but no `weight_class`. The
       per-interval `rest_time` gate is NOT answered this wave — RC-1 stored the
       session-level split only, `LogStep` carries no per-interval rest, so the
       `intervals` array is out of scope and rides the auto-upload follow-on.
@@ -1297,8 +1307,13 @@ rejects or does not return, never for a field we chose not to send. Plus,
 from the widened scope: a linked user sends an eligible row from the app ON
 THE PHONE and C2's result id is stored on it, with the duplicate (409) and
 failure states each observed for real at least once; the link flow's
-request bodies carry exactly ONE new user attribute, `weight_class` (the
-countable form of minimal-PII); and the dedup-granularity, `state`-echo and
+request bodies carry NO new user attribute (the countable form of
+minimal-PII, STRENGTHENED by the 2026-09-03 ruling — it used to read
+"exactly ONE new user attribute, `weight_class`"); **the UNIT of Concept2's
+`weight` field is measured on James's log-dev profile before the flag
+flips** (Concept2's only published line contradicts its own example, and no
+gate in this repo can settle it — every test agrees with whatever constant
+we chose); and the dedup-granularity, `state`-echo and
 zero-rest-post questions each carry a measured answer in PR0's report —
 "unknown" leaves the wave open. (RC-9(b)'s live ring verdict moved OUT to
 the open-item register at the PM open gate: no shared mechanism, PR, or

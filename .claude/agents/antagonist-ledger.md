@@ -6573,3 +6573,27 @@ plan's own tools and never with the REPO's.
   made `link.linked` false — so the mutant was invisible regardless. Settled by
   asking, for every probe, which RENDER CONDITION stands between the mutated
   state and the assertion, and whether the test's own scenario satisfies it.
+- **Ruling 2026-09-03 — "the API applies the profile's weight-class default".**
+  The claim: Concept2's logbook profile carries a Weight Class default that
+  "applies to the majority of your results", so a result POSTed without
+  `weight_class` would be filled in from it — which is why the design had spent
+  two revisions arguing about WHEN to ask the rower for a class rather than
+  whether to ask at all. Believed because the logbook help says exactly that, in
+  those words, and it is a true statement about the WEBSITE. Settled in one
+  command pair against log-dev: `POST /api/users/me/results` with no
+  `weight_class` answers **422**
+  (`{"errors":{"weight_class":["The weight class field is required."]}}`), and
+  the SAME row with `weight_class:"H"` answers **201** — a same-row control, so
+  the 422 cannot be blamed on anything else in the body. **Technique: when a
+  vendor's help page describes a default, the question is not whether the
+  default exists but which SURFACE applies it; ask the API by sending the
+  request without the field, with a control that differs in exactly that field.**
+  The same probe's `GET /api/users/me` also falsified the spec's V10 ("13
+  fields, none of them weight") — sixteen fields, `weight` and `gender` both
+  present — which turned the whole question around: the class was always
+  derivable and never had to be asked. **The residual this ruling creates is
+  named rather than closed:** the UNIT of that `weight` field is an INFERENCE
+  (Concept2's only published line sits on a different endpoint and contradicts
+  its own example — "decigrams", "e.g. 7500 for 75kg"), and no gate in this repo
+  can settle it, because every test we write agrees with whatever constant we
+  chose. RF11's shape exactly; the answer is a walk leg, not a test.

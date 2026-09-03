@@ -319,37 +319,9 @@
         letter-spacing: 0.08em;
         color: var(--ink-4);
       }
-      .wc-label {
-        font-family: var(--font-mono);
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.16em;
-        color: var(--ink);
-        margin: 0;
-      }
-      .wc-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-      .wc-opt {
-        min-height: 44px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid var(--rule-3);
-        border-radius: 0;
-        background: transparent;
-        color: var(--ink-3);
-        font-family: var(--font-sans);
-        font-size: 15px;
-        font-weight: 600;
-      }
-      .wc-opt.sel {
-        background: var(--ink);
-        border-color: var(--ink);
-        color: var(--on-color);
-      }
+      /* RF5: the .wc-* weight-class control rules are DELETED with the
+         control itself (2026-09-03 ruling). No frame on this page renders
+         one. */
       .btn-primary {
         min-height: 48px;
         display: flex;
@@ -364,11 +336,8 @@
         font-weight: 600;
         letter-spacing: 0.16em;
       }
-      .btn-primary.dim {
-        background: transparent;
-        border-color: var(--rule-3);
-        color: var(--ink-3);
-      }
+      /* .btn-primary.dim deleted with it: nothing dims Connect any more,
+         because nothing gates it. */
       .btn-outline {
         min-height: 48px;
         display: flex;
@@ -614,12 +583,21 @@
         <td class="num">1</td>
         <td>1a's weight-class ask is <em>conditional</em>: "do NOT ask H/L if
           Concept2 already has a weight class on the account."</td>
-        <td><strong>Unconditional.</strong> The ask always renders; Connect stays
-          inert until H or L is picked.</td>
-        <td><code>server/routes/concept2.ts:229-238</code> — the mint 400s
-          without <code>weightClass</code>, so the ask must precede the authorize
-          hop. Concept2 has no <code>weight_class</code> on
-          <code>/users/me</code> to check (see ruling i).</td>
+        <td><strong>There is no ask at all.</strong> The WEIGHT CLASS section,
+          its segmented control and its helper are gone; Connect is live on
+          first paint. One helper line replaces them: &quot;Your weight class
+          comes from your Concept2 profile.&quot;</td>
+        <td><strong>James, 2026-09-03:</strong> &quot;I don't want that set in
+          our app. I want it to be set on Concept2's side.&quot; Measured the
+          same day on log-dev: a result POSTed without
+          <code>weight_class</code> is refused <strong>422</strong>
+          (<code>{"errors":{"weight_class":["The weight class field is
+          required."]}}</code>), and <code>GET /api/users/me</code> carries
+          <code>weight</code> and <code>gender</code> but no
+          <code>weight_class</code> &mdash; so the class is DERIVED
+          server-side at send time and stored by us nowhere. Supersedes both
+          the board's conditional ask and this amendment's earlier
+          &quot;unconditional&quot; answer.</td>
       </tr>
       <tr>
         <td class="num">2</td>
@@ -685,19 +663,27 @@
       (<code>src/You.tsx:89-115</code>).
     </p>
 
-    <h3>1a Unlinked, with the weight-class ask <span class="badge b-changed">CHANGED</span></h3>
+    <h3>1a Unlinked, asking nothing <span class="badge b-changed">CHANGED</span></h3>
     <p class="lede">
-      Copy is the board's, verbatim. What changed is that the ask is no longer
-      conditional and no longer waits on a Concept2 lookup: it renders on every
-      unlinked card. Connect is inert (border <code>--rule-3</code>, label
-      <code>--ink-3</code>) until a class is picked. The segmented control is
-      <code>onboarding/OptionGroup.tsx</code> reused (RF8: the house
-      roving-tabindex radiogroup, one tab stop, arrows move focus and selection),
-      not a fourth hand-rolled one.
+      Copy is the board's, verbatim, minus what the 2026-09-03 ruling removed.
+      The WEIGHT CLASS section, its two-column segmented control, its
+      &quot;Concept2 requires a weight class. Asked once, at connect.&quot; ask
+      and its 61.5/75&nbsp;kg helper are all GONE, and so is the rule that kept
+      Connect inert until a class was picked. <strong>Connect is live on first
+      paint.</strong> In their place, one helper line above the button:
+      &quot;Your weight class comes from your Concept2 profile.&quot;
+      (12px <code>--ink-3</code>).
+    </p>
+    <p class="lede">
+      <strong>The card now collects nothing at all</strong> &mdash; no
+      radiogroup, no input, no draft state. That is the ruling's whole visible
+      effect on this surface, and it is why the two frames below are one frame:
+      there is no &quot;nothing picked&quot; and &quot;picked&quot; pair any
+      more, because there is nothing to pick.
     </p>
     <div class="boards">
       <div class="board">
-        <p class="board-cap">1a &middot; PORTRAIT &middot; in situ on You &middot; nothing picked</p>
+        <p class="board-cap">1a &middot; PORTRAIT &middot; in situ on You &middot; nothing to pick</p>
         <div class="frame">
           <div class="you-row">
             <div class="avatar">JA</div>
@@ -720,60 +706,8 @@
               row, from the log.
             </p>
             <div class="hair"></div>
-            <p class="wc-label">WEIGHT CLASS</p>
-            <p class="c2explain">
-              Concept2 requires a weight class. Asked once, at connect.
-            </p>
-            <div class="wc-grid">
-              <div class="wc-opt">Heavyweight</div>
-              <div class="wc-opt">Lightweight</div>
-            </div>
             <p class="c2helper">
-              Lightweight: 61.5 kg or under (women) &middot; 75 kg or under
-              (men). Otherwise heavyweight.
-            </p>
-            <div class="btn-primary dim">CONNECT TO CONCEPT2</div>
-            <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER &middot; YOU COME BACK HERE</p>
-          </div>
-          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
-          <span class="frame-dim">390 &times; 844</span>
-        </div>
-      </div>
-      <div class="board">
-        <p class="board-cap">1a &middot; PORTRAIT &middot; Heavyweight picked, Connect live</p>
-        <div class="frame">
-          <div class="you-row">
-            <div class="avatar">JA</div>
-            <div class="you-identity">
-              <p class="you-name">James Awesome</p>
-              <p class="you-email">james@jamestheaweso.me</p>
-            </div>
-            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
-          </div>
-          <p class="section-heading">BASELINES</p>
-          <div class="ghost tall">BASELINE EDITOR</div>
-          <div class="ghost short">RETEST SHORTCUT</div>
-          <div class="c2card">
-            <div class="c2head">
-              <span class="c2label">CONCEPT2</span>
-              <span class="c2status">NOT LINKED</span>
-            </div>
-            <p class="c2explain">
-              Sends finished monitor rows to your Concept2 logbook. Manual, per
-              row, from the log.
-            </p>
-            <div class="hair"></div>
-            <p class="wc-label">WEIGHT CLASS</p>
-            <p class="c2explain">
-              Concept2 requires a weight class. Asked once, at connect.
-            </p>
-            <div class="wc-grid">
-              <div class="wc-opt sel">Heavyweight</div>
-              <div class="wc-opt">Lightweight</div>
-            </div>
-            <p class="c2helper">
-              Lightweight: 61.5 kg or under (women) &middot; 75 kg or under
-              (men). Otherwise heavyweight.
+              Your weight class comes from your Concept2 profile.
             </p>
             <div class="btn-primary">CONNECT TO CONCEPT2</div>
             <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER &middot; YOU COME BACK HERE</p>
@@ -782,8 +716,6 @@
           <span class="frame-dim">390 &times; 844</span>
         </div>
       </div>
-    </div>
-    <div class="boards">
       <div class="board">
         <p class="board-cap wide">1a &middot; LANDSCAPE &middot; two-column card interior (board 3a's shape, kept)</p>
         <div class="frame land">
@@ -806,20 +738,11 @@
                   Sends finished monitor rows to your Concept2 logbook. Manual,
                   per row, from the log.
                 </p>
-                <p class="wc-label">WEIGHT CLASS</p>
-                <p class="c2explain">
-                  Concept2 requires a weight class. Asked once, at connect.
-                </p>
                 <p class="c2helper">
-                  Lightweight: 61.5 kg or under (women) &middot; 75 kg or under
-                  (men). Otherwise heavyweight.
+                  Your weight class comes from your Concept2 profile.
                 </p>
               </div>
               <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center">
-                <div class="wc-grid">
-                  <div class="wc-opt sel">Heavyweight</div>
-                  <div class="wc-opt">Lightweight</div>
-                </div>
                 <div class="btn-primary">CONNECT TO CONCEPT2</div>
                 <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER &middot; YOU COME BACK HERE</p>
               </div>
@@ -918,13 +841,16 @@
       who saw that page recognises the card. 12px <code>--ink-3</code>,
       <code>overflow-wrap: anywhere</code> (a long address must not push the card
       a line taller — the same fix <code>.you-identity</code> already carries,
-      <code>src/You.tsx:58-61</code>). Weight class is NOT shown, per the board's
-      own approved amendment.
+      <code>src/You.tsx:58-61</code>). No weight class is shown &mdash; and as
+      of the 2026-09-03 ruling there is none to show, on this card or any
+      other.
     </p>
     <div class="callout">
       <p><strong>The username is only renderable if ruling (ii) lands on B.</strong>
       <code>GET /api/concept2/link</code> returns
       <code>{available, linked, weightClass, c2UserId, needsReauth}</code> today
+      (the <code>weightClass</code> key is itself dropped by the 2026-09-03
+      ruling, in the same PR)
       (<code>server/routes/concept2.ts:535-546</code>) and
       <code>concept2_links</code> stores no username
       (<code>server/db/schema.ts</code>, the Concept2 block). Both variants are
@@ -1118,7 +1044,7 @@
               <p class="panel-label">THE LINK DIDN'T FINISH</p>
               <p class="panel-line">
                 The connection didn't complete. Nothing was linked, nothing was
-                saved. Your weight class pick is kept.
+                saved.
               </p>
               <p class="panel-reason">REASON: CONCEPT2 REFUSED THE EXCHANGE &middot; 502</p>
             </div>
@@ -1133,7 +1059,6 @@
               <p class="panel-label">THE LINK DIDN'T FINISH</p>
               <p class="panel-line">
                 You cancelled at Concept2. Nothing was linked, nothing was saved.
-                Your weight class pick is kept.
               </p>
               <p class="panel-reason">REASON: DECLINED AT CONCEPT2</p>
             </div>
@@ -1169,7 +1094,7 @@
               <p class="panel-label">THE LINK DIDN'T FINISH</p>
               <p class="panel-line">
                 The connection didn't complete. Nothing was linked, nothing was
-                saved. Your weight class pick is kept.
+                saved.
               </p>
               <p class="panel-reason">REASON: CONCEPT2 REFUSED THE EXCHANGE &middot; 502</p>
             </div>
@@ -1185,7 +1110,7 @@
       <tr><th>LinkOutcome</th><th>Card state</th><th>Panel line</th><th>REASON line</th></tr>
       <tr><td class="num">linked</td><td>1c</td><td>&mdash;</td><td>&mdash;</td></tr>
       <tr><td class="num">navigating</td><td>1b</td><td>Approve access on Concept2's page.</td><td>&mdash;</td></tr>
-      <tr><td class="num">declined</td><td>1e</td><td>You cancelled at Concept2. Nothing was linked, nothing was saved. Your weight class pick is kept.</td><td>DECLINED AT CONCEPT2</td></tr>
+      <tr><td class="num">declined</td><td>1e</td><td>You cancelled at Concept2. Nothing was linked, nothing was saved.</td><td>DECLINED AT CONCEPT2</td></tr>
       <tr><td class="num">cancelled</td><td>1a</td><td>&mdash; (returns to the unlinked card; the rower dismissed the sheet themselves)</td><td>&mdash;</td></tr>
       <tr><td class="num">abandoned</td><td>1e</td><td>board copy</td><td>THE BROWSER LEFT THE LINK</td></tr>
       <tr><td class="num">updateRequired</td><td>1g</td><td>Update Ergomatic to link your Concept2 account.</td><td>&mdash;</td></tr>
@@ -1223,7 +1148,7 @@
       <code>needsReauth: true</code> (<code>server/routes/concept2.ts:545</code>)
       once a refresh 400/401s, and the upload route refuses with
       <code>409 needs_reauth</code> (<code>:617-620</code>). It is
-      <strong>sticky</strong>: the link row and the weight class survive, only
+      <strong>sticky</strong>: the link row survives, only
       re-consent clears it (spec §Architecture 6). A linked card that said plain
       LINKED &check; over a dead grant would send every row to a 409.
     </p>
@@ -1253,8 +1178,7 @@
             <div class="panel">
               <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
               <p class="panel-line">
-                Your link and weight class are kept. Reconnect to send rows
-                again.
+                Your link is kept. Reconnect to send rows again.
               </p>
             </div>
             <div class="btn-primary">RECONNECT CONCEPT2</div>
@@ -1280,8 +1204,7 @@
               <div class="panel">
                 <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
                 <p class="panel-line">
-                  Your link and weight class are kept. Reconnect to send rows
-                  again.
+                  Your link is kept. Reconnect to send rows again.
                 </p>
               </div>
               <div style="display: flex; flex-direction: column; gap: 10px">
@@ -1295,155 +1218,16 @@
       </div>
     </div>
     <p class="lede">
-      <strong>Reconnect does not re-ask the weight class.</strong> The stored
-      class survives (<code>server/routes/concept2.ts:545</code> returns it beside
-      <code>needsReauth</code>), so the button mints straight from it. That is
-      also the PII bound holding: exit criterion 3 says the flow carries exactly
-      one new attribute, asked once. <strong>Except when there is nothing to
-      mint from</strong> &mdash; see 1k, immediately below.
+      <strong>Reconnect asks nothing, and there is nothing it could ask.</strong>
+      It calls the same argument-free <code>startLink()</code> Connect does, and
+      the only thing that can disable it is an attempt already in flight. An
+      earlier revision of this amendment drew a state (1k) for a stored weight
+      class that could not be read back &mdash; a RECONNECT button nothing could
+      press, plus a re-ask to rescue it. <strong>Both are withdrawn by the
+      2026-09-03 ruling:</strong> there is no stored class, so there is nothing
+      to be unreadable. That is also the PII bound holding in its strongest
+      form &mdash; exit criterion 3 now reads &quot;NO new user attribute&quot;.
     </p>
-
-    <h3>1k Needs re-auth, stored class unreadable <span class="badge b-new">NEW STATE</span></h3>
-    <p class="lede">
-      1f with one thing missing, and it is the thing RECONNECT mints from.
-      <code>normalizeLink</code> degrades any <code>weightClass</code> that is
-      not exactly <code>"H"</code> or <code>"L"</code> to <code>null</code> &mdash;
-      the empty string included, and any value a future server spells
-      differently. 1f as drawn above then renders CONCEPT2 STOPPED ACCEPTING
-      THIS LINK over a button that <strong>can never be pressed</strong>, with
-      no REASON line and no other route out that the copy offers. Every other
-      failure on this card carries a discriminator; this one carried none.
-    </p>
-    <p class="lede">
-      The fix asks the one question again, and only in this case. The chrome is
-      1f's, unchanged; the control is 1a's <code>OptionGroup</code>, unchanged;
-      one new line of copy sits between them. Ordinary reconnects still ask
-      nothing, so exit criterion 3's &quot;asked once&quot; holds for every
-      rower whose stored class is readable &mdash; which is all of them, until
-      one is not.
-    </p>
-    <div class="boards">
-      <div class="board">
-        <p class="board-cap">1k &middot; PORTRAIT &middot; nothing picked, RECONNECT inert</p>
-        <div class="frame">
-          <div class="c2card">
-            <div class="c2head">
-              <span class="c2label">CONCEPT2</span>
-              <span class="c2status on">RECONNECT NEEDED</span>
-            </div>
-            <p class="c2identity">
-              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
-            </p>
-            <div class="panel">
-              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
-              <p class="panel-line">
-                Your link and weight class are kept. Reconnect to send rows
-                again.
-              </p>
-            </div>
-            <p class="wc-label">WEIGHT CLASS</p>
-            <p class="c2explain">
-              Your stored weight class couldn't be read. Pick it again to
-              reconnect.
-            </p>
-            <div class="wc-grid">
-              <div class="wc-opt">Heavyweight</div>
-              <div class="wc-opt">Lightweight</div>
-            </div>
-            <div class="btn-primary dim">RECONNECT CONCEPT2</div>
-            <div class="hair"></div>
-            <div class="btn-danger">Unlink Concept2</div>
-          </div>
-          <span class="frame-dim">390 &times; 844</span>
-        </div>
-      </div>
-      <div class="board">
-        <p class="board-cap">1k &middot; PORTRAIT &middot; Heavyweight picked, RECONNECT live</p>
-        <div class="frame">
-          <div class="c2card">
-            <div class="c2head">
-              <span class="c2label">CONCEPT2</span>
-              <span class="c2status on">RECONNECT NEEDED</span>
-            </div>
-            <p class="c2identity">
-              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
-            </p>
-            <div class="panel">
-              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
-              <p class="panel-line">
-                Your link and weight class are kept. Reconnect to send rows
-                again.
-              </p>
-            </div>
-            <p class="wc-label">WEIGHT CLASS</p>
-            <p class="c2explain">
-              Your stored weight class couldn't be read. Pick it again to
-              reconnect.
-            </p>
-            <div class="wc-grid">
-              <div class="wc-opt sel">Heavyweight</div>
-              <div class="wc-opt">Lightweight</div>
-            </div>
-            <div class="btn-primary">RECONNECT CONCEPT2</div>
-            <div class="hair"></div>
-            <div class="btn-danger">Unlink Concept2</div>
-          </div>
-          <span class="frame-dim">390 &times; 844</span>
-        </div>
-      </div>
-    </div>
-    <div class="boards">
-      <div class="board">
-        <p class="board-cap wide">1k &middot; LANDSCAPE</p>
-        <div class="frame land">
-          <div class="c2card">
-            <div class="c2head">
-              <span class="c2label">CONCEPT2</span>
-              <span class="c2status on">RECONNECT NEEDED</span>
-            </div>
-            <p class="c2identity">
-              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
-            </p>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
-              <div style="display: flex; flex-direction: column; gap: 10px">
-                <div class="panel">
-                  <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
-                  <p class="panel-line">
-                    Your link and weight class are kept. Reconnect to send rows
-                    again.
-                  </p>
-                </div>
-                <p class="c2explain">
-                  Your stored weight class couldn't be read. Pick it again to
-                  reconnect.
-                </p>
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 10px">
-                <p class="wc-label">WEIGHT CLASS</p>
-                <div class="wc-grid">
-                  <div class="wc-opt sel">Heavyweight</div>
-                  <div class="wc-opt">Lightweight</div>
-                </div>
-                <div class="btn-primary">RECONNECT CONCEPT2</div>
-                <div class="btn-danger">Unlink Concept2</div>
-              </div>
-            </div>
-          </div>
-          <span class="frame-dim">844 &times; 390</span>
-        </div>
-      </div>
-    </div>
-    <div class="callout">
-      <p><strong>The one new sentence, and why it is not a REASON line.</strong>
-      &quot;Your stored weight class couldn't be read. Pick it again to
-      reconnect.&quot; sits where 1a's &quot;Concept2 requires a weight class.
-      Asked once, at connect.&quot; sits, in the same
-      <code>--ink</code>-on-<code>--surface</code> body size (17.11:1). It
-      explains the ask rather than reporting a fault: the rower has nothing to
-      retry and nothing to diagnose, and the panel above already carries the
-      failure. A mono REASON here would be a second failure line for one
-      failure.</p>
-    </div>
 
     <h3>1g Update required <span class="badge b-new">NEW STATE</span></h3>
     <p class="lede">
@@ -2169,6 +1953,7 @@
       <tr><td class="num">409 <code>needs_reauth</code></td><td>2f</td><td>&mdash;</td></tr>
       <tr><td class="num">409 <code>unlinked</code></td><td>block disappears (re-read the link; the rower unlinked in another tab)</td><td>&mdash;</td></tr>
       <tr><td class="num">422 <code>not_eligible</code></td><td><strong>2h</strong> (the client predicate and the server's disagree &mdash; the server wins, and the rower is told so rather than watching the block vanish)</td><td>CONCEPT2 WON'T TAKE THIS ROW &middot; &lt;REASON&gt;</td></tr>
+      <tr><td class="num">422 <code>no_weight_class</code></td><td><strong>2i</strong> (2026-09-03 ruling: Concept2's own profile carries no usable weight, so no class can be derived. The ONE send failure the rower can repair &mdash; and not here). <strong>Key on <code>body.error</code>, never on the 422</strong>: the two 422s render differently and only this one offers a way out</td><td>SET YOUR WEIGHT ON CONCEPT2</td></tr>
       <tr><td class="num">403 <code>unavailable</code></td><td>block disappears (flag flipped off mid-session)</td><td>&mdash;</td></tr>
       <tr><td class="num">502 <code>c2_error</code></td><td>2e</td><td>CONCEPT2 ERROR &middot; 502</td></tr>
       <tr><td class="num">400 <code>tz &hellip;</code></td><td>2e</td><td>COULDN'T READ THIS DEVICE'S TIME ZONE</td></tr>
@@ -2264,6 +2049,97 @@
       <p><strong>The table above is corrected in the same breath:</strong> its
       <code>422 not_eligible</code> row now reads &quot;2h&quot; with the
       REASON line, not &quot;block disappears&quot;.</p>
+    </div>
+
+    <h3>2i No weight on Concept2 <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      <strong>The 2026-09-03 ruling's own state.</strong> James: &quot;I don't
+      want that set in our app. I want it to be set on Concept2's side.&quot; So
+      the app asks nothing &mdash; but Concept2 still requires a
+      <code>weight_class</code> on every rower result (measured: a POST without
+      it is refused <strong>422</strong>), and the server derives one from the
+      linked profile's <code>weight</code> and <code>gender</code>. This is what
+      the rower sees when that profile carries no usable weight.
+    </p>
+    <p class="lede">
+      <strong>It is a 422 like 2h, and it must not read like one.</strong> 2h is
+      about the ROW and cannot be repaired at all; this is about the rower's
+      Concept2 PROFILE and is repaired in one visit, on a screen that is not
+      ours. So the chrome is 2f/2g's failed-state chrome, unchanged, and the one
+      difference is the button: <strong>no Retry</strong> (the server would read
+      the same unchanged profile and refuse again &mdash; the
+      guaranteed-to-fail affordance 1g already rejected), and instead
+      <strong>OPEN CONCEPT2 PROFILE</strong>, the same accent outline row the
+      View-on-Concept2 link-out already uses.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2i &middot; PORTRAIT</p>
+        <div class="frame">
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">NO WEIGHT CLASS</span>
+            </div>
+            <p class="send-line">
+              Concept2 needs a weight class on every result, and your Concept2
+              profile has no weight set. Set it there, then send this row again.
+            </p>
+            <p class="panel-reason">REASON: SET YOUR WEIGHT ON CONCEPT2</p>
+            <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">2i &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <div class="ghost short">HEROES &middot; INTERVALS &middot; MACHINE CONFIRMED &middot; TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">NO WEIGHT CLASS</span>
+            </div>
+            <p class="send-line">
+              Concept2 needs a weight class on every result, and your Concept2
+              profile has no weight set. Set it there, then send this row again.
+            </p>
+            <p class="panel-reason">REASON: SET YOUR WEIGHT ON CONCEPT2</p>
+            <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>No new colour pairing, restated as numbers rather than
+      asserted.</strong> Status <code>--ink</code> on <code>--surface</code>
+      17.11:1; the send line <code>--ink-2</code> on <code>--surface</code>
+      10.81:1; the REASON <code>--ink-3</code> on <code>--surface</code>
+      7.43:1; the link-out label <code>--accent</code> on <code>--surface</code>
+      5.94:1. All four are rows in &sect;4 already. The link-out row is 44px,
+      the same as View on Concept2 &mdash; and it is a
+      <strong>button</strong> for the same reason that one is: inside the
+      Capacitor WebView a plain anchor drives the WebView itself to
+      concept2.com with no way back.</p>
+      <p><strong>The destination was checked, not assumed.</strong>
+      <code>curl -sI https://log-dev.concept2.com/profile/2211</code> answered
+      <strong>HTTP 200</strong> on 2026-09-03 &mdash; not a redirect to login,
+      not a 404. The origin comes from the server's own
+      <code>logbookBaseUrl</code>, never a hardcoded
+      <code>log.concept2.com</code>, which would 404 for the whole sandbox
+      phase; if that origin is missing, the button does not render and the
+      sentence and REASON still name the repair.</p>
+      <p><strong>One line covers both server reasons.</strong> The route
+      answers <code>{error:"no_weight_class", reason:"no_weight"|"no_gender"}</code>.
+      Concept2 documents <code>gender</code> as <em>Required: Yes</em> on user
+      creation, so <code>no_gender</code> is a shape we have never seen; the
+      rower's action is identical either way, and inventing a second sentence
+      for an unobserved state would be copy nobody has tested.</p>
     </div>
 
     <h3>2g Absent <span class="badge b-same">UNCHANGED</span></h3>
@@ -2484,7 +2360,7 @@
       <tr><th>Where</th><th>Foreground</th><th>Background</th><th>Ratio</th><th>AA</th></tr>
       <tr><td>card body copy, section labels, LINKED &check; status</td><td class="num">--ink #1b1a17</td><td class="num">--surface #fffdf7</td><td class="num">17.11:1</td><td class="pass">PASS</td></tr>
       <tr><td>2c/2d/2e send lines</td><td class="num">--ink-2 #3f3c35</td><td class="num">--surface #fffdf7</td><td class="num">10.81:1</td><td class="pass">PASS</td></tr>
-      <tr><td>helpers, identity line, unselected weight option</td><td class="num">--ink-3 #57544c</td><td class="num">--surface #fffdf7</td><td class="num">7.43:1</td><td class="pass">PASS</td></tr>
+      <tr><td>helpers, identity line</td><td class="num">--ink-3 #57544c</td><td class="num">--surface #fffdf7</td><td class="num">7.43:1</td><td class="pass">PASS</td></tr>
       <tr><td>NOT LINKED / WAITING / NOT SENT status, footnotes</td><td class="num">--ink-4 #6f6a5f</td><td class="num">--surface #fffdf7</td><td class="num">5.29:1</td><td class="pass">PASS</td></tr>
       <tr><td>sunken panel label + line (1b, 1e, 1f, 1g)</td><td class="num">--ink #1b1a17</td><td class="num">--surface-sunken #efeade</td><td class="num">14.50:1</td><td class="pass">PASS</td></tr>
       <tr><td><strong>REASON line on the sunken panel</strong></td><td class="num">--ink-3 #57544c</td><td class="num">--surface-sunken #efeade</td><td class="num">6.30:1</td><td class="pass">PASS</td></tr>
@@ -2496,7 +2372,6 @@
       <tr><td>Unlink label, View on Concept2 link-out (outline state)</td><td class="num">--accent #b5341f</td><td class="num">--surface #fffdf7</td><td class="num">5.94:1</td><td class="pass">PASS</td></tr>
       <tr><td>Unlink ARMED label (1d)</td><td class="num">--on-color #fffdf7</td><td class="num">--accent #b5341f</td><td class="num">5.94:1</td><td class="pass">PASS</td></tr>
       <tr><td>CONNECT / RECONNECT primary label</td><td class="num">--on-color #fffdf7</td><td class="num">--ink #1b1a17</td><td class="num">17.11:1</td><td class="pass">PASS</td></tr>
-      <tr><td>selected weight option label</td><td class="num">--on-color #fffdf7</td><td class="num">--ink #1b1a17</td><td class="num">17.11:1</td><td class="pass">PASS</td></tr>
       <tr><td>card text over the page ground (landscape overflow cases)</td><td class="num">--ink-3 #57544c</td><td class="num">--page #f4f1e8</td><td class="num">6.69:1</td><td class="pass">PASS</td></tr>
       <tr><td>DIAGNOSTICS row (context only)</td><td class="num">--ink-3 #57544c</td><td class="num">--page #f4f1e8</td><td class="num">6.69:1</td><td class="pass">PASS</td></tr>
       <tr><td>inert Connect / inert Send label</td><td class="num">--ink-3 #57544c</td><td class="num">--surface #fffdf7</td><td class="num">7.43:1</td><td class="pass">PASS</td></tr>
@@ -2518,9 +2393,15 @@
       lines are <code>--ink-3</code>.
     </p>
     <p class="lede">
-      Every tappable in every frame is &ge; 44px: weight options 44, Connect /
-      Reconnect / Send / Retry 48, 1i's Retry 52, Unlink 52, the link-out row 44,
-      Delete 44.
+      Every tappable in every frame is &ge; 44px: Connect / Reconnect / Send /
+      Retry 48, 1i's Retry 52, Unlink 52, the link-out rows (View on Concept2,
+      and 2i's OPEN CONCEPT2 PROFILE) 44, Delete 44. <strong>2i introduces no
+      new colour pairing</strong> &mdash; its panel label and line are the
+      sunken panel's <code>--ink</code> (14.50:1), its REASON is
+      <code>--ink-3</code> on <code>--surface-sunken</code> (6.30:1), and its
+      button is the same <code>--accent</code>-on-<code>--surface</code> outline
+      the View-on-Concept2 link-out already uses (5.94:1). Every one of those
+      three ratios is a row in the table above; none is new.
     </p>
 
     <h2>5 · Accent's fifth job, declared</h2>
@@ -2553,25 +2434,33 @@
     <h2>6 · What this gate is asking for</h2>
     <ul class="tight">
       <li>The six changes in §0, each individually.</li>
-      <li>Ruling (i): the weight-class ask is unconditional (§1a).</li>
+      <li><strong>Ruling (i) is already ANSWERED and is here for the record,
+        not for a decision (James, 2026-09-03):</strong> &quot;I don't want that
+        set in our app. I want it to be set on Concept2's side.&quot; What this
+        gate asks about it is the RENDERED consequence &mdash; §1a with no ask,
+        and 2i, the new state where the rower is told their Concept2 profile has
+        no weight and given a button to it.</li>
       <li>Ruling (ii): identity line variant A (numeric) or B (stored username).
         B is rendered as the recommendation and costs one nullable column.</li>
       <li>Ruling (iii): the reworded 401/403 callback lines (§3).</li>
       <li>The new states: 1f needs-reauth, 1g update-required, 1h unavailable,
         <strong>1i the read failed</strong>, <strong>1j the unlink was
-        refused</strong>, <strong>1k needs-reauth with an unreadable stored
-        class</strong>, 2f row-level reconnect, <strong>2c-b sent with no
+        refused</strong>, 2f row-level reconnect, <strong>2c-b sent with no
         link-out</strong>, <strong>2h Concept2 won't take this row</strong>,
-        and the REASON lines.</li>
+        <strong>2i no weight on Concept2</strong>, and the REASON lines.</li>
       <li><strong>The three states added 2026-09-03, each because the state is
         REACHABLE and the earlier drawing of it was wrong rather than
-        missing:</strong> 1k replaces a RECONNECT button that could never be
-        pressed; 2c-b replaces a SENT row that showed no result id at all when
-        the server sent no logbook origin; 2h replaces a block that vanished
-        under the rower's finger when the two eligibility predicates
-        disagreed. Each one costs a line of copy or a control that already
-        exists elsewhere on the same card &mdash; none introduces a new
-        idiom.</li>
+        missing:</strong> 2c-b replaces a SENT row that showed no result id at
+        all when the server sent no logbook origin; 2h replaces a block that
+        vanished under the rower's finger when the two eligibility predicates
+        disagreed; <strong>2i is the ruling's own state</strong> &mdash; the one
+        place a rower learns that the class we no longer ask for is missing
+        where it now lives, with a button that takes them there. Each one costs
+        a line of copy or a control that already exists elsewhere on the same
+        card &mdash; none introduces a new idiom.
+        <strong>1k is WITHDRAWN</strong> by the same ruling: it existed to
+        re-ask for a stored class that could not be read back, and there is no
+        stored class.</li>
       <li><strong>1h's split into 1h and 1i specifically</strong> &mdash; an
         earlier revision drew a refused read as absence, and separating them is
         the one change on this page that alters what a rower is TOLD rather than

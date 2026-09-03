@@ -17,8 +17,8 @@ Two deliverables. First, the desk-side cross-connect Phase RC carried
 forward as exit criterion (d) — post a reconciled row to
 `log-dev.concept2.com`, pull `export/` back, and diff it against what we
 stored. Second, the rower-facing surface: a "Connect to Concept2" card on
-You (OAuth link, with the one required question C2 forces — weight class
-H/L) and a manual "Send to Concept2" action on a monitor-connected
+You (OAuth link, asking the rower nothing — see the 2026-09-03 ruling
+below) and a manual "Send to Concept2" action on a monitor-connected
 `finished` log row. Manual first; auto-upload is a named follow-on, not
 part of this wave. The point of the order: the mapping AND the link flow
 are proven against the sandbox before any tester can press a button that
@@ -34,8 +34,23 @@ exercises them.
   check when it lands: C2 requires explicit approval for the live write
   API ("please contact Concept2 for approval for the live API"), so
   confirm the credential pair is write-approved.
-- **`weight_class` ruling stands** (James, 2026-08-22, RC phase open):
-  a binary H/L asked ONLY at Concept2 link time, never at onboarding.
+- **`weight_class` ruling, REPLACED (James, 2026-09-03).** The former
+  ruling (2026-08-22, RC phase open) was "a binary H/L asked ONLY at
+  Concept2 link time, never at onboarding". It no longer stands. The
+  ruling now is, verbatim: **"I don't want that set in our app. I want it
+  to be set on Concept2's side."** The app asks nothing about weight class
+  anywhere — not at onboarding, not at link, not at send, not on the dev
+  probe — and stores nothing about it. Concept2's API leaves us no choice
+  about SENDING one: a result POSTed without the field is refused, measured
+  2026-09-03 against log-dev (user 2211, PR0 harness token), verbatim body
+  `{"message":"Could not create new result.","status_code":422,"errors":{"weight_class":["The weight class field is required."]}}`,
+  with a same-row control carrying `weight_class:"H"` answering 201
+  (result 85831, deleted afterwards). So the class is DERIVED server-side
+  at send time from the linked Concept2 profile's own `weight` and
+  `gender`, and discarded with the response. Migration 0023 drops
+  `concept2_links.weight_class` and `concept2_auth_attempts.weight_class`.
+  Implementation: `docs/superpowers/plans/2026-09-03-concept2-pr2-client.md`
+  Task 3.
 
 **Operator steps (anchor F5) — DONE 2026-08-31:** James supplied the dev
 credential pair (`LOGBOOK_CLIENT_ID_DEV`/`LOGBOOK_CLIENT_SECRET_DEV` in
@@ -140,11 +155,40 @@ are results.
   this wave. **Rate limits:** none currently. **Webhooks** exist — noted
   for the auto-upload follow-on. **No token-revocation endpoint** —
   nothing found; unlink is necessarily local (V5).
-- `GET /api/users/me` returns 13 fields, none of them weight —
-  `weight_class` must be asked by us (V10).
+- `GET /api/users/me` returns **sixteen** fields, and `weight` is one of
+  them — measured live against log-dev on 2026-09-03 (user 2211, PR0
+  harness token): age_restricted, country, dob, email, email_permission,
+  first_name, gender, health_data_permission, id, last_name,
+  logbook_privacy, max_heart_rate, profile_image, roles, username,
+  **weight**. **This REPLACES V10** ("returns 13 fields, none of them
+  weight — `weight_class` must be asked by us"), which was wrong on its
+  count and, more importantly, wrong on its conclusion: `weight` and
+  `gender` are exactly what Concept2's own lightweight definition is
+  written in terms of, so the class was always derivable and never had to
+  be asked. There is no `weight_class` field on the user object, and
+  Concept2's API does not apply the profile's Weight Class default on our
+  behalf — the 422 in the ruling bullet above is that measurement.
+- **The UNIT of `weight` is UNMEASURED and Concept2's docs contradict
+  themselves about it.** The only published line sits on the CREATE USER
+  endpoint (`https://log.concept2.com/developers/documentation/`, fetched
+  2026-09-03), verbatim: *"weight | No | integer | The weight in decigrams
+  for the user, e.g. 7500 for 75kg. Defaults to null if not set. | 7500"*.
+  7500 decigrams is 750 g, so the sentence's unit NAME and its EXAMPLE
+  disagree; the example is the half that pins a correspondence (one unit =
+  0.01 kg). **PRIMARY for the write parameter, INFERENCE for the read
+  field** — nothing states `GET /users/me` echoes the same encoding, and
+  the account we can measure carries `weight: null`. The derivation's
+  constants therefore carry the unit in their identifiers, and a walk leg
+  measuring a known weight on James's log-dev profile is an exit criterion
+  on the flag flip.
+- **Concept2's lightweight definition** (SECONDARY — logbook help and
+  forum, 2026-09-03; the help page 403s to fetchers, so this is a search
+  snippet): men 75 kg / 165 lb or less, women 61.5 kg / 135 lb or less,
+  heavyweight above, RowErg only. "or less" is inclusive.
 
 **Does the underlying system have the concept?** Everything we surface is
-a concept C2 itself owns: result creation, H/L weight class, work-only
+a concept C2 itself owns: result creation, the H/L weight class (which is
+C2's to set, not ours — 2026-09-03 ruling), work-only
 totals, duplicate rejection, export, native-app OAuth. The two things WE
 invent, named: the per-user LINK record and the per-row SENT state. The
 sent state's authority and lifetime are declared honestly below (anchor
@@ -174,10 +218,12 @@ callback browser has no session to bind. Google sign-in's native plugin
 flow (`docs/deploy.md:105-108`) is the in-repo precedent; C2 has no SDK,
 so we build the RFC 8252 shape:
 
-1. **Mint:** authed `POST /api/concept2/connect {weightClass}` (bearer or
-   cookie — works on both surfaces). Server validates `H`/`L`, creates a
+1. **Mint:** authed `POST /api/concept2/connect` (bearer or cookie —
+   works on both surfaces), with **no rower attribute in the body** (the
+   2026-09-03 ruling; native additionally declares `linkClient`, a claim
+   about the BUILD). Server creates a
    short-lived single-use `concept2_auth_attempts` row `{nonce, user_id,
-   weight_class, surface, created_at}` — `surface` (`"native"` | `"web"`,
+   surface, created_at}` — `surface` (`"native"` | `"web"`,
    new column, gate doc §3(g) round 10) records which caller minted the
    attempt, so a nonce minted for one surface cannot complete on the
    other — and returns the surface-appropriate authorize URL. No
@@ -227,7 +273,7 @@ so we build the RFC 8252 shape:
      way to LOCATE the attempt row to consume: `state` is the lookup key
      (same as the https callback's `consumeAttempt(state, ...)`). If C2
      does not echo `state` on the private-use-scheme redirect, the server
-     cannot find, single-use-consume, or weight-class-resolve the attempt
+     cannot find or single-use-consume the attempt
      at all — the exchange has no route to succeed. So native `state` echo
      is **EXPECTED but UNMEASURED, and load-bearing**, not a cosmetic
      nicety this design can proceed without. **PR1.75's sequence:** probe
@@ -313,8 +359,8 @@ so we build the RFC 8252 shape:
    (accept, detect, physically-confirm, app-bind) are catalogued in the
    gate doc's §3; this bullet states only the RULED activation contract,
    not the survey.
-4. **Link routes:** `GET /api/concept2/link` → `{linked, weightClass,
-   c2UserId}` (never tokens — `c2UserId` is the linked account's numeric
+4. **Link routes:** `GET /api/concept2/link` → `{linked, c2UserId}`
+   (no `weightClass` — the 2026-09-03 ruling; never tokens — `c2UserId` is the linked account's numeric
    id, which PR2's sent-state contract and its View-on-Concept2 link-out
    both need); `DELETE /api/concept2/link` →
    deletes the row (unlink is local, V5).
@@ -340,8 +386,8 @@ so we build the RFC 8252 shape:
    dead-grant shape is `HTTP 400 {"message":"The refresh token is
    invalid.","status_code":400}` (Probe 0's garbage token and Probe B's
    genuinely-rotated one are byte-identical). Rule: refresh 400/401 →
-   set `needs_reauth_at` (link and `weight_class` survive; the surface
-   prompts re-consent). No automatic path ever deletes a link on a
+   set `needs_reauth_at` (the link survives; the surface prompts
+   re-consent). No automatic path ever deletes a link on a
    token-endpoint error — C2's own docs show 400/401 for OUR malformed
    request and OUR client credentials too, so an automatic delete would
    destroy links on a server bug or a rotated secret, not only on a
@@ -416,9 +462,16 @@ so we build the RFC 8252 shape:
 | `access_token` | text, not null | server-side only, never serialized to any client response |
 | `refresh_token` | text, not null | rotates: replaced together with `access_token` on every refresh |
 | `expires_at` | timestamptz, not null | from `expires_in` |
-| `weight_class` | text, enum `H`/`L`, not null | James's ruling: asked at link time only |
-| `needs_reauth_at` | timestamptz, nullable | set when a refresh 400/401s (§Architecture 6); link and `weight_class` survive, the surface prompts re-consent, and a successful relink clears it |
+| `needs_reauth_at` | timestamptz, nullable | set when a refresh 400/401s (§Architecture 6); the link survives, the surface prompts re-consent, and a successful relink clears it |
 | `created_at` / `updated_at` | timestamptz | house pattern |
+
+*(PR1 shipped a `weight_class` enum column, NOT NULL, on BOTH
+`concept2_links` and `concept2_auth_attempts` — the row list below still
+shows it, because it describes what is deployed today. **Migration 0023
+DROPS both columns and the `weight_class` enum type**: the 2026-09-03
+ruling leaves no class for us to hold. Safe because prod runs flag-off
+with no links, which is CHECKED with a `SELECT count(*)` on both tables
+before the deploy rather than assumed.)*
 
 **`concept2_auth_attempts`** — **CURRENT (shipped, PR1):**
 `{nonce (pk), user_id FK, weight_class, created_at}`
@@ -498,7 +551,7 @@ shape for the follow-on.
 | `timezone` | `tz` | first-class C2 POST parameter |
 | `distance` | `work_meters` | work-only (V12) |
 | `time` | `round(work_seconds * 10)` | tenths; safe at the doublePrecision boundary (V8: sums of tenths carry ~1e-12 vs a 0.05 margin; a true half-tenth cannot arise from summing tenths) |
-| `weight_class` | `concept2_links.weight_class` | |
+| `weight_class` | DERIVED at send time from `GET /api/users/me`'s `weight` + `gender` (2026-09-03 ruling), never stored by us | inclusive thresholds, men ≤ 75 kg, women ≤ 61.5 kg; a profile with no usable weight refuses the send `422 {error:"no_weight_class"}` and the rower is sent to their Concept2 profile |
 | `workout_type` | `machineSummary.workoutType` (flat — see below), the PM5's OWN decoded value, mapped ordinal → C2 enum string; OMITTED when absent or unmapped | anchor F6: rev 1 derived a constant from our programming call (`commands.ts:158` sets `WORKOUTTYPE_VARIABLE_INTERVAL` unconditionally — that describes US, not the workout), and its JustRow branch modeled a state the app cannot yet produce. The machine's field is also the only one that can ever satisfy `verification_code`'s match rule. Field is optional; omission is honest |
 | `rest_time` | `round(rest_seconds * 10)` when > 0 | "Depends: for interval workouts only" |
 | `rest_distance` | `rest_meters` when > 0 | |
@@ -531,11 +584,11 @@ which is also the dedup experiment.
 
 ## Surfaces (Gate 0 — both screens, rendered, before PR2 starts)
 
-1. **You: "Concept2" card.** Unlinked (explains, asks H/L, Connect →
-   system browser); linked (state + weight class + Unlink with confirm;
-   unlink is local and rows already sent stay on Concept2); link-failed
-   (retryable). The H/L ask is part of the connect flow, not a form
-   field.
+1. **You: "Concept2" card.** Unlinked (explains, Connect → system
+   browser; **asks nothing** — 2026-09-03 ruling); linked (state + which
+   account + Unlink with confirm; unlink is local and rows already sent
+   stay on Concept2); link-failed (retryable). No weight class appears on
+   any card, because the app does not hold one.
 2. **Log row: "Send to Concept2".** idle → sending → sent / duplicate
    ("Concept2 already has this row") / failed (retryable). **Sent state
    includes a "View on Concept2" link-out** built from `c2_result_id`
@@ -706,8 +759,17 @@ safe; the flag, not PR ordering, is the safety mechanism.
 2. A linked user sends an eligible row from the app — ON THE PHONE, the
    primary surface — and C2's result id is stored on it; duplicate and
    failure states each observed for real at least once.
-3. Countable PII bound (PM): the link flow's request bodies carry
-   exactly ONE new user attribute, `weight_class`.
+3. Countable PII bound (PM), STRENGTHENED by the 2026-09-03 ruling: the
+   link flow's request bodies carry NO new user attribute. The weight
+   class is Concept2's own fact — derived at send time from the linked
+   profile, never asked, never stored by us.
+3b. **The unit of Concept2's `weight` field is MEASURED on hardware
+   before the flag flips**, not inferred from a vendor sentence that
+   contradicts its own example (§Research). James sets a known weight on
+   his log-dev profile; the operator GETs `/api/users/me` and records the
+   raw number beside the kilogram value; the derivation's constants are
+   corrected if they disagree. No gate in this repo can settle this —
+   every test agrees with whatever constant we chose (RF11).
 4. The dedup-granularity, `state`-echo, and zero-rest-post questions
    each carry a measured answer in PR0's report — "unknown" leaves the
    wave open.

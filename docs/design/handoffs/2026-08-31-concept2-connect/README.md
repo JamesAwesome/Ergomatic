@@ -8,9 +8,19 @@ every colour pairing's contrast ratio computed and stated — before any
 client implementation task starts. Gate 0 passed 2026-08-31; the board is
 final and gate-approved (see Fidelity).
 
-**The weight-class question is asked once**, from the You card's Connect
-flow, and only there — never at onboarding (James's ruling, 2026-08-22;
-minimal-PII).
+**There is no weight-class question. James, 2026-09-03: "I don't want
+that set in our app. I want it to be set on Concept2's side."** This
+SUPERSEDES the 2026-08-22 ruling ("asked once, from the You card's Connect
+flow") and the conditional-ask amendment below. Concept2's API refuses a
+result carrying no `weight_class` (measured 422, 2026-09-03), so the class
+is DERIVED server-side at send time from the linked Concept2 profile's own
+`weight` and `gender`, and stored by us nowhere. Every 1a detail below
+describing a WEIGHT CLASS section, its segmented control, its helper line,
+or a dimmed Connect is a record of a rendered board that is no longer
+built — see `amendment-2026-09-03.html` for what replaces it, and the
+2026-09-03 revision of
+`docs/superpowers/plans/2026-09-03-concept2-pr2-client.md` for the
+implementation.
 
 ## Overview
 
@@ -18,7 +28,7 @@ Two surfaces that link a rower's Concept2 logbook account and send finished
 monitor rows to it, one row at a time, manually:
 
 1. **You tab · Concept2 card** — owns the link (OAuth via the system
-   browser), the conditional weight-class ask, and unlink.
+   browser) and unlink. It asks the rower nothing (2026-09-03 ruling).
 2. **Log detail · Send block** — owns the per-row manual send and its
    persistent send state.
 
@@ -45,14 +55,22 @@ not rewrite it.
 
 ## Approved amendments (reflected in the board)
 
-- **Weight class ask is CONDITIONAL** (James): do NOT ask H/L if Concept2
-  already has a weight class on the account. Check after the OAuth
-  exchange; ask only when blank on Concept2. The rendered ask (1a) is kept
-  for that case. **Open question for PR0:** the documented
-  `GET /api/users/me` returns no weight field; if the API cannot report the
-  stored class, this needs a ruling before implementation.
-- **Weight class does not show on linked cards** (1c, 1d) — linked state is
-  just LINKED ✓, helper line, unlink.
+- **~~Weight class ask is CONDITIONAL~~ — WITHDRAWN, and its open
+  question is ANSWERED (James, 2026-09-03).** The amendment read: "do NOT
+  ask H/L if Concept2 already has a weight class on the account. Check
+  after the OAuth exchange; ask only when blank on Concept2." Its own open
+  question — whether the API can report the stored class — was measured
+  and the answer is no: `GET /api/users/me` carries no `weight_class`
+  field, and a result POSTed without one is refused
+  `422 {"errors":{"weight_class":["The weight class field is required."]}}`.
+  But the same measurement showed the profile DOES carry `weight` and
+  `gender`, which is what the class is defined from. **The ruling is
+  therefore neither conditional nor unconditional: there is no ask.** The
+  server derives the class from the profile at send time. A rower whose
+  Concept2 profile has no weight is told so, with a button to their
+  Concept2 profile (amendment 2i).
+- **Weight class does not show on ANY card** (1a, 1c, 1d) — there is none
+  to show. Linked state is LINKED ✓, the identity line, helper, unlink.
 - **Not linked → nothing on the log row.** The Concept2 block renders only
   when an account is linked. No pointer, no disabled control. The You card
   is the sole discovery surface.
@@ -83,17 +101,16 @@ WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
 
 - **1a Unlinked** (in situ on You, 390×844): explainer "Sends finished
   monitor rows to your Concept2 logbook. Manual, per row, from the log." ·
-  hairline `#ded8c9` · (conditional) WEIGHT CLASS section: label 11px mono
-  600; ask "Concept2 requires a weight class. Asked once, at connect."
-  (14px `#1b1a17`); segmented binary control, 2 equal columns,
-  `1px solid #c9c3b2`, min-height 44px, selected = `#1b1a17` fill /
-  `#fffdf7` text, unselected = `#57544c` on card; helper "Lightweight: 61.5
-  kg or under (women) · 75 kg or under (men). Otherwise heavyweight." (12px
-  `#57544c`) · primary CONNECT TO CONCEPT2 button (48px, `#1b1a17` fill,
-  `#fffdf7` mono 12px 600 0.16em) · footnote "OPENS CONCEPT2 IN YOUR
-  BROWSER · YOU COME BACK HERE" (11px mono `#6f6a5f`, centered). Until a
-  class is picked (when the ask is shown), Connect is dimmed (border
-  `#c9c3b2`, label `#57544c`) and inert.
+  hairline `#ded8c9` · **[WITHDRAWN 2026-09-03: the WEIGHT CLASS section,
+  its 2-column segmented control, its "Concept2 requires a weight class.
+  Asked once, at connect." ask, its 61.5/75 kg helper, and the dimmed-
+  Connect-until-picked rule are all GONE. The ruling removed the question,
+  so the control, its explanation and the state it gated no longer exist.
+  In their place: one helper line, "Your weight class comes from your
+  Concept2 profile." (12px `#57544c`).]** · primary CONNECT TO CONCEPT2
+  button (48px, `#1b1a17` fill, `#fffdf7` mono 12px 600 0.16em), **live on
+  first paint** · footnote "OPENS CONCEPT2 IN YOUR BROWSER · YOU COME BACK
+  HERE" (11px mono `#6f6a5f`, centered).
 - **1b Waiting / just returned**: sunken panel (`#efeade`,
   `1px solid #d8d3c4`, 12px 14px padding) — WAITING FOR CONCEPT2: "Approve
   access in the browser. On return, this card confirms the link." + Cancel
@@ -102,7 +119,8 @@ WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
 - **1c Linked**: LINKED ✓ status; helper "Finished monitor rows can be sent
   from the log. Send state shows on each row." (12px `#57544c`); hairline;
   **Unlink Concept2** button (52px, outline `1px solid #b5341f`, text
-  `#b5341f` 16px 600). No weight class shown. **Gate 0 amendment,
+  `#b5341f` 16px 600). No weight class shown — and as of 2026-09-03 none
+  exists to show, on this card or any other. **Gate 0 amendment,
   callback pages: APPROVED 2026-09-02 and BUILT at PR1.75a — the shared
   callback template (`2026-09-02-concept2-pr175-app-bind-design.md` §7)
   now covers 401 Not signed in, 403 Wrong account, 409 Already linked
@@ -116,8 +134,9 @@ WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
   unlink". Auto-disarms after 4 s (footnote states this).
 - **1e Link failed** (OAuth callback bounced): status NOT LINKED; sunken
   panel THE LINK DIDN'T FINISH: "The connection didn't complete. Nothing
-  was linked, nothing was saved. Your weight class pick is kept." · **Try
-  again** button (52px outline `#1b1a17`).
+  was linked, nothing was saved." (the trailing "Your weight class pick is
+  kept." is dropped 2026-09-03: there is no pick to keep) · **Try again**
+  button (52px outline `#1b1a17`).
 
 ### Surface 2 — Log detail: Send block (board IDs 2a-2e)
 
@@ -174,8 +193,8 @@ segmented control, Connect, footnote right).
 ## State Management
 
 - Link state (global): `unlinked | waiting | checking | linked |
-  link_failed`; stored weight class (H/L) when the ask was shown; kept
-  across a failed attempt.
+  link_failed`. **No stored weight class** (2026-09-03 ruling): the app
+  holds none, at any lifetime.
 - Per-row send state: `not_sent | sending | sent(resultId, acceptedAt) |
   duplicate | failed`. `sent` persists with the row and includes
   Concept2's result id; render sent only if the row's account matches the
