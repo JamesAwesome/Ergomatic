@@ -835,9 +835,30 @@ rower's work silently.
       still dies at `loadRun` first. **So this chunk's unguarded set is now
       exactly three loaders — `loadRun`, `loadDraft`, `loadTodayPick` —
       matching the §8 reshaping above; `loadMonitorRun` is off the list.**
-      Everything else here is unchanged and still owed: the three anchor
-      spec conditions, the Retry surface's Gate 0, AUD-015's Countdown
-      durability, and the Capacitor-WKWebView reachability research line.
+      **SPECCED 2026-09-03 as
+      `docs/superpowers/specs/2026-09-03-storage-denial-design.md`, and the
+      research line is CLOSED.** The getter CANNOT throw on the phone:
+      WebKit's `localStorage` getter has exactly one throw, gated on
+      `canAccessResource(LocalStorage) == No`, whose three routes are an
+      opaque origin, a `file://`-equivalent origin, and
+      `StorageBlockingPolicy::BlockAll` — and our `capacitor://localhost`
+      (no `server` block; a `WKURLSchemeHandler` serves it) is none of
+      them, with the blocking policy embedder-set and unset by Capacitor
+      and by us. Full citations:
+      `docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md`.
+      **James's ruling on that evidence (2026-09-03): the three guards ship
+      as WEB-ARM hardening — the dev loop, the e2e harness, the browser
+      fallback, where a user CAN block site data — and the Retry SURFACE
+      for a denied getter does NOT ship**, so anchor condition (3) is
+      retired with it. AUD-015's Countdown durability keeps its visible
+      state and is where the one Gate 0 goes, because a failed WRITE is
+      reachable everywhere. Anchor conditions (1) and (2) survive. Two
+      corrections the spec carries: the audit's second loader lives in
+      `session/draft.ts`, not `logDraft.ts`; and the catch must be BARE,
+      since the getter's non-throwing failure surfaces as a `TypeError`.
+      **Tripwire:** the whole argument rests on `server.iosScheme` being
+      unset — setting it to `"file"` makes the origin local and the throw
+      immediately reachable.
 
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 
