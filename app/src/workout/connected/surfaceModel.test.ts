@@ -526,6 +526,37 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
     expect(m.rate.absent).toBe(false);
   });
 
+  it("the byte half: a frame inside the reset window does NOT mirror when the byte reads true", () => {
+    const target = firstWorkPhase();
+    const m = model({
+      status: "live",
+      linkLost: false,
+      frame: frame({
+        state: "rowing",
+        intervalIndex: 1,
+        // The mirror image of the guard test above. Distance stays INSIDE
+        // the reset window (the walk's own 0.8, the same frame the mirror
+        // test uses), isolating the BYTE half of the discriminator: a
+        // mutant that dropped only `frame.rowingActive === false` would
+        // still pass if this test also advanced the distance out of the
+        // window.
+        rowingActive: true,
+        distanceMeters: 0.8,
+        spm: target.spm! + 10,
+        currentSplit: target.targetSplit! - 10,
+      }),
+    });
+    // Positive values, not `not.toBe("0:00.0")`: the mirror substitutes a
+    // specific pair, so asserting the judged pair is present says more
+    // than asserting the mirrored one is absent.
+    expect(m.pace.display).toBe(fmtSplit(target.targetSplit! - 10));
+    expect(m.pace.judgement).toBe("faster");
+    expect(m.pace.absent).toBe(false);
+    expect(m.rate.display).toBe(String(target.spm! + 10));
+    expect(m.rate.judgement).toBe("faster");
+    expect(m.rate.absent).toBe(false);
+  });
+
   it("the guard: once distance advances past the reset window, the mirror ends and judged values return — even with rowingActive still false", () => {
     const target = firstWorkPhase();
     const m = model({
