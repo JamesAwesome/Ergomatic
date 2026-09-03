@@ -9637,6 +9637,55 @@ describe("createPm5Driver: the deferred status subscriptions (connect-latency de
     );
   });
 
+  it("the release waits for the ACK, not the last chunk write — a stub that acks only when told holds the group back in between", async () => {
+    // The honest fake answers from inside `write()`, so no ordering it
+    // produces can separate a frame's last chunk from that frame's own
+    // ack; this leg is the one that can, and it is the mutation the
+    // release point exists to refuse (`sendSequence`'s own comment).
+    const transport = recording(stubTransport());
+    const driver = createPm5Driver(transport, createEventLog(), {
+      settleTicks: 0,
+      prepareSettleTicks: 0,
+    });
+    const written = (): number =>
+      transport.calls.filter(
+        (c) => c === `write ${RECEIVE_CHARACTERISTIC_UUID}`,
+      ).length;
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    await waitUntil(() => written() > 0);
+    // The prepare's own answer — a refusal, which `sendPrepare` swallows
+    // (`programViaStub`'s own doc comment explains why every by-hand
+    // exchange in this file uses one).
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+    const programmingChunks = buildProgrammingSequence(MINIMAL_PROGRAM).reduce(
+      (n, frame) => n + frame.length,
+      0,
+    );
+    await waitUntil(() => written() === prepareChunkCount + programmingChunks);
+
+    // Every chunk of the programming frame is on the wire and its ack has
+    // NOT been delivered. Nothing may go out yet.
+    expect(statusSubscribes(transport.calls)).toStrictEqual([]);
+
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await waitUntil(() => statusSubscribes(transport.calls).length > 0);
+    expect(statusSubscribes(transport.calls)).toStrictEqual(
+      DEFERRED_STATUS_SUBSCRIBES,
+    );
+
+    // Finish the call rather than leaving it pending: `verifyArmed` wants
+    // one fresh armed readback for the program we just sent.
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(MINIMAL_PROGRAM));
+    await pending;
+  });
+
   it("a driver that never arms subscribes the full group on the fallback, at 3000ms, and not before", () => {
     const timers = manualTimers();
     const transport = recording(
