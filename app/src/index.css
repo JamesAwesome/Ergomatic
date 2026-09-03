@@ -2588,7 +2588,10 @@ button.back-link:disabled,
    (index.css's own `.overlay-screen` rule, matching the draft-restore-
    notice/§4 N5 back-label comments' own pairing above in this file):
      --ink   (#1b1a17) on --page (#f4f1e8): 15.41:1 — title
-     --ink-2 (#3f3c35) on --page (#f4f1e8):  9.75:1 — value line, code
+     --ink-2 (#3f3c35) on --page (#f4f1e8):  9.74:1 — value line, code
+       (was 9.75 here; recomputed at Task 8's docs sweep against the
+       APPROVED Gate 0-B contrast table, which says 9.74 for this exact
+       pairing. WCAG 2.x relative luminance gives 9.7396.)
      --ink-3 (#57544c) on --page (#f4f1e8):  6.69:1 — caption (same
        figure this file's own draft-restore-notice comment already
        computed for `--ink-3` on `--page`, reused here since it is the
@@ -9559,7 +9562,7 @@ section:not(.news-pinned) .news-row:last-of-type {
    absorbs the deficit first — so a `scrollWidth <= clientWidth`
    assertion here could never have gone red. VALUES APPROVED at Gate
    0-B (James, 2026-09-02). Contrast computed, not eyeballed (RF6):
-   `--ink-2` (#3f3c35) on `--page` (#f4f1e8) is 9.75:1 and on `--surface`
+   `--ink-2` (#3f3c35) on `--page` (#f4f1e8) is 9.74:1 and on `--surface`
    (#fffdf7) is 10.81:1, both clear of the 4.5:1 AA floor. */
 .summary-row-partial {
   flex: 0 0 auto;

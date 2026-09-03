@@ -1433,7 +1433,7 @@ describe("index.css: .summary-row-partial is a NON-SHRINKING, NON-WRAPPING flex 
     expect(flexShrinkOf(rule.body)).toBe("0");
     expect(rule.body).toMatch(/white-space:\s*nowrap/);
     // Contrast computed, never eyeballed (RF6): `--ink-2` (#3f3c35) on
-    // `--page` (#f4f1e8) is 9.75:1 and on `--surface` (#fffdf7) is
+    // `--page` (#f4f1e8) is 9.74:1 and on `--surface` (#fffdf7) is
     // 10.81:1 — both clear the 4.5:1 AA floor.
     expect(rule.body).toMatch(/color:\s*var\(--ink-2\)/);
     expect(rule.body).toMatch(/font-family:\s*var\(--font-mono\)/);

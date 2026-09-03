@@ -273,7 +273,7 @@ exists, because line numbers in this repo move under every merge.
 | The banner's shipped pins | `ConnectedSurface.test.tsx` (2 text assertions + 2 CSS assertions + the only-filled-red census), `e2e/design.spec.ts` (the `connected-disconnected` fixture, `1 interval kept.`) | the design.spec leg is the ≥1 arm and is UNAFFECTED |
 | The banner's shipped FIXTURE | `ConnectedSurface.screens.test.tsx`'s `toMatchFileSnapshot("../../e2e/fixtures/connected-ready-lost.html")`; the file contains `connected-lost-body">Nothing kept.` | regenerated in Task 6 |
 | `.summary-row` layout | `app/src/index.css` | `display: flex; gap: 8px`; `.summary-row-offset` is `flex: 1; min-width: 0` and ellipsises; `.summary-row-dash` is `flex: 0 0 20px` right-aligned |
-| `--ink-2` contrast | `app/src/index.css`'s own computed comments | `#3f3c35` on `--page` `#f4f1e8` = **9.75:1**; on `--surface` = **10.81:1**. Floor 4.5:1. The partial cell reuses `.summary-row-time`'s existing pairing, so no new colour decision is introduced |
+| `--ink-2` contrast | `app/src/index.css`'s own computed comments | `#3f3c35` on `--page` `#f4f1e8` = **9.74:1** (corrected at Task 8's sweep; the approved gate table's own figure, and what WCAG 2.x luminance gives); on `--surface` = **10.81:1**. Floor 4.5:1. The partial cell reuses `.summary-row-time`'s existing pairing, so no new colour decision is introduced |
 | Replay precedent | `app/src/monitor/lifecycleReplay.test.ts`, `summaryHoldReplay.test.ts` | `createReplayTransport` + `vi.doMock("../adapters/monitorTransport")` + `vi.resetModules()` + dynamic re-import + `withLiveness` clock rebind |
 | supertest precedent | `app/server/routes/data.test.ts`, the `pm5 fields (Phase 7C Task 3)` describe | `asA(request(app).post("/api/logs")).send({...validLogBody(), steps:[…]})`, then `getLogById`, then `toStrictEqual` on `steps[0]`; a bounds refusal is `400` with `body.field === "steps"` and the member named in `body.error` |
 | e2e seeding helpers | `app/e2e/log.spec.ts`'s `postLog` (`steps?: { label; actualSource?; actualSeconds? }[]`) and `app/e2e/screenshots.spec.ts`'s `postLog` (a wider step type) | both need the new pair, plus `meters`/`seconds`/`targetSplit` on the narrow one |
@@ -1779,7 +1779,7 @@ partial replaces that dash. **ONE renderer serves both doors**
       }
       ```
       **Contrast, computed, not eyeballed:** `--ink-2` (`#3f3c35`) on `--page`
-      (`#f4f1e8`) is **9.75:1** and on `--surface` is **10.81:1**, both against
+      (`#f4f1e8`) is **9.74:1** and on `--surface` is **10.81:1**, both against
       the 4.5:1 floor — the numbers `index.css` itself already carries for this
       exact pairing, which `.summary-row-time` ships with. The gate's own
       contrast table carries it. **State the number in the PR.**
