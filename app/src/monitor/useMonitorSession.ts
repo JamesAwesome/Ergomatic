@@ -1818,11 +1818,17 @@ export function useMonitorSession(
    *  `program()`'s catch is itself one of the five producers; see that
    *  function); and, DEFENSIVELY, `connect()` and `teardown()`. SIX
    *  sites, found by symbol. **`program()` is the ONE whose clear is
-   *  reachable with a reading held** — a re-arm over a still-open run —
-   *  and its leg lives with the read that can observe it (the close-site
-   *  legs, added alongside `withPartial`'s call in `closeRecord`). The
-   *  other FIVE are DEFENSIVE and ungated by design, each stated so at its
-   *  own site rather than given a test that could not go red (RF21):
+   *  reachable with a reading held**: nothing but the `"programming"`
+   *  double-fire guard gates re-entry from `live`, and its own catch
+   *  CLOSES the run it is replacing (`program-failed`) with the reading
+   *  still set — which is why its clear sits after that close, and why its
+   *  leg lives with the read that can observe it (the close-site legs,
+   *  added alongside `withPartial`'s call in `closeRecord`). The same
+   *  "latent today, since no UI path re-programs" caveat `rowingStreakRef`'s
+   *  own clear carries at the top of that function applies to the SUCCESS
+   *  half; the catch half is exercised by this file's own P3b tests.
+   *  The other FIVE are DEFENSIVE and ungated by design, each stated so at
+   *  its own site rather than given a test that could not go red (RF21):
    *  - the RC-37 exit: its live arm returns first, and its own guard admits
    *    only `programming`/`ready`, neither of which can hold a reading
    *    (harden lens 2, finding 4);
@@ -3568,17 +3574,6 @@ export function useMonitorSession(
           "record-actual",
           `index=${event.actual.index} finalBoundary=${event.finalBoundary === true} recordClosed=${run.completedAt !== null} -> ${accepted ? "accepted" : "REFUSED (the record returned unchanged)"} (actuals ${run.actuals.length} -> ${next.actuals.length})`,
         );
-        // A refusal returns `candidate` itself unchanged — nothing to
-        // commit, nothing to re-render, exactly as `recordActual`'s own
-        // immutability guard always meant before `candidate` existed.
-        //
-        // Hand-off store design spec §1, plan Task 3: the GATE accepting
-        // (`accepted`, above) is no longer the same fact as the STORE
-        // accepting — a stale/retired/second-key refusal is now possible
-        // here too, and `runOpen`/`actuals` must only ever reflect what the
-        // store actually committed, per the sole-committer discipline
-        // (`applyProducerCommit`'s own doc comment: "a refusal can
-        // therefore never diverge producer from store").
         // §5.3, I-B3 half two: the interval's own actual has landed, so
         // its work bout is over by the other of the two events. On a
         // program with rests the `resting` clear above already fired ~60 s
@@ -3593,6 +3588,17 @@ export function useMonitorSession(
         ) {
           lastRowingFrameRef.current = null;
         }
+        // A refusal returns `candidate` itself unchanged — nothing to
+        // commit, nothing to re-render, exactly as `recordActual`'s own
+        // immutability guard always meant before `candidate` existed.
+        //
+        // Hand-off store design spec §1, plan Task 3: the GATE accepting
+        // (`accepted`, above) is no longer the same fact as the STORE
+        // accepting — a stale/retired/second-key refusal is now possible
+        // here too, and `runOpen`/`actuals` must only ever reflect what the
+        // store actually committed, per the sole-committer discipline
+        // (`applyProducerCommit`'s own doc comment: "a refusal can
+        // therefore never diverge producer from store").
         if (accepted && applyProducerCommit(next)) {
           update({ actuals: next.actuals });
         }
