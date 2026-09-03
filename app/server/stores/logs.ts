@@ -394,7 +394,7 @@ const LOG_LIST_COLUMNS = {
   // exclusion reasoning at the top of this object) — so the four clauses
   // are evaluated SERVER-SIDE and the row carries one derived boolean.
   // The shape is migration 0020's own EXISTS set predicate over the array
-  // (`drizzle/0020_wooden_millenium_guard.sql:36-39`), not the scalar
+  // (`drizzle/0020_wooden_millenium_guard.sql:37-40`), not the scalar
   // `->>` cast above (a different idiom for a different question).
   //
   // `src/log/storedSummary.ts`'s `partialCloseReason` is the SAME rule in

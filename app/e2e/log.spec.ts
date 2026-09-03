@@ -91,8 +91,12 @@ async function postLog(
     // Required on the wire since the v0.35.0 sunset (`source`
     // derive-when-absent). A caller that names its door keeps it; every
     // other seed gets the member the server used to derive for it, so
-    // no fixture's provenance moved at the sunset.
-    source?: "pm5" | "timer" | "manual";
+    // no fixture's provenance moved at the sunset. Carries all FOUR
+    // members: this is one of the ELEVEN mirrors door PR A's `no-reading`
+    // widening moves (`domain/types.ts`'s `LogSource` doc comment names the
+    // set), and it is NOT compiler-checked — omitting the member only fails
+    // where a test SEEDS it, never on omission.
+    source?: "pm5" | "timer" | "manual" | "no-reading";
     // Door spec (2026-09-02) §1.3: the honest close reason, so a seed can
     // be a genuinely PARTIAL row. Mirrors `schema.ts`'s `endedByEnum` at
     // the same "hand-copied literal union" fidelity `source` above already

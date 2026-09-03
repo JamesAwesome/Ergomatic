@@ -474,7 +474,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
   });
 
   // Fix round 1 (Task 3 review, IMPORTANT finding): a null-index actual
-  // never becomes a stored step (`logDraft.ts:844-846`'s own
+  // never becomes a stored step (`logDraft.ts:853-856`'s own
   // `actualByIndex` map only holds `index !== null` actuals), so Σ steps
   // alone would under-count DISTANCE/TIME relative to what genuinely
   // happened — the exact defect this TIER B1 branch exists to close. This
@@ -1436,7 +1436,7 @@ const SLACK_TIDE_LABEL = "3:00 @ 6k +12";
 const SLACK_TIDE_TARGET_SPLIT = 139.0;
 
 // The two shapes `buildMonitorLogSteps` ACTUALLY writes
-// (`session/logDraft.ts:865-919`), not an invented minimum: a MATCHED
+// (`session/logDraft.ts:883-922`), not an invented minimum: a MATCHED
 // interval gets `actualSource: "pm5"` plus the four actuals; an UNMATCHED
 // one — never reached, or a boundary pair that never both arrived — keeps
 // the authored target and `spm` and carries NO `actualSource` at all
@@ -1494,7 +1494,7 @@ const SOME_UNMEASURED_STEPS: StoredLogStep[] = [
 // A LOST BOUNDARY on rep 2: the interval is matched (`actualSource: "pm5"`)
 // but its elapsed reading is below `MIN_MEASURABLE_ELAPSED_SECONDS`
 // (`summaryModel.ts:577`, 1 s) — "a lost boundary whose pair never both
-// arrived" (`logDraft.ts:804-806`) / "an interval that produces ZERO frames
+// arrived" (`logDraft.ts:806-809`) / "an interval that produces ZERO frames
 // is lost entirely" (`domain/monitor/types.ts:62-63`). This shape exists so
 // the two candidate counts genuinely DISAGREE: `measuredElapsedSeconds`
 // says N = 1, a naive `actualSource !== undefined` count says 2.
@@ -1637,7 +1637,7 @@ describe("partialCloseReason — door spec §1.1, the four clauses", () => {
   });
 
   // Measurement loss, not a stopped piece: a short step on a `finished` row
-  // is a lost boundary (`logDraft.ts:804-806`) or a zero-frame interval
+  // is a lost boundary (`logDraft.ts:806-809`) or a zero-frame interval
   // (`domain/monitor/types.ts:62-63`). Clause 4 excludes it.
   it("a finished row with a short step is measurement loss, not partial", () => {
     expect(
