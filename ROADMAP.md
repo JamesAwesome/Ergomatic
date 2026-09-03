@@ -2316,8 +2316,8 @@ trigger is the whole entry.
 - **PWA installability.** **Trigger:** the web build stops being only a harness.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
-- **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; BASE
-  INTERACTION APPROVED 2026-09-03, written design under review.** James chose a
+- **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; HARDENED
+  DESIGN APPROVED 2026-09-03; IMPLEMENTATION UNSCHEDULED.** James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.
   A valid PM5
@@ -2330,13 +2330,21 @@ trigger is the whole entry.
   shortcut, not pairing. CoreBluetooth's opaque id makes the tag's MAC unusable;
   exact live `ScanResult.localName` matching is the bridge. **Gate -1 comes
   before product implementation:** a complete read on James's real PM5 must
-  prove `@capgo/capacitor-nfc@8.2.5` receives the external NDEF record, establish
-  its payload padding/termination, and show the ASCII-decoded name exactly
-  equals that unit's live `ScanResult.localName` across three fresh scans. The
+  prove the pinned, checked-in-patched `@capgo/capacitor-nfc@8.2.5` receives the
+  external NDEF record, establish its payload padding/termination, and show the
+  ASCII-decoded name exactly equals that unit's live `ScanResult.localName`
+  across repeated fresh scans. The patch is required because the released
+  plugin's retained events lack session identity, its NDEF delegate chooses the
+  first physical tag, and its stop promise does not drain old native closures.
+  Native attempt identity/single-tag/drain tests, fail-closed end-to-end
+  targeted-operation propagation, and raw BLE-operation serialization are
+  merge gates. The
   existing Flipper file is header-only and proves none of those literal bytes.
   Full architecture, atomic product-PR shape, Gate 0, cleanup/concurrency
   contract, replay seam, and exits:
   [`docs/superpowers/specs/2026-09-03-phase-nf-scan-nfc-design.md`](docs/superpowers/specs/2026-09-03-phase-nf-scan-nfc-design.md).
+  The executable, disposable hardware-proof plan is
+  [`docs/superpowers/plans/2026-09-03-phase-nf-gate-minus-one.md`](docs/superpowers/plans/2026-09-03-phase-nf-gate-minus-one.md).
   Implementation requires a separate explicit scheduling ruling; the default
   remains behind Wave A. **M**
 - **The parametric workout generator** — "generate me a 45' AT workout".

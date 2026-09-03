@@ -691,6 +691,7 @@
         <div class="state">
           <strong>Accepted, then automatic handoff</strong>
           <div class="state-button found">✓&nbsp;&nbsp;PM5 found</div>
+          <p class="state-note">One committed paint · no duration timer</p>
         </div>
         <div class="state">
           <strong>Rejected tag</strong>
@@ -714,9 +715,9 @@
         <div class="state">
           <strong>Exact target is already held</strong>
           <div class="message failure">
-            A PM5 is already connected. Use Connect.
+            End this PM5's current connection, then try again.
           </div>
-          <p class="state-note">Cancel returns to workout detail</p>
+          <p class="state-note">Try again stays exact · Cancel</p>
         </div>
         <div class="state">
           <strong>Duplicate exact target</strong>
@@ -724,6 +725,18 @@
             More than one PM5 has this name. Use Connect.
           </div>
           <p class="state-note">Cancel returns to workout detail</p>
+        </div>
+        <div class="state">
+          <strong>Target scan interrupted</strong>
+          <div class="message failure">Connection interrupted. Try again.</div>
+          <p class="state-note">Try again stays exact · Cancel</p>
+        </div>
+        <div class="state">
+          <strong>Bluetooth cleanup failed</strong>
+          <div class="message failure">
+            Bluetooth cleanup failed. Restart Ergomatic before trying again.
+          </div>
+          <p class="state-note">No in-process retry</p>
         </div>
       </div>
 

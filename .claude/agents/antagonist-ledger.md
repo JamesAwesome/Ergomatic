@@ -6826,3 +6826,20 @@ plan's own tools and never with the REPO's.
   the wrapper names, then check each hit's ENCLOSING block and each bare hit's
   CALL SITES — a bare getter behind a `…Safely` wrapper is guarded, and a
   wrapper-name grep would have produced a false finding here.**
+
+### 2026-09-03 — Phase NF hardening
+
+- **Techniques:** For every claimed matching drain, trace identity through the
+  start argument, concrete native object, every async closure, event payload,
+  retained-event queue, and framework reset; construct A-stop/reload-B and
+  require late A to be mechanically rejectable. Treat an omitted option as a
+  privilege downgrade: use a distinct capability whose absence fails closed,
+  then mutate each production decorator to drop it. Attach a drain to the raw
+  native operation rather than a raced UI promise, and define ownership before
+  testing cleanup rejection. Test asynchronous listener setup before its handle
+  resolves, re-read platform state before starting, and exercise both StrictMode
+  replay and true unmount. Decode bridge inputs from `unknown` with absent,
+  empty, malformed, and valid cases. Prove transient UI with a paint boundary,
+  traverse the actual routed producer-to-consumer composition, and constrain
+  time/identity with independent literals rather than production-derived
+  expectations.
