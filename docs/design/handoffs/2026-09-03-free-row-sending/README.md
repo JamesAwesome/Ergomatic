@@ -39,13 +39,24 @@ free-row door and the workout interstitial use `.button-l1` for it today
 outlines — an approximation where the rule is to lift the shipped value.
 Corrected before approval; the ready card itself changes nothing.
 
+## Deviation found at implementation (RF9)
+
+The rendered page draws the checklist's CURRENT line at `--ink`
+(15.41:1). The shipped `.connected-checklist-current` rule sets no colour
+of its own and inherits `--ink-3` (6.69:1 on `--page`, clear of the AA
+floor). The implementation lifted the SHIPPED class, deliberately:
+restyling that rule would also restyle the workout's card, which this gate
+never showed. So the card ships one shade lighter on that line than the
+page drew it, both pass AA, and moving to the page's value is James's call.
+
 ## Contrast, computed (RF6)
 
 | Element | Pairing | Ratio | Floor |
 | --- | --- | --- | --- |
 | Status label | `--ink-3` #57544c on `--page` #f4f1e8 | 6.69:1 | 4.5 passes |
 | Serif line | `--ink` #1b1a17 on `--page` #f4f1e8 | 15.41:1 | 3.0 large, passes |
-| Checklist, done and current | `--ink` #1b1a17 on `--page` #f4f1e8 | 15.41:1 | 4.5 passes |
+| Checklist, done | `--ink` #1b1a17 on `--page` #f4f1e8 | 15.41:1 | 4.5 passes |
+| Checklist, current (as shipped) | `--ink-3` #57544c on `--page` #f4f1e8 | 6.69:1 | 4.5 passes |
 | Body line | `--ink-2` #3f3c35 on `--page` #f4f1e8 | 9.74:1 | 4.5 passes |
 | Show me the numbers | `--on-color` #fffdf7 on `--accent` #b5341f | 5.94:1 | 4.5 passes |
 | Cancel | `--ink` #1b1a17 on `--surface` #fffdf7 | 17.11:1 | 4.5 passes |
