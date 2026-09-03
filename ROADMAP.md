@@ -588,7 +588,9 @@ rower's work silently.
         guard now keeping the `pm5` door for a nameless erg instead of
         storing the session as by-hand. All three riders below are ticked.
         Gate 0-A was APPROVED by James on 2026-09-02 before any task ran.
-        **PR B (the stored NUMBER) is still open.**
+        **PR B (the stored NUMBER) is IMPLEMENTED on branch
+        `wave-f-door-b`, 2026-09-03** — the item below carries what it
+        shipped; its PR number is owed here at merge.
       - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
         in-flight interval's metres in NEW step keys (`partialMeters`/
         `partialSeconds`), never `actualMeters` — an older server drops
@@ -605,7 +607,13 @@ rower's work silently.
       **S/M each; A lands before B; B's plan gets a FULL antagonist pass
       (novel stored shape + session-scoped ref).**
 
-- [ ] **The in-flight interval's metres are discarded on a mid-row link loss.**
+- [x] **The in-flight interval's metres are discarded on a mid-row link loss.**
+      **DONE — door PR B (branch `wave-f-door-b`), 2026-09-03.** A close that
+      catches the rower mid-interval banks that interval's last reading in two
+      NEW step keys and the row shows it beside the dash; no hero, tier, total
+      or "N intervals kept" moves (I-B2/I-B5). The five replay legs drive real
+      wire bytes from three committed captures. Gate 0-B approved 2026-09-02.
+      **The PR number is owed here at merge.**
       On a single-interval workout — the tester's own 2000 m "Beam Sea" — any
       mid-row loss gives `kept = 0`, which was the MAJORITY outcome of walk
       leg B, not an oddity. **The spec states explicitly whether correct resume
@@ -1330,6 +1338,20 @@ X" is a real disposition — most of these are single files.
       for free rows, or accept and say so in the button's copy. **S**
 
 ## Codebase-audit owners
+- **[x] LOST THE MONITOR must not say "Nothing kept." — DONE in door PR B**
+  (2026-09-03). Shipped on all THREE surfaces that carried the phrase, not
+  one: the banner's `kept === 0` arm renders its title alone (no body
+  element at all, never an emptied one), the connected surface's ended frame
+  says "The erg dropped the workout." and stops, and `LogSession.tsx`'s
+  dropped strip says "You had not finished an interval yet." with the bold
+  clause dropped rather than emptied. Every `kept >= 1` arm is byte-for-byte
+  unchanged. **The sentence below is WRONG and is corrected here rather than
+  deleted, because it was the reason this rode PR B:** a part-rowed interval
+  does NOT count toward "kept" and never will — I-B2, a partial is never an
+  `IntervalActual` and `measuredIntervalCount` does not see it. What PR B
+  actually does is make the zero-kept case one where something IS on screen
+  (the interval's own metres), which is why the phrase had to go. The
+  original text, for the record:
 - **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02): on
   the connected lost-link banner (`ConnectedSurface.tsx`'s `LostBanner`, the
   `kept === 0` arm), that line reads as loss at the exact moment the
@@ -1999,6 +2021,16 @@ Each needs erg time or a deliberate recording session.
   stack — capture it rather than re-running past it.** This matters more
   than the known e2e flakes: the unit project has no Docker, browser, or
   network and should be deterministic. **S**
+  **THREE files now, and a measured rate (door PR B Task 7, 2026-09-03):**
+  a third test joined the set — `server/auth/middleware.test.ts > noStore >
+  stamps Cache-Control: no-store` — alongside a `data.test.ts` cursor-
+  pagination leg and `server/routes/concept2.test.ts`'s cookie-caller leg
+  (`expected 401 to be 200` inside its own mint helper). Rate: **1 failure
+  in 10 runs at that branch's head, and 1 in 12 with `data.test.ts` reverted
+  to base** — the same rate with and without the branch's only `unit`-project
+  file, which is what rules out a regression and keeps this row's "cause
+  UNKNOWN, capture the next one" instruction standing. `concept2.test.ts`
+  ran 8/8 green in isolation, so it does not reproduce alone.
 - **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
   can no longer rot independently.** The class was two independent literals —
   `news.spec.ts`'s (CI-gated, bumped by every notes PR) and
