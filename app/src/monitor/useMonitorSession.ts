@@ -235,8 +235,9 @@ const ANONYMOUS_RUN: RunIdentity = {
  *  **RECONCILED, Phase JR PR 2.** This used to read: "None can — `live` is
  *  downstream of `ready`, which is downstream of the `armed` event, which
  *  only `program()` produces." The last clause is no longer true.
- *  `beginFreeRow()` is a SECOND producer of `ready`, reaching it with no
- *  wire traffic at all, so `ready` now has two doors rather than one.
+ *  `beginFreeRow()` is a SECOND producer of `ready`, reaching it with
+ *  nothing awaited (its p.80 send is detached), so `ready` now has two
+ *  doors rather than one.
  *
  *  The conclusion survives the correction: this value is still never read,
  *  because both doors seed `identityRef` before flipping the phase. It
@@ -966,10 +967,13 @@ export interface MonitorSession {
   connect(): Promise<void>;
   program(p: WorkoutProgram, identity: RunIdentity): Promise<void>;
   /** Phase JR PR 2: arms for the machine's OWN free row — reaches `ready`
-   *  with no wire traffic and files the record under a Just Row identity
-   *  (`workoutId: null`, `mode: "justrow"`). `program()`'s counterpart, and
-   *  synchronous because nothing is sent. A no-op while a programmed
-   *  session is `programming`/`ready`/`live`. */
+   *  synchronously and files the record under a Just Row identity
+   *  (`workoutId: null`, `mode: "justrow"`). `program()`'s counterpart.
+   *  Since spec 2026-09-02 the driver also sends the PM5 Concept2's p.80
+   *  Just Row program as a DETACHED send (ring entries only — nothing here
+   *  awaits or branches on it), so the erg leaves its menu when the link
+   *  comes up. A no-op while a programmed session is
+   *  `programming`/`ready`/`live`. */
   beginFreeRow(): void;
   /** The rower's End. Idempotent, and idempotent specifically against a
    *  terminal event racing it (spec §2). */
@@ -4763,16 +4767,22 @@ export function useMonitorSession(
   /**
    * PHASE JR PR 2 — the free row's arm, and `program()`'s counterpart.
    *
-   * Reaches `ready` with no wire traffic, because the row is already the
-   * machine's own: the rower is in the PM5's Just Row and there is nothing
-   * to send, arm or verify. Everything downstream is inherited unchanged —
-   * `handleFrame`'s own `"ready"` branch opens the record on the first
-   * rowing frame with distance, which IS the spec's "user intent plus
-   * motion" rule (the tap on Just Row was the intent).
+   * Reaches `ready` with nothing awaited: the row is the machine's own
+   * Just Row, and there is nothing to verify. Since spec 2026-09-02 the
+   * driver's `beginFreeRow()` does send Concept2's p.80 Just Row program
+   * so the PM5 leaves its menu — but as a DETACHED send whose only
+   * effects are ring entries (`free-row-program-sent`/`-unanswered`/
+   * `-failed`); this hook neither awaits nor reads its outcome, by ruling
+   * (the erg's own screen is the acknowledgment). Everything downstream is
+   * inherited unchanged — `handleFrame`'s own `"ready"` branch opens the
+   * record on the first rowing frame with distance, which IS the spec's
+   * "user intent plus motion" rule (the tap on Just Row was the intent).
    *
-   * SYNCHRONOUS, unlike `program()`: there is no promise to await when
-   * nothing is sent. That also makes the phase flip and the identity seed
-   * one indivisible step, so no frame can arrive between them.
+   * SYNCHRONOUS, unlike `program()`: no promise is awaited, which makes
+   * the phase flip and the identity seed one indivisible step, so no frame
+   * can arrive between them. That synchronous flip is load-bearing
+   * (`JustRow.tsx`'s once-latch and `deriveProgram` rely on it); an async
+   * rewrite would reopen the arm-effect re-trigger it closes.
    *
    * **The guard is not defensive tidiness.** Without it, calling this
    * during a programmed session silently rewrites `identityRef` to the Just

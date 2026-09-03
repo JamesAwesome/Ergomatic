@@ -12311,8 +12311,9 @@ describe("restPairComplete (pure) — RC-9d fix round 1: the all-or-nothing gate
  * PHASE JR PR 2, TASK 1 — the free row's own driver run.
  *
  * `activeRun` is assigned in exactly one place, inside `program()`
- * (`driver.ts:5992`). A free row never programs, so without `beginFreeRow`
- * the driver holds no run and `runIsOpen()` is false for the whole row —
+ * (`driver.ts:5992`). A free row never runs `program()`, so without
+ * `beginFreeRow` the driver holds no run and `runIsOpen()` is false for the
+ * whole row —
  * which silently costs three things the rower's row depends on: the machine
  * close never emits (`:2579` returns first), the machine's own 0x0039 is
  * discarded ("nothing filed", `:2974`), and auto-split boundaries take the
@@ -12354,18 +12355,156 @@ describe("beginFreeRow", () => {
     return { transport, log, driver, events };
   }
 
-  it("writes NOTHING to the wire", () => {
-    const { transport, driver } = freeRowDriver();
-    // The count BEFORE, not zero: the driver writes its own sample-rate
-    // command at construction. What this pins is that opening a free row
-    // adds no write of its own — asserted on the transport's write log
-    // rather than a spy over `program()`, because a spy proves a method was
-    // not called while the log proves the wire was silent.
-    const before = transport.writes.length;
+  /**
+   * CONNECT PROGRAMS THE ERG (spec 2026-09-02, exit criterion 2). The
+   * free row now sends Concept2's p.80 JustRow frame — alone, no prepare —
+   * as a DETACHED send whose only effects are ring entries, so every
+   * assertion below reads `log.entries()`. Both literals are TYPED from
+   * `docs/monitor/pm5-interface-notes.md` (§12 example 2 and §13), never
+   * derived from the builders, and the fake keeps no write log of its own.
+   */
+  const JUST_ROW_FRAME_HEX = "f1 76 07 01 01 01 13 02 01 01 61 f2";
+  const TERMINATE_FRAME_HEX = "f1 76 04 13 02 01 02 60 f2";
+
+  function freeRowFake(
+    script: Partial<Parameters<typeof createFakeTransport>[0]> = {},
+  ) {
+    // `settleTicks: 0` for the same reason `harness`'s own comment gives —
+    // the fake sends one status tick per terminate ack, never a heartbeat.
+    return harness({ program: MINIMAL_PROGRAM, ...script }, { settleTicks: 0 });
+  }
+
+  function kinds(log: ReturnType<typeof createEventLog>): string[] {
+    return log.entries().map((e) => e.kind);
+  }
+
+  it("opens the run BEFORE the first byte goes out: `free-row-open` precedes the first `write` in the ring", () => {
+    const { log, driver } = freeRowFake();
 
     driver.beginFreeRow();
 
-    expect(transport.writes.length).toBe(before);
+    // `sendSequence` issues its first write synchronously, inside this
+    // call — so the ring is the only witness to the ORDER, and the order
+    // is the whole point: `activeRun.freeRow` is what holds the RC-37
+    // watch and the divergence escalation off during the send.
+    const ring = kinds(log);
+    const open = ring.indexOf("free-row-open");
+    const firstWrite = ring.indexOf("write");
+    expect(open).toBeGreaterThanOrEqual(0);
+    expect(firstWrite).toBeGreaterThan(open);
+  });
+
+  it("writes exactly Concept2's p.80 JustRow frame, NO terminate, and the fake's ack lands as `free-row-program-sent`", async () => {
+    const { log, driver } = freeRowFake();
+
+    driver.beginFreeRow();
+    await waitUntil(() => kinds(log).includes("free-row-program-sent"));
+
+    const writes = log
+      .entries()
+      .filter((e) => e.kind === "write")
+      .map((e) => e.detail);
+    expect(writes).toStrictEqual([JUST_ROW_FRAME_HEX]);
+    expect(writes).not.toContain(TERMINATE_FRAME_HEX);
+    expect(
+      kinds(log).filter((k) => k === "free-row-program-sent"),
+    ).toHaveLength(1);
+    expect(kinds(log)).not.toContain("free-row-program-failed");
+  });
+
+  it("a NAK'd program leaves the row OPEN and records `free-row-program-failed` carrying the hex trace", async () => {
+    const { log, driver } = freeRowFake({ failNextProgramFrame: "reject" });
+
+    driver.beginFreeRow();
+    await waitUntil(() => kinds(log).includes("free-row-program-failed"));
+
+    const failed = log
+      .entries()
+      .find((e) => e.kind === "free-row-program-failed")!;
+    expect(failed.detail).toContain(`write ${JUST_ROW_FRAME_HEX}`);
+    expect(failed.detail).toContain("ack ");
+    expect(kinds(log)).not.toContain("free-row-program-sent");
+    // Still open — nothing on the phone branches on the send's outcome
+    // (ruling 2). `runIsOpen()` has one public witness: a second call is
+    // refused as a re-entry, which it can only be while the first run lives.
+    driver.beginFreeRow();
+    expect(kinds(log).at(-1)).toBe("free-row-ignored");
+  });
+
+  it("refuses terminate() with ProgramBusyError while the send is in flight — and the send still completes afterwards", async () => {
+    const { fake, log, driver } = freeRowFake();
+    // Holds the write's own promise open for 50 ms (the ack has already
+    // landed synchronously) so `sendSequence` is provably still running
+    // when END arrives. Without the flag, `terminate()` RESOLVES here: its
+    // `awaitAck` overwrites the single `pendingAck` slot unchecked.
+    fake.delayWrites(50);
+
+    driver.beginFreeRow();
+    await expect(driver.terminate()).rejects.toThrow(ProgramBusyError);
+    expect(kinds(log)).not.toContain("terminate-sent");
+
+    await vi.advanceTimersByTimeAsync(50);
+    await waitUntil(() => kinds(log).includes("free-row-program-sent"));
+    expect(kinds(log)).toContain("free-row-program-sent");
+  });
+
+  it("abandons an unanswered send at the deadline: `free-row-program-unanswered`, and terminate() is accepted from then on", async () => {
+    // The stub never acks — the replay transport's shape, and a PM5 that
+    // never answers. Production configures no `ackTimeout`, so without the
+    // deadline `programInFlight` would hold for the driver's life and END
+    // would be refused forever (harden lens 2).
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { settleTicks: 0 });
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    driver.beginFreeRow();
+    await expect(driver.terminate()).rejects.toThrow(ProgramBusyError);
+
+    // INDEPENDENT literals, never the driver's constant (RF21: a test that
+    // imports the number it gates retunes itself with it). Held at 2999,
+    // released at 3000.
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(kinds(log)).not.toContain("free-row-program-unanswered");
+    await vi.advanceTimersByTimeAsync(1);
+    await waitUntil(() => kinds(log).includes("free-row-program-unanswered"));
+    expect(kinds(log)).toContain("free-row-program-unanswered");
+    expect(kinds(log)).not.toContain("free-row-program-sent");
+    expect(kinds(log)).not.toContain("free-row-program-failed");
+
+    const written = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const before = written();
+    const pending = driver.terminate();
+    await waitUntil(() => written() > before);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await pending;
+    expect(kinds(log)).toContain("terminate-sent");
+  });
+
+  it("the free row stays open through the send on a fake that reacts to ANY terminate — because nothing in the send is one", async () => {
+    // The fake's default reaction to a terminate at an idle machine is a
+    // plain accept (§18 s3 item 15), which is exactly why a prepare
+    // re-added here could never go red on it (harden lens 1). Opting the
+    // reaction in makes the fake deliver `terminated` for a terminate in
+    // any state — and a `terminated` frame with this run open CLOSES it.
+    const { log, driver, events } = freeRowFake({
+      terminateReactsWhileIdle: true,
+    });
+
+    driver.beginFreeRow();
+    await waitUntil(() => kinds(log).includes("free-row-program-sent"));
+
+    expect(kinds(log)).toContain("free-row-program-sent");
+    expect(events.some((e) => e.kind === "terminated")).toBe(false);
+    expect(kinds(log)).not.toContain("terminal");
+    driver.beginFreeRow();
+    expect(kinds(log).at(-1)).toBe("free-row-ignored");
   });
 
   it("emits `terminated` when the rower backs out on the erg", () => {

@@ -76,7 +76,14 @@
 // twelve captured bytes was a rejection), and
 // `FakeScript.refuseNextPrepare`'s refused prepare step (§18 session 3 item
 // 15 — the captured byte for the one send this fake used to refuse by
-// default decodes to an ACCEPT).
+// default decodes to an ACCEPT). One machine REACTION is synthetic too:
+// `FakeScript.terminateReactsWhileIdle`'s `terminated` status off a
+// terminate at an idle machine (item 15 recorded no state change there).
+//
+// Since spec 2026-09-02 (Just Row: connect programs the erg) the fake also
+// accepts Concept2's p.80 JustRow frame (`buildJustRowProgram`) in ANY
+// phase, acked like a workout program's frame — `failNextProgramFrame`
+// reaches it — and models nothing else about it (`onJustRowFrameComplete`).
 //
 // Verifies each programming chunk byte-for-byte against
 // `buildProgrammingSequence`'s output (asserts — a wrong byte is a test
@@ -109,6 +116,7 @@
 
 import {
   buildGetErrorType,
+  buildJustRowProgram,
   buildProgrammingSequence,
   buildTerminate,
 } from "../../../domain/monitor/pm5/commands.js";
@@ -487,7 +495,10 @@ export interface FakeScript {
    * `injectNak` has always had (`injectNak`'s own doc comment). The prepare
    * step has its own one-shot sibling, `refuseNextPrepare` below, rather
    * than sharing this one: the two answer different frames, and only the
-   * prepare's is aimed at `program()`'s swallow rule.
+   * prepare's is aimed at `program()`'s swallow rule. The p.80 JustRow
+   * frame `beginFreeRow()` sends IS a programming frame for this purpose
+   * (spec 2026-09-02 §Mechanism 4: "its own comment forbids a second way
+   * to ASK for a reject"), so this is how a test NAKs the free row's send.
    */
   failNextProgramFrame?: "reject" | "garbled";
   /**
@@ -513,6 +524,27 @@ export interface FakeScript {
    * is the whole point of a refusal.
    */
   refuseNextPrepare?: boolean;
+  /**
+   * Spec 2026-09-02 (Just Row: connect programs the erg), harden lens 1.
+   * A terminate accepted at an IDLE machine — `onClearingFrameComplete`'s
+   * non-running branch — delivers a synthesized `terminated` status
+   * synchronously with its ack, the way `onArmedFrameComplete` already
+   * does for the app's own END, instead of changing nothing.
+   *
+   * **NEVER OBSERVED ON HARDWARE — synthetic**, and the default stays the
+   * observed one: §18 session 3 item 15's standalone terminate from an
+   * armed-idle screen was an ACCEPT with no state change recorded
+   * anywhere in the trace (`fake.test.ts` pins that default); a terminate
+   * at `terminated`/`finished` is unobserved in either direction
+   * (`queueTerminateAutoCycle`'s own doc comment). The knob exists because
+   * `driver.ts`'s `beginFreeRow()` opens its run BEFORE its send and a
+   * `terminated` frame with a run open CLOSES it — so a prepare (a
+   * terminate) re-added ahead of the free row's p.80 frame could never go
+   * red on this fake's honest default. With this on, it does: the ONLY
+   * consumer is that discriminating test, and it is not a model of what
+   * the PM5 does at its menu.
+   */
+  terminateReactsWhileIdle?: boolean;
   /**
    * Fix-3 Task 5: the WAITTOBEGIN bundle for the NEXT accept (whichever
    * arms next — a real program or an empty arm) reports the PRIOR
@@ -1247,6 +1279,12 @@ export function createFakeTransport(script: FakeScript): Transport &
   // length table.
   const flatProgramChunks = programSequence.flat();
   const terminateChunks = buildTerminate()[0]!;
+  // Spec 2026-09-02: the free row's own program, `driver.ts`'s
+  // `beginFreeRow()`. Always exactly one 12-byte chunk (`commands.test.ts`
+  // pins it), so a plain byte comparison finds it in `processWrite`
+  // regardless of phase — it can arrive on a fresh fake (`"clearing"`, the
+  // walk's connect-at-the-menu case) or over an armed one.
+  const justRowChunk = buildJustRowProgram()[0]![0]!;
   // Phase 7A-fix-2 Task 3: `src/monitor/driver.ts`'s `sendGetErrorType`
   // fires this ONE-OFF write after a genuine reject during the real
   // programming send — orthogonal to the clearing/programming/armed phase
@@ -2171,9 +2209,40 @@ export function createFakeTransport(script: FakeScript): Transport &
       sendAck("ok", echoedCommandIds(frame));
       if (machineState === "rowing" || machineState === "resting") {
         queueTerminateAutoCycle();
+      } else if (script.terminateReactsWhileIdle) {
+        // Synthetic, opt-in — `FakeScript.terminateReactsWhileIdle`'s own
+        // doc comment. Synchronous with the ack, exactly the shape
+        // `onArmedFrameComplete` delivers for the app's own END.
+        const terminated = synthesizeTerminated();
+        setLatestStatus(terminated);
+        deliverStatus(terminated);
       }
     }
     beginProgrammingSequence();
+  }
+
+  /** Spec 2026-09-02: the p.80 JustRow frame, complete. Acked like a
+   *  workout program's frame — `takeNextAckFailure` decides, so
+   *  `failNextProgramFrame`/`injectNak` reach it and `timeoutInjected`
+   *  withholds it — and NOTHING ELSE changes: no phase, no cursor, no
+   *  structure. The real machine arms a Just Row (0x0031 `workoutType`
+   *  0 → 1) and moves its screen; this fake does not model either,
+   *  because the driver reads neither (spec ruling 2: no readback
+   *  verification — the type-1 reading is also the idle-after-terminate
+   *  default, `EMPTY_ARM_STRUCTURE`) and the walk leg's control is the
+   *  gate that proves the screen moved. A fake that flipped the type here
+   *  would be modelling the fix, not the machine. */
+  function onJustRowFrameComplete(frame: Uint8Array): void {
+    if (timeoutInjected) return;
+    const echo = echoedCommandIds(frame);
+    const failure = takeNextAckFailure();
+    if (failure === "garbled") {
+      sendGarbledAck(echo);
+    } else if (failure === "reject") {
+      sendAck("reject", echo);
+    } else {
+      sendAck("ok", echo);
+    }
   }
 
   // Byte-for-byte verification happens on every individual WRITE (BLE
@@ -2801,6 +2870,20 @@ export function createFakeTransport(script: FakeScript): Transport &
       // the `0x1A` pull wrapper this frame uses (its own doc comment), so
       // there is nothing to derive it from.
       sendAck("ok", [0xc8]);
+      return;
+    }
+    // Spec 2026-09-02: the free row's p.80 JustRow frame, in ANY phase —
+    // checked before the phase machinery like the GetErrorType one-off
+    // above, and for the same reason: it is not the next expected
+    // clearing/programming/armed chunk, and it must not disturb those
+    // cursors. `beginFreeRow()` sends it with no prepare in front, so on a
+    // fresh fake it is the first write of the session.
+    if (bytesEqual(bytes, justRowChunk)) {
+      let complete = incoming.push(bytes);
+      while (complete) {
+        onJustRowFrameComplete(complete);
+        complete = incoming.push(new Uint8Array(0));
+      }
       return;
     }
     // A terminate frame arriving where the next PROGRAMMING frame would

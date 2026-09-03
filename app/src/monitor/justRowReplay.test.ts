@@ -10,6 +10,14 @@
 // asserts AFTER the reader, on the log door's rendered DOM. Nothing seeds a
 // `MonitorRun`.
 //
+// Since spec 2026-09-02 `beginFreeRow()` also sends the PM5 its Just Row
+// program (Concept2's p.80 frame). The replay transport resolves writes and
+// never acks, so here that send is ABANDONED at the driver's deadline and
+// the ring records `free-row-program-unanswered` — the row opens and
+// completes exactly as before, which is the ruling (nothing branches on the
+// send). The 08-31 capture predates the send, so `run()`'s divergence check
+// cannot see the write; the ring is this suite's witness for it.
+//
 // THE CAPTURE: `docs/monitor/sessions/walk-2026-08-31-justrow/`, the
 // phase's own capture walk. Pull from the PM5's main menu (auto-enters Just
 // Row), row past the 5:00 auto-split, a deliberate stop, resume, Menu end —
