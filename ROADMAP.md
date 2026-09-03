@@ -824,7 +824,7 @@ rower's work silently.
       register first** — the memory-only reload gap, the three surviving legacy
       reads, and the store's standing tier-precedence probe. The full record
       lives in PR #239 and moves to `docs/history/` when Wave F closes.
-- [x] **Audit AUD-011/AUD-015 — storage denial is recoverable before work — DONE in PR #281.**
+- [x] **Audit AUD-011/AUD-015 — storage denial is recoverable before work — DONE in PR #282.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
       PR may own both, with separate regression tests; the visible Retry state
