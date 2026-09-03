@@ -494,6 +494,91 @@ describe("useConcept2Link: a newer read always wins (review F7)", () => {
     expect(result.current.link?.linked).toBe(false);
     expect(result.current.link?.c2UserId).toBeNull();
   });
+
+  it("a superseded read that then FAILS TO PARSE reports nothing", async () => {
+    // Third arm of the same guard, and the reason it is not decoration: a
+    // superseded read whose body turns out to be HTML would otherwise print
+    // COULDN'T READ CONCEPT2 over a link a newer read had just confirmed.
+    // Found by reading the per-file coverage rows rather than the aggregate
+    // (RF2) — this branch and the one below were the file's only two
+    // uncovered statements.
+    let rejectBody!: (err: unknown) => void;
+    const slowBody = new Promise<unknown>((_resolve, reject) => {
+      rejectBody = reject;
+    });
+    const queue: Response[] = [
+      { ok: true, status: 200, json: () => slowBody } as unknown as Response,
+      new Response(
+        JSON.stringify({ available: true, linked: true, c2UserId: 2211 }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    ];
+    let served = 0;
+    const api = vi.fn(async () => queue[served++]!);
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.reload();
+    });
+    expect(result.current.link?.c2UserId).toBe(2211);
+
+    await act(async () => {
+      rejectBody(new SyntaxError("Unexpected token <"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.failed).toBeNull();
+    expect(result.current.link?.c2UserId).toBe(2211);
+  });
+
+  it("a superseded read whose REQUEST rejects reports nothing", async () => {
+    // The outer `.catch`'s own arm. Going offline mid-foreground would
+    // otherwise put REASON: NO CONNECTION over a link that had just been
+    // read successfully, which is the F7 bug wearing a different status.
+    const ctl: {
+      resolve: (res: Response) => void;
+      reject: (err: unknown) => void;
+    }[] = [];
+    const api = vi.fn(
+      async () =>
+        new Promise<Response>((resolve, reject) => {
+          ctl.push({ resolve, reject });
+        }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    await waitFor(() => expect(ctl).toHaveLength(1));
+
+    let second: Promise<void>;
+    await act(async () => {
+      second = result.current.reload();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(ctl).toHaveLength(2));
+
+    await act(async () => {
+      ctl[1]!.resolve(
+        new Response(
+          JSON.stringify({ available: true, linked: true, c2UserId: 2211 }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      await second;
+    });
+    expect(result.current.link?.c2UserId).toBe(2211);
+
+    await act(async () => {
+      ctl[0]!.reject(new Error("offline"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.failed).toBeNull();
+    expect(result.current.link?.c2UserId).toBe(2211);
+  });
 });
 
 describe("useConcept2Link re-reads when the document comes back (observation 19, invariant I5)", () => {
