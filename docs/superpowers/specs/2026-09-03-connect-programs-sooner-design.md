@@ -15,30 +15,30 @@ every connect: a free row, and every programmed workout too.
 
 ## The measurement (PRIMARY, our own rings)
 
-`docs/monitor/sessions/*/ring*.json`, first `write` to first `ack`, phone
-walks only:
+The numbers ship as their script, not as a transcription:
+`docs/monitor/sessions/ack-latency-census.py`, run from the repo root. It
+walks every committed ring, reports the first CSAFE write, its first ack and
+the gap between them, and splits native from web by a ring entry only the
+Capacitor transport can emit (`already-connected-guard`, recorded behind
+`hasDescribeLastScan`). That split was cross-checked against each walk
+README's own "laptop leg / phone leg" line and agrees on all sixteen.
 
-| Walk | Gap |
-| --- | --- |
-| 2026-08-23 (four rings) | 1698-1887 ms |
-| 2026-08-24, 2026-08-26 (three rings) | 1794-1880 ms |
-| 2026-08-28 (two rings) | 1729-1942 ms |
-| 2026-09-03 resume edge | 2058 ms |
-| 2026-09-03 Just Row (three rings) | 1788-2060 ms |
+At this branch's head it reports **native: 13 rings, gap 1698-2060 ms** and
+**web: 4 rings, gap 3294-4077 ms**. The oldest native ring predates free rows
+by eleven days, so this is not the Just Row feature's delay: it is every
+connect's delay, on both stacks, and Just Row is only the first feature whose
+evidence is a screen the rower is watching.
 
-Fourteen rings, one shape. The oldest predates free rows by eleven days,
-so this is not item 2's delay: it is every connect's delay, and item 2 is
-only the first feature whose evidence is a screen the rower is watching.
+Within a native ring the arrival order is always the same: our write is
+logged at +0 to +10 ms, the status characteristics report their first
+notifications across the next second, and the ack lands after the last of
+them.
 
-Within a ring the arrival order is always the same: our write is logged at
-+7 to +10 ms, the three status characteristics report their first
-notification at roughly +600, +800 and +1150 ms, and the ack lands 720 to
-811 ms after the last of them.
+## The cause
 
-## The cause (PRIMARY, vendor source in `node_modules`)
-
-`@capacitor-community/bluetooth-le` runs every call through one FIFO
-promise queue. `dist/esm/queue.js`:
+**On native this is settled (PRIMARY, vendor source under `node_modules`).**
+`@capacitor-community/bluetooth-le` runs every call through one FIFO promise
+queue. `dist/esm/queue.js`:
 
 ```js
 const makeQueue = () => {
@@ -53,18 +53,24 @@ and `dist/esm/bleClient.js`'s constructor: `this.queue = getQueue(true)`.
 Enqueue order is execution order, one at a time. Our transport already
 records this as its QUEUE INVARIANT (`capacitorBle.ts`, "REVIEW B3.3").
 
+**On web it is NOT settled, and this spec does not claim it.** The four web
+rings are worse, not better, so whatever serializes there is at least as
+strict; naming it would need a source we have not read. The fix below is a
+change to the order WE enqueue in, so it helps whichever queue is
+downstream, and the spec's claim stops at native.
+
 `createPm5Driver` enqueues ten native calls synchronously at construction,
 in this order: the sample-rate write, the CSAFE response subscription, and
 then eight status subscriptions (0x0032, 0x0033, 0x0038, 0x0031, 0x0037,
-0x0039, 0x003A, 0x003F). A tenth `subscribe` of 0x0031 costs nothing --
-the transport folds a second subscriber into the existing set without
-calling the plugin again.
+0x0039, 0x003A, 0x003F). A ninth `subscribe` of 0x0031 costs nothing on the
+queue -- the transport folds a second subscriber into the existing set
+without calling the plugin again. Count them with
+`grep -n "t.subscribe(\|mergeStatus(\|t.write(" app/src/monitor/driver.ts`.
 
-The arm cannot be part of that batch, because it fires from a React effect
-after the link is up: `JustRow.tsx` says so in its own comment ("THE ARM
-FIRES ONCE THE LINK IS UP, not at the press"), and the interstitial arms
-the same way. So the program write is enqueued a tick later and drains
-last, about 200 ms per preceding call.
+The arm cannot join that batch, because it fires from a React effect after
+the link is up: `JustRow.tsx` says so in its own comment ("THE ARM FIRES
+ONCE THE LINK IS UP, not at the press"), and the interstitial arms the same
+way. So the program write is enqueued a tick later and drains last.
 
 ## What changes
 
@@ -92,7 +98,7 @@ program into the driver's constructor.
 ## What this does NOT claim
 
 It does not make the PM5 faster. The ack still costs its own round trip,
-measured at 720 to 811 ms after the last preceding call drains. The claim
+measured in the census as the gap that remains once the queue is empty. The claim
 is only that we stop making the erg wait behind our own bookkeeping.
 
 ## Gates
