@@ -1349,6 +1349,127 @@
       form &mdash; exit criterion 3 now reads &quot;NO new user attribute&quot;.
     </p>
 
+    <h3>1f-b Needs re-auth, and the reconnect failed <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      <strong>Added by fix round 1 of Task 4, on the implementer's finding.</strong>
+      Every failure panel on this card is gated on the account being UNLINKED,
+      so a RECONNECT that failed rendered nothing at all: the rower tapped,
+      the attempt failed, and the screen was identical to before the tap. That
+      is the same silence 1j exists to forbid one control over, and the same
+      class as RF25 &mdash; a lower layer reported a failure and the surface
+      proceeded as though nothing had happened.
+    </p>
+    <p class="lede">
+      <strong>No new copy is invented here.</strong> The line and the REASON are
+      whatever <code>describeFailure</code> already returns for the outcome
+      (the full outcome &rarr; copy table above), rendered in 1e's own panel
+      chrome under 1e's own <code>THE LINK DIDN'T FINISH</code> label. The
+      frames below show <code>exchangeFailed</code> with a 502, which is the
+      same row 1e's first frame draws. <strong>The link is KEPT and RECONNECT
+      stays live</strong> &mdash; that is 1f's whole point, and it makes the
+      recovery one tap rather than an unlink and a fresh link.
+    </p>
+    <p class="lede">
+      Placement: BELOW the &quot;CONCEPT2 STOPPED ACCEPTING THIS LINK&quot;
+      panel and ABOVE the RECONNECT button, so the reading order is what is
+      wrong, then what just went wrong, then the control that fixes it &mdash;
+      the same order 1j uses for its own refusal.
+      <strong>No new colour pairing:</strong> the panel is the sunken panel
+      1b/1e/1f/1g/1i/1j already paint, so its label and line are
+      <code>--ink</code> on <code>--surface-sunken</code> (14.50:1) and its
+      REASON is <code>--ink-3</code> on <code>--surface-sunken</code> (6.30:1)
+      &mdash; both existing rows in &sect;4, and the second is the row that
+      exists because <code>--ink-4</code> there measures 4.48:1 and fails.
+      Every tappable is unchanged: RECONNECT 48px, Unlink 52px.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1f-b &middot; PORTRAIT &middot; in situ</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+            <div class="panel">
+              <p class="panel-label">THE LINK DIDN'T FINISH</p>
+              <p class="panel-line">
+                The connection didn't complete. Nothing was linked.
+              </p>
+              <p class="panel-reason">REASON: CONCEPT2 REFUSED THE LINK &middot; 502</p>
+            </div>
+            <div class="btn-primary">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1f-b &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <p class="c2identity">
+                  Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+                </p>
+                <div class="panel">
+                  <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+                  <p class="panel-line">
+                    Your link is kept. Reconnect to send rows again.
+                  </p>
+                </div>
+                <div class="panel">
+                  <p class="panel-label">THE LINK DIDN'T FINISH</p>
+                  <p class="panel-line">
+                    The connection didn't complete. Nothing was linked.
+                  </p>
+                  <p class="panel-reason">REASON: CONCEPT2 REFUSED THE LINK &middot; 502</p>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div class="btn-primary">RECONNECT CONCEPT2</div>
+                <div class="btn-danger">Unlink Concept2</div>
+              </div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <p class="lede">
+      <strong>The identity line moves into the telling column in landscape</strong>,
+      where 1f alone leaves it above the grid. That is the shipped card's one
+      rule showing through &mdash; what the card TELLS the rower goes left, what
+      it ASKS them to DO goes right &mdash; and it is the reading this page's
+      other four gridded frames (1a, 1c, 1i, 1j) already take.
+    </p>
+
     <h3>1g Update required <span class="badge b-new">NEW STATE</span></h3>
     <p class="lede">
       Copy is the design's, verbatim
@@ -2646,14 +2767,16 @@
       <tr><td>callback page top rule</td><td class="num">#b5341f</td><td class="num">#fffdf8</td><td class="num">5.94:1</td><td>rule only, never text</td></tr>
     </table>
     <p class="lede">
-      <strong>1i and 1j introduce no new pairing</strong> &mdash; that is the
-      result, stated rather than assumed. Both reuse the sunken panel and the
-      outline button the earlier states already paint, so every one of their
-      colours was already computed above; the four rows naming them exist so the
-      table can be read as covering every frame rather than every token. The one
-      value this page refuses (<code>--ink-4</code> on
+      <strong>1f-b, 1i and 1j introduce no new pairing</strong> &mdash; that is
+      the result, stated rather than assumed. All three reuse the sunken panel
+      and the outline button the earlier states already paint, so every one of
+      their colours was already computed above; the four rows naming them exist
+      so the table can be read as covering every frame rather than every token.
+      The one value this page refuses (<code>--ink-4</code> on
       <code>--surface-sunken</code>, 4.48:1) applies to them too: their REASON
-      lines are <code>--ink-3</code>.
+      lines are <code>--ink-3</code>. 1f-b in particular adds a SECOND sunken
+      panel to a card that already had one and no colour that was not on this
+      table before it.
     </p>
     <p class="lede">
       Every tappable in every frame is &ge; 44px: Connect / Reconnect / Send /
