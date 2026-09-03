@@ -10583,6 +10583,16 @@ section:not(.news-pinned) .news-row:last-of-type {
    error nothing measured; the e2e height gate on these two classes is why
    this one cannot repeat.
 
+   `Send again` JOINED that list in this task's fix round 1, and the page
+   moved rather than this rule (ruling R5). §2i's frames drew it as
+   `.btn-l4` — 44px, accent border, accent label: the control that page
+   gives Delete session on the same screen — while §2i's own callout called
+   it "the level-4 button 2e already uses for Retry send", which 2e does
+   not use. Both were corrected on the artifact: a non-destructive re-send
+   must not wear a delete's vocabulary, and --accent already has its one
+   declared job on this surface (the link-out, amendment §5), so a second
+   accent control here would be the drift that section exists to stop.
+
    15px 600-weight is NOT WCAG "large text" (18.66px bold / 24px), so the
    4.5:1 floor applies and is met: --ink on --surface, 17.11:1. */
 .c2-send-action {

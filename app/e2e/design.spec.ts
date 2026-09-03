@@ -10074,9 +10074,12 @@ test.describe("Concept2 send block: the control heights §2 draws", () => {
       ["c2-send-idle.html", ".c2-send-action", 48],
       // 2c: the link row, at `.send-linkrow`'s 44px.
       ["c2-send-sent.html", ".c2-send-linkout", 44],
-      // 2i draws BOTH, and its Send again is the same outline control the
-      // callout says it is ("the button 2e already uses for Retry send,
-      // unchanged").
+      // 2i draws BOTH. Its `Send again` is the ink outline 2e gives
+      // `Retry send` — the frames drew it as the 44px accent Delete control
+      // and the callout named a treatment 2e does not use, and both were
+      // corrected on the page in this task's fix round 1 (ruling R5). So
+      // this row and the 2a row above pin the SAME expected height, which
+      // is the point: one control class, one number.
       ["c2-send-no-weight.html", ".c2-send-linkout", 44],
       ["c2-send-no-weight.html", ".c2-send-action", 48],
     ];
