@@ -24,8 +24,6 @@ for path in sorted(glob.glob("docs/monitor/sessions/**/*.jsonl*", recursive=True
             if ev.get("dir") != "rx" or "hex" not in ev:
                 continue
             char = str(ev.get("char", ""))
-            if not char.startswith("ce0600" + SUFFIX[:2]) and SUFFIX not in char[:12]:
-                pass
             # match the 0x0031 characteristic: ce060031-...
             if "ce060031" not in char:
                 continue

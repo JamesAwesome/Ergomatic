@@ -2820,11 +2820,23 @@ export function createPm5Driver(
     // `rawRowingState` null on frame one — at which point this disjunct is
     // the only thing keeping I-2 ("a session that produced any frame records
     // the byte at least once") true, and without it an absent entry would
-    // stop meaning "no instrument". Unreachable ONLY because
-    // `pm5/parse.ts`'s `toMonitorFrame` is the sole `MonitorFrame` producer
-    // and always sets the field from a required wire byte; if a bare
-    // producer is ever built, this is the guard that survives it and the
-    // test leg to add is a first frame with `rawRowingState: undefined`.
+    // stop meaning "no instrument". Unreachable ONLY because every frame
+    // reaching THIS handler comes from `pm5/parse.ts`'s `toMonitorFrame`,
+    // which always sets the field from a required wire byte. That is a
+    // claim about this code path, not about the type: `surfaceModel.ts`'s
+    // `NO_FRAME` is already a production `MonitorFrame` literal carrying no
+    // `rawRowingState`, which is exactly why the field is optional and why
+    // this disjunct is not decoration. If a bare producer ever reaches the
+    // driver, this guard survives it, and the test leg to add is a first
+    // frame with `rawRowingState: undefined`.
+    //
+    // FOUR uncovered branches live in this block and all four are the same
+    // fact, so they are documented together rather than one at a time
+    // (`app/coverage/src/monitor/driver.ts.html` marks three `cbranch-no`,
+    // plus this disjunct): the `?? null` above, the `?? "unknown"` in
+    // `previous`, the `?? "unknown"` in the detail string, and
+    // `!rawRowingStateLogged` itself. Every one is the absent-field case,
+    // and no supported producer reaching this handler can take it.
     if (!rawRowingStateLogged || rawRowingState !== lastRawRowingState) {
       const previous = rawRowingStateLogged
         ? (lastRawRowingState ?? "unknown")

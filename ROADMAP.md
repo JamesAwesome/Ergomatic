@@ -727,7 +727,8 @@ rower's work silently.
       (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`): the clock
       RUNS through a mid-work stop.** With the rower sitting still, elapsed
       went 80.52 s → 92.11 s (+11.6 s) while distance went 247.1 → 249.6 m
-      (coast, then nothing). So `types.ts:189-191` holds for the mid-WORK
+      (coast, then nothing). So `MonitorFrame.state`'s own "no paused state
+      on the wire" note holds for the mid-WORK
       case and `types.ts:134`'s "FREEZES whenever `rowingActive` goes
       false" is correct only for its own measured REST — corrected at its
       site by this walk. Door PR B's `partialSeconds` is therefore interval
@@ -2182,6 +2183,19 @@ Each needs erg time or a deliberate recording session.
   file, which is what rules out a regression and keeps this row's "cause
   UNKNOWN, capture the next one" instruction standing. `concept2.test.ts`
   ran 8/8 green in isolation, so it does not reproduce alone.
+  **A CLIENT-project flake joined the set on 2026-09-03** (the `rowingActive`
+  branch, across four full runs): `ConnectedSurface.screens.test.tsx > screen
+  fixtures for pnpm screenshots > pane C, the grid mid-rest (RC-24)` failed
+  once as a SNAPSHOT mismatch and passed on an identical re-run minutes later,
+  on an unchanged tree. This row's title says "unit-project" and its whole
+  inference section reasons about supertest against in-memory fakes — neither
+  covers a jsdom snapshot in the `client` project, so the row's SCOPE is
+  widened here rather than the observation being filed under a mechanism it
+  does not share. What is OBSERVED: one failure, one identical green re-run,
+  no code change between them. What is INFERENCE and explicitly unchosen: the
+  same parallel-worker load theory, or snapshot serialisation racing a
+  concurrent write. **Same standing instruction: capture the next one's full
+  diff rather than re-running past it.**
 - **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
   can no longer rot independently.** The class was two independent literals —
   `news.spec.ts`'s (CI-gated, bumped by every notes PR) and

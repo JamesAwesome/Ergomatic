@@ -231,10 +231,15 @@ entry may claim a change it cannot name both sides of.
 ## §4 — Record corrections, swept in this PR
 
 **(a) The withdrawn "freezes whenever `rowingActive` goes false" survives in
-three LIVE files.** #280's walk narrowed the claim at `types.ts`'s own site;
+FOUR live files — three found by the obvious grep and a fourth that the
+obvious grep misses.** #280's walk narrowed the claim at `types.ts`'s own site;
 CLAUDE.md's rule is that a withdrawn claim's PHRASING is then grepped across
 every file that repeated it, and it was not. Confirmed by
-`grep -rn "FREEZES whenever\|freezes whenever\|freezes to the centisecond" app docs ROADMAP.md`:
+`grep -rn "FREEZES whenever\|freezes whenever\|freezes to the centisecond" app docs ROADMAP.md`
+— **and then the same grep with `freezes when`, which is the one that finds
+the fourth.** A withdrawn claim is swept by its MEANING, not by its exact
+wording; `whenever` and `when` are the same assertion and only one of them
+was searched for at rev 2. The branch review caught the miss:
 
 1. **`app/src/session/summaryModel.ts`** — the worst: it calls the
    elapsed-vs-rowing-time question *"NOT settled"* and quotes
@@ -249,6 +254,12 @@ every file that repeated it, and it was not. Confirmed by
 3. **`app/src/workout/connected/surfaceModel.test.ts`** — same phrasing,
    already scoped by its own next clause to a rest. **Narrow it too** rather
    than leave the next reviewer to re-find it and spend a round.
+4. **`app/src/monitor/transports/fake.ts`** — *"the interval clock, which
+   freezes when `rowingActive` goes false"*, on the sibling field beside
+   `restDistanceMeters`. Reachable only by the `freezes when` grep, which is
+   why rev 2 missed it and the branch review found it. **Narrowed to the
+   REST case**, which is the case that field's consumer actually fixes and
+   which the walk left unchanged.
 
 The two spec documents that also carry the phrasing
 (`2026-08-20-est-left-design.md`, `2026-09-02-door-partial-design.md`) are

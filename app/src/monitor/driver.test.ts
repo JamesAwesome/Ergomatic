@@ -6444,7 +6444,7 @@ describe("createPm5Driver: the log records frame STATE CHANGES, not every frame"
 });
 
 describe("createPm5Driver: the raw byte in the ring (raw-rowing-state, spec §2)", () => {
-  it("first frame records unconditionally: one entry, previous=none, naming the byte's own value", () => {
+  it("a session's FIRST frame records one entry reading previous=none and the byte's own value — so exactly one entry means the byte never moved", () => {
     // Same stubTransport idiom as "a rowing-state frame arriving before
     // program() was ever called" above: AS1/AS2 notified once (arbitrary
     // valid bytes) purely to satisfy the "seen" gate so `maybeEmitFrame`

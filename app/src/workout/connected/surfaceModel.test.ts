@@ -534,7 +534,7 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
       frame: frame({
         state: "rowing",
         intervalIndex: 1,
-        // The mirror image of the guard test above. Distance stays INSIDE
+        // The mirror image of the guard test BELOW. Distance stays INSIDE
         // the reset window (the walk's own 0.8, the same frame the mirror
         // test uses), isolating the BYTE half of the discriminator: a
         // mutant that dropped only `frame.rowingActive === false` would
