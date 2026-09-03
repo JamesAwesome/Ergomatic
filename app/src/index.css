@@ -9545,9 +9545,12 @@ section:not(.news-pinned) .news-row:last-of-type {
 
    `flex: 0 0 auto` plus `nowrap` ON THE FLEX ITEM ITSELF — RF21's own recorded failure was a `min-width` placed on a
    CHILD of the flex item, where the shrink algorithm never reads it. The
-   e2e no-clip assertion measures THIS element's `scrollWidth` against its
-   `clientWidth`, and this element is a block-level flex item, so both are
-   real (an inline element reports 0 for both, RF21's second smell).
+   e2e no-clip assertion Task 8 adds will measure THIS element's
+   `scrollWidth` against its `clientWidth` — it does not exist yet, and
+   this sentence is a requirement on that task, not a gate that is already
+   running. This element is a block-level flex item, so both figures are
+   real when it does (an inline element reports 0 for both, RF21's second
+   smell).
    `.summary-row-offset` beside it is `flex: 1; min-width: 0` and already
    ellipsises, so it is what yields the space. VALUES APPROVED at Gate
    0-B (James, 2026-09-02). Contrast computed, not eyeballed (RF6):
