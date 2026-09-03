@@ -2196,6 +2196,28 @@ Each needs erg time or a deliberate recording session.
   same parallel-worker load theory, or snapshot serialisation racing a
   concurrent write. **Same standing instruction: capture the next one's full
   diff rather than re-running past it.**
+- **`retest.spec.ts` is not idempotent across runs on a KEPT stack — the
+  e2e suite passes on a fresh database and fails on a reused one.** Found
+  2026-09-03 on the `rowingActive` branch, and DIAGNOSED rather than
+  re-run past. `retest.spec.ts:121` ("declining the offer keeps the
+  baselines untouched") failed twice in a row — reproducible, not a flake —
+  expecting the heading `Set your 2k baseline?` and landing on Today
+  instead. It is not that branch's doing: the only e2e-reachable file it
+  touches is `transports/fake.ts`, verified to have **0 non-comment changed
+  lines** against base. **The mechanism:** `pnpm e2e` leaves the stack up
+  (`E2E_KEEP` defaults to `1`) and `e2e.sh` tears down with
+  `docker compose down` and NO `-v`, so the per-worktree `pgdata` volume
+  survives every run. A test asserting "you have not set a baseline yet" is
+  exactly the shape that breaks once an earlier run in the same stack set
+  one. **Proof:** `docker compose -p <stack> down -v`, then `pnpm e2e` →
+  `455 passed (2.4m)`, against `454 passed / 1 failed` twice on the reused
+  volume. **Why it matters beyond one test:** CI is unaffected (fresh
+  containers every job), so this only ever bites a human or agent iterating
+  locally — and it bites as a mystery failure in a spec they did not touch,
+  which is the most expensive shape a false red can take. The fix is either
+  a test that seeds its own precondition instead of assuming a virgin
+  database, or an `e2e.sh` that resets the schema between runs; the first is
+  narrower and is the one to try. **S**
 - **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
   can no longer rot independently.** The class was two independent literals —
   `news.spec.ts`'s (CI-gated, bumped by every notes PR) and
