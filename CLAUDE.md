@@ -28,8 +28,14 @@ requirements).
   `integration` needs Docker. **Two footguns:**
   `pnpm test --project client -- <pattern>` **silently runs the full suite**
   (pnpm swallows the scoped flag), and the obvious workaround
-  `pnpm exec vitest run --project client <file>` runs client files OUTSIDE
-  jsdom — 89 false failures against a green HEAD.
+  `pnpm exec vitest run --project client <file>` drops the
+  `NODE_OPTIONS=--no-experimental-webstorage` that `package.json`'s `test`
+  script sets — Node 26's experimental webStorage global then collides with
+  jsdom's `localStorage` (measured 2026-09-02: 1582 false failures across
+  client+unit against a green HEAD; not a jsdom-vs-Node issue). Prefix the
+  bare form yourself:
+  `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`
+  — jsdom loads and the tests pass.
 - `pnpm dist:grep` — the production-bundle gate. CI runs it in the `app` job
   right after `pnpm build`; it proves named dev-only seams are absent from
   `dist/`.

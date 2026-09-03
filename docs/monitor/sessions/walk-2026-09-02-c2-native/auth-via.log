@@ -1,0 +1,48 @@
+$ tsx watch server/index.ts
+migrations up to date
+global starter library seeded (idempotent)
+WARNING: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not fully set — sign-in is DISABLED (auth routes will 503)
+ergomatic api listening on :8080
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/me"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/workouts"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/prefs"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/baselines"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/plan"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/logs"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/baselines"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/workouts"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/baselines"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/baselines"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/prefs"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/plan"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/baselines"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/logs"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/workouts"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/workouts"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/baselines"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/exchange"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/exchange"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/exchange"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/connect"}
+{"event":"auth_via","authVia":"bearer","bearerPresent":true,"cookiePresent":false,"path":"/api/concept2/link"}
+[ELIFECYCLE] Command failed with exit code 143.

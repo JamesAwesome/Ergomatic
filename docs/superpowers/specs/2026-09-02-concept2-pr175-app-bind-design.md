@@ -50,7 +50,7 @@ Unauthenticated `GET /oauth/authorize` with the native redirect returns `302 →
 so validation happens after login and the check needs a logged-in browser:
 open the authorize URL for `haus.waffle.ergomatic://oauth/callback` → PASS = the
 consent screen renders; open the same URL with an unregistered scheme → must
-error (the red control). Result recorded here: **PENDING James.** A FAIL is
+error (the red control). Result: **PASS (James, 2026-09-02 ~12:00Z)** — the registered scheme rendered the consent screen (both scopes listed); the bogus scheme rendered "Application Authorization: There was an error…", so the red control bit. The AS honours the private-use redirect. Cutover note: log-dev shows "Authorize **James Morelli** to use your account?" — the application is registered under James's name; the live-portal registration must name it Ergomatic (rowers see this screen on every ephemeral link). A FAIL is
 NO-GO for the whole per-surface design before any Swift is written.
 
 ## Research record (PRIMARY unless tagged)
@@ -60,9 +60,13 @@ NO-GO for the whole per-surface design before any Swift is written.
   for `authorization_code`; `redirect_uri` — *"This must match the value sent in
   the call to oauth/authorize."*; **`PKCE` / `code_challenge`: zero occurrences**
   in the whole document; **`state`: zero occurrences** — it is an undocumented
-  pass-through. PR0 measured `state` echoed on the HTTPS callback; on a
-  private-use-scheme redirect it is UNMEASURED. This design depends on neither
-  (§6).
+  pass-through. PR0 measured `state` echoed on the HTTPS callback. **On the
+  private-use-scheme redirect it is now MEASURED too (PR1.75b walk, 2026-09-02,
+  `docs/monitor/sessions/walk-2026-09-02-c2-native/`): echoed on the APPROVE
+  callback (`Callback carried state: yes`), absent on the DENY callback
+  (`Callback carried state: no`).** Undocumented remains undocumented — one
+  morning's observation of an authorization server that promises nothing — and
+  this design depends on neither leg (§6).
 - **RFC 8252** §7.1: apps *"MUST use a URI scheme based on a domain name under
   their control, expressed in reverse order"*; *"multiple apps can typically
   register the same scheme, which makes it indeterminate as to which app will
@@ -104,11 +108,18 @@ NO-GO for the whole per-surface design before any Swift is written.
   the callback URL, it needs to either register the custom URL scheme in its
   Info.plist, or set the scheme to callbackURLScheme argument in the
   initializer."* Not required, therefore; 1.75b registers it anyway (§0) and the
-  walk records nothing about it beyond confirming delivery. **The OS consent sheet:** Apple's class overview says the
+  walk records nothing about it beyond confirming delivery. **Walk 2026-09-02:
+  delivery confirmed and nothing visibly escaped the session — but the entry IS
+  registered on that build, so "nothing escaped" cannot distinguish *not needed*
+  from *needed and present*. Recorded as an observation, not a necessity
+  measurement; only a build without the entry could separate them, and none was
+  run.** **The OS consent sheet:** Apple's class overview says the
   system *"shows a modal view telling them which domain the app is authenticating
   with"*; NO Apple page fetched this session states that an ephemeral session
-  suppresses it — that widely-reported behaviour is UNSOURCED here and is an
-  observation the walk records, not a design input.
+  suppresses it — that widely-reported behaviour is UNSOURCED here.
+  **Walk 2026-09-02: no modal appeared with `ephemeral: true`, on one device and
+  one iOS version.** That is an observation of behaviour, not evidence that Apple
+  documents or guarantees the suppression; the claim stays unsourced.
 - **Cookies on a cross-site top-level GET** (rfc6265bis §5.8.3): a `Lax` cookie is
   sent when the request *"uses a 'safe' method"* and the target *"is a top-level
   traversable"*; §5.6.7.1 evaluates safeness per redirect hop. A C2 302 → our GET
@@ -121,11 +132,17 @@ NO-GO for the whole per-surface design before any Swift is written.
   `URLSession.shared` (`WebViewAssetHandler.swift`). `URLSession` reads and
   writes **`HTTPCookieStorage.shared`** with `httpShouldHandleCookies` true — the
   WebView's origin and `fetch`'s `credentials` mode are never consulted. Cookie
-  attachment on native is governed by the shared native jar, and whether
-  `erg_session` for the API origin can ever land in it is **UNMEASURED** (no
-  supported producer found: `/api/auth/native` sets no cookie; signout's
-  `clearSessionCookie()` is the only `Set-Cookie` a native client receives). The
-  walk instruments it (§Testing).
+  attachment on native is governed by the shared native jar, and no supported
+  producer was found that could put `erg_session` for the API origin into it
+  (`/api/auth/native` sets no cookie; signout's `clearSessionCookie()` is the
+  only `Set-Cookie` a native client receives). **MEASURED by the PR1.75b walk
+  (2026-09-02, `docs/monitor/sessions/walk-2026-09-02-c2-native/auth-via.log`):
+  42 authenticated native requests — every Concept2 route plus ordinary app
+  traffic — all `authVia:"bearer"`, `bearerPresent:true`, `cookiePresent:false`;
+  zero `auth_disagreement` lines. A native request carried no cookie in any of
+  them.** Scope: one install, one morning, against a dev origin with no prior web
+  sign-in in that jar — it shows the jar was empty for this origin throughout,
+  not that it CANNOT hold one.
 - **Capacitor custom native code** (capacitorjs.com/docs/ios/custom-code): a
   Swift `CAPPlugin, CAPBridgedPlugin` with `@objc` methods, registered in a
   view-controller subclass's `capacitorDidLoad()` via
@@ -223,7 +240,10 @@ unrelated redesign in one pass → split — decides it.
 - **PR1.75b — native + client (not TRIAD).** `WebAuthPlugin.swift`,
   `MyViewController.swift`, `Main.storyboard`, `project.pbxproj`, `Info.plist`
   (**register the scheme regardless** — one entry, zero cost, deletes a
-  walk-burning failure mode; the walk still RECORDS whether it was needed);
+  walk-burning failure mode; the walk still RECORDS whether it was needed.
+  **Walk 2026-09-02: nothing visibly escaped the session, but the entry was
+  registered on that build, so necessity is not distinguishable from it — the
+  record says observation, not measurement**);
   `src/native/webAuth.ts`; `src/adapters/linkFlow.ts`; the PR1.5 return-arm
   retirement **as a CENSUS** (every consumer of `onBrowserFinished`,
   `useReturnToApp`, `openExternalUrl` listed with its fate, plus one sentence on
@@ -248,7 +268,7 @@ unrelated redesign in one pass → split — decides it.
 persisted — according to which credential it resolved. A cookie whose value is
 the empty string — however produced; `clearSessionCookie()` sets `maxAge: 0` so a
 compliant browser DELETES rather than empties it (`cookies.ts:32-42`), and the
-shared native jar is UNMEASURED — counts as ABSENT. Already true for auth today
+shared native jar presented no cookie at all on the walk — counts as ABSENT. Already true for auth today
 (`getCookie` → `""` → falsy → 401, `middleware.ts:50`); load-bearing only for the
 NEW `authVia` derivation, which must not be written `cookie !== undefined`.
 **Both-present rule (the gate doc's own named resolution, §3(g) round 16):
@@ -257,14 +277,18 @@ supplies their own bearer gains nothing by also supplying a cookie. **Disagreeme
 present AND resolving to DIFFERENT users) is handled at TWO scopes, because
 `requireUser` is mounted app-wide (`router.use("/api", requireUser)`,
 `routes/data.ts:826`) and deploys to prod web on merge, while whether the native
-jar can ever carry `erg_session` is UNMEASURED until PR1.75b's walk (PM ruling,
+jar can ever carry `erg_session` was UNMEASURED when this was written (PM ruling,
 2026-09-02 — the evidence must not arrive one PR after the refusal):**
 (a) app-wide, `requireUser` resolves bearer-wins and emits ONE structured log
 line `{event:"auth_disagreement", bearerUser, cookieUser, path}` — an instrument,
 never a refusal; (b) on `/api/concept2/*` (dark behind the flag) the same
 condition is a hard `400 {error:"ambiguous_auth"}`, checked in the route module
-against `req.authVia` plus a second cookie resolution. Promoting (b) app-wide is
-a three-line follow-up AFTER the walk reads the log. The common "both present,
+against `req.authVia` plus a second cookie resolution. **The walk has now read
+the log (2026-09-02): 42/42 native requests `cookiePresent:false`, zero
+disagreement lines — the instrument never fired and no native request carried a
+cookie.** Promoting (b) app-wide is a three-line follow-up and is now a decision
+for James on that evidence, carried in ROADMAP's still-owed line rather than in
+this PR. The common "both present,
 same user" case cannot lock anyone out at either scope. Mint records
 `surface = authVia === "bearer" ? "native" : "web"`; no client-asserted surface
 exists for an attacker to choose. `neither present → 401` is unchanged and is in
@@ -323,7 +347,8 @@ never fail — a green gate that cannot go red (RF21), deleted at design time.
 | --- | --- | --- | --- | --- |
 | attempt row (server; `surface`, one per user) | mint (upsert) | consume on EITHER route — only AFTER the identity/surface checks pass (§5/§6); 15-min sweep at the next mint; user cascade | yes (server); a relaunched app re-mints and the upsert replaces the row | yes — an abandoned consent leaves a row that expires or is replaced |
 | `state` held by the native app for the hop | returned by mint beside `authorizeUrl` | completion of `startNativeLink` (success, cancel, decline, error) | NO — in-memory; kill → gone → re-mint | n/a: nothing persisted |
-| **the in-flight link claim** — INVARIANT: at most one link session per APP PROCESS, enforced NATIVELY. The plugin holds `activeSession` + `activeCall`; a second `start()` rejects `busy` in Swift, so the guard survives a WebView reload that destroys every JS value (a reload mid-session would otherwise drop the code into a call with no receiver and let a second sheet start). `linkInFlight` in `linkFlow.ts` is a UX convenience, never the authority | `start()` in Swift | the session's completion; AND plugin `load()` on a fresh document over a live session rejects the pending call `abandoned` and cancels the session, so no orphaned sheet outlives its receiver | NO | NO |
+| **the in-flight link claim** — INVARIANT: at most one link session per APP PROCESS, enforced NATIVELY. The plugin holds `activeSession` + `activeCall`; a second `start()` rejects `busy` in Swift, so the guard survives a WebView reload that destroys every JS value (a reload mid-session would otherwise drop the code into a call with no receiver and let a second sheet start). `linkInFlight` in `linkFlow.ts` is a UX convenience, never the authority | `start()` in Swift | the session's completion; AND `shouldOverrideLoad(_:)` on a main-frame navigation rejects the pending call `abandoned` and cancels the session, so no orphaned sheet outlives its receiver. **Corrected at the 1.75b plan, 2026-09-02:** this row said plugin `load()`, which cannot do the job — `load()` fires ONCE at plugin registration (`CapacitorBridge.swift:348-365` → `CAPPlugin+LoadInstance.swift:10-19`, called from `capacitorDidLoad()` at view-controller construction) and a reload's `bridge.reset()` (`CapacitorBridge.swift:295-298`) never re-runs it, so the literal design leaks the claim forever | NO | NO |
+| **the session's identity token** (`activeToken: UUID?`, Swift) — INVARIANT: a completion handler resolves ONLY the call its own session was started for. Minted per `start()` and captured in that session's completion closure, so a superseded session's late completion is discarded by identity rather than by assuming it drains before the next `start()` — `cancel()`'s effect on a pending completion handler is undocumented (SDK header:101-104) | `startOnMain(_:)`, beside `activeSession`/`activeCall`/`activeAnchor` | the same three sites as the claim (`clearActive()` nils it) | NO | NO |
 | the `ASWebAuthenticationSession` object AND its `presentationContextProvider` (a `weak` property per the SDK header — the plugin instance is the provider, retained by the bridge) — the session self-retains until completion on a ≥iOS 13 target (ours 15.0); the plugin also holds it | `start()` (never reused: *"start can only be called once for an ASWebAuthenticationSession instance"*) | its completion handler | no (OS) | no |
 | `req.authVia` | `requireUser` | end of request | n/a | n/a |
 
@@ -387,7 +412,10 @@ reached only by dynamic import from a new adapter `src/adapters/linkFlow.ts`:
   404 HTML during a rolling deploy) → typed `server_error`; otherwise `code` (and `state` if
   present — asserted equal to the held `state` when carried, refuse + log on
   mismatch; when C2 omits it this check is a no-op and is documented as
-  defence-in-depth, not a control) → `POST /api/concept2/exchange { code, state }`
+  defence-in-depth, not a guarantee. **MEASURED 2026-09-02: C2 carries it on the
+  approve leg and omits it on the deny leg, so the check bites on the only leg
+  that reaches an exchange, and the no-op case is real rather than
+  hypothetical**) → `POST /api/concept2/exchange { code, state }`
   through `api()` (bearer attached) → typed result.
 - **`ephemeral: true` — a CONTROL against code injection (research
   §Interception leg 3), not a UX preference.** Non-ephemeral shares Safari's persistent
@@ -401,7 +429,10 @@ reached only by dynamic import from a new adapter `src/adapters/linkFlow.ts`:
   possible to share the existing login information. An alert will be presented
   to get the user's consent for sharing"*; ephemeral sessions *"do not share
   cookies or other browsing data with a user's normal browser session"* — so no
-  alert, and a fresh Concept2 login every link. James approved ephemeral named
+  alert, and a fresh Concept2 login every link. **MEASURED in effect on the walk
+  (2026-09-02): with an established phone-Safari log-dev session, the link sheet
+  still asked for a Concept2 login, and no consent alert appeared — the control
+  works as designed on the device.** James approved ephemeral named
   (Gate 0, 2026-09-02); **overruling it re-opens the shared-phone leg of
   RFC 9700 §4.5 and that residual would be named in the ruling.** PR2's identity
   line (`c2UserId` is already served by `GET /link`) is the app-side half of the
@@ -589,7 +620,9 @@ button carries the `WebAuth` plugin — enforced by `linkClient`, not assumed.**
   did the callback carry `state`? did the scheme need an Info.plist entry (i.e.
   did anything escape the session)? (b) cancel the modal → typed `cancelled`, the
   attempt untouched server-side. (c) decline at Concept2's screen → typed
-  `declined`. (d) **the credential instrument for §1's UNMEASURED premise, and it is
+  `declined`. **RAN 2026-09-02: (a)-(e) all PASS —
+  `docs/monitor/sessions/walk-2026-09-02-c2-native/README.md` is the record.**
+  (d) **the credential instrument for §1's cookie premise, and it is
   COMMITTED code (1.75a), not a local edit:** `requireUser` logs
   `{authVia, bearerPresent, cookiePresent, path}` — never a token value — when
   `AUTH_VIA_LOG=1` (an env flag, never `NODE_ENV`, so the walk runs the PR's own
@@ -613,7 +646,12 @@ button carries the `WebAuth` plugin — enforced by `linkClient`, not assumed.**
 4. The native flow completes end-to-end on a phone against log-dev with a real
    consent, the callback delivered to the app; the `state`-echo and Info.plist
    facts RECORDED; the walk's per-request `authVia`/both-present readings
-   RECORDED.
+   RECORDED. **DISCHARGED 2026-09-02
+   (`docs/monitor/sessions/walk-2026-09-02-c2-native/`): link completed (C2 user
+   2211); `state` echoed on approve, absent on deny; Info.plist necessity NOT
+   distinguishable on a build that registers the scheme, recorded as an
+   observation; 42/42 requests `bearer`/`cookiePresent:false`, zero
+   disagreements.**
 5. **Reconciliation is a numbered TASK in each plan with a grep census as its
    exit gate**, pre-paid from the 17 sites the PM enumerated (server: `schema.ts:508-515`,
    `routes/concept2.ts:14-19,37-41,160-171,182`, `app.ts:93-105` (the mount comment — `routes/data.ts:820-826` carries no Concept2 phrase; the plan corrected this), the
@@ -644,10 +682,11 @@ button carries the `WebAuth` plugin — enforced by `linkClient`, not assumed.**
 files | grep server` → empty; (2) the six identity rows green in
 `pnpm test --project integration -- concept2` plus the mutation log; (3) the
 phrase grep pasted, all zero/accounted; (4) the walk table: per-request
-`authVia` + both-present, `state` echoed y/n, Info.plist needed y/n; (5)
+`authVia` + both-present, `state` echoed y/n, Info.plist observation (necessity
+is not answerable on a build that registers the scheme — the walk says so); (5)
 `ROADMAP.md` PR1.75 `[x]` with the still-owed line.
 
-## Decisions for James (from antagonist pass 2) — **D1 YES, D2 YES (James, 2026-09-02 "Approved"); D3 PENDING**
+## Decisions for James (from antagonist pass 2) — **D1 YES, D2 YES (James, 2026-09-02 "Approved"); D3 PASS (2026-09-02)**
 
 - **D1 — detective control against code injection (stored shape, 0021).** Add
   `UNIQUE (c2_user_id)` on `concept2_links`; a link whose Concept2 account is
@@ -660,8 +699,8 @@ phrase grep pasted, all zero/accounted; (4) the walk table: per-request
   email, escaped). The shared-browser fixation residual passes every server
   check correctly; copy is its only mitigation. Changes an approved page →
   rendered on the Gate 0 artifact; **APPROVED 2026-09-02.**
-- **D3 — the desk pre-check** (§GO/NO-GO): two URLs in
-  `scratchpad/c2-desk-precheck.txt`, your logged-in browser, cancel at consent.
+- **D3 — the desk pre-check** (§GO/NO-GO): **PASS, 2026-09-02** (see the
+  GO/NO-GO line for the two observations).
 
 ## Plan reconciliation (1.75a plan, 2026-09-02 — rulings on the writer's observations)
 

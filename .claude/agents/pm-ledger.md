@@ -4361,3 +4361,72 @@ does not match these numbers._
   sessions already in the log, and old by-hand rows that were really
   no-reading never change. No walk owed; the nameless-erg arms are
   unobserved hardening by their own code comment (skip spoken).
+## Wave E PR1.75b final gate, 2026-09-02 (#277 — the native half, scoped ~10-min gate)
+
+- **The scoped gate was the right call, and it is worth stating what made it
+  cheap.** 1.75b is not TRIAD (zero `app/server`, zero migrations, the whole
+  arm dev-gated), so the gate was three checks — census, walk record, fold —
+  and took the ten minutes it was budgeted. **Precedent: when the shape gate
+  splits a PR, it should also SIZE the final gate for each half in the same
+  ruling.** Doing that at the split cost nothing and saved a full pass here.
+- **The fold was WRITTEN IN THE PLAN and measured before the gate, and it is
+  the first in the series that needed no trimming.** The plan carried
+  `fold 120/24` as a checked value; the PR opened at exactly 120 words / 24
+  max bullet. Series: #239 148 · #248 274 · #249 225 · #258 134 · #268 186 ·
+  #272 153 · **#277 120 as opened.** **The rule that worked: put the fold's
+  word budget in the plan as a number a pass can recount, not in the gate as
+  a thing to trim.** Adopt for every plan.
+- **"Behind the flag" recurred in the very wave whose shape gate named it —
+  in the fold this time, not the diff.** #277's fold said "Everything stays
+  dark behind `C2_LINK_ENABLED`", while `Info.plist`'s new
+  `CFBundleURLTypes` entry and `ios-release.sh`'s by-name client-id
+  derivation ship unconditionally in the next TestFlight build. Neither is
+  rower-visible, so "tester impact: none" survives and nothing was wrong —
+  but the flag clause is a claim about a ROUTE and was written about a PR.
+  **Ask it of the fold as well as of the diff: which line of this body would
+  be false if the flag never flipped?** (Fixed at the gate: "rower-facing".)
+- **A correction landed in `CLAUDE.md` while the claim it withdrew stayed
+  standing in the antagonist ledger — under "Attacked and HELD".** #277
+  corrects the `pnpm exec vitest run --project client` footgun (mechanism: a
+  dropped `NODE_OPTIONS`, 1582 false failures) and had left the pass-11 ledger
+  entry asserting the footgun is "STALE … so the plan's three uses of that
+  form are correct", plus two repeats in the plan. Worse:
+  `.claude/agent-briefing.md` already carried the correct mechanism on main,
+  so a hardening pass contradicted a standing in-repo rule and nobody grepped.
+  **A ledger's "Attacked and HELD" section is vetted ground the next agent
+  starts from; when a PR withdraws a claim, the phrase sweep MUST include both
+  ledgers, not only code and docs.** (Fixed at the gate, in place.)
+- **RF14, tenth: six still-owed items in the body, four in the ROADMAP.** The
+  empty-`state=` unit test and "M5, `project.pbxproj` id sort order" had no
+  home outside the PR body. The check that finds this in one minute is now
+  standing: **diff the body's still-owed list against the ROADMAP's, both
+  directions.** (Both filed at the gate.)
+- **A live decision does not survive inside a `[x]` COMPLETE row.** The
+  `ambiguous_auth` promotion is correctly left to James on the walk's 42/42
+  `cookiePresent:false` evidence, but its only home was prose under the
+  now-ticked PR1.75 row, while `## Needs a decision from James` still said it
+  "holds two rows, both closed as records rather than live questions."
+  **When a gate parks a decision, the row that holds it must be one that
+  stays open.** (A LIVE row added at the gate.)
+- **The walk record set the standard for a negative observation.** Its
+  Info.plist section states the observation, then says the observation cannot
+  answer the question the heading asks, names the experiment that would, and
+  is filed as "observation, not measurement." **Quote it the next time a walk
+  card asks for a fact the build cannot distinguish.**
+- **Both halves of the split falsify in one command, and both came back
+  clean:** #269 empty under `app/src`/`app/ios`, #277 empty under
+  `app/server`/`app/drizzle`. Three gates running now for "a split is only
+  real if a single command can falsify it."
+- **What the eleven-pass hardening loop bought, judged at the far end:**
+  executability YES — the plan's prescribed blocks paste and pass, and the
+  four rules #275 promoted came out of it. Review cleanliness NO — the
+  implementation review still found three defects the eleven passes could
+  not have found (an empty-string `params.get()`, an unpinned client
+  constant, a mutation row whose fallback restored the original value), all
+  three requiring the code to exist. **The loop hardens the PLAN, never the
+  CODE; do not let a high pass count buy confidence in the implementation
+  review's scope.** With the `harden` skill's stop rule now capping the loop,
+  the number to watch is passes-per-novel-finding, not passes.
+- **Release: not needed.** `dist:grep` needle 8 proves the probe absent from a
+  flag-off bundle (with the red proof run); nothing a rower reaches. Wave E's
+  next tag is PR2's to claim, re-checked at its merge.

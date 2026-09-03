@@ -169,6 +169,7 @@ jobs:
       - name: Lint + test the ios-release probe-flag guard
         run: |
           bash -n app/scripts/ios-release.sh
+          bash -n app/scripts/ios-google-client-id.sh
           bash app/scripts/ios-release.test.sh
 
   deploy:

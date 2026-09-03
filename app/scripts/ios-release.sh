@@ -98,11 +98,14 @@ if [ "$describe" != "$(git -C "$APP_DIR" describe --abbrev=0 2>/dev/null)" ]; th
   exit 2
 fi
 
-# Recover the iOS OAuth client id from the committed reversed URL scheme
-# (com.googleusercontent.apps.<id> ⇄ <id>.apps.googleusercontent.com).
+# Recover the iOS OAuth client id from the committed reversed URL scheme.
+# BY NAME, not by CFBundleURLTypes index -- PR1.75b adds a second URL type
+# (haus.waffle.ergomatic) and an index-based read would silently export a
+# malformed id if the entries were ever reordered. See
+# scripts/ios-google-client-id.sh's own header, and the cases in
+# ios-release.test.sh that prove both orderings derive the same id.
 if [ -z "${GOOGLE_IOS_CLIENT_ID:-}" ]; then
-  reversed="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$PLIST")"
-  GOOGLE_IOS_CLIENT_ID="${reversed#com.googleusercontent.apps.}.apps.googleusercontent.com"
+  GOOGLE_IOS_CLIENT_ID="$(bash "$APP_DIR/scripts/ios-google-client-id.sh" "$PLIST")"
   export GOOGLE_IOS_CLIENT_ID
   echo "ios-release: GOOGLE_IOS_CLIENT_ID derived from Info.plist"
 fi

@@ -5875,3 +5875,590 @@ same way.
   shortened-literal grep returns exactly the 6 hits claimed; no `.summary-meta`
   e2e locator can see a second element; and PR A introduces no session-scoped
   state, so RF27 owes nothing.
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 1)
+
+- **A vendor lifecycle hook named in a design without checking that it fires in the case
+  it was chosen for.** Design §2 cleared the in-flight link claim via the Capacitor plugin's
+  `load()` "on a fresh document over a live session". `load()` runs ONCE, from
+  `registerPluginInstance` at view-controller construction; a WebView reload runs
+  `bridge.reset()` (storedCalls + listeners only) and never re-runs it, so the literal design
+  leaks the claim forever. Caught by the plan writer, not the design pass.
+  **Technique: for any vendor hook a design depends on, find its CALL SITES in the vendored
+  source — not its declaration — and check the call site is reachable in the failure case.**
+  RF16's second corollary aimed at a MECHANISM instead of a document: the API was real, the
+  argument needed an attribute of it (when it fires) that nobody checked.
+- **"Single resolution by construction" that is actually single resolution by ordering.**
+  The substituted `shouldOverrideLoad` teardown clears `activeCall` before cancelling, and the
+  completion handler guards on `activeCall != nil` — which asks "is there ANY call", not "is
+  this MY session's call". A superseded session's late completion can resolve the NEXT
+  session's call. Unreachable in practice (the window is a full page load), so hardening debt,
+  not a defect — but the comment claimed the strong version.
+  **Technique: for every "by construction" claim about single resolution, name the VALUE that
+  makes the two instances distinguishable. If the guard reads a shared slot rather than an
+  identity, the guarantee is ordering luck. A per-attempt token turns it deterministic.**
+- **A typed union that names every failure the AUTHOR thought of, and not the transport.**
+  `LinkOutcome` mapped nine plugin rejections and two server hops and had no member for a
+  thrown `fetch`/`JSON.parse`/`new URL` — on a walk conducted over a cloudflared quick tunnel.
+  Symptom: the operator taps and nothing happens, with no readout.
+  **Technique: for any union claiming to name "every way X can end", walk the function line by
+  line and list every expression that can THROW. Every throw with no catch is a missing member.**
+- **A comment-leader normaliser that strips `//` and leaves the third slash.** The phrase
+  census's `sed -E 's@^[[:space:]]*(\*|//|--|>)[[:space:]]?@@'` finds a JSDoc-wrapped phrase and
+  MISSES a Swift `///`-wrapped one — in the same PR that adds a `///`-commented Swift file to
+  the census corpus. Proven both ways with a two-line fixture.
+  **Technique: run a normaliser against a fixture in EVERY comment syntax its own `find` will
+  reach, not just the syntax that motivated it. `(\*+/?|/\*+|/{2,}|-{2,}|>|#)` is the fixed form.**
+- **A test-file insertion point identified from a string inside a heredoc.** The plan pointed
+  at "the trailing `case "$1" in` dispatch at :212" of `ios-release.test.sh`; that `case` is
+  inside a `cat > … <<'STUB'` block building a pnpm stub, and the file has no trailing dispatch.
+  **Technique: before citing a shell construct's line number as a structural anchor, check
+  whether it sits inside a heredoc — `grep -n "<<'" file` first.**
+- **Walk-card blocks written in bash for a fish shell.** `set -a; . .env; set +a` and `export`
+  are bash-only; the operator's default shell is fish, so the card's FIRST block fails.
+  **Technique: RF13's "run it or read the code" extends to the SHELL — check the operator's
+  `$SHELL` against the syntax, and say "run this in bash" when they differ.**
+- **HELD under attack, and worth recording as vetted:** all fifteen `ASWebAuthenticationSession.h`
+  quotes verbatim and line-exact; all `project.pbxproj` anchors exact (`objectVersion = 60`, no
+  synchronized groups, so manual refs are required not optional); `cap update ios` writes
+  `Package.swift`/Podfile and never `project.pbxproj`/`Main.storyboard`/`Info.plist`; the whole
+  retirement census reproduced exactly (`browserFinished` = 52 under `src`, to the occurrence);
+  the Info.plist scheme registration does NOT reopen RFC 8252 because zero `appUrlOpen`
+  listeners exist — an absence that is now a permanent census row, since a future listener
+  would silently reopen it.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 2, verifying pass 1's fixes)
+
+- **A build-output gate whose expected number nobody had ever measured.** Gate (a) asserted
+  `grep -c 'SwiftCompile.*Foo\.swift' build.log` == 1 to prove Sources-phase membership. Measured
+  on a cold `-derivedDataPath` build at this head: a genuine member counts **4** (two log line
+  forms × two architectures, because `generic/platform=iOS Simulator` builds arm64 AND x86_64)
+  and **0** on any warm re-run — so `1` is the one value it can never legitimately print, and the
+  plan re-ran it in a second task where the build is warm by construction.
+  **Technique: a gate whose pass value is a COUNT of build-log lines is a heuristic wearing a
+  number until someone has run the build and counted. The deterministic artifact was one
+  directory away: `…/App.build/Objects-normal/<arch>/App.SwiftFileList` is the compiler's own
+  input list for the target's Sources phase, written by `WriteAuxiliaryFile`, and reflects the
+  pbxproj rather than the build's incremental state.**
+- **A compile gate that runs before the step that creates its inputs.** `xcodebuild build` failed
+  with `error: The file "public" couldn't be opened` — `app/ios/App/App/public` and `config.xml`
+  are gitignored (`app/ios/.gitignore:4,13`) and generated by `cap sync`, which the plan ran in
+  the NEXT gate. **Technique: before ordering an iOS gate, `ls` the target directory against
+  `.gitignore` — a generated input absent from a fresh worktree makes the gate unrunnable, and
+  no amount of reading the command reveals it.**
+- **A census regex defeated by the exact case its own comment cited as the reason for its
+  design.** `rejectCodes` took the last `/"([^"\\]*)"/g` match per `.reject(` line "because
+  messages carry `\(interpolation)`" — and `[^"\\]*` stops dead at the backslash of a Swift
+  interpolation. Measured: 12 of 14 reject lines collected, and renaming the `@unknown default`
+  arm's code to `typoCode` left the sorted-set assertion GREEN. The two invisible lines were
+  precisely the two the comment named.
+  **Technique: for any regex census, assert that the number of codes extracted equals the number
+  of lines matched — `expect(codes).toHaveLength(lines)`. A regex that silently skips a line
+  shrinks the expectation instead of failing, and the set comparison then passes forever.
+  `/"((?:[^"\\]|\\.)*)"/g` is the fixed form.**
+- **A "diff, not a reading" gate that cannot be diffed.** Step 3b replaced two judgement calls
+  with "diff against an expected file built from the table" — but the table's residual cells name
+  document nicknames ("gate doc ×2", "1.75a plan ×4"), not paths, so the expected file cannot be
+  built mechanically and the gate collapses back into the judgement it replaced.
+  **Technique: when a census needs a mechanical pass condition, diff BASE-vs-HEAD captures of the
+  same script, never head-vs-a-table-transcribed-by-hand. A prose table is not an artifact.**
+- **A gate green on a surface it cannot reach, again.** `grep -rn -i concept2 app/e2e` → one
+  unrelated comment. `pnpm e2e` is correctly REQUIRED (RF1) and cannot touch one line this PR
+  adds, because the only consumer is compiled out of the stack's bundle.
+  **Technique: for every required gate, ask what it proves ABOUT THIS DIFF, and write
+  "required-but-blind, here is what actually proves it" into the plan — otherwise a green badge
+  becomes the coverage claim (RF26).**
+- **HELD under attack, and now vetted:** the `activeToken` guard is sound on every path (a
+  superseded completion is discarded by identity; the four pre-claim early returns correctly do
+  NOT clear, and `busy` clearing would strand a live session); all four `WebViewDelegationHandler`
+  citations line-exact (`:45-48`, `:77-92`, `:108-115`, `:158-162`), plus `CAPPlugin.h:34-40` /
+  `.m:170-172` and `CapacitorBridge.swift:115` (`[String: CapacitorPlugin]`); `debug.xcconfig` is
+  `baseConfigurationReference` at `project.pbxproj:187,308`, so dropping `assertionFailure` was
+  right; `ios-release.test.sh` is 250 lines with `:246` the summary block and no pre-existing
+  `trap`; the census normaliser reproduces exactly (`///` old=0 new=1, all four comment syntaxes);
+  WHATWG `URL`/`searchParams` parse the private-use scheme correctly (PROVEN in Node 26, spec-
+  backed — query state is scheme-independent); every exchange error string is expressible in
+  `LinkOutcome`; `POST /connect` has no already-linked guard so the walk's re-link path works;
+  and all ten clauses of `ROADMAP.md:1096-1128` have a disposition.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 3, verifying pass 2's fixes)
+
+- **A concurrency test whose mock arms its resolver BELOW two awaits, released
+  from above them.** The `busy` case did `const second = await startLink(...)`
+  (one microtask) and then `release(...)` — but the first attempt was still
+  inside `await res.json()`, which settles on a LATER task, so `WebAuth.start`
+  had not been called, `release` still held its `() => undefined` initializer,
+  the release was dropped silently and `await first` never settled. The same
+  test then `await`ed a THIRD call against a mock returning a fresh
+  never-resolved promise per invocation. Both are timeouts; the test is red on
+  the mutant AND red on correct code, so the `finally`-deletion probe would be
+  logged as "biting" against a test that cannot go green.
+  **Technique: simulate the mock and the implementation in plain Node with a
+  `Promise.race` timeout before believing any test that interleaves a pending
+  promise with a module-scope guard. Two questions settle it — "is the
+  resolver armed when the test calls it?" and "how many times is the plugin
+  called versus how many resolvers exist?" Arm-detection (`releases.push`
+  + `vi.waitFor(() => expect(releases).toHaveLength(n))`) replaces a single
+  `let release` variable and makes both bugs impossible.**
+- **A prerequisite chain fixed one link short — the SAME defect class, one
+  layer up, inside the pass that fixed it.** Pass 2 moved `cap sync` in front
+  of `xcodebuild` because `xcodebuild` needed gitignored inputs `cap sync`
+  writes. `cap sync` itself needs `dist/client`, which is also gitignored:
+  in a fresh worktree it exits 1 with `Could not find the web assets
+  directory`. **Technique: when a fix reorders a gate because of a missing
+  generated input, walk the chain to the FIRST command whose inputs are all
+  tracked — one `ls` against `.gitignore` per hop, not one for the hop that
+  failed.**
+- **A mutation instruction that is not valid syntax.** "Delete `readStatus`'s
+  `catch` block (leave the `try`)" — `try {}` with no `catch`/`finally` is a
+  `SyntaxError: Missing catch or finally after try`. The sibling row in the
+  same plan ("remove the catch, leave `try`/`finally`") was legal, which is
+  how the illegal one read as fine. **Technique: paste every mutation
+  instruction into `node -e` (or a scratch file) before shipping it. A
+  mutation is code, and the same "run it or read the code that serves it" bar
+  applies (RF13).** Corollary: a mutation row that PREDICTS its failure mode
+  ("it dies by THROWING, record that exact text") must name the layer that
+  observes the failure — a rejection from `void f()` inside `useEffect` dies
+  as an assertion timeout, never as a thrown test.
+- **"finds nothing" about a grep that finds one unrelated line.** The e2e
+  blindness argument was correct and its own cited command falsified it
+  (`design.spec.ts:2017`, a PM5 BLE-name comment). **Technique: for every
+  "grep X finds nothing" sentence, run the grep and paste its ACTUAL output;
+  if it is non-empty, name the hit and why it does not count. A conclusion
+  that survives the real output is stronger than one that needs the output to
+  be empty.**
+- **Attacked and HELD (this plan's vetted ground is now closed):** the
+  clear-site clause against the Swift's four pre-claim / two post-claim
+  returns; the contract regex reproduced in Node (14 lines → 14 codes on the
+  fixed form, 12 on the naive, and the `typoCode` probe green on the naive /
+  red on the fixed); `census.sh` complete and its `norm()` reproduced across
+  all four comment syntaxes; the whole step-3b base-vs-head census procedure
+  run end to end (diff = 15 lines, all the plan's own file; `browserFinished`
+  = 52 under `app/src`; `appUrlOpen` = 0; every residual count exact);
+  `cap sync` leaving `git diff -- app/ios` EMPTY; `xcodebuild` BUILD SUCCEEDED
+  and `App.SwiftFileList` present at the named arm64 path listing
+  `AppDelegate.swift`; the fold counted at 119 words / 24 longest;
+  `UIApplicationSceneManifest` = 0; `searchParams` and Node's `querystring`
+  both decoding `+` as a space; `CAPBridgeProtocol.swift:80` declaring
+  `registerPluginInstance` (so `bridge?.` compiles) and
+  `capacitorDidLoad()` being an empty `open func` at `:164` called at `:53`
+  after the bridge is assigned; the storyboard's current
+  `customModule="Capacitor"` with no `customModuleProvider`, making the
+  plan's `customModule="App" customModuleProvider="target"` the correct
+  replacement; all Task 3 deletion ranges exact; and the three pre-existing
+  main-checkout items named correctly.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 4, verifying pass 3's fixes)
+
+- **A test added because a probe could not discriminate, gated by a mutation that also
+  cannot discriminate.** REV 4 added a RE-READ test because "the mount test alone cannot
+  tell a correct check order from a swapped one" — and named its biting mutation as
+  "`statusError` moved BELOW the `status === null` check". Measured in Node against the
+  plan's own `describeStatus`: that reordering still returns `unreadable` on the re-read
+  path (statusError is checked before `!status.available`), so the new test stays GREEN
+  and the row would be logged as biting. The plan's PROSE described the right mutation
+  ("falls straight through to `not linked`"); only moving the check below `!status.linked`
+  produces it. **Technique: for a guarded ORDER, do not describe the mutation by which
+  neighbour it moves past — run every reordering against every state the tests reach, and
+  name the destination that changes ALL of them. Prose describing a mutant's effect and the
+  instruction producing it are two claims; check them separately.**
+- **A cited edit RANGE that includes the first line of the next thing.** Task 8's "replace
+  the Status block (`ROADMAP.md:1120-1128`)" — the block is 1120-1127; 1128 is the PR2 row.
+  **Technique: for any "replace lines N-M" instruction, print line M+1 as well and confirm
+  it is NOT part of what you named.** Same family as the ledger's heredoc-anchor entry: a
+  line number is only an anchor once you have looked at both ends of it.
+- **A walk observation whose precondition the card never establishes.** Check (a) told the
+  operator the sheet "should ask you to log in even if Safari already has a Concept2
+  session" — but no step signs in to Concept2 in the phone's Safari, so "it asked me to log
+  in" is exactly what a NON-ephemeral session produces on a fresh phone. It was also absent
+  from the check's RECORD bullets and from the report's contents, while the PR fold sold it
+  above the fold as a rower-facing control. **Technique: for every walk observation, ask
+  what state the phone must be in for a NO to be possible — if the card does not put it
+  there, the observation is decoration, and the fix is a precondition step plus a RECORD
+  line, not better wording.**
+- **Attacked and HELD (this pass added no new ground beyond the above):** the busy test
+  simulated in Node — correct code passes in 145 ms, the `finally`-deleted mutant fails at
+  exactly `expected [ … ] to have a length of 2 but got 1`, and the shared-`Response`
+  counterfactual reproduces the JSDoc's predicted failure verbatim (Node 26's message is
+  `Body is unusable: Body has already been read`); `pnpm build` → `cap sync` → `-list` from
+  a truly emptied `dist/` (`git diff -- app/ios` EMPTY; `public/` = 74 files, css/html/js/
+  png/woff/woff2, zero census-matching extensions); `census.sh` exits 0 with
+  `browserFinished` = 52 under `app/src`; both e2e greps reproduce (one PM5 comment, one
+  empty); `ios-google-client-id.sh` written and run — 5/5 cases pass on the real plist, the
+  index-0 PlistBuddy mutant fails 2; `ios-release.test.sh` is `set -uo pipefail` with no
+  `-e`, so the new block's idiom matches the file; migrations run at boot
+  (`server/index.ts:32`) so the walk DB needs no migrate step; `c2UserId` IS unique but a
+  `--rm` walk container makes collision unreachable; the fold counts 119/24 exactly; and an
+  attack on check (c) failed — an existing grant does NOT suppress Concept2's consent
+  screen (the 08-31 crossconnect authorized user 2211 on the same client, and D3 on 09-02
+  still rendered "Authorize James Morelli to use your account?").
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 5, verifying pass 4's fixes)
+
+- **A red proof that names its MUTATION but not its TREE.** Task 8's census probe said
+  "delete the leader-strip and re-run: the wrapped hit disappears" — true at the baseline,
+  a guaranteed no-op at the head. Measured corpus-wide: the leader strip changes exactly
+  ONE count in the whole corpus, `Concept2LinkProbe.tsx`'s wrapped phrase, and the same
+  plan rewrites that file and deletes the phrase. **Technique: for any probe run over a
+  CORPUS rather than one file, diff the normaliser's output with and without the mutation
+  at the tree the step actually runs on — if only one file discriminates, ask whether the
+  plan changes that file before the probe fires. A red proof states the tree, not just the
+  mutation.**
+- **A plan's own pass-count bullet goes stale at every fold, and it is the one that reaches
+  the reviewer.** REV 5 folded pass 4 and left "THREE DELTA passes … folded at REV 2, REV 3
+  and REV 4" ticked `- [x]` in Task 9 AND in the PR Record's risk line. **Technique: after
+  folding a pass, grep the plan for the pass COUNT and for every REV number, the same sweep
+  CLAUDE.md already demands for a withdrawn claim's phrasing.**
+- **Attacked and HELD:** all three `describeStatus` orderings run in Node (correct green/green,
+  the old reorder green on re-read, the bottom-move red on both); `ROADMAP.md:1120-1127` vs
+  `:1128` verbatim; the four ephemeral-precondition sites consistent, with a NO now reachable;
+  the fold at 120 words / 24 longest by `wc`, every bullet backed by a named walk RECORD or
+  test; every mutation table's target committed before its probe; and — newly measured — gate
+  (a)'s pass value of `1`, counted against a real Sources-phase member in
+  `App.SwiftFileList` (`grep -c 'App/AppDelegate\.swift$'` → `1`), so the number that replaced
+  the unmeasurable `SwiftCompile` count is itself measured. ~40 `file:line` citations re-read
+  at this head, one drifted (`eslint.config.js:86-89` excludes `src/adapters/**` at `:90`).
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 6, verifying pass 5's fixes)
+
+- **A phrase-census gate whose expected ZEROS are falsified by the same plan's own new
+  source.** The retirement row said `browserFinished` = 0 under `app/src`, and the plan's
+  prescribed `src/adapters/linkFlow.ts` header contains the literal (plan `:1227`); the
+  PERMANENT `appUrlOpen` row said 0 under `app/src` AND `app/ios`, and the plan's own
+  `WebAuthPlugin.swift` doc comment contains it (`:263`). Both counts were measured against
+  the CURRENT tree, where the new files do not exist yet, so the table was true when written
+  and false the moment the plan is executed. **Technique: for any census/grep gate, run the
+  phrase list against the CODE THE PLAN PRESCRIBES — the file-content code blocks, not the
+  plan's prose — before believing an expected count. A gate's expected value is a claim about
+  the post-change tree, and a pre-change measurement cannot support it.**
+- **A gate ordered before the edits it will judge.** The base-vs-head census diff sat at step
+  3b while steps 4-6 each add a `browserFinished` sentence to ROADMAP.md (1→2) and the two
+  PR1.5 documents (3→4, 7→8) — so the diff either describes a tree the PR does not ship or
+  reports the plan's own prescribed edits as defects. **Technique: for a diff-shaped gate,
+  ask which later steps in the SAME task still change the corpus, and either move the gate
+  behind them or enumerate their deltas in the permitted list with exact before→after counts.**
+- **A mutation that breaks the TOOL is observationally identical to the mutation biting.**
+  "Delete the `sed -E` leader-strip from `norm()`" leaves `norm() { | tr … }` — bash syntax
+  error, exit 2, zero output — so every hit "disappears" and the red proof reads as passing.
+  Pass 3's `try {}` entry covers invalid mutation syntax; this is its corollary.
+  **Technique: a probe that removes part of a tool must state the tool-still-runs form AND a
+  SURVIVOR — here, `never a real link` must still report 1 while `posts nothing and carries
+  no client id` goes to 0. A red proof with no survivor cannot tell a bite from a crash.**
+- **Attacked and HELD:** all six of pass 5's folds (pass counts consistent at both sites; the
+  baseline-tree probe run end to end and biting, `never a real link` surviving;
+  `eslint.config.js:89-90`; `You.tsx:19-20`'s `DEV ||` OR; observation 10's grep list exact);
+  ~30 fresh citations across `concept2.ts`, `middleware.ts`, `index.ts`, `auth/routes.ts`,
+  `project.pbxproj` (all four anchors + thirteen settings lines), `Main.storyboard:14`,
+  `dist-grep.sh`, `ios-release.sh/.test.sh`, `ci.yml`, `phase-lt.md`, the gate doc's three
+  markers, `ROADMAP.md:1086-1095`; the Swift's two compile-blocking signatures verified in the
+  vendored sources (`CAPPlugin.h:40` is `NSNumber* _Nullable`, so the `-> NSNumber?` override
+  is legal; `JSTypes.swift:34` gives a NON-optional `getBool(key, default)`); `compose.yml:61-64`
+  never exporting `VITE_ENABLE_C2_LINK_PROBE`, so the e2e/screenshots blindness claim holds; and
+  the "only the calling app's session" guarantee traced to design §Research `:73` (PRIMARY,
+  developer.apple.com) rather than the SDK header, which does not contain it — the Swift comment
+  attributes it correctly.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 7, verifying pass 6's fixes)
+
+Seventh consecutive verification pass on one plan. Three REVISE, all
+found by re-running the previous pass's own reasoning one column over.
+
+- **CLAIM (pass 6's fix): the census table's residual cells now reflect the
+  plan's own prescribed record edits.** FALSE for the sibling row. Pass 6
+  re-counted `browserFinished` after steps 4-5 add sentences to three
+  documents, and got 1→2 / 3→4 / 7→8 exactly right. It never re-counted the
+  OTHER phrase inside the same prescribed block: step 4's replacement ROADMAP
+  Status block also contains `appUrlOpen` once, so ROADMAP goes 2→3 and step
+  6b's gate diff emits an unpermitted line. **Technique: when a fix re-measures
+  ONE row of a table against a newly-written source, re-measure every row
+  against that same source — the source is the unit, not the row.** Settled by
+  running the plan's own census script against a detached worktree at the
+  stated baseline, then grepping the prescribed replacement text for each
+  phrase in the list.
+- **CLAIM: an operator command in a walk card is checked when its OUTPUT is
+  checked.** FALSE. `pnpm ios:build` (package.json:29) ends in
+  `scripts/ios-version.sh:12-13`, which rewrites two TRACKED files with version
+  stamps. The plan's own Global Constraints state the rule and the required
+  `git restore`; the card is the plan's only invocation of the command and
+  carries neither, and the SDLC step that would catch it names those exact two
+  files as known pre-existing dirt in a DIFFERENT checkout. **Technique: for
+  every command handed to an operator, read what it writes, not only what it
+  prints — and grep the plan for who restores it.** The main checkout's own
+  `git status` was the standing proof nobody restores them.
+- **CLAIM: a walk case that carries a PASS criterion is fully recorded.**
+  FALSE for an OPTIONAL variant. Check (d)'s optional WebContent-termination
+  run is, by the plan's own words, "the only thing that can settle" an
+  INFERENCE the shipped Swift comment declares in its own text — and it had no
+  bullet in the report contents and no row in the fold task, so a measurement
+  would have left `INFERENCE, not measured` standing in shipped code.
+  **Technique: for every "UNMEASURED"/"INFERENCE" string a plan puts into
+  shipped prose, find the walk step that measures it AND the fold row that
+  rewrites it; a measurement with no fold row is not an instrument.**
+- **HELD, attacked hard:** all four of pass 6's folds — the `linkFlow.ts`
+  header and every prescribed `app/src` block re-grepped (0 lowercase
+  `browserFinished`, including the surviving halves of the three edited files);
+  the single permitted `app/ios` `appUrlOpen` hit; step 6b's placement and all
+  three `browserFinished` post-edit counts re-derived by counting the current
+  files; the `/tmp/pr175b-base` worktree lifecycle (created once, reused,
+  removed once). The census mutation was RUN: exit 0, `posts nothing and
+  carries no client id` drops 1→0 for `Concept2LinkProbe.tsx` while `never a
+  real link` survives at 1, and the diff moves exactly one line — the survivor
+  requirement is what separates a bite from a crashed tool. Pass counts
+  consistent at all three sites. **Newly verified PRIMARY, and it was the
+  walk's single point of failure: the (d) inspector chain** —
+  `debug.xcconfig:1` → `project.pbxproj:187,308` → `Info.plist:5-6` →
+  `CAPInstanceDescriptor.swift:144` / `CapacitorBridge.swift:31` →
+  `CapacitorBridge.swift:458` `isInspectable`, documented at
+  `CAPInstanceDescriptor.h:102`. Also verified: `POST /connect`
+  (`routes/concept2.ts:212-277`) has no already-linked refusal, so the card's
+  "an already linked account can re-link" holds and checks (b)-(d) survive a
+  successful (a).
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 8, verifying pass 7's fixes)
+
+Eighth consecutive verification pass on one plan. Two REVISE, both found by
+running something the plan only asserted.
+
+- **CLAIM: "the six new checks FAIL" before the code exists.** FALSE — five do.
+  The third, `[ "$rc" -ne 0 ]` on a script that does not exist yet, passes
+  vacuously: `bash <missing file>` exits 127, which is indistinguishable from
+  the correct refusal it will later assert. **Technique: a failing-test-first
+  step's expected failure COUNT is a measurement, not an inference — run the
+  prescribed block against the pre-fix tree (point its `$HERE` at the real
+  directory from a scratch copy; nothing needs writing into the worktree) and
+  count the FAIL lines. Any check whose assertion is "exits non-zero", "returns
+  empty", or "is absent" is green before the subject exists, so it can never be
+  part of a red proof.** Sibling of the ledger's `SwiftCompile`-count entry: the
+  pass value was reasoned, not counted.
+- **CLAIM (pass 7's own fold): the SDK-header citation rule is widened.** TRUE
+  where the rule is ARGUED (Global Constraints), FALSE where it is USED. The
+  prescribed `WebAuthPlugin.swift` still ships "Every Apple-behaviour claim
+  below quotes the SDK header … by line", and two claims below it do not: the
+  bare-scheme guard rests on a labelled SECONDARY forums post (`grep -i
+  "special char|should not include|bare|colon"` over
+  `ASWebAuthenticationSession.h` → EMPTY, so no header line exists to quote),
+  and the `shouldOverrideLoad` comment cites WebKit and Capacitor with zero
+  header quotes. **Technique: when a pass RELAXES a rule, grep the relaxed
+  absolute ("every", "only", "by line") through the plan's own PRESCRIBED CODE
+  BLOCKS, not just its prose — shipped comments are where a withdrawn absolute
+  survives, and CLAUDE.md's sweep rule names exactly this ("correcting where the
+  claim was ARGUED and leaving it where it was USED is the failure").**
+- **Attacked and HELD:** the whole census re-run one more time, per phrase,
+  against every prescribed insertion and code block extracted to files — only
+  the two documented additions appear (`appUrlOpen` in `WebAuthPlugin.swift`
+  and in step 4's ROADMAP block; `browserFinished` in that block and in step 5's
+  HISTORICAL note), and `ROADMAP.md`'s baseline (2 / 1, at `:1091,:1108` /
+  `:1089`) plus the replaced `:1120-1127` block containing neither confirms the
+  2→3 and 1→2 cells exactly; two apparent extra hits were extraction artefacts
+  (a quoted sentence being REMOVED, and the plan's own instruction prose).
+  `ios-version.sh:14` prints the card's success line byte-for-byte.
+  `Main.storyboard:14` and the `Info.plist` `:21-30` fragment are BYTE-identical
+  to the plan's replacements (tabs included). All four `project.pbxproj`
+  anchors, the seven existing id prefixes, `E2A1` = 0. `ios-release.sh:101-108`
+  is exactly the block being replaced, with `APP_DIR`/`PLIST` in scope. Task 1's
+  commit stages zero lint-staged-matching files (`package.json:14,18`), so no
+  hook can reformat it. No Xcode state is required that a fresh engineer lacks:
+  no scheme is tracked, none is needed (`CODE_SIGNING_ALLOWED=NO`, `generic/
+  platform=iOS Simulator`), and `Package.resolved` is untracked so it cannot
+  break gate (b). `linkFlow.test.ts` lands in the jsdom `client` project, loads
+  cleanly (only `vitest` is a static import) and fails per-test on the dynamic
+  import — no zero-collection trap. `eslint.config.js:89-90` still exact.
+- **Nit, optional:** Task 9's `git status -- app/ios` "must be empty" — that
+  form prints five lines on a clean tree; Task 6 step 4's `--short` form is the
+  one that reads empty.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 9, verifying pass 8's fixes)
+
+Ninth consecutive verification pass. One REVISE, found by testing the surviving
+universal rather than the two claims that triggered the previous pass.
+
+- **CLAIM (pass 8's fix): the Swift header's citation rule now matches the code
+  below it.** HALF TRUE. Pass 8 widened the rule where it is USED (the plugin
+  header, four source categories) but not where it is ARGUED (Global Constraint
+  `:41`, still three — missing "the vendored Capacitor sources by file:line",
+  the category the `shouldOverrideLoad` comment leans on hardest), while REV 9's
+  own summary claims the two "mirror ... exactly". And the universal is still
+  falsified below it: `// shouldOverrideLoad(_:) is a WKNavigationDelegate
+  callback, which UIKit already delivers on main` cites nothing, is the whole
+  thread-confinement argument for the RF27 table's four fields, names the wrong
+  framework (WebKit), and mis-describes a CAPPlugin method as a delegate callback
+  (`WebViewDelegationHandler.swift:67` → `:82`). A PRIMARY line existed the whole
+  time and the plan already uses the identical idiom one observation away:
+  `WKNavigationDelegate.h:69-70` carries `WK_SWIFT_UI_ACTOR`, defined
+  `= NS_SWIFT_UI_ACTOR` at `WKFoundation.h:60`. **Technique: when a pass RELAXES
+  an absolute, run the check in BOTH directions — (a) the argued site and the
+  used site must enumerate the SAME set, and (b) re-test the universal against
+  every claim it governs, not only the ones that triggered the pass. Grepping for
+  the absolute's WORDS finds instance (a); only enumerating the governed claims
+  finds (b), and (b) is where the uncited premise lives.**
+- **Technique added: a plan that predicts `format:check → green` is making a
+  measurable claim about its own prescribed code.** Extract every prescribed
+  source block to files and run the repo's own formatter over them. Measured
+  here: four of six blocks fail `prettier --check` (pure 80-column re-wrapping,
+  no literal or census phrase moves), so the gate as written goes red on
+  verbatim paste.
+- **Attacked and HELD:** the step-1 block RUN against a scratch copy pointed at
+  the real `app/scripts` — 20 pre-existing `ok`, `fails=5`, the vacuous
+  "exits non-zero" check green and the next check failing on the
+  `No such file or directory` text, exactly as REV 9 states; `:246` is the
+  summary-block anchor on the current 250-line file and the new block's
+  `trap … EXIT` collides with nothing; `git status -- app/ios` prints 6 lines vs
+  `--short`'s 0, at both live `--short` sites; the census guard at all three
+  sites naming both tokens; the pass count EIGHT / REV 2–9 at both live sites;
+  the fold recounted at 120 words / 24 longest (a naive `wc -w` reads 126 —
+  it counts the bullet dashes); `94b83c84` confirmed as the commit before the
+  plan file was added and an ancestor of HEAD; the `/tmp/pr175b-base` lifecycle
+  and step 6b's placement; Task 5's gate order carrying no
+  prerequisite-after-consumer; every walk-card citation verbatim
+  (`index.ts:76`, `:126`, `:79-83`, `package.json:29,30`,
+  `ios-release.sh:42-45`, `auth/routes.ts:101-106`); `no-non-null-assertion`
+  absent from tseslint `recommended` (it is `strict`-only) and `app/scripts`
+  already in `tsconfig.app.json`'s include, so the new contract test is not
+  first-of-kind; `NATIVE_REDIRECT_URI` at `routes/concept2.ts:67` and the
+  prescribed `LINK_CALLBACK_SCHEME` both matching the contract test's regexes;
+  and `Concept2LinkProbe.test.tsx` loading cleanly (all imports static-safe,
+  component and adapter both dynamic) with `toHaveBeenCalledExactlyOnceWith`
+  already in use at `useMonitorSession.test.ts:9541`.
+- **Nit, optional:** Task 4 step 4's RF5 sweep says "the ONLY surviving hits may
+  be the two narrative sentences added in Task 3 steps 3-4"; the plan's own
+  prescribed text leaves three grep lines in two files (plan `:1674`, `:1678`,
+  `:1705`). The allowlist is defined by provenance, not the numeral, so nothing
+  is wrongly deleted — but it is the same off-by-one class as passes 6 and 7.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 10, verifying pass 9's fixes)
+
+Tenth consecutive verification pass. One REVISE, found by running the previous
+pass's own token list against the sources it never re-measured.
+
+- **CLAIM (pass 9's fix): the RF5 sweep now names its three surviving hit lines
+  exactly.** FALSE — there are FIVE. Pass 9 corrected "two" to "three" by
+  re-counting inside Task 3's own two files (`externalBrowser.ts`,
+  `appLifecycle.ts`) and never ran the four-token list against the OTHER
+  prescribed sources: Task 2 step 4's `linkFlow.ts` header and Task 4 step 3's
+  `Concept2LinkProbe.tsx` doc comment each carry `useReturnToApp`. Since the
+  step's escalation clause is absolute ("Any other hit is dead prose or a dead
+  import: fix it here"), the sweep as written directs the implementer to strip
+  two sentences the plan deliberately prescribes — including its own stated
+  justification for the retirement. Settled by extracting every prescribed
+  `app/src` fence to files and running the sweep command verbatim against them:
+  5 lines, not 3.
+  **Technique: a phrase list gets a "new prose must not reintroduce this token"
+  GUARD at every site that writes prose, or its expected set goes stale at the
+  next fold. The census phrases in this same plan carry that guard at three
+  sites and never drifted; the RF5 token list carries none and drifted twice
+  (passes 9 and 10). When a pass corrects a count, re-run the FULL token list
+  against the FULL prescribed corpus — a count corrected in one file is not a
+  count corrected.**
+- **Technique added: plan-internal line citations cannot survive their own
+  fold.** REV 10 cited the Global Constraint as `:41` and the Swift header as
+  `:292-296`; prepending the REV 10 paragraph moved both by +2 in the same
+  commit. Cite by provenance (Task/step/symbol), never by the plan's own line
+  number.
+- **Attacked and HELD:** the whole thread-confinement chain re-read in the
+  iOS 26.5 SDK — `WKNavigationDelegate.h:69-70` (`WK_SWIFT_UI_ACTOR` on the
+  protocol), `WKFoundation.h:59-60` (the `#ifdef` branch is live;
+  `NS_SWIFT_UI_ACTOR` is defined at `NSObjCRuntime.h:253`), and
+  `WebViewDelegationHandler.swift:7` conforming to `WKNavigationDelegate`, `:67`
+  the `decidePolicyFor` handler, `:82` the `shouldOverrideLoad` call — every
+  clause of the new comment accurate, including the framework attribution the
+  previous version got wrong. Global Constraint and Swift header enumerate the
+  SAME four source categories. Ten citations spot-checked verbatim:
+  `ASWebAuthenticationSession.h:50-53,71,73-77,79-82,89-92,94-99` (typo "do
+  not not share" reproduced faithfully), `CapacitorBridge.swift:348-365`
+  (`plugins[…] = pluginInstance` at `:361`) and `:295-298`,
+  `CAPPlugin+LoadInstance.swift:10-19`, `CAPBridgeViewController.swift:48-53`,
+  `project.pbxproj:239,314,336`. `pnpm format` measured: `prettier --write .`
+  over the whole `app/` tree, but `.prettierignore` excludes
+  `ios`/`dist`/`drizzle` and `pnpm format:check` is green at `cdcfee41`, so the
+  write cannot reach the scope gate. Pass count NINE / REV 2–10 consistent at
+  both live sites. Design↔plan seam closed in both directions: every
+  §0/§2/§4/§Testing/exit-4/6(a)/8 requirement mapped to a task (including §0's
+  "one sentence" and its STOP branch, and all six §Testing `linkFlow`
+  assertions), and all three scope-creep items carry a named rule.
+
+### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 11, the whole-plan consistency lens)
+
+Eleventh consecutive pass. Three REVISE, two of them the same class, and the class
+survived ten passes because every one of them checked the plan's blocks with the
+plan's own tools and never with the REPO's.
+
+- **CLAIM: prescribed source blocks are paste-ready because a pass ran `prettier
+  --check` over them.** FALSE for two of the three gates that actually run. Placed
+  all six prescribed TS/TSX blocks at their real paths: `pnpm typecheck` dies with
+  `TS2493` (the probe test's `mockLink` declares `vi.fn(async () => …)`, zero
+  parameters, and a test three screens down does `api.mock.calls.filter(c => c[0]
+  === …)`), and `pnpm lint` dies with `react-hooks/set-state-in-effect` on the
+  probe component's `useEffect(() => { void readStatus(); })`, where `readStatus`
+  is a `useCallback(async …)` that sets state. The plan's own sibling test file got
+  the mock arity right twice; the repo's own established mount-fetch idiom
+  (`WorkoutDetail.tsx:52`, `void f().then(cb)`) passes the lint rule where the
+  `async`/`await` shape does not — isolated with a two-file A/B probe.
+  **Technique: a plan that prescribes source blocks is making a claim about the
+  repo's gates, not about its own prose. Extract every block to its REAL path and
+  run `pnpm typecheck` and `pnpm lint`, not only `prettier --check` — formatting is
+  the one gate that cannot fail on semantics. Then run the prescribed TESTS against
+  the prescribed IMPLEMENTATION: 19/19, 11/11 and 4/4 green here, which is what
+  makes the two red gates a paste-readiness defect rather than a design defect.**
+  Corollary: when a lint fix changes a function's SHAPE (async/try -> then/catch),
+  sweep the plan's mutation table — a row whose rationale is "`try {}` alone is a
+  SyntaxError" is about the old shape.
+- **CLAIM (pass 6's fix): the census's `appUrlOpen` expectation is correct.** TRUE
+  where it is USED (the table, step 3b's permitted list, step 6b), FALSE where it
+  is ARGUED — Task 1 step 4's rationale paragraph still reads "expected 0 under
+  `app/src` and `app/ios`" while the plan's own prescribed Swift carries the hit.
+  `git log -L` shows the line untouched since REV 2, five passes before the row was
+  corrected. **Technique: CLAUDE.md's sweep rule runs in BOTH directions. Passes 8
+  and 9 caught argued-fixed/used-stale; this is used-fixed/argued-stale, and the
+  same `git log -L <line>,<line>` on the surviving sentence dates it instantly.**
+- **Attacked and HELD:** all five of pass 10's folds (the RF5 five re-derived from
+  the fences AND from every deletion range in the real tree; both token guards; zero
+  bare plan-internal citations in Task 9, the five in the REV block being the quoted
+  defect itself; RF19's three sub-claims — `vitest.config.ts:48`, one
+  `PBXNativeTarget`, e2e-on-web; TEN / REV 2–11). Six recounts exact: prettier 4-of-6
+  and precisely the four named; `browserFinished` = 52 split 3/1/1/14/33; 14 reject
+  lines -> 14 fixed / 12 naive; fold 120/24; `fails=5` with the vacuous check green;
+  RF5 = 5. **Every cell of the census table verified against a live run** — all
+  twelve rows, all residual counts, no drift. The leader-strip red proof re-run
+  corpus-wide: diff is exactly one line and `never a real link` survives. And
+  CLAUDE.md's own `pnpm exec vitest run --project client <file>` footgun was
+  called STALE here — **WRONG, corrected at #277's PM gate (2026-09-02):** the
+  footgun is REAL and its mechanism is the dropped `NODE_OPTIONS=--no-experimental-webstorage`
+  that `package.json`'s `test` script sets (the bare form produced 1582 false
+  failures across client+unit against a green head; the two-file spot check
+  passed by luck of file selection). The plan's uses carry the `NODE_OPTIONS=`
+  prefix, which is why they were correct; the diagnosis ("jsdom loads, vitest 4")
+  was not. `.claude/agent-briefing.md` already carried the right mechanism —
+  a pass contradicted a standing in-repo rule and nobody grepped. **Nit: step 3b's example read-line says "all 19
+  surviving `browserFinished` hits"; the table sums to 25.**
+
+### 2026-09-02 — Wave E PR1.75b IMPLEMENTATION (lessons found by review, not by the 11 plan passes)
+
+- **A WHATWG getter answers `""` where the reader assumed `null`.** The prescribed
+  `linkFlow.ts` guarded `params.get("code") === null` for "no code"; `?code=`
+  (an empty parameter, exactly what a `?error=access_denied&code=` decline can
+  carry) yields `""`, skipped the guard, skipped the `declined` branch, and
+  POSTed `{code: ""}` to `/exchange` — a rower's decline surfaced as a server
+  400. It survived eleven antagonist passes because every pass parsed the
+  happy-path callback and the absent-key callback, never the present-but-empty
+  key. **Technique: for every `get()`/`params`/`searchParams` read, test three
+  shapes — absent, empty, valued — and name which of `null`/`""` the code treats
+  as "not there".** The sibling `?state=` read fails SAFE (an empty state is a
+  mismatch, so the exchange is refused) and is recorded as untested.
+- **A client constant compared only against itself, one seam over from the one
+  that was cross-checked.** `LINK_CALLBACK_SCHEME` had both an independent
+  literal pin and a server cross-check in the contract census;
+  `LINK_CLIENT`, gating the same mint, had neither — the test asserted the
+  posted body against the imported symbol. A one-character drift would 409
+  every native mint. **Technique: when a census cross-checks one literal across
+  two files, list every OTHER literal the same request carries and ask whether
+  each has the same two pins.**
+- **A mutation row whose fallback restores the original value.** The plan's row
+  "exchange body `state` → `returnedState ?? state`" was meant to prove the
+  exchange sends the MINT's state, not the callback's; but `??` falls back on
+  nullish, and every test's callback either omits `state` (→ the mint's `state`,
+  the original behaviour) or carries a matching one — so the mutant is a
+  semantic no-op and the suite stays green. The row predicted a `null` that only
+  the OTHER mutation (`state: returnedState`) produces; that form bit
+  immediately. Anyone running the table mechanically logs a pass. **Technique:
+  before trusting a mutation row, ask what value the mutant produces for EACH
+  fixture the suite feeds it; a mutation that maps every fixture to the
+  original output is not a mutation of the behaviour under test.**
