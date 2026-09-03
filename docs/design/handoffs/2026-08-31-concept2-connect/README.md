@@ -79,6 +79,11 @@ not rewrite it.
   none, and refuses the send when neither answers. A rower who reaches that
   refusal is told which of the two it was, with a button to their Concept2
   account and a Send again (amendment 2i, redrawn 2026-09-03).
+  **That read ignores every row Ergomatic itself posted** (amendment change
+  9): Concept2's list carries our own rows, its 201 echoes back the class we
+  sent, and nothing on the row marks it as ours — so without the exclusion a
+  derived guess would return as the rower's own declaration on the next send,
+  and the SENT line that makes the guess correctable would go silent.
 - **The SENT state names the class and its source** (amendment change 7,
   2026-09-03): "WEIGHT CLASS H · FROM YOUR LAST CONCEPT2 ROW", or "· FROM
   YOUR CONCEPT2 WEIGHT" when we derived it. Session-scoped — nothing about

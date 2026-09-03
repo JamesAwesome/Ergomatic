@@ -49,10 +49,20 @@ exercises them.
   each send and discarded with the response, in this producer order:
   **(1) the rower's own most recent DECLARATION** — the newest of their
   recent results whose `weight_class` reads H or L, which is the producer
-  Concept2 itself uses (§Research); **(2) failing that, OUR derivation**
+  Concept2 itself uses (§Research), **excluding every result this app
+  itself wrote**; **(2) failing that, OUR derivation**
   from the profile's `weight` + `gender`, behind a plausibility band;
   **(3) failing that, refuse the send** (422 `no_weight_class`) and tell the
-  rower where to fix it. The class is **never cached** — a declaration can
+  rower where to fix it. **WE NEVER READ OUR OWN WRITES BACK AS THE
+  DECLARATION** (invariant I4c): Concept2's list contains the rows we
+  posted, its 201 echoes the class we sent, and no field marks a row as
+  ours — so without the exclusion a derived guess returns as producer 1 on
+  the next send, relabelled as the rower's declaration, and the one line
+  that makes it correctable goes silent. A page whose only rows are ours is
+  NO declaration, and the send falls through to the derivation exactly as
+  if the list were empty. A **failed** read is not an empty one either: it
+  is retryable, never a silent fall-through to the guess. The class is
+  **never cached** — a declaration can
   change on Concept2 at any time with no signal to us, and a stale one
   writes a wrong competition category into a record we cannot edit. The
   SENT state names the class that was sent and which producer supplied it,

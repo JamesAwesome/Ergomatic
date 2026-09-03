@@ -1297,6 +1297,16 @@ closed with zero Concept2 contact.
       is refused 422; `GET /api/users/me` carries `weight` and `gender` but
       no `weight_class`; and `GET /api/users/me/results` returns every result
       carrying `weight_class`, date-descending, in ~220 ms for a small page.
+      **Corrected once more by the code-reading lens, and it is the standing
+      warning printed immediately below:** that list contains the rows
+      Ergomatic itself posted, Concept2's 201 echoes back the class we sent,
+      and no field marks a row as ours — so reading it unfiltered is a
+      MIRROR, and a derived guess would have come back as the rower's own
+      declaration on the very next send. The read now excludes every result
+      id this app wrote (`session_logs.c2_result_id`), and a page whose only
+      rows are ours counts as no declaration at all. The class is never
+      cached, and a FAILED read is retryable rather than a silent
+      fall-through to the guess.
       The
       per-interval `rest_time` gate is NOT answered this wave — RC-1 stored the
       session-level split only, `LogStep` carries no per-interval rest, so the

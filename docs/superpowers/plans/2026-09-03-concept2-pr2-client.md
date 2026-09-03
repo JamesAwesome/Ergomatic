@@ -10,6 +10,11 @@ The first revision derived the class from the linked profile's `weight` + `gende
 
 Three consequences run through the whole plan. **The producer order is 1) the rower's latest declaration, 2) our derivation from the profile, 3) refuse** — with a plausibility band on the raw profile number, so four of the five wrong-unit readings refuse loudly instead of silently classifying (observation 24, corrected). **The SENT state names the class that was sent and where it came from**, because a class we DERIVED is a guess about a fact Concept2 lets its owner set, and a guess nobody sees can never be corrected. **Nothing is cached**: the class is read fresh on every send (ruling R13), because a declaration can change on Concept2 at any time with no signal to us.
 
+**Two rules the declaration read carries, because without them the producer order is a loop rather than a chain (observation 29).**
+
+- **WE NEVER READ OUR OWN WRITES BACK AS THE ROWER'S DECLARATION.** The results list Concept2 returns contains the rows Ergomatic itself posted, echoing the class we supplied, and nothing in the projection tells them apart from a real designation. Without an exclusion, send 1 derives a guess and send 2 reads that guess back as "the rower's declaration" — laundering it, and silencing the provenance line that exists to make it correctable. The read therefore excludes every result id this app wrote for this account, and **if every candidate row is ours, that is NOT a declaration**: the resolution falls through to the profile exactly as if the list were empty, and still reports its source as the profile.
+- **A FAILED READ IS NOT AN EMPTY READ.** A `c2_error` on the declaration read returns a retryable failure; only a successful read that genuinely carries no usable class falls through to the derivation. Refusing when we have no data and guessing when we FAILED to read data is an asymmetry nothing argues for, and the guess it produces lands on a permanent third-party record.
+
 Migration 0023 still drops the two columns that hold a class today. The consequences are folded into Tasks 2, 3, 4, 5, 7, 10, 11, 13 and 14; observations 7, 8, 24, 25, 26, 27 and 28 carry the evidence.
 
 Written 2026-09-03 in worktree `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pr2` (branch `wave-e-pr2-client`, base main `3e15378e`). Every `file:line` below was read in this worktree at that head. PR1 (#—), PR1.5, PR1.75a (#269) and PR1.75b (#277) are all merged; the server, the native plugin and `adapters/linkFlow.ts` all exist and are what this PR builds on.
@@ -39,7 +44,7 @@ Each line is quoted from the spec (§ named), the board, or the standing rules (
 - **Availability is a capability gate, not a hide** (spec §Architecture 8, verbatim): "the client renders NO Concept2 card and NO Send affordance when unavailable, and every link/upload route refuses server-side too."
 - **Not linked → nothing on the log row** (board, approved amendment, verbatim): "The Concept2 block renders only when an account is linked. No pointer, no disabled control. The You card is the sole discovery surface."
 - **Sent renders only for the live account** (spec §Stored shapes, anchor F8, verbatim): "the sent state renders only when the row's `c2_user_id` matches the live link's."
-- **PII bound** (spec exit criterion 3, as amended by James's 2026-09-03 ruling, verbatim): "the link flow's request bodies carry NO new user attribute. The weight class is Concept2's own fact: read from Concept2 at send time, never asked, never stored by us." The app asks nothing about weight class at onboarding, at link, at send, or on the dev probe. This is the strongest form of the standing minimal-PII rule, not a weakening of it. **And the READ is minimal too:** the declaration page is projected down to an ordered list of class letters before it leaves `client.fetchResults` — none of the rower's other logbook rows is persisted, logged or rendered.
+- **PII bound** (spec exit criterion 3, as amended by James's 2026-09-03 ruling, verbatim): "the link flow's request bodies carry NO new user attribute. The weight class is Concept2's own fact: read from Concept2 at send time, never asked, never stored by us." The app asks nothing about weight class at onboarding, at link, at send, or on the dev probe. This is the strongest form of the standing minimal-PII rule, not a weakening of it. **And the READ is minimal too:** the declaration page is projected down to FOUR fields per row before it leaves `client.fetchResults` — `id`, `type`, `weight_class` and the two date fields — and every one of them is load-bearing for the decision (`id` excludes our own writes, `type` says whether Concept2 required a class on that row at all, the dates stop a future-dated row pinning "newest" forever). **Nothing else about the rower's logbook is read, and none of the four is persisted, logged or rendered** — the one thing that reaches a log line is a COUNT of how many of the returned rows were ours.
 - **House copy style:** no em-dashes in user-facing strings (periods / colons / middle dots). Time formatting follows the house elastic-positional format; this PR renders no durations.
 - **Design hard requirements:** CSS custom properties only, never raw hex. Hit targets ≥ 44×44 px. Text contrast ≥ 4.5:1, **computed and stated as a number, never judged by eye** (RF6). 2px radii, no shadows, no animation.
 - **Platform conditionals live ONLY in the adapter layer** (CLAUDE.md Native-first, lint-enforced via `no-restricted-imports`): `src/platform.ts`, `src/api.ts`, `src/native/`, `src/adapters/`. Neither component calls `isNative()`.
@@ -79,7 +84,7 @@ Both summary lines ("Test Files" and "Tests") were read for every run — a file
 
 **What was placed — a strictly larger slice than the superseded receipt covered, including step A7, which that one had to leave UNRUN:**
 
-- `server/concept2/mapping.ts` — `pickDeclaredWeightClass`, `deriveWeightClass`, the four constants, the failure/source/weight types, and `buildC2Payload`'s signature change with all eleven of its call sites.
+- `server/concept2/mapping.ts` — `pickDeclaredWeightClass`, `deriveWeightClass`, the four constants, the failure/source/weight types, and `buildC2Payload`'s signature change with all TWELVE of its call sites (`grep -c "buildC2Payload(" server/concept2/mapping.test.ts` -> `12`, run at `1d08ab46`; an earlier draft of this receipt said eleven, and `pnpm typecheck` names all twelve as TS2345 at lines 176, 196, 205, 214, 227, 238, 245, 264, 278, 279, 293 and 301).
 - `server/concept2/client.ts` — the rewritten `fetchMe`, the new `fetchResults`, `readProfileWeight`, and the timeout bound on all four wire calls.
 - `server/routes/concept2.ts` — **step A7 in full**: `flagIfSameGrant`, `resolveWeightClass`, the `LinkIdentity` narrowing, the whole-resolution retry, and the 200 body's two new fields.
 - `src/log/concept2Send.ts` + its test, `src/api/useConcept2Link.ts`'s shape half, `StoredLog`'s two fields and the three fixtures they break.
@@ -114,14 +119,46 @@ Five more on the client model, all biting their named test: `c2ProfileUrl` resto
 **What the placement FOUND, which is the reason it was worth running — three things, and one of them changed the design:**
 
 1. **The plausibility band cannot catch a hundredths-of-a-POUND reading, and the first draft of this plan claimed it caught all five.** The band's own test went red on `16500`, which is inside 30-300 kg. A 2.2x unit error is undetectable from one number. The comment, the test and observation 24 now say "four of the five", and there is a test pinning the fifth so a later overclaim goes red.
-2. **Adding a second read call to the upload path breaks ~20 existing route tests, and no earlier draft named them.** The fix is one default on `makeStubClient` (`fetchResults` → `{ok:true, weightClasses:["H"]}`, which is the account we measured), after which only **5** tests fail, all for reasons this revision genuinely changes: four assert `res.body` `toStrictEqual({resultId})` and one has `weightClass` in its own title.
+2. **Adding a second read call to the upload path breaks ~20 existing route tests, and no earlier draft named them.** The fix is one default on `makeStubClient` (`fetchResults` → one measured `rower` row carrying `"H"`), after which only the tests this revision genuinely changes fail. **The count is SEVEN, not five** — `grep -c "toStrictEqual({ resultId" server/routes/concept2.test.ts` -> `6` (lines 1592, 1955, 2011, 2048, 2173, 2197), each of which gains the two new keys, plus the one test with `weightClass` in its own title. Measured by running the suite against the placement (below), not by reading.
 3. **`makeStubClient` needs `fetchResults` at all** — a new method on a `as unknown as C2Client` cast is invisible to typecheck and shows up as a runtime TypeError.
+4. **`makeFakeLogsStore` needs `sentC2ResultIds` for the same reason, and it is the fold's own cost.** The exclusion mechanism reads the logs store from inside the upload route; without a fake, EIGHTEEN existing upload tests answer 500 rather than the status they assert. Named here because it is invisible to `pnpm typecheck` (`fakes.ts` ends `as unknown as LogsStore`) and looks like a mass regression when it appears.
 
 **What the placement does NOT cover, named rather than carried silently:** the schema drop and migration 0023, `server/stores/concept2.ts`, `server/testing/fakes.ts`, the mint's own `weightClass` removal (step A2), `adapters/linkFlow.ts`'s `startLink()`, the dev probe and the contract test. Those need the 76 `weightClass` occurrences in `server/routes/concept2.test.ts`, `server/stores/concept2.integration.test.ts` and `server/db/schema.integration.test.ts` ported, which is the implementation rather than a paste test. **A reviewer should treat steps A1-A4 and A10 as UNRUN prescriptions** — read as code, checked against the files they edit, but not compiled. Step A10's migration-test ripple in particular is the one place a reviewer's eye is doing work a compiler did everywhere else, and its raw-SQL half is invisible to both `pnpm typecheck` and `--project unit` by construction.
 
 **Also not covered:** the `pnpm build` / `pnpm dist:grep` rows, and `--project integration` (its Docker stack was not booted for this placement — the integration project's Concept2 files are among the untouched ones above). Task 9 and Task 10 run those and record their own numbers; do not cite this receipt for them (RF12).
 
 **What this receipt does NOT cover, named rather than carried silently:** the `pnpm build` / `pnpm dist:grep` rows. They were measured on an earlier tree, nothing in this revision touches a needle or the probe flag, and a bundle claim is settled by producing the artifact, never by inheriting a table row (RF12). Task 9 runs them and records its own numbers; do not cite this receipt for them.
+
+**Third placement, for the exclusion mechanism and the copy this fold changes.** Placed at their real paths in this worktree at head `1d08ab46` (`git status --short` empty before the placement and again after the restore), covering `server/concept2/mapping.ts`'s producer block, `server/concept2/client.ts`'s `fetchResults`/`fetchMe`/timeout, `server/routes/concept2.ts`'s resolution + logging, `server/stores/logs.ts`'s `sentC2ResultIds`, `server/testing/fakes.ts`'s mirror of it, and `src/log/concept2Send.ts`'s copy set (placed standalone, with the two cross-module imports replaced by local shapes — the module's own consumers are unchanged by this fold and were not re-placed).
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| typecheck | `pnpm typecheck` | 0 errors; `E2E TypeScript membership: 19/19` |
+| lint | `pnpm lint` | 0 problems, no new suppressions |
+| format | `pnpm format:check` | red on 7 files as first written; `prettier --write` then green — the blocks below are written as Prettier printed them (see the receipt's F8 note) |
+| unit | `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit` | `Test Files 2 failed \| 56 passed (58)` / `Tests 12 failed \| 1793 passed \| 1 skipped (1806)` — the 12 are exactly the named ripple: 7 in `routes/concept2.test.ts`, 5 in `client.test.ts` |
+| client | the same command, `--project client` | `Test Files 172 passed (172)` / `Tests 4698 passed (4698)` |
+
+**Ten probes run against this placement**, each mutated in place and reverted by an inverse edit (RF22: the tree carried the uncommitted placement):
+
+| Mutation | Result |
+| --- | --- |
+| `pickDeclaredWeightClass`: the `ourResultIds` skip deleted | `Tests 10 failed \| 139 passed` — headed by "never reads OUR OWN writes back as the rower's declaration", "takes the NEWEST readable class, skipping our own row above it" and the route-level "never reads its OWN write back as the rower's declaration on the next send" |
+| the route: a `c2_error` on the declaration read falls through to the profile | `Tests 8 failed \| 101 passed` — "reports a FAILED declaration read as retryable, never as our own guess" |
+| `pickDeclaredWeightClass`: any `type` carries a class | `Tests 1 failed \| 39 passed` — "reads a class only off a type Concept2 REQUIRES one on" |
+| `pickDeclaredWeightClass`: the future-date skip widened 100000x | `Tests 1 failed \| 39 passed` — "skips a row dated in the FUTURE, so one bad stamp cannot pin the declaration forever" |
+| `deriveWeightClass`: `gender` compared raw, no case-fold | `Tests 1 failed \| 39 passed` — "case-folds gender, because the wire's letter case is documented only by example" |
+| `C2_TIMEOUT_MS = 1` | `Tests 6 failed \| 22 passed` — "bounds every wire call at ten seconds, pinned with a literal rather than the constant it gates" (the other 5 are the named `fetchMe` ripple) |
+| `noWeightCopy`: `NO_WEIGHT_SET` for the two middle tokens | `Tests 2 failed \| 1 passed` — "gives each server reason honest words…" and "never blames the rower's weight for a number OUR unit inference could not classify" |
+| `noWeightCopy`: `no_gender` sent back to the logbook | `Tests 1 failed \| 2 passed` — "names no destination its only control cannot reach" |
+| `noWeightCopy`: rewritten as a `Record` + `reason in MAP` lookup | `Tests 1 failed \| 2 passed` — "gives each server reason honest words…", on the `toString`/`constructor` rows, which render `undefined` under that form while `tsc` types the lookup as non-optional |
+| (control) all restored | `mapping.test.ts` `Tests 40 passed (40)`; `concept2Send.test.ts` `Tests 3 passed (3)` |
+
+**What this placement FOUND, beyond confirming the lens's twelve:**
+
+1. **`?type=` IS a documented filter, and the "unproven" claim was under-read** — the vendor's Get Results table says `type | Fetches only results of this type. Must be one of rower, skierg, bike, dynamic, slides, paddle, water, snow, rollerski, multierg`. The design still selects on the FIELD, but now because it accepts THREE types rather than because the parameter is unproven.
+2. **The non-rower question is answered by the vendor's own documented example, not left unmeasured** — see observation 27's correction. It was reachable the whole time on a page this plan already quotes.
+3. **`date_utc` is nullable on Concept2's own example rows**, which is why the recency guard falls back to `date` and accepts a row whose timestamps are both absent.
 
 **The receipt covers the server.** An earlier scoped-lint receipt (five client source files only) is what hid `vitest/prefer-strict-equal` and `vitest/no-conditional-expect` firing on this plan's own TEST blocks, and hid three server ripples entirely: `scripts/webauth-contract.test.ts`'s pinned key list, `src/monitor/Concept2LinkProbe.tsx`'s `LinkStatus` interface, and `server/db/schema.integration.test.ts`'s migration-boundary block. All three are now named in the tasks that cause them.
 
@@ -194,7 +231,7 @@ Numbered so review can cite them. Each is a place where an authority this plan i
 25. **Nothing in the repo reads the profile on the SEND path today, and the token machinery is built for one wire call, not two.** The upload route acquires a token through `acquireAccessToken` and makes exactly one wire call (`client.postResult`), with one refresh-and-retry and a locked repeat-401 branch that flags `needs_reauth` only when the link's CURRENT access token still matches the rejected one (`server/routes/concept2.ts`, the `stillSameGrant` block). Task 3 adds a SECOND wire call ahead of it, and a profile read that 401s must reach the SAME flag — otherwise a dead grant surfaces forever as a retryable `c2_error` and the rower is never told to reconnect. **`client.fetchMe`'s failure shape cannot express that today**: it returns a bare `{ ok: false }` for a 401, a 500 and a thrown fetch alike (`server/concept2/client.ts`, `if (!res.ok) return { ok: false }`). **Task 3 gives it `kind: "auth" | "c2_error"` and extracts the existing locked flag block into a named helper both repeat-401 sites call**, so the two answer identically rather than one being a copy of the other. **Countable ripple, MEASURED by placing the block rather than reasoned about** — and the first count this plan carried was wrong, which is why it is stated as a run rather than a list. Two production call sites (the web callback and the native exchange) only test `.ok` and read `c2UserId`/`username`, so neither changes. The TESTS are the ripple, and there are **nine assertions across two files**:
 
   - `server/routes/concept2.test.ts` — **five** stub sites, not the two an earlier draft named. `pnpm typecheck` reports all five: two write `mockResolvedValue({ ok: false })` (they become `{ ok: false, kind: "c2_error" }` — neither test is about a 401, and both callback paths answer 502 for either kind, so no assertion moves), and **three write a success stub that is now missing `weight` and `gender`** (`stubHappyExchange`'s shared helper plus two inline ones). Give those `weight: 8200, gender: "M"` — present-and-plausible, since none of these tests is about the derivation.
-  - `server/concept2/client.test.ts` — **four** assertions, and typecheck does NOT name them, because they are `toStrictEqual` on a RETURNED value rather than an argument. They fail at RUNTIME, and an implementer who trusts a green typecheck will meet them at the test run: the two success cases gain `weight` and `gender`; `"PROBE 401 invalid-access-token body -> {ok:false}"` gains `kind: "auth"` and `status: 401` — **that one is the assertion that pins the discriminator, so it is the covering test for M9i**; the rejected-fetch and malformed-body cases gain `kind: "c2_error"` and their status. Their titles still read `-> {ok:false}`; widen each to name the kind it now asserts.
+  - `server/concept2/client.test.ts` — **FIVE** assertions, and typecheck does NOT name them, because they are `toStrictEqual` on a RETURNED value rather than an argument. They fail at RUNTIME, and an implementer who trusts a green typecheck will meet them at the test run. Measured by running the suite against the placement: `Tests 5 failed | 23 passed`, and the file's own `describe("fetchMe")` holds exactly five `it()`s (`grep -n fetchMe server/concept2/client.test.ts` at `1d08ab46` -> the describe plus five call sites, lines 318, 341, 353, 361, 371). An earlier draft of this observation said four and enumerated five in the same paragraph. The two success cases gain `weight` and `gender`; `"PROBE 401 invalid-access-token body -> {ok:false}"` gains `kind: "auth"` and `status: 401` — **that one is the assertion that pins the discriminator, so it is the covering test for M9i**; the rejected-fetch and malformed-body cases gain `kind: "c2_error"` and their status. Their titles still read `-> {ok:false}`; widen each to name the kind it now asserts.
 
 26. **Concept2 says the profile weight does NOT determine the class — the rower designates it, per piece.** The first revision's whole mechanism rested on the opposite. Concept2's logbook help, verbatim (SECONDARY — the help page 403s to fetchers, so this is a search snippet of Concept2's own text, 2026-09-03; the same provenance the thresholds already use):
 
@@ -206,11 +243,26 @@ Numbered so review can cite them. Each is a place where an authority this plan i
 
 27. **Concept2's results list carries the declaration, and one small page is a single cheap round trip.** MEASURED 2026-09-03 against log-dev (user 2211, a PR0 harness token whose scope is the production `SCOPE` constant `user:read,results:write` — so nothing here widens a scope): `GET /api/users/me/results?number=1` → **200**, one result. **Every result in the list carries `weight_class`** (all `"H"` on this account). The full key set per result: `comments, date, date_utc, distance, id, privacy, ranked, real_time, rest_distance, rest_time, source, stroke_data, stroke_rate, time, time_formatted, timezone, type, user_id, verified, weight_class, workout_type`. The list is **date-descending**, not id-descending: id 85561 dated `2026-09-02 10:00:30` sorted ahead of id 85562 dated `2026-09-02 10:00:00`. Pagination is `meta.pagination` with `total`, `count`, `per_page`, `current_page`, `total_pages`, `links.next`.
 
-    **`?type=rower` is ACCEPTED (200) but UNPROVEN as a filter** — every row on the measurable account is already `rower`, so nothing distinguishes "filtered" from "returned everything". The design therefore selects on the FIELD, never on the query: `pickDeclaredWeightClass` skips any entry that is not exactly `"H"` or `"L"`.
+    **`?type=` is a DOCUMENTED filter, and the design still selects on the FIELD — for a different reason than an earlier draft gave.** That draft said the parameter was "accepted (200) but unproven as a filter", which was true of our own probe and under-read against the vendor page this plan already quotes. Fetched 2026-09-03 from `https://log.concept2.com/developers/documentation/` (HTTP 200), the Get Results parameter table's `type` row reads: _"Fetches only results of this type. Must be one of: rower, skierg, bike, dynamic, slides, paddle, water, snow, rollerski, multierg"_, with the worked example `GET /api/users/me/results?from=2015-05-01&to=2015-05-31&type=rower`. **PRIMARY.** We select on the field anyway because the read accepts THREE types (see below) and one query can name only one — and because a field read is auditable in the log line, while a filtered page is a claim about a server we cannot inspect.
+
+    **WHETHER A NON-ROWER RESULT CARRIES A CLASS IS ANSWERED, and it was answerable the whole time on that same page.** Two rows from it, both PRIMARY, both fetched 2026-09-03:
+
+    - the Add Result parameter table: _"`weight_class` | Depends | string | **Required if type is rower, dynamic or slides.** Value must be either H or L | H"_;
+    - the Get Results 200 example body, whose SECOND result is `"type": "skierg"` and carries `"weight_class": "H"` anyway.
+
+    So a non-rower row DOES carry a class, and on a type Concept2 does not require one for, that value is unmeasured noise rather than a designation. **`pickDeclaredWeightClass` therefore reads a class only off the three types the vendor requires one on** (`CLASS_BEARING_RESULT_TYPES`), and skips every other row and every row with no `type`. An earlier revision left this "UNMEASURED, exit criterion 3b settles it with one glance"; it is settled, and 3b keeps the glance only as a live confirmation.
+
+    **`date_utc` can be null.** Both rows of that same documented example carry `"date_utc": null` (and `"timezone": null`), which is why the recency guard prefers `date_utc`, falls back to `date`, and accepts a row whose timestamps are BOTH absent rather than discarding a real declaration over a missing stamp.
 
     **Latency, measured from a dev laptop (NOT from the deploy host), 5 samples each, medians:** `?number=1` 216 ms, `?number=5` 221 ms, `GET /api/users/me` 220 ms. A small page is free, which is why `DECLARATION_PAGE_SIZE` is 5 rather than 1: five recent pieces survive a short run of BikeErg/SkiErg rows, whose `weight_class` is not required. **One page only** — the route never walks `links.next`; a rower with no readable class in five falls through to the profile.
 
-    **What this does NOT establish, named rather than carried silently:** whether a NON-rower result carries a class at all. Every row on the account we can read is `rower`, so a BikeErg row's value is unmeasured. If such a row does carry one, we would take it — which is still that rower's own designation for that piece, so it is bounded rather than wrong. Exit criterion 3b's session is where one glance settles it.
+    **What this does NOT establish, named rather than carried silently:** whether `?number=5` without a sort parameter is stably date-descending across ALL accounts. It was measured date-descending on one. The recency guard and the type filter bound what a bad order can do (a future-dated row is skipped whatever position it holds), but nothing here proves the order itself.
+
+29. **Concept2's results list contains OUR OWN WRITES, and nothing in it says so.** This is the finding that changes the mechanism. The upload route posts a row with the class it resolved; Concept2's 201 echoes it back, and that row then appears on the very next `GET /api/users/me/results`. PRIMARY, `docs/monitor/c2-crossconnect-2026-09/raw-output.txt` lines 1-25: the 201 body carries `"weight_class": "H"` — the class we supplied — and `"source": "James Morelli"`, which is the rower's own name, not an application marker. There is no field on the row that distinguishes a result Ergomatic posted from one the rower entered on Concept2's website.
+
+    **The failure that produces, stated as a sequence.** A rower who has declared nothing gets producer 2 on send 1: we DERIVE a class from their profile weight, post it, and the SENT state says `WEIGHT CLASS H · FROM YOUR CONCEPT2 WEIGHT` — honest, and correctable, because ruling R2 exists to make the guess visible. On send 2, that same row is the newest thing in their list, so producer 1 answers with our own guess and the SENT state says `FROM YOUR LAST CONCEPT2 ROW`. **The guess has been laundered into the rower's declaration, and the one line that existed to expose it has gone silent.** It is RF11 one level up: we write a number to a third party and then read it back as our oracle. The amendment's own justification for 2c ("a guess the rower can SEE is a guess the rower can fix; a guess they never see is one nothing can ever catch") is what this kills.
+
+    **The fix, and why it is an exclusion rather than a stickiness flag.** `session_logs.c2_result_id` already stores every result id this app wrote, per row, alongside the `c2_user_id` that accepted it (`server/db/schema.ts`, the Wave E PR1 block). The declaration read projects `id` and drops every row whose id appears in that column for this user AND this Concept2 account — one local query, no new state, and correct across relink because ids belong to Concept2's namespace and a row written while account A was linked says nothing about account B. **If every candidate row is ours, the answer is "no declaration", not "our last class":** the resolution falls through to the profile and still reports `profile` as its source, so the provenance line keeps telling the truth on every send. The alternative considered and rejected was a session-scoped "never report `declaration` for a class we sent" flag — it would need a lifetime (RF27), it would still read our own row, and it would go wrong the moment the rower edits that row on Concept2's website, which is exactly the repair 2c is inviting them to make.
 
 28. **There is no readable profile default, and no account-settings page we can name.** `GET /api/users/me/preferences`, `/settings` and `/profile` on the API host all answer **500 HTML** (measured 2026-09-03), so the Weight Class Default the help page describes is not exposed to us. And the link-out's destination was wrong on the evidence that was cited FOR it: `curl -sI https://log-dev.concept2.com/profile/2211` → 200 was read as "the path renders", but fetching the BODY (2026-09-03, 200, 13862 bytes) shows a PUBLIC read-only card — "Login Sign Up … james morelli Age: 38 Country: United States Logbook ID: 2211 Member since: August 21, 2026 … Quick Links Your Log Rankings". No weight, no form, no edit control. **A page that renders 200 to an anonymous fetcher is by construction not the rower's own account-edit form**, so that 200 is evidence AGAINST the destination it was cited for. Probed the same day on the same host: `/profile` (no id) → **302 → `/login`**, the authenticated-self signature; `/profile/edit`, `/profile/2211/edit`, `/account`, `/settings`, `/preferences` all → 404.
 
@@ -245,11 +297,23 @@ Read at `3e15378e`. PR2 keys on `body.error`, never on status alone — **409 ca
 | `GET /api/concept2/link` (`routes/concept2.ts:519-548`) | `200 {available:false}` (flag off, HTTP 200 on purpose — `:524-529`) · `200 {available:true, linked:false}` · `200 {available:true, linked:true, weightClass, c2UserId, needsReauth}` — **after Task 3: `weightClass` is GONE and `c2Username`, `logbookBaseUrl` are added** | 401; 400 `ambiguous_auth` |
 | `POST /api/concept2/connect` (`:218-283`) — via `startLink`, never called directly | `200 {authorizeUrl, state}` | 403 `unavailable`; **409 `update_required`** (`:244-247`). **After Task 3 the `400 field:"weightClass"` refusal is GONE** — the body carries no class and an old client that still sends one is ignored, not refused (ruling i) |
 | `DELETE /api/concept2/link` (`:550-565`) | `204`, idempotent (deleting an absent link still 204s) | 403 `unavailable`; 401 |
-| `POST /api/concept2/results/:logId` (`:569-906`) | `200 {resultId}` from the already-sent short-circuit at `:627-630`; **after Task 3 a fresh send answers `200 {resultId, weightClass, weightClassSource}`** (ruling R2) | **409 `duplicate`** + `c2ResultId` (`:896-898`) · **409 `needs_reauth`** (`:617-620`, `:848`) · **409 `unlinked`** (`:614`) · 422 `not_eligible` + `reason` (`:636`) · **422 `no_weight_class` + `reason` (NEW, Task 3)** · 403 `unavailable` (`:576`) · 404 (`:585`, `:609`) · 400 `field:"tz"` (`:596-601`) · 502 `c2_error` |
+| `POST /api/concept2/results/:logId` (`:569-906`) | `200 {resultId}` from the already-sent short-circuit at `:627-630`; **after Task 3 a fresh send answers `200 {resultId, weightClass, weightClassSource}`** (ruling R2) | **409 `duplicate`** + `c2ResultId` (`:896-898`) · **409 `needs_reauth`** (`:617-620`, `:848`) · **409 `unlinked`** (`:614`) · 422 `not_eligible` + `reason` (`:636`) · **422 `no_weight_class` + `reason` (NEW, Task 3)** · 403 `unavailable` (`:576`) · 404 (`:585`, `:609`) · 400 `field:"tz"` (`:596-601`) · 502 `c2_error` — **which Task 3 gives a second producer: a failed declaration or profile read, reported as the retryable thing it is rather than fallen through** |
 
 **The two 422s are siblings and the client must tell them apart, because only one of them is fixable and the fix is not here.** `not_eligible` is decided locally from the row (source, close reason, totals) before any wire call; `no_weight_class` is decided from Concept2's own side, needs a token, and is repaired on Concept2's website — which is why 2i carries a link-out and 2h does not. Both key on `body.error`, never on the 422 alone.
 
-**`no_weight_class` carries FOUR reason tokens, not two**, and they are wire vocabulary the client renders in its own words: `no_weight` (absent, or zero), `unreadable_weight` (present and unparseable — Concept2's API is Laravel and the read field is undocumented, so a `"7500"` string is a live possibility), `implausible_weight` (outside 30-300 kg, which is what a wrong UNIT looks like from here), `no_gender` (a profile Concept2's two-value, gendered definition cannot classify at all). **The last one does not read as "set your weight"** — that rower's weight is not the broken thing, and telling them to fix it would send them after a field that is fine.
+**`no_weight_class` carries FOUR reason tokens, not two**, and they are wire vocabulary the client renders in its own words: `no_weight` (absent, or zero), `unreadable_weight` (present and unparseable — Concept2's API is Laravel and the read field is undocumented, so a `"7500"` string is a live possibility), `implausible_weight` (outside 30-300 kg, which is what a wrong UNIT looks like from here), `no_gender` (a profile Concept2's two-value, gendered definition cannot classify at all).
+
+**FOUR tokens, THREE renderings, and every rendering is DRAWN on the Gate 0 page** (amendment 2i; Task 5's `noWeightCopy` is the mapping). The grouping is by what the rower can do about it, and two of the three sentences say what WE could not do rather than what they should fix:
+
+- `no_weight` — a genuinely absent weight is theirs to set, so this one names the repair.
+- `unreadable_weight` + `implausible_weight` — one rendering. An implausible number is most likely OUR unit inference being wrong (observation 24), so the copy must not assert that the rower's weight is bad.
+- `no_gender`, **and any token this client does not recognise** — one rendering: we could not work a class out. It does not say "set your weight" (that rower's weight is not the broken thing) and it does not name the logbook, because 2i's only control opens the PROFILE and copy may never name a destination its control cannot reach.
+
+**There is no fifth sentence.** An unrecognised token reuses the third rendering rather than getting a fallback of its own, so the set of sentences the route can produce is exactly the set the gate drew.
+
+**A FAILED declaration read answers `502 {error:"c2_error"}`, not a fall-through and not a new token.** It is rendered by the existing "couldn't reach Concept2" family with a Send again — the same words a failed `postResult` gets, because it is the same fact from the rower's side. A distinct wire token would need a distinct drawn sentence for a state whose only honest advice is "try again"; what the operator needs instead is the log line below, which names the layer.
+
+**The route logs one structured line per send.** There is no logging in this route today (`grep -n "console\." server/routes/concept2.ts` returns nothing at `1d08ab46`), so nothing tells an operator which of the three producers answered or that a read failed at all. One line, following `server/auth/middleware.ts`'s `auth_disagreement` convention (`console.warn(JSON.stringify({event, …}))`, the nearest sibling in the same request path) — `console.log` when a class resolved, `console.warn` when it did not. It carries the resolved source, the count of the rower's returned rows that were OUR OWN writes, and on failure the layer that failed with its status. **Never a token, never a result body, never anything from another rower's rows.**
 
 **The two new 200 fields are read DEFENSIVELY by the client, not required.** An older image mid rolling deploy answers a bare `{resultId}`, and a SENT row with no provenance line is correct there — it is exactly what a later mount renders anyway, since nothing about the class is stored.
 
@@ -271,6 +335,7 @@ Every piece of state this PR introduces, with its mint site, its clear sites, an
 - **I2.** The unlink arm is armed by exactly one tap and disarmed by exactly one of: a second tap, four seconds elapsing, or the card unmounting. It can never survive a navigation away from You.
 - **I3.** A row's sent state is a fact about the row and the LIVE link together. It is re-derived on every render from `(row.c2ResultId, row.c2UserId, link.c2UserId)` and is never cached across a link change.
 - **I4.** **The weight class is never our state, at any lifetime.** There is no draft, no column, no cache, and no field on any request body this app composes from rower input. It is resolved from Concept2 on the send that uses it and discarded with the response — so a rower who declares a different class, or changes their weight, on Concept2 gets the new class on their next send, with nothing of ours to go stale. The only lifetime question this invariant can be asked is "where is it stored?", and the answer is "nowhere, by construction".
+- **I4c (observation 29).** **We never read our own writes back as the rower's declaration.** The declaration read excludes every Concept2 result id this app wrote for the currently linked account, and when every candidate row is ours the answer is "no declaration" — the resolution falls through to the profile and still reports `profile` as its source. The state this rests on is not new and has no lifetime of its own: `session_logs.c2_result_id`/`c2_user_id` are the columns PR1 already writes, read fresh on each send. **The invariant is not "prefer a row we did not write"; it is that a class we produced can never come back to us wearing the rower's name.**
 - **I4b (ruling R13).** **One resolution per REQUEST; never one per deployment, session, or link.** The class is read fresh on every send, because it is the rower's DECLARATION and it can change on Concept2 at any moment with no signal to us — a cached class writes a wrong competition category into a record we cannot edit, which is the exact failure observation 26 is about, and caching it would mean re-adding a stored column this PR is dropping. What IS reused is the single resolution across the route's internal 401 retry: re-reading between two attempts at the same row could send two different classes for one send, which is the split-authority defect I4 exists to prevent. **The measured cost of the ruling, stated plainly:** one send goes from one Concept2 round trip to two (about +220 ms when the declaration answers, +440 ms when the profile fallback also runs — laptop medians, observation 27), on a human-initiated action that already renders a SENDING state. Sends are one per workout, never on a render or a poll. If the auto-upload follow-on ever sends a batch, it resolves ONCE per batch, not once per row.
 - **I5.** The card's view of the link is refreshed on every occasion the DOCUMENT becomes visible to the rower again, not only on mount. A restore that skips mounting must not leave a stale panel on screen (observation 19). The refresh is idempotent: it re-reads and re-renders, and it never mints, retries or cancels anything.
 - **I5b.** After a RESTORE, no attempt state from before the document unloaded is still on screen. Re-reading the link alone does not discharge I5, because the panel the rower is stuck behind is drawn from the ATTEMPT (`outcome`/`busy`), not from the link: a restore preserves the JS heap, so a web attempt the rower DECLINED comes back with `outcome` still `navigating` and renders a buttonless OPENING CONCEPT2 panel with no Try again, forever. The half that fixes the succeeded case and the half that fixes the declined case are two different pieces of state and both are owed.
@@ -1463,7 +1528,8 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit sc
 - Modify: `app/server/concept2/mapping.ts` (**new** `pickDeclaredWeightClass` and `deriveWeightClass` + their four constants and three types; `buildC2Payload`'s second parameter)
 - Modify: `app/server/concept2/client.ts` (**new** `fetchResults`; `fetchMe` parses `weight`/`gender` and its failure shape gains `kind` + `status`; a timeout bound on all four wire calls)
 - Modify: `app/server/stores/concept2.ts` (`upsertLink`'s input, `getLink`'s projection, `createAttempt`'s input, `consumeAttempt`'s projection, the `WeightClass` type export)
-- Modify: `app/server/testing/fakes.ts` (`makeFakeConcept2Store`, mirroring both the added and the dropped columns)
+- Modify: **`app/server/stores/logs.ts`** (**new** `sentC2ResultIds(userId, c2UserId)` — the exclusion the declaration read needs, observation 29)
+- Modify: `app/server/testing/fakes.ts` (`makeFakeConcept2Store`, mirroring both the added and the dropped columns; **and `makeFakeLogsStore`, which needs `sentC2ResultIds` or eighteen existing upload tests answer 500** — the file ends `as unknown as LogsStore`, so `pnpm typecheck` will not say so)
 - Modify: `app/server/routes/concept2.ts` (both `upsertLink` calls pass `c2Username`; the Linked callback page's fallback; `GET /link` returns `c2Username` and `logbookBaseUrl` and **stops returning `weightClass`**; `Concept2RouterDeps` gains `logbookBaseUrl`; the mint stops requiring a class; the exchange response drops it; **the upload route reads the profile and derives the class**)
 - Test: `app/server/concept2/mapping.test.ts` (the derivation table; `buildC2Payload`'s call sites), `app/server/concept2/client.test.ts` (`fetchMe`'s new fields and failure kinds)
 - Modify: `app/server/index.ts` (pass `c2BaseUrl` in as `logbookBaseUrl`), `app/server/app.ts` (thread it)
@@ -1474,7 +1540,7 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit sc
 - Test: `app/server/routes/concept2.test.ts` (append; ALSO fix its `buildApp` harness literal, its `freshLink` override type, one pre-existing `toStrictEqual` response assertion and one pre-existing rendered-page assertion — see steps 5b and 6b), `app/server/stores/concept2.integration.test.ts` (its `link()` builder is the second of the three; its override type widens too)
 
 **Interfaces:**
-- Produces: `concept2_links.c2_username text` (nullable); `GET /api/concept2/link` gains `c2Username: string | null` and `logbookBaseUrl: string` and LOSES `weightClass`; `pickDeclaredWeightClass(classes) → WeightClass | null`; `deriveWeightClass(profile) → { ok: true; weightClass } | { ok: false; reason }`; `client.fetchResults(token, n)`; `POST /api/concept2/results/:logId` gains `422 {error:"no_weight_class", reason:"no_weight" | "unreadable_weight" | "implausible_weight" | "no_gender"}` and a fresh send's `200` gains `weightClass` + `weightClassSource`. **`reason` is a WIRE TOKEN, not display copy** — the sibling it is modelled on (`not_eligible`) sends `EligibilityFailure`'s lowercase members and lets the client own the words, and amendment 2i's four lines are that client-side rendering.
+- Produces: `concept2_links.c2_username text` (nullable); `GET /api/concept2/link` gains `c2Username: string | null` and `logbookBaseUrl: string` and LOSES `weightClass`; `pickDeclaredWeightClass(rows, { ourResultIds, now }) → WeightClass | null`; `deriveWeightClass(profile) → { ok: true; weightClass } | { ok: false; reason }`; `client.fetchResults(token, n) → { ok: true; rows: C2ResultRow[] } | { ok: false; kind; status }`; `logs.sentC2ResultIds(userId, c2UserId) → Set<number>`; `POST /api/concept2/results/:logId` gains `422 {error:"no_weight_class", reason:"no_weight" | "unreadable_weight" | "implausible_weight" | "no_gender"}` and a fresh send's `200` gains `weightClass` + `weightClassSource`. **`reason` is a WIRE TOKEN, not display copy** — the sibling it is modelled on (`not_eligible`) sends `EligibilityFailure`'s lowercase members and lets the client own the words, and amendment 2i's four lines are that client-side rendering.
 - Removes: `concept2_links.weight_class`, `concept2_auth_attempts.weight_class`, the `weight_class` pgEnum, `POST /api/concept2/connect`'s `weightClass` requirement and its `400 field:"weightClass"`, and `weightClass` from `POST /api/concept2/exchange`'s response.
 - `upsertLink`'s INPUT gains `c2Username?: string | null` — **optional, defaulting to `null` internally.** The stored column and the `getLink` projection stay required-and-nullable; only the writer's input is optional. Observation 20 is why: a required input field reaches **53 call sites** through three builders (`LINK_INPUT`/`freshLink` in `server/routes/concept2.test.ts`, `link()` in `server/stores/concept2.integration.test.ts`, `makeFakeConcept2Store` in `server/testing/fakes.ts`), none of which has a username to give. The two PRODUCTION write sites both pass one explicitly, so nothing real relies on the default.
 
@@ -1586,15 +1652,43 @@ psql "$DATABASE_URL" -c "select count(*) as links from concept2_links;" -c "sele
 // against log-dev from a dev laptop, 5 samples each, medians on 2026-09-03 —
 // `GET /api/users/me/results?number=1` 216 ms, `?number=5` 221 ms,
 // `GET /api/users/me` 220 ms. 10 s is roughly 45x that, so it cannot clip a
-// slow-but-working call, while bounding one send's worst case to three of
-// these rather than an open-ended wait. (Measured from a laptop, NOT from the
-// deploy host; the deploy host's own latency to Concept2 is unmeasured.)
+// slow-but-working call. (Measured from a laptop, NOT from the deploy host;
+// the deploy host's own latency to Concept2 is unmeasured.)
+//
+// WHAT IT BOUNDS, counted rather than felt. The send path's longest chain is
+// NINE bounded calls, not three: refreshTokens, fetchResults, fetchMe,
+// refreshTokens, fetchResults, fetchMe, postResult, refreshTokens,
+// postResult. 90 s is therefore the arithmetic ceiling on that chain. The
+// ceiling a TIMEOUT can actually reach is far lower, because a timeout
+// classifies as `c2_error` and no `c2_error` on this route is retried: the
+// nine-call chain requires the failures to be fast 401s. Nothing else caps
+// SENDING — there is no client-side abort on the send fetch, no
+// `server.requestTimeout`/`headersTimeout`, and no proxy timeout in-repo.
 const C2_TIMEOUT_MS = 10_000;
 ```
 
+  **And the value is PINNED, not merely present.** The prescribed gate below asserts that a signal exists, which `C2_TIMEOUT_MS = 1` would leave green (RF21's first smell / RF4). One more test pins the number with an INDEPENDENT literal — never the exported constant, which would retune itself:
+
+```ts
+    it("bounds every wire call at ten seconds, pinned with a literal rather than the constant it gates", async () => {
+      const timeout = vi.spyOn(AbortSignal, "timeout");
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { data: { id: 2211 } }));
+      const client = createC2Client(cfg, fetchImpl);
+      await client.fetchMe("t");
+      expect(timeout).toHaveBeenCalledWith(10_000);
+      const [, init] = fetchImpl.mock.calls[0] as [URL, RequestInit];
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+      timeout.mockRestore();
+    });
+```
+
+  RUN against the placement: `C2_TIMEOUT_MS = 1` gives `Tests 6 failed | 22 passed`, headed by this test's own title.
+
   …then add `signal: AbortSignal.timeout(C2_TIMEOUT_MS),` to the `fetchImpl` options of **all four** calls this module makes: `requestTokens`, `fetchMe`, `fetchResults` and `postResult`. Every one of them already catches a thrown fetch into its own retryable failure, so a `TimeoutError` classifies correctly with no other change.
 
-  **(b) The vendor number's three states.** Add above `createC2Client`, and import `C2ProfileWeight` from `./mapping.js`:
+  **(b) The vendor number's three states.** Add above `createC2Client`, with `import type { C2ProfileWeight, C2ResultRow } from "./mapping.js";` at the top of the file:
 
 ```ts
 // The vendor NUMBER's three states, kept apart rather than folded (see
@@ -1715,18 +1809,34 @@ function readProfileWeight(value: unknown): C2ProfileWeight {
     // `2026-09-02 10:00:00`), and `meta.pagination` carries `total`, `count`,
     // `per_page`, `current_page`, `total_pages` and `links.next`.
     //
-    // This projects ONE field per row and keeps nothing else. The rower's
-    // other logbook rows are not ours to hold, log or render: what leaves this
-    // method is an ordered list of class letters, in the order Concept2
-    // returned them, and nothing that identifies a row. One page only — the
-    // caller never walks `links.next` (a rower with no rower-class row in the
-    // recent page falls through to the profile, which is cheaper and quieter
-    // than paging a stranger's history).
+    // This projects FOUR fields per row and keeps nothing else. The rower's
+    // other logbook rows are not ours to hold, log or render, and each of the
+    // four earns its place in the DECISION rather than being carried along:
+    //
+    //   `id`         so the caller can exclude the rows THIS APP wrote.
+    //                Without it, a class we derived comes back on the next
+    //                send wearing the rower's name (observation 29) — and
+    //                nothing else on the row distinguishes ours: the 201
+    //                echoes our `weight_class` and reports `source` as the
+    //                rower's own name.
+    //   `type`       because Concept2 requires a class only on some types
+    //                ("Required if type is rower, dynamic or slides"), and
+    //                its own documented example shows a `skierg` row
+    //                carrying one anyway — an unmeasured value, not a
+    //                designation.
+    //   `date_utc` / `date`
+    //                so a row dated in the FUTURE cannot pin "newest"
+    //                forever. `date_utc` is NULLABLE (both rows of the
+    //                vendor's own example carry null), hence the pair.
+    //
+    // One page only — the caller never walks `links.next` (a rower with no
+    // usable declaration in the recent page falls through to the profile,
+    // which is cheaper and quieter than paging a stranger's history).
     async fetchResults(
       accessToken: string,
       count: number,
     ): Promise<
-      | { ok: true; weightClasses: (string | null)[] }
+      | { ok: true; rows: C2ResultRow[] }
       | { ok: false; kind: "auth" | "c2_error"; status: number | null }
     > {
       const url = new URL("/api/users/me/results", cfg.baseUrl);
@@ -1753,10 +1863,22 @@ function readProfileWeight(value: unknown): C2ProfileWeight {
       }
       return {
         ok: true,
-        weightClasses: rows.map((row) => {
-          const value = (row as { weight_class?: unknown } | null)
-            ?.weight_class;
-          return typeof value === "string" ? value : null;
+        rows: rows.map((entry) => {
+          const row = entry as {
+            id?: unknown;
+            type?: unknown;
+            weight_class?: unknown;
+            date_utc?: unknown;
+            date?: unknown;
+          } | null;
+          return {
+            id: typeof row?.id === "number" ? row.id : null,
+            type: typeof row?.type === "string" ? row.type : null,
+            weightClass:
+              typeof row?.weight_class === "string" ? row.weight_class : null,
+            dateUtc: typeof row?.date_utc === "string" ? row.date_utc : null,
+            date: typeof row?.date === "string" ? row.date : null,
+          };
         }),
       };
     },
@@ -1789,13 +1911,25 @@ function readProfileWeight(value: unknown): C2ProfileWeight {
  * producer order is:
  *
  *   1. The rower's own most recent declaration — the newest result in their
- *      logbook whose `weight_class` reads "H" or "L" (`pickDeclaredWeightClass`
- *      below, over the ordered page `client.fetchResults` returns).
+ *      logbook that is THEIRS TO HAVE DECLARED and whose `weight_class`
+ *      reads "H" or "L" (`pickDeclaredWeightClass` below, over the ordered
+ *      page `client.fetchResults` returns).
  *   2. Failing that, OUR derivation from the profile's `weight` + `gender`
  *      (`deriveWeightClass`). This is ours, not Concept2's, and the SENT
  *      state says so in as many words.
  *   3. Failing that, refuse the send (422 `no_weight_class`) rather than
  *      guessing a competition category onto a permanent third-party record.
+ *
+ * "THEIRS TO HAVE DECLARED" is doing real work, and producer 1 is a loop
+ * without it: the results list contains the rows THIS APP posted, echoing
+ * back the class we sent (`docs/monitor/c2-crossconnect-2026-09/
+ * raw-output.txt` lines 1-25 — the 201 body carries our `weight_class` and
+ * reports `source` as the rower's own name). Read naively, a class we
+ * DERIVED on send 1 comes back as "the rower's declaration" on send 2, and
+ * the provenance line that exists to make the guess correctable goes silent.
+ * `pickDeclaredWeightClass` therefore takes the ids this app already wrote
+ * for the linked account and skips them, and when every candidate is ours it
+ * returns null — which is "no declaration", never "our last class".
  *
  * Nothing here is stored. The class is read on the send that uses it and
  * discarded with the response: a declaration can change on Concept2 at any
@@ -1833,24 +1967,100 @@ export type WeightClassFailure =
  *  go and set it again, forever. */
 export type C2ProfileWeight = number | "unreadable" | null;
 
+/** One row of the rower's Concept2 results list, projected to the four
+ *  fields the declaration read decides on (`client.fetchResults`'s own
+ *  comment says what each is for). */
+export interface C2ResultRow {
+  id: number | null;
+  type: string | null;
+  weightClass: string | null;
+  dateUtc: string | null;
+  date: string | null;
+}
+
+/** The result types Concept2 REQUIRES a weight class on, and therefore the
+ *  only types whose `weight_class` is a designation rather than noise.
+ *  PRIMARY, `https://log.concept2.com/developers/documentation/` fetched
+ *  2026-09-03, the Add Result parameter table, verbatim:
+ *
+ *    weight_class | Depends | string | Required if type is rower, dynamic
+ *    or slides. Value must be either H or L | H
+ *
+ *  A row of any OTHER type may still carry a value — the same page's Get
+ *  Results 200 example has a `"type": "skierg"` row carrying
+ *  `"weight_class": "H"` — and that value is unmeasured, because nothing
+ *  required the rower to mean it. Skipping those rows is the hedge, and it
+ *  costs nothing: the rower falls through to the profile, or to the refusal
+ *  that tells them where to fix it. */
+export const CLASS_BEARING_RESULT_TYPES: readonly string[] = [
+  "rower",
+  "dynamic",
+  "slides",
+];
+
+/** How far ahead of our own clock a result may be dated and still count as
+ *  the rower's most recent declaration.
+ *
+ *  A logbook row can be entered by hand with any date, and "newest" has no
+ *  recency bound of its own: without this, ONE row dated 2030 pins the
+ *  declaration for every send this rower ever makes, and nothing in the app
+ *  could tell them why. Skipping it is the safe direction — the fallback is
+ *  an older real declaration, or the profile, or a refusal that names a
+ *  repair — whereas honouring it is silently permanent. A day of slack
+ *  absorbs clock skew and timezone-boundary rows without admitting a
+ *  deliberate future date. */
+export const FUTURE_ROW_SKEW_MS = 24 * 60 * 60 * 1000;
+
+/** `date_utc` is NULLABLE on Concept2's own documented example rows (both of
+ *  them carry `"date_utc": null`), so `date` is the fallback, read as UTC:
+ *  it is local time with no offset, which is at worst ~14 h out and well
+ *  inside the skew above. A row with NEITHER is taken at its list position
+ *  rather than discarded — a missing stamp is not a reason to throw away a
+ *  real designation. */
+function rowInstantMs(row: C2ResultRow): number | null {
+  const raw = row.dateUtc ?? row.date;
+  if (raw === null) return null;
+  const parsed = Date.parse(raw.includes("T") ? raw : `${raw.trim()}Z`);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /** Producer 1: the rower's own most recent designation.
  *
- *  `classes` arrives in the order Concept2 returned it, which is
+ *  `rows` arrives in the order Concept2 returned it, which is
  *  DATE-DESCENDING — measured 2026-09-03 on log-dev with
  *  `GET /api/users/me/results?number=1`, where id 85561 dated
  *  `2026-09-02 10:00:30` sorts ahead of id 85562 dated `2026-09-02 10:00:00`,
- *  so the order is by date and not by id. The first readable entry is
- *  therefore the newest declaration.
+ *  so the order is by date and not by id. The first row that survives every
+ *  skip below is therefore the newest declaration.
  *
- *  Selection is on the FIELD, never on a query filter: `?type=rower` is
- *  accepted (200) but unproven as a filter, because every row on the account
- *  we can measure is already `rower`. A row whose `weight_class` is absent or
- *  anything other than "H"/"L" is skipped rather than trusted. */
+ *  FOUR skips, and the FIRST is the one that keeps this function honest:
+ *
+ *   1. `ourResultIds` — a result THIS APP wrote. See the block comment
+ *      above: without this, our own derived guess is read back as the
+ *      rower's declaration on the very next send.
+ *   2. a type Concept2 does not require a class on (`CLASS_BEARING_RESULT_TYPES`),
+ *      and a row with no `type` at all.
+ *   3. a `weight_class` that is not exactly "H" or "L". Selection is on the
+ *      FIELD, not on `?type=` — that parameter IS documented as a filter,
+ *      but it names one type and this read accepts three, and a field read
+ *      is auditable in the route's own log line.
+ *   4. a row dated further ahead than `FUTURE_ROW_SKEW_MS`.
+ *
+ *  Returning null means "this rower has declared nothing we can read", which
+ *  is what the caller falls through on. It never means "use the last class
+ *  we sent". */
 export function pickDeclaredWeightClass(
-  classes: readonly (string | null)[],
+  rows: readonly C2ResultRow[],
+  opts: { ourResultIds: ReadonlySet<number>; now: number },
 ): WeightClass | null {
-  for (const value of classes) {
-    if (value === "H" || value === "L") return value;
+  for (const row of rows) {
+    if (row.id !== null && opts.ourResultIds.has(row.id)) continue;
+    if (row.type === null) continue;
+    if (!CLASS_BEARING_RESULT_TYPES.includes(row.type)) continue;
+    if (row.weightClass !== "H" && row.weightClass !== "L") continue;
+    const at = rowInstantMs(row);
+    if (at !== null && at > opts.now + FUTURE_ROW_SKEW_MS) continue;
+    return row.weightClass;
   }
   return null;
 }
@@ -1941,13 +2151,30 @@ export function deriveWeightClass(profile: {
   ) {
     return { ok: false, reason: "implausible_weight" };
   }
-  if (gender === "M") {
+  // `M`/`F` is DOCUMENTED, and the read side's letter case is documented
+  // only by EXAMPLE — so the comparison case-folds rather than trusting the
+  // example. Both rows are PRIMARY,
+  // `https://log.concept2.com/developers/documentation/` fetched 2026-09-03:
+  //
+  //   Create User parameter table:
+  //     gender | Yes | string | Must be one of: F, M | M
+  //   Get User (`GET /api/users/{user}`), the documented 200 example body:
+  //     "gender": "M"
+  //
+  // The first is a WRITE parameter and pins the vocabulary; the second is
+  // this endpoint's own example and is the only statement about what the
+  // READ returns. Neither is an enumeration of what a live account may hold,
+  // and this project has not yet read a real value (exit criterion 3b's
+  // session does, in one glance). Case-folding and trimming cost nothing and
+  // turn a plausible `"m"` from a silent refusal into a classification.
+  const normalized = gender === null ? null : gender.trim().toUpperCase();
+  if (normalized === "M") {
     return {
       ok: true,
       weightClass: weight <= LIGHTWEIGHT_MAX_MEN_HUNDREDTHS_KG ? "L" : "H",
     };
   }
-  if (gender === "F") {
+  if (normalized === "F") {
     return {
       ok: true,
       weightClass: weight <= LIGHTWEIGHT_MAX_WOMEN_HUNDREDTHS_KG ? "L" : "H",
@@ -1961,7 +2188,9 @@ export function deriveWeightClass(profile: {
 }
 ```
 
-  **`buildC2Payload`'s second parameter stops being a link.** It is declared `link: { weightClass: "H" | "L" }` today and was fed from the stored link row; it is now fed from the resolution, and a parameter named `link` that is not a link is exactly the kind of stale name that outlives a refactor. It becomes `weightClass: WeightClass`, with `weight_class: weightClass` in the payload. Ripple, measured with `git grep -n buildC2Payload -- '*.ts'`: **eleven call sites, all in `server/concept2/mapping.test.ts`**, every one passing that file's local `LINK` constant. Replace `LINK` with `"H"` at each; the constant itself goes.
+  **If the live value turns out to be something else entirely** (`"Male"`, a numeric code), the profile fallback is dead for every rower and each one silently gets `no_gender` — whose copy happens to be reasonable, which is exactly what would let it go unnoticed. That is why 3b reads James's own value rather than inferring it from the doc example, and why the route's log line carries the failure reason: a deployment where every send logs `no_gender` says so in one grep.
+
+  **`buildC2Payload`'s second parameter stops being a link.** It is declared `link: { weightClass: "H" | "L" }` today and was fed from the stored link row; it is now fed from the resolution, and a parameter named `link` that is not a link is exactly the kind of stale name that outlives a refactor. It becomes `weightClass: WeightClass`, with `weight_class: weightClass` in the payload. Ripple, measured with `grep -c "buildC2Payload(" server/concept2/mapping.test.ts` -> **`12`** (an earlier draft said eleven): **twelve call sites, all in `server/concept2/mapping.test.ts`** — lines 176, 196, 205, 214, 227, 238, 245, 264, 278, 279, 293, 301, which is also exactly the TS2345 list `pnpm typecheck` prints against the placement. Every one passes that file's local `LINK` constant, so the cheapest correct edit is one line — `const LINK = "H" as const;` — rather than twelve; the constant then still names what it is, and a reviewer sees twelve unchanged call sites instead of twelve to check.
 
 - [ ] **Step A7: The upload route resolves the class from Concept2, and a 401 on either read reaches the same flag a rejected post does.** Four edits in `app/server/routes/concept2.ts`'s upload handler. All four were placed and run — see the receipt.
 
@@ -2011,6 +2240,38 @@ const DECLARATION_PAGE_SIZE = 5;
 
   The existing `postResult` repeat-401 branch becomes `const stillSameGrant = await flagIfSameGrant(accessToken);` with its comment replaced by a one-line pointer to the helper.
 
+  **(b2) The exclusion query, in `app/server/stores/logs.ts`.** One owner-scoped read beside `recordC2Result`, which is the writer it mirrors. It runs only when the declaration page came back OK and is therefore skipped entirely on a failed read:
+
+```ts
+    // Wave E PR2 (observation 29): the Concept2 result ids THIS app wrote to
+    // the given Concept2 account, so the declaration read can exclude them.
+    // Owner-scoped AND account-scoped: result ids live in Concept2's
+    // namespace, and a row written while account A was linked says nothing
+    // about account B — scoping to the LIVE link's `c2UserId` is what makes
+    // this correct across a relink. Served by the existing
+    // `session_logs_user_id_idx`; no new index (the per-user row count here
+    // is the rower's own log, and the eligible population measured on prod
+    // was 6 of 20 rows).
+    async sentC2ResultIds(
+      userId: string,
+      c2UserId: number,
+    ): Promise<Set<number>> {
+      const rows = await db
+        .select({ c2ResultId: sessionLogs.c2ResultId })
+        .from(sessionLogs)
+        .where(
+          and(
+            eq(sessionLogs.userId, userId),
+            eq(sessionLogs.c2UserId, c2UserId),
+            isNotNull(sessionLogs.c2ResultId),
+          ),
+        );
+      return new Set(rows.map((r) => r.c2ResultId as number));
+    },
+```
+
+  `and`, `eq` and `isNotNull` are already imported in that file (`lastDonePerWorkout` uses `isNotNull`). **`server/testing/fakes.ts`'s `makeFakeLogsStore` needs the same method**, filtering its in-memory rows on `c2UserId` and a non-null `c2ResultId` — without it eighteen existing upload tests answer 500, and `pnpm typecheck` will not tell you, because that file ends `as unknown as LogsStore`.
+
   **(c) The producer chain, as one helper.** Beside the one above, so the two reads are resolved as a UNIT and the caller has one thing to retry:
 
 ```ts
@@ -2020,28 +2281,75 @@ const DECLARATION_PAGE_SIZE = 5;
       // derivation from their profile second, a refusal third. We never
       // guess a competition category onto a permanent third-party record.
       //
-      // A failed declaration read is not an error state of its own: it falls
-      // through to the profile, which is the same token and the same
-      // 401/needs_reauth machinery one call later. The only failure this
-      // helper surfaces as `auth` is one the CALLER must re-run wholesale on
-      // a refreshed token.
-      async function resolveWeightClass(token: string): Promise<
-        | { ok: true; weightClass: WeightClass; source: WeightClassSource }
-        | { ok: false; kind: "auth" | "c2_error" }
-        | { ok: false; kind: "no_class"; reason: WeightClassFailure }
-      > {
-        const list = await client.fetchResults(token, DECLARATION_PAGE_SIZE);
-        if (list.ok) {
-          const declared = pickDeclaredWeightClass(list.weightClasses);
-          if (declared !== null) {
-            return { ok: true, weightClass: declared, source: "declaration" };
+      // A FAILED read is not an EMPTY read (lens 2 F2). A `c2_error` on the
+      // declaration page returns here, retryable, naming the layer that
+      // failed; only a page that came back and genuinely carries no usable
+      // class falls through to the profile. Refusing when we have no data
+      // and guessing when we FAILED TO READ data is an asymmetry nothing
+      // argues for, and the thing it guesses is a competition category on a
+      // permanent third-party record. The only failure this helper surfaces
+      // as `auth` is one the CALLER must re-run wholesale on a refreshed
+      // token.
+      //
+      // `ourResultIds` is observation 29: the results list contains the rows
+      // this app posted, and nothing on them says so. `ourRowsSkipped` rides
+      // out purely so the log line can report it — it is a count of OUR OWN
+      // writes, never anything about the rower's other rows.
+      type WeightClassResolution =
+        | {
+            ok: true;
+            weightClass: WeightClass;
+            source: WeightClassSource;
+            ourRowsSkipped: number;
           }
-        } else if (list.kind === "auth") {
-          return { ok: false, kind: "auth" };
+        | { ok: false; kind: "auth" }
+        | {
+            ok: false;
+            kind: "c2_error";
+            layer: "declaration" | "profile";
+            status: number | null;
+          }
+        | { ok: false; kind: "no_class"; reason: WeightClassFailure };
+
+      async function resolveWeightClass(
+        token: string,
+        c2UserId: number,
+      ): Promise<WeightClassResolution> {
+        const list = await client.fetchResults(token, DECLARATION_PAGE_SIZE);
+        if (!list.ok) {
+          if (list.kind === "auth") return { ok: false, kind: "auth" };
+          return {
+            ok: false,
+            kind: "c2_error",
+            layer: "declaration",
+            status: list.status,
+          };
+        }
+        const ourResultIds = await logs.sentC2ResultIds(userId, c2UserId);
+        const ourRowsSkipped = list.rows.filter(
+          (row) => row.id !== null && ourResultIds.has(row.id),
+        ).length;
+        const declared = pickDeclaredWeightClass(list.rows, {
+          ourResultIds,
+          now: now().getTime(),
+        });
+        if (declared !== null) {
+          return {
+            ok: true,
+            weightClass: declared,
+            source: "declaration",
+            ourRowsSkipped,
+          };
         }
         const me = await client.fetchMe(token);
         if (!me.ok) {
-          return { ok: false, kind: me.kind };
+          if (me.kind === "auth") return { ok: false, kind: "auth" };
+          return {
+            ok: false,
+            kind: "c2_error",
+            layer: "profile",
+            status: me.status,
+          };
         }
         const derived = deriveWeightClass(me);
         if (!derived.ok) {
@@ -2051,7 +2359,46 @@ const DECLARATION_PAGE_SIZE = 5;
           ok: true,
           weightClass: derived.weightClass,
           source: "profile",
+          ourRowsSkipped,
         };
+      }
+```
+
+  **(c2) The log line, because nothing in this route says which layer answered.** `grep -n "console\." server/routes/concept2.ts` returns NOTHING at this head: an operator watching a rower fail to send has no way to tell a refused profile from an unreachable Concept2 from a declaration we read correctly. One line per send, copying `server/auth/middleware.ts`'s `auth_disagreement` shape (`console.warn(JSON.stringify({ event, … }))`) — the nearest sibling in this codebase's own request path, and the convention this block follows rather than inventing one:
+
+```ts
+      // One line per send, naming WHICH producer answered — the route had no
+      // logging at all before this. `console.log` on success and
+      // `console.warn` on failure follows `auth/middleware.ts`'s convention
+      // (`auth_via` logs, `auth_disagreement` warns).
+      //
+      // What it carries and what it must never carry: our own `logId` and
+      // the resolved source; a COUNT of how many returned rows were OUR OWN
+      // writes (the diagnostic that would have exposed observation 29 in
+      // production); and on failure the layer, its status, or the refusal
+      // reason. Never a token, never a result body, never a Concept2 result
+      // id, never anything about another rower's rows.
+      function logWeightClass(outcome: WeightClassResolution): void {
+        const base = { event: "c2_weight_class", logId };
+        if (outcome.ok) {
+          console.log(
+            JSON.stringify({
+              ...base,
+              source: outcome.source,
+              ourRowsSkipped: outcome.ourRowsSkipped,
+            }),
+          );
+          return;
+        }
+        console.warn(
+          JSON.stringify({
+            ...base,
+            failure: outcome.kind,
+            layer: outcome.kind === "c2_error" ? outcome.layer : undefined,
+            status: outcome.kind === "c2_error" ? outcome.status : undefined,
+            reason: outcome.kind === "no_class" ? outcome.reason : undefined,
+          }),
+        );
       }
 ```
 
@@ -2074,7 +2421,7 @@ const DECLARATION_PAGE_SIZE = 5;
       // re-read between two attempts at the same row could send two different
       // classes for one send, which is the split-authority defect I4 exists
       // to prevent.
-      let resolved = await resolveWeightClass(accessToken);
+      let resolved = await resolveWeightClass(accessToken, lockedLink.c2UserId);
       if (!resolved.ok && resolved.kind === "auth") {
         const retryOutcome = await acquireAccessToken({
           staleAccessToken: accessToken,
@@ -2089,22 +2436,33 @@ const DECLARATION_PAGE_SIZE = 5;
         // included: retrying only the profile would silently demote a rower
         // who HAS a declaration to our own derivation, purely because their
         // first token had expired.
-        resolved = await resolveWeightClass(accessToken);
+        resolved = await resolveWeightClass(accessToken, lockedLink.c2UserId);
         if (!resolved.ok && resolved.kind === "auth") {
           // I2's rule, one wire call earlier than it used to apply: a repeat
           // 401 after a GENUINE refresh is a dead grant, not a stale token.
           // Same helper, same answer, same never-delete.
+          logWeightClass(resolved);
           const stillSameGrant = await flagIfSameGrant(accessToken);
           res
             .status(stillSameGrant ? 409 : 502)
             .json(
-              stillSameGrant ? { error: "needs_reauth" } : { error: "c2_error" },
+              stillSameGrant
+                ? { error: "needs_reauth" }
+                : { error: "c2_error" },
             );
           return;
         }
       }
+      logWeightClass(resolved);
       if (!resolved.ok) {
         if (resolved.kind !== "no_class") {
+          // A read that FAILED, not a read that came back empty — the
+          // difference matters because only one of them may be guessed past.
+          // It answers the existing retryable family (502 `c2_error`, the
+          // same words a failed post gets) rather than a new wire token,
+          // because from the rower's side it is the same fact and the only
+          // honest advice is "try again". WHICH layer failed is in the log
+          // line above, where an operator needs it.
           res.status(502).json({ error: "c2_error" });
           return;
         }
@@ -2128,6 +2486,8 @@ const DECLARATION_PAGE_SIZE = 5;
 ```
 
   **The `!resolved.ok` ladder is written as a nested check rather than two flat guards, and that is load-bearing, not style.** `resolved` is a `let` reassigned inside the retry block, so TypeScript's control-flow analysis re-widens it afterwards: a flat `if (!resolved.ok && resolved.kind === "c2_error")` followed by `if (!resolved.ok) { … resolved.reason }` does not compile, because the compiler cannot rule out the `auth` member. Measured by placing it.
+
+  **`logWeightClass(resolved)` sits on both exits, and the placement of the first one is deliberate.** The repeat-401 branch logs BEFORE `flagIfSameGrant`, because that helper takes a lock and the log line is about the resolution, not about what the lock decided. Every other outcome — resolved, refused, failed — goes through the single call below the retry block, so there is exactly one line per send and no path that emits two.
 
   …and the retry's payload rebuild becomes:
 
@@ -2161,17 +2521,213 @@ const DECLARATION_PAGE_SIZE = 5;
 
 - [ ] **Step A8: The tests, and what each is allowed to prove.** Three layers, because the pure functions, the route and the seam fail differently. All of the blocks below were placed and run.
 
-  **1. The pure tables, in `app/server/concept2/mapping.test.ts`.** Two describes: `pickDeclaredWeightClass` (newest-wins, holes skipped, empty falls through) and `deriveWeightClass` (the boundary table, the band, the three weight states, the gender case). The boundary is pinned on both sides in the MEASURED unit with **INDEPENDENT literals**, never derived from the exported constants — a test that imports the number it exists to gate proves nothing about it (RF21's first smell). The exact blocks are in the placement (`mapping.test.ts`'s two appended describes); their titles are the contract:
+  **1. The pure tables, in `app/server/concept2/mapping.test.ts`.** Two describes. The boundary is pinned on both sides in the MEASURED unit with **INDEPENDENT literals**, never derived from the exported constants — a test that imports the number it exists to gate proves nothing about it (RF21's first smell). **The blocks are here rather than "in the placement", because every other task in this plan carries its blocks and an implementer working from titles cannot reproduce the counts the mutation table states:**
 
-  - `"takes the NEWEST readable class, not the first non-null-ish thing in the page"`
-  - `"skips rows that carry no class, rather than treating them as a declaration"`
-  - `"returns null when the page holds no declaration at all, so the caller falls through"`
-  - `"classifies every case in the table"` (one assertion over a mapped array — `vitest/no-conditional-expect` forbids `expect` inside a loop)
-  - `"puts the boundary rower in the LIGHT class, because Concept2 says 'or less'"`
-  - `"REFUSES four of the five wrong-unit readings of a 75 kg rower instead of classifying one"`
-  - `"CANNOT refuse a hundredths-of-a-pound reading, and this test records that rather than implying otherwise"` — **this one exists to make a later overclaim go red**, and its own comment says so
-  - `"refuses an implausible weight WHATEVER the gender says …"` (the band runs BEFORE the gender branch)
-  - `"tells 'present but unreadable' apart from 'not set', because only one of them is the rower's to fix"`
+```ts
+const NOW = Date.parse("2026-09-03T12:00:00Z");
+
+function resultRow(over: Partial<C2ResultRow> = {}): C2ResultRow {
+  return {
+    id: 85561,
+    type: "rower",
+    weightClass: "H",
+    dateUtc: "2026-09-02 10:00:30",
+    date: "2026-09-02 06:00:30",
+    ...over,
+  };
+}
+
+describe("pickDeclaredWeightClass", () => {
+  it("never reads OUR OWN writes back as the rower's declaration", () => {
+    // Observation 29. The row is indistinguishable from a real declaration
+    // in every projected field EXCEPT its id, which is why the id is
+    // projected — and the second assertion proves the fixture is a
+    // declaration in every other respect, so the first one is really about
+    // the exclusion and not about some other skip.
+    const ours = resultRow({ id: 90001, weightClass: "H" });
+    expect(
+      pickDeclaredWeightClass([ours], {
+        ourResultIds: new Set([90001]),
+        now: NOW,
+      }),
+    ).toBeNull();
+    expect(
+      pickDeclaredWeightClass([ours], { ourResultIds: new Set(), now: NOW }),
+    ).toBe("H");
+  });
+
+  it("takes the NEWEST readable class, skipping our own row above it", () => {
+    // Two survivors that DISAGREE, so list order is what decides — a
+    // fixture whose survivors agreed would let a reversed iteration pass.
+    expect(
+      pickDeclaredWeightClass(
+        [
+          resultRow({ id: 85561, weightClass: "L" }),
+          resultRow({ id: 85560, weightClass: "H" }),
+        ],
+        { ourResultIds: new Set(), now: NOW },
+      ),
+    ).toBe("L");
+    expect(
+      pickDeclaredWeightClass(
+        [
+          resultRow({ id: 90001, weightClass: "H" }),
+          resultRow({ id: 85561, weightClass: "L" }),
+          resultRow({ id: 85560, weightClass: "H" }),
+        ],
+        { ourResultIds: new Set([90001]), now: NOW },
+      ),
+    ).toBe("L");
+  });
+
+  it("reads a class only off a type Concept2 REQUIRES one on", () => {
+    // The vendor's ten documented types, in the order its own table lists
+    // them. The three that answer are the three the Add Result table names
+    // ("Required if type is rower, dynamic or slides"); a `skierg` row
+    // carrying a class is the vendor's OWN example, and it is noise.
+    const seen = (
+      [
+        "rower",
+        "dynamic",
+        "slides",
+        "skierg",
+        "bike",
+        "paddle",
+        "water",
+        "snow",
+        "rollerski",
+        "multierg",
+      ] as const
+    ).map((type) =>
+      pickDeclaredWeightClass([resultRow({ type, weightClass: "L" })], {
+        ourResultIds: new Set(),
+        now: NOW,
+      }),
+    );
+    expect(seen).toStrictEqual([
+      "L",
+      "L",
+      "L",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it("skips a row dated in the FUTURE, so one bad stamp cannot pin the declaration forever", () => {
+    expect(
+      pickDeclaredWeightClass(
+        [
+          resultRow({ id: 1, weightClass: "L", dateUtc: "2030-01-01 00:00:00" }),
+          resultRow({ id: 2, weightClass: "H" }),
+        ],
+        { ourResultIds: new Set(), now: NOW },
+      ),
+    ).toBe("H");
+  });
+
+  it("takes a row whose timestamps are BOTH absent, because Concept2's own example carries a null date_utc", () => {
+    expect(
+      pickDeclaredWeightClass(
+        [resultRow({ weightClass: "L", dateUtc: null, date: null })],
+        { ourResultIds: new Set(), now: NOW },
+      ),
+    ).toBe("L");
+  });
+
+  it("skips rows whose class is not exactly H or L, and returns null when the page holds none", () => {
+    // Not only absent and empty: a lowercase letter and a spelled-out word
+    // are not wire classes, and sending one would be refused by Concept2
+    // (or worse, accepted as something else).
+    expect(
+      pickDeclaredWeightClass(
+        [
+          resultRow({ weightClass: null }),
+          resultRow({ weightClass: "" }),
+          resultRow({ weightClass: "l" }),
+          resultRow({ weightClass: "Heavyweight" }),
+        ],
+        { ourResultIds: new Set(), now: NOW },
+      ),
+    ).toBeNull();
+    expect(
+      pickDeclaredWeightClass([], { ourResultIds: new Set(), now: NOW }),
+    ).toBeNull();
+  });
+});
+
+describe("deriveWeightClass", () => {
+  it("case-folds gender, because the wire's letter case is documented only by example", () => {
+    expect(deriveWeightClass({ weight: 7000, gender: "m" })).toStrictEqual({
+      ok: true,
+      weightClass: "L",
+    });
+    expect(deriveWeightClass({ weight: 7000, gender: " F " })).toStrictEqual({
+      ok: true,
+      weightClass: "H",
+    });
+  });
+
+  it("classifies every case in the table", () => {
+    // INDEPENDENT literals: 7500 / 6150 are written here, never imported
+    // from the module they gate (RF21's first smell). "or less" is
+    // inclusive, so the boundary itself is LIGHT on both sides.
+    const table = [
+      { weight: 7500, gender: "M", expected: "L" },
+      { weight: 7501, gender: "M", expected: "H" },
+      { weight: 6150, gender: "F", expected: "L" },
+      { weight: 6151, gender: "F", expected: "H" },
+    ] as const;
+    expect(
+      table.map((c) =>
+        deriveWeightClass({ weight: c.weight, gender: c.gender }),
+      ),
+    ).toStrictEqual(table.map((c) => ({ ok: true, weightClass: c.expected })));
+  });
+
+  it("REFUSES four of the five wrong-unit readings of a 75 kg rower", () => {
+    // decigrams, grams, hundredths-kg (the assumed unit), hundredths-lb,
+    // integer kg, integer lb. The THIRD is the assumed-correct reading and
+    // the FOURTH is the one no band can catch — this test records that
+    // rather than implying the guard is complete, so a later overclaim
+    // goes red here.
+    const readings = [750000, 75000, 7500, 16530, 75, 165];
+    expect(
+      readings.map((weight) => deriveWeightClass({ weight, gender: "M" }).ok),
+    ).toStrictEqual([false, false, true, true, false, false]);
+  });
+
+  it("tells 'present but unreadable' apart from 'not set', and refuses a profile it cannot classify", () => {
+    expect(
+      deriveWeightClass({ weight: "unreadable", gender: "M" }),
+    ).toStrictEqual({ ok: false, reason: "unreadable_weight" });
+    expect(deriveWeightClass({ weight: null, gender: "M" })).toStrictEqual({
+      ok: false,
+      reason: "no_weight",
+    });
+    expect(deriveWeightClass({ weight: 0, gender: "M" })).toStrictEqual({
+      ok: false,
+      reason: "no_weight",
+    });
+    expect(deriveWeightClass({ weight: 7000, gender: null })).toStrictEqual({
+      ok: false,
+      reason: "no_gender",
+    });
+    // The band runs BEFORE the gender branch, so a wrong unit refuses for
+    // every profile rather than only for the two we can classify.
+    expect(deriveWeightClass({ weight: 750000, gender: "X" })).toStrictEqual({
+      ok: false,
+      reason: "implausible_weight",
+    });
+  });
+});
+```
+
+  RUN against the placement: `Tests 40 passed (40)` for the whole file. Mutation results are in the table below.
 
   **2. The route, in `app/server/routes/concept2.test.ts`'s upload describe.** Written against that file's real helpers (`buildApp`, `asA`, `makeStubClient`, `freshLink`, `seedEligibleLog`) — read them; there is nothing named `makeApp` or `mintState`. **`makeStubClient` gains a `fetchResults` default, and this is the edit that keeps ~20 existing upload tests green:**
 
@@ -2179,28 +2735,124 @@ const DECLARATION_PAGE_SIZE = 5;
     // Ruling (i): the upload path reads the rower's most recent Concept2
     // results to find their own weight-class DECLARATION before it ever
     // considers the profile. This default is the account we measured — every
-    // result on log-dev user 2211 carries `weight_class`, all "H" — so it is
-    // the machine's own ordinary state, not a value chosen to make a gate
-    // pass. A test about the PROFILE fallback must override it with
-    // `{ ok: true, weightClasses: [] }`, or it silently exercises the
-    // declaration path instead.
+    // result on log-dev user 2211 carries `weight_class`, all "H", type
+    // `rower` — so it is the machine's own ordinary state, not a value
+    // chosen to make a gate pass. A test about the PROFILE fallback must
+    // override it with `{ ok: true, rows: [] }`, or it silently exercises
+    // the declaration path instead.
     fetchResults: vi.fn(async () => ({
       ok: true as const,
-      weightClasses: ["H"],
+      rows: [
+        {
+          id: 90001,
+          type: "rower",
+          weightClass: "H",
+          dateUtc: "2026-09-02 10:00:30",
+          date: "2026-09-02 06:00:30",
+        },
+      ],
     })),
 ```
 
-  Seven new tests go in that describe (blocks in the placement), and each names the thing it is allowed to prove:
+  Eight new tests go in that describe, and each names the thing it is allowed to prove:
 
   - `"sends the class the ROWER declared on their own most recent Concept2 row"` — asserts the POSTED BODY (the only place the claim is observable) **and** that `fetchMe` was never called.
-  - `"falls back to OUR derivation from the profile, and says which producer answered"` — `weightClasses: []`, `weight: 7000, gender: "M"` → `weight_class: "L"`, `weightClassSource: "profile"`.
-  - `"a failed declaration read falls through to the profile rather than failing the send"`.
+  - `"falls back to OUR derivation from the profile, and says which producer answered"` — `rows: []`, `weight: 7000, gender: "M"` → `weight_class: "L"`, `weightClassSource: "profile"`.
+  - **`"never reads its OWN write back as the rower's declaration on the next send"` — observation 29's gate, and it is an RF24 seam: it starts UPSTREAM of the producer.** Both blocks are below.
+  - **`"reports a FAILED declaration read as retryable, never as our own guess"`.** This REPLACES a test an earlier revision prescribed — `"a failed declaration read falls through to the profile rather than failing the send"` — which blessed the very behaviour lens 2 F2 identified as the defect. **Delete that one; do not keep both.** A network blip must not change a competition category on a permanent record.
   - `"refuses with no_weight_class and reaches Concept2's results endpoint NOT AT ALL when neither producer answers"` — the assertion that matters is `expect(client.postResult).not.toHaveBeenCalled()`; a 422 that still POSTed would have written a class we invented onto a permanent record.
   - `"passes the profile's OWN failure reason through, so an unreadable weight is not reported as an unset one"`.
   - `"flags needs_reauth when the class reads 401 twice, rather than reporting a retryable error forever"` — observation 25's whole reason.
   - `"re-reads the DECLARATION on the refreshed token, not just the profile"` — asserts `fetchResults`'s SECOND call carried the new token.
 
-  **Four existing tests change, and one changes for a reason worth naming.** The four `expect(res.body).toStrictEqual({ resultId: N })` assertions gain the two new keys. And `it("sources weightClass and c2UserId from the LOCKED read …")` loses half its subject: the class no longer lives on the link, so it becomes `"sources c2UserId from the LOCKED read, not the earlier unlocked getLink"` and drops its `weight_class` assertion, keeping the `c2UserId` one — which is I4's remaining half and still worth a gate.
+  The two this fold adds, written against the file's real helpers and RUN:
+
+```ts
+  it("never reads its OWN write back as the rower's declaration on the next send", async () => {
+    // RF24, and the only shape that can catch observation 29: this test
+    // STARTS upstream of the producer. Send 1 writes a row; Concept2 then
+    // echoes that row back on the results list carrying the class we sent;
+    // send 2 must still answer `profile`, because a class we produced is
+    // not a declaration however it comes back to us.
+    //
+    // Two independent observables, because the echoed class necessarily
+    // EQUALS what we sent — the posted body cannot discriminate here, which
+    // is exactly why ruling R2 put the source on the response.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    const page: { rows: unknown[] } = { rows: [] };
+    vi.mocked(client.fetchResults).mockImplementation(async () => ({
+      ok: true as const,
+      rows: page.rows as never,
+    }));
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jmorelli",
+      weight: 7000,
+      gender: "M",
+    });
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 340 });
+    const { app, logs } = buildApp({ store, client });
+    const first = await seedEligibleLog(logs, userA.id);
+    const second = await seedEligibleLog(logs, userA.id);
+
+    const one = await asA(
+      request(app).post(`/api/concept2/results/${first}`).send({ tz: "UTC" }),
+    );
+    expect(one.status).toBe(200);
+    expect(one.body.weightClassSource).toBe("profile");
+
+    // Concept2 now returns OUR row. Nothing on it says so except the id.
+    page.rows = [
+      {
+        id: 340,
+        type: "rower",
+        weightClass: "L",
+        dateUtc: "2026-09-03 11:00:00",
+        date: "2026-09-03 07:00:00",
+      },
+    ];
+    vi.mocked(client.fetchMe).mockClear();
+
+    const two = await asA(
+      request(app).post(`/api/concept2/results/${second}`).send({ tz: "UTC" }),
+    );
+    expect(two.status).toBe(200);
+    expect(two.body.weightClassSource).toBe("profile");
+    // The fallback really RAN, rather than the source string alone being
+    // right for some other reason.
+    expect(client.fetchMe).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a FAILED declaration read as retryable, never as our own guess", async () => {
+    // Lens 2 F2. The rower may well have a declaration; we could not read
+    // it. Deriving here would put OUR guess on a permanent third-party
+    // record because of a 500, and the rower would never know a read had
+    // failed at all.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({
+      ok: false,
+      kind: "c2_error",
+      status: 500,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(502);
+    expect(res.body).toStrictEqual({ error: "c2_error" });
+    expect(client.fetchMe).not.toHaveBeenCalled();
+    expect(client.postResult).not.toHaveBeenCalled();
+  });
+```
+
+  **SEVEN existing tests change, not four, and one changes for a reason worth naming.** `grep -c "toStrictEqual({ resultId" server/routes/concept2.test.ts` -> **`6`** (lines 1592, 1955, 2011, 2048, 2173, 2197); each gains the two new keys. Plus `it("sources weightClass and c2UserId from the LOCKED read …")`, which loses half its subject: the class no longer lives on the link, so it becomes `"sources c2UserId from the LOCKED read, not the earlier unlocked getLink"` and drops its `weight_class` assertion, keeping the `c2UserId` one — which is I4's remaining half and still worth a gate. **The already-sent short-circuit's own tests do NOT appear in that failing set, which is the evidence that its bare `{resultId}` really is unchanged.**
 
   **3. The seam.** Task 10's RF24 gate gains rows for this — see that task. It is the only test in this PR that starts at Concept2's own results-list shape and ends at the bytes on Concept2's results endpoint.
 
@@ -2224,6 +2876,8 @@ const DECLARATION_PAGE_SIZE = 5;
   **`describe("migration 0021: …")` runs against a folder capped at 0021** (its own `staging` assertion pins `appliedBefore: 21, appliedAfter: 22`), where `weight_class` is still `NOT NULL` with no default. So:
   - its five raw-SQL inserts naming `weight_class` are **KEPT, unchanged** — they are that image's own statements, and they are invisible to `pnpm typecheck` AND to `--project unit`, so nothing would tell an implementer who removed them;
   - its **two typed `db.insert(concept2Links)` calls in the D1 unique-constraint test break in the direction the plan did not anticipate.** Once step A1 deletes the field from the Drizzle object, those inserts OMIT a column the capped DB still requires, and D1 fails with a **not-null violation instead of the unique violation it asserts**. The fix is to convert both to raw `pool.query` SQL that still names `weight_class` — **not** to "remove the field", which is what breaks them.
+
+    **AND THE ASSERTION MOVES IN THE SAME EDIT, or the conversion swaps one failure for another.** D1 asserts `rejects.toMatchObject({ cause: { message: /concept2_links_c2_user_id_unique/ } })`, and its own in-file comment says the `cause` nesting exists BECAUSE the typed builder wraps pg's error in a `DrizzleQueryError`. Raw `pool.query` throws pg's error directly and has no `.cause`, so the converted test goes red on the shape rather than on the constraint. Assert the pg error itself — `rejects.toThrow(/concept2_links_c2_user_id_unique/)` — and **rewrite the comment that explains the nesting in the same edit**, since it is about to describe a wrapper that is no longer there (the review-record rule: correct the claim where it is USED, not only where it was argued). Both halves are invisible to `pnpm typecheck` and to `--project unit`; only `--project integration` sees either.
 
   Run `--project integration` on this file specifically after the change; `--project unit` cannot see any of it.
 
@@ -2575,19 +3229,30 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project integra
   | M12b | the web callback's `upsertLink` uses `me.username ?? null` | needs a fixture where `fetchMe` returns `username: ""` — assert the stored value is `null`, not `""` |
   | M12c | `routes/concept2.ts`'s Linked-page fallback returns `` `#${String(me.c2UserId)}` `` (the pre-PR2 spelling) | "names the numeric account the SAME way the card does" |
   | M13 | the flag-off branch returns `{available:false, logbookBaseUrl}` | "GET /link leaks neither field while the flag is off" |
-  | M9d | `deriveWeightClass`: flip `<=` to `<` on the men's threshold | RUN: `Tests 2 failed | 37 passed` — "puts the boundary rower in the LIGHT class, because Concept2 says 'or less'" AND the table. The boundary is the only place the two operators disagree, which is why the table pins 7500 and 6150 exactly rather than only 7490/7510 |
-  | M9e | `deriveWeightClass`: swap the two thresholds (men 6150, women 7500) | RUN: `2 failed | 37 passed` — a swap a men-only fixture would never notice, which is why the table carries both genders |
-  | M9f | `deriveWeightClass`: drop the `weight <= 0` clause, guarding on `weight === null` alone | RUN: `1 failed | 38 passed` — the table, on its `weight: 0` row. Without it a zeroed profile classifies as the lightest possible rower and a wrong class lands on a permanent Concept2 record |
-  | M9f2 | `deriveWeightClass`: delete the plausibility band | RUN: `2 failed | 37 passed` — "REFUSES four of the five wrong-unit readings" and "refuses an implausible weight WHATEVER the gender says". Without the band an integer-kg reading classes every rower LIGHTWEIGHT, filing heavyweights in Concept2's lightweight rankings |
-  | M9f3 | `pickDeclaredWeightClass`: iterate the page in reverse | RUN: `1 failed | 38 passed` — "takes the NEWEST readable class". The list is date-descending, so reversing it sends the rower's OLDEST recent declaration |
-  | M9f4 | `pickDeclaredWeightClass`: accept any non-empty string | RUN: `2 failed | 37 passed` — "skips rows that carry no class" and "returns null when the page holds no declaration". A lowercase `"l"` or a `"Heavyweight"` is not a wire class and must not be sent as one |
+  **Re-measured 2026-09-03 against the blocks exactly as written above** (`mapping.test.ts` baseline `Tests 40 passed (40)`). The counts an earlier revision carried were measured against a 39-test file and against fixtures this fold changed; do not carry those forward. **Two of these did NOT bite as first written, and the fixtures above are the fix** — recorded here rather than quietly corrected, because a probe that stops biting when its fixture changes is RF21 arriving by drift:
+
+  | # | Mutation | Must fail |
+  | --- | --- | --- |
+  | M9d | `deriveWeightClass`: flip `<=` to `<` on the men's threshold | RUN: `Tests 1 failed | 39 passed` — "classifies every case in the table". The boundary is the only place the two operators disagree, which is why the table pins 7500 and 6150 exactly rather than only 7490/7510 |
+  | M9e | `deriveWeightClass`: swap the two thresholds (men 6150, women 7500) | RUN: `2 failed | 38 passed` — the table AND the case-fold test. A swap a men-only fixture would never notice, which is why the table carries both genders |
+  | M9f | `deriveWeightClass`: drop the `weight <= 0` clause, guarding on `weight === null` alone | RUN: `1 failed | 39 passed` — "tells 'present but unreadable' apart from 'not set' …", on its `weight: 0` case. Without it a zeroed profile classifies as the lightest possible rower and a wrong class lands on a permanent Concept2 record |
+  | M9f2 | `deriveWeightClass`: delete the plausibility band | RUN: `2 failed | 38 passed` — "REFUSES four of the five wrong-unit readings" and the refusal table's implausible case. Without the band an integer-kg reading classes every rower LIGHTWEIGHT, filing heavyweights in Concept2's lightweight rankings |
+  | M9f3 | `pickDeclaredWeightClass`: iterate the page in reverse | RUN: `1 failed | 39 passed` — "takes the NEWEST readable class, skipping our own row above it". **This probe went GREEN against the fixture as first drafted** (its two rows were "our H" then "their L", so reversing them still returned L). It bites only because that test now carries two SURVIVING rows that disagree |
+  | M9f4 | `pickDeclaredWeightClass`: accept any class string that is not null or empty | RUN: `1 failed | 39 passed` — "skips rows whose class is not exactly H or L …". **Also GREEN as first drafted**, whose only holes were `null` and `""` — precisely the two the mutant still skips. It bites because the fixture now carries `"l"` and `"Heavyweight"` |
+  | M9f5 | `pickDeclaredWeightClass`: delete the `ourResultIds` skip | RUN: `Tests 10 failed | 139 passed` across `mapping.test.ts` + `routes/concept2.test.ts` — "never reads OUR OWN writes back as the rower's declaration", "takes the NEWEST readable class, skipping our own row above it", and the route-level RF24 seam. **This is observation 29's probe and the one that matters most**: without it a class we derived is laundered into the rower's declaration on their next send, and the provenance line goes quiet |
+  | M9f6 | `pickDeclaredWeightClass`: accept every `type` | RUN: `1 failed | 39 passed` — "reads a class only off a type Concept2 REQUIRES one on". A `skierg` row's class is unmeasured noise; the vendor's own example carries one |
+  | M9f7 | `pickDeclaredWeightClass`: widen `FUTURE_ROW_SKEW_MS` 100000x | RUN: `1 failed | 39 passed` — "skips a row dated in the FUTURE …". One hand-entered 2030 row would otherwise pin this rower's declaration forever, with nothing in the app able to say why |
+  | M9f8 | `deriveWeightClass`: compare `gender` raw, no trim/upper | RUN: `1 failed | 39 passed` — "case-folds gender …". If the live value is `"m"`, every rower gets `no_gender` and its copy is reasonable enough to hide it |
   | M9g | the upload route: ignore the declaration and always derive from the profile | RUN: red on "sends the class the ROWER declared on their own most recent Concept2 row" (plus 7 more, because `makeStubClient`'s `fetchMe` throws when unstubbed — the file's own convention). **The named test's fixture makes it bite on its own merits**: the declaration is `"L"` and the profile is absent, so the mutant cannot accidentally agree |
+  | M9g3 | the route: a `c2_error` on the declaration read falls through to the profile (the behaviour an earlier revision prescribed a test FOR) | RUN: `Tests 8 failed | 101 passed` — "reports a FAILED declaration read as retryable, never as our own guess" |
+  | M9g4 | `logWeightClass` deleted, or its `source` field dropped | no test asserts on stdout, and that is stated rather than papered over: the log line is an OPERATOR instrument, not a product behaviour, and its evidence is the placement's own captured output (`{"event":"c2_weight_class","logId":"…","source":"declaration","ourRowsSkipped":0}`, printed by the route tests). A gate on console output would pin a diagnostic's wording; what must not regress is the RESOLUTION, and M9f5/M9g/M9g3 gate that |
   | M9g2 | the upload route: the 401 retry re-reads only the profile, not the declaration | RUN: `2 failed | 112 passed` — "re-reads the DECLARATION on the refreshed token, not just the profile". Without it, a rower whose token merely expired is silently demoted from their own declaration to our guess |
   | M9h | the upload route: a `no_class` failure falls through to the POST instead of returning 422 | RUN: `1 failed | 113 passed` — on `expect(client.postResult).not.toHaveBeenCalled()`. The status assertion alone would not bite a mutant that POSTs first and answers 422 afterwards |
   | M9i | `fetchMe`: return `{ ok: false, kind: "c2_error", status: 401 }` for a 401 (the pre-PR2 collapse) | "flags needs_reauth when the class reads 401 twice" — the route answers 502 and `needsReauthAt` stays null. This is observation 25's probe and the reason the discriminator exists |
   | M9i2 | `readProfileWeight`: drop the numeric-string arm | RUN: `1 failed | 33 passed` — "reads a finite numeric STRING as a weight …". A rower who HAS a weight would otherwise be told forever to go and set one |
-  | M9i3 | drop the `signal` from any one of the four `fetchImpl` calls | RUN: `1 failed | 33 passed` — "passes an abort signal to every one of the four calls". **What this proves and what it does not:** that a signal is attached, and (with its sibling test) that an abort classifies as retryable. It does NOT prove the 10 s value; no fast test can, and the test's own comment says so rather than letting the green read as more |
-  | M9j | the 200 response drops `weightClass`/`weightClassSource` | the four `toStrictEqual` body assertions in the upload describe. Ruling R2's whole point is that a derived class is VISIBLE at the moment it is written |
+  | M9i3 | drop the `signal` from any one of the four `fetchImpl` calls | RUN: `1 failed | 33 passed` — "passes an abort signal to every one of the four calls". **What this proves and what it does not:** that a signal is attached, and (with its sibling test) that an abort classifies as retryable. It does NOT prove the 10 s value — M9i4 does |
+  | M9i4 | `C2_TIMEOUT_MS = 1` | RUN: `Tests 6 failed | 22 passed` — "bounds every wire call at ten seconds, pinned with a literal rather than the constant it gates" (the other 5 are the named `fetchMe` ripple). The value is pinned by an INDEPENDENT literal via `vi.spyOn(AbortSignal, "timeout")`; deriving the expectation from `C2_TIMEOUT_MS` would retune the test with the constant (RF21's first smell) |
+  | M9j | the 200 response drops `weightClass`/`weightClassSource` | the SIX `toStrictEqual({ resultId })` body assertions in the upload describe. Ruling R2's whole point is that a derived class is VISIBLE at the moment it is written |
   | M9k | the postResult retry path re-runs `resolveWeightClass` instead of reusing `resolved` | no existing test bites, and that is the finding (ruling R13's own invariant): add one that stubs `fetchResults` to answer `["L"]` then `["H"]` across two calls and asserts BOTH `postResult` bodies carry `weight_class: "L"`. Recorded as a probe that must be MADE to bite rather than one that already does |
   | M13b | write `logbookBaseUrl,` as ES2015 shorthand in the response literal | "the probe's LinkStatus interface names exactly the keys GET /api/concept2/link emits" — the key vanishes from `linkResponseKeys()`'s output while the pinned list and `LinkStatus` still carry it. **This probe is the whole reason the explicit form is prescribed**, and it only bites once step 6b(1) and (2) are both done: written shorthand FROM THE START, with neither file updated, all three stay silently consistent and the key ships unpinned |
 
@@ -3503,11 +4168,16 @@ export default function Concept2Card({ email }: { email: string }) {
           {/* Ruling (i): nothing is asked here. The hairline still marks
               the break between the explanation and the action; what used
               to sit between them was a WEIGHT CLASS section and a
-              two-option radiogroup. Concept2's own profile is where the
-              class is set now, and the copy below says so rather than
-              leaving the rower to wonder where it went. */}
+              two-option radiogroup. The copy below says where the class
+              comes from rather than leaving the rower to wonder where the
+              question went — and it names CONCEPT2, not the profile,
+              because the profile is only the FALLBACK producer
+              (observation 29): the class comes from the rower's own most
+              recent Concept2 row first. Naming the profile here would be
+              wrong for every rower who has ever declared a class, and it
+              would promise a page this card cannot open. */}
           <p className="c2-card-helper">
-            Your weight class comes from your Concept2 profile.
+            Your weight class comes from Concept2.
           </p>
           <button
             type="button"
@@ -3944,12 +4614,11 @@ describe("readSendResponse (409 carries THREE meanings, 422 carries TWO; never k
     ).toBe("failed");
   });
 
-  it("gives each server reason its OWN honest words, and never tells a gender-unclassifiable rower to set a weight", () => {
-    // Four tokens, three renderings. `unreadable_weight` and
-    // `implausible_weight` share one because the rower's action is
-    // identical; `no_gender` does NOT, because Concept2's category is
-    // two-valued with gendered thresholds — that profile has no derivable
-    // class at all, and its weight is not the broken thing.
+  it("gives each server reason honest words, and never tells a rower we cannot classify to set a weight", () => {
+    // Four tokens, three renderings, and the last two rows are lens 2 F12:
+    // a `Record` + `reason in MAP` lookup admits `Object.prototype` keys,
+    // so `"toString"` would render an `undefined` line while `tsc` types
+    // the lookup as non-optional. The switch cannot be reached that way.
     const rendered = (
       [
         "no_weight",
@@ -3957,6 +4626,8 @@ describe("readSendResponse (409 carries THREE meanings, 422 carries TWO; never k
         "implausible_weight",
         "no_gender",
         "something_new",
+        "toString",
+        "constructor",
       ] as const
     ).map((reason) => {
       const state = readSendResponse(422, {
@@ -3967,19 +4638,45 @@ describe("readSendResponse (409 carries THREE meanings, 422 carries TWO; never k
     });
     expect(rendered).toStrictEqual([
       "SET YOUR WEIGHT ON CONCEPT2",
-      "CHECK YOUR WEIGHT ON CONCEPT2",
-      "CHECK YOUR WEIGHT ON CONCEPT2",
-      "PICK A CLASS ON CONCEPT2",
-      "CHECK YOUR CONCEPT2 PROFILE",
+      "COULDN'T READ YOUR CONCEPT2 WEIGHT",
+      "COULDN'T READ YOUR CONCEPT2 WEIGHT",
+      "COULDN'T GET A CLASS FROM CONCEPT2",
+      "COULDN'T GET A CLASS FROM CONCEPT2",
+      "COULDN'T GET A CLASS FROM CONCEPT2",
+      "COULDN'T GET A CLASS FROM CONCEPT2",
     ]);
+  });
 
-    const genderState = readSendResponse(422, {
+  it("never blames the rower's weight for a number OUR unit inference could not classify", () => {
+    // An implausible number is most likely our own unit being wrong
+    // (observation 24), so the copy says what WE could not do.
+    const state = readSendResponse(422, {
       error: "no_weight_class",
-      reason: "no_gender",
+      reason: "implausible_weight",
     });
-    expect(genderState.kind === "noWeight" && genderState.line).not.toContain(
-      "weight set",
+    expect(state.kind === "noWeight" && state.line).not.toContain("no weight");
+    expect(state.kind === "noWeight" && state.line).toContain(
+      "we couldn't read",
     );
+  });
+
+  it("names no destination its only control cannot reach", () => {
+    const lines = (
+      [
+        "no_weight",
+        "unreadable_weight",
+        "implausible_weight",
+        "no_gender",
+      ] as const
+    ).map((reason) => {
+      const state = readSendResponse(422, { error: "no_weight_class", reason });
+      return state.kind === "noWeight" ? state.line : "";
+    });
+    // 2i's one control opens the PROFILE. No sentence may send the rower to
+    // the logbook, where the class is set per result and this button cannot
+    // go — which is what the copy said before lens 2 F3.
+    expect(lines.join(" ")).not.toContain("logbook");
+    expect(lines.join(" ")).not.toContain("—");
   });
 
   it("degrades a malformed 200 rather than rendering SENT with no id", () => {
@@ -4183,45 +4880,71 @@ function field(body: unknown, key: string): unknown {
     : null;
 }
 
-/** Amendment 2i's copy, by the wire token that produced it.
+/** Amendment 2i's copy: FOUR server tokens, THREE renderings, and every
+ *  one of them drawn on the Gate 0 page.
  *
- *  The tokens are the SERVER's vocabulary and the words are the client's —
- *  the same split `not_eligible` uses. `unreadable_weight` and
- *  `implausible_weight` share a rendering on purpose: the rower's action is
- *  identical ("check the weight on your profile"), while the two tokens stay
- *  distinct on the wire so an operator reading a log can tell a value we
+ *  The tokens are the SERVER's vocabulary and the words are the client's,
+ *  the same split `not_eligible` uses. The renderings are grouped by what
+ *  the rower can actually DO about it, and every sentence is answerable
+ *  from the one control this state has (OPEN CONCEPT2 PROFILE).
+ *
+ *  `unreadable_weight` and `implausible_weight` share one rendering, and
+ *  it says what WE could not do rather than what they should fix: an
+ *  implausible number is most likely our own unit inference being wrong
+ *  (`server/concept2/mapping.ts`'s band comment), so blaming the rower's
+ *  weight sends them after a field that is probably fine. The two tokens
+ *  stay distinct on the WIRE so the route's log line can tell a value we
  *  could not parse from one that parsed and was absurd.
  *
- *  `no_gender` gets its own sentence, and NOT "set your weight": Concept2's
- *  category is two-valued with gendered thresholds, so for such a profile
- *  there is no derivation at all, and the repair is a declaration — which is
- *  the producer this design reads first. */
-const NO_WEIGHT_COPY: Record<string, { line: string; reason: string }> = {
-  no_weight: {
-    line: "Concept2 needs a weight class on every result, and your Concept2 profile has no weight set. Set it there, then send this row again.",
-    reason: "SET YOUR WEIGHT ON CONCEPT2",
-  },
-  unreadable_weight: {
-    line: "Concept2 needs a weight class on every result, and the weight on your Concept2 profile came back in a form we couldn't read. Check it there, then send this row again.",
-    reason: "CHECK YOUR WEIGHT ON CONCEPT2",
-  },
-  implausible_weight: {
-    line: "Concept2 needs a weight class on every result, and the weight on your Concept2 profile is outside the range we can classify. Check it there, then send this row again.",
-    reason: "CHECK YOUR WEIGHT ON CONCEPT2",
-  },
-  no_gender: {
-    line: "Concept2 needs a weight class on every result, and we couldn't work one out from your Concept2 profile. Pick lightweight or heavyweight on a result in your Concept2 logbook, then send this row again.",
-    reason: "PICK A CLASS ON CONCEPT2",
-  },
+ *  `no_gender` and any token we do not recognise share the third: we
+ *  could not work a class out, and the destination is the same. It does
+ *  NOT say "set your weight" (that rower's weight is not the broken
+ *  thing) and it does NOT name the logbook, because this state's only
+ *  control opens the PROFILE and copy must never name a destination its
+ *  control cannot reach. */
+const NO_WEIGHT_SET = {
+  line: "Concept2 needs a weight class on every result, and your Concept2 profile has no weight set. Set it there, then send this row again.",
+  reason: "SET YOUR WEIGHT ON CONCEPT2",
 };
 
-// An unrecognised token still gets an honest, actionable line rather than a
-// blank panel: a token we have never seen means Concept2's side has a class
-// problem we cannot name, and the destination is the same.
-const NO_WEIGHT_FALLBACK = {
-  line: "Concept2 needs a weight class on every result, and we couldn't get one from your Concept2 account. Check your Concept2 profile, then send this row again.",
-  reason: "CHECK YOUR CONCEPT2 PROFILE",
+const WEIGHT_UNREADABLE = {
+  line: "Concept2 needs a weight class on every result, and we couldn't read the weight on your Concept2 profile. Open Concept2 to check it, then send this row again.",
+  reason: "COULDN'T READ YOUR CONCEPT2 WEIGHT",
 };
+
+const CLASS_UNDERIVABLE = {
+  line: "Concept2 needs a weight class on every result, and we couldn't work one out from your Concept2 profile. Open Concept2 to check it, then send this row again.",
+  reason: "COULDN'T GET A CLASS FROM CONCEPT2",
+};
+
+/** A SWITCH, not a `Record` lookup. A `reason in NO_WEIGHT_COPY` guard over
+ *  a `Record<string, X>` admits `Object.prototype` keys — a wire token of
+ *  `"toString"` passes the guard and yields an `undefined` line, which the
+ *  compiler hides because `Record` types the lookup as non-optional (this
+ *  app sets no `noUncheckedIndexedAccess`). A switch cannot be reached that
+ *  way, is exhaustive over the wire vocabulary, and needs no
+ *  `Object.hasOwn` — which is Safari 15.4, above this app's
+ *  `IPHONEOS_DEPLOYMENT_TARGET = 15.0` floor and used nowhere in this repo
+ *  (RF27's availability rule).
+ *
+ *  There is deliberately NO fourth "unknown token" rendering: an
+ *  unrecognised token means Concept2's side gave us something we could not
+ *  turn into a class, which is exactly what `CLASS_UNDERIVABLE` says. That
+ *  keeps the set of sentences this client can produce equal to the set the
+ *  Gate 0 page drew. */
+function noWeightCopy(reason: unknown): { line: string; reason: string } {
+  switch (reason) {
+    case "no_weight":
+      return NO_WEIGHT_SET;
+    case "unreadable_weight":
+    case "implausible_weight":
+      return WEIGHT_UNREADABLE;
+    case "no_gender":
+      return CLASS_UNDERIVABLE;
+    default:
+      return CLASS_UNDERIVABLE;
+  }
+}
 
 /**
  * `POST /api/concept2/results/:logId`'s answer -> the block's state.
@@ -4276,11 +4999,7 @@ export function readSendResponse(status: number, body: unknown): SendState {
   // failure that renders a BUTTON going somewhere: the repair is on
   // Concept2's side and the rower has no other way to find it.
   if (error === "no_weight_class") {
-    const reason = field(body, "reason");
-    const copy =
-      typeof reason === "string" && reason in NO_WEIGHT_COPY
-        ? NO_WEIGHT_COPY[reason]
-        : NO_WEIGHT_FALLBACK;
+    const copy = noWeightCopy(field(body, "reason"));
     return { kind: "noWeight", line: copy.line, reason: copy.reason };
   }
   // `not_eligible` is NOT one of the `gone` cases, and folding it in with
@@ -5081,9 +5800,12 @@ describe("Concept2SendBlock refusals (amendment 2d/2e/2f)", () => {
       await screen.findByRole("button", { name: "Send to Concept2" }),
     );
     expect(
-      await screen.findByText("REASON: PICK A CLASS ON CONCEPT2"),
+      await screen.findByText("REASON: COULDN'T GET A CLASS FROM CONCEPT2"),
     ).toBeTruthy();
     expect(screen.queryByText(/no weight set/)).toBeNull();
+    // And it does not name a destination this state's one control cannot
+    // reach: the class is PER-RESULT, while the button opens the profile.
+    expect(screen.queryByText(/logbook/)).toBeNull();
   });
 
   it("names the class it sent AND where it came from, on the send that sent it", async () => {
@@ -6589,7 +7311,7 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
   - **`a qualifying row offers Send; a timer row does not`** — two seeded rows, one `pm5`/`finished`, one `timer`; open each detail door; assert the block on one and its total absence on the other.
   - **`send -> SENT with the result link`** — route `POST /results/*` to `200 {resultId: 339, weightClass: "H", weightClassSource: "profile"}`; tap Send; assert `Accepted by Concept2.`, `RESULT 339`, `WEIGHT CLASS H · FROM YOUR CONCEPT2 WEIGHT` (ruling R2), and that the link-out's target is `https://log-dev.concept2.com/profile/2211/log/339`. (Assert the URL the button would open, not a navigation: `openReadOnlyUrl`'s web arm opens a new context and Playwright would need a popup handler; use `page.waitForEvent("popup")` if asserting the real open, and say which you did.)
   - **`send -> 409 duplicate -> ALREADY THERE`** and **`send -> 502 -> SEND FAILED with a REASON and a retry`**.
-  - **`send -> 422 no_weight_class -> the account link-out`** (amendment 2i, ruling i) — route `POST /results/*` to `422 {error:"no_weight_class", reason:"no_weight"}`; tap Send; assert `REASON: SET YOUR WEIGHT ON CONCEPT2`, that `Send again` IS offered, and that `OPEN CONCEPT2 PROFILE` targets `https://log-dev.concept2.com/profile` — **no id** (observation 28). Then assert the same 422 with `reason: "no_gender"` renders `REASON: PICK A CLASS ON CONCEPT2` and does NOT say "no weight set": the four tokens do not collapse to one line, and this is the flow where a collapse would be invisible to the unit tests.
+  - **`send -> 422 no_weight_class -> the account link-out`** (amendment 2i, ruling i) — route `POST /results/*` to `422 {error:"no_weight_class", reason:"no_weight"}`; tap Send; assert `REASON: SET YOUR WEIGHT ON CONCEPT2`, that `Send again` IS offered, and that `OPEN CONCEPT2 PROFILE` targets `https://log-dev.concept2.com/profile` — **no id** (observation 28). Then assert the same 422 with `reason: "no_gender"` renders `REASON: COULDN'T GET A CLASS FROM CONCEPT2`, does NOT say "no weight set", and does NOT name the logbook (a destination this state's one control cannot reach): the four tokens do not collapse to one line, and this is the flow where a collapse would be invisible to the unit tests.
   - **`coming BACK from Concept2 re-reads the link, without a remount`** — observation 19 and invariant I5, and the only gate in this repo that can observe the bfcache path at all. Route `GET /link` to `{available:true, linked:false}`; open You; stub the mint so the hop lands on a page inside the app's own origin (a stubbed callback page is enough — nothing about the real OAuth hop is being tested here); tap Connect and let the document navigate; **flip the routed `GET /link` to a LINKED response**; then `await page.goBack()` and assert the card reads `LINKED ✓` with its identity line, with no reload driven by the test. If the browser reloads rather than restoring, the mount read gets there first and the test passes for the boring reason — **say which happened in the task report**, because "it passed" and "the listener fired" are different facts and only the second one is evidence for the `pageshow` half of Task 1.
   - **`a read that fails says so and retries`** — route `GET /link` to a 502; assert `Couldn't reach Concept2 linking.` and a `REASON` naming the status; re-route to `{available:true, linked:false}`; tap `Retry`; assert the unlinked card appears. Amendment 1i, and the counterpart of the invisibility case above: these two must not look the same on screen.
   - **`an unlink the server refuses says the link is unchanged`** — linked; route `DELETE /link` to a 500; two taps; assert `Couldn't unlink. Your link is unchanged.` and that the card still reads `LINKED ✓`. Amendment 1j.

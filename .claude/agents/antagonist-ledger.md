@@ -6701,3 +6701,58 @@ the fixes are folded into the plan, the spec, the amendment and ROADMAP.**
   **Technique: a paste-test is not a formality when the change adds a CALL to a
   shared path — the ripple is in the stubs, and stubs behind a cast are exactly
   where the compiler stops helping.**
+
+**Code-reading lens, 2026-09-03 (the declaration mechanism). Twelve findings;
+the two that changed the design are first, and both are mirrors.**
+
+- **A vendor list read back as an oracle, containing our own writes.** The
+  design read the rower's most recent Concept2 result to get their DECLARED
+  weight class — the right producer, established by the delta pass. The list
+  also contains the rows Ergomatic itself posted: Concept2's 201 echoes back
+  the very class we supplied, and no projected field distinguishes our row
+  from a real declaration (`source` is the account holder's name, not the
+  application's). So a DERIVED guess on send 1 returns as producer 1 on send
+  2, relabelled as the rower's own declaration, and the SENT provenance line
+  that exists to make the guess correctable goes silent at exactly the moment
+  it starts being wrong. **Technique: after establishing that a vendor field
+  is the right producer, ask whether the collection you read it from contains
+  your own writes — and prove it with a TWO-CALL probe rather than one.** One
+  send looks correct; the defect only exists on the second. RF11 one level up:
+  we wrote a number to a third party and then read it back as our authority.
+  The fix is an exclusion (`session_logs.c2_result_id`) plus an invariant: a
+  page whose only rows are ours is NO declaration, not a declaration.
+- **A failed read silently becoming a guess.** The resolver branched on
+  `list.ok`, returned early only for an auth failure, and let every other
+  error — a 500, a timeout, a reset connection — fall through to the profile
+  derivation. Proven by stubbing the results endpoint to 500 for a rower who
+  had declared `L`: the POST body carried `H`. **Technique: for any layered
+  producer, separate "the source said nothing" from "we failed to ask" and
+  check which branch a transport error takes.** Having no data is a reason to
+  fall back; failing to read data is a reason to retry. The asymmetry was
+  nowhere argued for, and the plan had even prescribed a test blessing it.
+- **A seam test that passed for the wrong reason, because a fetch mock had no
+  arm for the call under test.** "A profile with no weight stops the send
+  BEFORE the results endpoint is touched" had arms for the profile and the
+  POST but none for the results GET, so that call fell into the POST
+  catch-all, which ran `JSON.parse(String(init?.body))` on `undefined` and
+  threw — exercising a thrown fetch rather than an empty declaration page, and
+  making the test's own title false. **Technique: read a fetch mock's arms
+  against the calls the code under test actually makes; a missing arm does not
+  fail loudly, it silently redirects the call into whatever the catch-all
+  does.**
+- **Copy and controls contradicting each other, one gate revision later.** The
+  redrawn refusal state told a rower whose profile cannot be classified to
+  "pick lightweight or heavyweight on a result in your Concept2 logbook",
+  beneath a button that opens the PROFILE — where a per-result class cannot be
+  picked. The same frame's sibling sentence blamed the rower's weight for an
+  implausible number that is most likely our own unit inference being wrong.
+  **Technique: this check does not retire after one pass — re-read every
+  sentence against its controls after each redraw, because a fix to one
+  sentence is where the next mismatch is introduced.**
+- **A stated worst case that undercounted its own chain by 3x.** A 10 s
+  per-call timeout was documented as bounding "one send's worst case to three
+  of these"; the route's real worst path is nine bounded calls, so 90 s, and
+  nothing else caps the SENDING state. **Technique: for any per-call bound,
+  enumerate the actual call chain including every refresh-and-retry arm, and
+  check whether anything upstream caps the total; a per-call number is not a
+  worst case.**

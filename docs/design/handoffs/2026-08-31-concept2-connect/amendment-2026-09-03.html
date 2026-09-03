@@ -586,7 +586,9 @@
         <td><strong>There is no ask at all.</strong> The WEIGHT CLASS section,
           its segmented control and its helper are gone; Connect is live on
           first paint. One helper line replaces them: &quot;Your weight class
-          comes from your Concept2 profile.&quot;</td>
+          comes from Concept2.&quot; It names CONCEPT2 rather than the profile,
+          because the profile is only the fallback producer and this card cannot
+          open it.</td>
         <td><strong>James, 2026-09-03:</strong> &quot;I don't want that set in
           our app. I want it to be set on Concept2's side.&quot; Measured the
           same day on log-dev: a result POSTed without
@@ -662,6 +664,32 @@
           (RF11).</td>
       </tr>
       <tr>
+        <td class="num">9</td>
+        <td>The declaration is read from Concept2's results list as it comes.</td>
+        <td><strong>The read excludes every result id this app wrote, and a page
+          whose only rows are ours counts as NO declaration</strong> &mdash; so
+          row 7's line cannot relabel our own guess as the rower's
+          declaration.</td>
+        <td>Concept2's list contains the rows we posted, its 201 echoes the class
+          we sent, and nothing on the row marks it as ours. Send 1 derives and
+          says so; send 2 would have read that same class back and said &quot;FROM
+          YOUR LAST CONCEPT2 ROW&quot;, silencing the one line that makes the
+          guess correctable. Reading our own writes back as an oracle is RF11 one
+          level up.</td>
+      </tr>
+      <tr>
+        <td class="num">10</td>
+        <td>2i's sentences name where to go, one per reason.</td>
+        <td><strong>All three say &quot;open Concept2 to check it&quot;, and the
+          shared middle sentence says what WE could not do</strong> rather than
+          what the rower should fix.</td>
+        <td>One sentence sent the rower to pick a class &quot;on a result in your
+          Concept2 logbook&quot; beneath a button that opens the profile, where it
+          cannot be picked. And an implausible weight is most likely our own unit
+          inference being wrong, so blaming their weight sends them after a field
+          that is probably fine.</td>
+      </tr>
+      <tr>
         <td class="num">8</td>
         <td>2i offers only &quot;OPEN CONCEPT2 PROFILE&quot;, pointed at
           <code>{origin}/profile/{id}</code>, with one sentence for every
@@ -704,7 +732,7 @@
       and its 61.5/75&nbsp;kg helper are all GONE, and so is the rule that kept
       Connect inert until a class was picked. <strong>Connect is live on first
       paint.</strong> In their place, one helper line above the button:
-      &quot;Your weight class comes from your Concept2 profile.&quot;
+      &quot;Your weight class comes from Concept2.&quot;
       (12px <code>--ink-3</code>).
     </p>
     <p class="lede">
@@ -740,7 +768,7 @@
             </p>
             <div class="hair"></div>
             <p class="c2helper">
-              Your weight class comes from your Concept2 profile.
+              Your weight class comes from Concept2.
             </p>
             <div class="btn-primary">CONNECT TO CONCEPT2</div>
             <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER &middot; YOU COME BACK HERE</p>
@@ -772,7 +800,7 @@
                   per row, from the log.
                 </p>
                 <p class="c2helper">
-                  Your weight class comes from your Concept2 profile.
+                  Your weight class comes from Concept2.
                 </p>
               </div>
               <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center">
@@ -1680,6 +1708,20 @@
       sub-line on this card.
     </p>
     <p class="lede">
+      <strong>&quot;FROM YOUR LAST CONCEPT2 ROW&quot; is only true because the
+      read ignores our own writes, and that rule was missing when this line was
+      first drawn.</strong> Concept2's results list contains the rows Ergomatic
+      itself posted, its 201 echoes back the very class we sent, and no field on
+      the row marks it as ours. So a DERIVED guess on the first send would have
+      been read back as the rower's own declaration on the second &mdash; the
+      guess laundered into a declaration, and this line, the one thing that makes
+      the guess correctable, going silent exactly when it started being wrong. The
+      declaration read now excludes every result id this app wrote, and a page
+      whose only rows are ours counts as no declaration at all: the rower keeps
+      seeing <strong>FROM YOUR CONCEPT2 WEIGHT</strong> for as long as that is
+      what it is.
+    </p>
+    <p class="lede">
       <strong>It is session-scoped by construction, and that is correct rather
       than a shortfall.</strong> Nothing about the class is stored by us, so the
       line renders on the response of the send that just happened and is absent
@@ -2159,6 +2201,23 @@
         so that profile has no derivable class at all, and its weight is not the
         broken thing. Telling that rower to set a weight sends them after a field
         that is fine.</li>
+      <li><strong>Every sentence is answerable from the one control this state
+        has, and none of them names a destination that control cannot
+        reach.</strong> An earlier drawing told the <code>no_gender</code> rower to
+        &quot;pick lightweight or heavyweight on a result in your Concept2
+        logbook&quot; beneath a button that opens the PROFILE &mdash; and the class
+        is per-result, so the profile is the one page where it cannot be picked.
+        All three sentences now say <em>open Concept2 to check it</em>. The shared
+        middle sentence also stopped blaming the rower's weight: an implausible
+        number is most likely OUR unit inference being wrong, so it says what we
+        could not do. The two tokens stay distinct on the wire so the send's log
+        line can tell a value we could not parse from one that parsed and was
+        absurd.</li>
+      <li><strong>There is deliberately no fourth sentence for an unrecognised
+        token.</strong> A token we do not know means Concept2's side gave us
+        something we could not turn into a class, which is what the third sentence
+        already says. That keeps the set of sentences the client can produce equal
+        to the set drawn on this page.</li>
     </ul>
     <div class="boards">
       <div class="board">
@@ -2191,11 +2250,11 @@
               <span class="c2status on">NO WEIGHT CLASS</span>
             </div>
             <p class="send-line">
-              Concept2 needs a weight class on every result, and the weight on
-              your Concept2 profile came back in a form we couldn't read. Check
-              it there, then send this row again.
+              Concept2 needs a weight class on every result, and we couldn't
+              read the weight on your Concept2 profile. Open Concept2 to check
+              it, then send this row again.
             </p>
-            <p class="panel-reason">REASON: CHECK YOUR WEIGHT ON CONCEPT2</p>
+            <p class="panel-reason">REASON: COULDN'T READ YOUR CONCEPT2 WEIGHT</p>
             <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
             <div class="btn-l4" style="margin-top: 10px">Send again</div>
           </div>
@@ -2207,10 +2266,10 @@
             </div>
             <p class="send-line">
               Concept2 needs a weight class on every result, and we couldn't work
-              one out from your Concept2 profile. Pick lightweight or heavyweight
-              on a result in your Concept2 logbook, then send this row again.
+              one out from your Concept2 profile. Open Concept2 to check it, then
+              send this row again.
             </p>
-            <p class="panel-reason">REASON: PICK A CLASS ON CONCEPT2</p>
+            <p class="panel-reason">REASON: COULDN'T GET A CLASS FROM CONCEPT2</p>
             <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
             <div class="btn-l4" style="margin-top: 10px">Send again</div>
           </div>
