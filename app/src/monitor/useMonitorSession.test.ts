@@ -11784,6 +11784,131 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(written[0]?.detail).toBe("idx=0 m=244.1 s=59.7");
   }, 15000);
 
+  // The same producer's REFUSAL arm — reachable, and the one a "it kept
+  // nothing" report after a link loss actually lands on: the rower finished
+  // the work bout (a rest frame retired the reading, I-B3 half one) and the
+  // reset arrives during that rest. Nothing to bank, and the ring has to say
+  // WHICH silence this was.
+  it("door PR B: a continuity reset with the reading already retired records partial-refused, not silence", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    // `REAL_TAIL_HEX`'s own decoded fields, re-encoded with the ONE change
+    // this leg is about: the machine has moved to INTERVALREST. Every
+    // continuity axis is held exactly where the tail left it (twd 1354,
+    // elapsed 59.7, distance 244.1) so nothing but the work-bout end
+    // changes — a frame that also moved a number backwards would be a
+    // different test.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        buildGeneralStatusBytes({
+          elapsedSeconds: 59.7,
+          distanceMeters: 244.1,
+          workoutType: 8,
+          intervalType: 0,
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          rowingState: 0,
+          strokeState: 0,
+          totalWorkDistanceMeters: 1354,
+          workoutDurationRaw: 6000,
+          workoutDurationType: 0,
+          dragFactor: 104,
+        }),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    expect(lifecycleCb).toBeDefined();
+    resumeAfterGap(lifecycleCb!);
+    expect(result.current.frameSilence).toBe(true);
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("ended");
+
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("link-lost");
+    expect(stored?.partial).toBeUndefined();
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(exported.filter((e) => e.kind === "partial-written")).toHaveLength(
+      0,
+    );
+    const refused = exported.filter((e) => e.kind === "partial-refused");
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.detail).toBe("reason=no-reading idx=none");
+  }, 15000);
+
   // -------------------------------------------------------------------
   // Whole-branch review minor 2: the continuity reset was closing the
   // record through `completeContinuityReset` directly — a pure transform
