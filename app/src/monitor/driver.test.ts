@@ -6459,7 +6459,7 @@ describe("createPm5Driver: the raw byte in the ring (raw-rowing-state, spec §2)
     // not an edge").
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -6498,7 +6498,7 @@ describe("createPm5Driver: the raw byte in the ring (raw-rowing-state, spec §2)
     // frames must still leave exactly ONE ring entry.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -6536,7 +6536,7 @@ describe("createPm5Driver: the raw byte in the ring (raw-rowing-state, spec §2)
     // operator reading the ring needs both sides of the change.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
