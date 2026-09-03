@@ -49,10 +49,12 @@
 // a genuine no-op: on web it registers nothing on `document` and never
 // calls `cb`, for either transition. `registerWebAppLifecycleListener`
 // still implements the raw Page Visibility mapping and stays exported and
-// directly tested — this is the ONE platform conditional (native-first
-// policy), so `useMonitorSession.ts`'s own resume handler needs no
-// `isNative()` check of its own: on web it simply never hears from this
-// module again.
+// directly tested. PR1.75b removed its last importer (`api/useReturnToApp.ts`);
+// it remains exported as the raw primitive, exactly as Minor 9 left it, with
+// `appLifecycle.test.ts` as its direct cover. This is the ONE platform
+// conditional (native-first policy), so `useMonitorSession.ts`'s own resume
+// handler needs no `isNative()` check of its own: on web it simply never
+// hears from this module again.
 
 import { isNative } from "../platform";
 

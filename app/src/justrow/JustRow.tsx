@@ -17,6 +17,7 @@ import { saveRun } from "../session/run";
 // — the exact iOS data-loss failure the lifecycle work exists to prevent.
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import { deriveAxes } from "../monitor/connectedAxes";
+import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption";
 import { read as readHandoff } from "../monitor/handoffStore";
 import { useMonitorSession } from "../monitor/useMonitorSession";
 import ConnectedSurface from "../workout/ConnectedSurface";
@@ -299,7 +300,20 @@ export default function JustRow() {
     <main className="screen connected-interstitial">
       <div className="connected-interstitial-body">
         <p className="connected-status-label">
-          {ready ? `${session.deviceName ?? "PM5"} · CONNECTED` : "JUST ROW"}
+          {/* RC-18 (door spec §3): DEAD. `ready` is `axes.program ===
+              "armed"`, which `deriveProgram` only produces from phase
+              "ready"/"live" — and this screen's only `beginFreeRow()`
+              caller (the effect above) refuses to arm until
+              `session.deviceName !== null`; the `failed`/`picking`
+              patches that null the name also always move `phase` off
+              "ready"/"live" in the same `update()`. So `session.deviceName`
+              is never null while `ready` is true, and this `??` arm has no
+              supported producer. Changed for consistency with the other
+              seven sites only; deliberately UNTESTED (RC-18's own
+              reachability rule). */}
+          {ready
+            ? `${session.deviceName ?? NAMELESS_MONITOR_CAPTION} · CONNECTED`
+            : "JUST ROW"}
         </p>
         <h1 className="connected-serif-line">
           {ready ? "Ready when you pull" : "Connecting to monitor"}

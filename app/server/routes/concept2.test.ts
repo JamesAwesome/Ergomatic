@@ -1517,9 +1517,13 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     }));
     const client = makeStubClient();
     const { app, logs } = buildApp({ store, client });
-    // Deliberately INELIGIBLE (deviceName null): needs_reauth must win
-    // before eligibility per the pinned check order.
-    const id = await seedEligibleLog(logs, userA.id, { deviceName: null });
+    // Deliberately INELIGIBLE (source: "manual", not "pm5" —
+    // eligibilityFailure's gate since Door PR A §2.2): needs_reauth must
+    // win before eligibility per the pinned check order.
+    const id = await seedEligibleLog(logs, userA.id, {
+      deviceName: null,
+      source: "manual",
+    });
     const res = await asA(
       request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
     );
@@ -1528,11 +1532,18 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(client.postResult).not.toHaveBeenCalled();
   });
 
+  // Door PR A (2026-09-02) §2.2: `eligibilityFailure`'s gate reads
+  // `source`, not `deviceName` — a realistic non-monitor row overrides
+  // BOTH (the biconditional forbids a `deviceName` on a non-pm5 row), not
+  // `deviceName` alone.
   it("not_eligible -> 422 with reason", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
     const { app, logs } = buildApp({ store });
-    const id = await seedEligibleLog(logs, userA.id, { deviceName: null });
+    const id = await seedEligibleLog(logs, userA.id, {
+      deviceName: null,
+      source: "manual",
+    });
     const res = await asA(
       request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
     );

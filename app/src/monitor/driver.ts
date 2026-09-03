@@ -119,6 +119,7 @@ import type {
   Transport,
 } from "../../domain/monitor/types.js";
 import type { MonitorEventLog } from "./eventLog";
+import { NAMELESS_MONITOR_CAPTION } from "./deviceCaption.js";
 // RC-9a (design spec 2026-08-25-free-oracles §1, fix round 1): imported
 // rather than re-declared — a local copy had nothing binding it to
 // `summaryModel.ts`'s own value, so a future change there would silently
@@ -659,12 +660,20 @@ export interface DriverOptions {
    * `DiscoveredMonitor` to source a real name from at all). Flows verbatim
    * into `capabilities.deviceName`. Omitted (the constructor is still
    * reachable with no name at all — a caller mid-migration, or a test with
-   * nothing to assert about the name) falls back to the literal `"PM5"`
-   * placeholder, same as before this option existed; never fabricated from
-   * anything else.
+   * nothing to assert about the name) falls back to the literal
+   * `NAMELESS_MONITOR_CAPTION` (RC-18: `"MONITOR"`, not `"PM5"` — an
+   * invented brand this door never advertises), same as before this option
+   * existed; never fabricated from anything else.
    */
   deviceName?: string;
 }
+
+/** RC-18's neutral caption, now defined in the LEAF module
+ *  `deviceCaption.ts` (door PR A's whole-branch review, M-3 — that file's
+ *  own comment has the why) and RE-EXPORTED here so this module's existing
+ *  consumers, the transports included, keep importing it from where they
+ *  always did. New READ-side consumers should import the leaf directly. */
+export { NAMELESS_MONITOR_CAPTION } from "./deviceCaption.js";
 
 /** `DriverOptions.settleTicks`'s own default — see that field's doc
  *  comment for why "omitted" means this number, not "no bound". */
@@ -1050,9 +1059,13 @@ export function createPm5Driver(
   // `options.deviceName` the caller threaded through from its own
   // `Transport.scan()` result (`DriverOptions.deviceName`'s own doc
   // comment — the picked device's real advertised name, e.g.
-  // "PM5 432331249"). Falls back to the literal `"PM5"` placeholder ONLY
+  // "PM5 432331249"). Falls back to `NAMELESS_MONITOR_CAPTION` (RC-18's
+  // `"MONITOR"`, not the invented `"PM5"` this comment used to name) ONLY
   // when no name was given at all — never fabricated from anything else,
-  // and never shown to a screen that had a real name available.
+  // and never shown to a screen that had a real name available. This IS
+  // the second-order default that reaches storage
+  // (`capabilities.deviceName` -> `useMonitorSession.ts`'s
+  // `createMonitorRun` call, after the picker's own fallback below it).
   /** The only clock reading this driver ever takes — see `DriverOptions.now`
    *  for why one exists at all, and for the three predicates that read it
    *  (`STRUCTURE_MISMATCH_WINDOW_MS`, the finish grace's own expiry, and
@@ -1072,7 +1085,7 @@ export function createPm5Driver(
     canProgram: true,
     hasStrokeRate: true,
     reportsIntervals: true,
-    deviceName: options.deviceName ?? "PM5",
+    deviceName: options.deviceName ?? NAMELESS_MONITOR_CAPTION,
   };
 
   /**

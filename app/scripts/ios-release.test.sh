@@ -243,6 +243,63 @@ check "dist:grep failure (runtime): reached ios:build before the gate (sanity)" 
 ! grep -q 'xcodebuild' <<<"$stub_log_contents"
 check "dist:grep failure (runtime): xcodebuild is NEVER invoked" $?
 
+# Wave E PR1.75b (2026-09-02-concept2-pr175-app-bind-design.md §0: the app
+# registers `haus.waffle.ergomatic` in CFBundleURLTypes). Before this PR the
+# release derived GOOGLE_IOS_CLIENT_ID from CFBundleURLTypes INDEX 0
+# (ios-release.sh's old `PlistBuddy -c 'Print :CFBundleURLTypes:0:
+# CFBundleURLSchemes:0'`). Adding a second URL type makes that index a
+# silent trap: put the Concept2 entry first and the release exports
+# `haus.waffle.ergomatic.apps.googleusercontent.com`, which fails
+# jwtVerify's audience check (server/auth/nativeVerify.ts:14-18) in a
+# SHIPPED build with no error at build time. The derivation is now
+# name-based and lives in its own script so this test can run it for real
+# (the same "run it for real" bar as the cases above), on Linux CI too --
+# PlistBuddy does not exist on ubuntu-latest, which is why the new script
+# greps the plist XML rather than using it.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+write_plist() { # $1 = file, $2 = "google-first" | "concept2-first"
+  {
+    echo '<?xml version="1.0" encoding="UTF-8"?>'
+    echo '<plist version="1.0"><dict><key>CFBundleURLTypes</key><array>'
+    if [ "$2" = "concept2-first" ]; then
+      echo '<dict><key>CFBundleURLName</key><string>Concept2Link</string><key>CFBundleURLSchemes</key><array><string>haus.waffle.ergomatic</string></array></dict>'
+    fi
+    echo '<dict><key>CFBundleURLName</key><string>GoogleSignIn</string><key>CFBundleURLSchemes</key><array><string>com.googleusercontent.apps.896004543555-9m5cf46vdgf57dv1r68u7stad6ngi304</string></array></dict>'
+    if [ "$2" = "google-first" ]; then
+      echo '<dict><key>CFBundleURLName</key><string>Concept2Link</string><key>CFBundleURLSchemes</key><array><string>haus.waffle.ergomatic</string></array></dict>'
+    fi
+    echo '</array></dict></plist>'
+  } > "$1"
+}
+
+expected="896004543555-9m5cf46vdgf57dv1r68u7stad6ngi304.apps.googleusercontent.com"
+
+write_plist "$tmp/google-first.plist" google-first
+[ "$(bash "$HERE/ios-google-client-id.sh" "$tmp/google-first.plist")" = "$expected" ]
+check "google client id: derived when the Google URL type is first" $?
+
+write_plist "$tmp/concept2-first.plist" concept2-first
+[ "$(bash "$HERE/ios-google-client-id.sh" "$tmp/concept2-first.plist")" = "$expected" ]
+check "google client id: derived when the Concept2 URL type is first (the index-0 trap)" $?
+
+echo '<?xml version="1.0"?><plist version="1.0"><dict/></plist>' > "$tmp/none.plist"
+out=$(bash "$HERE/ios-google-client-id.sh" "$tmp/none.plist" 2>&1); rc=$?
+[ "$rc" -ne 0 ]
+check "google client id: exits non-zero when no reversed scheme is present" $?
+grep -q 'no com.googleusercontent.apps' <<<"$out"
+check "google client id: the failure names what it looked for" $?
+
+# The REAL committed plist still yields the real id -- the fixtures above
+# could all pass against a plist shape we do not actually ship.
+[ "$(bash "$HERE/ios-google-client-id.sh" "$HERE/../ios/App/App/Info.plist")" = "$expected" ]
+check "google client id: the committed Info.plist still derives the real id" $?
+
+# ios-release.sh must not carry the index-based form any more.
+! grep -q 'CFBundleURLTypes:0:CFBundleURLSchemes:0' "$HERE/ios-release.sh"
+check "ios-release: no longer derives the client id from URL-type index 0" $?
+
 if [ "$fails" -gt 0 ]; then
   echo "ios-release.test.sh: $fails failure(s)"
   exit 1

@@ -1178,8 +1178,12 @@ export function describeStoreContracts(
         // level (`machineAvgPaceSecondsPer500m`, a narrow jsonb-path
         // scalar read OUT of the still-excluded `machineSummary` blob),
         // so the expected-key set is `get()`'s keys minus the three
-        // exclusions, PLUS this one derived key.
-        it("the list projection is exactly get()'s key set minus steps minus series minus machineSummary, plus the derived machineAvgPaceSecondsPer500m scalar — no column silently drops out", async () => {
+        // exclusions, PLUS this one derived key. Door spec (2026-09-02)
+        // §1.3, Task 4: a SECOND derived key joins it — `partial`, the
+        // four PARTIAL clauses evaluated over the EXCLUDED `steps` column
+        // (the detail screen evaluates them itself; the list cannot, so
+        // the store answers the question for it).
+        it("the list projection is exactly get()'s key set minus steps minus series minus machineSummary, plus the derived machineAvgPaceSecondsPer500m and partial scalars — no column silently drops out", async () => {
           const stores = await makeStores();
           const userId = await stores.makeUser();
           const { id } = await stores.logs.create(
@@ -1192,9 +1196,77 @@ export function describeStoreContracts(
             .filter(
               (k) => k !== "steps" && k !== "series" && k !== "machineSummary",
             )
-            .concat("machineAvgPaceSecondsPer500m")
+            .concat("machineAvgPaceSecondsPer500m", "partial")
             .sort();
           expect(Object.keys(listRow).sort()).toStrictEqual(expectedKeys);
+        });
+
+        // Door spec (2026-09-02) §1.3, Task 4: the derived boolean's own
+        // VALUE, one case per clause, so the fake cannot satisfy the key
+        // pin above with a constant and the two stores cannot drift on
+        // the rule. Real Postgres defines truth here as everywhere else in
+        // this file; the end-to-end agreement with the DETAIL screen's own
+        // TypeScript predicate is gated separately, over rows seeded
+        // through `POST /api/logs`, in
+        // `server/routes/partial.integration.test.ts`.
+        const partialRow = (overrides: Partial<LogInput> = {}) =>
+          logInput({
+            source: "pm5",
+            deviceName: "PM5 432331249",
+            endedBy: "rower",
+            steps: [
+              { label: "Work", targetSplit: 120, actualSource: "pm5" },
+              { label: "Work", targetSplit: 120 },
+            ],
+            ...overrides,
+          });
+
+        it("list rows carry partial: true for a connected row stopped early with an interval never reached", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(userId, partialRow());
+          const [listRow] = await stores.logs.list(userId, 10);
+          expect(listRow).toMatchObject({ partial: true });
+        });
+
+        // Clause 4 is an ALLOWLIST: `finished` is outside it, so a short
+        // step on a finished row is MEASUREMENT LOSS, not a stopped piece.
+        it("list rows carry partial: false when endedBy is finished, even with an unmeasured step", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(userId, partialRow({ endedBy: "finished" }));
+          const [listRow] = await stores.logs.list(userId, 10);
+          expect(listRow).toMatchObject({ partial: false });
+        });
+
+        // Clause 3: every interval was reached, so there is nothing
+        // unfinished to name however the session ended.
+        it("list rows carry partial: false when every step carries an actualSource", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(
+            userId,
+            partialRow({
+              steps: [{ label: "Work", targetSplit: 120, actualSource: "pm5" }],
+            }),
+          );
+          const [listRow] = await stores.logs.list(userId, 10);
+          expect(listRow).toMatchObject({ partial: false });
+        });
+
+        // The `coalesce(..., false)` case: `ended_by` is nullable and
+        // SQL's `true and null` is NULL, not false, so a legacy pm5 row
+        // with no close reason must read back the BOOLEAN false — never
+        // `null`, which the client type forbids.
+        it("list rows carry partial: false, a real boolean, for a legacy pm5 row whose endedBy is null", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(userId, partialRow({ endedBy: null }));
+          const [listRow] = await stores.logs.list(userId, 10);
+          expect(listRow).toMatchObject({ partial: false });
+          expect(typeof (listRow as { partial: unknown }).partial).toBe(
+            "boolean",
+          );
         });
 
         // RC-5 §3, Task 4: the scalar itself — present when the blob

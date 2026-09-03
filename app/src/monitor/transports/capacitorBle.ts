@@ -47,6 +47,7 @@ import type {
   DiscoveredMonitor,
   Transport,
 } from "../../../domain/monitor/types.js";
+import { NAMELESS_MONITOR_CAPTION } from "../deviceCaption.js";
 
 // `Transport.write`/`subscribe` take a bare characteristic id (design's own
 // choice, `types.ts`'s header comment) — a real GATT call needs the OWNING
@@ -462,7 +463,17 @@ export function createCapacitorBleTransport(): Transport & {
           // sheet, which is the one path this file's own queue-invariant
           // comment above says must never race a BleClient call.
           lastScanOutcome = "offered the already-held device; no picker";
-          return [{ id: heldDevice.deviceId, name: heldDevice.name ?? "PM5" }];
+          // RC-18 (door spec §3): REACHABLE — a held device carries no
+          // `namePrefix` constraint the way the picker below does, so its
+          // `name` can genuinely be absent. This is the site that gates
+          // `capacitorBle.test.ts`'s "a held device with no advertised name
+          // falls back to 'MONITOR'" leg.
+          return [
+            {
+              id: heldDevice.deviceId,
+              name: heldDevice.name ?? NAMELESS_MONITOR_CAPTION,
+            },
+          ];
         }
         lastScanOutcome = "no already-connected device; scanned normally";
         if (!(await BleClient.isEnabled())) {
@@ -491,7 +502,18 @@ export function createCapacitorBleTransport(): Transport & {
           }
           throw err;
         });
-        return [{ id: device.deviceId, name: device.name ?? "PM5" }];
+        // RC-18 (door spec §3): DEAD. `requestDevice`'s only filter is
+        // `namePrefix: "PM5"` two lines above, so a device this call can
+        // return always carries a name starting "PM5" — this `??` arm has
+        // no supported producer, and a green test on it would be
+        // decoration. Changed for consistency with the other seven sites
+        // only; deliberately UNTESTED (RC-18's own reachability rule).
+        return [
+          {
+            id: device.deviceId,
+            name: device.name ?? NAMELESS_MONITOR_CAPTION,
+          },
+        ];
       })();
       return raceScanTimeout(pipeline);
     },

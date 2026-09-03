@@ -197,6 +197,13 @@ const LOGS: RecentLog[] = [
     machineWorkSeconds: null,
     machineWorkMeters: null,
     machineAvgPaceSecondsPer500m: null,
+    // Door spec (2026-09-02) §1.3: a complete row with no close reason,
+    // the default everywhere in this suite. Today's LAST THREE rows never
+    // set `hero`, so they render no numbers line and therefore no chip
+    // even when these say otherwise — the gate for that lives in
+    // `HistoryList.test.tsx`.
+    endedBy: null,
+    partial: false,
   },
   {
     id: "log-2",
@@ -217,6 +224,8 @@ const LOGS: RecentLog[] = [
     machineWorkSeconds: null,
     machineWorkMeters: null,
     machineAvgPaceSecondsPer500m: null,
+    endedBy: null,
+    partial: false,
   },
   {
     id: "log-3",
@@ -237,6 +246,8 @@ const LOGS: RecentLog[] = [
     machineWorkSeconds: null,
     machineWorkMeters: null,
     machineAvgPaceSecondsPer500m: null,
+    endedBy: null,
+    partial: false,
   },
 ];
 
@@ -1804,6 +1815,8 @@ describe("Today (LAST THREE)", () => {
           machineWorkSeconds: null,
           machineWorkMeters: null,
           machineAvgPaceSecondsPer500m: null,
+          endedBy: null,
+          partial: false,
         },
       ],
     });
@@ -1839,6 +1852,8 @@ describe("Today (LAST THREE)", () => {
           machineWorkSeconds: null,
           machineWorkMeters: null,
           machineAvgPaceSecondsPer500m: null,
+          endedBy: null,
+          partial: false,
         },
       ],
     });
@@ -1849,6 +1864,34 @@ describe("Today (LAST THREE)", () => {
       .closest("section")!;
     const row = within(section).getByText("Occluded Front").closest("li")!;
     expect(within(row).getByText("JUL 25 · 2/5")).toBeVisible();
+  });
+
+  // Door spec (2026-09-02) §1.3, Gate 0-A slot B: the chip rides the
+  // NUMBERS line, and Today's LAST THREE rows render no numbers line
+  // (`LogRow`'s `hero` prop is false here and only here). James approved
+  // that slot knowing this: Today stays silent about a stopped session,
+  // History says it. This pins the accepted cost so a later change cannot
+  // introduce it to Today by accident.
+  it("a partial row in LAST THREE wears NO chip — Today renders no numbers line, the accepted Gate 0-A cost", async () => {
+    mockReady({
+      logs: [
+        {
+          ...LOGS[0],
+          partial: true,
+          endedBy: "rower",
+          avgSplitSeconds: 124,
+          distanceMeters: 2000,
+        },
+      ],
+    });
+    const { container } = await renderToday();
+
+    const section = screen
+      .getByRole("heading", { name: "ALL SESSIONS" })
+      .closest("section")!;
+    expect(within(section).getByText("Occluded Front")).toBeVisible();
+    expect(container.querySelector(".log-partial-chip")).toBeNull();
+    expect(container.querySelector(".today-log-hero")).toBeNull();
   });
 
   // From-the-log spec (2026-08-18), §1: the heading is now the ALL

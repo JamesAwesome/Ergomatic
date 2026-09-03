@@ -1,5 +1,10 @@
 # PR1.5 fix round 2 — on-device walk card (P1a-device)
 
+**HISTORICAL — 2026-09-02:** the `Browser.open` + `browserFinished` return
+arm this card walked was retired at PR1.75b
+(`2026-09-02-concept2-pr175b-native.md`, Task 3's census). Kept as the
+record of what was built and why.
+
 **Revised, fix round 3** (antagonist findings 9-11): step 7 corrected —
 returning from background lands you on the STILL-OPEN sheet, not a
 dismissed one, so the counter is deterministically 3, not "2 or briefly

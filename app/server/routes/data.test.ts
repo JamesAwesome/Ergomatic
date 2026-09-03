@@ -10,6 +10,10 @@ import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { PREFERENCES_DEFAULTS } from "../stores/preferences.js";
 import { makeFakeStores } from "../testing/fakes.js";
 import { createDataRouter, type Stores } from "./data.js";
+import {
+  PARTIAL_STEP_LEG_A,
+  PARTIAL_STEP_LEG_B,
+} from "../../src/session/partialGateFixture.js";
 
 // In-memory fakes, keyed by userId, mirroring the real stores' signatures
 // exactly, live in app/server/testing/fakes.ts (shared with other server
@@ -2794,6 +2798,101 @@ describe("GET/POST /api/logs", () => {
       });
       expect(res.status).toBe(400);
       expect(res.body.field).toBe("steps");
+    });
+
+    // Door spec (2026-09-02) §5.1: the in-flight pair survives the route.
+    // RF24 — this leg starts at the PRODUCER (the POST body) and asserts
+    // after the READER (the GET), because both halves being well tested is
+    // exactly the condition that hides a broken seam.
+    it("round-trips partialMeters/partialSeconds through POST -> GET", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [{ ...PARTIAL_STEP_LEG_A }],
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.steps[0]).toStrictEqual({ ...PARTIAL_STEP_LEG_A });
+    });
+
+    // Task 7 step 6 — the MIRROR of the leg above, over the OTHER half of
+    // the shared declaration. Not redundant with it: leg A's pair is a
+    // whole-metre 15 / 8.28 s, leg B's is a TENTH-of-a-metre 37.6 / 10.9 s,
+    // so this is the leg that would go red on a route that rounded, floored
+    // or integer-coerced either number on the way through. `partialReplay
+    // .test.ts` (client) asserts the hook BANKS these two objects; this pair
+    // of legs asserts the route PRESERVES them. Neither side retypes the
+    // object — one declaration, two consumers, so a change to what the hook
+    // banks re-points both in the same edit.
+    it("round-trips the second declared pair (tenths, not whole numbers) through POST -> GET", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [{ ...PARTIAL_STEP_LEG_B }],
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.steps[0]).toStrictEqual({ ...PARTIAL_STEP_LEG_B });
+    });
+
+    it("rejects a half-pair: partialMeters with no partialSeconds", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", partialMeters: 37.6 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toBe(
+        "steps[0]: partialMeters and partialSeconds must both be present or both be absent",
+      );
+    });
+
+    it("rejects a half-pair: partialSeconds with no partialMeters", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", partialSeconds: 10.9 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toBe(
+        "steps[0]: partialMeters and partialSeconds must both be present or both be absent",
+      );
+    });
+
+    // Fix round 1 (coordinator review): a bare partialMeters: -1 is ALSO a
+    // half-pair, so the pair check backstops it and the leg can never
+    // isolate the bound it names (M0.2 proved this). A valid partner value
+    // keeps the pair check satisfied so only the bound check can fire.
+    it("rejects a negative partialMeters, naming the field", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", partialMeters: -1, partialSeconds: 8.28 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toBe(
+        "steps[0]: partialMeters must be a number, >= 0",
+      );
+    });
+
+    it("rejects a negative partialSeconds, naming the field", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", partialSeconds: -1, partialMeters: 15 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toBe(
+        "steps[0]: partialSeconds must be a number, >= 0",
+      );
     });
 
     // Split-band boundary: pm5's own bound is "> 0 and <= 6000", not >= 0.

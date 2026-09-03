@@ -1,11 +1,28 @@
 import { describe, expect, it } from "vitest";
+import { LOG_SOURCES } from "../../domain/types";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import type {
-  MeasuredRow,
-  PrescribedRow,
-  SummaryRow,
+// I-B5 census (door spec §5.2), Task 4: `eligibilityFailure` is a pure,
+// framework-free function (no drizzle-orm, no db schema — the module's own
+// header) — the SAME "independent, own-bounds mirror" boundary
+// `LIBRARY_WORKOUTS` above already crosses from a client test, not the
+// `server/stores/`-graph import `useRecentLogs.ts`'s comment warns off.
+import { eligibilityFailure } from "../../server/concept2/mapping";
+import {
+  buildSummaryModel,
+  type MeasuredRow,
+  type PrescribedRow,
+  type SummaryRow,
 } from "../session/summaryModel";
-import { buildStoredSummary, type StoredLog } from "./storedSummary";
+import {
+  buildStoredSummary,
+  historyChipWord,
+  PARTIAL_CLOSE_REASONS,
+  partialChipWord,
+  partialCloseReason,
+  type PartialCloseReason,
+  type StoredLog,
+  type StoredLogStep,
+} from "./storedSummary";
 
 // Same idiom as `summaryModel.test.ts`'s own `asMeasured`: narrows a
 // SummaryRow to its measured variant with a loud failure (never a silent
@@ -324,6 +341,40 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(view.heroes.totalLine).toBeUndefined();
   });
 
+  // Door PR A (2026-09-02) §2.2: `buildStoredTotalLine`'s gate is rewritten
+  // from `row.deviceName === null` to `row.source !== "pm5"`. A `pm5` row
+  // with a null `deviceName` cannot exist on the wire (the biconditional
+  // forbids it), so the two predicates cannot be told apart by any
+  // reachable `pm5` fixture — this fixture is the mirror case instead: a
+  // `timer` row carrying a NON-null `deviceName`. That shape is
+  // UNREACHABLE in production (`logSourceContradiction` 400s it on save)
+  // but legal in the `StoredLog` type, and it is the exact input the two
+  // predicates disagree on: the retired `deviceName === null` check would
+  // have let this row through to a total line (deviceName is non-null);
+  // the new `source !== "pm5"` check excludes it (source is "timer").
+  // Exists only to prove which field the gate actually reads.
+  it("a `timer` row with a (production-impossible) non-null deviceName still renders NO total line — the discriminator between the retired deviceName check and the new source check", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        source: "timer",
+        steps: [
+          {
+            label: "6:00 @ 6k",
+            actualSplit: 130,
+            actualSource: "stopwatch",
+            meters: 1500,
+          },
+        ],
+        avgSplitSeconds: 130,
+        timeSeconds: 780,
+        distanceMeters: 6000,
+      }),
+    );
+    expect(view.heroes.timeSeconds).toBe(780);
+    expect(view.heroes.totalLine).toBeUndefined();
+  });
+
   it("TIER B2: a pm5-sourced step carrying only ONE of actualSeconds/actualMeters, and a stopwatch-sourced step carrying BOTH — neither shape `buildMonitorLogSteps` writes today, but `routes/data.ts`'s own validator accepts each field independently, so a stored row CAN carry them. Both are excluded from the AVG SPLIT quotient (it needs the pm5 pair together); DISTANCE/TIME still sum whichever half each one has, unconditionally", () => {
     const steps: StoredLog["steps"] = [
       ...EXIT7_STEPS,
@@ -430,7 +481,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
   });
 
   // Fix round 1 (Task 3 review, IMPORTANT finding): a null-index actual
-  // never becomes a stored step (`logDraft.ts:844-846`'s own
+  // never becomes a stored step (`logDraft.ts:853-856`'s own
   // `actualByIndex` map only holds `index !== null` actuals), so Σ steps
   // alone would under-count DISTANCE/TIME relative to what genuinely
   // happened — the exact defect this TIER B1 branch exists to close. This
@@ -817,6 +868,37 @@ describe("buildStoredSummary — §5A source derivation", () => {
     expect(timer.meta.timeLabel).toBeDefined();
     const byHand = buildStoredSummary(baseRow());
     expect(byHand.meta.timeLabel).toBeUndefined();
+  });
+
+  // Door PR A (2026-09-02) §2.1/§2.3: the fourth `LogSource` member. Built
+  // from the file's fullest existing fixture (`baseRow`, not a hand-rolled
+  // minimum — RF3) with only `source`/`deviceName` overridden, the same
+  // idiom every fixture in this describe block already uses.
+  it("a no-reading row reads NO MONITOR READING and DOES carry a wall-clock time", () => {
+    const view = buildStoredSummary(
+      baseRow({ source: "no-reading", deviceName: null }),
+    );
+    expect(view.meta.sourceLabel).toBe("NO MONITOR READING");
+    expect(view.meta.timeLabel).toBeDefined();
+  });
+
+  // §2.3: the allowlist, over the column — the three members whose moment
+  // the APP WITNESSED (the connected door, the phone clock, and a
+  // connected arrival that measured nothing) all carry a timeLabel.
+  it.each([["pm5"], ["timer"], ["no-reading"]] as const)(
+    "%s carries a timeLabel (the app witnessed the moment)",
+    (source) => {
+      const row = baseRow({
+        source,
+        deviceName: source === "pm5" ? "PM5 432331249" : null,
+      });
+      expect(buildStoredSummary(row).meta.timeLabel).toBeDefined();
+    },
+  );
+
+  it("manual carries NO timeLabel (an off-app session has no moment the app knows)", () => {
+    const row = baseRow({ source: "manual", deviceName: null });
+    expect(buildStoredSummary(row).meta.timeLabel).toBeUndefined();
   });
 });
 
@@ -1297,7 +1379,7 @@ describe("buildStoredSummary — targets-only caption", () => {
   });
 });
 
-// Cohort-unlock spec (2026-08-23), §2: `linkLostLine` is present, with
+// Cohort-unlock spec (2026-08-23), §2: `closeLine` is present, with
 // the exact copy, for `endedBy === "link-lost"` alone — every other
 // value (including the other five real ones, and absent/null) renders
 // nothing here, proven by exact equality against several distinct
@@ -1326,9 +1408,7 @@ describe("buildStoredSummary — cohort-unlock §2 link-lost line", () => {
         distanceMeters: 1500,
       }),
     );
-    expect(view.linkLostLine).toBe(
-      "LINK LOST · the app lost the monitor before the end",
-    );
+    expect(view.closeLine).toBe("LINK LOST · the app lost the monitor");
   });
 
   it.each([
@@ -1341,6 +1421,788 @@ describe("buildStoredSummary — cohort-unlock §2 link-lost line", () => {
     ["absent", undefined],
   ] as const)("omits the line for endedBy=%s", (_label, endedBy) => {
     const view = buildStoredSummary(baseRow({ endedBy }));
-    expect(view.linkLostLine).toBeUndefined();
+    expect(view.closeLine).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Door spec (2026-09-02) §1 — PARTIAL: what a stopped connected piece says.
+//
+// Fixtures: "Slack Tide", the library's own 5×3' at 6k+12 with 1' rest
+// (`server/seed/library/o2.ts`, `{ k: "reps", count: 5 }`) — a REAL
+// five-interval workout, so `M` is 5 the way the approved Gate 0-A artboard
+// renders it rather than a hand-chosen number (recurring failure 3).
+const SLACK_TIDE = LIBRARY_WORKOUTS.find((w) => w.title === "Slack Tide")!;
+// `refPaceLabel` (`session/logDraft.ts:269-271`) composes
+// `${durationText} @ ${refLabel(ref)}`, and `refLabel` (`domain/pace.ts:106-111`)
+// renders a non-zero offset as `${base} +${off}` — so every one of Slack
+// Tide's five reps is labelled identically, as a reps block always is.
+const SLACK_TIDE_LABEL = "3:00 @ 6k +12";
+// 6k 2:07.0 (127.0 s) + 12 = 139.0 s, the effective target
+// `buildLogSeed` resolves for `ref: { base: "6k", off: 12 }`.
+const SLACK_TIDE_TARGET_SPLIT = 139.0;
+
+// The two shapes `buildMonitorLogSteps` ACTUALLY writes
+// (`session/logDraft.ts:883-922`), not an invented minimum: a MATCHED
+// interval gets `actualSource: "pm5"` plus the four actuals; an UNMATCHED
+// one — never reached, or a boundary pair that never both arrived — keeps
+// the authored target and `spm` and carries NO `actualSource` at all
+// ("Unambiguous against the row-local discriminant", `:913-917`).
+function measuredStep(
+  actualSeconds: number,
+  actualMeters: number,
+  actualSplit: number,
+): StoredLogStep {
+  return {
+    label: SLACK_TIDE_LABEL,
+    targetSplit: SLACK_TIDE_TARGET_SPLIT,
+    seconds: 180,
+    actualSource: "pm5",
+    actualSplit,
+    actualSeconds,
+    actualMeters,
+    actualSpm: 22,
+    spm: 22,
+  };
+}
+
+function unreachedStep(): StoredLogStep {
+  return {
+    label: SLACK_TIDE_LABEL,
+    targetSplit: SLACK_TIDE_TARGET_SPLIT,
+    seconds: 180,
+    spm: 22,
+  };
+}
+
+// A connected Just Row: `steps: []` (`JustRowLog.tsx:209`), no plan to be
+// partial against.
+const NO_STEPS: StoredLogStep[] = [];
+
+// All five reps rowed and matched.
+const ALL_MEASURED_STEPS: StoredLogStep[] = [
+  measuredStep(180.0, 647, 139.1),
+  measuredStep(180.0, 651, 138.2),
+  measuredStep(180.0, 644, 139.8),
+  measuredStep(180.0, 640, 140.6),
+  measuredStep(180.0, 638, 141.0),
+];
+
+// Stopped after two: reps 3-5 were never reached, so they carry no
+// `actualSource`. N = 2, M = 5 — the artboard's own `2 of 5`.
+const SOME_UNMEASURED_STEPS: StoredLogStep[] = [
+  measuredStep(180.0, 647, 139.1),
+  measuredStep(180.0, 651, 138.2),
+  unreachedStep(),
+  unreachedStep(),
+  unreachedStep(),
+];
+
+// A LOST BOUNDARY on rep 2: the interval is matched (`actualSource: "pm5"`)
+// but its elapsed reading is below `MIN_MEASURABLE_ELAPSED_SECONDS`
+// (`summaryModel.ts:577`, 1 s) — "a lost boundary whose pair never both
+// arrived" (`logDraft.ts:806-809`) / "an interval that produces ZERO frames
+// is lost entirely" (`domain/monitor/types.ts:62-63`). This shape exists so
+// the two candidate counts genuinely DISAGREE: `measuredElapsedSeconds`
+// says N = 1, a naive `actualSource !== undefined` count says 2.
+const LOST_BOUNDARY_STEPS: StoredLogStep[] = [
+  measuredStep(180.0, 647, 139.1),
+  { ...measuredStep(0.4, 1, 200.0) },
+  unreachedStep(),
+  unreachedStep(),
+  unreachedStep(),
+];
+
+const STEPS_SHAPES = {
+  "no steps (a connected Just Row)": NO_STEPS,
+  "every step measured": ALL_MEASURED_STEPS,
+  "two measured, three never reached": SOME_UNMEASURED_STEPS,
+  "one measured, one lost boundary, three never reached": LOST_BOUNDARY_STEPS,
+} as const;
+type StepsShape = keyof typeof STEPS_SHAPES;
+
+// The seven `endedBy` states the spec names: the five-member allowlist
+// (`schema.ts`'s endedByEnum minus `finished`), plus `finished`, plus the
+// legacy `null` that DOES occur on pm5 rows (`monitorRun.ts:228-233`,
+// `routes/data.ts:1738` stores `?? null`).
+const ENDED_BY_STATES = [
+  "finished",
+  "rower",
+  "link-lost",
+  "program-dropped",
+  "program-failed",
+  "interrupted",
+  null,
+] as const;
+type EndedByState = (typeof ENDED_BY_STATES)[number];
+
+// The expected outcomes are LITERAL maps, hand-written from spec §1.1 — never
+// re-derived from the four clauses, because an expectation that re-implements
+// the predicate agrees with a broken predicate for exactly the reason it is
+// broken (recurring failure 11's shape, in test form).
+const NOTHING: Record<string, PartialCloseReason | undefined> = {
+  finished: undefined,
+  rower: undefined,
+  "link-lost": undefined,
+  "program-dropped": undefined,
+  "program-failed": undefined,
+  interrupted: undefined,
+  null: undefined,
+};
+const EVERY_CLOSE_BUT_FINISHED: Record<string, PartialCloseReason | undefined> =
+  {
+    finished: undefined,
+    rower: "rower",
+    "link-lost": "link-lost",
+    "program-dropped": "program-dropped",
+    "program-failed": "program-failed",
+    interrupted: "interrupted",
+    null: undefined,
+  };
+
+const PARTIAL_TABLE: {
+  source: StoredLog["source"];
+  shape: StepsShape;
+  outcomes: Record<string, PartialCloseReason | undefined>;
+}[] = [
+  // Clause 1 holds only for `pm5`; clauses 2/3 knock out the first two
+  // shapes; clause 4 is the five-member allowlist.
+  {
+    source: "pm5",
+    shape: "no steps (a connected Just Row)",
+    outcomes: NOTHING,
+  },
+  { source: "pm5", shape: "every step measured", outcomes: NOTHING },
+  {
+    source: "pm5",
+    shape: "two measured, three never reached",
+    outcomes: EVERY_CLOSE_BUT_FINISHED,
+  },
+  {
+    source: "pm5",
+    shape: "one measured, one lost boundary, three never reached",
+    outcomes: EVERY_CLOSE_BUT_FINISHED,
+  },
+  // Clause 1 over the WHOLE enum, not just its nearest neighbour: `pm5` is
+  // the only door that stores planned-vs-measured steps, so every one of the
+  // other three `LOG_SOURCES` members (`domain/types.ts:101-102`) is
+  // excluded whatever its steps or its close say. Pinning all four means a
+  // fifth member added later cannot slip through by resembling `timer`.
+  ...(["timer", "manual", "no-reading"] as const).flatMap((source) =>
+    (
+      [
+        "no steps (a connected Just Row)",
+        "every step measured",
+        "two measured, three never reached",
+        "one measured, one lost boundary, three never reached",
+      ] as const
+    ).map((shape) => ({ source, shape, outcomes: NOTHING })),
+  ),
+];
+
+const PARTIAL_CROSS_PRODUCT: {
+  source: StoredLog["source"];
+  shape: StepsShape;
+  endedBy: EndedByState;
+  expected: PartialCloseReason | undefined;
+}[] = PARTIAL_TABLE.flatMap((entry) =>
+  ENDED_BY_STATES.map((endedBy) => ({
+    source: entry.source,
+    shape: entry.shape,
+    endedBy,
+    expected: entry.outcomes[endedBy === null ? "null" : endedBy],
+  })),
+);
+
+describe("partialCloseReason — door spec §1.1, the four clauses", () => {
+  it.each(PARTIAL_CROSS_PRODUCT)(
+    "source=$source, steps=$shape, endedBy=$endedBy -> $expected",
+    ({ source, shape, endedBy, expected }) => {
+      expect(
+        partialCloseReason({ source, steps: STEPS_SHAPES[shape], endedBy }),
+      ).toBe(expected);
+    },
+  );
+
+  // The named legs spec §1.1 demands, each asserted on its own so a failure
+  // says WHICH rule broke rather than "row 23 of 56".
+
+  // Just Row: a free row has no plan to be partial against. Every connected
+  // JR closes `rower` (`useMonitorSession.ts:5010`), so this is the leg that
+  // would go red if the rule ever stopped excluding it. WHICH clause
+  // excludes it, measured rather than reasoned (see `partialCloseReason`'s
+  // own clause-2 comment): clause 2 returns first for `steps: []`, so it IS
+  // what excludes this row today — clause 3 would also do it (`[].some(...)`
+  // is false), which is why clause 2 is redundant, but redundant is not the
+  // same as inert. The probe that bites THIS leg is clause 2 deleted AND
+  // clause 3 flipped to `.every` (M3.1c, "expected 'rower' to be
+  // undefined"); either mutation on its own leaves this assertion green.
+  it("a connected Just Row is never partial, however it closed", () => {
+    expect(
+      partialCloseReason({ source: "pm5", steps: [], endedBy: "rower" }),
+    ).toBeUndefined();
+  });
+
+  // Measurement loss, not a stopped piece: a short step on a `finished` row
+  // is a lost boundary (`logDraft.ts:806-809`) or a zero-frame interval
+  // (`domain/monitor/types.ts:62-63`). Clause 4 excludes it.
+  it("a finished row with a short step is measurement loss, not partial", () => {
+    expect(
+      partialCloseReason({
+        source: "pm5",
+        steps: LOST_BOUNDARY_STEPS,
+        endedBy: "finished",
+      }),
+    ).toBeUndefined();
+  });
+
+  // A legacy row: `endedBy` null occurs on pm5 rows and is NOT partial. This
+  // is why clause 4 is an allowlist and never `endedBy !== "finished"`.
+  it("a legacy pm5 row with a null close is not partial", () => {
+    expect(
+      partialCloseReason({
+        source: "pm5",
+        steps: LOST_BOUNDARY_STEPS,
+        endedBy: null,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("an absent close (the field omitted entirely) is not partial", () => {
+    expect(
+      partialCloseReason({ source: "pm5", steps: LOST_BOUNDARY_STEPS }),
+    ).toBeUndefined();
+  });
+
+  // All steps measured, ended by the rower (a last boundary landed,
+  // WORKOUTEND did not, End pressed): clause 3 excludes it.
+  it("a rower-ended row with every step measured reads as complete", () => {
+    expect(
+      partialCloseReason({
+        source: "pm5",
+        steps: ALL_MEASURED_STEPS,
+        endedBy: "rower",
+      }),
+    ).toBeUndefined();
+  });
+
+  // Clause 1 in isolation: identical steps and close to a row the rule DOES
+  // mark partial, differing only in the door.
+  it("a timer row cannot be partial in stored data at all", () => {
+    expect(
+      partialCloseReason({
+        source: "timer",
+        steps: SOME_UNMEASURED_STEPS,
+        endedBy: "rower",
+      }),
+    ).toBeUndefined();
+    expect(
+      partialCloseReason({
+        source: "pm5",
+        steps: SOME_UNMEASURED_STEPS,
+        endedBy: "rower",
+      }),
+    ).toBe("rower");
+  });
+
+  // The table above is only a clause-1 pin if it names EVERY door. Asserted
+  // against `LOG_SOURCES` itself (`domain/types.ts:121`) rather than against
+  // a retyped list, so a fifth member added to the enum makes this leg red
+  // instead of silently going unexercised.
+  it("the table covers every LogSource, so clause 1 is pinned over the whole enum", () => {
+    expect(
+      [...new Set(PARTIAL_TABLE.map((e) => e.source))].sort(),
+    ).toStrictEqual([...LOG_SOURCES].sort());
+  });
+
+  it("the allowlist is exactly the server enum minus finished, in the spec's order", () => {
+    expect(PARTIAL_CLOSE_REASONS).toStrictEqual([
+      "rower",
+      "link-lost",
+      "program-dropped",
+      "program-failed",
+      "interrupted",
+    ]);
+  });
+});
+
+describe("buildStoredSummary — door spec §1.2, the close-reason line", () => {
+  function partialRow(
+    endedBy: EndedByState,
+    steps: StoredLogStep[],
+  ): StoredLog {
+    return baseRow({
+      workoutTitle: SLACK_TIDE.title,
+      workoutType: SLACK_TIDE.type,
+      source: "pm5",
+      deviceName: "PM5 432331249",
+      steps,
+      endedBy,
+    });
+  }
+
+  // Every literal below is taken from the APPROVED Gate 0-A artboard
+  // (`docs/superpowers/specs/2026-09-02-door-gate-a.html`, decision (a)),
+  // not from the spec's own draft table.
+  it.each([
+    [
+      "rower",
+      SOME_UNMEASURED_STEPS,
+      "STOPPED EARLY · 2 of 5 intervals measured",
+    ],
+    [
+      "link-lost",
+      SOME_UNMEASURED_STEPS,
+      "LINK LOST · the app lost the monitor · 2 of 5 intervals measured",
+    ],
+    [
+      "program-dropped",
+      LOST_BOUNDARY_STEPS,
+      "THE MONITOR DROPPED THE PROGRAM · 1 of 5 intervals measured",
+    ],
+    [
+      "program-failed",
+      LOST_BOUNDARY_STEPS,
+      "THE PROGRAM DID NOT LOAD · 1 of 5 intervals measured",
+    ],
+    [
+      "interrupted",
+      LOST_BOUNDARY_STEPS,
+      "LEFT UNFINISHED · 1 of 5 intervals measured",
+    ],
+  ] as const)("endedBy=%s renders its own sentence", (endedBy, steps, line) => {
+    expect(buildStoredSummary(partialRow(endedBy, steps)).closeLine).toBe(line);
+  });
+
+  // §1.2: `link-lost` keeps its OWN ungated, steps-independent trigger. Both
+  // of these rows are EXCLUDED by the PARTIAL predicate and still carry the
+  // release-noted sentence, suffix-free (`releaseNotes.ts:366`).
+  it("a link-lost Just Row still says LINK LOST, suffix-free", () => {
+    expect(
+      buildStoredSummary(partialRow("link-lost", NO_STEPS)).closeLine,
+    ).toBe("LINK LOST · the app lost the monitor");
+  });
+
+  it("a link-lost row with every step measured still says LINK LOST, suffix-free", () => {
+    expect(
+      buildStoredSummary(partialRow("link-lost", ALL_MEASURED_STEPS)).closeLine,
+    ).toBe("LINK LOST · the app lost the monitor");
+  });
+
+  // The other four words render ONLY when all four clauses hold — a
+  // steps-independent `STOPPED EARLY` would print on every connected Just
+  // Row and on every planned row Ended after its last interval.
+  it.each([
+    ["rower", NO_STEPS],
+    ["rower", ALL_MEASURED_STEPS],
+    ["program-dropped", NO_STEPS],
+    ["program-failed", ALL_MEASURED_STEPS],
+    ["interrupted", NO_STEPS],
+    ["finished", LOST_BOUNDARY_STEPS],
+    [null, LOST_BOUNDARY_STEPS],
+  ] as const)(
+    "a non-partial endedBy=%s row renders no close line",
+    (endedBy, steps) => {
+      expect(buildStoredSummary(partialRow(endedBy, steps)).closeLine).toBe(
+        undefined,
+      );
+    },
+  );
+
+  // PARTIAL implies `N < M` (clause 3 guarantees an unmeasured step), so the
+  // suffix can never read `5 of 5`. Asserted over EVERY row the table marks
+  // partial, off the rendered artifact rather than off a second count.
+  it("every partial row's suffix reads N of M with N < M = steps.length", () => {
+    const partialRows = PARTIAL_CROSS_PRODUCT.filter(
+      (r) => r.expected !== undefined,
+    );
+    expect(partialRows.length).toBe(10);
+    for (const { shape, endedBy } of partialRows) {
+      const steps = STEPS_SHAPES[shape];
+      const line = buildStoredSummary(partialRow(endedBy, steps)).closeLine;
+      const match = /· (\d+) of (\d+) intervals measured$/.exec(line ?? "");
+      expect(match, `no N of M suffix on: ${String(line)}`).not.toBeNull();
+      const measured = Number(match![1]);
+      const total = Number(match![2]);
+      expect(total).toBe(steps.length);
+      expect(measured).toBeLessThan(total);
+    }
+  });
+});
+
+describe("partialChipWord / historyChipWord — door spec §1.3, the list chip", () => {
+  // Gate 0-A decision (e), the approved short forms.
+  it.each([
+    ["rower", "STOPPED EARLY"],
+    ["link-lost", "LINK LOST"],
+    ["program-dropped", "PROGRAM DROPPED"],
+    ["program-failed", "PROGRAM NOT LOADED"],
+    ["interrupted", "UNFINISHED"],
+  ] as const)("partialChipWord(%s) is %s", (endedBy, chip) => {
+    expect(partialChipWord(endedBy)).toBe(chip);
+  });
+
+  it.each([["finished"], [null], [undefined]] as const)(
+    "partialChipWord(%s) is undefined — outside the allowlist",
+    (endedBy) => {
+      expect(partialChipWord(endedBy)).toBeUndefined();
+    },
+  );
+
+  // The list's whole rule, so the two surfaces cannot name one close two
+  // ways: `link-lost` is UNGATED (it renders on the detail screen for rows
+  // the PARTIAL predicate excludes, so a chip gated on `partial` alone would
+  // leave History silent about the one row the detail screen shouts about);
+  // the other four render only when the row is partial.
+  it("a non-partial link-lost row still carries the LINK LOST chip", () => {
+    expect(historyChipWord({ partial: false, endedBy: "link-lost" })).toBe(
+      "LINK LOST",
+    );
+  });
+
+  it.each([
+    ["rower"],
+    ["program-dropped"],
+    ["program-failed"],
+    ["interrupted"],
+  ] as const)("a non-partial endedBy=%s row carries no chip", (endedBy) => {
+    expect(historyChipWord({ partial: false, endedBy })).toBeUndefined();
+  });
+
+  it.each([
+    ["rower", "STOPPED EARLY"],
+    ["link-lost", "LINK LOST"],
+    ["program-dropped", "PROGRAM DROPPED"],
+    ["program-failed", "PROGRAM NOT LOADED"],
+    ["interrupted", "UNFINISHED"],
+  ] as const)(
+    "a partial endedBy=%s row carries the %s chip",
+    (endedBy, chip) => {
+      expect(historyChipWord({ partial: true, endedBy })).toBe(chip);
+    },
+  );
+
+  it.each([["finished"], [null]] as const)(
+    "a partial-flagged endedBy=%s row still carries no chip — the chip table is keyed by value",
+    (endedBy) => {
+      expect(historyChipWord({ partial: true, endedBy })).toBeUndefined();
+    },
+  );
+});
+
+describe("I-B5 census: no summing reader ever sees partialMeters/partialSeconds (door spec §5.2, Task 4)", () => {
+  // Realistic pm5 fixture (RF3): EXIT7_STEPS above, the exit-7 walk's own
+  // real captured values, both steps carrying `actualSource: "pm5"` and a
+  // genuine actualMeters/actualSeconds pair — the population this census
+  // exists to protect.
+  //
+  // PINNED to endedBy: "rower", not "link-lost" (harden lens 2, finding 5).
+  // Task 5 step 5b makes `caption` a FUNCTION of `endedBy`: on a
+  // `link-lost` row carrying a partial it legitimately becomes `INTERVAL N
+  // · LAST READING BEFORE THE LINK WENT` — a `link-lost` fixture here would
+  // fail this census for a reason that is NOT a leak (the caption moved BY
+  // DESIGN), and "fix" it by widening the assertion, which is exactly how a
+  // real leak gets waved through later. `endedBy: "rower"` is one of the
+  // four wire-close reasons I-B1 allows a partial for, and keeps `caption`
+  // (and every other field below) invariant regardless of Task 5, so any
+  // difference this test finds is a genuine leak.
+  const row = baseRow({
+    workoutTitle: SEA_FRET.title,
+    workoutType: SEA_FRET.type,
+    deviceName: "PM5 432331249",
+    source: "pm5",
+    steps: EXIT7_STEPS,
+    endedBy: "rower",
+  });
+  // Adds the pair to ONE step only — proving a single leaked step, not just
+  // an all-steps-carry-it shape, moves nothing.
+  const withPartial: StoredLog = {
+    ...row,
+    steps: [
+      { ...EXIT7_STEPS[0]!, partialMeters: 63, partialSeconds: 41 },
+      EXIT7_STEPS[1]!,
+    ],
+  };
+
+  it("adding partialMeters/partialSeconds to one step changes nothing about buildStoredSummary's heroes, total line, caption, read-back, or close line", () => {
+    const before = buildStoredSummary(row);
+    const after = buildStoredSummary(withPartial);
+    // `rows` is the one field that legitimately differs after Task 5 (it
+    // renders the pair on the affected row's own step list) — excluded
+    // here, per the task brief, so this stays a leak detector both before
+    // and after that task lands. Every other field on the view —
+    // `heroes` (`stepActualSums`/`hasStepActuals`/`tierBAvgSplitSeconds`/
+    // `buildStoredRest`/`buildStoredTotalLine` all run unconditionally at
+    // the top of `buildHeroes`, over the SAME `row.steps` `withPartial`
+    // widens — though for THIS row's own branch, read verbatim at
+    // `monitorRun.ts:1098`, `endedBy !== "finished"` means the RC-1 work
+    // pair is never written and `isReconstructableClose` gates TIER B2
+    // off, so `stepSums`'s numeric VALUE never reaches this particular
+    // row's own output — a mutation probe that proves the assertion can
+    // still bite is in the task report, via a rescue path realistically
+    // shaped like `buildStoredRest`'s own fallback-2 rung above), plus
+    // `caption`, `readBack`, `planFooter`, `closeLine` — is compared for
+    // real.
+    expect({ ...after, rows: undefined }).toStrictEqual({
+      ...before,
+      rows: undefined,
+    });
+  });
+
+  it("measuredElapsedSeconds: the affected step's own measured-elapsed reading (rendered as timeLabel) is unchanged by the pair riding alongside it", () => {
+    // `measuredElapsedSeconds` isn't exported and has no field of its own
+    // on `MeasuredRow` — it feeds `timeLabel` (`buildRows`' own source:
+    // `fmtDuration(elapsed / 60)`), reached only through `rows`, the one
+    // field the summary-object assertion above excludes. Read it off
+    // `rows[0]` directly instead: EXIT7_STEPS[0]'s own real capture is
+    // 67.9s, at/above the pm5 measurable floor, so `buildRows` measures it
+    // — `fmtDuration(67.9 / 60)` is "1:08" (`domain/duration.ts`'s own
+    // `splitParts`: `Math.round(67.9) = 68` -> `1:08`).
+    const beforeRow = asMeasured(buildStoredSummary(row).rows[0]);
+    const afterRow = asMeasured(buildStoredSummary(withPartial).rows[0]);
+    expect(afterRow.timeLabel).toBe(beforeRow.timeLabel);
+    expect(afterRow.timeLabel).toBe("1:08");
+  });
+
+  it("the C2 mapping: eligibilityFailure's own row shape has no `steps` field at all, so no value the pair could carry can ever reach it — and the fence excludes every partial row anyway (I-B1: a partial row's endedBy is never \"finished\", the one value eligibilityFailure accepts)", () => {
+    const c2Row = {
+      source: "pm5" as const,
+      endedBy: "rower",
+      workSeconds: 124,
+      workMeters: 500,
+    };
+    // `steps` isn't part of `SessionLogRow` at all (mapping.ts's own type) —
+    // added here only to prove, at runtime, that a caller handing this
+    // function an object that ALSO happens to carry a `steps` array with
+    // the new keys gets the identical verdict, because the function never
+    // reads the property.
+    const withSteps = { ...c2Row, steps: withPartial.steps };
+    expect(eligibilityFailure(withSteps)).toBe(eligibilityFailure(c2Row));
+    expect(eligibilityFailure(c2Row)).toBe("not_finished");
+  });
+
+  // heroDistanceMeters (`LogRow.tsx`) — STATED, not asserted (RF21):
+  // `RecentLog` has no `steps` field at all, so no value of
+  // `partialMeters`/`partialSeconds` can ever reach it. An equality
+  // assertion here could never fail and would be decoration, not a check.
+});
+
+// ---------------------------------------------------------------------
+// Door spec (2026-09-02) §5.1/§6 — the stored screen's own half of the
+// in-flight pair. Gate 0-B (James, 2026-09-02) APPROVED decisions (a),
+// (b) and (c); the strings below are that approval, not a proposal.
+// ---------------------------------------------------------------------
+
+/** The five 500 m reps of a REAL library workout (Tropical Wave — the
+ *  workout the approved artboard draws), as stored steps. RF3: a
+ *  five-step row with the partial on step 3 is what production looks
+ *  like, and a single-step fixture cannot tell `rows.find(...)` from
+ *  `rows[0]`. `targetSplit` 102 is 2k+2 against this suite's own
+ *  baselines idiom (2k = 100 s per 500). */
+const TROPICAL_WAVE = LIBRARY_WORKOUTS.find(
+  (w) => w.title === "Tropical Wave",
+)!;
+
+function tropicalSteps(): StoredLogStep[] {
+  return Array.from({ length: 5 }, (_unused, i) => ({
+    label: "500 m @ 2k +2",
+    targetSplit: 102,
+    meters: 500,
+    // Steps 1 and 2 measured off the machine; 3 is the in-flight one; 4
+    // and 5 were never reached.
+    ...(i < 2
+      ? {
+          actualSource: "pm5" as const,
+          actualSeconds: 112,
+          actualMeters: 500,
+          actualSplit: 112,
+        }
+      : {}),
+    ...(i === 2 ? { partialMeters: 250, partialSeconds: 63 } : {}),
+  }));
+}
+
+function tropicalRow(endedBy: StoredLog["endedBy"]): StoredLog {
+  return baseRow({
+    workoutTitle: TROPICAL_WAVE.title,
+    workoutType: TROPICAL_WAVE.type,
+    deviceName: "PM5 432331249",
+    source: "pm5",
+    steps: tropicalSteps(),
+    endedBy,
+  });
+}
+
+describe("buildRows — the in-flight pair on the stored step row (§5.1)", () => {
+  it("puts the formatted pair on the unmeasured step it belongs to, and on no other row", () => {
+    const rows = buildStoredSummary(tropicalRow("rower")).rows;
+    expect(asPrescribed(rows[2]).partialLabel).toBe("250 m · 1:03");
+    // Never on an unreached row (4 and 5) — absence is a KEY absence, not
+    // a present-and-undefined one, because rows are compared with
+    // `toStrictEqual` across this suite.
+    expect(asPrescribed(rows[3]).partialLabel).toBeUndefined();
+    expect("partialLabel" in asPrescribed(rows[3])).toBe(false);
+    expect("partialLabel" in asPrescribed(rows[4])).toBe(false);
+  });
+
+  it("a TIME step reads the clock first: `2:10 · 480 m` (Gate 0-B decision (b)), off the same one formatter", () => {
+    const rows = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "rower",
+        steps: [
+          {
+            label: "3:00 @ 6k",
+            seconds: 180,
+            targetSplit: 120,
+            partialMeters: 480,
+            partialSeconds: 130,
+          },
+        ],
+      }),
+    ).rows;
+    expect(asPrescribed(rows[0]).partialLabel).toBe("2:10 · 480 m");
+  });
+});
+
+describe("both row builders format the pair through the SAME function (§5.1: one formatter, two doors)", () => {
+  it("monitorWorkRows (live/log door) and buildRows (stored screen) put the IDENTICAL string on the same step for the same data", () => {
+    // THE LEG THAT CATCHES A SECOND COPY OF THE FORMAT. One expected
+    // value, asserted against both doors — a row saved from this very
+    // piece must read back the way the live summary read it, or the same
+    // number is described two ways on two screens.
+    const live = buildSummaryModel({
+      door: "monitor",
+      run: {
+        v: 2,
+        workoutId: null,
+        title: TROPICAL_WAVE.title,
+        program: {
+          intervals: [
+            {
+              type: "work",
+              kind: "distance",
+              value: 500,
+              targetSplit: 102,
+              displaySpm: 26,
+              restSeconds: 120,
+            },
+          ],
+        },
+        logSeed: {
+          steps: [{ label: "500 m @ 2k +2", kind: "work" as const }],
+          paces: {},
+        },
+        actuals: [],
+        deviceName: "PM5 432331249",
+        startedAt: "2026-08-18T18:57:00.000Z",
+        completedAt: "2026-08-18T19:02:00.000Z",
+        terminated: false,
+        endedBy: "rower",
+        partial: { intervalIndex: 0, meters: 250, seconds: 63 },
+      },
+    });
+    const stored = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "rower",
+        steps: [
+          {
+            label: "500 m @ 2k +2",
+            targetSplit: 102,
+            meters: 500,
+            partialMeters: 250,
+            partialSeconds: 63,
+          },
+        ],
+      }),
+    );
+    expect(asPrescribed(live.rows[0]).partialLabel).toBe("250 m · 1:03");
+    expect(asPrescribed(stored.rows[0]).partialLabel).toBe(
+      asPrescribed(live.rows[0]).partialLabel,
+    );
+  });
+});
+
+describe("buildStoredSummary's caption — the link-lost sentence, by precedence (§6, Gate 0-B decision (c))", () => {
+  it("a link-lost row whose steps carry a partial captions the INTERVAL the pair belongs to", () => {
+    expect(buildStoredSummary(tropicalRow("link-lost")).caption).toBe(
+      "INTERVAL 3 · LAST READING BEFORE THE LINK WENT",
+    );
+  });
+
+  it("the SAME steps on a `rower` close keep the caption they have today — the sentence is about the LINK, not about the partial", () => {
+    // Steps 1 and 2 are measured, so `targetsOnlyCaption` abstains:
+    // today's value is `undefined`, and it must stay `undefined`.
+    expect(buildStoredSummary(tropicalRow("rower")).caption).toBeUndefined();
+  });
+
+  it("a SINGLE-STEP link-lost row: the caption is EXACTLY the partial sentence — never TARGETS ONLY, never the two concatenated (precedence, not stacking)", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "link-lost",
+        steps: [
+          {
+            label: "500 m @ 2k +2",
+            targetSplit: 102,
+            meters: 500,
+            partialMeters: 250,
+            partialSeconds: 63,
+          },
+        ],
+      }),
+    );
+    // EQUALITY, never `toContain` — a `toContain` assertion stays green
+    // under a stacked value, which is the failure this leg exists for.
+    expect(view.caption).toBe("INTERVAL 1 · LAST READING BEFORE THE LINK WENT");
+  });
+});
+
+describe("buildRows — the spoken form of the pair, keyed on the stored close reason (§6, Gate 0-B decision (g))", () => {
+  it("a `rower` row speaks `stopped at`; the SAME steps on a `link-lost` row speak `last reading`", () => {
+    // The stored door reads its close reason off the persisted row, so
+    // this is where a saved link-lost piece proves it still says what got
+    // THROUGH months later — the live door's own leg is in
+    // `summaryModel.test.ts`, and both call one producer.
+    const rower = buildStoredSummary(tropicalRow("rower")).rows[2]!;
+    const lost = buildStoredSummary(tropicalRow("link-lost")).rows[2]!;
+    expect(asPrescribed(rower).partialSpoken).toBe(
+      "stopped at 250 m after 1:03",
+    );
+    expect(asPrescribed(lost).partialSpoken).toBe(
+      "last reading 250 m after 1:03",
+    );
+  });
+
+  it("a TIME step speaks metres first even though it SHOWS the clock first", () => {
+    const rows = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "rower",
+        steps: [
+          {
+            label: "3:00 @ 6k",
+            seconds: 180,
+            targetSplit: 120,
+            partialMeters: 480,
+            partialSeconds: 130,
+          },
+        ],
+      }),
+    ).rows;
+    expect(asPrescribed(rows[0]).partialLabel).toBe("2:10 · 480 m");
+    expect(asPrescribed(rows[0]).partialSpoken).toBe(
+      "stopped at 480 m after 2:10",
+    );
+  });
+
+  it("an unreached step carries no spoken form at all", () => {
+    const rows = buildStoredSummary(tropicalRow("rower")).rows;
+    expect("partialSpoken" in asPrescribed(rows[3])).toBe(false);
   });
 });

@@ -310,18 +310,19 @@ slate.
       deleted, and `docs/RELEASING.md`'s API note records the break. The
       0020 BACKFILL rule stays (it is history, not a live inference).
       Filed here per RF14 and the spec's exit criterion 8b. **XS**
-- [ ] **v0.35.0's release notes must RETIRE "A Just Row never advances
-      your plan" (v0.32.0) — trigger: the v0.35.0 notes PR, once the
-      substitution PR ships.** One sentence in the notes' own voice: a Just
-      Row can now stand in for a plan session, and the Plan tab says so.
-      Filed at the substitution spec (RF14). **XS**
-- [ ] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
-      told testers — trigger: the v0.34.0 notes PR.** v0.32.0 said
-      "connect to the erg" (there is now a Start Timer with no erg) and
-      "no type chip, on purpose" (free rows now carry the JR chip). One
-      sentence each, in the notes' own voice, or the News tab contradicts
-      itself two entries apart. Filed at #268's PM gate (RF14, and the PR
-      body had claimed this row already existed). **XS**
+- [x] **v0.35.0's release notes must RETIRE "A Just Row never advances
+      your plan" (v0.32.0).** **DONE — shipped in `releaseNotes.ts:18`
+      (v0.35.0 entry): "v0.32.0 said a Just Row never advances your plan;
+      now it can, when you say so, and never otherwise."** Ticked at door
+      PR A's PM gate, which found the row discharged and unticked. Filed at
+      the substitution spec (RF14). **XS**
+- [x] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
+      told testers.** **DONE — both shipped in the v0.34.0 entry:
+      `releaseNotes.ts:39` ("v0.32.0 said connect to the erg; that is now
+      one of two ways in") and `:40` ("v0.32.0 said no type chip, on
+      purpose; in practice the row was too easy to lose in History, so it
+      has one now").** Ticked at door PR A's PM gate, which found the row
+      discharged and unticked. Filed at #268's PM gate (RF14). **XS**
 - [x] **Timer mode, on the phone — DONE in this PR (2026-09-02; spec
       `docs/superpowers/specs/2026-09-02-timer-mode-design.md`, Gate 0
       `docs/design/handoffs/2026-09-02-timer-mode/`). One END box in both
@@ -488,12 +489,24 @@ rower's work silently.
       live arm publishing `closeReason`; the real-driver seam test; the
       two Gate-0 surfaces; this composition drive-through). **PR #248**,
       PM final gate GO-WITH-CONDITIONS 2026-08-31.
-- [ ] **The pocketed-phone window's two co-producers. RE-SCOPED on evidence
-      2026-08-31 — one is not a defect.** `pause-declared` at 66 spm while
-      rowing is real and stays here, owned by
-      `2026-08-31-lifecycle-design.md` §4, and it deliberately WAITS on that
-      spec's §3 instrument rather than being fixed on the stale-frame story
-      (66 spm is consistent with a stale reading, not evidence of one).
+- [x] **~~The pocketed-phone window's two co-producers~~ — §4 CLOSED
+      2026-09-03: UNREPRODUCED and INSTRUMENTED (James's ruling at the
+      resume-edge walk).** `pause-declared` at 66 spm while rowing was
+      owned by `2026-08-31-lifecycle-design.md` §4 and waited on that
+      spec's §3 instrument, which shipped in #267. The walk that used it
+      (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`) performed the
+      exact gesture — locked mid-row for 35.5 s, kept rowing, unlocked —
+      and **declared no pause at all in the 22.4 s that followed**. The
+      post-resume inter-arrival gaps were `[84,180,90]` ms; the one
+      genuine `pause-declared`, seven seconds into a deliberate mid-work
+      stop, carried `[90,90,180]` ms. **Timing does not discriminate on
+      this device, and there was nothing to discriminate.** Designing a
+      predicate on a defect an instrumented capture of its own gesture
+      cannot reproduce would be inventing a mechanism, so the instrument
+      stays and the item closes — the same posture as F-1 (6-MIN). The
+      next occurrence arrives with `gapsMs` and `sinceResumeMs` already on
+      it; a design starts from those numbers or not at all. One device,
+      one run: this is not a claim that the defect cannot happen.
       **TWD 52→0→64 m non-monotonic is CORRECT BEHAVIOUR and leaves this
       item:** `continuity.ts`'s `check` convicts a reset only when TWD,
       elapsed AND distance all read backward together — TWD alone is the
@@ -555,6 +568,16 @@ rower's work silently.
       pocketed-phone chain does not need it — the late open cost the series
       trace's head, never the interval actuals. Stays a separate Wave F
       item.
+      **IT NOW OWNS A SECOND THING, from door PR B (2026-09-03).** The
+      in-flight reading that PR banks is held in a per-run ref that
+      `connect()` and `teardown()` clear defensively, and those two clears
+      are unreachable today only because no surface offers Connect with a
+      run open. `useMonitorSession.ts`'s own comment at the ref says it:
+      **"ROADMAP's R10 reconnect would arm both `connect()`/`teardown()`
+      clears, and then these clears are what lose the metres."** So this
+      item must decide what a resumed run does with a held reading before
+      it arms either path — otherwise it silently reintroduces the loss
+      door PR B just closed.
 - [ ] **RC-29 — LEFT WAVE F on 2026-08-31, same day it was folded in.** It
       was folded in carrying a measured false-positive rate — "9 banners in
       288 s over a link that never dropped (`walk-2026-08-26/`)" — that
@@ -571,7 +594,7 @@ rower's work silently.
       current build; `2026-08-31-lifecycle-design.md` §6 ships a latch
       counter so ordinary use produces the number, and no threshold moves
       until it does.
-- [ ] **The `door` item — RE-SCOPED 2026-09-02, spec
+- [x] **The `door` item — RE-SCOPED 2026-09-02, spec
       `docs/superpowers/specs/2026-09-02-door-partial-design.md`.** The
       column itself SHIPPED as `session_logs.source` (`pm5 | timer |
       manual`) in #268 / migration 0020 on 2026-09-02, so "which door" is
@@ -598,6 +621,28 @@ rower's work silently.
         `source` SUNSET is NO LONGER PART OF PR A** — it shipped on its own
         as #273 / v0.35.0 on 2026-09-02 (its own row above is reconciled).
         **Gate 0-A** on the rendered saved row + list chip.
+        **SHIPPED as door PR A (2026-09-02), every clause above:** the
+        four-clause PARTIAL predicate with its five-word marker table
+        (`storedSummary.ts`'s `partialCloseReason`/`buildCloseLine`);
+        `STOPPED EARLY · N of M intervals measured` on the session detail,
+        above the heroes, and a `.log-partial-chip` on the History row,
+        both words from one table so the two surfaces cannot disagree;
+        `LINK LOST` keeping its own ungated, steps-independent trigger and
+        shortened to `LINK LOST · the app lost the monitor` so the combined
+        line fits; the list's boolean derived in SQL from the same four
+        clauses (no new column) with an agreement test holding the two
+        copies equal; `log_source` gaining `no-reading` (migration 0022, no
+        backfill, no device name) so a connected arrival that measured
+        nothing reads `NO MONITOR READING` with its wall-clock time rather
+        than `LOGGED BY HAND` with none; `timeLabel` re-derived as a
+        positive three-member allowlist; RC-18's fallback becoming the
+        literal `MONITOR` at all seven sites, with the deviceName-band
+        guard now keeping the `pm5` door for a nameless erg instead of
+        storing the session as by-hand. All three riders below are ticked.
+        Gate 0-A was APPROVED by James on 2026-09-02 before any task ran.
+        **PR B (the stored NUMBER) is IMPLEMENTED on branch
+        `wave-f-door-b`, 2026-09-03** — the item below carries what it
+        shipped as **PR #279**.
       - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
         in-flight interval's metres in NEW step keys (`partialMeters`/
         `partialSeconds`), never `actualMeters` — an older server drops
@@ -614,16 +659,39 @@ rower's work silently.
       **S/M each; A lands before B; B's plan gets a FULL antagonist pass
       (novel stored shape + session-scoped ref).**
 
-- [ ] **The in-flight interval's metres are discarded on a mid-row link loss.**
+      **TICKED 2026-09-03 — nothing remains under this item.** The column
+      shipped in #268; PR A shipped the stored WORD in #276 (`e6f456ce`);
+      PR B ships the stored NUMBER and is the last thing this item scoped.
+      Two things people have asked about here are NOT owed by this item and
+      have their own rows: the spec's §4 riders, all three ticked under PR A
+      above, and **correct resume**, which now also owns what a resumed run
+      does with a held in-flight reading. **The only thing still to write in
+      is PR B's number**, in the two places already marked for it — the PR A
+      sub-item's closing line just above, and the in-flight metres item just
+      below — and nowhere else.
+
+- [x] **The in-flight interval's metres are discarded on a mid-row link loss.**
+      **DONE — door PR B (branch `wave-f-door-b`), 2026-09-03.** A close that
+      catches the rower mid-interval banks that interval's last reading in two
+      NEW step keys and the row shows it beside the dash; no hero, tier, total
+      or "N intervals kept" moves (I-B2/I-B5). The five replay legs drive real
+      wire bytes from three committed captures. Gate 0-B approved 2026-09-02.
+      **PR #279.**
       On a single-interval workout — the tester's own 2000 m "Beam Sea" — any
       mid-row loss gives `kept = 0`, which was the MAJORITY outcome of walk
       leg B, not an oddity. **The spec states explicitly whether correct resume
-      recovers those metres.** **S**
+      recovers those metres — and the answer is that it does NOT:** correct
+      resume must first stop clearing the reading, because `connect()` and
+      `teardown()` both clear it today (see the correct-resume item above).
+      Discharged 2026-09-03 rather than struck: the sentence bound
+      independently of the tick. **S**
       **SPECCED as `2026-08-31-lifecycle-design.md` §5, and SEQUENCED BEHIND
       THE `door` COLUMN above.** The live-drop arm (§1) inherits this
       directly: banking "what was rowed" banks nothing when no boundary was
-      reached. A stored partial is OUR number, not the machine's — there is
-      no interval pair mid-interval — so it can never be tier A, and
+      reached. A stored partial is the machine's own frame reading with OUR
+      attribution to the in-flight interval, never an interval pair the
+      machine reported — there is none mid-interval — so it can never be
+      tier A, and
       `measuredIntervalCount` correctly will not count it toward
       "N intervals kept." That is the PARTIAL vocabulary's job, which is why
       this lands with or after that migration and its summary copy is part
@@ -640,6 +708,29 @@ rower's work silently.
       since `parse.ts:608`'s strict `rowingState === 1` makes any non-1 read
       `false` and the next occurrence still will not say which. No behaviour
       change proposed. **S**
+      **(d) SETTLED 2026-09-03 at the resume-edge walk
+      (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`): the clock
+      RUNS through a mid-work stop.** With the rower sitting still, elapsed
+      went 80.52 s → 92.11 s (+11.6 s) while distance went 247.1 → 249.6 m
+      (coast, then nothing). So `types.ts:189-191` holds for the mid-WORK
+      case and `types.ts:134`'s "FREEZES whenever `rowingActive` goes
+      false" is correct only for its own measured REST — corrected at its
+      site by this walk. Door PR B's `partialSeconds` is therefore interval
+      elapsed INCLUDING idle time, exactly as `2026-09-02-door-partial-design.md`
+      §5.1 concluded; no shipped behaviour changes. **(c) is still open —
+      the ring carries no raw-byte diagnostic, so the byte's own value
+      through the stop remains unobserved.** The original text, for the
+      record: `domain/monitor/types.ts:134` claims `MonitorFrame.elapsedSeconds`
+      "FREEZES whenever `rowingActive` goes false", measured through a REST;
+      `types.ts:189-191` says the wire has no paused state at all; and
+      `PAUSED_FRAME_HOLD`'s comment records that the byte's behaviour through
+      a mid-piece stop has NEVER been observed. Door PR B's stored pair is
+      elapsed time, so the mid-WORK case is the one that matters. The
+      observation: on a DISTANCE interval, stop pulling mid-interval for
+      ≥10 s, keep the program running, then End. The recording then carries
+      both the clock and the byte through the same stop and the loser of
+      those two comments is corrected at its own site. Spec
+      `2026-09-02-door-partial-design.md` §5.1 carries the full reading.
 - [x] **The machine's own totals have NEVER reached a saved row. TRIAD — a
       change to what a stored number MEANS, and it lands alone.** Found by
       James on production TestFlight 2026-08-28; the ring is
@@ -786,20 +877,35 @@ the re-scope — not a branch of their own and not the lifecycle spec's PRs. The
 none of that migration's risk, so bundling them costs a reviewer nothing and
 saves three round trips.
 
-- [ ] **`ALTER TABLE "preferences" DROP COLUMN "warmup";`** — one line, safe
-      once no deployed image reads it. Still present at
-      `server/db/schema.ts:369`. **Its trigger fired long ago:** Phase WU set it
-      at "the first server-touching phase after TWO tags have shipped",
-      deliberately countable. **Ten tags have shipped since.**
-- [ ] **Remove the legacy warm-up guards on the persisted `LogSeed.steps[].kind`
-      union.** `logDraft.ts:864` (was `:857`) still carries `if (seedStep.kind === "warmup")
-return;` and the union at `:607` (was `:600`) is still `"warmup" | "work"`. Binding
-      sub-ruling from WU: `kind` stays the literal union, never widened to
-      `string`. Same expired trigger as above.
-- [ ] **RC-12's last unreconciled comment.** Four of six sites are already
-      corrected; `domain/monitor/types.ts:630-631` (was `:607`, now the `Transport` interface) still claims `onDisconnect`
-      covers "the Bluetooth stack resetting" without qualification. The
-      neighbouring iOS-backgrounding claim was already struck as false.
+- [x] **`ALTER TABLE "preferences" DROP COLUMN "warmup";`** — one line, safe
+      once no deployed image reads it. **DONE (door PR A, migration 0022,
+      Task 1):** the column is dropped and the `preferences.warmup` Drizzle
+      field is removed from `server/db/schema.ts` in the same commit
+      (comment now at `:423-432`). Its trigger fired long ago: Phase WU set
+      it at "the first server-touching phase after TWO tags have shipped",
+      deliberately countable, and ten tags had shipped by the time this
+      rider rode.
+- [x] **Remove the legacy warm-up guards on the persisted `LogSeed.steps[].kind`
+      union.** **PARTLY DONE (door PR A, Task 6, amended at the whole-branch
+      review): the union is NARROWED, the GUARD is KEPT behind a cast for
+      the residual population.** `LogSeed.steps[].kind` is now the literal
+      `"work"` — per the binding sub-ruling from WU, never widened to
+      `string`. `buildMonitorLogSteps`'s skip survives as an explicit
+      legacy-population read, `(seedStep.kind as string) === "warmup"`, the
+      identical shape `summaryModel.ts`'s `warmupIndex` already uses over
+      the same records: an unlogged `MonitorRun` authored before warm-up
+      removal (PR #150, v0.16.0) still carries the string at runtime, and
+      deleting the guard would move that row's AVG SPLIT between the live
+      and stored doors. NO NUMBER MOVES. Owed removal, now for BOTH readers
+      together: when that population is provably gone.
+- [x] **RC-12's last unreconciled comment.** **DONE (door PR A, Task 6):**
+      `domain/monitor/types.ts`'s `onDisconnect` doc block no longer claims
+      "the phone's Bluetooth stack resetting" or "iOS backgrounding" as
+      causes. Both are struck as UNSOURCED and UNMEASURED, not as disproven
+      — what the walks establish is the absence of OUR OWN evidence (the
+      capture-corpus grep is empty), never the radio's behaviour
+      (`docs/history/phase-rc.md:2054-2056`). Wording softened at door
+      PR A's PM gate.
 
 **Exit:** a phone locked before the first pull, a phone backgrounded mid-piece,
 and a link dropped mid-piece each produce a stored row that matches what the
@@ -1209,8 +1315,10 @@ closed with zero Concept2 contact.
       dark, nonce-only plumbing (ACCEPTED as the interim implementation,
       per the design-gate ruling), not the authenticated activation shape.
       Split from PR1 so one reviewer never holds a token-broker migration
-      and an iOS deep-link contract in one pass. **S**
-- [ ] **PR1.75 — full option (g), the ruled activation shape, TRIAD
+      and an iOS deep-link contract in one pass. **S** (That return seam
+      was retired at PR1.75b — see below — once the native link moved to
+      `ASWebAuthenticationSession`.)
+- [x] **PR1.75 — full option (g), the ruled activation shape, TRIAD
       (AUTH).** Owns every piece the account-injection ruling's hard
       precondition names: the `surface` column migration (`"native"` |
       `"web"`) + enforcement at both mint/complete routes, **the surface
@@ -1234,14 +1342,36 @@ closed with zero Concept2 contact.
       separate admission-model question, not bundled here. Sequenced
       PR1.5 → PR1.75 → PR2; gates `C2_LINK_ENABLED=1` on any real cohort
       (`2026-09-01-concept2-pr15-gate.md` §6). **M**
-      **Status 2026-09-02: server half BUILT (PR1.75a, #269) — migration
-      0021 (#268 took 0020 first), both identity ladders, `authVia`, the
-      styled pages; native half is PR1.75b (`WebAuthPlugin`, `linkFlow`,
-      the return-arm census, the walk). The per-clause disposition of this
-      row lands at 1.75b's merge (design exit criterion 8); still owed
-      after both: the flag flip, live-portal registration of the native
-      redirect, PR2's surface + identity line, promotion of the app-wide
-      disagreement refusal.**
+      **Status 2026-09-02: COMPLETE across two PRs. Per-clause disposition
+      of this row:** the `surface` column migration + enforcement at both
+      routes — DONE (1.75a, #269, migration 0021); the surface predicate's
+      own authority (`req.authVia`, bearer wins, both-present rule,
+      disagreement test) — DONE (1.75a); per-surface redirect URIs — DONE
+      (1.75a); the authenticated native exchange — DONE across both (`POST
+      /api/concept2/exchange` at 1.75a; the device return that reaches it
+      at 1.75b, #277, on `ASWebAuthenticationSession`, NOT a URL scheme +
+      `appUrlOpen`); an authenticated web callback — DONE (1.75a);
+      Concept2's approval of the native `redirect_uri` — log-dev DONE
+      2026-09-02, **live portal STILL OWED**; dual-route identity tests —
+      DONE (1.75a); `UNIQUE(user_id)` + one atomic upsert at mint — DONE
+      (1.75a); `ALLOWED_EMAILS`-as-revocation — explicitly NOT bundled,
+      still a separate admission-model question. **PR1.5's `Browser.open` +
+      `browserFinished` return arm was RETIRED at 1.75b** (the callback now
+      arrives in a promise); `@capacitor/browser` stays for PR2's read-only
+      link-out. Device walk:
+      `docs/monitor/sessions/walk-2026-09-02-c2-native/`. **Still owed
+      after both PRs:** the `C2_LINK_ENABLED` flag flip on a real cohort,
+      gated on Concept2's write approval; live-portal registration of the
+      native redirect under the application name "Ergomatic" (log-dev is
+      registered under James's own name — D3 pre-check observation,
+      `94b83c84`); PR2's surface + its Gate 0 identity-copy amendment; the
+      `describeStoreContracts` gap named at 1.75a
+      (`2026-09-02-concept2-pr175a-server.md:44`); and a decision for
+      James, not made here: whether to promote the app-wide bearer/cookie
+      disagreement refusal (design §1) to a hard `400 ambiguous_auth` now
+      that this walk measured 42/42 native requests cookie-free. Until
+      decided, the app-wide path only logs `auth_disagreement` and
+      `/api/concept2/*` alone refuses.
 - [ ] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
       (Connect + H/L ask + Unlink) and the log row's Send action with
       sent/duplicate/failed states and a View-on-Concept2 link-out. **M**
@@ -1300,17 +1430,32 @@ X" is a real disposition — most of these are single files.
       for free rows, or accept and say so in the button's copy. **S**
 
 ## Codebase-audit owners
-- **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02): on
-  the connected lost-link banner (`ConnectedSurface.tsx`'s `LostBanner`, the
-  `kept === 0` arm), that line reads as loss at the exact moment the
-  RECONNECT is nullifying it — scary and, given recovery, false. Proposed:
-  `kept === 0` renders the title alone (no body); `kept >= 1` keeps
-  "N intervals kept." Copy-only, one file, cosmetic failure mode —
-  FAST-PATH eligible, but a rendered **Gate 0** first (it changes what a
-  rower reads). **Rides PR 4 (§5 partial metres) — James, 2026-09-02**: the
-  same PR that makes a part-rowed interval count toward "kept" owns what the
-  zero-kept banner says, one Gate 0 for the whole kept vocabulary. Evidence:
-  `ConnectedSurface.tsx:848`.
+- [x] **LOST THE MONITOR must not say "Nothing kept." — DONE in door PR B**
+  (2026-09-03). Shipped on all THREE surfaces that carried the phrase, not
+  one: the banner's `kept === 0` arm renders its title alone (no body
+  element at all, never an emptied one), the connected surface's ended frame
+  says "The erg dropped the workout." and stops, and `LogSession.tsx`'s
+  dropped strip says "You had not finished an interval yet." with the bold
+  clause dropped rather than emptied. Every `kept >= 1` arm is byte-for-byte
+  unchanged. **The sentence below is WRONG and is corrected here rather than
+  deleted, because it was the reason this rode PR B:** a part-rowed interval
+  does NOT count toward "kept" and never will — I-B2, a partial is never an
+  `IntervalActual` and `measuredIntervalCount` does not see it. What PR B
+  actually does is make the zero-kept case one where something IS on screen
+  (the interval's own metres), which is why the phrase had to go. The
+  original text, for the record:
+  > **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02):
+  > on the connected lost-link banner (`ConnectedSurface.tsx`'s
+  > `LostBanner`, the `kept === 0` arm), that line reads as loss at the
+  > exact moment the RECONNECT is nullifying it — scary and, given
+  > recovery, false. Proposed: `kept === 0` renders the title alone (no
+  > body); `kept >= 1` keeps "N intervals kept." Copy-only, one file,
+  > cosmetic failure mode — FAST-PATH eligible, but a rendered **Gate 0**
+  > first (it changes what a rower reads). **Rides PR 4 (§5 partial
+  > metres) — James, 2026-09-02**: the same PR that makes a part-rowed
+  > interval count toward "kept" owns what the zero-kept banner says, one
+  > Gate 0 for the whole kept vocabulary. Evidence:
+  > `ConnectedSurface.tsx:848`.
 
 - **v0.32.0's notes owe the DIAGNOSTICS door its affordance sentence** (PM
   gate on #258, 2026-09-01): where it is (You → DIAGNOSTICS → Monitor logs),
@@ -1518,6 +1663,16 @@ X" is a real disposition — most of these are single files.
   unreachable to anyone but the session that wrote it (recurring failure
   16's corollary). To reproduce: run `pnpm screenshots` twice at the same
   commit, saving the first run's PNGs, and diff run against run.
+- **`src/monitor/useMonitorSession.test.ts` — a pre-existing flake**
+  (`listSessionLogs()` expected length 1, got 2: an extra session-log ring
+  entry, RF27's own territory) fired once during PR1.75b's coverage runs,
+  reported 2026-09-02, and passed on three isolated re-runs plus the very
+  next full coverage run. Not in that PR's diff (last touched at a prior
+  commit, `10b8aa94`). **Written out here rather than cited to the report
+  that found it**, because that report lives under git-excluded
+  `.superpowers/` (recurring failure 16's corollary) — the same reason the
+  screenshot-flakiness item above is inlined. Rides the next PR touching
+  this file, or the next time it fires.
 
 ## Needs a decision from James
 
@@ -1529,7 +1684,8 @@ connected-surface table below with a fix-13-instrument-14 ruling; "Run it
 again" was declined; RC-38 was pulled forward and the rest of Phase PROTO
 held; the axis-quantity question opened the "say which number this is" design
 pass below; AUD-006 got its fix shape. **This table now holds two rows, both
-closed as records rather than live questions: RC-30 (declined at the RC close)
+closed as records rather than live questions — plus, since 2026-09-02, ONE
+LIVE row (the app-wide `ambiguous_auth` promotion, below): RC-30 (declined at the RC close)
 and the C2 account injection row — RULED by James at PR1.5's design gate
 (2026-09-01): ACCEPT the bounded residual for the dark plumbing; fully
 authenticated option (g) — attempt-surface binding AND identity-checked
@@ -1549,7 +1705,8 @@ question, not a re-raised one.
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
-| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by two FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is PR1.75b's, and the gate stays closed until it ships and walks) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by two FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
+| **App-wide `ambiguous_auth` promotion** | LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
@@ -1564,6 +1721,12 @@ tester nothing and the north star is a stranger using this; RC-38 is the one
 row where we key a live check on an enum we have not read. **Re-ask at Wave A's
 close, not before.**
 
+- **PR1.75b leftovers (2026-09-02, #277's PM gate — RF14):** (1) a unit test for
+  the empty `?state=` callback (`params.get` answers `""`, which the adapter
+  treats as a MISMATCH and refuses — fails safe, untested); (2)
+  `app/ios/App/App.xcodeproj/project.pbxproj`'s four `E2A1B0…` entries sit out
+  of ascending-id order and Xcode will re-sort them on its next save (cosmetic;
+  expect that churn in the next iOS PR, not a CLI rewrite).
 - **RC-38 — SCHEDULED (2026-08-31), rides the next connected-surface PR.**
   Transcribe `OBJ_WORKOUTTYPE_T`. We have read one row of an enum we key a check
   on: `8` is sourced, `1` and `0` are sourced nowhere. James, 2026-08-27:
@@ -1810,6 +1973,50 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **FILED (door PR A's PM gate, 2026-09-02): the server tsconfig now
+  includes a client file, and no lint fence stops `server/` importing
+  `src/`.** `app/tsconfig.server.json`'s `include` reads
+  `["server", "domain", "src/vite-env.d.ts"]` — the third entry added by
+  #226's Playwright-typecheck ratchet, so the server project's roots reach
+  into `src/`. `app/eslint.config.js`'s `no-restricted-imports` block
+  (`:108`) fences Capacitor plugins and `src/platform`/`src/native` for the
+  CLIENT; there is no mirror rule forbidding a `server/**` file from
+  importing `src/**`. Owed: that fence, with a carve-out for tests, which
+  legitimately cross. Rides the next PR touching server lint or tsconfig.
+  **XS**
+- **FILED (door PR A's PM gate, 2026-09-02): `1,000` in the History list,
+  `1000` on the log detail.** Pre-existing, not this PR's.
+  `LogRow.tsx:51` hand-rolls a comma thousands separator (`fmtMeters`, its
+  own house-style comment) and the History row uses it (`:185`); the
+  detail's own step rows render `` `${step.meters} m` `` raw
+  (`storedSummary.ts:947`). Same distance, two spellings, one screen apart.
+  Owed: pick one and share the formatter. Rides the next PR touching
+  either. **XS**
+- **FILED (door PR A's PM gate, 2026-09-02):
+  `server/concept2/mapping.test.ts:160-169` is pinned by TYPECHECK, not by
+  its own assertion.** The leg exists to make the retired
+  `deviceName === null` gate and the live `source !== "pm5"` gate disagree,
+  and to do it the fixture is cast past the excess-property check
+  (`as unknown as Parameters<typeof eligibilityFailure>[0]`) onto a row
+  shape the wire cannot produce — `logSourceContradiction` 400s a
+  `deviceName` on any non-pm5 row. So the runtime expectation discriminates
+  a state only the cast can reach. Owed: either say so in the leg's own
+  comment (the honest reading — it is a mutation discriminator, not a
+  reachability claim), or reach the same disagreement through a supported
+  producer. **XS**
+- **FILED (door PR A's PM gate, 2026-09-02): the `freeRow` 401 first-run
+  flake.** On a cold stack (24 containers up) the first `freeRow` e2e
+  sign-in has 401'd once and passed on retry. Not reproduced on a warm
+  stack. Owed: one run with the backdoor sign-in instrumented, to say
+  whether it is the auth seam or container start-up ordering. **S**
+- **ACCEPTED (Gate 0-A's own cost, door PR A, 2026-09-02): Today's last
+  three rows carry no PARTIAL chip.** The chip lands in History and on the
+  log detail; Today's compact rows have no slot for it without displacing
+  the type badge. Gate 0-A weighed two options and took the cost. A THIRD
+  option — the chip on the title line, or displacing the badge — is
+  deferred to the Timer-mode design pass (the `## Timer mode, on the
+  phone` row above), which is already redesigning that row.
+
 - **RESOLVED (2026-08-31): `swapMark`'s `globalOnly: false` arm is pinned**
   — trigger pulled forward by James. The arm's only producer is synthetic,
   so `Plan.test.tsx` mocks one session's prescription (and nothing else);
@@ -1921,6 +2128,16 @@ Each needs erg time or a deliberate recording session.
   stack — capture it rather than re-running past it.** This matters more
   than the known e2e flakes: the unit project has no Docker, browser, or
   network and should be deterministic. **S**
+  **THREE files now, and a measured rate (door PR B Task 7, 2026-09-03):**
+  a third test joined the set — `server/auth/middleware.test.ts > noStore >
+  stamps Cache-Control: no-store` — alongside a `data.test.ts` cursor-
+  pagination leg and `server/routes/concept2.test.ts`'s cookie-caller leg
+  (`expected 401 to be 200` inside its own mint helper). Rate: **1 failure
+  in 10 runs at that branch's head, and 1 in 12 with `data.test.ts` reverted
+  to base** — the same rate with and without the branch's only `unit`-project
+  file, which is what rules out a regression and keeps this row's "cause
+  UNKNOWN, capture the next one" instruction standing. `concept2.test.ts`
+  ran 8/8 green in isolation, so it does not reproduce alone.
 - **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
   can no longer rot independently.** The class was two independent literals —
   `news.spec.ts`'s (CI-gated, bumped by every notes PR) and

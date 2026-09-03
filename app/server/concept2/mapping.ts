@@ -8,6 +8,8 @@
 // logic, from scripts/c2-crossconnect.ts:132-152, with their own comments
 // here rather than a shared import.
 
+import type { LogSource } from "../../domain/types.js";
+
 // Independent, own-bounds structural mirror of `stores/logs.ts`'s `get()`
 // return row (the SAME "independent mirror" idiom that file's own
 // `LogSeriesSample` doc comment names) — only the fields this module
@@ -16,6 +18,16 @@
 // nullability mirrors its real column (`db/schema.ts`): `loggedAt` is
 // NOT NULL (a DB-side default); everything else here is nullable exactly
 // as stored.
+//
+// Door PR A (2026-09-02) §2.2: `deviceName` is GONE from this shape,
+// replaced by `source`. Provenance is what the column is FOR
+// (`domain/types.ts`'s `LogSource`); the null check this module used to
+// run was convenient, never itself the stated signal — 0020's backfill
+// CASE (`WHEN device_name IS NOT NULL THEN 'pm5'`) and
+// `logSourceContradiction`'s biconditional (`deviceName ≠ null ⟺ source
+// = 'pm5'`) have kept the two signals in agreement on every write since,
+// so the rewrite below is a true no-op over every row ever stored,
+// attacked and held (spec §2.2).
 export interface SessionLogRow {
   loggedAt: Date;
   completedAt: Date | null;
@@ -25,7 +37,7 @@ export interface SessionLogRow {
   restSeconds: number | null;
   restMeters: number | null;
   machineSummary: Record<string, unknown> | null;
-  deviceName: string | null;
+  source: LogSource;
   endedBy: string | null;
 }
 
@@ -40,13 +52,18 @@ export type EligibilityFailure =
 // deliberate: a pre-RC row is excluded with the SAME reason a
 // rower-terminated row gets, stated here because a pre-RC row has no
 // close reason at all, not a wrong one.
+//
+// Door PR A (2026-09-02) §2.2: gate 1 reads `source`, not `deviceName` —
+// every non-`pm5` member (`timer`/`manual`/`no-reading`) is equally
+// ineligible for a Concept2 upload, which `source !== "pm5"` says
+// directly rather than through the deviceName proxy.
 export function eligibilityFailure(row: {
-  deviceName: string | null;
+  source: LogSource;
   endedBy: string | null;
   workSeconds: number | null;
   workMeters: number | null;
 }): EligibilityFailure | null {
-  if (row.deviceName === null) return "not_monitor";
+  if (row.source !== "pm5") return "not_monitor";
   if (row.endedBy !== "finished") return "not_finished";
   if (row.workSeconds === null || row.workMeters === null) {
     return "no_work_totals";

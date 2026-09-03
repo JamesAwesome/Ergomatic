@@ -35,6 +35,8 @@ import {
   deviationBarWidthPercent,
   isMeasuredReading,
   measuredIntervalCount,
+  partialRowLabel,
+  partialSpokenLabel,
   readingOfLogStep,
   rowJudgment,
   type MeasuredRow,
@@ -933,10 +935,16 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
       program,
       actuals: [wu, w1, w2],
       logSeed: {
+        // Unsafe cast: door PR A narrowed `LogSeed.steps[].kind` to the
+        // literal `"work"`, but this fixture models a run stored BEFORE
+        // that change, which can still carry the runtime string "warmup"
+        // despite the type no longer admitting it — see `warmupIndex`'s
+        // own comment (`summaryModel.ts`) for why the reader still checks
+        // for it.
         steps: program.intervals.map((_iv, i) => ({
           label: `Interval ${i}`,
-          kind: i === 0 ? ("warmup" as const) : ("work" as const),
-        })),
+          kind: i === 0 ? "warmup" : "work",
+        })) as { label: string; kind: "work" }[],
         paces: {},
       },
     });
@@ -967,10 +975,16 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
       program,
       actuals: [oldShapeActual],
       logSeed: {
+        // Unsafe cast: door PR A narrowed `LogSeed.steps[].kind` to the
+        // literal `"work"`, but this fixture models a run stored BEFORE
+        // that change, which can still carry the runtime string "warmup"
+        // despite the type no longer admitting it — see `warmupIndex`'s
+        // own comment (`summaryModel.ts`) for why the reader still checks
+        // for it.
         steps: program.intervals.map((_iv, i) => ({
           label: `Interval ${i}`,
-          kind: i === 0 ? ("warmup" as const) : ("work" as const),
-        })),
+          kind: i === 0 ? "warmup" : "work",
+        })) as { label: string; kind: "work" }[],
         paces: {},
       },
     });
@@ -984,10 +998,16 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
       program,
       actuals: [],
       logSeed: {
+        // Unsafe cast: door PR A narrowed `LogSeed.steps[].kind` to the
+        // literal `"work"`, but this fixture models a run stored BEFORE
+        // that change, which can still carry the runtime string "warmup"
+        // despite the type no longer admitting it — see `warmupIndex`'s
+        // own comment (`summaryModel.ts`) for why the reader still checks
+        // for it.
         steps: program.intervals.map((_iv, i) => ({
           label: `Interval ${i}`,
-          kind: i === 0 ? ("warmup" as const) : ("work" as const),
-        })),
+          kind: i === 0 ? "warmup" : "work",
+        })) as { label: string; kind: "work" }[],
         paces: {},
       },
     });
@@ -2604,5 +2624,253 @@ describe("buildSummaryModel — the completion eyebrow suppression (PR #248 roun
     const run = monitorRun({ program: { intervals: [] }, actuals: [] });
     const model = buildSummaryModel({ door: "monitor", run });
     expect(model.suppressCompletionEyebrow).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------
+// Door spec (2026-09-02) §5.1/§5.4/§6 — the in-flight pair on the step
+// row, and the link-lost caption under the table. Gate 0-B (James,
+// 2026-09-02) APPROVED decisions (a), (b), (c), (d), (f) and (g); the
+// strings below are that approval, not a proposal.
+// ---------------------------------------------------------------------
+
+describe("partialRowLabel — the ONE formatter for the in-flight pair (§5.1, Gate 0-B (a)/(b))", () => {
+  it("a DISTANCE interval reads the pair THEN the clock: `250 m · 1:03` (decision (a) — the counted-DOWN dimension leads)", () => {
+    expect(partialRowLabel({ partialMeters: 250, partialSeconds: 63 })).toBe(
+      "250 m · 1:03",
+    );
+  });
+
+  it("a TIME interval reads the clock THEN the metres: `2:10 · 480 m` (decision (b))", () => {
+    expect(
+      partialRowLabel({
+        partialMeters: 480,
+        partialSeconds: 130,
+        seconds: 180,
+      }),
+    ).toBe("2:10 · 480 m");
+  });
+
+  it("the pair is a UNIT: either key alone (or neither) formats nothing at all", () => {
+    expect(partialRowLabel({ partialMeters: 250 })).toBeUndefined();
+    expect(partialRowLabel({ partialSeconds: 63 })).toBeUndefined();
+    expect(partialRowLabel({})).toBeUndefined();
+    // The time-interval arm too, so a future guard cannot be half-removed
+    // and still pass on the distance arm alone.
+    expect(
+      partialRowLabel({ partialMeters: 480, seconds: 180 }),
+    ).toBeUndefined();
+  });
+
+  it("a ZERO pair RENDERS, and reads `0 m · 0:00` — there is no floor, because the reading is real (an interval's first rowing frame is d=0 in the corpus)", () => {
+    // Pinned as an exact string rather than `toBeDefined()`: the failure
+    // this leg exists for is a future `if (meters === 0) return undefined;`,
+    // which a defined-ness assertion would never see, and absence here
+    // would be invention (harden lens 2 finding 2; controller ruling at
+    // Finding 6).
+    expect(partialRowLabel({ partialMeters: 0, partialSeconds: 0 })).toBe(
+      "0 m · 0:00",
+    );
+  });
+
+  it("an OVER-TARGET partial still reads as a partial — `503 m · 2:01` against a 500 m target, with no over/under branch anywhere (decision (d))", () => {
+    expect(partialRowLabel({ partialMeters: 503, partialSeconds: 121 })).toBe(
+      "503 m · 2:01",
+    );
+  });
+
+  it("`fmtDuration` ROUNDS, so a partial can read exactly like a completed interval — `1:00 · 197 m` on a 1:00 target, BY DESIGN", () => {
+    // C1's own measured triple (Task 7 step 3), so this is the string a
+    // real capture produces. `fmtDuration(59.74 / 60)` is `1:00` because
+    // `splitParts` does `Math.round(minutes * 60)` (`domain/duration.ts`),
+    // and `Math.round(196.6)` is `197`.
+    //
+    // THE TELL IS THE ROW'S SHAPE, NOT ITS NUMBERS (Gate 0-B decision
+    // (d), APPROVED): a partial row carries the dash's slot filled and NO
+    // pace and NO rate cell — asserted in `PostWorkoutSummary.test.tsx`.
+    // Nothing here branches on whether the pair beats its own target.
+    expect(
+      partialRowLabel({
+        partialMeters: 196.6,
+        partialSeconds: 59.74,
+        seconds: 60,
+      }),
+    ).toBe("1:00 · 197 m");
+  });
+});
+
+describe("partialCaption — the link-lost sentence under the table (§6, Gate 0-B decision (c))", () => {
+  /** A REAL library program: Tropical Wave's five 500 m reps, the same
+   *  workout the approved artboard draws (RF3 — a five-interval program
+   *  with the partial on interval 3 is what production looks like, and a
+   *  single-interval fixture cannot tell `rows.find(...)` from `rows[0]`). */
+  const TROPICAL = libraryProgram("Tropical Wave");
+
+  function tropicalActual(index: number): IntervalActual {
+    const iv = TROPICAL.intervals[index]!;
+    return {
+      index,
+      elapsedSeconds: 112,
+      distanceMeters: iv.kind === "distance" ? iv.value : 500,
+      avgSplit: iv.targetSplit ?? 112,
+      avgSpm: iv.displaySpm ?? 26,
+      avgHeartRateBpm: 158,
+      restDistanceMeters: 0,
+    };
+  }
+
+  /** Tropical Wave with intervals 1 and 2 measured and the rower 250 m
+   *  into interval 3 — the artboard's own scenario. */
+  function tropicalRun(endedBy: MonitorRun["endedBy"]): MonitorRun {
+    return monitorRun({
+      program: TROPICAL,
+      actuals: [tropicalActual(0), tropicalActual(1)],
+      partial: { intervalIndex: 2, meters: 250, seconds: 63 },
+      endedBy,
+    });
+  }
+
+  it("a link-lost close whose rows carry a partial captions the INTERVAL the pair belongs to", () => {
+    const model = buildSummaryModel({
+      door: "monitor",
+      run: tropicalRun("link-lost"),
+    });
+    expect(model.caption).toBe(
+      "INTERVAL 3 · LAST READING BEFORE THE LINK WENT",
+    );
+  });
+
+  it("the SAME rows on a `rower` close keep the caption they have today — the sentence is about the LINK, not about the partial", () => {
+    const model = buildSummaryModel({
+      door: "monitor",
+      run: tropicalRun("rower"),
+    });
+    // Two rows measured, so `targetsOnlyCaption` abstains: today's value
+    // is `undefined`, and it must stay `undefined`.
+    expect(model.caption).toBeUndefined();
+  });
+
+  it("a SINGLE-INTERVAL link-lost row: the caption is EXACTLY the partial sentence — never TARGETS ONLY, never the two concatenated (precedence, not stacking)", () => {
+    const model = buildSummaryModel({
+      door: "monitor",
+      run: monitorRun({
+        program: {
+          intervals: [
+            interval({ kind: "distance", value: 500, targetSplit: 102 }),
+          ],
+        },
+        actuals: [],
+        endedBy: "link-lost",
+        partial: { intervalIndex: 0, meters: 250, seconds: 63 },
+      }),
+    });
+    // EQUALITY, never `toContain` — a `toContain` assertion stays green
+    // under a stacked value, which is the failure this leg exists for.
+    expect(model.caption).toBe(
+      "INTERVAL 1 · LAST READING BEFORE THE LINK WENT",
+    );
+  });
+});
+
+describe("partialSpokenLabel — the pair as a screen reader says it (§6, Gate 0-B decision (g))", () => {
+  it("a non-link-lost close speaks `stopped at`, spelling the pair out with `after` rather than the middle dot", () => {
+    expect(
+      partialSpokenLabel({ partialMeters: 250, partialSeconds: 63 }, "rower"),
+    ).toBe("stopped at 250 m after 1:03");
+  });
+
+  it("a LINK-LOST close speaks `last reading` — what GOT THROUGH, not where the rower got to", () => {
+    expect(
+      partialSpokenLabel(
+        { partialMeters: 250, partialSeconds: 63 },
+        "link-lost",
+      ),
+    ).toBe("last reading 250 m after 1:03");
+  });
+
+  it("the spoken order is metres THEN clock on BOTH interval kinds — the visible order is a layout choice, `X m after Y` is the English one", () => {
+    // A time interval's VISIBLE pair leads with the clock (decision (b),
+    // `2:10 · 480 m`); spoken, that would read "stopped at 2:10 after
+    // 480 m", which says the metres are a duration. The two orders are
+    // deliberately independent, and this leg is what stops the spoken
+    // form being quietly re-derived from `partialRowLabel`'s string.
+    //
+    // The SIGNATURE carries half of this guarantee and is stronger than
+    // any assertion here: `partialSpokenLabel` Picks only the two partial
+    // keys, NOT `seconds`, so it cannot branch on interval kind at all —
+    // passing one is a compile error. The end-to-end proof that a real
+    // TIME step still speaks metres-first is `storedSummary.test.ts`'s own
+    // leg, which goes through `buildRows` with `seconds: 180` set.
+    expect(
+      partialSpokenLabel({ partialMeters: 480, partialSeconds: 130 }, "rower"),
+    ).toBe("stopped at 480 m after 2:10");
+  });
+
+  it("the pair is a UNIT here too: either key alone formats nothing", () => {
+    expect(partialSpokenLabel({ partialMeters: 250 }, "rower")).toBeUndefined();
+    expect(
+      partialSpokenLabel({ partialSeconds: 63 }, "link-lost"),
+    ).toBeUndefined();
+  });
+
+  it("the four other close reasons all speak `stopped at` — only link-lost differs, and the allowlist is the LINK one, not a negation of `rower`", () => {
+    for (const endedBy of [
+      "rower",
+      "program-dropped",
+      "program-failed",
+      "interrupted",
+      "finished",
+      null,
+      undefined,
+    ] as const) {
+      expect(
+        partialSpokenLabel({ partialMeters: 250, partialSeconds: 63 }, endedBy),
+      ).toBe("stopped at 250 m after 1:03");
+    }
+  });
+});
+
+describe("both row builders produce the spoken form too, through the SAME function", () => {
+  const PROGRAM: WorkoutProgram = {
+    intervals: [interval({ kind: "distance", value: 500, targetSplit: 102 })],
+  };
+
+  function spokenFor(endedBy: MonitorRun["endedBy"]): string | undefined {
+    const model = buildSummaryModel({
+      door: "monitor",
+      run: monitorRun({
+        program: PROGRAM,
+        actuals: [],
+        endedBy,
+        partial: { intervalIndex: 0, meters: 250, seconds: 63 },
+      }),
+    });
+    const row = model.rows[0]!;
+    return row.measured ? undefined : row.partialSpoken;
+  }
+
+  it("monitorWorkRows puts `stopped at` on a rower close and `last reading` on a link-lost one", () => {
+    expect(spokenFor("rower")).toBe("stopped at 250 m after 1:03");
+    expect(spokenFor("link-lost")).toBe("last reading 250 m after 1:03");
+  });
+
+  it("an unreached row carries no spoken form at all — an ABSENT key, not a present-and-undefined one", () => {
+    const model = buildSummaryModel({
+      door: "monitor",
+      run: monitorRun({
+        program: {
+          intervals: [
+            interval({ kind: "distance", value: 500, targetSplit: 102 }),
+            interval({ kind: "distance", value: 500, targetSplit: 102 }),
+          ],
+        },
+        actuals: [],
+        endedBy: "rower",
+        partial: { intervalIndex: 0, meters: 250, seconds: 63 },
+      }),
+    });
+    const unreached = model.rows[1]!;
+    expect(unreached.measured).toBe(false);
+    expect("partialSpoken" in unreached).toBe(false);
   });
 });

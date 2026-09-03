@@ -227,10 +227,14 @@ export interface Sample {
    *  winning frame's own `state` was `"resting"` — ABSENT means work, the
    *  same absent-not-false idiom `hr` above already uses, so a work
    *  sample costs zero extra bytes. The renderer cannot recover this
-   *  later (a stored log's steps never carry a warm-up row, so anything
-   *  positional derived from steps lands displaced); the recorder is the
-   *  only place that ever saw the wire's own state byte, so it must mark
-   *  the sample at construction. */
+   *  later (a stored log's steps never carry a warm-up row — nothing has
+   *  PRODUCED one since Phase WU, and `buildMonitorLogSteps` still skips a
+   *  legacy warm-up seed step on the one population that can persist the
+   *  string, its own KEEP guard — and no step carries a marker to key a
+   *  positional derivation off either, so anything positional derived from
+   *  steps lands displaced); the recorder is the only place that ever saw
+   *  the wire's own state byte, so it must mark the sample at
+   *  construction. */
   readonly r?: true;
 }
 

@@ -90,13 +90,37 @@ export interface WorkoutInput {
  *  (Just Row unconnected spec, 2026-09-02, §Mechanism stored shape (c)).
  *  `pm5` = the connected door, the monitor's own numbers; `timer` = the
  *  phone's clock (a `SessionRun` closed on the Timer, or the time-only Just
- *  Row); `manual` = typed in after the fact (`Log it after`). Stored as a
- *  fact at write time, never inferred by a reader: the old read-side guess
+ *  Row); `manual` = typed in after the fact (`Log it after`); `no-reading`
+ *  = a connected arrival the app holds no reading for (door PR A, spec
+ *  `docs/superpowers/specs/2026-09-02-door-partial-design.md` §2.1 — reads
+ *  `NO MONITOR READING`, the live screen's own word). Stored as a fact at
+ *  write time, never inferred by a reader: the old read-side guess
  *  (`deviceName`, else any stopwatch step, else by hand) was already wrong
  *  about a connected session saved through the manual door. Migration 0020
  *  backfills every pre-existing row with that same guess, once, so nothing
- *  a rower already sees changes word. Three mirrors move together:
- *  `server/db/schema.ts`'s `logSourceEnum`, and this tuple, which
- *  `server/routes/data.ts` validates the wire against. */
-export type LogSource = "pm5" | "timer" | "manual";
-export const LOG_SOURCES: readonly LogSource[] = ["pm5", "timer", "manual"];
+ *  a rower already sees changes word; `no-reading` gets NO backfill (door
+ *  spec §2.4 — old `manual` rows that were really no-reading arrivals are
+ *  indistinguishable and stay `LOGGED BY HAND` permanently).
+ *
+ *  ELEVEN mirrors of this value set move together (door spec §2.4 names
+ *  them; no single grep finds the set). Compile-enforced: `logSource.ts`'s
+ *  and `storedSummary.ts`'s `switch`es are total over `LogSource` with no
+ *  `default`, so a fifth member errors on its own (no `assertNever`
+ *  mechanism needed) — which is what forces `summaryModel.ts`'s live word
+ *  into `storedSummary.ts`'s new arm. NOT compile-enforced, and the
+ *  dangerous one by name: **`LOG_SOURCES` below is `readonly LogSource[]`,
+ *  not a tuple** — a short array compiles clean, and `routes/data.ts`
+ *  validates the wire against it, so omitting a member there 400s every
+ *  save of it with nothing red (the POST seam test is the only thing that
+ *  makes that omission red). The rest — `schema.ts`'s `logSourceEnum`, the
+ *  membership 400 message literal (`routes/data.ts`), the migration, and
+ *  the two e2e helper `source?` unions (`e2e/screenshots.spec.ts`,
+ *  `e2e/log.spec.ts`, the latter failing only where a test SEEDS the new
+ *  member, never on omission) — are likewise not compiler-checked. */
+export type LogSource = "pm5" | "timer" | "manual" | "no-reading";
+export const LOG_SOURCES: readonly LogSource[] = [
+  "pm5",
+  "timer",
+  "manual",
+  "no-reading",
+];

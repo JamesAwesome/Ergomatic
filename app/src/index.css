@@ -571,6 +571,37 @@ button:disabled {
   text-align: center;
 }
 
+/* Door spec (2026-09-02) §1.3, Gate 0-A decision (e), APPROVED by James:
+   the History list's partial chip ("STOPPED EARLY", "LINK LOST", ...) on the
+   numbers line. Its declarations are `.free-row-chip`'s above VERBATIM,
+   including #272's badge-column centring block — same 12px mono, --ink-3 on
+   --page at 6.69:1 (floor 4.5:1, PASS) and on --surface at 7.43:1, same 1px
+   --rule-3 hollow border at 1.56:1, inherited unchanged and DECORATIVE (the
+   chip's meaning is entirely its text, so the border carries no information
+   and needs no 3:1 non-text contrast; flagged and accepted at Gate 0-A
+   rather than silently decided).
+
+   A SEPARATE RULE, never a grouped selector: `FreeRowChip.test.tsx:68` pins
+   `.free-row-chip` to exactly ONE rule and `:70` pins its selector list to
+   exactly [".free-row-chip"], and SEVEN e2e assertions count or read the
+   text of that class. `src/log/partialChip.test.ts` pins the two rules'
+   declaration SETS equal so the copy cannot drift. */
+.log-partial-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  padding: 2px 6px;
+  box-sizing: border-box;
+  min-width: 28.4px;
+  text-align: center;
+}
+
 .pain-bar {
   display: flex;
   gap: 2px;
@@ -2451,6 +2482,17 @@ button.back-link:disabled,
   color: var(--ink-3);
 }
 
+/* Door spec (2026-09-02) §1.3, Gate 0-A slot B: the numbers line becomes a
+   two-item row when a partial chip rides on it, so the chip's 12px box and
+   the 11px numbers share one baseline with a real gap instead of running
+   together. Applied by `LogRow.tsx` only when a chip is present, so the
+   line's ordinary one-child layout is untouched everywhere else. */
+.today-log-hero-chipped {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* -- History list (from-the-log spec, 2026-08-18, /today/log) ----------
    Row idiom is `.today-log-row`/`.today-log-list`, reused verbatim (§1:
    "one row component, not two") — only the screen's own header/list
@@ -2546,7 +2588,10 @@ button.back-link:disabled,
    (index.css's own `.overlay-screen` rule, matching the draft-restore-
    notice/§4 N5 back-label comments' own pairing above in this file):
      --ink   (#1b1a17) on --page (#f4f1e8): 15.41:1 — title
-     --ink-2 (#3f3c35) on --page (#f4f1e8):  9.75:1 — value line, code
+     --ink-2 (#3f3c35) on --page (#f4f1e8):  9.74:1 — value line, code
+       (was 9.75 here; recomputed at Task 8's docs sweep against the
+       APPROVED Gate 0-B contrast table, which says 9.74 for this exact
+       pairing. WCAG 2.x relative luminance gives 9.7396.)
      --ink-3 (#57544c) on --page (#f4f1e8):  6.69:1 — caption (same
        figure this file's own draft-restore-notice comment already
        computed for `--ink-3` on `--page`, reused here since it is the
@@ -9491,6 +9536,42 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-4);
+}
+
+/* Door spec (2026-09-02) §5.1: the in-flight pair, as an EXTRA CELL IN
+   FRONT OF the dash — Gate 0-B decision (a), APPROVED: "The dash stays.
+   The pair is an extra cell in front of it, not a replacement for it".
+   Every declaration is `.summary-row-time`'s own (mono, 13px, `--ink-2`,
+   tabular-nums): the pair is typed as one of the table's numbers, not as
+   a new register. Only the box differs — content-sized instead of a 44px
+   column, right-aligned, never wrapping.
+
+   `flex: 0 0 auto` plus `nowrap` ON THE FLEX ITEM ITSELF — RF21's own recorded failure was a `min-width` placed on a
+   CHILD of the flex item, where the shrink algorithm never reads it.
+   These two declarations are gated by `PostWorkoutSummary.test.tsx`'s
+   own CSS-rule legs, which read them off THIS selector and carry their
+   own mutations.
+   `.summary-row-offset` beside it is `flex: 1; min-width: 0` and already
+   ellipsises, so it is what yields the space. That yield order is what
+   Task 8's e2e leg gates (`log.spec.ts`, "not clipped at the narrowest
+   supported portrait"), by CONTAINMENT — the cell's box inside the row's
+   content box. Measured while writing it, and recorded here because the
+   earlier version of this comment asked for the wrong assertion: this
+   element's own `scrollWidth` and `clientWidth` agree at every value
+   tried, including an absurd `12345 m · 59:59`, because the offset cell
+   absorbs the deficit first — so a `scrollWidth <= clientWidth`
+   assertion here could never have gone red. VALUES APPROVED at Gate
+   0-B (James, 2026-09-02). Contrast computed, not eyeballed (RF6):
+   `--ink-2` (#3f3c35) on `--page` (#f4f1e8) is 9.74:1 and on `--surface`
+   (#fffdf7) is 10.81:1, both clear of the 4.5:1 AA floor. */
+.summary-row-partial {
+  flex: 0 0 auto;
+  text-align: right;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .summary-legend {

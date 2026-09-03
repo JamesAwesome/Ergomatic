@@ -679,8 +679,12 @@ option as settled.**
 > describing the callback as unauthenticated, the attempts table as
 > lacking a surface column, or mint as raceable describes the PRE-1.75a
 > code and is kept as the record the ruling was drawn from. The native
-> return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's;
-> the activation gate stays closed until it ships. Current design:
+> return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's.
+> **COMPLETED 2026-09-02 by PR1.75b (#277):** the native return is BUILT
+> on `ASWebAuthenticationSession` and walked on device; option (g)'s
+> code-side precondition is now met in full. The activation gate itself
+> stays closed on the flag flip, live-portal registration and PR2.
+> Current design:
 > `docs/superpowers/specs/2026-09-02-concept2-pr175-app-bind-design.md`.
 
 Every option (a)-(f) above operates entirely INSIDE THE BROWSER, where
@@ -974,8 +978,12 @@ alone.**
 > describing the callback as unauthenticated, the attempts table as
 > lacking a surface column, or mint as raceable describes the PRE-1.75a
 > code and is kept as the record the ruling was drawn from. The native
-> return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's;
-> the activation gate stays closed until it ships. Current design:
+> return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's.
+> **COMPLETED 2026-09-02 by PR1.75b (#277):** the native return is BUILT
+> on `ASWebAuthenticationSession` and walked on device; option (g)'s
+> code-side precondition is now met in full. The activation gate itself
+> stays closed on the flag flip, live-portal registration and PR2.
+> Current design:
 > `docs/superpowers/specs/2026-09-02-concept2-pr175-app-bind-design.md`.
 
 PR1.5 no longer ships NO surface of its own — the P1a-device fix round
@@ -1082,8 +1090,12 @@ principal, matching what it actually proves.
 > describing the callback as unauthenticated, the attempts table as
 > lacking a surface column, or mint as raceable describes the PRE-1.75a
 > code and is kept as the record the ruling was drawn from. The native
-> return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's;
-> the activation gate stays closed until it ships. Current design:
+> return (`ASWebAuthenticationSession`, not `appUrlOpen`) is PR1.75b's.
+> **COMPLETED 2026-09-02 by PR1.75b (#277):** the native return is BUILT
+> on `ASWebAuthenticationSession` and walked on device; option (g)'s
+> code-side precondition is now met in full. The activation gate itself
+> stays closed on the flag flip, live-portal registration and PR2.
+> Current design:
 > `docs/superpowers/specs/2026-09-02-concept2-pr175-app-bind-design.md`.
 
 **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded

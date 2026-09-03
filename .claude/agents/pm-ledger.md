@@ -4287,3 +4287,223 @@ does not match these numbers._
 - Fold-word series: #239 148, #248 274, #249 225, #258 134, #268 186,
   **#272 153 → trimmed at the gate.** The arrow-route bullet recurred
   ("Just Row → Start Timer → finish"), one gate after it was named.
+
+## TRIAD final-PR gate, 2026-09-02 (Wave F door PR A — a stored WORD's meaning)
+
+- **A read-time predicate over stored columns is a RETROACTIVE product
+  change, and nobody treated it as one.** PARTIAL is derived at read time
+  from `ended_by` (live since migration 0012) plus `steps` — no migration,
+  no backfill, and therefore every qualifying row already in the database
+  gains a marker and a History chip the moment this deploys. The spec
+  discusses "no backfill" three times, always about `log_source`; the word
+  retroactive appears nowhere in the spec, the plan, the PR body or the
+  ROADMAP, and the Try-it line describes rowing a new piece. **At any gate
+  on a derived-at-read predicate, ask which EXISTING rows change appearance
+  and count them** — one prod query, the same one RF24's machine-summary
+  count used. Contrast the enum member in the same PR, whose retro
+  population was reasoned about carefully because a migration forced the
+  question. A change that needs no migration gets no such prompt.
+- **The design gate's "a number change is a design question too" clause
+  does NOT fire on a divergence that no existing row can reach.** PR A's
+  Task 6 removed Phase WU's warm-up guard, so a saved row built from a
+  pre-v0.16.0 seed would recompute AVG SPLIT over a phantom step while the
+  live summary's `warmupIndex` stays frozen. The controller ruled ACCEPT
+  (population: a MonitorRun authored 13 tags ago, never logged, still on a
+  phone, logged after this ships — nothing already saved moves); the final
+  whole-branch review then found the zero-cost alternative in the same file
+  pair — restore the guard behind the identical `(kind as string)` cast that
+  keeps `warmupIndex` alive — and the ruling was REVERSED before merge. No
+  number moves. **Generalises: the clause keys on whether a STORED row
+  renders differently, not on whether any arithmetic changed; and before
+  accepting a moved number, ask whether the sibling reader in the same PR
+  already shows how to avoid it.**
+- **`scripts/deploy.sh` can execute unattended the rollback that
+  `RELEASING.md`'s rollback floor forbids.** `rollback()` (`:23-29`) checks
+  out the previous SHA and re-ups when the new build fails its health
+  wait — after the new container has already booted and migrated. With
+  0022 that means the column is dropped and the restored image still
+  declares `preferences.warmup`, so `GET /api/prefs` 500s while the deploy
+  log reports a successful rollback. **A rollback-floor row is a claim
+  about an OPERATOR; check whether an automated path can perform it, and
+  name that path in the row.** The 0020 row has the same exposure and does
+  not name it either. Sibling of the 2026-09-02 "before deploying and
+  before merging are the same moment here" ruling.
+- **RF14, tenth: five of six deferred minors lived only in the PR body**,
+  and the body ALSO pointed at `.superpowers/sdd/.../task-*-report.md` for
+  the Tasks 1-6 mutation tables — a path in `.git/info/exclude`, so the
+  evidence for six tasks' probes becomes unreachable at merge. Two
+  failures, one habit. **The Record block's citations get the same
+  reachability check as a ROADMAP row's.**
+- **Two ROADMAP notes-obligation rows were discharged by shipped release
+  notes and left unticked** (`:283` v0.35.0, `:288` v0.34.0). Third gate
+  running where the ROADMAP is edited by the PR that PLANS work and not by
+  the one that FINISHES it. **At every gate, grep the ROADMAP for rows
+  naming a tag that is already cut** — `git tag --sort=-v:refname | head`
+  makes it two commands.
+- **Artboards vs built captures, second measurement:** Gate 0-A rendered
+  five close-reason words; the branch commits a built capture for two
+  (`STOPPED EARLY`, and `LINK LOST` via its e2e leg). The three uncaptured
+  words include the LONGEST line, while the landscape no-wrap assertion was
+  run on the SHORTEST. Not blocked — one table, one slot, unit-pinned
+  literals, and section 4 of the artifact showed all three at portrait
+  proportions — but **when a clip/wrap gate exists, check that it measures
+  the worst case and not the convenient one.**
+- **Fold PASSES cleanly for the first time in the series: 103 words, four
+  bullets, none over 25.** Series: #228 ~270, #230 266, #239 148, #248 274,
+  #249 225, #258 134, #268 186, #272 153, **door PR A 103, unamended** —
+  111 words / five bullets after PM-1's own required sentence, still under
+  both counts. The
+  30-second rule is now enforceable by two counts and the count is being
+  hit before the gate rather than at it. Stop treating a pass as news.
+- **Release: v0.36.0 MINOR after merge** (v0.35.0 cut the same day; nothing
+  reserves .36). Notes owe the marker, `NO MONITOR READING`, `MONITOR` —
+  plus the two sentences the PR body omitted: the marker applies to
+  sessions already in the log, and old by-hand rows that were really
+  no-reading never change. No walk owed; the nameless-erg arms are
+  unobserved hardening by their own code comment (skip spoken).
+## Wave E PR1.75b final gate, 2026-09-02 (#277 — the native half, scoped ~10-min gate)
+
+- **The scoped gate was the right call, and it is worth stating what made it
+  cheap.** 1.75b is not TRIAD (zero `app/server`, zero migrations, the whole
+  arm dev-gated), so the gate was three checks — census, walk record, fold —
+  and took the ten minutes it was budgeted. **Precedent: when the shape gate
+  splits a PR, it should also SIZE the final gate for each half in the same
+  ruling.** Doing that at the split cost nothing and saved a full pass here.
+- **The fold was WRITTEN IN THE PLAN and measured before the gate, and it is
+  the first in the series that needed no trimming.** The plan carried
+  `fold 120/24` as a checked value; the PR opened at exactly 120 words / 24
+  max bullet. Series: #239 148 · #248 274 · #249 225 · #258 134 · #268 186 ·
+  #272 153 · **#277 120 as opened.** **The rule that worked: put the fold's
+  word budget in the plan as a number a pass can recount, not in the gate as
+  a thing to trim.** Adopt for every plan.
+- **"Behind the flag" recurred in the very wave whose shape gate named it —
+  in the fold this time, not the diff.** #277's fold said "Everything stays
+  dark behind `C2_LINK_ENABLED`", while `Info.plist`'s new
+  `CFBundleURLTypes` entry and `ios-release.sh`'s by-name client-id
+  derivation ship unconditionally in the next TestFlight build. Neither is
+  rower-visible, so "tester impact: none" survives and nothing was wrong —
+  but the flag clause is a claim about a ROUTE and was written about a PR.
+  **Ask it of the fold as well as of the diff: which line of this body would
+  be false if the flag never flipped?** (Fixed at the gate: "rower-facing".)
+- **A correction landed in `CLAUDE.md` while the claim it withdrew stayed
+  standing in the antagonist ledger — under "Attacked and HELD".** #277
+  corrects the `pnpm exec vitest run --project client` footgun (mechanism: a
+  dropped `NODE_OPTIONS`, 1582 false failures) and had left the pass-11 ledger
+  entry asserting the footgun is "STALE … so the plan's three uses of that
+  form are correct", plus two repeats in the plan. Worse:
+  `.claude/agent-briefing.md` already carried the correct mechanism on main,
+  so a hardening pass contradicted a standing in-repo rule and nobody grepped.
+  **A ledger's "Attacked and HELD" section is vetted ground the next agent
+  starts from; when a PR withdraws a claim, the phrase sweep MUST include both
+  ledgers, not only code and docs.** (Fixed at the gate, in place.)
+- **RF14, tenth: six still-owed items in the body, four in the ROADMAP.** The
+  empty-`state=` unit test and "M5, `project.pbxproj` id sort order" had no
+  home outside the PR body. The check that finds this in one minute is now
+  standing: **diff the body's still-owed list against the ROADMAP's, both
+  directions.** (Both filed at the gate.)
+- **A live decision does not survive inside a `[x]` COMPLETE row.** The
+  `ambiguous_auth` promotion is correctly left to James on the walk's 42/42
+  `cookiePresent:false` evidence, but its only home was prose under the
+  now-ticked PR1.75 row, while `## Needs a decision from James` still said it
+  "holds two rows, both closed as records rather than live questions."
+  **When a gate parks a decision, the row that holds it must be one that
+  stays open.** (A LIVE row added at the gate.)
+- **The walk record set the standard for a negative observation.** Its
+  Info.plist section states the observation, then says the observation cannot
+  answer the question the heading asks, names the experiment that would, and
+  is filed as "observation, not measurement." **Quote it the next time a walk
+  card asks for a fact the build cannot distinguish.**
+- **Both halves of the split falsify in one command, and both came back
+  clean:** #269 empty under `app/src`/`app/ios`, #277 empty under
+  `app/server`/`app/drizzle`. Three gates running now for "a split is only
+  real if a single command can falsify it."
+- **What the eleven-pass hardening loop bought, judged at the far end:**
+  executability YES — the plan's prescribed blocks paste and pass, and the
+  four rules #275 promoted came out of it. Review cleanliness NO — the
+  implementation review still found three defects the eleven passes could
+  not have found (an empty-string `params.get()`, an unpinned client
+  constant, a mutation row whose fallback restored the original value), all
+  three requiring the code to exist. **The loop hardens the PLAN, never the
+  CODE; do not let a high pass count buy confidence in the implementation
+  review's scope.** With the `harden` skill's stop rule now capping the loop,
+  the number to watch is passes-per-novel-finding, not passes.
+- **Release: not needed.** `dist:grep` needle 8 proves the probe absent from a
+  flag-off bundle (with the red proof run); nothing a rower reaches. Wave E's
+  next tag is PR2's to claim, re-checked at its merge.
+
+## TRIAD final-PR gate, 2026-09-03 (Wave F door PR B — a stored NUMBER's meaning)
+
+- **"OUR number, never the machine's" was a claim about ATTRIBUTION that
+  reads as a claim about PROVENANCE, and the difference is an oracle.**
+  `partialMeters`/`partialSeconds` are `MonitorFrame.distanceMeters`/
+  `elapsedSeconds`, and `domain/monitor/types.ts:31-33` says those are
+  *"0x0031's OWN Elapsed Time / Distance, exactly as the machine reports
+  them"*. What is ours is which interval we attribute the reading to (§7:
+  `toActualIndex` returns `null` at terminate, so the machine reports the
+  quantity and cannot attribute it). Nothing shipped is wrong — but the
+  sentence invites the next agent to compare the pair against the PM5's own
+  interval reading and call it agreement. **Same bytes: RF11's mirror.**
+  Whenever a spec says a number is "ours", make it name the wire field it
+  came from, or say it is derived and from what.
+- **A spec built its number's MEANING on the weaker of two contradicting
+  comments in the same file, 55 lines apart.** §5.1's "the pair is elapsed,
+  not rowing time" quotes `types.ts:189-191` (*"There is NO paused state on
+  the wire"*, tagged C4/H1). `types.ts:134` says of the very same field,
+  MEASURED against a committed capture, that it *"FREEZES whenever
+  `rowingActive` goes false"*. RF16's second corollary in its purest form:
+  the citation was real, current, correctly transcribed, and the file's own
+  measured sentence contradicted it. **When a spec cites a field's comment,
+  grep the file for every other mention of that field before trusting the
+  one quoted** — this codebase documents fields in several places and the
+  measured claim is rarely the one nearest the declaration.
+- **A read-time predicate and a write-time value shipping one tag apart
+  produce a note that promises one and delivers the other.** PR A's marker
+  is retroactive (derived from stored columns); PR B's pair is written at
+  close, so no existing row ever gains it. The v0.36.0 note said so for the
+  marker — *"sessions already in your log get it the moment you update"* —
+  and said nothing for the pair, two items above. **When consecutive PRs
+  mix a derived-at-read change with a written-at-close one, the note states
+  the retroactivity of EACH.** Generalises the PR A gate's retroactivity
+  finding from the ROADMAP to the release notes.
+- **The captures rendered the safe case of the gap the gate flagged.** Gate
+  0-B put the hero-vs-pair disagreement to James as a named binary (accept
+  silently, or owe a sentence) at 20 m on a 1230 m hero, and he took the
+  recommendation — correct process. But all three committed captures seed
+  heroes that equal the measured rows EXACTLY, so nothing in the repo now
+  renders the gap, and on the single-interval piece this item exists for
+  (the tester's 2000 m Beam Sea) it is unmeasured and unbounded. Second
+  gate running for **"when a gate exists, check it measures the worst case
+  and not the convenient one"** — PR A's clip assertion, PR B's fixtures.
+- **RF14, eleventh: the zero ruling.** `0 m · 0:00` is written and rendered
+  with no floor — a product decision nobody was asked about, recorded only
+  in the PR body and `.superpowers/`. Its neighbour policy is the opposite
+  (`summaryModel.ts:606-618`: a sub-floor MEASURED row renders as if nothing
+  was measured). **A ruling that creates an inconsistency with an adjacent
+  shipped policy belongs at that policy's site**, not in a body.
+- **A ticked `[x]` item can carry its own undischarged sentence.** ROADMAP's
+  in-flight-metres item ticks DONE while its text still says *"The spec
+  states explicitly whether correct resume recovers those metres"* — which
+  the spec does not; the answer exists only in a code comment (*"R10
+  reconnect would arm both, and then these clears are what lose the
+  metres"*). **At every gate that ticks a ROADMAP box, re-read the box's own
+  prose for sentences that bind independently** — the 2026-08-15 CR2 ruling,
+  now recurring on a tick rather than on an exit.
+- **Hardening, the first clean measurement, and it PAID.** Three passes
+  (spec lens 1; plan lens 1+2), 16 findings, **zero** self-inflicted
+  bookkeeping — against PR1.75b's eleven passes of which six were. Two were
+  load-bearing and undiscoverable later without shipping a defect first:
+  `program()`'s clear placed AFTER its own close, and I-B1 as an allowlist
+  rather than `≠ finished` (wrong by exactly one member). Per-task review
+  still found ~25 findings, three Important. **The number to watch is
+  findings-per-pass with bookkeeping findings EXCLUDED from the numerator**;
+  #275's plan-authoring rules are what took that term to zero.
+- **Fold: 121 words / 5 bullets / longest 25 — under budget, but the body's
+  own counts (116 and 23) were both wrong.** Series: #239 148 · #248 274 ·
+  #249 225 · #258 134 · #268 186 · #272 153 · door PR A 103 · #277 120 ·
+  **door PR B 121.** Three gates running at budget as opened. The count is
+  no longer the risk; MIS-counting is. The rule says count, not feel — that
+  binds the author's self-report too.
+- **Release: v0.36.0 MINOR at merge**, notes in this PR, `date` re-stamped
+  at the tag, no walk owed. The ~1/10 `unit`-project flake is a register
+  row, not a merge risk, and is filed with the discriminator that settles
+  it (same rate with and without the branch's only `unit` file).

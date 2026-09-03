@@ -17,13 +17,17 @@ import {
 // 60s/130m + 60s/144m + 0s/0m rest -> 120s/274m totals). This is the SAME
 // transcription PR0's harness fixture used
 // (scripts/c2-crossconnect.ts:280-346, FIXTURE/FIXTURE_OPTS) — never
-// invented (RF16). deviceName is the repo-standard monitor-log fixture
-// string (e.g. server/stores/stores.integration.test.ts:603).
+// invented (RF16).
 //
 // This is the corpus's ONLY eligible machineSummary fixture (RF3 — every
 // committed store fixture carries workoutType:1 from a terminated
 // capture, ineligible by this module's finished-only fence), so it is
 // transcribed fresh here rather than reused.
+//
+// Door PR A (2026-09-02) §2.2: `source: "pm5"` replaces the fixture's
+// former `deviceName` field — the row is the eligible fixture BECAUSE
+// its source is `pm5`, the same fact `deviceName: "PM5 432331249 Row"`
+// used to stand in for.
 const FINISHED_ROW: SessionLogRow = {
   loggedAt: new Date("2026-08-25T21:40:00.000Z"),
   completedAt: new Date("2026-08-25T21:42:03.110Z"), // ring.json:65's wall stamp
@@ -33,7 +37,7 @@ const FINISHED_ROW: SessionLogRow = {
   restSeconds: 120,
   restMeters: 274,
   machineSummary: { avgStrokeRate: 24, workoutType: 8 },
-  deviceName: "PM5 432331249 Row",
+  source: "pm5",
   endedBy: "finished",
 };
 const LINK = { weightClass: "H" as const };
@@ -64,21 +68,26 @@ describe("formatC2Date", () => {
 });
 
 describe("eligibilityFailure", () => {
-  it("returns not_monitor when deviceName is null", () => {
-    expect(
-      eligibilityFailure({
-        deviceName: null,
-        endedBy: "finished",
-        workSeconds: 254.8,
-        workMeters: 935,
-      }),
-    ).toBe("not_monitor");
-  });
+  // Door PR A (2026-09-02) §2.2: the gate reads `source`, not
+  // `deviceName` — every non-`pm5` member is equally ineligible.
+  it.each(["no-reading", "timer", "manual"] as const)(
+    "returns not_monitor when source is %s",
+    (source) => {
+      expect(
+        eligibilityFailure({
+          source,
+          endedBy: "finished",
+          workSeconds: 254.8,
+          workMeters: 935,
+        }),
+      ).toBe("not_monitor");
+    },
+  );
 
   it("returns not_finished when endedBy is a non-finished close reason", () => {
     expect(
       eligibilityFailure({
-        deviceName: "PM5 432331249 Row",
+        source: "pm5",
         endedBy: "rower",
         workSeconds: 254.8,
         workMeters: 935,
@@ -92,7 +101,7 @@ describe("eligibilityFailure", () => {
   it("returns not_finished when endedBy is null (a pre-RC row)", () => {
     expect(
       eligibilityFailure({
-        deviceName: "PM5 432331249 Row",
+        source: "pm5",
         endedBy: null,
         workSeconds: 254.8,
         workMeters: 935,
@@ -103,7 +112,7 @@ describe("eligibilityFailure", () => {
   it("returns no_work_totals when workSeconds is null", () => {
     expect(
       eligibilityFailure({
-        deviceName: "PM5 432331249 Row",
+        source: "pm5",
         endedBy: "finished",
         workSeconds: null,
         workMeters: 935,
@@ -114,7 +123,7 @@ describe("eligibilityFailure", () => {
   it("returns no_work_totals when workMeters is null", () => {
     expect(
       eligibilityFailure({
-        deviceName: "PM5 432331249 Row",
+        source: "pm5",
         endedBy: "finished",
         workSeconds: 254.8,
         workMeters: null,
@@ -122,10 +131,10 @@ describe("eligibilityFailure", () => {
     ).toBe("no_work_totals");
   });
 
-  it("checks device before close-reason (ordering)", () => {
+  it("checks source before close-reason (ordering)", () => {
     expect(
       eligibilityFailure({
-        deviceName: null,
+        source: "manual",
         endedBy: null,
         workSeconds: null,
         workMeters: null,
@@ -135,6 +144,28 @@ describe("eligibilityFailure", () => {
 
   it("returns null for the eligible fixture row", () => {
     expect(eligibilityFailure(FINISHED_ROW)).toBeNull();
+  });
+
+  // Door PR A (2026-09-02) §2.2: the discriminator between the retired
+  // `deviceName === null` check and the new `source !== "pm5"` check. The
+  // row below is UNREACHABLE on the wire (`logSourceContradiction` 400s a
+  // `deviceName` on any non-pm5 row, so a `timer` row can never carry
+  // one) and the extra key is illegal in `eligibilityFailure`'s own
+  // parameter type (deliberately cast past the excess-property check) —
+  // it exists ONLY to make the two predicates disagree. Under the current
+  // `source !== "pm5"` gate this returns `not_monitor` immediately; under
+  // the retired `deviceName === null` gate the non-null `deviceName`
+  // would have passed gate 1, and — with `endedBy: "finished"` and both
+  // totals present — fallen all the way through to `null` (eligible).
+  it("source, not deviceName, decides eligibility (mutation discriminator)", () => {
+    const row = {
+      source: "timer",
+      deviceName: "PM5 432331249 Row",
+      endedBy: "finished",
+      workSeconds: 254.8,
+      workMeters: 935,
+    } as unknown as Parameters<typeof eligibilityFailure>[0];
+    expect(eligibilityFailure(row)).toBe("not_monitor");
   });
 });
 

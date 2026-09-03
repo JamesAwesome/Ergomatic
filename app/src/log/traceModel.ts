@@ -89,7 +89,11 @@ export type Measure = "pace" | "rate" | "hr";
  *  rest marker, carried through UNCHANGED so `TraceChart` can tint a rest
  *  span without re-deriving anything from `Sample`/steps — the renderer
  *  cannot recover this later (a stored log's steps never carry a warm-up
- *  row, so anything positional derived from steps lands displaced; the
+ *  row — nothing has PRODUCED one since Phase WU, and
+ *  `buildMonitorLogSteps` still skips a legacy warm-up seed step on the
+ *  one population that can persist the string, its own KEEP guard — and
+ *  no step carries a marker to key a positional derivation off either,
+ *  so anything positional derived from steps lands displaced; the
  *  recorder is the only place that ever saw the wire's own state byte).
  *  A structural superset of `ChartPoint` (never a narrower/different `x`/
  *  `y`), so it still passes to `decimate` (Task 1's own shared primitive,

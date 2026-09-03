@@ -1460,12 +1460,22 @@ describe("the lost banner says what survived", () => {
   // what we saw. We saw nothing.
   it("claims nothing when nothing was measured, on the surface that never saw a pull", () => {
     renderNeverRowed();
-    expect(bannerText()).toBe("LOST THE MONITORNothing kept.");
+    expect(bannerText()).toBe("LOST THE MONITOR");
     // Said twice on purpose: the count-naming half of the copy must not
     // appear at all, in any form, on a surface with nothing to count —
     // not even as a zero.
     expect(bannerText()).not.toMatch(/\d/);
     expect(bannerText()).not.toMatch(/interval/i);
+  });
+
+  // Gate 0-B decision (e): the zero arm renders no body element at all, not
+  // an empty one — an empty `.connected-lost-body` would still occupy the
+  // flex column's `gap: 5px` beneath the title.
+  it("renders no body element at all when nothing was measured", () => {
+    renderNeverRowed();
+    expect(
+      document.querySelector(".connected-lost-body"),
+    ).not.toBeInTheDocument();
   });
 
   // A rower can lose the link a stroke into interval 1 — they HAVE rowed,
@@ -1474,7 +1484,7 @@ describe("the lost banner says what survived", () => {
   // must not disagree.
   it("claims nothing mid-row too, when no boundary ever arrived", () => {
     renderSurface({ phase: "disconnected", actuals: [] });
-    expect(bannerText()).toBe("LOST THE MONITORNothing kept.");
+    expect(bannerText()).toBe("LOST THE MONITOR");
   });
 
   // The rule is shared with the summary screen, so a sub-second boundary
@@ -2266,7 +2276,7 @@ describe("the interim ended frame tells the truth about a program drop (Gate 0)"
     );
   });
 
-  it("says Nothing kept when the drop happened before anything was measured", () => {
+  it("stops at the sentence when the drop happened before anything was measured", () => {
     renderSurface({
       phase: "ended",
       endedBy: "machine",
@@ -2274,7 +2284,7 @@ describe("the interim ended frame tells the truth about a program drop (Gate 0)"
       actuals: [],
     });
     expect(document.querySelector(".connected-body-line")!.textContent).toBe(
-      "The erg dropped the workout. Nothing kept.",
+      "The erg dropped the workout.",
     );
   });
 

@@ -228,15 +228,50 @@ function IntervalRow({ row }: { row: SummaryRow }) {
       </li>
     );
   }
+  // Door spec (2026-09-02) §5.1: a step the rower was IN THE MIDDLE OF
+  // when the session closed short shows its own two numbers; an unreached
+  // step shows nothing. Both are unmeasured rows — the difference is that
+  // one has a reading and the other genuinely has none.
+  //
+  // THE DASH STAYS, and the pair is an EXTRA CELL IN FRONT OF IT (Gate
+  // 0-B decision (a), APPROVED, verbatim: "The dash stays. The pair is an
+  // extra cell in front of it, not a replacement for it — so rows 3, 4
+  // and 5 all still end with the same mark that means *this interval was
+  // never measured*. That one choice is what stops a part-rowed row from
+  // reading as a rowed one, and it does the work in decision (d) too.")
+  // The alternative — the pair REPLACING the dash — is rendered in the
+  // artboard beside it and captioned "Not recommended — the dash is doing
+  // real work"; it is the shape this row must NOT take, and
+  // `PostWorkoutSummary.test.tsx` holds it out.
+  //
+  // Decision (d): an over-target partial reads exactly the same way —
+  // there is no over/under branch here, and the retained dash is what
+  // carries that. Decision (f): no pace, split or rate cell, ever, because
+  // the pair's clock is ELAPSED and a quotient of the two would be a split
+  // nobody rowed.
+  //
+  // Decision (g), APPROVED, both forms: `, not measured` is KEPT and the
+  // spoken pair is APPENDED to it — "the accessible name should not claim
+  // more than the visible row does", and the visible row still ends on the
+  // dash. The wording itself (`stopped at …` vs a link-lost row's `last
+  // reading …`, and the `after` that replaces the meaningless-aloud middle
+  // dot) is decided ONCE, in `summaryModel.ts`'s `partialSpokenLabel`;
+  // this template chooses no words of its own and derives nothing from
+  // `partialLabel`, whose visible order flips by interval kind.
   return (
     <li
       className="summary-row"
-      aria-label={`Interval ${row.index}: ${row.label}, not measured`}
+      aria-label={`Interval ${row.index}: ${row.label}, not measured${
+        row.partialSpoken === undefined ? "" : `, ${row.partialSpoken}`
+      }`}
     >
       <span className="summary-row-index">{row.index}</span>
       <span className="summary-row-duration">{row.durationLabel ?? ""}</span>
       <span className="summary-row-target">{row.targetPaceLabel ?? ""}</span>
       <span className="summary-row-offset">{offsetFragment(row.label)}</span>
+      {row.partialLabel !== undefined && (
+        <span className="summary-row-partial">{row.partialLabel}</span>
+      )}
       <span className="summary-row-dash">—</span>
     </li>
   );

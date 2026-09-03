@@ -26,6 +26,7 @@ import {
   MONITOR_SPM_MAX,
   spmIsMeasured,
 } from "./logDraft";
+import type { LogSeed } from "./logDraft";
 
 // Realistic fixtures throughout (repo convention, CLAUDE.md's own recurring
 // failure #3): every table below is a REAL library workout from
@@ -1037,8 +1038,10 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
   // PHASE WU deleted the integration case that stood here: it drove the
   // warm-up SETTING through `buildRun` and pinned the `kind: "warmup"` seed
   // step plus its "8:00 warm-up"/"2000 m warm-up" label idiom. There is no
-  // setting and no producer left, so nothing can write that kind. The seed
-  // reader that still honours it on PERSISTED records is pinned below,
+  // setting and no producer left, so nothing can write that kind. Door PR A
+  // (rider 2) narrowed the TYPE to the literal `"work"` but KEPT the reader
+  // that honours the legacy runtime string on PERSISTED records (restored
+  // at the whole-branch review, Important 1). That reader is pinned below,
   // under "a stored run written before `type` existed still drops its
   // warm-up when loaded back".
 
@@ -1286,6 +1289,35 @@ const THREE_STEP_RUN: MonitorRun = {
   terminated: false,
 };
 
+// GYRE_RUN — door spec (2026-09-02) §5.1, Task 4's own fixture: a real
+// library workout (RF3), not a hand-built minimum. Gyre (this file's own
+// F1b fixture above): three SEQUENTIAL distance work steps, w1 750m@2k+5
+// (rest 2'), w2 500m@2k+3 (rest 2'), w3 250m@2k+1 (no rest) — three
+// intervals, so a partial landing on the middle one proves selectivity
+// against BOTH neighbours at once, not just "not index 0."
+const GYRE = library("Gyre");
+const GYRE_DRAFT = buildDraft({
+  id: "id-gyre-partial",
+  title: GYRE.title,
+  type: GYRE.type as WorkoutType,
+  steps: GYRE.steps,
+});
+const GYRE_BUILT = buildRun(GYRE_DRAFT, BASELINES, NOW);
+const GYRE_PROGRAM = compileOrThrow(GYRE_BUILT.phases);
+const GYRE_LOG_SEED = buildLogSeed(GYRE_BUILT.phases, BASELINES);
+const GYRE_RUN: MonitorRun = {
+  v: 2,
+  workoutId: GYRE_DRAFT.workoutId,
+  title: GYRE_DRAFT.title,
+  program: GYRE_PROGRAM,
+  logSeed: GYRE_LOG_SEED,
+  actuals: [],
+  deviceName: "PM5 432331249",
+  startedAt: NOW.toISOString(),
+  completedAt: new Date(NOW.getTime() + 3 * 60 * 1000).toISOString(),
+  terminated: false,
+};
+
 describe("buildMonitorLogSteps (7C spec §3)", () => {
   it("maps walk 4's interval 0: label from the seed, target from the program, actualSplit/actualSpm/avgHr/actualSeconds/actualMeters verbatim from the actual, source pm5 (Phase LT spec 1, §2: WALK4_DRAFT authors no spm, so the target half stays absent — the distinct-values split is its own dedicated test below)", () => {
     const steps = buildMonitorLogSteps(WALK4_RUN);
@@ -1331,7 +1363,17 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     });
   });
 
-  it("a LEGACY kind:'warmup' seed step produces NO step (manual parity, adversarial B2) and shifts nothing", () => {
+  it("the type no longer admits `kind: 'warmup'` — LogSeed.steps[].kind is the literal `\"work\"`, never widened to `string` (Phase WU's binding sub-ruling)", () => {
+    // @ts-expect-error — rider 2 (door PR A, spec §4) narrowed the union;
+    // this must fail to compile, or the narrowing regressed.
+    const illegal: LogSeed["steps"][number] = { label: "x", kind: "warmup" };
+    // The `@ts-expect-error` above is the real assertion (compile-time);
+    // this runtime one only satisfies the lint rule that every test makes
+    // one.
+    expect(illegal.label).toBe("x");
+  });
+
+  it("a LEGACY kind:'warmup' seed step produces NO step (manual parity, adversarial B2) and shifts nothing — the guard reads the legacy RUNTIME string the narrowed type no longer admits", () => {
     const draft = buildDraft({
       id: "id-walk4-warmup-variant",
       title: "Walk 4 (warmup variant)",
@@ -1352,22 +1394,24 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     const built = buildRun(draft, BASELINES, NOW);
     const program = compileOrThrow(built.phases);
     // PHASE WU: nothing PRODUCES `kind: "warmup"` any more — `buildRun`'s
-    // warm-up argument and the phase type behind it are both gone. The
-    // reader that skips such a step is deliberately KEPT, because `LogSeed`
-    // is PERSISTED and a `MonitorRun` written before Phase WU still carries
-    // the value (see `LogSeed`'s own doc comment). So this fixture writes
-    // the legacy value by hand onto an otherwise real seed — which is
-    // exactly the shape that comes back out of localStorage — instead of
-    // asking a producer that no longer exists to make one.
+    // warm-up argument and the phase type behind it are both gone. Door
+    // PR A (rider 2) narrowed the TYPE to `"work"` only but KEPT the
+    // reader's guard, which now reads the legacy value behind an explicit
+    // cast. So this fixture forces the legacy RUNTIME shape (a `MonitorRun`
+    // authored before warm-up removal, still carrying the string "warmup"
+    // once it comes back out of JSON) past the type with an unsafe cast of
+    // its own — exactly what `JSON.parse` hands back, which no compile-time
+    // type can prevent. THIS is the population the guard exists for.
     const realSeed = buildLogSeed(built.phases, BASELINES);
+    const legacyStep = {
+      ...realSeed.steps[0]!,
+      kind: "warmup",
+    } as unknown as (typeof realSeed.steps)[number];
+    expect((legacyStep as { kind: unknown }).kind).toBe("warmup");
     const logSeed = {
       ...realSeed,
-      steps: [
-        { ...realSeed.steps[0]!, kind: "warmup" as const },
-        ...realSeed.steps.slice(1),
-      ],
+      steps: [legacyStep, ...realSeed.steps.slice(1)],
     };
-    expect(logSeed.steps.map((s) => s.kind)).toStrictEqual(["warmup", "work"]);
     const run: MonitorRun = {
       v: 2,
       workoutId: draft.workoutId,
@@ -1375,8 +1419,8 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       program,
       logSeed,
       actuals: [
-        // A boundary at the warmup's own position — even if the machine
-        // reports one, it must never surface as a step of its own.
+        // A boundary at the legacy warm-up's own position — even if the
+        // machine reports one, it must never surface as a step of its own.
         {
           index: 0,
           elapsedSeconds: 60,
@@ -1402,6 +1446,9 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       terminated: false,
     };
     const steps = buildMonitorLogSteps(run);
+    // ONE step only — the legacy warm-up position produced none, and the
+    // surviving work step keeps ITS OWN mapping (interval 1's actual),
+    // never the warm-up's.
     expect(steps).toHaveLength(1);
     expect(steps[0]!.label).toBe(logSeed.steps[1]!.label);
     expect(steps[0]!.actualSource).toBe("pm5");
@@ -1423,14 +1470,15 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
   // surface included, gets a program `WorkoutDetail` compiled fresh in
   // memory at Connect), and it is safe for exactly one reason this test
   // exists to keep true: it decides warm-up-ness from
-  // `logSeed.steps[i].kind`, never from `ProgramInterval.type`. `LogSeed`'s
-  // own doc comment above calls `kind` "REDUNDANT with
-  // `ProgramInterval.type`" and contemplates retiring it; retiring it in
-  // favour of `type` would silently emit a warm-up row for every record
-  // that straddles the update. So this walks the REAL stored shape —
-  // JSON in localStorage, through `loadMonitorRun`, with the legacy
-  // intervals — rather than a hand-built object that happens to carry the
-  // new field.
+  // `logSeed.steps[i].kind` — read behind an explicit cast since door PR A
+  // (rider 2) narrowed that union to the literal `"work"` while KEEPING the
+  // guard — never from `ProgramInterval.type`. `LogSeed`'s own doc comment
+  // above calls `kind` "REDUNDANT with `ProgramInterval.type`" and
+  // contemplates retiring it; retiring it in favour of `type` would
+  // silently emit a warm-up row for every record that straddles the
+  // update. So this walks the REAL stored shape — JSON in localStorage,
+  // through `loadMonitorRun`, with the legacy intervals — rather than a
+  // hand-built object that happens to carry the new field.
   it("a stored run written before `type` existed still drops its warm-up when loaded back", () => {
     localStorage.clear();
     const draft = buildDraft({
@@ -1514,6 +1562,9 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(loaded!.program.intervals[0]).not.toHaveProperty("type");
 
     const steps = buildMonitorLogSteps(loaded!);
+    // The legacy warm-up position (0) produced NO step — the guard read the
+    // runtime string off a record that came through `JSON.parse`, which is
+    // the only way this value can reach the reader at all.
     expect(steps).toHaveLength(1);
     expect(steps[0]!.label).toBe(logSeed.steps[1]!.label);
     expect(steps[0]!.actualSource).toBe("pm5");
@@ -1788,12 +1839,11 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
   // be authorable (`wu` carried no positional constraint), and since
   // 2026-08-09's warmup setting it was not: the setting only ever
   // PREPENDED, so nothing in production could put a warmup phase in the
-  // middle any more, and since Phase WU
-  // nothing can put one ANYWHERE. The skip is still written
-  // position-independently and this test still holds it to that: the
-  // fixture is a real three-interval program whose MIDDLE seed step is
-  // hand-set to the legacy `kind: "warmup"` — the shape a pre-WU record
-  // can hand the reader out of localStorage.
+  // middle any more, and since Phase WU nothing can put one ANYWHERE. The
+  // skip is still written position-independently and this test still holds
+  // it to that: the fixture is a real three-interval program whose MIDDLE
+  // seed step is hand-set to the legacy `kind: "warmup"` — the shape a
+  // pre-WU record can hand the reader out of localStorage.
   it("a LEGACY MID-LIST kind:'warmup' seed step produces NO step and does not shift the following work step's mapping (branch review Medium-2)", () => {
     const draft = buildDraft({
       id: "id-mid-workout-warmup",
@@ -1823,19 +1873,17 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     const built = buildRun(draft, BASELINES, NOW);
     const program = compileOrThrow(built.phases);
     const realSeed = buildLogSeed(built.phases, BASELINES);
+    // The unsafe cast forces the legacy runtime shape (a persisted
+    // `kind: "warmup"` string) past the now-narrower `LogSeed` type — see
+    // the leading-position case above for why.
+    const legacyMidStep = {
+      ...realSeed.steps[1]!,
+      kind: "warmup",
+    } as unknown as (typeof realSeed.steps)[number];
     const logSeed = {
       ...realSeed,
-      steps: [
-        realSeed.steps[0]!,
-        { ...realSeed.steps[1]!, kind: "warmup" as const },
-        realSeed.steps[2]!,
-      ],
+      steps: [realSeed.steps[0]!, legacyMidStep, realSeed.steps[2]!],
     };
-    expect(logSeed.steps.map((s) => s.kind)).toStrictEqual([
-      "work",
-      "warmup",
-      "work",
-    ]);
     expect(program.intervals).toHaveLength(3);
     const run: MonitorRun = {
       v: 2,
@@ -2175,6 +2223,85 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       expect(steps[0]!.spm).toBe(20);
       expect(steps[0]).not.toHaveProperty("actualSpm");
       expect(steps[0]).not.toHaveProperty("actualSource");
+    });
+  });
+
+  // door spec (2026-09-02) §5.1, Task 4: the in-flight interval's own
+  // reading, copied onto the step it belongs to. `run.partial` is written
+  // ONLY at close (`monitorRun.ts`'s `withPartial`) and read here, off the
+  // LOADED `MonitorRun` — never `actualMeters`/`actualSeconds`, never a
+  // third `actualSource` member (global constraints: an older server drops
+  // unknown keys silently, so new key names make its degradation identical
+  // to not shipping §5 at all).
+  describe("door spec (2026-09-02) §5.1: the partial pair", () => {
+    it("puts the pair on the step whose PROGRAM index matches run.partial.intervalIndex, and on no other — writing neither actualMeters nor actualSeconds for it (the anti-leg)", () => {
+      const run: MonitorRun = {
+        ...GYRE_RUN,
+        partial: { intervalIndex: 1, meters: 320, seconds: 88 },
+      };
+      const steps = buildMonitorLogSteps(run);
+      expect(steps).toHaveLength(3);
+      expect(steps[0]).not.toHaveProperty("partialMeters");
+      expect(steps[0]).not.toHaveProperty("partialSeconds");
+      expect(steps[1]!.partialMeters).toBe(320);
+      expect(steps[1]!.partialSeconds).toBe(88);
+      expect(steps[1]).not.toHaveProperty("actualMeters");
+      expect(steps[1]).not.toHaveProperty("actualSeconds");
+      expect(steps[1]).not.toHaveProperty("actualSource");
+      expect(steps[2]).not.toHaveProperty("partialMeters");
+      expect(steps[2]).not.toHaveProperty("partialSeconds");
+    });
+
+    it("I-B6 restated on the read side: a partial whose index collides with an interval that already carries an actual writes no partial", () => {
+      const run: MonitorRun = {
+        ...GYRE_RUN,
+        actuals: [
+          {
+            index: 1,
+            elapsedSeconds: 95,
+            distanceMeters: 500,
+            avgSplit: 190,
+            avgSpm: 24,
+            avgHeartRateBpm: 140,
+            restDistanceMeters: 0,
+          },
+        ],
+        // The writer (`withPartial`) already refuses this shape — I-B6 —
+        // but this leg proves the READER holds the same invariant even if
+        // a stored record somehow carried both (belt and braces: M4.3
+        // deletes the `actual === undefined` guard and this leg goes red).
+        partial: { intervalIndex: 1, meters: 400, seconds: 100 },
+      };
+      const steps = buildMonitorLogSteps(run);
+      expect(steps[1]!.actualSource).toBe("pm5");
+      expect(steps[1]).not.toHaveProperty("partialMeters");
+      expect(steps[1]).not.toHaveProperty("partialSeconds");
+    });
+
+    it("the legacy warm-up leg: a legacy kind:'warmup' seed step at program index 0 makes out.length diverge from i, and the partial (index 1) still lands on the FIRST EMITTED step — the leg M4.1 (keying on out.length instead of i) turns red", () => {
+      const legacyStep = {
+        ...GYRE_LOG_SEED.steps[0]!,
+        kind: "warmup",
+      } as unknown as (typeof GYRE_LOG_SEED.steps)[number];
+      const legacySeed = {
+        ...GYRE_LOG_SEED,
+        steps: [legacyStep, ...GYRE_LOG_SEED.steps.slice(1)],
+      };
+      const run: MonitorRun = {
+        ...GYRE_RUN,
+        logSeed: legacySeed,
+        partial: { intervalIndex: 1, meters: 210, seconds: 70 },
+      };
+      const steps = buildMonitorLogSteps(run);
+      // The legacy warm-up position (program index 0) produced no step —
+      // two survive, and the partial belongs to the first of them (index
+      // 1), even though `out.length === 0` at the moment it's checked.
+      expect(steps).toHaveLength(2);
+      expect(steps[0]!.label).toBe(legacySeed.steps[1]!.label);
+      expect(steps[0]!.partialMeters).toBe(210);
+      expect(steps[0]!.partialSeconds).toBe(70);
+      expect(steps[1]).not.toHaveProperty("partialMeters");
+      expect(steps[1]).not.toHaveProperty("partialSeconds");
     });
   });
 });

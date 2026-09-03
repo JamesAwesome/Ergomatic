@@ -131,9 +131,16 @@ export interface MonitorFrame {
   //   `AdditionalStatus1.restSeconds`) but never carried onto this type
   //   until the EST LEFT fix (Phase LL): it is the field that makes a
   //   countdown through a rest possible without the wall clock. Unlike
-  //   `MonitorFrame.elapsedSeconds` (the per-interval clock, which FREEZES
-  //   whenever `rowingActive` goes false — a rower sitting still through a
-  //   rest stops it dead), Rest Time counts down in real time regardless
+  //   `MonitorFrame.elapsedSeconds` (the per-interval clock, which freezes
+  //   through a REST — a rower sitting still through a rest stops it dead;
+  //   NARROWED 2026-09-03, this comment used to say it freezes "whenever
+  //   `rowingActive` goes false", which over-reaches: through a mid-WORK
+  //   stop the clock KEEPS RUNNING, measured at
+  //   `docs/monitor/sessions/walk-2026-09-03-resume-edge/` — elapsed
+  //   80.52s -> 92.11s while distance sat at 247.1 -> 249.6 m — which is
+  //   what `:189-191`'s "no paused state on the wire" describes and what
+  //   door PR B's stored `partialSeconds` therefore is), Rest Time counts
+  //   down in real time regardless
   //   of the flywheel (EST LEFT design spec §1/§5, measured against
   //   `docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl`:
   //   the interval clock froze at 133.08 for 26s while this field ran
@@ -628,22 +635,30 @@ export interface Transport {
    *  which arrives via `onDisconnect` instead. */
   disconnect(): Promise<void>;
   /** Registers a callback for an UNEXPECTED link drop (radio out of range,
-   *  the phone's Bluetooth stack resetting, a reported Bluetooth-disabled
-   *  event) — never fired by a caller-initiated `disconnect()`. Returns
-   *  an unsubscribe function.
+   *  a reported Bluetooth-disabled event) — never fired by a
+   *  caller-initiated `disconnect()`. Returns an unsubscribe function.
    *
-   *  **CORRECTED (Phase LL Task 2, link-truth design spec §2 mechanism
-   *  2):** this comment used to name "iOS backgrounding" among the
-   *  causes of an unexpected `onDisconnect` — false. `Info.plist`
-   *  declares no `UIBackgroundModes`, so the app's whole JS runtime
-   *  simply SUSPENDS while backgrounded; nothing in this codebase
-   *  observes CoreBluetooth actually tearing the link down for that
-   *  reason specifically, and whether `didDisconnectPeripheral` even
-   *  fires for a backgrounded app is INFERENCE, not measured (Apple
-   *  documents only the connect/cancel cases — walk item W5). Backgrounding
-   *  is instead detected at the ADAPTER layer (`src/adapters/
-   *  appLifecycle.ts`) and handled by treating the frame stream as
-   *  suspect on resume (`useMonitorSession.ts`'s own `frameSilence`) —
-   *  a SEPARATE mechanism from this callback, never a producer of it. */
+   *  **RC-12 (`docs/history/phase-rc.md:2054-2056`):** this comment used
+   *  to also name "the phone's Bluetooth stack resetting" and "iOS
+   *  backgrounding" among the causes of an unexpected `onDisconnect`. Both
+   *  are struck as UNSOURCED — not as disproven: what the walks establish
+   *  is the absence of our own evidence, never the radio's behaviour. This
+   *  codebase records no capture or walk showing this callback firing for a
+   *  Bluetooth-stack reset (`grep -rli "bluetooth stack\|stack reset"
+   *  docs/monitor/sessions/` is empty), and the case is UNMEASURED here —
+   *  the claim may yet be true of the platform; it was simply never our
+   *  observation. For backgrounding specifically:
+   *  `Info.plist` declares no
+   *  `UIBackgroundModes`, so the app's whole JS runtime simply SUSPENDS
+   *  while backgrounded; nothing in this codebase observes CoreBluetooth
+   *  actually tearing the link down for that reason, and whether
+   *  `didDisconnectPeripheral` even fires for a backgrounded app is
+   *  INFERENCE, not measured (Apple documents only the connect/cancel
+   *  cases — walk item W5; Phase LL Task 2, link-truth design spec §2
+   *  mechanism 2). Backgrounding is instead detected at the ADAPTER layer
+   *  (`src/adapters/appLifecycle.ts`) and handled by treating the frame
+   *  stream as suspect on resume (`useMonitorSession.ts`'s own
+   *  `frameSilence`) — a SEPARATE mechanism from this callback, never a
+   *  producer of it. */
   onDisconnect(cb: (reason: string) => void): () => void;
 }

@@ -432,9 +432,23 @@ export default function FromTheLog() {
       {row !== null && view !== null && (
         <>
           <SummaryMetaBlock title={row.workoutTitle} meta={view.meta} />
-          {/* Cohort-unlock spec (2026-08-23), §2: the detail header's own
-              marked line, `endedBy === "link-lost"` only — every other
-              value (including absent/null) renders nothing here.
+          {/* Door spec (2026-09-02) §1.3: the close-reason line, in the slot
+              the cohort-unlock spec's `LINK LOST` already used — ABOVE the
+              heroes, between the black rule and AVG SPLIT (Gate 0-A,
+              APPROVED by James 2026-09-02, rendered at real proportions;
+              the spec's first draft said "beneath" and the artboard, built
+              from the real CSS, corrected it). Two triggers, both value
+              equalities and both decided in `buildCloseLine`: a link-lost
+              close alone, and a row the PARTIAL predicate marks — see
+              `StoredSummaryView.closeLine`'s own doc comment. Everything
+              else renders nothing here.
+              `MachineConfirmedBlock` is UNTOUCHED by this: the marker is a
+              sibling ABOVE it, from the view model, so that block keeps its
+              "reads the row and nothing else" constraint (its own comment
+              at :65-84).
+              The DOM and the class are unchanged from the cohort-unlock
+              rendering, so the contrast figure below still holds as
+              measured.
               `.summary-meta` reused verbatim (no new CSS rule): it's the
               same header's own existing secondary-line class, already
               contrast-audited — this screen is `.overlay-screen`, whose
@@ -447,8 +461,8 @@ export default function FromTheLog() {
               background this screen never paints on), so this line reads
               as this header's own text rather than inventing a second
               visual register for one sentence. */}
-          {view.linkLostLine !== undefined && (
-            <p className="summary-meta">{view.linkLostLine}</p>
+          {view.closeLine !== undefined && (
+            <p className="summary-meta">{view.closeLine}</p>
           )}
           <SummaryHeroesBlock heroes={view.heroes} />
 

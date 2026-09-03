@@ -214,6 +214,20 @@ export interface LogStep {
    *  all — its measured value lives in `spm` instead (see that field's
    *  own doc comment, and `spmIsMeasured` below). */
   actualSpm?: number;
+  /** Door spec (2026-09-02) §5.1: OUR reading of the interval that was
+   *  still in flight when a connected session closed short — the last
+   *  rowing frame's own 0x0031 distance, never an `IntervalActual`.
+   *  Written ONLY by `buildMonitorLogSteps` below, only on a step with NO
+   *  `actualSource`, and only from `MonitorRun.partial`. NEW KEY NAMES on
+   *  purpose (§5.1): a partial carried in `actualMeters` would reach an
+   *  older server as the number without its marker and enter every sum
+   *  forever. Never summed, never paced (§5.2 I-B5). */
+  partialMeters?: number;
+  /** The same reading's ELAPSED time, not rowing time — the PM5 has no
+   *  paused state and its clock runs whether or not the rower pulls
+   *  (`domain/monitor/types.ts`). Paired with `partialMeters` above:
+   *  `buildMonitorLogSteps` writes both or neither. */
+  partialSeconds?: number;
 }
 
 /** THE ROW-LOCAL DISCRIMINANT for a pre-split monitor row (Phase LT spec 1,
@@ -586,25 +600,24 @@ export function buildManualLogSteps(
  *  its own), so `seed.steps[i]` and `program.intervals[i]` name the SAME
  *  interval for every `i` — a later task's whole alignment contract.
  *
- *  `kind` KEEPS its `"warmup"` member after Phase WU, and that is
- *  deliberate — this is the one warm-up union the removal does NOT delete.
- *  `LogSeed` is PERSISTED inside a stored `MonitorRun`
- *  (`src/monitor/monitorRun.ts`'s localStorage record), so a run written
- *  before Phase WU still carries `kind: "warmup"` on its first step. The
- *  reader in `buildMonitorLogSteps` below skips exactly those steps;
- *  deleting the member would make that guard unwritable and silently add a
- *  phantom warm-up row to what such a record SAVES.
- *  It stays a LITERAL union rather than widening to `string`: widening
- *  admits typos, erases the enumeration, and hides the owed cleanup from
- *  the compiler. `buildLogSeed` below can no longer PRODUCE `"warmup"` —
- *  no phase can be one — so the member is legacy-read-only from here.
- *  Owed removal: ROADMAP Phase WU, at the first server-touching phase
- *  after two tags have shipped. */
+ *  `kind` LOST its `"warmup"` MEMBER at door PR A (spec §4 rider 2) — the
+ *  union is now the literal `"work"` alone. It stays a LITERAL union rather
+ *  than widening to `string`: widening admits typos, erases the
+ *  enumeration, and hides a future owed cleanup from the compiler.
+ *  `buildLogSeed` below has not been able to PRODUCE `"warmup"` since
+ *  Phase WU, so every step it writes is `"work"`.
+ *  **The READER in `buildMonitorLogSteps` still honours the legacy value**,
+ *  behind an explicit cast rather than a union member: `LogSeed` is
+ *  PERSISTED inside a stored `MonitorRun` (`src/monitor/monitorRun.ts`'s
+ *  localStorage record), so a run authored before warm-up removal
+ *  (PR #150, v0.16.0, 2026-08-22) and still unlogged carries
+ *  `kind: "warmup"` on its first step once it comes back out of JSON,
+ *  despite the type no longer admitting it. That is the same
+ *  "trust the wire, not the type" legacy-population read
+ *  `summaryModel.ts`'s `warmupIndex` performs on the SAME records; see
+ *  `buildMonitorLogSteps`'s own guard comment below. */
 export interface LogSeed {
-  /** `kind: "warmup"` is legacy-only — see this interface's own comment.
-   *  Nothing writes it any more; the reader in `buildMonitorLogSteps`
-   *  still honours it for records written before Phase WU. */
-  steps: { label: string; kind: "warmup" | "work" }[];
+  steps: { label: string; kind: "work" }[];
   /** The PACES LOCKED panel's values (README.md §7's "PACES LOCKED AT 2K
    *  1:52.0 · 6K 2:02.0"), captured HERE because the monitor door has no
    *  draft to recover them from later the way `LogSession.tsx`'s own
@@ -617,8 +630,8 @@ export interface LogSeed {
 
 /** Builds a `MonitorRun`'s `logSeed`. Every non-rest phase produces exactly
  *  one seed step, in phase order, and since Phase WU every one of them is
- *  `kind: "work"` — no phase can be a warm-up any more, so this function
- *  never writes the seed's legacy `"warmup"` value (see `LogSeed`).
+ *  `kind: "work"` — no phase can be a warm-up any more, and `LogSeed`'s own
+ *  type has named only `"work"` since door PR A (see `LogSeed`).
  *
  *  Labels reuse this module's OWN `durationText`/`refPaceLabel` helpers —
  *  the SAME ones `buildManualLogSteps` composes its labels from — so a work
@@ -775,8 +788,8 @@ export const MONITOR_SPM_MAX = 99;
  *  what `run.logSeed` (`buildLogSeed`'s own output, frozen at Connect)
  *  exists to supply; see this file's `LogSeed` doc comment for the
  *  alignment contract between `logSeed.steps` and `program.intervals`, and
- *  for why the seed's own `kind` keeps its legacy `"warmup"` member after
- *  Phase WU removed the concept everywhere else.
+ *  for the legacy `"warmup"` string this reader still honours behind a cast
+ *  after door PR A narrowed the seed's own `kind` union.
  *
  *  **Alignment / disqualification** (§3): `logSeed` missing, or
  *  `logSeed.steps.length !== program.intervals.length`, throws
@@ -786,9 +799,12 @@ export const MONITOR_SPM_MAX = 99;
  *
  *  **A LEGACY warmup seed step produces NO step** (§3, adversarial B2):
  *  shape parity with the manual door, which has never emitted a warmup row.
- *  Nothing writes `kind: "warmup"` since Phase WU, but a `MonitorRun`
- *  stored before it still can, so the guard stays. Such a step's own
- *  program-interval position is still consumed while walking the two
+ *  Nothing has written `kind: "warmup"` since Phase WU, and since door PR A
+ *  (spec §4 rider 2) the type does not admit it either — but a `MonitorRun`
+ *  stored before warm-up removal still carries the string at RUNTIME, so
+ *  the guard stays, as an explicit legacy-population read behind a cast
+ *  (the same shape `summaryModel.ts`'s `warmupIndex` uses). Such a step's
+ *  own program-interval position is still consumed while walking the two
  *  parallel arrays (so later intervals keep their correct position), but no
  *  `LogStep` is pushed for it, and any actual matched to that position
  *  (§3's matching rule, next) never surfaces. Rest never gets its own
@@ -855,13 +871,22 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
   const out: LogStep[] = [];
   run.program.intervals.forEach((interval, i) => {
     const seedStep = seed.steps[i]!;
-    // KEEP (Phase WU). `LogSeed` is PERSISTED on a stored `MonitorRun`, so
-    // a record written before Phase WU still carries `kind: "warmup"`.
-    // Removing this guard adds a phantom warm-up row to what gets SAVED
-    // from such a record. Nothing produces the value any more
-    // (`buildLogSeed` above). Owed removal: ROADMAP Phase WU, at the first
-    // server-touching phase after two tags have shipped.
-    if (seedStep.kind === "warmup") return;
+    // KEEP — RESTORED at door PR A's whole-branch review (Important 1).
+    // The earlier fix-round ruling that ACCEPTED removing this guard is
+    // REVERSED; no number moves. `LogSeed` is PERSISTED on a stored
+    // `MonitorRun`, so a record authored before warm-up removal (PR #150,
+    // v0.16.0, 2026-08-22) and still unlogged carries `kind: "warmup"` at
+    // runtime once it comes back out of JSON — that population, and only
+    // that one, is what this guard reads for. The TYPE no longer admits the
+    // value (spec §4 rider 2 narrowed `LogSeed.steps[].kind` to the literal
+    // `"work"`, and that narrowing stands), so the read is an explicit
+    // legacy-population cast — the identical shape `summaryModel.ts`'s
+    // `warmupIndex` uses over the SAME records. Deleting it would push a
+    // phantom warm-up row into what such a record SAVES, and the saved
+    // row's AVG SPLIT would then read back through the Log door as a
+    // DIFFERENT number from the live summary `warmupIndex` keeps frozen.
+    // Nothing produces the value any more (`buildLogSeed` above cannot).
+    if ((seedStep.kind as string) === "warmup") return;
     const step: LogStep = { label: seedStep.label };
     if (interval.targetSplit !== null) step.targetSplit = interval.targetSplit;
     if (interval.kind === "time") {
@@ -916,6 +941,35 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
       // with this rate. Unambiguous against the row-local discriminant,
       // which requires `actualSource === "pm5"` first.
       if (interval.displaySpm !== null) step.spm = interval.displaySpm;
+    }
+    // Door spec (2026-09-02) §5.1: the in-flight interval's own reading,
+    // copied onto the step it belongs to and NEVER into
+    // `actualMeters`/`actualSeconds`. Keyed on the PROGRAM index `i` (the
+    // index `MonitorRun.partial` carries), not on `out.length` — a legacy
+    // warm-up seed step returns above without pushing, so the two diverge.
+    // `actual === undefined` restates I-B6 on the read side: the writer
+    // (`withPartial`) already refuses an interval that carries an actual,
+    // and a step can never show both.
+    //
+    // A `run.partial` whose index matches NO emitted step is dropped
+    // SILENTLY, and that is deliberate (harden lens 2, finding 3, which
+    // otherwise puts a ring entry on every refusal). This function runs
+    // OUTSIDE the hook — there is no `sessionRef` here, and giving a
+    // pure builder that `summaryModel.ts` and `LogSession.tsx` call on
+    // every render a diagnostics dependency would be the wrong trade.
+    // It is also unreachable under Task 2's `program()` placement: the
+    // index is minted from `frame.intervalIndex`, which `toProgramIndex`
+    // derives from the SAME `run.program` this loop iterates, and the
+    // ref clears at every re-arm — so a partial can only carry an index
+    // this program has.
+    const partial = run.partial;
+    if (
+      partial !== undefined &&
+      partial.intervalIndex === i &&
+      actual === undefined
+    ) {
+      step.partialMeters = partial.meters;
+      step.partialSeconds = partial.seconds;
     }
     out.push(step);
   });

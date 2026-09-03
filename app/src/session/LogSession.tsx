@@ -32,6 +32,7 @@ import {
   type LogStep,
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
+import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption";
 import {
   type MachineSummaryDetail,
   type MonitorRun,
@@ -556,10 +557,13 @@ export interface LogFormFields {
    *  promise. The session door closing a `SessionRun` says `timer`; the
    *  monitor-mode branch says `pm5` (beside the `deviceName` the server's
    *  contradiction check requires for it); the Log-it-after door says
-   *  `manual` — including the no-reading arrival (`connectedNoRecord`),
-   *  whose own word is Phase LM's call. The server derives the member only
-   *  for a body that omits it (an installed build predating the column —
-   *  `server/logSource.ts`), a path with a sunset. */
+   *  `manual`, EXCEPT the no-reading arrival (`connectedNoRecord`), which
+   *  says `no-reading` (Door PR A, 2026-09-02, §2.1) — the fourth member
+   *  named for a connected session the app never heard a pull from. The
+   *  server still derives the member for a body that omits it entirely
+   *  (an installed build predating the column — `server/logSource.ts`),
+   *  but ONLY that path: `source` has been required on the wire since
+   *  v0.35.0 (#273's sunset), so this door's own body always carries one. */
   source: LogSource;
   // 7C spec §6: the monitor mode's ONLY addition to the shared body shape —
   // `run.deviceName`, spread straight onto the wire body below (`{
@@ -727,29 +731,63 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
     if (opts.advancesPlan !== undefined) body.advancesPlan = opts.advancesPlan;
     // Branch review Minor: the server's own `deviceName` band is 1..64
     // chars (`data.ts`), but `webBluetooth.ts`/`capacitorBle.ts` both use
-    // `device.name ?? "PM5"` (nullish, not `||`) — an empty advertised GATT
-    // name (`""`) or one past 64 chars reaches `createMonitorRun` and this
-    // body unguarded, and would otherwise 400 the WHOLE save with no
-    // recoverable retry (the 400-retry above only ever strips `workoutId`).
-    // Same "drop the field, never block the save" rule this branch already
-    // applies to avgHr/actualSplit/spm (`logDraft.ts`'s `buildMonitorLogSteps`)
-    // — the save always goes through; the server reads `deviceName` back as
-    // null, same as any pre-7C row.
+    // `device.name ?? NAMELESS_MONITOR_CAPTION` (nullish, not `||`) — an
+    // empty advertised GATT name (`""`) or one past 64 chars reaches
+    // `createMonitorRun` and this body unguarded, and would otherwise 400
+    // the WHOLE save with no recoverable retry (the 400-retry above only
+    // ever strips `workoutId`). Same "the save always goes through" rule
+    // this branch already applies to avgHr/actualSplit/spm
+    // (`logDraft.ts`'s `buildMonitorLogSteps`) — RC-18's fallback already
+    // keeps this UNREACHABLE for a live connect (both transports substitute
+    // the caption before it ever reaches here), so this guard is
+    // UNOBSERVED HARDENING against a name that arrives some other way (a
+    // stale `MonitorRun` from before RC-18 shipped, or a future producer
+    // this file cannot see) — see step 6 below for what it does now.
     if (
       typeof body.deviceName === "string" &&
       (body.deviceName.length === 0 || body.deviceName.length > 64)
     ) {
-      delete body.deviceName;
-      // Just Row unconnected spec (2026-09-02): the monitor door's `pm5`
-      // is a contradiction without a `deviceName` (`server/logSource.ts`
-      // 400s it, which would block the WHOLE save this guard exists to
-      // let through), so the door claim goes with the name. Since the
-      // v0.35.0 sunset `source` is REQUIRED on the wire (an absent one is
-      // its own 400), so this body states `manual` itself — the member
-      // the server derived for it while it still could (no device name,
-      // no stopwatch step). It renders `LOGGED BY HAND`, which is what
-      // the same row rendered before the column existed.
-      if (body.source === "pm5") body.source = "manual";
+      // Door PR A (spec §3 + §4): the advertised name is unusable, but the
+      // DOOR is still the connected one, and `pm5` REQUIRES a name (the
+      // biconditional, `server/logSource.ts`). Before the v0.35.0 sunset
+      // this branch deleted the door claim and let the server derive;
+      // #273 changed that to stating `manual`, because an absent `source`
+      // is now its own 400. Both stored a connected session as by-hand.
+      // RC-18's neutral literal is what the row actually needs: the door
+      // stays `pm5` and the device-name column reads as the caption it is.
+      //
+      // THE `pm5` NARROWING IS KEPT (L5): the biconditional forbids a name
+      // on `timer`, `manual` and `no-reading`, so substituting one on a
+      // non-pm5 body would manufacture the very contradiction the server
+      // 400s. Only the connected door gets a substituted caption; every
+      // other door drops the field, exactly as today.
+      //
+      // THE TRADE, STATED (L7): a name longer than 64 characters is real
+      // and gets REPLACED by a caption, so its tail is not stored. That is
+      // the same posture the empty-name case has always had (nothing was
+      // stored at all), and it is preferred to losing the door. Both arms
+      // are UNOBSERVED HARDENING — no capture in `docs/monitor/sessions/`
+      // has ever shown a PM5 advertising an empty or 65+-character name —
+      // not a defect being fixed.
+      if (body.source === "pm5") {
+        body.deviceName = NAMELESS_MONITOR_CAPTION;
+      } else {
+        // RC-18 (M5.5): DEAD today, same reachability class as
+        // `capacitorBle.ts`'s picker arm — the OUTER `typeof === "string"`
+        // check above already can only be true when `source === "pm5"`,
+        // because `handleSave`/the manual door's `submit()` calls never
+        // set `deviceName` on the wire body in the first place
+        // (`LogFormFields.deviceName`'s own doc: "the monitor mode's ONLY
+        // addition to the shared body shape"). Kept anyway as the
+        // narrowing's own belt: if a future door ever DID attach a name,
+        // this is what stops it reaching the server's contradiction check
+        // (`server/logSource.test.ts`'s "timer/manual with a deviceName is
+        // refused" pins that check independently). Gated by pinning the
+        // REAL, reachable fact instead — `LogSession.test.tsx`'s "the
+        // timer/manual door's save never attaches a deviceName" legs —
+        // rather than faking a body shape no door can produce.
+        delete body.deviceName;
+      }
     }
     try {
       // Fix round (MED-1): every retry below rebuilds from `currentBody`
@@ -1856,14 +1894,14 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       <div className="log-dropped-strip">
         <p className="log-dropped-title">THE ERG DROPPED THE WORKOUT.</p>
         <p className="log-dropped-body">
-          <b>
-            {droppedKept === 0
-              ? "Nothing kept."
-              : `${droppedKept} ${droppedKept === 1 ? "interval" : "intervals"} kept.`}
-          </b>{" "}
-          {droppedKept === 0
-            ? "You had not finished an interval yet."
-            : "The row below is what the erg measured before it stopped."}
+          {droppedKept === 0 ? (
+            "You had not finished an interval yet."
+          ) : (
+            <>
+              <b>{`${droppedKept} ${droppedKept === 1 ? "interval" : "intervals"} kept.`}</b>{" "}
+              The row below is what the erg measured before it stopped.
+            </>
+          )}
         </p>
       </div>
     );
@@ -2125,7 +2163,16 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         workoutTitle: activeWorkout.title,
         workoutType: activeWorkout.type,
         steps: logSteps,
-        source: "manual",
+        // Door spec (2026-09-02) §2.1: a connected arrival with no record
+        // (`connectedNoRecord`, computed once at mount at :1620 for the
+        // same reason it is read at :2247 — a later render must not
+        // change what the screen already told the rower) names its own
+        // door. No `deviceName` rides with it: the biconditional forbids
+        // one on every member but `pm5`, and the only name reachable here
+        // is a best-effort LAST-USED name (see this file's :560 comment
+        // and `storedSummary.ts`'s SOURCE header, "SOURCE — A COLUMN, NOT
+        // AN INFERENCE").
+        source: connectedNoRecord ? "no-reading" : "manual",
       },
       opts,
     );
