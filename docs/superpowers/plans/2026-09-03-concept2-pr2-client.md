@@ -1242,9 +1242,22 @@ it is declared above). **Everything else stands**, including step 1 item 3
 its argument), items 4-6, step 3b's whole weight-class chain, and both
 adapter functions.
 
+**SECOND RULING, 2026-09-03 — step 3b MOVES TO TASK 3.** This task's own text
+already says the weight-class half "must land in the SAME commit as Task 3's
+server half, because the two ends of one wire cannot disagree across a
+commit": `startLink` stops sending `weightClass` while
+`POST /api/concept2/connect` still 400s without it, and every link attempt
+fails in between. A separate Task 2 commit cannot satisfy that. **So Task 2
+ships the two adapter functions and nothing else, and step 3b's whole
+weight-class chain — including the `concept2CardModel.test.ts` fixture that
+breaks on purpose when the field goes — executes inside Task 3, in the commit
+that changes the server.** Task 2's Files list below is trimmed to match; the
+chain's prescribed edits stay written here, where the reviewer of Task 3 can
+find them.
+
 **Files:**
-- Modify: `app/src/adapters/linkFlow.ts` (**the weight-class chain only, now that Task 1 landed the `busy` widening: the `WeightClass` type, `startLink`'s parameter, the mint body, the exchange-response shape and the `linked` member's field** — ruling i)
-- Modify: `app/src/you/concept2CardModel.test.ts` — **added to this list by the Task 1 review.** Its `linked` fixture carries `weightClass: "H"` on purpose, so that dropping the field from the union is a COMPILE error here rather than a silently stale fixture. Update it in the same commit.
+- ~~Modify: `app/src/adapters/linkFlow.ts`~~ — **moved to Task 3** (**the weight-class chain: the `WeightClass` type, `startLink`'s parameter, the mint body, the exchange-response shape and the `linked` member's field** — ruling i) the `WeightClass` type, `startLink`'s parameter, the mint body, the exchange-response shape and the `linked` member's field** — ruling i)
+- ~~Modify: `app/src/you/concept2CardModel.test.ts`~~ — **moved to Task 3 with step 3b** (added to this list by the Task 1 review, then moved by the second ruling above).** Its `linked` fixture carries `weightClass: "H"` on purpose, so that dropping the field from the union is a COMPILE error here rather than a silently stale fixture. Update it in the same commit.
 - Modify: `app/src/adapters/webNavigate.ts` (append `openWebInNewTab`)
 - Modify: `app/src/adapters/externalBrowser.ts` (import and append `openReadOnlyUrl`)
 - Test: `app/src/adapters/externalBrowser.test.ts` (append), `app/src/adapters/webNavigate.test.ts` (append), `app/src/adapters/linkFlow.test.ts` (append)
@@ -1572,6 +1585,7 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit sc
 **Gated on ruling (ii) = B for the `c2Username` half. If James picks A, skip that half (the column, both write sites, and the `GET /link` field); `logbookBaseUrl` is NOT optional and ships either way (observation 5), and **the weight-class half is RULED, not optional, and ships regardless of (ii)** — migration 0023 exists for it even if the username column never joins it.
 
 **Files:**
+- Modify: **`app/src/adapters/linkFlow.ts`** and **`app/src/you/concept2CardModel.test.ts`** — **MOVED HERE FROM TASK 2 (2026-09-03 ruling).** The adapter's weight-class chain (the `WeightClass` type, `startLink`'s parameter, the mint body, the exchange-response shape, the `linked` member's field) is Task 2's step 3b, written out there. It executes HERE, in the same commit as the server change, because the two ends of one wire cannot disagree across a commit: `startLink` dropping `weightClass` while `POST /api/concept2/connect` still 400s without it fails every link attempt in between. The card-model test's `linked` fixture carries `weightClass: "H"` on purpose, so dropping the field is a compile error rather than a stale fixture.
 - Modify: `app/server/db/schema.ts` (the `concept2Links` block; the `concept2AuthAttempts` block; the `weightClassEnum` declaration)
 - Create: `app/drizzle/0023_<name>.sql` + `app/drizzle/meta/0023_snapshot.json` + journal entry, via `pnpm db:generate` (index confirmed free in step 1)
 - Modify: `app/server/concept2/mapping.ts` (**new** `pickDeclaredWeightClass` and `deriveWeightClass` + their four constants and three types; `buildC2Payload`'s second parameter)
