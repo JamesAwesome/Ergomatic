@@ -6696,3 +6696,86 @@ plan's own tools and never with the REPO's.
   plan WIDENED (`CloseReason | "interrupted"`) admitted the member the spec
   says writes none — "allowlists, never negations" applies to the guard on the
   producer, not only to the render.
+
+## 2026-09-03 — Phase JR item 2, post-walk delta (PR #278, commits b74c65a0 / 4987a1b6 / 7d0c50ce)
+
+- **A "mutation → red" line in a spec is a claim about a COMMAND, and it gets
+  run.** Spec rev 5's §Evidence 2b said "Mutation for each: restore the
+  `mode !== "justrow"` exclusion → red" for three legs. Restoring `cancel()`'s
+  exclusion alone leaves the whole client suite green (172/172 files,
+  4782/4782 tests) because `cancel()`'s own `teardown(armed, driver)` call
+  then sends the terminate; and `endSession` has no such exclusion at all, so
+  the named mutation cannot reach that leg either (its biting mutation is the
+  terminate refusal, which reddens 6 tests at the corrected head). TECHNIQUE:
+  **apply every mutation a spec's evidence table names, as written, before
+  believing the table — and when a commit says "a probe found X", grep for the
+  DOCUMENT that asserts not-X.** Here the implementer found it and wrote it
+  into the code and the test but not the spec: fixed where the claim is USED,
+  left standing where it is ARGUED — the review-record rule's own failure,
+  inverted.
+- **A walk that found one cause does not license "two causes, both fixed".**
+  The ring settled it in three lines: `free-row-program-sent` at +1795 ms,
+  `disconnect-requested` at +3384 ms — Cancel ran 1589 ms AFTER the send
+  settled, so the refusal path was never entered and only the mode exclusion
+  was operative. TECHNIQUE: **print the ring's interleaving of each claimed
+  cause's PRECONDITION against the moment the symptom happened.** A cause that
+  was not live then is hardening debt, not a diagnosis — the walk README said
+  so correctly ("would"); the commit message promoted the hypothetical.
+- **A CONSTANT THAT ACQUIRES A SECOND CONSUMER MUST BE RETUNED AGAINST BOTH.**
+  `FREE_ROW_PROGRAM_DEADLINE_MS` bounded a flag; the same commit made it also
+  bound how long a `terminate()` is DEFERRED, then raised it 3000 → 5000
+  against ack latency alone. The deferral then raced the hook's own teardown:
+  END at `ready` closes, holds the burst ~2002 ms, releases, navigates,
+  unmounts, and disconnects ≈4027 ms after END, against a Ready frame at
+  write+1159 ms and a deadline at write+5000 ms — a margin of ~186 ms. If the
+  disconnect wins, the terminate writes to a hung-up transport and the erg is
+  left armed: the defect being fixed, one path over. Nobody stated the margin.
+  TECHNIQUE: **when a timeout gains a new reader, list every OTHER timer it now
+  races and put the arithmetic in the comment.** The tell is a doc comment
+  whose own qualifier excludes the case the constant governs — here, "raising
+  it costs nothing on a machine that answers", written on the constant that
+  exists for machines that do not. FIXED in `ed8b0766` by making the driver
+  owe its terminate write (`terminateWritesOwed`) and holding `disconnect()`
+  until the debt clears — a race closed structurally, not by retuning a number.
+- **"No caller awaits it" is a grep, and it decides whether a guard is
+  testable.** `cancel()`'s terminate is distinguished from `teardown()`'s only
+  by being AWAITED; every call site is `void session.cancel()` (three in
+  `JustRow.tsx`, two in `ConnectedInterstitial.tsx`, one in
+  `JustRowObserver.tsx`). So the property the code's own comment claimed as its
+  contract had no consumer and no possible oracle — RF21's third smell, found
+  by grepping call sites rather than by reading the guard.
+- **A LIFETIME TABLE'S "survives" CELL NAMES A GUARD; CHECK THAT GUARD CANNOT
+  LAPSE MID-LIFETIME.** Rev 5's table justified "cannot be overwritten while
+  live" with the driver's `runIsOpen()` refusal — but `activeRun.closed = true`
+  is set by the machine's own terminal frame, reachable during the ~2 s send
+  (the rower presses Menu). The invariant holds, one layer up, via the hook's
+  phase gate. TECHNIQUE: **for every guard cited in a lifetime table, grep for
+  every writer of the state that guard reads, and ask whether any of them can
+  fire inside the lifetime being described.**
+- **Attacked and HELD:** the wait is genuinely bounded (ack, NAK, deadline via
+  `setTimeout`, and the disconnect hatch resolving `pendingAck` as
+  `"disconnected"` — all four reach the stored chain; both handlers attached,
+  neither throws, so the chain resolves and `terminate()` can never reject from
+  the await; `buildJustRowProgram` is one frame, so no mid-sequence null-
+  `pendingAck` window); no ordering sends the terminate before the p.80 frame
+  (`beginFreeRow()` is synchronous through the first write and mints the
+  promise in the same statement) or twice (`cancel` nulls `driverRef` before
+  its await; `alreadyTerminated` stops the repeat); no stale await is possible
+  (clear is `= null`, a suspended waiter holds its own reference); the deadline
+  IS pinned by independent literals (4999 held / 5000 released, never importing
+  the constant, failing in both directions); the cancel test really does run
+  inside the send window (proved by the refusal mutation reddening it, not by
+  reading it); and every number in the walk README reproduces from the ring
+  JSONs — write→ack 1968/2060/1788 ms, type 0 at write+1158 → ack +1968 → type
+  1 at +2057 (89 ms after the ack), Ready-to-ack 809/809/718 ms. Finding 2
+  (readback unsound) follows from rings 2 and 3 opening at `workoutType=1`
+  before their acks. Finding 1's causal inference rests on the IN-BAND control
+  (type 0 held for 1.16 s of live connection, flipping 89 ms after our own ack,
+  no other write in the ring), not on the photos — which are correctly labelled
+  CORRELATED, not SAME-FRAME, and carry no timestamps.
+- **Filed alongside:** ring 3's ack status byte is `0x01`, not the `0x81` the
+  README's parenthetical named. Both are accepts (the driver logged
+  `free-row-program-sent`, which requires `frameStatus === "ok"`); the
+  difference is the CSAFE frame-toggle bit — the same alternation this repo
+  once invented a wrong mechanism to explain (interface-notes §19.2, D1
+  withdrawn). Corrected in `b78d9a0f`.
