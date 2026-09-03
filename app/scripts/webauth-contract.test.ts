@@ -163,10 +163,12 @@ describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
 
   it("the linkClient declaration is one capability spelled in two places", () => {
     // Retyping `LINK_CLIENT` breaks every native link on the device -- the
-    // server answers `409 {error:"update_required"}` and issues no attempt --
-    // and NO runtime test can see it: `linkFlow.test.ts` asserts the posted
-    // body against the same imported constant, which agrees with itself
-    // whatever it says. This is the only gate that compares the two files.
+    // server answers `409 {error:"update_required"}` and issues no attempt.
+    // `linkFlow.test.ts:109` pins the client-side literal, so a drift THERE
+    // is caught; what no runtime test can see is a rename of the SERVER's
+    // `NATIVE_LINK_CLIENT`, since nothing else compares the two files
+    // (measured 2026-09-02: a server-side rename leaves `linkFlow.test.ts`
+    // 24/24 green and reddens only this file).
     //
     // Each `exec` runs on its OWN source on purpose: the shorter pattern also
     // matches the server's longer `NATIVE_LINK_CLIENT`, so running it over the

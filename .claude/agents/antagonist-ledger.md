@@ -6423,3 +6423,36 @@ plan's own tools and never with the REPO's.
   against vitest 4's `projects` config — jsdom loads, 4/4 pass — so the plan's three
   uses of that form are correct. **Nit: step 3b's example read-line says "all 19
   surviving `browserFinished` hits"; the table sums to 25.**
+
+### 2026-09-02 — Wave E PR1.75b IMPLEMENTATION (lessons found by review, not by the 11 plan passes)
+
+- **A WHATWG getter answers `""` where the reader assumed `null`.** The prescribed
+  `linkFlow.ts` guarded `params.get("code") === null` for "no code"; `?code=`
+  (an empty parameter, exactly what a `?error=access_denied&code=` decline can
+  carry) yields `""`, skipped the guard, skipped the `declined` branch, and
+  POSTed `{code: ""}` to `/exchange` — a rower's decline surfaced as a server
+  400. It survived eleven antagonist passes because every pass parsed the
+  happy-path callback and the absent-key callback, never the present-but-empty
+  key. **Technique: for every `get()`/`params`/`searchParams` read, test three
+  shapes — absent, empty, valued — and name which of `null`/`""` the code treats
+  as "not there".** The sibling `?state=` read fails SAFE (an empty state is a
+  mismatch, so the exchange is refused) and is recorded as untested.
+- **A client constant compared only against itself, one seam over from the one
+  that was cross-checked.** `LINK_CALLBACK_SCHEME` had both an independent
+  literal pin and a server cross-check in the contract census;
+  `LINK_CLIENT`, gating the same mint, had neither — the test asserted the
+  posted body against the imported symbol. A one-character drift would 409
+  every native mint. **Technique: when a census cross-checks one literal across
+  two files, list every OTHER literal the same request carries and ask whether
+  each has the same two pins.**
+- **A mutation row whose fallback restores the original value.** The plan's row
+  "exchange body `state` → `returnedState ?? state`" was meant to prove the
+  exchange sends the MINT's state, not the callback's; but `??` falls back on
+  nullish, and every test's callback either omits `state` (→ the mint's `state`,
+  the original behaviour) or carries a matching one — so the mutant is a
+  semantic no-op and the suite stays green. The row predicted a `null` that only
+  the OTHER mutation (`state: returnedState`) produces; that form bit
+  immediately. Anyone running the table mechanically logs a pass. **Technique:
+  before trusting a mutation row, ask what value the mutant produces for EACH
+  fixture the suite feeds it; a mutation that maps every fixture to the
+  original output is not a mutation of the behaviour under test.**

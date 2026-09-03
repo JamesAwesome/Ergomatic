@@ -41,10 +41,11 @@ export type WeightClass = "H" | "L";
 /**
  * Every way a link attempt can end. Design §4 names nine; this union adds
  * `linked`/`navigating` (the two successes), `updateRequired`/`mintFailed`/
- * `exchangeFailed` (the two server hops the design describes in prose), and
+ * `exchangeFailed` (the two server hops the design describes in prose),
  * `pluginError` (plan observation 2 -- `cannotStart`, a failed `start()`, or a
  * foreign `NSError` have no other home, and folding them into `cancelled`
- * would report a real failure as a user's decision).
+ * would report a real failure as a user's decision), plus `abandoned` from
+ * §2's lifetime table (the `shouldOverrideLoad` main-frame rejection).
  *
  * `networkError` is the TRANSPORT's member. Every other member names a failure
  * somebody designed; this one names the failures nobody designed -- `api()`'s
