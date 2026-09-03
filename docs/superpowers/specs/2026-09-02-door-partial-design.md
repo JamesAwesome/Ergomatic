@@ -33,8 +33,8 @@ NUMBER means.** A reviewer never holds both at once.
   PARTIAL read and its copy; RC-18's neutral fallback; the positive
   `timeLabel` gate; the three riders. Gate 0-A.
 - **PR B — the stored number.** Lifecycle spec §5: the in-flight interval's
-  metres survive a mid-row close as OUR number, never the machine's, in new
-  step keys, and the "N intervals kept" vocabulary including the lost banner.
+  metres survive a mid-row close in new step keys — the MACHINE's own
+  reading, attributed by US to the interval it was in flight for, and the "N intervals kept" vocabulary including the lost banner.
   Gate 0-B. Lands after A.
 
 The decisions below were taken with James on 2026-09-02 and then attacked in
@@ -405,9 +405,17 @@ PR A is that migration.
 ### 5.1 What it stores and where
 
 On a connected close that is not `finished`, the interval in flight — the one
-with no boundary actual — stores its live frame reading as **our** number in
-two NEW step keys, `partialMeters` and `partialSeconds`, on the step that was
-in flight. Never in `actualMeters`/`actualSeconds`, never as a new
+with no boundary actual — stores its live frame reading in two NEW step keys,
+`partialMeters` and `partialSeconds`, on the step that was in flight.
+**Whose number it is, said precisely (PM final gate, 2026-09-03):** the pair
+is `MonitorFrame.distanceMeters`/`elapsedSeconds`, which
+`domain/monitor/types.ts:31-33` documents as _"0x0031's OWN Elapsed Time /
+Distance, exactly as the machine reports them"_ — the QUANTITY is the
+machine's. What is OURS is the ATTRIBUTION: §7 records that
+`toActualIndex` returns `null` at terminate, so the machine reports the
+reading and cannot say which interval it belongs to, and we do. Anything
+else this spec ever said about the pair being "our number, never the
+machine's" is superseded by this paragraph. Never in `actualMeters`/`actualSeconds`, never as a new
 `actualSource` member. The reason is the server's own validator comment
 (`routes/data.ts:594-596`): _"any extra keys the client sent are silently
 dropped, not persisted."_ A partial carried in `actualMeters` plus a marker
@@ -432,10 +440,45 @@ not "so far":** `endSession`'s `linkGone` includes frame silence, so the
 banked reading can be arbitrarily old. Gate 0-B approves that reading with
 that word, or the copy changes.
 
-**The pair is elapsed, not rowing time.** `domain/monitor/types.ts:189-191`:
-_"There is NO paused state on the wire — mid-workout the clock runs whether
-or not the rower pulls."_ A rower who stops pulling and then presses End
-banks a `partialSeconds` that includes idle time. **No split, pace or rate is
+**The pair is elapsed, not rowing time — and the residual is UNSETTLED**
+(PM final gate, 2026-09-03; this section originally stated it flat, on one
+citation, while the same file contradicts itself 55 lines apart).
+
+- `domain/monitor/types.ts:189-191`, the WIRE-DOC claim, tagged C4/H1:
+  _"There is NO paused state on the wire — mid-workout the clock runs
+  whether or not the rower pulls."_
+- `domain/monitor/types.ts:134`, MEASURED and about the very same field,
+  says the opposite in the same breath: `MonitorFrame.elapsedSeconds` is
+  _"the per-interval clock, which FREEZES whenever `rowingActive` goes false
+  — a rower sitting still through a rest stops it dead"_, measured against
+  `walk-2026-08-16/session-2-wu-4unequal.jsonl`.
+- The discriminator, and why this spec still says "elapsed": that measured
+  freeze was watched **through a REST**, not through a mid-WORK stop, and a
+  mid-work stop HAS been measured the other way. `useMonitorSession.ts`'s
+  `PAUSED_FRAME_HOLD` doc comment records it as §17 item 20, ANSWERED by the
+  2026-08-08 hardware recording: _"on a real PROGRAMMED timed interval the
+  PM5's clock runs whether or not the rower pulls — the recording shows LEFT
+  IN INTERVAL counting 4:38 → 3:47 while meters sat pinned at 30, split at
+  4:16.1, rate at 68"_. That is the case a partial is banked in, and it says
+  the clock runs.
+- **What is therefore still open, precisely two things**, and neither
+  changes what ships: (i) the same observation on a DISTANCE interval —
+  `PAUSED_FRAME_HOLD`'s own caveat says the three-metric freeze "has only
+  been WATCHED on a timed one"; (ii) the `rowingActive` byte's value through
+  that stop, which the same comment records as **never observed** ("frames
+  whose Rowing State behavior during a mid-piece stop has NEVER been
+  observed"), so `types.ts:134`'s "whenever `rowingActive` goes false" has
+  never been evaluated mid-work at all.
+- **No committed capture settles (i) or (ii)**, checked by listing
+  `docs/monitor/sessions/` by date and grepping every `rowingActive` mention
+  in `docs/` (RF16's corpus check). **OWED AT THE NEXT WALK:** on a DISTANCE
+  interval, stop pulling mid-interval for ≥10 s, keep the program running,
+  then End — the recording then carries both the clock's behaviour and the
+  byte through the same stop, and the loser of `types.ts:134` vs
+  `types.ts:189-191` is corrected at its own site.
+
+A rower who stops pulling and then presses End banks a `partialSeconds` that
+includes idle time on the measured evidence above. **No split, pace or rate is
 ever derived from the partial pair**; the step row shows the two numbers as
 what they are (metres so far, interval clock so far). A `rowing` frame with
 `intervalIndex: null` (the D3 divergence, `types.ts:152-159`) writes no
@@ -625,9 +668,17 @@ saved row together, one vocabulary.
   t=15442: el=8.5 d=15) and we decline it, because `toActualIndex` returns
   `null` for `state === "terminated"` — CSAFE-DEF footnote 12 says the
   interval number "will change depending on where you are in the interval",
-  so the machine reports the QUANTITY but cannot ATTRIBUTE it. "Our number,
-  never the machine's" is right for that stronger reason; the first
-  implementer to see that event must not reach for it.
+  so the machine reports the QUANTITY but cannot ATTRIBUTE it. That is
+  exactly what "ours" means here and all it means: the ATTRIBUTION is ours,
+  the two numbers are the machine's own. **This section used to say "our
+  number, never the machine's", which reads as a claim about PROVENANCE and
+  is wrong as one** (PM final gate, 2026-09-03): the pair is
+  `MonitorFrame.distanceMeters`/`elapsedSeconds`, and `types.ts:31-33` says
+  those are _"0x0031's OWN Elapsed Time / Distance, exactly as the machine
+  reports them"_. The sentence mattered because it invites the next agent to
+  compare the pair against the PM5's own in-flight reading and call the
+  agreement a check — same bytes, RF11's mirror. The first implementer to
+  see that declined 0x0037/0x0038 event must still not reach for it.
 - `ls docs/superpowers/research/` covers nothing here (RF18 check run).
 
 ---

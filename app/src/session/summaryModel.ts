@@ -710,10 +710,23 @@ export function readingOfIntervalActual(
  *  reads `250 m · 1:03`, a time interval `2:10 · 480 m`. Nothing else in
  *  the codebase re-derives either the order or the separator.
  *
- *  NO SPLIT, PACE OR RATE IS DERIVED FROM THIS PAIR (§5.1). The seconds
- *  are ELAPSED, not rowing time — the PM5 has no paused state and its
- *  clock runs whether or not the rower pulls — so a quotient of the two
- *  would be a number nobody rowed. */
+ *  BOTH NUMBERS ARE THE MACHINE'S OWN (`MonitorFrame.distanceMeters` /
+ *  `elapsedSeconds`, `domain/monitor/types.ts:31-33`: "exactly as the
+ *  machine reports them"). What this app supplies is the ATTRIBUTION to the
+ *  in-flight interval, which the machine cannot make (spec §7). Do not read
+ *  a comparison against the PM5's own in-flight reading as a check: it is
+ *  the same bytes.
+ *
+ *  NO SPLIT, PACE OR RATE IS DERIVED FROM THIS PAIR (§5.1), and a quotient
+ *  of the two would be a number nobody rowed. The seconds are ELAPSED
+ *  rather than rowing time on the balance of the evidence, NOT settled:
+ *  `types.ts:189-191` says the wire has no paused state, while
+ *  `types.ts:134` says this same field "FREEZES whenever `rowingActive`
+ *  goes false" — measured through a REST. The mid-WORK case is what matters
+ *  here and is measured the first way (§17 item 20, the 2026-08-08
+ *  recording, quoted in `useMonitorSession.ts`'s `PAUSED_FRAME_HOLD`
+ *  comment: the clock ran while the metres sat pinned). Spec §5.1 carries
+ *  the open residual and the walk observation owed to close it. */
 export function partialRowLabel(
   step: Pick<LogStep, "partialMeters" | "partialSeconds" | "seconds">,
 ): string | undefined {

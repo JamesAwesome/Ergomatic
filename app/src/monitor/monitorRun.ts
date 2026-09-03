@@ -1217,6 +1217,27 @@ const PARTIAL_WRITE_REASONS = [
  *
  * Returns its input unchanged when any gate refuses, so a caller can hand
  * the result straight on without an identity check of its own.
+ *
+ * THERE IS NO FLOOR, AND THAT IS A RULING, NOT AN OVERSIGHT (controller,
+ * 2026-09-02; recorded here at the site because a ruling that creates an
+ * inconsistency with an adjacent shipped policy belongs beside the policy,
+ * not in a PR body — PM final gate, 2026-09-03). A `rowing` frame carrying
+ * `d=0` is in the committed corpus, so `{ meters: 0, seconds: 0 }` is a
+ * REAL reading; it is written here and rendered as `0 m · 0:00`.
+ *
+ * ITS NEIGHBOUR POLICY IS THE OPPOSITE, DELIBERATELY.
+ * `summaryModel.ts`'s `MIN_MEASURABLE_ELAPSED_SECONDS` treats a sub-floor
+ * MEASURED reading as though nothing was measured at all, because a
+ * mis-tapped stopwatch or an unsettled boundary read is noise that would
+ * drag a hero.
+ * The two rules disagree because "absence over invention" cuts the other
+ * way here: that floor suppresses a number we are not sure was rowed, while
+ * this pair is a reading the machine actually sent for an interval the
+ * rower actually entered. Suppressing it would be inventing an absence.
+ *
+ * REVERSIBLE BY ONE CONDITION IN THIS FUNCTION (a `reading.meters === 0 &&
+ * reading.seconds === 0` refusal) with no stored-shape change and no
+ * migration; the cost of being wrong is a noisy row in a sub-second window.
  */
 export function withPartial(
   run: MonitorRun,

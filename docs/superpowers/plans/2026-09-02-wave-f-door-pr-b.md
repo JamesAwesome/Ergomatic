@@ -6,8 +6,9 @@
 session stopped short are KEPT and shown. Today they are discarded: the
 interval in flight has no boundary pair, so nothing about it survives, and a
 single-interval piece lost mid-row keeps nothing at all. After this PR the
-in-flight interval's own last reading is stored as OUR number, in two new
-step keys, and renders on that step's row on both the log door and the saved
+in-flight interval's own last reading is stored in two new step keys — the
+MACHINE's own two numbers, attributed by US to the interval they were in
+flight for (spec §5.1/§7: the attribution is the part that is ours) — and renders on that step's row on both the log door and the saved
 row. The lost banner stops saying "Nothing kept." when something now is.
 
 **Architecture:** One session-scoped ref (`lastRowingFrameRef`) minted on
@@ -74,7 +75,12 @@ value below is approved copy rather than a proposal:
   THIS PR** — `ConnectedSurface.tsx`'s ended-frame line and
   `LogSession.tsx`'s dropped-program strip. Task 6 carries all three.
 - **(f)** no split, pace or rate is ever derived from the pair.
-- **(g)** the row's `aria-label` speaks `stopped at 250 m · 1:03`.
+- **(g)** the row's `aria-label` APPENDS the spoken pair to `, not measured`,
+  in the artboard's own two forms: `, not measured, stopped at 250 m after
+  1:03`, and `, not measured, last reading 250 m after 1:03` on a `link-lost`
+  close. Metres lead on both interval kinds and the middle dot goes (spec
+  §6 (g)). This line drafted `stopped at 250 m · 1:03` before Gate 0-B; the
+  artboard is the approval and the draft is superseded.
 
 **No task is gate-blocked any more** — the tasks below run in order. The
 DISTANCE hero's own gap (it already counts the abandoned interval's rowed
@@ -1566,7 +1572,9 @@ partial replaces that dash. **ONE renderer serves both doors**
         finding 2 — controller ruling at Finding 6). On a DISTANCE interval
         (`seconds` absent) `{ partialMeters: 0, partialSeconds: 0 }` →
         `0 m · 0:00`, and the row's `aria-label` reads
-        `Interval 1: <label>, stopped at 0 m · 0:00`. **There is no floor**:
+        `Interval 1: <label>, not measured, stopped at 0 m after 0:00`
+        (spec §6 (g)'s approved form; this step drafted `stopped at 0 m ·
+        0:00` before Gate 0-B). **There is no floor**:
         the reading is real (interval N's first rowing frame is `d=0` in the
         corpus), so absence would be invention. Pin the exact string, not a
         `toBeDefined()` — the failure this leg exists for is a future
@@ -1732,8 +1740,11 @@ partial replaces that dash. **ONE renderer serves both doors**
         // when the session closed short reads its own two numbers where an
         // unreached step reads the dash. Both are unmeasured rows — the
         // difference is that one has a reading and the other genuinely has
-        // nothing. Gate 0-B decision (g), APPROVED: the accessible name says
-        // `stopped at 250 m · 1:03`. Decision (d): an over-target partial
+        // nothing. Gate 0-B decision (g), APPROVED: the accessible name
+        // appends the spoken pair to `, not measured` in the artboard's two
+        // forms (spec §6 (g)) — `, not measured, stopped at 250 m after
+        // 1:03`, and `last reading …` on a `link-lost` close. Decision (d):
+        // an over-target partial
         // reads exactly the same way — there is no over/under branch here.
         return (
           <li
@@ -2088,10 +2099,11 @@ const WALK_0828_PROGRAM: WorkoutProgram = {
       the same probe as **M3.3** — must redden C1.
 
       **C2 — I-B3, under an End close.** Cut at `e.t <= 100000` (mid-rest,
-      3.5 s after that first resting frame and 36 s before interval 0's own
-      boundary at t=136429). Same three assertions except **`run.partial` is
-      `undefined`** — interval 0's work bout ended at the resting frame, 60 s
-      before its actual would have arrived. Mutation: **M7.1**.
+      23.5 s after that first resting frame at t=76488.9 and 36.4 s before
+      interval 0's own boundary at t=136429.2 — both figures corrected at the
+      final fix wave; this step said 3.5 s and 36 s). Same three assertions
+      except **`run.partial` is `undefined`** — interval 0's work bout ended
+      at the resting frame, 60 s before its actual would have arrived. Mutation: **M7.1**.
       **This is today's leg, correctly labelled.** As written it gated I-B3
       and was described as gating the End arm; the cut landed past the clear,
       so its own assertion could only ever be negative. C1 is the End-arm
@@ -2613,8 +2625,9 @@ ENDEDBY rower ACTUALS []
 PARTIAL undefined
 ```
 
-**That third block is leg C2, not C1.** The cut at `t<=100000` lands 3.5 s
-AFTER the first `resting` frame (t=76489), so I-B3 had already cleared the ref
+**That third block is leg C2, not C1.** The cut at `t<=100000` lands 23.5 s
+AFTER the first `resting` frame (t=76488.9 — this paragraph said 3.5 s, corrected
+at the final fix wave), so I-B3 had already cleared the ref
 and `undefined` is the only answer it could ever have printed: it gates I-B3
 under an End close, and calling it the End-arm gate was harden lens 1's second
 finding. **Leg C1 (cut at `e.t <= 76200`) was NOT run this session** — its
