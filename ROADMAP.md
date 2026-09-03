@@ -459,12 +459,24 @@ rower's work silently.
       live arm publishing `closeReason`; the real-driver seam test; the
       two Gate-0 surfaces; this composition drive-through). **PR #248**,
       PM final gate GO-WITH-CONDITIONS 2026-08-31.
-- [ ] **The pocketed-phone window's two co-producers. RE-SCOPED on evidence
-      2026-08-31 — one is not a defect.** `pause-declared` at 66 spm while
-      rowing is real and stays here, owned by
-      `2026-08-31-lifecycle-design.md` §4, and it deliberately WAITS on that
-      spec's §3 instrument rather than being fixed on the stale-frame story
-      (66 spm is consistent with a stale reading, not evidence of one).
+- [x] **~~The pocketed-phone window's two co-producers~~ — §4 CLOSED
+      2026-09-03: UNREPRODUCED and INSTRUMENTED (James's ruling at the
+      resume-edge walk).** `pause-declared` at 66 spm while rowing was
+      owned by `2026-08-31-lifecycle-design.md` §4 and waited on that
+      spec's §3 instrument, which shipped in #267. The walk that used it
+      (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`) performed the
+      exact gesture — locked mid-row for 35.5 s, kept rowing, unlocked —
+      and **declared no pause at all in the 22.4 s that followed**. The
+      post-resume inter-arrival gaps were `[84,180,90]` ms; the one
+      genuine `pause-declared`, seven seconds into a deliberate mid-work
+      stop, carried `[90,90,180]` ms. **Timing does not discriminate on
+      this device, and there was nothing to discriminate.** Designing a
+      predicate on a defect an instrumented capture of its own gesture
+      cannot reproduce would be inventing a mechanism, so the instrument
+      stays and the item closes — the same posture as F-1 (6-MIN). The
+      next occurrence arrives with `gapsMs` and `sinceResumeMs` already on
+      it; a design starts from those numbers or not at all. One device,
+      one run: this is not a claim that the defect cannot happen.
       **TWD 52→0→64 m non-monotonic is CORRECT BEHAVIOUR and leaves this
       item:** `continuity.ts`'s `check` convicts a reset only when TWD,
       elapsed AND distance all read backward together — TWD alone is the
@@ -666,8 +678,19 @@ rower's work silently.
       since `parse.ts:608`'s strict `rowingState === 1` makes any non-1 read
       `false` and the next occurrence still will not say which. No behaviour
       change proposed. **S**
-      **(d) added 2026-09-03, owed at the NEXT WALK, from door PR B's PM
-      gate:** `domain/monitor/types.ts:134` claims `MonitorFrame.elapsedSeconds`
+      **(d) SETTLED 2026-09-03 at the resume-edge walk
+      (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`): the clock
+      RUNS through a mid-work stop.** With the rower sitting still, elapsed
+      went 80.52 s → 92.11 s (+11.6 s) while distance went 247.1 → 249.6 m
+      (coast, then nothing). So `types.ts:189-191` holds for the mid-WORK
+      case and `types.ts:134`'s "FREEZES whenever `rowingActive` goes
+      false" is correct only for its own measured REST — corrected at its
+      site by this walk. Door PR B's `partialSeconds` is therefore interval
+      elapsed INCLUDING idle time, exactly as `2026-09-02-door-partial-design.md`
+      §5.1 concluded; no shipped behaviour changes. **(c) is still open —
+      the ring carries no raw-byte diagnostic, so the byte's own value
+      through the stop remains unobserved.** The original text, for the
+      record: `domain/monitor/types.ts:134` claims `MonitorFrame.elapsedSeconds`
       "FREEZES whenever `rowingActive` goes false", measured through a REST;
       `types.ts:189-191` says the wire has no paused state at all; and
       `PAUSED_FRAME_HOLD`'s comment records that the byte's behaviour through
