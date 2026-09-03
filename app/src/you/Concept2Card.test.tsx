@@ -404,6 +404,39 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
+
+  it("names NO CONNECTION when the unlink request never completed", async () => {
+    // The 1j panel's other reading. A DELETE that never reaches the server
+    // at all takes `unlink()`'s `catch`, not its `else`, and a rower on a
+    // dropped connection must still be told the link is UNCHANGED rather
+    // than left to guess from a control that silently re-armed.
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") throw new Error("offline");
+      return new Response(JSON.stringify(LINKED), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Unlink Concept2" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
+    expect(await screen.findByText("REASON: NO CONNECTION")).toBeTruthy();
+    expect(
+      screen.getByText("Couldn't unlink. Your link is unchanged."),
+    ).toBeTruthy();
+    // The grant is genuinely still live and the card still says so; and the
+    // arm is spent on this exit too, so no stray tap re-fires the DELETE.
+    expect(screen.getByText("LINKED ✓")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Unlink Concept2" }),
+    ).toBeTruthy();
+  });
 });
 
 describe("Concept2Card outcomes (Gate 0 amendment 1e/1f/1g)", () => {
@@ -423,6 +456,39 @@ describe("Concept2Card outcomes (Gate 0 amendment 1e/1f/1g)", () => {
       await screen.findByText("REASON: CONCEPT2 REFUSED THE LINK · 502"),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("Try again runs a whole new attempt, and a link that lands clears the failure", async () => {
+    // RF4: the panel's button is asserted to WORK, not merely to exist.
+    // The test above proves 1e renders a Try again; nothing proved it was
+    // wired, and a dead retry on the one screen that offers recovery is
+    // exactly the defect that costs a walk.
+    let attempt = 0;
+    let linked = false;
+    const api = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify(linked ? LINKED : { available: true, linked: false }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => {
+      attempt += 1;
+      if (attempt === 1) return { kind: "networkError", message: "boom" };
+      linked = true;
+      return { kind: "linked", c2UserId: 2211, stateEchoed: true };
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
+    await screen.findByText("THE LINK DIDN'T FINISH");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("LINKED ✓")).toBeTruthy();
+    expect(startLink).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("THE LINK DIDN'T FINISH")).toBeNull();
   });
 
   it("renders the update-required panel with no retry, because retrying this build cannot work", async () => {
