@@ -660,35 +660,29 @@ export function measuredIntervalCount(
  *  or -1 when this run has none — which is every run built by today's code,
  *  since `buildLogSeed` (`logDraft.ts`) has not been able to write
  *  `kind: "warmup"` since Phase WU. `LogSeed.steps[].kind` is now typed
- *  `"work"` only (door PR A, spec §4 rider 2, narrowed the union — that
- *  rider's own scope was the READER at `logDraft.ts`'s
- *  `buildMonitorLogSteps`, a SEPARATE mechanism from this one; it did not
- *  touch this function), but a `MonitorRun` stored before either change
- *  still carries the string `"warmup"` at runtime once it comes back out
- *  of JSON, despite the type saying otherwise — the same "trust the wire,
- *  not the type" reasoning `MonitorRun`'s own `interval.type === undefined`
- *  comment relies on. The unchecked read below is what lets this function
- *  keep finding it: dropping this would silently fold that run's warm-up
- *  interval into its AVG SPLIT — moving a number on a record already shown
- *  to the rower. Also -1 when there is no `logSeed` at all (a v1
- *  `MonitorRun` predating the field, `MonitorRun.logSeed`'s own doc
- *  comment).
+ *  `"work"` only (door PR A, spec §4 rider 2, narrowed the union), but a
+ *  `MonitorRun` stored before either change still carries the string
+ *  `"warmup"` at runtime once it comes back out of JSON, despite the type
+ *  saying otherwise — the same "trust the wire, not the type" reasoning
+ *  `MonitorRun`'s own `interval.type === undefined` comment relies on. The
+ *  unchecked read below is what lets this function keep finding it:
+ *  dropping this would silently fold that run's warm-up interval into its
+ *  AVG SPLIT — moving a number on a record already shown to the rower.
+ *  Also -1 when there is no `logSeed` at all (a v1 `MonitorRun` predating
+ *  the field, `MonitorRun.logSeed`'s own doc comment).
  *
- *  CONTROLLER RULING (fix round 1, Important 1) — why this function stays
- *  even though `buildMonitorLogSteps` no longer needs it: for the narrow
- *  residual population (an unlogged `MonitorRun` authored before warm-up
- *  removal — PR #150, v0.16.0, 2026-08-22 — and logged AFTER door PR A
- *  ships), this function is what keeps the LIVE post-session summary's AVG
- *  SPLIT frozen at the OLD fused figure (2:20.0 in the case that surfaced
- *  this) while the SAME row, once saved, reads back a DIFFERENT number
- *  through the Log door — `storedSummary.ts` (tier B1 `:781-782`, tier B2
- *  `:803`) recomputes AVG SPLIT from `row.steps` in PREFERENCE to the
- *  stored column, and `row.steps` now carries the former warm-up position
- *  as a real, measured pm5 step (`logDraft.ts`'s own guard-removal comment
- *  has the full account), so the Log door's number moves to 2:29.4 on that
- *  SAME row. This divergence is bounded to the one population above,
- *  ACCEPTED here, and surfaced to James in the PR body as the one number
- *  door PR A can move. `warmupIndex` stays. */
+ *  THE SIBLING READER, and why the two must move together (door PR A,
+ *  whole-branch review Important 1): `logDraft.ts`'s `buildMonitorLogSteps`
+ *  performs the IDENTICAL cast — `(seedStep.kind as string) === "warmup"` —
+ *  to skip a legacy warm-up seed step when that same run is finally LOGGED.
+ *  A fix round briefly removed that one, which would have made a saved row
+ *  carry the former warm-up position as a real measured pm5 step; the Log
+ *  door's `storedSummary.ts` recomputes AVG SPLIT from `row.steps` in
+ *  PREFERENCE to the stored column, so the SAME row would then read back a
+ *  DIFFERENT AVG SPLIT than the live summary this function keeps frozen.
+ *  The guard was RESTORED and the acceptance REVERSED before merge: both
+ *  readers honour the legacy string, so no number moves anywhere. If either
+ *  is ever retired, retire both in the same change. */
 function warmupIndex(run: MonitorRun): number {
   return (
     run.logSeed?.steps.findIndex((s) => (s.kind as string) === "warmup") ?? -1

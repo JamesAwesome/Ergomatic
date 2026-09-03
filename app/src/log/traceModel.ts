@@ -88,14 +88,13 @@ export type Measure = "pace" | "rate" | "hr";
 /** trace-truth Task 2 (spec §3): a `ChartPoint` plus the recorder's own
  *  rest marker, carried through UNCHANGED so `TraceChart` can tint a rest
  *  span without re-deriving anything from `Sample`/steps — the renderer
- *  cannot recover this later (a stored log's steps carry no reliable
- *  warm-up marker to key a positional derivation off — nothing FLAGS a
- *  step as one; before door PR A they were never present at all, and PR A's
- *  own accepted residual means the narrow legacy population it names can
- *  even carry one, unmarked, once re-logged — `logDraft.ts`'s guard-
- *  removal comment has the full account — so any positional derivation
- *  from steps was always liable to land displaced; the recorder is the
- *  only place that ever saw the wire's own state byte).
+ *  cannot recover this later (a stored log's steps never carry a warm-up
+ *  row — nothing has PRODUCED one since Phase WU, and
+ *  `buildMonitorLogSteps` still skips a legacy warm-up seed step on the
+ *  one population that can persist the string, its own KEEP guard — and
+ *  no step carries a marker to key a positional derivation off either,
+ *  so anything positional derived from steps lands displaced; the
+ *  recorder is the only place that ever saw the wire's own state byte).
  *  A structural superset of `ChartPoint` (never a narrower/different `x`/
  *  `y`), so it still passes to `decimate` (Task 1's own shared primitive,
  *  also consumed by bars/stacked bars — §2's tripwire) unchanged. */

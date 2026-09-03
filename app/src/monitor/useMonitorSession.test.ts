@@ -160,11 +160,11 @@ const TEST_SEED: { logSeed: LogSeed } = {
     // imports `summaryModel.ts` (the hook's only session import is
     // `import type { LogSeed }`, `:63`), so `warmupIndex` (RC-5's legacy-
     // run detection) is unreachable from here regardless of what `kind`
-    // says. Door PR A (spec §4 rider 2) narrowed `LogSeed.steps[].kind` to
-    // the literal `"work"` and removed `buildMonitorLogSteps`' own legacy
-    // skip, so this reads "work" like any other seed step would since
-    // Phase WU. (The two `buildMonitorLogSteps` calls this file makes use
-    // a SEPARATE fixture, `ONE_IDENTITY` below, not this one.)
+    // says, and the two `buildMonitorLogSteps` calls this file makes use a
+    // SEPARATE fixture (`ONE_IDENTITY` below), never this one. So this
+    // reads `"work"`, the only value door PR A's narrowed
+    // `LogSeed.steps[].kind` union admits and the only value anything has
+    // produced since Phase WU.
     steps: [{ label: "8:00 warm-up", kind: "work" }],
     paces: { k6: 120 },
   },
@@ -544,11 +544,10 @@ const ONE_INTERVAL: WorkoutProgram = {
  *  `buildMonitorLogSteps` requires `logSeed.steps.length ===
  *  program.intervals.length` (the alignment contract, `LogSeed`'s own doc
  *  comment) or it throws. `TEST_SEED` above happens to have the same
- *  length now that its own step is `kind: "work"` (door PR A removed the
- *  skip a "warmup"-tagged step used to hit), but it is never paired with
- *  `ONE_INTERVAL` at any call site below — this fixture exists so every
- *  `programAndArm(..., ONE_INTERVAL, ...)` call below names the seed it
- *  actually goes with, rather than relying on that coincidence. */
+ *  length, but it is never paired with `ONE_INTERVAL` at any call site
+ *  below — this fixture exists so every `programAndArm(..., ONE_INTERVAL,
+ *  ...)` call below names the seed it actually goes with, rather than
+ *  relying on that coincidence. */
 const ONE_IDENTITY: RunIdentity = {
   workoutId: "walk-day-2",
   title: "1:00",
