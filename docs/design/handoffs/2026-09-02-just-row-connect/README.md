@@ -4,6 +4,15 @@
 stays on the main menu, so it looks like the connection did nothing";
 re-confirmed by James 2026-09-02). **Status: GATE 0 PASSED — James, 2026-09-02, on rev 1c ("first stroke", his line; "approved").** Spec: `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`.
 
+## Rev 2 amendment (after the antagonist pass, 2026-09-02)
+
+The readback verification behind copy B was falsified (the "verified"
+readback is the PM5's own idle default), so there is no branch: **copy A
+is the only copy**, and it is true whether or not the program landed.
+`Unverified.dc.html` is kept as the approved artifact but is retired —
+the shipped `Nothing is programmed…` line goes, because once the app
+sends the frame it is false.
+
 ## The two boards
 
 Both are the shipped Ready frame (`docs/screenshots/justrow-ready.png`)

@@ -1,8 +1,10 @@
 # Connect puts the erg into a Just Row session — design
 
-**Status: spec rev 1, 2026-09-02. Gate 0 PASSED on rev 1c (James: copy A is
-`The clock starts on your first stroke.`). Antagonist FULL pass in flight
-(wire semantics); the plan follows it. No stored shape.**
+**Status: spec REV 2, 2026-09-02. Gate 0 PASSED on rev 1c (James: copy A is
+`The clock starts on your first stroke.`). The antagonist's full pass
+(wire semantics) is folded: the frame HELD byte for byte; the readback
+verification was FALSIFIED — rev 2 removes it and with it copy B and the
+transient state. No stored shape.**
 Phase JR follow-on item 2, re-confirmed by James 2026-09-02 ("i do want
 item 2"). Handoff: `docs/design/handoffs/2026-09-02-just-row-connect/`.
 
@@ -27,14 +29,27 @@ the machine did not take it.
   `domain/monitor/pm5/commands.ts` (`SET_WORKOUTTYPE` :25, `buildScreenState`
   :209-214); `buildProgrammingSequence` ends with the same screen-state
   command (:363). PRIMARY.
-- **The type byte is what the machine picks for itself.** Decoded from
+- **The type byte is what the machine picks for itself — and it is ALSO
+  the machine's idle default, so it verifies nothing.** Decoded from
   `docs/monitor/sessions/walk-2026-08-31-justrow/just-row-pm5-recording-1788214688045.jsonl.gz`
-  (0x0031 offset 6, `parse.ts:130`): at the main menu, before any pull,
-  `workoutType = 0`, state `0` (WAITTOBEGIN); at the first pull (t=109.7 s)
-  `workoutType = 1` with state still `0`, then state `1` (rowing). So the
-  PM5's own menu-entered Just Row is type `1`, the same byte p.80 programs
-  — and the readback DISCRIMINATES menu (0) from Just-Row-armed (1). PRIMARY
-  (machine). **RC-38 disposition:** the Appendix A `OBJ_WORKOUTTYPE_T` row
+  (0x0031 offset 6, `parse.ts:130`): at a VIRGIN main menu `workoutType = 0`
+  (`PRE_ARM_BASELINE_STRUCTURE`, "before anything has ever been armed");
+  from the first pull `1`; and after the Menu end, 105 consecutive idle
+  frames read `type = 1, state = 0` with nothing sent by anyone. This
+  repo already names that shape: `statusFrames.ts:131-135`
+  `EMPTY_ARM_STRUCTURE = { workoutType: 1, durationRaw: 0, durationType: 128 }`
+  — "session 4a's captured empty-arm anatomy", the signature of a PM5 that
+  armed NOTHING — and `driver.ts:4963` records that `sendPrepare()`'s own
+  terminate drives the machine into exactly it. Rev 1 read the first 94
+  frames of the capture and proposed `type === 1 && armed` as proof of our
+  program; the antagonist decoded the whole file. **A verification whose
+  preceding step manufactures its own pass condition is not a
+  verification.** The only field that would answer "is the Just Row
+  SCREEN up" is `CSAFE_PM_GET_SCREENSTATESTATUS` (CSAFE-DEF p.65 via
+  §19.6: a `SetScreenState` ack means "posted for processing by the UI
+  task"), a read command this codebase has never sent — out of scope
+  here, named as the future path. PRIMARY (machine + notes). **RC-38
+  disposition:** the Appendix A `OBJ_WORKOUTTYPE_T` row
   for `0x01` stays a doc LABEL (Concept2's PDFs are served behind
   Cloudflare and could not be fetched for transcription — James can drop
   the PDF into `docs/monitor/` if a verbatim row is wanted); the machine
@@ -50,72 +65,104 @@ the machine did not take it.
   the menu (or on a finished screen).
 - **Prepare:** the programmed path sends `TERMINATEWORKOUT` first
   (`sendPrepare`, `driver.ts:5656`); EXR does the same at session start
-  (ecosystem review §g). At the menu it is a no-op; on a finished-workout
-  screen it clears it. Reused, not re-invented.
+  (ecosystem review §g). What a terminate does at the main menu is
+  UNOBSERVED (Appendix E documents terminate from WorkoutRow and
+  WorkoutLogged only, §19.4/§19.5; `driver.ts:4963` says it can itself put
+  the machine at type 1) — it is sent unconditionally, its NAK/timeout
+  swallowed as today (`sendPrepare` rethrows only `"disconnected"`), and
+  the walk leg observes it. `waitForPrepareSettle` returns at once unless
+  the prior state was rowing/resting (`driver.ts:5532`), so nothing
+  stalls at the menu. Reused, not re-invented.
 
 ## Rulings
 
 1. Send Concept2's p.80 frame, byte for byte (`buildJustRowProgram()`
-   returns exactly it; a test pins the literal including the checksum).
-2. Verify like a workout: within the same tick budget `verifyArmed` uses,
-   the machine must report `workoutType === 1` and state WAITTOBEGIN.
-   Verified → Ready copy A. Not verified → Ready copy B (today's words)
-   and a ring entry; the free row proceeds exactly as today, because
-   pulling from the menu still enters Just Row. Never fatal.
-3. Copy A (Gate 0): `Just Row is on the monitor. The clock starts on your
-   first stroke.` Copy B: the shipped line, unchanged.
+   returns exactly it; a test pins the literal including the checksum —
+   the antagonist ran the real framer over the two units and got
+   `F1 76 07 01 01 01 13 02 01 01 61 F2`, wrapper count `07`, checksum
+   `0x61`, HELD).
+2. **No readback verification** (rev 2; rev 1's was falsified above). The
+   send's outcome — acked, NAK'd, timed out, link dropped — goes to the
+   ring as `free-row-program-sent` / `free-row-program-failed` with the hex
+   trace, and nothing on the phone branches on it. The free row proceeds
+   exactly as today on every branch; the erg's own screen is the
+   acknowledgment, and the walk leg (with a control) is what proves the
+   frame does what p.80 says.
+3. **One copy, James's line (Gate 0 rev 1c):** `The clock starts on your
+   first stroke.` It is true whether or not the program landed, so the
+   phone claims nothing about the monitor and there is no copy B and no
+   pending state. It replaces the shipped `Nothing is programmed…` line,
+   which becomes FALSE the moment this ships.
 4. The `freeRow` opt-outs (no divergence escalation, no structure
-   watchdog) stay: a JustRow program has no interval structure.
+   watchdog) stay: a JustRow program has no interval structure. **The
+   RC-37 `armedWatch` branch is held off during the send by ONE line —
+   `driver.ts:4982`'s `!activeRun?.freeRow` guard — because `beginFreeRow`
+   does not set `programInFlight`; a test pins that guard.**
 
 ## Mechanism
 
-1. `commands.ts`: `WORKOUTTYPE_JUSTROW_SPLITS = 0x01` (doc label; machine
-   corroboration cited), `buildJustRowProgram(): Uint8Array[][]` — one
-   unit, the p.80 frame's payload for `sendSequence`.
-2. `driver.ts` `beginFreeRow()` becomes `beginFreeRow(): Promise<"programmed" | "unverified">`:
-   open `activeRun` as today, then `sendPrepare()`, `sendSequence(buildJustRowProgram(), "free-row-programmed")`,
-   then a verify that resolves when a 0x0031 tick reports `workoutType === 1`
-   and state `armed`, or rejects after `verifyArmed`'s tick budget; every
-   rejection/timeout is caught, logged (`free-row-program-unverified`, with
-   the hex trace), and returns `"unverified"`. `activeRun.freeRow` is set
-   BEFORE the send so the opt-outs hold throughout.
-3. `useMonitorSession.ts`: `beginFreeRow()` returns the promise; the hook
-   stores `freeRowProgram: "pending" | "programmed" | "unverified"` on the
-   session (transient, not persisted — no stored shape).
-4. `JustRow.tsx`: Ready copy branches on that value; `"pending"` shows copy
-   B until the promise settles (never a blank line).
-5. Fake transport: answers the p.80 frame like a workout program and flips
-   its 0x0031 `workoutType` readback to `1`; a scripted `refuseJustRow`
-   option leaves it `0` (the unverified branch).
+1. `commands.ts`: `WORKOUTTYPE_JUSTROW = 0x01` (a doc LABEL — the notes
+   never transcribe `OBJ_WORKOUTTYPE_T`; machine corroboration above; NOT
+   named `_SPLITS`, which the notes cannot quote) and
+   `buildJustRowProgram(): Uint8Array[][]` — one unit, the p.80 payload,
+   for `sendSequence`.
+2. `driver.ts` `beginFreeRow()` stays SYNCHRONOUS in everything the hook
+   relies on: it opens `activeRun` (with `freeRow: true`, so both opt-outs
+   hold throughout) and returns as today. It additionally FIRES a detached
+   send — `void (async () => { await sendPrepare(); await sendSequence(buildJustRowProgram(), "free-row-program-sent"); })().catch(log …)` —
+   whose only effects are ring entries. No state, no promise surfaced, so
+   the hook's synchronous `ready` flip (`useMonitorSession.ts:4773-4775`,
+   "one indivisible step") and `JustRow.tsx`'s once-latch are untouched
+   and the arm effect cannot re-trigger. Every rejection, NAK, timeout and
+   disconnect is caught and logged; a disconnect mid-send is already the
+   hook's link-lost path.
+3. `JustRow.tsx`: the Ready body line becomes James's line. No branch.
+4. Fake transport: accepts the p.80 frame like a workout program (acks);
+   a scripted `nakJustRow` option answers a real NAK (`(status & 0x30) ===
+   0x10`, §19.1) so the failed-send ring entry has a producer.
+5. Comments swept in the same PR (they become false): `driver.ts:5836`
+   ("DELIBERATELY SYNCHRONOUS AND UNACKED… no wire traffic"),
+   `useMonitorSession.ts:4773`, `JustRow.tsx:291-293` ("a free row arms
+   nothing, which is exactly why `beginFreeRow` sends no bytes").
 
-## Lifetime (no stored state)
+## Lifetime
 
-`freeRowProgram` is minted per arm attempt, cleared when the session
-leaves `ready`, never persisted; a relaunch re-arms and re-sends.
+No state. The detached send belongs to the driver instance; a teardown
+mid-send resolves as a disconnect and is logged as such.
 
 ## Exit criteria
 
-1. `buildJustRowProgram()`'s bytes equal `F1 76 07 01 01 01 13 02 01 01 61 F2`
-   through the framer (a literal, not derived from the constants).
-2. Driver, fake transport: `beginFreeRow()` sends prepare then the frame,
-   resolves `"programmed"` when the readback flips to 1, `"unverified"`
-   when it stays 0 (both branches; a mutation that skips the verify goes
-   red on the unverified case).
-3. Replay over the 08-31 capture (observe-only, readback 0): resolves
-   `"unverified"` and the door shows copy B — the negative branch on real
-   bytes (RF24).
-4. Door: copy A when programmed, copy B when unverified or pending
-   (client test on the mocked session; e2e on the fake for the A path).
-5. **Walk leg (the gate for the screen itself):** connect from the door at
-   the main menu; photograph the PM5 showing its Just Row screen BEFORE
-   the first pull, with the phone reading copy A in the same frame; pull;
-   frames arrive; end; log. Second leg: connect with a FINISHED workout on
-   the PM5's screen; the prepare clears it and the Just Row screen shows.
-6. Every string on the board appears verbatim.
+1. `buildJustRowProgram()` through the real framer equals
+   `F1 76 07 01 01 01 13 02 01 01 61 F2` (a literal, not derived from the
+   constants).
+2. Driver on the fake transport: `beginFreeRow()` returns synchronously
+   with the run open and `phase` flipped BEFORE any byte is written
+   (asserted by ordering); the prepare and the frame are sent, in that
+   order, and `free-row-program-sent` is logged; with `nakJustRow` the run
+   is still open and `free-row-program-failed` carries the hex trace; a
+   mutation that drops the `!activeRun?.freeRow` guard at `driver.ts:4982`
+   goes red on a test that ticks 0x0031 during the send.
+3. Replay over the 08-31 capture (observe-only; the capture carries no
+   acks): the free row still opens and completes exactly as today — the
+   send's failure is a ring entry, never a behaviour change (RF24).
+4. Door: the body line reads James's line, verbatim; `Nothing is
+   programmed` appears nowhere (grep).
+5. **Walk leg, with a CONTROL (the antagonist's shape, since pulling from
+   the menu enters Just Row anyway and a terminate may leave the monitor
+   at type 1):** (a) power-cycle the PM5 to a virgin main menu and confirm
+   `type = 0` in the ring; photograph the PM5 screen BEFORE connecting;
+   (b) connect from the door; photograph PM5 + phone in one frame BEFORE
+   the first stroke — the PM5 on its Just Row screen, the phone reading
+   the line; (c) pull, frames arrive, end, log. Negative leg: connect
+   again immediately after a Menu end (the PM5 sitting at type 1) and
+   photograph whether the screen changes. Observation to record, not a
+   gate: the split cadence of the programmed row versus the menu-entered
+   row's 5:00.
+6. The three stale comments are gone (grep the quoted phrases).
 
 ## PR shape
 
-One PR, not fast path (driver + domain commands + hook + door + fake).
-Antagonist full pass on this spec (wire semantics); no PM gate (no number,
-no shape, no auth; the release call rides the next notes PR). James
-reviews after the walk leg.
+One PR, not fast path (driver + domain commands + door + fake; the hook
+is untouched). Antagonist full pass DONE (rev 1 → 2; ledger entry rides
+this branch); no PM gate (no number, no shape, no auth; the release call
+rides the next notes PR). James reviews after the walk leg.
