@@ -1,9 +1,10 @@
 # Connect puts the erg into a Just Row session — design
 
-**Status: spec REV 2, 2026-09-02, HARDENING. Gate 0 PASSED on rev 1c
-(James: the Ready line is `The clock starts on your first stroke.`). No
-stored shape. Antagonist anchor pass folded; `harden` running (lens 1
-delta on the fixes, lens 2 on the prescribed blocks).**
+**Status: spec REV 3, 2026-09-02. Gate 0 PASSED on rev 1c (James: the
+Ready line is `The clock starts on your first stroke.`). No stored shape.
+Antagonist anchor pass folded (rev 2); `harden` lens 1 folded (rev 3 —
+the prepare step is GONE and the send holds `programInFlight`); lens 2
+next.**
 Phase JR follow-on item 2, re-confirmed by James 2026-09-02 ("i do want
 item 2"). Handoff: `docs/design/handoffs/2026-09-02-just-row-connect/`.
 
@@ -64,16 +65,21 @@ the machine did not take it.
 - **Programming a live Just Row cannot happen from this door:** the PM5
   does not advertise mid-Just-Row (N1), so the link only ever comes up at
   the menu (or on a finished screen).
-- **Prepare:** the programmed path sends `TERMINATEWORKOUT` first
-  (`sendPrepare`, `driver.ts:5656`); EXR does the same at session start
-  (ecosystem review §g). What a terminate does at the main menu is
-  UNOBSERVED (Appendix E documents terminate from WorkoutRow and
-  WorkoutLogged only, §19.4/§19.5; `driver.ts:4963` says it can itself put
-  the machine at type 1) — it is sent unconditionally, its NAK/timeout
-  swallowed as today (`sendPrepare` rethrows only `"disconnected"`), and
-  the walk leg observes it. `waitForPrepareSettle` returns at once unless
-  the prior state was rowing/resting (`driver.ts:5532`), so nothing
-  stalls at the menu. Reused, not re-invented.
+- **No prepare step — and this is load-bearing** (harden lens 1). The
+  programmed path sends `TERMINATEWORKOUT` first (`sendPrepare`) BEFORE any
+  run exists — `program()` assigns `activeRun` only after `verifyArmed`.
+  `beginFreeRow` opens the run FIRST, and a terminate sent while a run is
+  open makes the PM5 report `terminated`, which the driver's terminal
+  branch (`maybeEmitFrame`: `finished`/`terminated` → `activeRun.closed`
+  → `emit({kind:"terminated"})` → the hook's `endByMachine`) treats as the
+  row ending — the same reaction the app's own END relies on (`fake.ts`'s
+  `synthesizeTerminated` doc: prepare and END "send the SAME wire command
+  — byte for byte — so they get the SAME machine reaction"). The two
+  `freeRow` guards (`grep -n freeRow driver.ts` → the divergence
+  escalation and the RC-37 watch) do not cover that branch. So the free
+  row sends the p.80 frame ALONE: a program replaces a loaded workout
+  (§19.1 verdict (b)), and a finished-workout screen is the walk's
+  negative leg to observe, not something the app clears first.
 
 ## Rulings
 
@@ -97,9 +103,15 @@ the machine did not take it.
    which becomes FALSE the moment this ships.
 4. The `freeRow` opt-outs (no divergence escalation, no structure
    watchdog) stay: a JustRow program has no interval structure. **The
-   RC-37 `armedWatch` branch is held off during the send by ONE line —
-   `driver.ts:4982`'s `!activeRun?.freeRow` guard — because `beginFreeRow`
-   does not set `programInFlight`; a test pins that guard.**
+   send holds `programInFlight`** for its duration (harden lens 1): that
+   flag already gates `program()`'s re-entry and the RC-37 watch, and
+   `terminate()` — which today has no re-entrancy guard and would share
+   the driver's ONE `pendingAck` slot with the in-flight send (the ack
+   matcher is arrival-order only; it never reads the ack's command byte,
+   and production configures no `ackTimeout`, so an orphaned slot never
+   expires) — REFUSES with `ProgramBusyError` while it is set, exactly as
+   `program()` does. END during the ~one-frame send window is therefore a
+   no-op the rower retries, never a collided ack.
 
 ## Mechanism
 
@@ -111,8 +123,8 @@ the machine did not take it.
 2. `driver.ts` `beginFreeRow()` stays SYNCHRONOUS in everything the hook
    relies on: it opens `activeRun` (with `freeRow: true`, so both opt-outs
    hold throughout) and returns as today. It additionally FIRES a detached
-   send — `void (async () => { await sendPrepare(); await sendSequence(buildJustRowProgram(), "free-row-program-sent"); })().catch(log …)` —
-   whose only effects are ring entries. No state, no promise surfaced, so
+   send — `programInFlight = true; void sendSequence(buildJustRowProgram(), "free-row-program-sent").catch(log …).finally(() => { programInFlight = false; })`
+   — NO prepare, whose only effects are ring entries. No state, no promise surfaced, so
    the hook's synchronous `ready` flip (`useMonitorSession.ts:4773-4775`,
    "one indivisible step") and `JustRow.tsx`'s once-latch are untouched
    and the arm effect cannot re-trigger. Every rejection, NAK, timeout and
@@ -121,16 +133,34 @@ the machine did not take it.
 3. `JustRow.tsx`: the Ready body line becomes James's line. No branch.
 4. Fake transport: accepts the p.80 frame like a workout program (acks);
    a scripted `nakJustRow` option answers a real NAK (`(status & 0x30) ===
-   0x10`, §19.1) so the failed-send ring entry has a producer.
-5. Comments swept in the same PR (they become false): `driver.ts:5836`
-   ("DELIBERATELY SYNCHRONOUS AND UNACKED… no wire traffic"),
-   `useMonitorSession.ts:4773`, `JustRow.tsx:291-293` ("a free row arms
-   nothing, which is exactly why `beginFreeRow` sends no bytes").
+   0x10`, §19.1) so the failed-send ring entry has a producer. **And it
+   reacts to a TERMINATE with `synthesizeTerminated` regardless of whether
+   its machine is running** — today it queues that reaction only for a
+   running machine, which is why a prepare-at-the-menu defect could not
+   go red (harden lens 1); with that, a mutation that re-adds
+   `sendPrepare()` to the detached send closes the free row in the test.
+5. Prose swept in the same PR (it becomes false): the `free-row-open`
+   ring string "opened a free row (no program sent)" (an operator reads it
+   on the walk), `beginFreeRow`'s JSDoc ("sending the machine nothing",
+   "no wire traffic to await"), `driver.ts`'s "DELIBERATELY SYNCHRONOUS
+   AND UNACKED… no wire traffic" comment, `useMonitorSession.ts`'s two
+   comments on the arm (near the `ready` flip and near line 2564),
+   `Today.tsx`'s free-row comment (~685), `JustRow.tsx`'s door comments
+   (~108 and ~291-293, "a free row arms nothing, which is exactly why
+   `beginFreeRow` sends no bytes"), `justRowReplay.test.ts`'s header.
 
 ## Lifetime
 
-No state. The detached send belongs to the driver instance; a teardown
-mid-send resolves as a disconnect and is logged as such.
+One flag, already existing: `programInFlight`, set for the send's
+duration and cleared in `finally` (also on disconnect). The detached
+promise belongs to the driver instance; `capacitorBle.write` throws from
+`requireConnected` after a disconnect, so a teardown mid-send rejects and
+is caught. **The ring is snapshotted BEFORE unsubscribe/disconnect**
+(the hook's teardown comment says so), so a `free-row-program-failed`
+recorded AFTER teardown never reaches the diagnostics door — the
+design's only artifact is missing in exactly that branch. Stated, not
+fixed: the walk's negative leg does not rely on the ring for a
+teardown-timed failure.
 
 ## Exit criteria
 
@@ -139,11 +169,14 @@ mid-send resolves as a disconnect and is logged as such.
    constants).
 2. Driver on the fake transport: `beginFreeRow()` returns synchronously
    with the run open and `phase` flipped BEFORE any byte is written
-   (asserted by ordering); the prepare and the frame are sent, in that
-   order, and `free-row-program-sent` is logged; with `nakJustRow` the run
-   is still open and `free-row-program-failed` carries the hex trace; a
-   mutation that drops the `!activeRun?.freeRow` guard at `driver.ts:4982`
-   goes red on a test that ticks 0x0031 during the send.
+   (asserted by ordering); ONLY the p.80 frame is written (no terminate —
+   asserted on the fake's write log) and `free-row-program-sent` is
+   logged; with `nakJustRow` the run is still open and
+   `free-row-program-failed` carries the hex trace; `terminate()` called
+   mid-send rejects with `ProgramBusyError` and the send's ack still
+   resolves the send; a mutation that re-adds `sendPrepare()` closes the
+   free row on the terminate-reacting fake (red); a mutation that drops
+   `programInFlight` lets the mid-send `terminate()` through (red).
 3. Replay over the 08-31 capture (observe-only; the capture carries no
    acks): the free row still opens and completes exactly as today — the
    send's failure is a ring entry, never a behaviour change (RF24).
@@ -151,8 +184,11 @@ mid-send resolves as a disconnect and is logged as such.
    programmed` appears nowhere (grep).
 5. **Walk leg, with a CONTROL (the antagonist's shape, since pulling from
    the menu enters Just Row anyway and a terminate may leave the monitor
-   at type 1):** (a) power-cycle the PM5 to a virgin main menu and confirm
-   `type = 0` in the ring; photograph the PM5 screen BEFORE connecting;
+   at type 1):** (a) power-cycle the PM5 to a virgin main menu; the ring
+   exists only after connect, so the control reads "the FIRST `structure`
+   line in the diagnostics door says `workoutType=0`" (that entry carries
+   the raw type on change from the first 0x0031); photograph the PM5
+   screen BEFORE connecting;
    (b) connect from the door; photograph PM5 + phone in one frame BEFORE
    the first stroke — the PM5 on its Just Row screen, the phone reading
    the line; (c) pull, frames arrive, end, log. Negative leg: connect
