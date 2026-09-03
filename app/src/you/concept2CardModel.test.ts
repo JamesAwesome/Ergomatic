@@ -39,12 +39,16 @@ import {
 // carry a note the others do not.
 // ---------------------------------------------------------------------------
 
-// Board 1e's panel line is transcribed inline on every row of the table
-// below rather than hoisted into one shared constant. Fifteen repetitions is
-// deliberate: a shared constant is one edit away from being the same
-// self-reference F1 found, one level removed. The amendment's rendered 1e
-// frames read `<p class="panel-line">The connection didn't complete. Nothing
-// was linked.</p>`.
+// Board 1e's panel line is transcribed inline on each of the THIRTEEN table
+// rows that read board copy, rather than hoisted into one shared constant.
+// (Fifteen rows are failures; `declined` and
+// `exchangeFailed · already_linked_elsewhere` carry their own lines instead,
+// so the literal appears fourteen times in this file — thirteen rows plus
+// the `FAILED_LINE` pin, which is the count F1-a's mutation printed.)
+// The repetition is deliberate: a shared constant is one edit away from
+// being the same self-reference F1 found, one level removed. The amendment's
+// rendered 1e frames read `<p class="panel-line">The connection didn't
+// complete. Nothing was linked.</p>`.
 
 const LINKED: Concept2Link = {
   // Spelled out rather than spread from `LINK_UNAVAILABLE`: a fixture that
@@ -287,36 +291,57 @@ const COPY_TABLE: CopyRow[] = [
   },
 ];
 
+/** Every `kind` the union declares, as a TYPE-CHECKED exhaustive record.
+ *
+ *  `Record<LinkOutcome["kind"], true>` is the whole point: an eighteenth
+ *  member makes this object literal missing a required key, which is a
+ *  COMPILE error (TS2741) on this declaration, before any test runs. The
+ *  runtime assertion below then compares `COPY_TABLE`'s kinds against
+ *  `Object.keys` of this record — so adding the new key here to satisfy the
+ *  compiler immediately fails that assertion until a `COPY_TABLE` row for it
+ *  exists. Two gates, in the order that catches the mistake earliest.
+ *
+ *  The first version was a hardcoded array of seventeen strings with no tie
+ *  to the union at all. A reviewer added `| { kind: "zzzNewMember" }` plus a
+ *  matching `case`, left the table untouched, and got a clean typecheck and
+ *  28 passing tests: a member with no copy row and no red gate, inside the
+ *  round that removed two other gates of exactly that shape (RF21). The
+ *  array stated what the union contained; it never asked the union. */
+const EVERY_KIND: Record<LinkOutcome["kind"], true> = {
+  abandoned: true,
+  busy: true,
+  cancelled: true,
+  contextInvalid: true,
+  declined: true,
+  exchangeFailed: true,
+  linked: true,
+  malformed: true,
+  mintFailed: true,
+  navigating: true,
+  networkError: true,
+  noContext: true,
+  noWindow: true,
+  pluginError: true,
+  serverError: true,
+  stateMismatch: true,
+  updateRequired: true,
+};
+
 describe("describeFailure — the Gate 0 amendment's outcome table, transcribed", () => {
   it.each(COPY_TABLE)("$name", ({ outcome, expected }) => {
     expect(describeFailure(outcome)).toStrictEqual(expected);
   });
 
   it("covers every member of the union, with the two branching members twice", () => {
-    // The table is only an authority if it is COMPLETE. `describeFailure` is
-    // total over the union with no `default`, so a new member is a compile
-    // error there — but nothing would force it into this table. Counting the
-    // distinct `kind`s here does.
+    // The table is only an authority if it is COMPLETE. `describeFailure`
+    // being total over the union with no `default` makes a new member a
+    // compile error THERE; it does nothing to force that member in HERE.
+    // `EVERY_KIND` is what closes the gap, and it closes it at compile time.
     const kinds = new Set(COPY_TABLE.map((row) => row.outcome.kind));
-    expect([...kinds].sort()).toStrictEqual([
-      "abandoned",
-      "busy",
-      "cancelled",
-      "contextInvalid",
-      "declined",
-      "exchangeFailed",
-      "linked",
-      "malformed",
-      "mintFailed",
-      "navigating",
-      "networkError",
-      "noContext",
-      "noWindow",
-      "pluginError",
-      "serverError",
-      "stateMismatch",
-      "updateRequired",
-    ]);
+    expect([...kinds].sort()).toStrictEqual(Object.keys(EVERY_KIND).sort());
+    // `busy` carries a second row (its `source` branch) and `exchangeFailed`
+    // a second and third (its own line, plus two generic statuses), so
+    // seventeen kinds become twenty rows.
     expect(COPY_TABLE).toHaveLength(20);
   });
 });

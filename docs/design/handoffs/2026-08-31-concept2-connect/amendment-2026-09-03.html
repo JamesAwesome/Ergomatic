@@ -1124,8 +1124,9 @@
     <h3>1e Link failed <span class="badge b-changed">CHANGED</span></h3>
     <p class="lede">
       Board copy kept verbatim; a mono REASON line is added beneath it. The
-      reason exists because <code>LinkOutcome</code> has sixteen members
-      (<code>adapters/linkFlow.ts:79-106</code>) and a tester reporting "it didn't
+      reason exists because <code>LinkOutcome</code> has seventeen members
+      (<code>adapters/linkFlow.ts</code>, the <code>export type
+      LinkOutcome</code> union) and a tester reporting "it didn't
       work" with no discriminator costs a walk. It is <code>--ink-3</code> on the
       sunken panel, not <code>--ink-4</code>: that pairing measures 4.48:1 and
       fails AA (see §4).
@@ -1201,8 +1202,12 @@
         </div>
       </div>
     </div>
-    <p class="lede">The full outcome &rarr; copy table (every one of the sixteen
-      <code>LinkOutcome</code> members has a home; none falls through silently):</p>
+    <p class="lede">The full outcome &rarr; copy table (every one of the
+      seventeen <code>LinkOutcome</code> members has a home; none falls through
+      silently). Seventeen members, sixteen rows: <code>busy</code> and
+      <code>exchangeFailed</code> each take TWO rows because they branch
+      (on <code>source</code> and on <code>error</code>), while the four
+      device-open failures share ONE row because they render one sentence.</p>
     <table class="kv">
       <tr><th>LinkOutcome</th><th>Card state</th><th>Panel line</th><th>REASON line</th></tr>
       <tr><td class="num">linked</td><td>1c</td><td>&mdash;</td><td>&mdash;</td></tr>
