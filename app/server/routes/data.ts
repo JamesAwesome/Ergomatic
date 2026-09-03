@@ -1731,10 +1731,19 @@ export function createDataRouter({
     // (`Europe/Kyiv`/`Europe/Kiev`, `America/Nuuk`/`America/Godthab` are the
     // ordinary skew), and the disagreeing list is OURS. Refusing would turn
     // a completed workout into a failed save over a field that exists only
-    // to date a THIRD PARTY's copy of it. A dropped zone costs the upload
-    // nothing it did not already lack: `buildC2Payload`'s branch is paired,
-    // so a null `tz` simply takes the `loggedAt`/`effectiveTz` fallback that
-    // every pre-PR2 row already takes.
+    // to date a THIRD PARTY's copy of it.
+    //
+    // WHAT A DROPPED ZONE ACTUALLY COSTS, read at the upload path rather
+    // than assumed: nothing about the DATE. `routes/concept2.ts` resolves
+    // `effectiveTz` (the stored zone, else the upload request's own zone,
+    // persisted on first use) and builds its payload row as
+    // `{...eligibilityRow, tz: effectiveTz}` — never the raw, possibly-null
+    // `row.tz`. So `buildC2Payload`'s paired branch still fires on a row
+    // whose `completedAt` is set, and Concept2 is still told the moment the
+    // rower stopped. The only casualty is WHICH zone labels that instant:
+    // the phone's zone at send time rather than at save time, the same zone
+    // for the same rower on the same day. A degraded save is therefore
+    // strictly better than a refused one, not merely less bad.
     //
     // `checkCompletedAt` above already models this posture for the sibling
     // field (an implausible stamp is `{ok: true, value: null}`, not a
