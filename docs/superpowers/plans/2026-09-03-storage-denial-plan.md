@@ -1519,7 +1519,9 @@ in the order the tasks above present them.
 - Scoped runs, each **measured and quoted above at its own task step**:
   `run.test.ts`/`draft.test.ts`/`todayPick.test.ts` together — `Test Files
   3 passed (3)`, `Tests 90 passed (90)`. `Countdown.test.tsx` alone —
-  `Test Files 1 passed (1)`, `Tests 35 passed (35)`. `Today.test.tsx`
+  `Test Files 1 passed (1)`, `Tests 35 passed (35)` **at the Task 2
+  checkpoint; Task 3 adds one more leg to the same file, so the
+  completed tree reads 36**. `Today.test.tsx`
   alone — `Test Files 1 passed (1)`, `Tests 133 passed (133)`.
   `Countdown.screens.test.tsx` — `Snapshots 1 written`, `Tests 1 passed
   (1)`, then `Tests 1 passed (1)` again on a second, idempotent run (no
