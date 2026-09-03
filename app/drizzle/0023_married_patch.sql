@@ -54,6 +54,13 @@
 -- which is the passing case and would otherwise read as a failed command.
 --
 -- Expected: unset or empty, and zero, and zero. ANY OTHER ANSWER IS A STOP.
+--
+-- MEASURED ON THE DEPLOY HOST BY JAMES, 2026-09-03 — the two row counts, run
+-- as written above, both returned `0` (output pasted into the session, one
+-- `count | 0 | (1 row)` block per query). So this drop touches NO rows: there
+-- is no stored `weight_class` anywhere in production to lose, and no rower
+-- holds a live grant whose class the migration discards. The `printenv` half
+-- is the one still OWED before merge.
 -- A `1` is a live writer whose INSERT this drop breaks; a non-zero link
 -- count is a real rower holding a live grant whose class we are about to
 -- drop, which is a design question nobody has asked.
