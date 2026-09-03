@@ -2316,37 +2316,29 @@ trigger is the whole entry.
 - **PWA installability.** **Trigger:** the web build stops being only a harness.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
-- **Phase NF — tap the monitor to connect** (NFC; James, 2026-08-31, after
-  connecting via NFC in Concept2's own ErgData). The PM5 "configures itself as a
-  Near Field Communication Tag A" whose first NDEF record,
-  `concept2.com:bleconnectinfo`, holds a 6-byte BLE address, an address type,
-  and **an advertising name up to 31 bytes** — `PM5 430343693` (PM5 Bluetooth
-  Smart Interface Definition v1.30, §"Near Field Communication NDEF Records",
-  PRIMARY, quoted from the PDF at
-  `concept2.com/files/pdf/us/monitors/PM5_BluetoothSmartInterfaceDefinition.pdf`;
-  our own `docs/monitor/` transcriptions do not cover this section). That name
-  is exactly what our connect path already filters on
-  (`capacitorBle.ts:480`, `namePrefix: "PM5"`), so a tap turns the modal device
-  sheet into one erg rather than twenty in a gym. **The MAC is dead weight on
-  iOS** — CoreBluetooth exposes opaque per-device UUIDs, never hardware
-  addresses (INFERENCE from the platform, to be confirmed at spec time) — and
-  the tag's second record is an Android Application Record (`android.com:pkg` →
-  `com.concept2.ergdata`) with no iOS equivalent, so this is an in-app "hold
-  your phone to the monitor" affordance, never a tap-with-the-app-closed launch.
-  **It does not remove the erg-side ritual**: the PM5 still has to be on its
-  Connect Device screen, because the tag is a lookup shortcut and not pairing.
-  Costs: the `com.apple.developer.nfc.readersession.formats` entitlement plus an
-  `NFCReaderUsageDescription`, which regenerates the provisioning profile the
-  CLI release path uses, and a plugin (`@capgo/capacitor-nfc` 8.2.5 tracks
-  Capacitor 8, which we are on — re-verify at install per the standing rule).
-  **First work of the phase is the unverified pair**: that iOS Core NFC reads
-  this external record off a real PM5 at all, and that the name the tag states
-  is byte-identical to what CoreBluetooth's scan reports. A Flipper dump of
-  the tag lives in `docs/monitor/nfc/` (2026-08-31, PARTIAL: header only —
-  it confirms the 27-byte external type and a 40-byte payload, but the
-  payload itself is still owed; the README says how to get it). **Trigger:** anytime —
-  it is post-production polish for a household that already pairs fine, so it
-  waits behind the front door and then only needs James to ask. **S/M**
+- **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; BASE
+  INTERACTION APPROVED 2026-09-03, written design under review.** James chose a
+  56 px filled muted-fern **Scan NFC** action directly above the equal-weight
+  existing blue **Connect**, present only when native iOS reports NFC support.
+  A valid PM5
+  record confirms `PM5 found`, then silently discovers that exact advertised
+  name and reuses the existing connect → program → `armed` path; no second app
+  tap and no Bluetooth picker. Unsupported records say `Unsupported NFC tag`.
+  A target that is not advertising says
+  `Open Connect Device on this PM5, then try again.` and never falls back to a
+  general picker. **The PM5 still must be on Connect Device**: NFC is a lookup
+  shortcut, not pairing. CoreBluetooth's opaque id makes the tag's MAC unusable;
+  exact live `ScanResult.localName` matching is the bridge. **Gate -1 comes
+  before product implementation:** a complete read on James's real PM5 must
+  prove `@capgo/capacitor-nfc@8.2.5` receives the external NDEF record, establish
+  its payload padding/termination, and show the ASCII-decoded name exactly
+  equals that unit's live `ScanResult.localName` across three fresh scans. The
+  existing Flipper file is header-only and proves none of those literal bytes.
+  Full architecture, atomic product-PR shape, Gate 0, cleanup/concurrency
+  contract, replay seam, and exits:
+  [`docs/superpowers/specs/2026-09-03-phase-nf-scan-nfc-design.md`](docs/superpowers/specs/2026-09-03-phase-nf-scan-nfc-design.md).
+  Implementation requires a separate explicit scheduling ruling; the default
+  remains behind Wave A. **M**
 - **The parametric workout generator** — "generate me a 45' AT workout".
   **Its trigger has FIRED** (Phase 6 closed the loop, and `patterns.json` is the
   exact fixture it would consume), so this is eligible to schedule whenever it is
