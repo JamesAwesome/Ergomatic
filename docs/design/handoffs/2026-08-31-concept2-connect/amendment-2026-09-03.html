@@ -597,8 +597,8 @@
     <div class="callout">
       <p><strong>Why an amendment at all.</strong> The board was approved before
       PR1, PR1.5, PR1.75a and PR1.75b existed. Four of its frames describe
-      behaviour the shipped server and native code cannot produce, and five
-      states the shipped code CAN reach have no frame. Each is named below with
+      behaviour the shipped server and native code cannot produce, and
+      several states the shipped code CAN reach have no frame. Each is named below with
       the line that settles it.</p>
       <p>Type FACES on this page are system stacks. The app ships Newsreader /
       Archivo / IBM Plex Mono; sizes, weights, tracking and colour are the
@@ -1351,17 +1351,27 @@
       </div>
     </div>
 
-    <h3>1h Unavailable, and the read failing <span class="badge b-new">NEW</span></h3>
+    <h3>1h Unavailable <span class="badge b-new">NEW</span></h3>
     <p class="lede">
       <code>{available: false}</code> arrives with HTTP 200
       (<code>server/routes/concept2.ts:524-529</code>) &mdash; a flag-off server
       reads exactly like an unlinked one unless the client distinguishes them,
       which is the trap <code>Concept2LinkProbe.tsx:118-121</code> already names.
       <strong>No card renders at all</strong> (board: "a capability gate, not a
-      cosmetic hide"). The same silence covers the mount read failing: a card
-      that cannot say what it is showing shows nothing rather than a wrong
-      state. Both frames are You with the card simply absent.
+      cosmetic hide"). Both frames are You with the card simply absent, and this
+      is the state every deployment is in today.
     </p>
+    <div class="callout">
+      <p><strong>A failed READ is not this state, and an earlier revision of
+      this page said it was.</strong> That reading &mdash; "a card that cannot
+      say what it is showing shows nothing" &mdash; is right about a card that
+      has not finished loading and wrong about one whose read was refused: it
+      draws a fault as a capability answer, and tells a rower whose deployment
+      does have Concept2 that it does not. The two are separated below as
+      <strong>1i</strong>, which has its own copy, its own REASON and a Retry.
+      The pre-first-read case keeps 1h's silence, because nothing is yet known
+      and there is nothing to say.</p>
+    </div>
     <div class="boards">
       <div class="board">
         <p class="board-cap">1h &middot; PORTRAIT &middot; You with no Concept2 card (flag off, or the read failed)</p>
@@ -1396,6 +1406,207 @@
           <p class="section-heading">BASELINES</p>
           <div class="ghost">BASELINE EDITOR</div>
           <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1i The read failed <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      <strong>Not the same answer as 1h, and not drawn the same way.</strong>
+      <code>{available:false}</code> means "this deployment has no Concept2" and
+      renders nothing. A read that FAILED means "we could not find out" &mdash; a
+      fault, on a deployment that may well have Concept2 &mdash; and drawing it as
+      absence tells the rower something untrue about their own account.
+      <code>api()</code> resolves on any status
+      (<code>src/api.ts</code> does not throw on non-2xx), so a 401 or a 502
+      arrives as an ordinary response and has to be turned into this state
+      explicitly. The REASON carries the status, for the same reason 1e's does:
+      a tester reporting "the Concept2 card is broken" with no discriminator
+      costs a walk. When the request never completed at all, it reads
+      <code>REASON: NO CONNECTION</code>.
+    </p>
+    <p class="lede">
+      <strong>Where it is NOT shown:</strong> the log row. The You card is the
+      sole discovery surface and owns the retry; a second Concept2 error panel on
+      a screen about a rowing session is noise the rower cannot act on from
+      there, so the Send block stays silent on a failed read exactly as it does
+      when no account is linked.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1i &middot; PORTRAIT &middot; in situ on You</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">COULDN'T READ</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">COULDN'T READ CONCEPT2</p>
+              <p class="panel-line">Couldn't reach Concept2 linking.</p>
+              <p class="panel-reason">REASON: THE SERVER ANSWERED 502</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Retry</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">1i &middot; PORTRAIT &middot; the offline reading, beside 1h for comparison</p>
+        <div class="frame">
+          <p class="board-cap">REQUEST NEVER COMPLETED</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">COULDN'T READ</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">COULDN'T READ CONCEPT2</p>
+              <p class="panel-line">Couldn't reach Concept2 linking.</p>
+              <p class="panel-reason">REASON: NO CONNECTION</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Retry</div>
+          </div>
+          <p class="board-cap" style="margin-top: 14px">
+            1h FOR COMPARISON &mdash; flag off, nothing renders at all
+          </p>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide">1i &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">COULDN'T READ</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div class="panel">
+                <p class="panel-label">COULDN'T READ CONCEPT2</p>
+                <p class="panel-line">Couldn't reach Concept2 linking.</p>
+                <p class="panel-reason">REASON: THE SERVER ANSWERED 502</p>
+              </div>
+              <div class="btn-outline" style="min-height: 52px">Retry</div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1j The unlink was refused <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      A destructive action the server refused. Without this frame the only
+      visible effect of a failed <code>DELETE /api/concept2/link</code> is the
+      two-tap arm clearing &mdash; which reads either as "nothing happened" or,
+      worse, as "it worked and the card is wrong". <strong>The line says the link
+      is UNCHANGED explicitly</strong>, because the dangerous reading of a failed
+      destructive action is that it half-worked. This is RF25's shape at the UI
+      seam: a lower layer reported a failure and the caller must not proceed as
+      though it succeeded.
+    </p>
+    <p class="lede">
+      The panel sits ABOVE the Unlink control, so the rower reads the outcome and
+      then sees the button that produced it. The identity line stays visible: the
+      grant named there is still live, which is the whole point. A 404 is NOT a
+      failure here &mdash; another tab already unlinked, which is the outcome we
+      wanted (<code>src/log/FromTheLog.tsx:365-371</code> takes the identical line
+      for <code>DELETE /api/logs/:id</code>).
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1j &middot; PORTRAIT &middot; in situ, after a refused second tap</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <p class="c2helper">
+              Finished monitor rows can be sent from the log. Send state shows on
+              each row.
+            </p>
+            <div class="panel">
+              <p class="panel-label">UNLINK DIDN'T HAPPEN</p>
+              <p class="panel-line">Couldn't unlink. Your link is unchanged.</p>
+              <p class="panel-reason">REASON: THE SERVER ANSWERED 500</p>
+            </div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1j &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <p class="c2identity">
+                  Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+                </p>
+                <div class="panel">
+                  <p class="panel-label">UNLINK DIDN'T HAPPEN</p>
+                  <p class="panel-line">Couldn't unlink. Your link is unchanged.</p>
+                  <p class="panel-reason">REASON: THE SERVER ANSWERED 500</p>
+                </div>
+              </div>
+              <div class="btn-danger">Unlink Concept2</div>
+            </div>
+          </div>
           <span class="frame-dim">844 &times; 390</span>
         </div>
       </div>
@@ -1975,6 +2186,10 @@
       <tr><td>NOT LINKED / WAITING / NOT SENT status, footnotes</td><td class="num">--ink-4 #6f6a5f</td><td class="num">--surface #fffdf7</td><td class="num">5.29:1</td><td class="pass">PASS</td></tr>
       <tr><td>sunken panel label + line (1b, 1e, 1f, 1g)</td><td class="num">--ink #1b1a17</td><td class="num">--surface-sunken #efeade</td><td class="num">14.50:1</td><td class="pass">PASS</td></tr>
       <tr><td><strong>REASON line on the sunken panel</strong></td><td class="num">--ink-3 #57544c</td><td class="num">--surface-sunken #efeade</td><td class="num">6.30:1</td><td class="pass">PASS</td></tr>
+      <tr><td>1i / 1j panel label + line (COULDN'T READ CONCEPT2, UNLINK DIDN'T HAPPEN)</td><td class="num">--ink #1b1a17</td><td class="num">--surface-sunken #efeade</td><td class="num">14.50:1</td><td class="pass">PASS</td></tr>
+      <tr><td>1i / 1j REASON line (status, or NO CONNECTION)</td><td class="num">--ink-3 #57544c</td><td class="num">--surface-sunken #efeade</td><td class="num">6.30:1</td><td class="pass">PASS</td></tr>
+      <tr><td>1i COULDN'T READ status, top right of the card</td><td class="num">--ink-4 #6f6a5f</td><td class="num">--surface #fffdf7</td><td class="num">5.29:1</td><td class="pass">PASS</td></tr>
+      <tr><td>1i Retry label and its 1px border</td><td class="num">--ink #1b1a17</td><td class="num">--surface #fffdf7</td><td class="num">17.11:1</td><td class="pass">PASS</td></tr>
       <tr><td><strong>the value this amendment REFUSES for panel text</strong></td><td class="num">--ink-4 #6f6a5f</td><td class="num">--surface-sunken #efeade</td><td class="num">4.48:1</td><td class="fail">FAIL &mdash; never on the panel</td></tr>
       <tr><td>Unlink label, View on Concept2 link-out (outline state)</td><td class="num">--accent #b5341f</td><td class="num">--surface #fffdf7</td><td class="num">5.94:1</td><td class="pass">PASS</td></tr>
       <tr><td>Unlink ARMED label (1d)</td><td class="num">--on-color #fffdf7</td><td class="num">--accent #b5341f</td><td class="num">5.94:1</td><td class="pass">PASS</td></tr>
@@ -1991,8 +2206,19 @@
       <tr><td>callback page top rule</td><td class="num">#b5341f</td><td class="num">#fffdf8</td><td class="num">5.94:1</td><td>rule only, never text</td></tr>
     </table>
     <p class="lede">
+      <strong>1i and 1j introduce no new pairing</strong> &mdash; that is the
+      result, stated rather than assumed. Both reuse the sunken panel and the
+      outline button the earlier states already paint, so every one of their
+      colours was already computed above; the four rows naming them exist so the
+      table can be read as covering every frame rather than every token. The one
+      value this page refuses (<code>--ink-4</code> on
+      <code>--surface-sunken</code>, 4.48:1) applies to them too: their REASON
+      lines are <code>--ink-3</code>.
+    </p>
+    <p class="lede">
       Every tappable in every frame is &ge; 44px: weight options 44, Connect /
-      Reconnect / Send / Retry 48, Unlink 52, the link-out row 44, Delete 44.
+      Reconnect / Send / Retry 48, 1i's Retry 52, Unlink 52, the link-out row 44,
+      Delete 44.
     </p>
 
     <h2>5 · Accent's fifth job, declared</h2>
@@ -2029,7 +2255,13 @@
       <li>Ruling (ii): identity line variant A (numeric) or B (stored username).
         B is rendered as the recommendation and costs one nullable column.</li>
       <li>Ruling (iii): the reworded 401/403 callback lines (§3).</li>
-      <li>The five new states (1f, 1g, 1h, 2f, and the REASON lines).</li>
+      <li>The new states: 1f needs-reauth, 1g update-required, 1h unavailable,
+        <strong>1i the read failed</strong>, <strong>1j the unlink was
+        refused</strong>, 2f row-level reconnect, and the REASON lines.</li>
+      <li><strong>1h's split into 1h and 1i specifically</strong> &mdash; an
+        earlier revision drew a refused read as absence, and separating them is
+        the one change on this page that alters what a rower is TOLD rather than
+        how it looks.</li>
       <li>§5's accent ruling.</li>
     </ul>
     <p class="lede">

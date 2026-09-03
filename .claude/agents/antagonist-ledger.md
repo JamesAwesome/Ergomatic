@@ -6462,3 +6462,59 @@ plan's own tools and never with the REPO's.
   before trusting a mutation row, ask what value the mutant produces for EACH
   fixture the suite feeds it; a mutation that maps every fixture to the
   original output is not a mutation of the behaviour under test.**
+
+### 2026-09-03 — Wave E PR2 client plan (harden Lens 1)
+
+- **The spec's PRIMARY mapping branch was unreachable because the two PRs that
+  own its halves each built the other's.** PR1 shipped `completed_at`/`tz`
+  through the POST validator; no PR ever taught the client to POST them, so
+  `buildC2Payload`'s accurate branch never fires and every Concept2 upload
+  carries the SAVE clock. Both halves are tested; the seam has no test because
+  no test starts upstream of the writer. **Technique: for any field a spec
+  splits across PRs, grep the CLIENT tree for the field name before believing
+  the server-side validator means the field arrives — `git grep "\btz\b" --
+  src/` returning nothing outside tests settled it in one command. A validator
+  is evidence that a field is ACCEPTED, never that it is SENT.**
+- **A schema comment naming a future PR is a claim about that PR's scope, and
+  nobody checks it when the PR is written.** `session_logs.tz`'s own comment
+  said "posted at save from PR2 on"; PR2's plan never mentioned it. **Technique:
+  when planning PR N, grep the repo for the PR's own name (`PR2`, `Wave E PR2`)
+  — comments, spec bullets and ROADMAP clauses that assign work to it are
+  requirements the plan must either schedule or explicitly decline.**
+- **`??` is not a null-guard for a vendor string.** The identity line meant to
+  discharge an account-injection residual renders blank on `username: ""`,
+  because `fetchMe` passes the empty string through and `??` only catches
+  nullish — one seam over from the `?code=` defect that taught this ledger the
+  absent/empty/valued rule, and with a doc comment claiming "never an empty
+  identity". **Technique: the absent/empty/valued triad applies to every
+  vendor-supplied STRING that reaches a rendered surface, not just to URL
+  params; and when a code comment claims a guarantee, feed the code the value
+  the guarantee names and read the output.**
+- **A retired lifecycle seam retires its justification too, and the surviving
+  half of the reasoning goes unexamined.** `useReturnToApp` was deleted on
+  "native resolves in a promise, web unloads" — true of native, and true of web
+  only until the back-forward cache RESTORES the page instead of reloading it,
+  at which point no mount runs and the card is frozen mid-attempt. **Technique:
+  when a design says "the mount read reveals it", ask what re-mounts — and check
+  for `pageshow`/bfcache eligibility by looking for `no-store` on the DOCUMENT
+  and for any `unload` handler, both of which are one grep each.**
+- **A capture whose seed has no supported producer.** A screenshot seeding
+  `c2_result_id` cannot exist in a stack where the only writer of that column is
+  a route that 403s. **Technique: for every "seed state X and capture" step,
+  name the WRITER of X and confirm it is reachable in the environment the
+  capture runs in; `git grep` the column name minus tests usually returns the
+  single writer.**
+- **`A && B || C` in a prescribed gate block reports C's exit status when A
+  fails.** A red suite reads green. **Technique: run every prescribed shell
+  block with a deliberately failing first command and read `$?`, or forbid
+  `&&`/`||` chains in gate blocks outright — one command per line.**
+- **Attacked and HELD:** all nine contrast figures recomputed independently from
+  `tokens.css` (17.11 / 10.81 / 7.43 / 5.29 / 14.50 / 6.30 / 4.48 / 5.94 / 1.73
+  — every one exact, including the `--ink-4`-on-sunken refusal); ruling (i)'s
+  "the mint 400s without `weightClass`" and the sixteen-field `/users/me`
+  measurement; ruling (ii)'s "both write sites already hold `me`"; the 409
+  duplicate's write-before-respond and its readback through `db.select()`;
+  `upsertLink` clearing `needsReauthAt` on every path; `api()` not throwing on
+  non-2xx; the `busy` widening against the contract census (it parses case
+  LABELS, not returns); the measured logbook origin; and every REASON string
+  present in the Gate 0 amendment.
