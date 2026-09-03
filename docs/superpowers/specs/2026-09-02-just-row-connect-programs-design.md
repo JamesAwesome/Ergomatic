@@ -1,7 +1,8 @@
 # Connect puts the erg into a Just Row session — design
 
-**Status: spec rev 1, 2026-09-02. Gate 0 presented (the Ready frame's two
-copies). Antagonist FULL pass owed (wire semantics). No stored shape.**
+**Status: spec rev 1, 2026-09-02. Gate 0 PASSED on rev 1c (James: copy A is
+`The clock starts on your first stroke.`). Antagonist FULL pass in flight
+(wire semantics); the plan follows it. No stored shape.**
 Phase JR follow-on item 2, re-confirmed by James 2026-09-02 ("i do want
 item 2"). Handoff: `docs/design/handoffs/2026-09-02-just-row-connect/`.
 

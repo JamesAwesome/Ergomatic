@@ -2,8 +2,7 @@
 
 **Origin:** Phase JR follow-on item 2 (walk finding 2026-09-01: "the erg
 stays on the main menu, so it looks like the connection did nothing";
-re-confirmed by James 2026-09-02). **Status: PRESENTED for Gate 0,
-2026-09-02.** Spec: `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`.
+re-confirmed by James 2026-09-02). **Status: GATE 0 PASSED — James, 2026-09-02, on rev 1c ("first stroke", his line; "approved").** Spec: `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`.
 
 ## The two boards
 
