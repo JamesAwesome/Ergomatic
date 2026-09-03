@@ -6529,3 +6529,37 @@ plan's own tools and never with the REPO's.
   `terminated` (CSAFE-DEF footnote 12). "Our number, never the machine's" is
   correct for a stronger reason than the spec states, and the next implementer
   will find that event.
+- **2026-09-02, PR B's PLAN (delta pass): A PER-ARM RESET AT THE TOP OF AN ARMING
+  FUNCTION DISARMS THE CLOSE THAT FUNCTION PERFORMS IN ITS OWN CATCH.** The plan
+  placed the new ref's clear "beside `rowingStreakRef.current = null;`" at every
+  one of that ref's four sites. Three are harmless; `program()` is not — its
+  clear runs above the `try`, and its catch closes the previous run with
+  `"program-failed"`, one of the five producers the same plan requires to bank a
+  partial. The prescribed Task 3 leg for that producer could never pass.
+  TECHNIQUE: **when copying a lifetime from a sibling ref, do not check the
+  SITES — check whether any of those sites CLOSES the thing the new ref is about.
+  `grep` the arming function for the closer (`closeRecord`, `complete*`) and
+  order the clear against its own closes, never against the sibling's
+  placement.** A sibling ref is only a valid template while its own consumers
+  read at the same moments yours do.
+- **A "constructed ordering" leg can prove the invariant and not the arm.** Task
+  7's End-arm leg cut the capture at t<=100000 — 3.5 s after the first `resting`
+  frame — so I-B3 had already cleared the ref and the leg's own assertion was
+  `partial === undefined`. It gated I-B3 under an End close and was written up as
+  gating the End arm. TECHNIQUE: **for every cut-the-capture leg, print the cut
+  timestamp against the interleaving of the events that CLEAR the state under
+  test; a cut is a claim about where in the timeline you landed, and it needs the
+  same measurement as the timeline itself.** The fix is a second cut (t<=76200,
+  between the last rowing frame and the first resting frame) whose assertion is
+  positive.
+- **"Joined by one asserted fixture" is a claim about IMPORTS, not about equal
+  literals.** The two halves of the headline gate carried the same object typed
+  twice in two files; a change to what the hook banks reddens one and leaves the
+  other asserting a stale literal that still round-trips. The repo had already
+  ruled on this shape one PR earlier — `server/routes/partial.integration.test.ts`
+  imports its predicate from `src/` and says a copy "would be a third mirror" —
+  which also disproves the plan's premise that a server test cannot reach the
+  client tree. TECHNIQUE: **before accepting "these two tests share a fixture",
+  ask which FILE the symbol is declared in; if the answer is two, grep the repo
+  for a test that already crosses that boundary before believing it cannot be
+  crossed.**
