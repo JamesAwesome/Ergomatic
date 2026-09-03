@@ -554,7 +554,24 @@ saved row together, one vocabulary.
   duration and the partial pair holds metres and clock) — beside a measured
   row; the same row on a link-lost close, where the pair is what was last
   received (§5.1); the saved-row heroes unchanged by it (I-B5 made visible);
-  and the lost banner both arms. Cannot be approved
+  and the lost banner both arms. **APPROVED by James 2026-09-02
+  (`2026-09-02-door-gate-b.html`, all recommendations taken):** (a) the pair
+  `250 m · 1:03` then the dash on a distance row; (b) `2:10 · 480 m` against a
+  `3:00` time row; (c) the link-lost reading marked by a caption under the
+  table in the targets-only caption's type, replacing that caption on a
+  single-interval link-lost row (an inline word collapses the pace-ref cell
+  to zero, measured); (d) an over-target partial (`503 m` against `500 m`)
+  still reads as partial — no pace, no rate; (e) the lost banner's zero-kept
+  arm renders the title alone, AND the two sibling surfaces that say "Nothing
+  kept." — the connected surface's ended-frame line and `LogSession.tsx`'s
+  dropped-program strip — drop it the same way in this PR, since the strip
+  would otherwise sit above a step row showing the metres (RF23's shape);
+  (f) no split, pace or rate is derived from the pair; (g) the row's
+  `aria-label` speaks "stopped at 250 m · 1:03" (approved copy). The DISTANCE
+  hero already counts the abandoned interval's rowed metres while the rows
+  cannot show them, so a rower can subtract and find a gap; James accepted
+  the gap silently — the pair never enters a hero (I-B5) and no sentence is
+  owed. Cannot be approved
   before §5's shape is decided, which is why it is not folded into 0-A (RC-24:
   a shape approved on a description).
 
