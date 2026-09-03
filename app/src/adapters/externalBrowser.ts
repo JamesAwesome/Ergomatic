@@ -1,9 +1,11 @@
 // Wave E PR1.5, narrowed at PR1.75b: opens an external URL for the rower.
-// `adapters/linkFlow.ts`'s WEB arm is the consumer today (a full-page
-// navigation to Concept2's consent screen, whose outcome is read from
-// `GET /api/concept2/link` on the next mount); PR2's read-only "View on
-// Concept2" link-out is the next one, and it is why `@capacitor/browser`
-// stays a dependency.
+// Two exports, one per intent. `openExternalUrl` serves the OAuth consent
+// hop, and `adapters/linkFlow.ts`'s WEB arm is its only consumer (a
+// full-page navigation to Concept2's consent screen, whose outcome is read
+// from `GET /api/concept2/link` on the next mount). `openReadOnlyUrl`
+// (PR2 Task 2) serves the read-only "View on Concept2" link-out the rower
+// comes BACK from; its own component consumer lands later in PR2, and it is
+// why `@capacitor/browser` stays a dependency.
 //
 // **`onBrowserFinished`/`onNativeBrowserFinished` were REMOVED at PR1.75b**
 // (2026-09-02-concept2-pr175-app-bind-design.md §4): with the native link on
