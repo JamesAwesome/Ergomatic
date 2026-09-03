@@ -12,7 +12,7 @@ with ONE line changed or kept:
 
 | Board | Copy | When |
 | --- | --- | --- |
-| `Main.dc.html` (A) | `The clock starts on your first pull.` | the PM5's readback confirms the program (workout type 1, WAITTOBEGIN) |
+| `Main.dc.html` (A) | `The clock starts on your first stroke.` | the PM5's readback confirms the program (workout type 1, WAITTOBEGIN) |
 | `Unverified.dc.html` (B) | the shipped line: `Nothing is programmed. The monitor keeps its own time, and the clock starts on your first stroke.` | not answered yet, or the machine did not take it — still true, since pulling from the menu enters Just Row by itself |
 
 The real change is on the erg (its Just Row screen instead of the main
