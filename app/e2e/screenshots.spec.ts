@@ -5352,6 +5352,63 @@ for (const name of CONNECTED_STATES) {
   });
 }
 
+// --- AUD-011/015: the blocked-start state, both orientations -------------
+//
+// Same rationale as the connected-fixture section above: this state needs a
+// REAL denied localStorage write, which the e2e stack cannot produce (a
+// production bundle, no injection seam) and which storage-denial spec §3/§5
+// rules out simulating live against a real browser's Storage implementation
+// for a mere capture. So the markup comes from
+// `src/session/Countdown.screens.test.tsx`, which renders the REAL
+// Countdown component tree with the run write denied and writes the
+// resulting markup to `e2e/fixtures/`, kept honest by `toMatchFileSnapshot`
+// the same way `connected-ended-error` already is.
+//
+// No `TAB_BAR_MARKUP` injection here, unlike `showConnectedFixture`:
+// `.countdown-screen`'s own `min-height` formula already subtracts
+// `var(--tap)` unconditionally (index.css, both the portrait and landscape
+// rules), not gated on a `:has()` selector the way the connected surface's
+// is — so the wrapper is structurally accurate with no bar node present,
+// matching what this route actually renders (`hidesTabBar`, AppRoutes.tsx).
+async function showCountdownFixture(page: Page, name: string): Promise<void> {
+  const html = readFileSync(path.join(CONNECTED_FIXTURES, `${name}.html`), {
+    encoding: "utf-8",
+  });
+  await page.goto("/", { waitUntil: "load" });
+  await page.waitForFunction(
+    () =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--page")
+        .trim() !== "",
+  );
+  await page.evaluate((markup) => {
+    document.body.innerHTML = `<div class="app-shell">${markup}</div>`;
+  }, html);
+  await expect(page.locator(".countdown-screen")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+}
+
+test("countdown-blocked-start", async ({ page }) => {
+  await showCountdownFixture(page, "countdown-blocked-start");
+  await expect(
+    page.getByText("Couldn't keep your session on this phone."),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "countdown-blocked-start.png"),
+  });
+});
+
+test("countdown-blocked-start-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await showCountdownFixture(page, "countdown-blocked-start");
+  await expect(
+    page.getByText("Couldn't keep your session on this phone."),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "countdown-blocked-start-landscape.png"),
+  });
+});
+
 // ── PHASE JR PR 2: the free row ─────────────────────────────────────────
 // Real data throughout (recurring failure 7): the live and log captures are
 // driven through the real connect → arm → frames pipeline off the fake, so

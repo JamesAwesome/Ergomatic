@@ -2233,11 +2233,13 @@ describe("Today (stale draft discard on mount)", () => {
   // `loadRun()` (Today.tsx's mount) threw first; this PR's Task 1 closes
   // that loader, so THIS is the first test that can exercise
   // `loadTodayPick`'s own guard through a real Today mount. `mockReady()`'s
-  // default PLAN_AT (planKey "sprint", doneN 11) is a real plan/pool, not
-  // freestyle — needed so this call is reached at all. SCOPED TO THIS KEY
-  // ON PURPOSE, same reasoning as the MONITOR_RUN_KEY test above: a
-  // blanket denial still dies at `loadRun()` first and would prove nothing
-  // about this loader.
+  // default PLAN_AT (planKey "sprint", doneN 11) is simply the fixture's own
+  // default — the `loadTodayPick` call fires unconditionally on mount in
+  // both plan and freestyle modes (Today.tsx's own `pickOverride` lazy
+  // initializer), so no particular plan/freestyle state is what makes it
+  // reachable. SCOPED TO THIS KEY ON PURPOSE, same reasoning as the
+  // MONITOR_RUN_KEY test above: a blanket denial still dies at `loadRun()`
+  // first and would prove nothing about this loader.
   it("survives a DENIED storage getter on the today-pick key: Today mounts, and the daily pick reads as absent (storage-denial spec §1/§3)", async () => {
     mockReady();
     const real = Storage.prototype.getItem;

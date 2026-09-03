@@ -811,9 +811,16 @@ rower's work silently.
       never reached it because `loadRun` (`Today.tsx:280`) throws first. Three
       spec conditions from the anchor: (1) a Today fixture that actually
       reaches the `loadTodayPick` call (needs a plan and a pool); (2) one
-      COMPOSED denial-then-Start test — after AUD-011's fix, denial makes
-      `loadRun()` return null, so Start proceeds and then hits
-      `saveRun === false`, a path neither finding's own tests cover; (3) the
+      COMPOSED denial-then-Start test — **CORRECTED at the spec's antagonist
+      DELTA pass (2026-09-03): this composition never happens.** A denied
+      getter fails EVERY storage access on that origin, not the run key
+      alone, so `saveDraft` (Countdown's own mount effect, called before
+      `saveRun`) throws first and Countdown never mounts at all — there is
+      no "Start proceeds, then `saveRun === false`" path for AUD-011's fix
+      to create. The blocked-start state this spec actually builds is
+      produced by QUOTA at the run key specifically (the draft write
+      succeeds, only the run write is over budget), not by getter denial —
+      see the spec's §3 legs (a)/(b)/(c). (3) the
       Retry surface needs a non-retry exit — a Retry under a still-denied
       getter is a loop. Open research line for the spec: whether the getter
       can throw in a Capacitor WKWebView on its own origin (the WHATWG
