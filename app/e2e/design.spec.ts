@@ -9827,34 +9827,44 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
 // ── Wave E PR2, Surface 1: the Concept2 card's landscape interior ──────────
 //
 // WHAT THIS PROVES, exactly (RF26 — the strongest claim it may make): that
-// `index.css`'s `@media (orientation: landscape)` rule for `.c2-card-body`
-// really moves the card's own markup in a real engine, and that portrait
-// really does not. It measures the COMPONENT'S OWN OUTPUT: the fixture below
-// was captured from a live `render(<Concept2Card email=… />)` of the unlinked
-// state, not hand-written, and `Concept2Card.test.tsx`'s
-// "Concept2Card layout structure" cases pin the same two class names in the
-// component so the fixture cannot silently drift from what ships.
+// `index.css`'s `@media (orientation: landscape)` rules for
+// `.c2-card-body-split` really move the card's own markup in a real engine,
+// that portrait does not, and that the states the amendment draws SINGLE
+// column stay single column with their hairlines intact.
+//
+// WHICH STATES ARE WHICH IS MEASURED, NOT READ. A script over every
+// `class="frame land"` block in `amendment-2026-09-03.html` reports a
+// two-column grid on 1a, 1c, 1f, 1f-b, 1i and 1j and no grid on 1b, 1d, 1e
+// and 1g, and reports that 1d's landscape frame DRAWS a hairline. A previous
+// revision of this file asserted that no landscape frame draws one and that
+// only 1b and 1g are un-gridded; both were false, and the hairline test here
+// enforced the wrong claim. The fixtures below cover one state of each kind.
+//
+// THE FIXTURES ARE THE COMPONENT'S OWN OUTPUT, and that is gated rather than
+// asserted: `Concept2Card.test.tsx`'s "the e2e fixtures ARE this component's
+// output" compares each committed file against the component's `innerHTML`
+// in full, so any drift at all — a moved `<hr>`, a changed status string, a
+// dropped aria attribute — reddens there. `loadCard` applies the same
+// whitespace normalisation those tests use, so the browser sees the
+// component's exact markup regardless of how the file is formatted on disk;
+// the empty act column in the 1g fixture must stay `:empty` to collapse.
 //
 // WHAT IT DOES NOT PROVE: that the card is reachable on You. It is not, yet —
 // Task 8 mounts it and the e2e stack runs with `C2_LINK_ENABLED` unset
 // (`compose.yml`'s `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`, exported by
 // neither `e2e.sh` nor `screenshots.sh`), so the route answers
 // `{available:false}` and the card renders `null` on every screen in this
-// suite today. The end-to-end version of this assertion — real card, real
-// stack, real flag — is owed at Task 8/11 and is recorded in the task report.
-// This test is the layer that CAN reach the CSS rule today, which is the
-// whole of RF21's "if a guard protects an invariant no user-facing path can
-// reach, the test belongs at the layer that can reach it".
+// suite today. The end-to-end version is owed at Task 8/11.
 //
 // Boxes are read off `.c2-card-tell` and `.c2-card-act`, which are `div`s and
-// therefore block-level: an inline element reports 0 for every box metric,
+// therefore block-level; an inline element reports 0 for every box metric,
 // which is the measurement error RF21's own example shipped.
-test.describe("Concept2 card: the landscape two-column interior (Gate 0 amendment §1a-1j)", () => {
-  async function loadCard(page: Page): Promise<void> {
+test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)", () => {
+  async function loadCard(page: Page, fixture: string): Promise<void> {
     const markup = readFileSync(
-      path.join(process.cwd(), "e2e/fixtures/c2-card-unlinked.html"),
+      path.join(process.cwd(), "e2e/fixtures", fixture),
       { encoding: "utf-8" },
-    );
+    ).replace(/>\s+</g, "><");
     await page.goto("/", { waitUntil: "load" });
     await page.waitForFunction(
       () =>
@@ -9877,36 +9887,74 @@ test.describe("Concept2 card: the landscape two-column interior (Gate 0 amendmen
     return { tell, act };
   }
 
-  test("landscape puts the ACTION column to the right of the TELL column, and portrait stacks them", async ({
+  test("a SPLIT state puts the action column to the right of the tell column in landscape, and stacks in portrait", async ({
     page,
   }) => {
     await page.setViewportSize(PHONE_LANDSCAPE);
-    await loadCard(page);
+    await loadCard(page, "c2-card-unlinked.html");
     const land = await columns(page);
-    // The deciding assertion. Side by side means the action column STARTS
-    // to the right of where the tell column ENDS — stronger than comparing
-    // left edges alone, which a stacked layout with any indent could pass.
+    // Side by side means the action column STARTS to the right of where the
+    // tell column ENDS — stronger than comparing left edges alone, which a
+    // stacked layout with any indent could pass.
     expect(land.act.x).toBeGreaterThan(land.tell.x + land.tell.width - 1);
-    // ...and on the same row, which is what "column" means here.
     expect(Math.abs(land.act.y - land.tell.y)).toBeLessThan(land.tell.height);
 
     await page.setViewportSize(PHONE_PORTRAIT);
-    await loadCard(page);
+    await loadCard(page, "c2-card-unlinked.html");
     const port = await columns(page);
-    // Stacked: same left edge, and the action column sits BELOW.
     expect(port.act.x).toBeCloseTo(port.tell.x, 0);
     expect(port.act.y).toBeGreaterThan(port.tell.y + port.tell.height - 1);
   });
 
-  test("landscape drops the hairline the amendment's landscape frames do not draw", async ({
+  test("a SINGLE-column state (1d armed) stays stacked in landscape and keeps its hairline", async ({
     page,
   }) => {
+    // 1d is badged UNCHANGED on the page — inherited from the approved board
+    // — and the page draws it single column WITH a hairline in landscape as
+    // well as portrait. This is the assertion that stops the split rule
+    // reaching it.
     await page.setViewportSize(PHONE_LANDSCAPE);
-    await loadCard(page);
+    await loadCard(page, "c2-card-armed.html");
+    const land = await columns(page);
+    expect(land.act.x).toBeCloseTo(land.tell.x, 0);
+    expect(land.act.y).toBeGreaterThan(land.tell.y + land.tell.height - 1);
+    await expect(page.locator(".c2-card-hair")).toBeVisible();
+
+    await page.setViewportSize(PHONE_PORTRAIT);
+    await loadCard(page, "c2-card-armed.html");
+    await expect(page.locator(".c2-card-hair")).toBeVisible();
+  });
+
+  test("a SPLIT state drops the hairline in landscape, and keeps it in portrait", async ({
+    page,
+  }) => {
+    // Scoped to the split body only: the 20px column gap has taken over the
+    // job of marking the break, which is why 1a, 1c, 1f, 1i and 1j draw no
+    // hairline in landscape while 1d does.
+    await page.setViewportSize(PHONE_LANDSCAPE);
+    await loadCard(page, "c2-card-unlinked.html");
     await expect(page.locator(".c2-card-hair")).toBeHidden();
 
     await page.setViewportSize(PHONE_PORTRAIT);
-    await loadCard(page);
+    await loadCard(page, "c2-card-unlinked.html");
     await expect(page.locator(".c2-card-hair")).toBeVisible();
+  });
+
+  test("a state with nothing to DO (1g) gives its panel the full card width", async ({
+    page,
+  }) => {
+    // `.c2-card-act:empty { display: none }`, measured rather than asserted
+    // about. The tell column must span the body's whole content width, in
+    // both orientations — a 50% track held open for an empty column is
+    // exactly what this rule exists to prevent.
+    for (const vp of [PHONE_LANDSCAPE, PHONE_PORTRAIT]) {
+      await page.setViewportSize(vp);
+      await loadCard(page, "c2-card-update-required.html");
+      const tell = await page.locator(".c2-card-tell").boundingBox();
+      const body = await page.locator(".c2-card-body").boundingBox();
+      if (tell === null || body === null) throw new Error("no box");
+      expect(tell.width).toBeCloseTo(body.width, 0);
+      await expect(page.locator(".c2-card-act")).toBeHidden();
+    }
   });
 });

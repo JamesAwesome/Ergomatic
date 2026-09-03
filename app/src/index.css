@@ -10077,12 +10077,20 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* 1b and 1g have nothing to DO — an OPENING or UPDATE NEEDED panel and no
-   control at all. Collapsing the empty column keeps their panels full
-   width, which is what the amendment's own 1b and 1g landscape frames draw
-   (they are the two of the ten it does not grid). Without this the grid
-   below would hold a 50% track open for a column with nothing in it, and
-   portrait would carry a stray 12px gap. React emits no text node for a
-   false branch, so the div is genuinely `:empty` in those states. */
+   control at all — so their act column renders with no child node and would
+   otherwise contribute a stray 12px flex gap under the panel, in BOTH
+   orientations. That gap is this rule's whole job. React emits no text node
+   for a false branch, so the div is genuinely `:empty` in those states.
+
+   It is NOT what keeps those two panels full width in landscape; `-split`
+   does, by not being applied to them. An earlier revision justified
+   `grid-auto-flow: column` on the grounds that "one declaration serves both
+   shapes" — one column when act is empty, two when it is not — and that
+   argument counted the wrong shapes. 1d and 1e are single-column on the
+   page too, and BOTH have a non-empty act column, so auto-flow could never
+   have produced their layout; meanwhile the two states it did handle are
+   handled by `-split` anyway. The landscape grid is now the page's own
+   literal `1fr 1fr`. */
 .c2-card-act:empty {
   display: none;
 }
@@ -10210,15 +10218,28 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
+/* The page's own `.btn-outline`, matched declaration for declaration
+   (fix round 2, F7): 48px and 15px, not the 52px/16px an earlier revision
+   shipped for both outline buttons. 1e's "Try again" is a plain
+   `.btn-outline` on the page; 1i's "Retry" is the same button with an
+   inline `min-height: 52px`, which is `.c2-card-retry-tall` below — and it
+   is why §4's own prose reads "Retry 48, 1i's Retry 52".
+   15px 600-weight is NOT WCAG "large text" (that needs 18.66px bold or
+   24px), so the 4.5:1 floor still applies and is met: --ink on --surface,
+   17.11:1. No input is involved, so the 16px iOS-zoom rule does not. */
 .c2-card-retry {
-  min-height: 52px;
+  min-height: 48px;
   background: transparent;
   border: 1px solid var(--ink);
   border-radius: 0;
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
+}
+
+.c2-card-retry-tall {
+  min-height: 52px;
 }
 
 /* Board 1c/1d. Accent's third canonical job, a destructive control
@@ -10243,58 +10264,66 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--on-color);
 }
 
-/* Landscape: the two-column card interior the amendment draws (fix round 1,
-   R1 — 1a's own board caption is "two-column card interior", and the page
-   grids 1a, 1c, 1f, 1i and 1j at `grid-template-columns: 1fr 1fr; gap: 20px`,
-   four of them with `align-items: center`).
+/* Landscape: the two-column card interior, for the SIX frames the amendment
+   draws that way and no others (fix round 2, F1).
 
-   BARE `@media (orientation: landscape)`, which is this file's ONLY landscape
-   idiom — the five existing blocks (the timer screen, the connected surface
-   and the JR band among them) all use exactly this form, and a
-   `grep -n "@media" src/index.css` over the file finds no width or height
-   clause on any of them. An earlier revision of this block carried
-   `and (max-height: 500px)`, which would have been the single media query in
-   the codebase with a size term, and would have silently excluded a tall
-   landscape viewport from a rule the design applies to landscape as such.
+   MEASURED over the page, not read off it. A script over every
+   `class="frame land"` block reports `grid-template-columns: 1fr 1fr;
+   gap: 20px` on 1a, 1c, 1f, 1f-b, 1i and 1j, and NO grid on 1b, 1d, 1e and
+   1g — four un-gridded frames, not two. It also reports that 1d's landscape
+   frame DRAWS A HAIRLINE. A previous revision of this block asserted the
+   opposite of both, and shipped 1d and 1e as two columns with 1d's hairline
+   suppressed; 1d is badged UNCHANGED on the page, i.e. inherited from the
+   approved board, so that was a silent redraw of approved work.
 
-   `grid-auto-flow: column` + `grid-auto-columns: 1fr` rather than an explicit
-   two-column template, so the states with nothing to DO (1b, 1g — whose
-   `.c2-card-act` is `:empty` and therefore `display: none` above) lay out as
-   ONE full-width column, exactly as the amendment's un-gridded 1b/1g
-   landscape frames draw them. One declaration serves both shapes; no
-   `:has()` and so no question about the iOS 15.0 deployment floor.
+   Everything here is therefore scoped to `.c2-card-body-split`, which the
+   component applies from an explicit enumeration of those frames
+   (`Concept2Card.tsx`'s `singleColumn`). The scoping is what keeps 1b, 1d,
+   1e and 1g single-column and 1d's hairline visible.
 
-   `align-items: center` uniformly, including for 1a, which is the one gridded
-   frame on the page without it — the one-rule ruling prefers the consistent
-   treatment to reproducing a four-of-five inconsistency.
+   `grid-template-columns: 1fr 1fr` — the page's own declaration, verbatim.
+   The earlier `grid-auto-flow: column` + `grid-auto-columns: 1fr` was there
+   to serve the empty-act states as one column, but every state that needs
+   one column is now excluded from this rule outright, and two of the four
+   (1d, 1e) have a NON-empty act column that auto-flow could never have
+   collapsed. There is nothing left for it to do.
 
-   The hairlines go: not one of the amendment's landscape frames draws a
-   `.hair`, because the 20px column gap already marks the break between what
-   the card says and what it asks. They stay in portrait, where every frame
-   has them.
+   BARE `@media (orientation: landscape)`: this file's only landscape idiom.
+   `grep -n "@media" src/index.css` shows six blocks, none with a width or
+   height clause. `padding`/`gap` are NOT overridden here — the page has no
+   landscape override at all and renders `.c2card` at 16px/12px in both
+   orientations; an earlier revision shipped 14px/16px and 10px, which were
+   invented (F7). The 8px tell / 10px act inner gaps below ARE the page's,
+   read off the inline styles of its own landscape column wrappers.
 
-   NO NEW COLOUR PAIRING. This block sets layout only — no `color`, no
-   `background`, no `border` — so every ratio in this block's own header
-   still holds unchanged, and there is nothing new to compute. */
+   `align-items: center` uniformly, including 1a, which is the one gridded
+   frame without it. Reviewed and closed with no action: the page's act
+   column carries `justify-content: center`, and with no background, border
+   or divider on either column the painted result is identical.
+
+   Hairlines are hidden only INSIDE a split body, where the 20px column gap
+   already marks the break. 1d keeps its hairline because 1d is never split.
+
+   NO NEW COLOUR PAIRING. Layout only — no `color`, no `background`, no
+   `border` — so every ratio in this block's own header still holds. */
 @media (orientation: landscape) {
-  .c2-card {
-    padding: 14px 16px;
-    gap: 10px;
-  }
-
-  .c2-card-body {
+  .c2-card-body-split {
     display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 20px;
     align-items: center;
   }
 
-  .c2-card-act {
+  .c2-card-body-split .c2-card-tell {
+    gap: 8px;
+  }
+
+  .c2-card-body-split .c2-card-act {
+    gap: 10px;
     justify-content: center;
   }
 
-  .c2-card-hair {
+  .c2-card-body-split .c2-card-hair {
     display: none;
   }
 }

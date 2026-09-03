@@ -226,7 +226,11 @@ export default function Concept2Card({ email }: { email: string }) {
           </h2>
           <span className="c2-card-status">COULDN&apos;T READ</span>
         </div>
-        <div className="c2-card-body">
+        {/* 1i is one of the page's GRIDDED landscape frames, so this body is
+            always split — unlike 1e, the other panel-plus-one-button state,
+            which the page draws single column. The two are inconsistent on
+            the page and the page is the authority (fix round 2, F1). */}
+        <div className="c2-card-body c2-card-body-split">
           <div className="c2-card-tell">
             <div className="c2-card-panel">
               <p className="c2-card-panel-label">COULDN&apos;T READ CONCEPT2</p>
@@ -241,7 +245,7 @@ export default function Concept2Card({ email }: { email: string }) {
           <div className="c2-card-act">
             <button
               type="button"
-              className="c2-card-retry"
+              className="c2-card-retry c2-card-retry-tall"
               onClick={() => void reload()}
             >
               Retry
@@ -259,8 +263,17 @@ export default function Concept2Card({ email }: { email: string }) {
     busy ||
     (outcome !== null && outcome.kind === "navigating") ||
     (outcome !== null && outcome.kind === "busy" && outcome.source === "guard");
-  const updateRequired =
-    outcome !== null && outcome.kind === "updateRequired" && !link.linked;
+  // NO `&& !link.linked` (fix round 2, F2). It used to carry one, which made
+  // this outcome render NOTHING on the needs-reauth card: `describeFailure`
+  // answers `null` for `updateRequired` (correctly — it is not a failure), so
+  // the 1f-b panel could not draw it either, and a rower on a build that
+  // predates the WebAuth plugin tapped RECONNECT and the screen did not move.
+  // The server answers `409 update_required` from the mint regardless of link
+  // state and `needsReauth` is sticky, so that is a state a real rower sits
+  // in, not a corner. The `!link.linked` test now lives on the RENDER gates
+  // below, where it belongs: it decides which chrome draws the panel, not
+  // whether the outcome exists.
+  const updateRequired = outcome !== null && outcome.kind === "updateRequired";
 
   const status = link.linked
     ? link.needsReauth
@@ -269,6 +282,20 @@ export default function Concept2Card({ email }: { email: string }) {
     : opening
       ? "WAITING"
       : "NOT LINKED";
+
+  // WHICH STATES THE PAGE DRAWS AS TWO COLUMNS (fix round 2, F1). Not a
+  // principle — an enumeration, and it is stated as one because the page is
+  // not internally consistent and the ruling is that the page wins: 1i (read
+  // failed) is gridded while 1e (link failed) is not, and both are "one panel
+  // and one button".
+  //
+  // MEASURED, not read. A script over every `class="frame land"` block in
+  // `amendment-2026-09-03.html` reports a two-column grid for 1a, 1c, 1f,
+  // 1f-b, 1i and 1j, and no grid for 1b, 1d, 1e and 1g. An earlier revision
+  // of this file asserted "1b and 1g are exactly the two the page does not
+  // grid"; that was wrong by two, and it shipped 1d and 1e split.
+  const singleColumn =
+    armed || (!link.linked && (opening || updateRequired || failure !== null));
 
   return (
     <section className="c2-card" aria-labelledby="c2-card-label">
@@ -283,18 +310,19 @@ export default function Concept2Card({ email }: { email: string }) {
         </span>
       </div>
 
-      {/* ONE RULE, NOT FIVE SPECIAL CASES (fix round 1, R1). What the card
-          TELLS the rower goes in `.c2-card-tell`; what it ASKS them to DO
-          goes in `.c2-card-act`. The pair is present in EVERY state, so the
-          landscape two-column rule is structural rather than per-state
-          guesswork — the amendment draws the grid in five landscape frames
-          (1a, 1c, 1f, 1i, 1j) and, in 1f alone, leaves the identity line
-          above it; the single rule resolves that inconsistency by putting
-          identity where it belongs, on the telling side.
-          Portrait stacks the pair and is unchanged: `.c2-card-body` is a
-          12px-gap flex column there, exactly the gap these children had as
-          direct flex children of `.c2-card` before the wrappers existed. */}
-      <div className="c2-card-body">
+      {/* What the card TELLS the rower goes in `.c2-card-tell`; what it ASKS
+          them to DO goes in `.c2-card-act`. The pair is in the DOM in EVERY
+          state, so the landscape rule has a stable target; `-split` is what
+          decides whether that target becomes two columns, and it is an
+          enumeration of the page's own frames (see `singleColumn` above),
+          not a principle.
+          The identity line lives in the tell column in every state. 1f's
+          landscape frame draws it above the grid instead; that is the one
+          place the shipped card departs from a frame, it is recorded under
+          1f in the amendment, and it is what the tell/act split means. */}
+      <div
+        className={`c2-card-body${singleColumn ? "" : " c2-card-body-split"}`}
+      >
         <div className="c2-card-tell">
           {link.linked && (
             <p className="c2-card-identity">{identityLine(link, email)}</p>
@@ -322,17 +350,41 @@ export default function Concept2Card({ email }: { email: string }) {
             <FailurePanel failure={failure} />
           )}
 
+          {/* Fix round 2, F2. `updateRequired` is not a failure, so it never
+              reaches `FailurePanel` — and while this gate carried
+              `!link.linked` it reached nothing at all here, which made a
+              RECONNECT on a pre-WebAuth build completely silent. Same panel
+              copy as 1g, in 1f-b's chrome, which already holds two panels. */}
+          {link.linked && link.needsReauth && updateRequired && (
+            <div className="c2-card-panel">
+              <p className="c2-card-panel-label">UPDATE NEEDED</p>
+              <p className="c2-card-panel-line">
+                Update Ergomatic to link your Concept2 account.
+              </p>
+            </div>
+          )}
+
           {link.linked && !link.needsReauth && !armed && (
             <p className="c2-card-helper">
               Finished monitor rows can be sent from the log.
             </p>
           )}
 
+          {/* The armed hairline sits ABOVE the warning, not below it: the
+              page's 1d frames order the card identity, hair, explain, button,
+              foot, in BOTH orientations (fix round 2, F6 — a previous
+              revision moved it into the act column and claimed portrait was
+              unchanged). Every other linked state puts its hairline in the
+              act column instead, immediately above Unlink, which is where
+              1c, 1f, 1f-b and 1j draw it. */}
           {link.linked && armed && (
-            <p className="c2-card-explain">
-              Unlink removes this app&apos;s access. Rows already sent stay on
-              Concept2.
-            </p>
+            <>
+              <hr className="c2-card-hair" />
+              <p className="c2-card-explain">
+                Unlink removes this app&apos;s access. Rows already sent stay on
+                Concept2.
+              </p>
+            </>
           )}
 
           {/* Amendment 1j. Sits above the Unlink control it belongs to, so
@@ -426,7 +478,10 @@ export default function Concept2Card({ email }: { email: string }) {
 
           {link.linked && (
             <>
-              <hr className="c2-card-hair" />
+              {/* Not while armed: 1d's hairline is above the warning, in the
+                  tell column (F6). Two hairlines would be a rule the page
+                  never draws. */}
+              {!armed && <hr className="c2-card-hair" />}
               <button
                 type="button"
                 className={`c2-card-danger${armed ? " c2-card-danger-armed" : ""}`}

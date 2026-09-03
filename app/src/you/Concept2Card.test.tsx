@@ -7,6 +7,8 @@ import {
   fireEvent,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { LinkOutcome } from "../adapters/linkFlow";
 
 afterEach(() => {
@@ -535,6 +537,44 @@ describe("Concept2Card outcomes (Gate 0 amendment 1e/1f/1g)", () => {
     expect(screen.queryByText(/Concept2 jamesawesome/)).toBeNull();
   });
 
+  it("an updateRequired RECONNECT says UPDATE NEEDED, instead of not moving at all", async () => {
+    // Fix round 2, F2. `describeFailure` answers `null` for `updateRequired`
+    // — correctly, it is not a failure — so it never reaches `FailurePanel`,
+    // and while the `updateRequired` const carried `&& !link.linked` this
+    // outcome rendered NOTHING on the reauth card. The server answers
+    // `409 update_required` from the mint for any build predating the
+    // WebAuth plugin, regardless of link state, and `needsReauth` is sticky:
+    // a real rower taps RECONNECT and the screen does not move.
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "updateRequired",
+    }));
+    mount({ ...LINKED, needsReauth: true }, startLink);
+    await renderCard();
+    const reconnect = await screen.findByRole("button", {
+      name: "RECONNECT CONCEPT2",
+    });
+    // THE ASSERTION THE DEFECT NEEDED, in the shape the review caught it in:
+    // the card's whole text, before and after the tap. Asserting only that
+    // the panel appears would pass against a card that also silently threw
+    // away everything else.
+    const before = document.querySelector(".c2-card")?.textContent ?? "";
+    await userEvent.click(reconnect);
+    expect(await screen.findByText("UPDATE NEEDED")).toBeTruthy();
+    expect(
+      screen.getByText("Update Ergomatic to link your Concept2 account."),
+    ).toBeTruthy();
+    const after = document.querySelector(".c2-card")?.textContent ?? "";
+    expect(after).not.toBe(before);
+    // Still the reauth card, and the link is still kept.
+    expect(screen.getByText("RECONNECT NEEDED")).toBeTruthy();
+    expect(
+      screen.getByText("CONCEPT2 STOPPED ACCEPTING THIS LINK"),
+    ).toBeTruthy();
+    // No Try again: retrying the same build cannot succeed, which is 1g's
+    // rule and holds identically here.
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
   it("a failed RECONNECT says what happened, instead of leaving the screen unchanged", async () => {
     // Fix round 1, R2 — amendment 1f-b. Every failure panel used to be gated
     // `!link.linked`, so a declined or refused RECONNECT on the needs-reauth
@@ -659,6 +699,82 @@ describe("Concept2Card panel lines no type protects (Task 1 review F9)", () => {
   });
 });
 
+// FIX ROUND 2, F5 — the anti-drift claim, made TRUE rather than narrowed.
+// `e2e/design.spec.ts` measures committed fixtures, and the previous round
+// claimed the component "pins the same two class names so the fixture cannot
+// silently drift". It pinned four structural facts; the `<hr>`'s position,
+// the explain/helper order, the status text and the aria wiring could all
+// change with the fixture left stale and the suite green.
+//
+// These tests compare the WHOLE committed fixture against the component's
+// own `innerHTML`, so any drift at all reddens. One normaliser owns both
+// sides and strips only whitespace BETWEEN tags — which is also exactly what
+// the e2e loader applies before injecting, so the browser sees the
+// component's markup no matter how the file is formatted on disk (that
+// matters: the empty act column must stay `:empty`, and a pretty-printer's
+// newline between `<div>` and `</div>` would silently defeat it).
+describe("the e2e fixtures ARE this component's output (F5)", () => {
+  const norm = (html: string) => html.replace(/>\s+</g, "><").trim();
+
+  async function renderTo(status: unknown, startLink = vi.fn()) {
+    const api = vi.fn(
+      async () =>
+        new Response(JSON.stringify(status), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink }));
+    vi.resetModules();
+    const { default: Concept2Card } = await import("./Concept2Card");
+    return render(<Concept2Card email="james@jamestheaweso.me" />);
+  }
+
+  function committed(name: string): string {
+    return readFileSync(join(process.cwd(), "e2e/fixtures", name), "utf-8");
+  }
+
+  it("c2-card-unlinked.html is what the unlinked card renders", async () => {
+    const { container } = await renderTo({ available: true, linked: false });
+    await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" });
+    expect(norm(container.innerHTML)).toBe(
+      norm(committed("c2-card-unlinked.html")),
+    );
+  });
+
+  it("c2-card-armed.html is what the armed card renders", async () => {
+    const { container } = await renderTo(LINKED);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Unlink Concept2" }),
+    );
+    await screen.findByRole("button", { name: "Tap again to unlink" });
+    expect(norm(container.innerHTML)).toBe(
+      norm(committed("c2-card-armed.html")),
+    );
+  });
+
+  it("c2-card-update-required.html is what the update-required card renders", async () => {
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "updateRequired",
+    }));
+    const { container } = await renderTo(
+      { available: true, linked: false },
+      startLink,
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
+    await screen.findByText("UPDATE NEEDED");
+    expect(norm(container.innerHTML)).toBe(
+      norm(committed("c2-card-update-required.html")),
+    );
+    // The act column really is empty, which is what `:empty` needs in order
+    // to collapse it — and what the e2e width assertion measures.
+    expect(container.querySelector(".c2-card-act")?.childNodes.length).toBe(0);
+  });
+});
+
 // The landscape two-column rule (fix round 1, R1) is a CSS rule that acts on
 // TWO CLASS NAMES. `index.css` cannot check that the component still emits
 // them, and jsdom does no layout, so the proof is split deliberately and each
@@ -723,6 +839,118 @@ describe("Concept2Card layout structure (the tell/act pair the grid targets)", (
     const act = document.querySelector(".c2-card-body > .c2-card-act");
     expect(act?.contains(retry)).toBe(true);
     expect(tell?.textContent).toContain("Couldn't reach Concept2 linking.");
+  });
+});
+
+// EVERY rendered literal, pinned (fix round 2, F4). This file's own header
+// argues that these strings have no type behind them and that only this
+// component can get them wrong; that argument covers all of them, and ten
+// used to have no assertion anywhere — a mutation of the weight-class helper
+// reddened one LAYOUT test and no copy test at all.
+//
+// Each literal below was transcribed from `amendment-2026-09-03.html` by
+// extracting the text of every `c2label`/`c2status`/`c2explain`/`c2helper`/
+// `c2foot`/`panel-*`/`btn-*` node inside its `c2card` frames, and comparing
+// that set against this component's JSX. Never read back off the symbol that
+// renders it.
+describe("Concept2Card copy, pinned literal by literal (F4)", () => {
+  it("1a unlinked: the label, the status, both body lines, the button and its footnote", async () => {
+    mount({ available: true, linked: false });
+    await renderCard();
+    expect(
+      await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    ).toBeTruthy();
+    expect(screen.getByText("CONCEPT2")).toBeTruthy();
+    expect(screen.getByText("NOT LINKED")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Your weight class comes from Concept2."),
+    ).toBeTruthy();
+    expect(screen.getByText("OPENS CONCEPT2 IN YOUR BROWSER")).toBeTruthy();
+  });
+
+  it("1b opening: the status chip reads WAITING", async () => {
+    const startLink = vi.fn(async (): Promise<LinkOutcome> => ({
+      kind: "navigating",
+    }));
+    mount({ available: true, linked: false }, startLink);
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
+    await screen.findByText("OPENING CONCEPT2");
+    expect(screen.getByText("WAITING")).toBeTruthy();
+  });
+
+  it("1c linked: the helper that says where sending happens", async () => {
+    mount(LINKED);
+    await renderCard();
+    await screen.findByText("LINKED \u2713");
+    expect(
+      screen.getByText("Finished monitor rows can be sent from the log."),
+    ).toBeTruthy();
+  });
+
+  it("1d armed: the warning and the auto-disarm footnote", async () => {
+    mount(LINKED);
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Unlink Concept2" }),
+    );
+    expect(
+      screen.getByText(
+        "Unlink removes this app's access. Rows already sent stay on Concept2.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("DISARMS ON ITS OWN AFTER 4 SECONDS")).toBeTruthy();
+  });
+
+  it("1f needs re-auth: the status, the panel label and its line", async () => {
+    mount({ ...LINKED, needsReauth: true });
+    await renderCard();
+    expect(await screen.findByText("RECONNECT NEEDED")).toBeTruthy();
+    expect(
+      screen.getByText("CONCEPT2 STOPPED ACCEPTING THIS LINK"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Your link is kept. Reconnect to send rows again."),
+    ).toBeTruthy();
+  });
+
+  it("1i read failed: the status chip and the panel label", async () => {
+    const api = vi.fn(
+      async () => new Response("<html>502</html>", { status: 502 }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    expect(await screen.findByText("COULDN'T READ")).toBeTruthy();
+    expect(screen.getByText("COULDN'T READ CONCEPT2")).toBeTruthy();
+  });
+
+  it("1j unlink refused: the panel label", async () => {
+    const api = vi.fn(async (_path: string, init?: RequestInit) =>
+      init?.method === "DELETE"
+        ? new Response("nope", { status: 500 })
+        : new Response(JSON.stringify(LINKED), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Unlink Concept2" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
+    expect(await screen.findByText("UNLINK DIDN'T HAPPEN")).toBeTruthy();
   });
 });
 

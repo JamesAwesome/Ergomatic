@@ -1348,6 +1348,17 @@
       to be unreadable. That is also the PII bound holding in its strongest
       form &mdash; exit criterion 3 now reads &quot;NO new user attribute&quot;.
     </p>
+    <div class="callout">
+      <p><strong>The landscape frame above draws the identity line in the
+      wrong place, and the shipped card does not follow it.</strong> This is
+      the only frame on the page that puts <code>.c2identity</code> ABOVE the
+      two-column grid; 1a, 1c, 1i and 1j all put their telling content inside
+      it. The shipped card has one rule &mdash; what it TELLS the rower goes in
+      the left column, what it ASKS them to DO goes in the right &mdash; so the
+      identity line is in the left column here too, exactly as 1c and 1j draw
+      it. Recorded here rather than under 1f-b, because this frame is the one
+      a reader opens to see the shape that changed.</p>
+    </div>
 
     <h3>1f-b Needs re-auth, and the reconnect failed <span class="badge b-new">NEW STATE</span></h3>
     <p class="lede">
@@ -1368,6 +1379,17 @@
       same row 1e's first frame draws. <strong>The link is KEPT and RECONNECT
       stays live</strong> &mdash; that is 1f's whole point, and it makes the
       recovery one tap rather than an unlink and a fresh link.
+    </p>
+    <p class="lede">
+      <strong>The same frame carries <code>UPDATE NEEDED</code>.</strong> A
+      RECONNECT can also come back <code>409 update_required</code> &mdash; the
+      mint answers it for any build predating the <code>WebAuth</code> plugin,
+      regardless of link state, and <code>needsReauth</code> is sticky &mdash;
+      and that outcome is NOT a failure, so it carries no line of its own from
+      the outcome table. It draws 1g's panel in this frame's chrome, in the
+      same slot the failure panel uses, with no Try again for 1g's own reason:
+      retrying the same build cannot succeed. Until fix round 2 it rendered
+      nothing at all, which is the same silence this state exists to remove.
     </p>
     <p class="lede">
       Placement: BELOW the &quot;CONCEPT2 STOPPED ACCEPTING THIS LINK&quot;
