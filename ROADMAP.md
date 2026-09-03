@@ -189,15 +189,39 @@ slate.
   `docs/monitor/pm5-interface-notes.md:204` (`SET_WORKOUTTYPE(0x01)` +
   `SET_SCREENSTATE(PREPARETOROWWORKOUT)`), and `SET_SCREENSTATE` is
   already built and emitted. **No research pass — the earlier line here
-  saying one was owed was wrong (RF18).** Cost if built: `beginFreeRow()`
-  stops being "sends no bytes" and gains a reject path and an ack gate;
-  carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
-  `OBJ_WORKOUTTYPE_T` entry). One driver change plus one walk leg. **M**
+  saying one was owed was wrong (RF18).** One driver change plus one walk
+  leg; carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
+  `OBJ_WORKOUTTYPE_T` entry). **M**
   **RE-CONFIRMED by James, 2026-09-02 ("i do want item 2"), after using the
   ready fix: build it. Its own PR (wire semantics + a walk leg), after the
   Timer-mode design pass. Ground already in the repo: the 08-31 walk's
   OPEN 5, the p.80 JustRow frame at `docs/monitor/pm5-interface-notes.md:204`,
-  RC-38 rides with it.**
+  RC-38 rides with it.** **IMPLEMENTED (PR #TBD, 2026-09-02; spec
+  `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`
+  rev 4.1, Gate 0 rev 1c): `beginFreeRow()` opens the run, then sends the
+  p.80 frame ALONE — no prepare, since a terminate with a run open is the
+  row's own END — as a DETACHED send bounded by
+  `FREE_ROW_PROGRAM_DEADLINE_MS` (3 s); its outcome goes to the ring
+  (`free-row-program-sent`/`-unanswered`/`-failed`) and nothing on the
+  phone branches on it. The earlier cost line here ("gains a reject path
+  and an ack gate") was half wrong: there is a reject PATH but no ack
+  GATE, because the readback that would verify the program (0x0031
+  `workoutType = 1`) is also the PM5's idle-after-terminate default, so
+  the erg's own screen is the acknowledgment. The Ready line is James's:
+  `The clock starts on your first stroke.` (the shipped `Nothing is
+  programmed…` line became false and is gone). Gates: `commands.test.ts`
+  pins the frame literal; `driver.test.ts` the ring order, the no-prepare
+  literal, NAK, busy-END and deadline paths; `justRowReplay.test.ts` the
+  unanswered send over the 08-31 capture; `e2e/justrow.spec.ts` reads
+  `free-row-program-sent` off the diagnostics door's copied ring. WALK
+  LEG OWED (plan Task 5), and James reviews after it: a CONTROL (PM5
+  power-cycled to a virgin menu — the first `structure` ring line reads
+  `workoutType=0` — photographed before connect, then PM5 + phone in one
+  frame before the first stroke) and a NEGATIVE leg (reconnect right
+  after a Menu end, the PM5 sitting at type 1: does the screen change?).
+  Split cadence of the programmed row vs the menu-entered 5:00 is an
+  observation to record, not a gate. RC-38's disposition is under Phase
+  PROTO.**
 - **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
   infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
   James ruled TIME ONLY; Gate 0 PASSED on rev 2e
@@ -1542,6 +1566,20 @@ close, not before.**
   confirms our reading or finds a real defect; both outcomes are cheap.
   **Per recurring failure 16's second corollary, the row for each value is
   quoted verbatim beside the claim it supports.** **S**
+  **DISPOSITION (Just Row connect spec 2026-09-02, PR #TBD): NOT
+  transcribed, and said so where the value is used.** Concept2's PDFs sit
+  behind Cloudflare and could not be fetched, so `0x01` ships as
+  `WORKOUTTYPE_JUSTROW` in `domain/monitor/pm5/commands.ts` with a doc
+  comment naming it a LABEL rather than an `OBJ_WORKOUTTYPE_T` row. What
+  the value rests on instead is machine corroboration, counted not
+  transcribed: the 08-31 capture's 0x0031 census
+  (`docs/monitor/sessions/walk-2026-08-31-justrow/decode-0031.py`) reads
+  type `0` at a virgin menu, `1` from the first pull, and `1` again after
+  a Menu end with nothing sent by anyone — so `1` is what the PM5 picks
+  for its own Just Row, and ALSO its idle default, which is why the spec
+  keys no gate on it. The verbatim row is still owed: James can drop the
+  CSAFE PDF into `docs/monitor/` and the transcription is a comment
+  change. Still **S**, no longer scheduled against a PR.
 - **The axis-quantity question — REHOMED 2026-08-31** into the "say which number
   this is" design pass below. It was never only about `traceModel.ts`'s `t` and
   `d`; it is one of three places the same screen mixes two quantities.

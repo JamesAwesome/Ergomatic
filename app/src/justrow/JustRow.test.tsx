@@ -618,15 +618,16 @@ describe("JustRow: Lost → Try again through the real hook", () => {
       "connected-keep-on",
     );
     // The body line is James's (Gate 0 rev 1c, spec 2026-09-02 ruling 3),
-    // on the shipped interstitial's own class: true whether or not the
-    // detached p.80 send landed, so the phone claims nothing about the
-    // monitor. The line it replaced — "Nothing is programmed…" — became
-    // FALSE the moment `beginFreeRow()` started sending, so its absence is
-    // pinned too.
-    expect(
-      screen.getByText("The clock starts on your first stroke."),
-    ).toHaveClass("connected-body-line");
-    expect(screen.queryByText(/Nothing is programmed/)).not.toBeInTheDocument();
+    // on the shipped interstitial's own class, and it is the WHOLE line:
+    // the send `beginFreeRow()` fires is detached and the phone claims
+    // nothing about whether the erg took it, so the line it replaced (the
+    // one that said the monitor had been sent nothing, false since that
+    // send exists) can never come back as a prefix or a second sentence.
+    const bodyLine = screen.getByText("The clock starts on your first stroke.");
+    expect(bodyLine).toHaveClass("connected-body-line");
+    expect(bodyLine).toHaveTextContent(
+      /^The clock starts on your first stroke\.$/,
+    );
 
     // The link dies before any motion: pre-run, so the Lost frame.
     act(() => {
