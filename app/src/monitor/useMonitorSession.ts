@@ -1841,8 +1841,15 @@ export function useMonitorSession(
    *    `cancel()` nulls `runRef` (and has already run `teardown()`) before
    *    returning, so every later `closeRecord` stops at its no-record
    *    guard;
-   *  - `connect()` and `teardown()`: `runRef.current` is null once either
-   *    has run, same no-record guard (harden lens 1, finding 5).
+   *  - `connect()` and `teardown()`: DEFENSIVE, and the reason is the CALL
+   *    GRAPH, not the state (review fix round 1 — round 0 claimed
+   *    `runRef.current` is null once either has run, and it is not: only
+   *    the RC-37 exit and `cancel()` null it). A link lost mid-row leaves
+   *    an open run AND a held reading, and `endSession` has no phase
+   *    guard. Reachable only because no surface offers Connect with a run
+   *    open (`justrow/JustRow.tsx`; the interstitial's Try Again is pre-row
+   *    only) and nothing unmounts-then-closes. **ROADMAP's R10 reconnect
+   *    would arm both, and then these clears are what lose the metres.**
    *  SURVIVES teardown / relaunch / re-arm: no / no / no. */
   const lastRowingFrameRef = useRef<{
     intervalIndex: number;
@@ -3315,6 +3322,14 @@ export function useMonitorSession(
         // RECEIVED (§5.1) — and the frame that TRIPS a continuity reset is
         // by definition the dishonest one, so it must not have been folded
         // into the ref before that read.
+        //
+        // It IS folded in a moment later, though (review fix round 1,
+        // minor a): this line still runs after that close, so the
+        // dishonest frame does mint. Harmless, and deliberately not
+        // special-cased — the reset has already moved the phase to
+        // `"ended"`, so no further frame reaches this branch, and the
+        // closed record's own `completedAt !== null` guard refuses every
+        // later write. The reading simply dies with the hook.
         noteFrameForPartial(frame);
         update({ frame, frozen: nowPaused });
         return;
@@ -3574,20 +3589,6 @@ export function useMonitorSession(
           "record-actual",
           `index=${event.actual.index} finalBoundary=${event.finalBoundary === true} recordClosed=${run.completedAt !== null} -> ${accepted ? "accepted" : "REFUSED (the record returned unchanged)"} (actuals ${run.actuals.length} -> ${next.actuals.length})`,
         );
-        // §5.3, I-B3 half two: the interval's own actual has landed, so
-        // its work bout is over by the other of the two events. On a
-        // program with rests the `resting` clear above already fired ~60 s
-        // ago and this is a no-op; on an `r0` program (no rest frames at
-        // all) this is the ONLY clear, and it fires 180 ms after the last
-        // rowing frame (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`).
-        // Keyed on ACCEPTANCE, so a refused actual (a closed record, a free
-        // row) never retires a reading the record still owns.
-        if (
-          accepted &&
-          lastRowingFrameRef.current?.intervalIndex === event.actual.index
-        ) {
-          lastRowingFrameRef.current = null;
-        }
         // A refusal returns `candidate` itself unchanged — nothing to
         // commit, nothing to re-render, exactly as `recordActual`'s own
         // immutability guard always meant before `candidate` existed.
@@ -3600,6 +3601,29 @@ export function useMonitorSession(
         // (`applyProducerCommit`'s own doc comment: "a refusal can
         // therefore never diverge producer from store").
         if (accepted && applyProducerCommit(next)) {
+          // §5.3, I-B3 half two: the interval's own actual has landed, so
+          // its work bout is over by the other of the two events. On a
+          // program with rests the `resting` clear above already fired ~60 s
+          // ago and this is a no-op; on an `r0` program (no rest frames at
+          // all) this is the ONLY clear, and it fires 180 ms after the last
+          // rowing frame (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`).
+          //
+          // INSIDE the committed branch, not beside `accepted` (review fix
+          // round 1, RF25). `accepted` means the RECORD GATE took it;
+          // `applyProducerCommit` returning `false` (stale / retired /
+          // second-key) means the STORE did not, and leaves `runRef`
+          // unchanged. Retiring the reading on that outcome would lose it
+          // twice over: the record does not own the actual, and the close
+          // would find no reading either — a durability failure the caller
+          // CAN see, proceeded past as if it were a success. This is the
+          // same authority the MINT side already reads
+          // (`runRef.current.actuals`), so both halves of I-B3/I-B6 now key
+          // on store truth rather than on gate truth.
+          if (
+            lastRowingFrameRef.current?.intervalIndex === event.actual.index
+          ) {
+            lastRowingFrameRef.current = null;
+          }
           update({ actuals: next.actuals });
         }
         // Whatever the record decided, the boundary the SPLIT condition was
@@ -4141,12 +4165,18 @@ export function useMonitorSession(
       }
       frameArrivalsRef.current = [];
       lastResumeAtMsRef.current = null;
-      // §5.3: DEFENSIVE. `teardown` runs after every close has already read
-      // this ref (it is the file's own single choke point for every exit
-      // path), and `runRef.current` is null by the time anything could close
-      // again — so this can never be the line that decides a partial. Here
-      // for the same reason `frameArrivalsRef` above is: nothing of this
-      // session's survives it. No mutation (RF21).
+      // §5.3: DEFENSIVE — **reachable only because nothing unmounts this
+      // hook and then closes the run it was holding.** Round 1 of this
+      // task's review corrected the reason first written here: `teardown`
+      // does NOT null `runRef`, and neither does `fail()` or the
+      // `disconnected` handler (only the RC-37 exit and `cancel()` do), so
+      // "the record is gone by now" was false. `teardown` IS the file's
+      // single choke point for every exit path, and every close that
+      // reaches a surface runs before it — but a caller that tore down
+      // with a run open and then closed it would find the reading already
+      // discarded here. Nothing does that today. Here for the same reason
+      // `frameArrivalsRef` above is: nothing of this session's survives a
+      // teardown. No mutation, because nothing can reach it (RF21).
       lastRowingFrameRef.current = null;
       partialMintRefusedRef.current.clear();
 
@@ -4511,12 +4541,21 @@ export function useMonitorSession(
     // yet, never latched by whatever the last connection's watchdog saw.
     livenessRef.current = null;
     // §5.3: DEFENSIVE, and deliberately unlike `rowingStreakRef`, which does
-    // NOT clear here at all. No supported ordering closes a record after a
-    // fresh attempt begins — `runRef.current` is null by then, so
-    // `closeRecord` returns at its own no-record guard — so this can never
-    // be the line that decides a partial. It is here for the same
-    // "a fresh connect() never inherits a stale PRIOR value" rule the
-    // comment above states, and carries no mutation (RF21).
+    // NOT clear here at all. **Reachable only because no surface offers
+    // Connect with a run still open.** Round 1 of this task's review
+    // corrected the reason first written here: `runRef.current` is NOT null
+    // by the time a fresh attempt begins — the only two sites that null it
+    // are the RC-37 exit and `cancel()`, and neither `fail()` nor the
+    // `disconnected` handler is one of them. A link lost mid-row therefore
+    // leaves an OPEN run and a HELD reading, and `endSession` has no phase
+    // guard that would stop a later close from reading it. What holds this
+    // off today is the call graph, not the state: the mid-row lost surface
+    // offers End, never Connect (`justrow/JustRow.tsx`'s own "Try again is
+    // honest here only because no row was under way"), and the
+    // interstitial's Try Again is pre-row only. **ROADMAP's R10 reconnect
+    // would arm exactly this, and then THIS CLEAR is what loses the
+    // metres** — a reconnect that resumes an open run must not run it.
+    // Carries no mutation because nothing can reach it (RF21).
     lastRowingFrameRef.current = null;
     partialMintRefusedRef.current.clear();
     hysteresisCancelRef.current?.();
@@ -5387,9 +5426,19 @@ export function useMonitorSession(
     // from the run this cancel is abandoning must never seed the next one.
     //
     // DEFENSIVE, not gated, correcting the plan's claim (this task's
-    // report, RF10): `cancel()` nulls `runRef` a few lines below and has
-    // already run `teardown()` above, so every later `closeRecord` returns
-    // at its own no-record guard and nothing can read what this clears.
+    // report, RF10): every route from `live` to a phase this function
+    // admits runs through `fail()` or the `disconnected` handler, and
+    // `cancel()` nulls `runRef` a few lines below, so every later
+    // `closeRecord` returns at its own no-record guard.
+    //
+    // DEAD TWICE OVER, in fact (review fix round 1, minor b):
+    // `teardown(armed, driver)` a few lines above has ALREADY cleared both
+    // pieces of state. Kept anyway, and deliberately: `cancel()` states
+    // its own per-run resets beside each other (`identityRef`, `freezeRef`,
+    // `rowingStreakRef`, `lastContinuityRef`, `runRef`) rather than relying
+    // on `teardown`'s list staying a superset of them, and a reader
+    // checking this function's lifetime should not have to read another
+    // function to find a line missing.
     lastRowingFrameRef.current = null;
     partialMintRefusedRef.current.clear();
     // Phase LL Task 4: same per-run lifecycle as `freezeRef`/

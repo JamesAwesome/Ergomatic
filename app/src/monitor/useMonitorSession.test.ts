@@ -13723,6 +13723,107 @@ describe("Door PR B Task 2 (§5.3, I-B6): the mint refusal, diagnosed once per i
     ]);
   });
 
+  // Review fix round 1, finding 3: the dedupe's OTHER half. "At most one
+  // entry per index per RUN" has two claims in it, and the leg above only
+  // proves the first (one per index). The second — that a SECOND run gets
+  // its own entry — is what the `partialMintRefusedRef.current.clear()` at
+  // every arming site exists for, and it is genuinely at risk: `sessionRef`
+  // and its ring are replaced only at GATT (see `connect()`'s own
+  // "NOTHING SESSION-IDENTITY-SHAPED HAPPENS HERE" block), while `program()`
+  // re-arms inside one connection. A Set that outlived its run would
+  // silence the next run's first refusal for the whole session.
+  it("a SECOND run in the SAME session gets its own entry — the dedupe is per-RUN, not per-session", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        // Run 1: rowing, its boundary, then the lag frame.
+        status(100, {
+          elapsedSeconds: 30,
+          distanceMeters: 100,
+          programIntervalIndex: 0,
+        }),
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSpm: 24,
+            avgHeartRateBpm: 142,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 200,
+        },
+        status(300, {
+          elapsedSeconds: 61,
+          distanceMeters: 204,
+          programIntervalIndex: 0,
+        }),
+        // Run 2, after a re-arm on the SAME connection: the same three
+        // beats over again.
+        status(400, {
+          elapsedSeconds: 12,
+          distanceMeters: 40,
+          programIntervalIndex: 0,
+        }),
+        {
+          atMs: 500,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 210,
+            avgSpm: 25,
+            avgHeartRateBpm: 145,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 210,
+        },
+        status(600, {
+          elapsedSeconds: 61,
+          distanceMeters: 214,
+          programIntervalIndex: 0,
+        }),
+      ],
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+    expect(result.current.actuals).toHaveLength(1);
+    tick(fake, 100);
+
+    // ONE refusal so far — run 1's.
+    const afterRunOne = (
+      JSON.parse(result.current.exportLog()) as { kind: string }[]
+    ).filter((e) => e.kind === "partial-mint-refused");
+    expect(afterRunOne).toHaveLength(1);
+
+    // The re-arm, on the SAME transport and therefore the SAME ring.
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+    expect(result.current.actuals).toHaveLength(1);
+    tick(fake, 100);
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const refusals = entries.filter((e) => e.kind === "partial-mint-refused");
+    expect(refusals).toHaveLength(2);
+    expect(refusals.map((e) => e.detail)).toStrictEqual([
+      "reason=actual-banked idx=0",
+      "reason=actual-banked idx=0",
+    ]);
+  });
+
   it("an ordinary live run, no actual banked yet: nothing is refused", async () => {
     const { result, fake } = harness({
       program: TWO_INTERVALS,
