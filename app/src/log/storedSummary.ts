@@ -98,6 +98,7 @@ import {
   NO_MONITOR_READING_SOURCE,
   partialCaption,
   partialRowLabel,
+  partialSpokenLabel,
   rowJudgment,
   targetsOnlyCaption,
   type PrescribedRow,
@@ -944,7 +945,17 @@ export function partialCloseReason(
 // nothing but the row's own `targetSplit`/`actualSplit`/`actualSource`
 // (the stored session average still feeds ONLY the AVG SPLIT hero, via
 // `buildHeroes` below, untouched).
-function buildRows(steps: StoredLogStep[]): SummaryRow[] {
+// `endedBy` is threaded in for ONE reason (door spec 2026-09-02 §6, Gate
+// 0-B decision (g)): a `link-lost` partial row speaks `last reading`
+// rather than `stopped at`, because the pair is what GOT THROUGH and the
+// silence before the close can be arbitrarily long. It reaches no other
+// decision in this function — the pair's own VISIBLE string
+// (`partialRowLabel`) is identical on every close reason, and nothing here
+// derives a number from it.
+function buildRows(
+  steps: StoredLogStep[],
+  endedBy: StoredLog["endedBy"],
+): SummaryRow[] {
   return steps.map((step, i) => {
     const index = i + 1;
     const elapsed = measuredElapsedSeconds(step);
@@ -966,6 +977,8 @@ function buildRows(steps: StoredLogStep[]): SummaryRow[] {
       };
       const partial = partialRowLabel(step);
       if (partial !== undefined) row.partialLabel = partial;
+      const spoken = partialSpokenLabel(step, endedBy);
+      if (spoken !== undefined) row.partialSpoken = spoken;
       return row;
     }
     const timeLabel = fmtDuration(elapsed / 60);
@@ -1180,7 +1193,7 @@ export function historyChipWord(row: {
 export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const meta = buildMeta(row);
   const heroes = buildHeroes(row);
-  const rows = buildRows(row.steps);
+  const rows = buildRows(row.steps, row.endedBy);
   const caption = partialCaption(rows, row.endedBy) ?? targetsOnlyCaption(rows);
   const readBack = buildReadBack(row);
   const closeLine = buildCloseLine(row);

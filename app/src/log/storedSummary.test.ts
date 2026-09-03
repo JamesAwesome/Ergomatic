@@ -2161,3 +2161,48 @@ describe("buildStoredSummary's caption — the link-lost sentence, by precedence
     expect(view.caption).toBe("INTERVAL 1 · LAST READING BEFORE THE LINK WENT");
   });
 });
+
+describe("buildRows — the spoken form of the pair, keyed on the stored close reason (§6, Gate 0-B decision (g))", () => {
+  it("a `rower` row speaks `stopped at`; the SAME steps on a `link-lost` row speak `last reading`", () => {
+    // The stored door reads its close reason off the persisted row, so
+    // this is where a saved link-lost piece proves it still says what got
+    // THROUGH months later — the live door's own leg is in
+    // `summaryModel.test.ts`, and both call one producer.
+    const rower = buildStoredSummary(tropicalRow("rower")).rows[2]!;
+    const lost = buildStoredSummary(tropicalRow("link-lost")).rows[2]!;
+    expect(asPrescribed(rower).partialSpoken).toBe(
+      "stopped at 250 m after 1:03",
+    );
+    expect(asPrescribed(lost).partialSpoken).toBe(
+      "last reading 250 m after 1:03",
+    );
+  });
+
+  it("a TIME step speaks metres first even though it SHOWS the clock first", () => {
+    const rows = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "rower",
+        steps: [
+          {
+            label: "3:00 @ 6k",
+            seconds: 180,
+            targetSplit: 120,
+            partialMeters: 480,
+            partialSeconds: 130,
+          },
+        ],
+      }),
+    ).rows;
+    expect(asPrescribed(rows[0]).partialLabel).toBe("2:10 · 480 m");
+    expect(asPrescribed(rows[0]).partialSpoken).toBe(
+      "stopped at 480 m after 2:10",
+    );
+  });
+
+  it("an unreached step carries no spoken form at all", () => {
+    const rows = buildStoredSummary(tropicalRow("rower")).rows;
+    expect("partialSpoken" in asPrescribed(rows[3])).toBe(false);
+  });
+});

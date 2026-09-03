@@ -270,8 +270,12 @@ export interface MeasuredRow {
 }
 
 /** A prescribed (unmeasured) row (§2E: index/distance-duration/target-pace/
- *  offset/`—`). See this module's header for why the offset fragment is
- *  not split out of `label`. */
+ *  offset, then — door spec (2026-09-02) §5.1, Gate 0-B decision (a) — an
+ *  optional in-flight PAIR cell, and always the `—`). SIX cells, not five:
+ *  the pair is an EXTRA cell in front of the dash, never a replacement for
+ *  it, so every unmeasured row still ends on the same mark. See this
+ *  module's header for why the offset fragment is not split out of
+ *  `label`. */
 export interface PrescribedRow {
   measured: false;
   index?: number;
@@ -292,6 +296,28 @@ export interface PrescribedRow {
    *  (`docs/TESTING.md` §3's `vitest/prefer-strict-equal`), which
    *  distinguishes an absent key from a present-and-undefined one. */
   partialLabel?: string;
+  /** Door spec (2026-09-02) §6, Gate 0-B decision (g), APPROVED: the same
+   *  pair as a screen reader says it, lead-in verb included — `stopped at
+   *  250 m after 1:03`, or `last reading 250 m after 1:03` on a
+   *  `link-lost` close. `partialSpokenLabel` below is the ONE producer and
+   *  both builders call it, exactly as they do for `partialLabel`.
+   *
+   *  A SECOND FIELD, not a derivation of `partialLabel`, for two reasons
+   *  the renderer cannot recover on its own. (1) The middle dot carries no
+   *  meaning aloud, so the spoken form spells the pair out with `after`.
+   *  (2) The VISIBLE order flips by interval kind (decision (b): a time
+   *  interval leads with the clock) while the SPOKEN order never does —
+   *  "stopped at 2:10 after 480 m" says the metres are a duration. The two
+   *  orders are deliberately independent; `summaryModel.test.ts` has the
+   *  leg that stops one being re-derived from the other.
+   *
+   *  The renderer APPENDS this to `, not measured` rather than replacing
+   *  it: the accessible name must not claim more than the visible row
+   *  does, and the visible row still ends on the dash (decision (a)).
+   *
+   *  ASSIGNED CONDITIONALLY, same `toStrictEqual` reasoning as
+   *  `partialLabel` above. */
+  partialSpoken?: string;
 }
 
 export type SummaryRow = MeasuredRow | PrescribedRow;
@@ -300,9 +326,28 @@ export interface SummaryModel {
   meta: SummaryMeta;
   heroes: SummaryHeroes;
   rows: SummaryRow[];
-  /** §2E: `TARGETS ONLY · NOTHING MEASURED`, present only when literally no
-   *  row carries a measurement (R-E, verbatim: "appears only when NO row
-   *  carries a measurement"). */
+  /** The one centred line under the interval table. TWO producers now,
+   *  resolved by PRECEDENCE — never stacked, and never more than one
+   *  element (door spec 2026-09-02 §6, Gate 0-B decision (c), APPROVED):
+   *
+   *  1. `partialCaption` — `INTERVAL N · LAST READING BEFORE THE LINK
+   *     WENT`, on a `link-lost` close whose rows carry an in-flight pair.
+   *  2. `targetsOnlyCaption` — §2E's `TARGETS ONLY · NOTHING MEASURED`
+   *     (R-E, verbatim: "appears only when NO row carries a measurement").
+   *
+   *  Both callers write `partialCaption(...) ?? targetsOnlyCaption(rows)`,
+   *  so (1) REPLACES (2) wherever both would fire — a single-interval
+   *  link-lost piece measures nothing, so they collide in the very same
+   *  slot, and `TARGETS ONLY · NOTHING MEASURED` is arguably false once a
+   *  reading is on the row.
+   *
+   *  SUPERSEDED, and stated so rather than left to be inferred: this
+   *  comment used to read "present only when literally no row carries a
+   *  measurement". That is FALSE as of §5 — a five-interval link-lost
+   *  model with two MEASURED rows and a partial on the third carries a
+   *  caption (`summaryModel.test.ts`'s Tropical Wave leg). The R-E
+   *  sentence still governs producer (2) alone, quoted above where it
+   *  applies. */
   caption?: string;
   /** PR #248's round-1 review recommended suppression ("My recommendation
    *  is to suppress the completion eyebrow"), implemented here, then
@@ -680,6 +725,38 @@ export function partialRowLabel(
   return step.seconds === undefined
     ? `${metersLabel} · ${clockLabel}`
     : `${clockLabel} · ${metersLabel}`;
+}
+
+/** Door spec (2026-09-02) §6, Gate 0-B decision (g), APPROVED — the pair
+ *  as a screen reader says it, and the ONE place that decides its wording.
+ *
+ *  TWO FORMS, and the discriminant is the LINK, not the rower. On a
+ *  `link-lost` close the pair is what GOT THROUGH, not where the rower got
+ *  to: `endSession`'s `linkGone` includes frame silence, so the reading can
+ *  be arbitrarily old and `stopped at` would assert something the record
+ *  cannot support. That row says `last reading` instead, reading the same
+ *  way the caption under the table does (`partialCaption` above). Every
+ *  other close — and an absent one — says `stopped at`.
+ *
+ *  ALLOWLIST ON THE LINK, NEVER A NEGATION OF `rower`: the input admits
+ *  `interrupted` and `finished` as well as the four wire closes, so a
+ *  `!== "rower"` gate would speak `last reading` for four reasons that
+ *  never lost anything.
+ *
+ *  METRES FIRST ON BOTH INTERVAL KINDS, unlike `partialRowLabel` above,
+ *  whose visible order flips with the target's own quantity (decision (b)).
+ *  Aloud, "480 m after 2:10" is the English one; "2:10 after 480 m" says
+ *  the metres are a duration. The dot goes too — it carries no meaning
+ *  spoken, which is decision (g)'s own reason for spelling the pair out. */
+export function partialSpokenLabel(
+  step: Pick<LogStep, "partialMeters" | "partialSeconds">,
+  endedBy: (CloseReason | "interrupted") | null | undefined,
+): string | undefined {
+  const meters = step.partialMeters;
+  const seconds = step.partialSeconds;
+  if (meters === undefined || seconds === undefined) return undefined;
+  const verb = endedBy === "link-lost" ? "last reading" : "stopped at";
+  return `${verb} ${Math.round(meters)} m after ${fmtDuration(seconds / 60)}`;
 }
 
 /** How many of these readings the rule would keep. The connected
@@ -1068,6 +1145,8 @@ function monitorWorkRows(run: MonitorRun): SummaryRow[] {
       };
       const partial = partialRowLabel(step);
       if (partial !== undefined) row.partialLabel = partial;
+      const spoken = partialSpokenLabel(step, run.endedBy);
+      if (spoken !== undefined) row.partialSpoken = spoken;
       return row;
     }
     // isMonitorRowMeasurable already proved actualSeconds is defined and

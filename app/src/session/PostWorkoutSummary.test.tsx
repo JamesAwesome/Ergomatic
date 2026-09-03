@@ -1181,6 +1181,7 @@ function partialModel(overrides: Partial<SummaryModel> = {}): SummaryModel {
         durationLabel: "500 m",
         targetPaceLabel: "1:52.0",
         partialLabel: "250 m · 1:03",
+        partialSpoken: "stopped at 250 m after 1:03",
       },
       {
         measured: false,
@@ -1265,17 +1266,50 @@ describe("PostWorkoutSummary — the in-flight pair on a partial step row (§5.1
     expect(rowByIndex(1).querySelector(".summary-row-pace")).not.toBeNull();
   });
 
-  it("the accessible name speaks the pair instead of `not measured` (Gate 0-B decision (g))", () => {
+  it("the accessible name KEEPS `not measured` and appends the pair, spelled out (Gate 0-B decision (g), both forms)", () => {
+    // `not measured` is kept, matching the dash the sighted row keeps
+    // under decision (a) — the accessible name must not claim more than
+    // the visible row does. And the middle dot carries no meaning aloud,
+    // so the spoken form spells the two numbers out with `after` instead.
     renderSummary({ model: partialModel() });
     expect(
       screen.getByRole("listitem", {
-        name: "Interval 3: 500 m @ 2k +2, stopped at 250 m · 1:03",
+        name: "Interval 3: 500 m @ 2k +2, not measured, stopped at 250 m after 1:03",
       }),
     ).toBeInTheDocument();
     // The unreached row's own name is untouched.
     expect(
       screen.getByRole("listitem", {
         name: "Interval 4: 500 m @ 2k +2, not measured",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("a LINK-LOST partial row speaks `last reading`, not `stopped at` — the pair is what GOT THROUGH, not where the rower got to", () => {
+    // The second form of decision (g), and it reads the same way the
+    // caption under the table does (`LAST READING BEFORE THE LINK WENT`):
+    // on a link-lost close the silence before the close can be
+    // arbitrarily long, so `stopped at` would assert something the record
+    // cannot support.
+    renderSummary({
+      model: partialModel({
+        rows: [
+          {
+            measured: false,
+            index: 3,
+            label: "500 m @ 2k +2",
+            durationLabel: "500 m",
+            targetPaceLabel: "1:52.0",
+            partialLabel: "250 m · 1:03",
+            partialSpoken: "last reading 250 m after 1:03",
+          },
+        ],
+        caption: "INTERVAL 3 · LAST READING BEFORE THE LINK WENT",
+      }),
+    });
+    expect(
+      screen.getByRole("listitem", {
+        name: "Interval 3: 500 m @ 2k +2, not measured, last reading 250 m after 1:03",
       }),
     ).toBeInTheDocument();
   });
@@ -1291,13 +1325,14 @@ describe("PostWorkoutSummary — the in-flight pair on a partial step row (§5.1
             durationLabel: "500 m",
             targetPaceLabel: "1:52.0",
             partialLabel: "0 m · 0:00",
+            partialSpoken: "stopped at 0 m after 0:00",
           },
         ],
       }),
     });
     expect(
       screen.getByRole("listitem", {
-        name: "Interval 1: 500 m @ 2k +2, stopped at 0 m · 0:00",
+        name: "Interval 1: 500 m @ 2k +2, not measured, stopped at 0 m after 0:00",
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("0 m · 0:00")).toBeInTheDocument();

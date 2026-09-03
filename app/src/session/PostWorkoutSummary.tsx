@@ -249,13 +249,20 @@ function IntervalRow({ row }: { row: SummaryRow }) {
   // carries that. Decision (f): no pace, split or rate cell, ever, because
   // the pair's clock is ELAPSED and a quotient of the two would be a split
   // nobody rowed.
+  //
+  // Decision (g), APPROVED, both forms: `, not measured` is KEPT and the
+  // spoken pair is APPENDED to it — "the accessible name should not claim
+  // more than the visible row does", and the visible row still ends on the
+  // dash. The wording itself (`stopped at …` vs a link-lost row's `last
+  // reading …`, and the `after` that replaces the meaningless-aloud middle
+  // dot) is decided ONCE, in `summaryModel.ts`'s `partialSpokenLabel`;
+  // this template chooses no words of its own and derives nothing from
+  // `partialLabel`, whose visible order flips by interval kind.
   return (
     <li
       className="summary-row"
-      aria-label={`Interval ${row.index}: ${row.label}${
-        row.partialLabel === undefined
-          ? ", not measured"
-          : `, stopped at ${row.partialLabel}`
+      aria-label={`Interval ${row.index}: ${row.label}, not measured${
+        row.partialSpoken === undefined ? "" : `, ${row.partialSpoken}`
       }`}
     >
       <span className="summary-row-index">{row.index}</span>
