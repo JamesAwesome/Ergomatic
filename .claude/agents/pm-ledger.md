@@ -4514,7 +4514,9 @@ does not match these numbers._
   PR #287's spec was YAGNI, he accepted the PM/controller recommendation by
   saying "Log the decision". The design and rendered Gate 0 remain research;
   their earlier approval does not authorize implementation or make reconnect
-  a Wave F exit gate. ROADMAP owns the deferred item and its reopen trigger.
+  a Wave F exit gate. At James's follow-up request, ROADMAP's explicit Icebox
+  owns the item and its reopen trigger. Wave F has no scheduled implementation
+  left; final closeout review is distinct from building another feature.
 - **Evidence of need is different from evidence that a design is safe.**
   `docs/monitor/sessions/walk-2026-08-28-codebase-audit/README.md` records
   a deliberate Bluetooth-off test that kept one completed interval for save;

@@ -120,7 +120,7 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 | Wave  | What it is                  | Size | Tester sees                                 |
 | ----- | --------------------------- | ---- | ------------------------------------------- |
-| **F** | Lifecycle: stop losing rows | L    | Yes, and it is the most valuable thing here |
+| **F** | Lifecycle closeout          | —    | Shipped; final evidence/review only         |
 | **A** | The front door              | L    | Yes, immediately                            |
 | **D** | The toolbox                 | M    | Nothing                                     |
 | **B** | Backups and telemetry       | M    | Nothing                                     |
@@ -444,11 +444,12 @@ fixed.
 
 ## Wave F — Lifecycle: the app stops losing rows
 
-**Status:** OPEN — Correct Resume is deferred by James's 2026-09-03
-build-now ruling; see its single deferred owner under "After the strangers".
-It is no longer a Wave F implementation or exit requirement. This ruling
-does not itself close the phase: the remaining phase-close evidence and
-review must be reconciled against the narrowed exit below.
+**Status:** IMPLEMENTATION COMPLETE; final closeout review pending.
+Correct Resume is in the Icebox, not this wave's implementation or exit.
+The pocketed-phone umbrella's three child items are resolved below; no
+additional implementation is hidden in its former unchecked box. The
+phase-close evidence still needs reconciliation against the narrowed exit
+before the phase is archived; this status does not claim that review passed.
 **L.** Absorbs the rest of Phase LM, whose PR 1 shipped as #198 / v0.24.0.
 
 **Goal:** preserve received work across pocketing, locking and link loss,
@@ -459,9 +460,14 @@ the same row after that drop is deferred.
 hardware in August. The shipped fixes below address that evidence; they do not
 establish demand for same-row Bluetooth reattachment.
 
-- [ ] **The pocketed-phone row: a whole piece rowed and nothing kept.
-      RE-DIAGNOSED at the phase-open anchor pass, 2026-08-28.** The outcome is
-      real (James's row, walk leg 4, v0.25.0 build 759, production), but this
+- [x] **The pocketed-phone row: a whole piece rowed and nothing kept.**
+      **WORK ITEMS RESOLVED:** live program-drop handling shipped in #248;
+      the resume edge closed as unreproduced/instrumented in #280 after
+      #267's instrument; #258 replaced the unrecoverable ring with history.
+      This resolves the three child items, not the unproven original causal
+      chain. **Historical diagnosis from the phase-open anchor, 2026-08-28:**
+      the outcome is real (James's row, walk leg 4, v0.25.0 build 759,
+      production), but this
       item's original mechanism — "stays `phase=ready`, opens no record, End
       silently discards" — was FALSE by its own cited ring: the record OPENED
       at machine elapsed 43.04 s (`rowing-active-fallback`'s single emit site
@@ -644,13 +650,9 @@ establish demand for same-row Bluetooth reattachment.
       **TICKED 2026-09-03 — nothing remains under this item.** The column
       shipped in #268; PR A shipped the stored WORD in #276 (`e6f456ce`);
       PR B ships the stored NUMBER and is the last thing this item scoped.
-      Two things people have asked about here are NOT owed by this item and
-      have their own rows: the spec's §4 riders, all three ticked under PR A
-      above, and **correct resume**, which now also owns what a resumed run
-      does with a held in-flight reading. **The only thing still to write in
-      is PR B's number**, in the two places already marked for it — the PR A
-      sub-item's closing line just above, and the in-flight metres item just
-      below — and nowhere else.
+      The spec's §4 riders are also resolved under PR A. Correct Resume is
+      separate, iceboxed work; it does not leave an obligation under this
+      delivered item. PR B's number is recorded above and below as #279.
 
 - [x] **The in-flight interval's metres are discarded on a mid-row link loss.**
       **DONE — door PR B (branch `wave-f-door-b`), 2026-09-03.** A close that
@@ -2288,10 +2290,10 @@ Each needs erg time or a deliberate recording session.
 
 ---
 
-# After the strangers
+# Icebox
 
-Deferred, not killed. One line and one trigger each. No exits and no sizes — a
-trigger is the whole entry.
+Not scheduled in any wave. Reconsider only when the recorded trigger fires;
+an iceboxed item is not a phase-close requirement.
 
 - **Correct Resume — deferred by James, 2026-09-03.** **Trigger:** a
   diagnostic-backed, naturally occurring authoritative mid-row link drop
@@ -2302,6 +2304,13 @@ trigger is the whole entry.
   `docs/superpowers/specs/2026-09-03-correct-resume-design.md` and Gate 0 are
   retained research, not implementation authority; re-scope and approve afresh
   at the trigger. Not gated on Wave A finishing if the incident arrives sooner.
+
+---
+
+# After the strangers
+
+Deferred, not killed. One line and one trigger each. No exits and no sizes — a
+trigger is the whole entry.
 - **Phase PS — personal stats.** The app's stated purpose, and it matters most
   at day 30 and least at day 1: a stranger has no history to trend. **Trigger:**
   a tester has enough history for a trend to be honest. Carries a live hazard

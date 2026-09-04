@@ -5,7 +5,7 @@
 James accepted the PM's build-now recommendation on 2026-09-03 and asked to
 "Log the decision". Correct Resume is removed from Wave F's implementation and
 exit requirements. Its single backlog owner and reopen trigger are in
-`ROADMAP.md` under "After the strangers"; the rationale and accepted cost are
+`ROADMAP.md` under "Icebox"; the rationale and accepted cost are
 in `.claude/agents/pm-ledger.md`, "Correct Resume: need before mechanism".
 
 The proposal below is retained research, not shipped behavior, a binding
