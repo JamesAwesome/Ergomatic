@@ -1,7 +1,18 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023"],
+    // `"DOM"` is here for the TYPE-CHECK pass only, and
+    // `tsconfig.server.build.json` pins it back off for the pass that
+    // actually compiles the shipped server. This config includes
+    // `server/**/*.test.ts`, and
+    // `server/routes/concept2Send.integration.test.ts` imports the
+    // CLIENT's own send predicates and link parser at runtime (RF24: the
+    // one gate that starts upstream of the producer) — the hop it drags in,
+    // `src/api/useConcept2Link.ts`, listens on `window`/`document`. The
+    // alternative was splitting that hook into a shape module and a hook
+    // module purely to satisfy a compiler flag; the pin below buys the same
+    // safety without the split.
+    "lib": ["ES2023", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "skipLibCheck": true,
