@@ -25,10 +25,12 @@ Correct Resume remains deferred. This is not fast path: a mistake could lose
 a record. A non-TRIAD full cycle is possible only while claim/retire identity,
 timing and reasons, successful-save behavior and recorded values stay
 unchanged. Re-scope before implementation if that boundary cannot hold.
-The phase remains OPEN. Task 1 implementation and Task 2 browser evidence,
-including the two-orientation recovery matrix and initial landscape safe exit,
-are complete; the proposed phone acceptance walk, phase-close review and any
-merge decision remain pending James. Browser proof does not replace that native
+The phase remains OPEN. Task 1 and Task 2 reviews are complete; whole-branch
+review requires a combined fix for malformed programmed measurements,
+conflicting designated-test identity and deferred CSS/comment scope. The
+two-orientation recovery matrix and initial landscape safe-exit evidence are
+recorded. The proposed phone acceptance walk, phase-close judgment and any
+merge decision remain pending James. Browser proof does not replace native
 acceptance.
 
 The warning's new **View unsaved** action navigates through the same cancel
@@ -71,6 +73,12 @@ existing explicit-tap clipboard/failure idiom in
 `app/src/workout/connected/ConnectionLogSheet.tsx:120`; no new storage or
 platform mechanism. This is a named limitation approved by James,
 not a claim that every legacy record becomes saveable.
+Admission checks the existing downstream-required numeric fields as numbers,
+including required members of a present programmed summary-total object.
+Missing, null or coercible string/boolean values are not measurements merely
+because a builder renders them without throwing. Preserve legitimate optional
+absence and existing arithmetic; reject malformed inputs rather than repair
+them.
 
 Two more anchor findings are in this same work, not follow-up deferrals:
 
@@ -132,7 +140,12 @@ library log door. Invalid/missing source or key cannot select a default.
 
 The library is optional context for recovery, not the record's identity.
 Unknown `isGlobal`, expected pain and designated-test status stay unknown;
-do not award a test result from title alone. Existing plan-fetch/save rules
+do not award a test result from title alone. A positive designated-test offer
+uses the linked library row's complete global/title identity and requires its
+title to agree with the retained session title. Both disagreement directions
+refuse the offer; the retained display and POST title do not change. This
+conservative compatibility check can withhold an offer after a genuine
+designated row is renamed, but ordinary saving remains available. Existing plan-fetch/save rules
 and successful-save retirement remain in the shared form. The phone-timer
 summary likewise must not block review on a missing draft plus a stalled
 library request (`LogSession.tsx:1336`); use its matching draft's type when
