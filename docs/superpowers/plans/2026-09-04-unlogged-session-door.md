@@ -39,15 +39,15 @@ Baseline: product code at `c5015c2e`; opening/approval docs precede this plan.
 
 ## Lifetime contract
 
-| State | Mint | Clear / survival |
-| --- | --- | --- |
-| URL source + startedAt | clicked Today row | survives reload; each route mount validates exactly that source/key; changed query remounts |
-| selected monitor entry | hydrated key-filtered read | immutable mount snapshot; existing claim and key/revision retirement; different current key never consumed |
-| selected timer run | key-matched load | immutable mount snapshot; success/discard may clear only matching current startedAt; do not clear a replacement draft |
-| missing type selection | explicit change | form-local; user choice wins later fetch; reset on source/key remount |
-| copy feedback | Copy recording press | form-local success/failure, reset on remount; no storage effect |
-| discard arm | existing useStagedDiscard | existing blur/timeout rules; no state copy to parent fetch branches |
-| warning stage/count | existing guard press | clear on Cancel/View; View also discards Connect's staged authorization |
+| State                  | Mint                       | Clear / survival                                                                                                      |
+| ---------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| URL source + startedAt | clicked Today row          | survives reload; each route mount validates exactly that source/key; changed query remounts                           |
+| selected monitor entry | hydrated key-filtered read | immutable mount snapshot; existing claim and key/revision retirement; different current key never consumed            |
+| selected timer run     | key-matched load           | immutable mount snapshot; success/discard may clear only matching current startedAt; do not clear a replacement draft |
+| missing type selection | explicit change            | form-local; user choice wins later fetch; reset on source/key remount                                                 |
+| copy feedback          | Copy recording press       | form-local success/failure, reset on remount; no storage effect                                                       |
+| discard arm            | existing useStagedDiscard  | existing blur/timeout rules; no state copy to parent fetch branches                                                   |
+| warning stage/count    | existing guard press       | clear on Cancel/View; View also discards Connect's staged authorization                                               |
 
 No additional session refs, counters, module caches or storage keys are authorized.
 
@@ -112,7 +112,7 @@ describe("source-bound review navigation", () => {
 
 Run `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/session/reviewSelector.test.ts` from `app/`; before implementation the valued-source tests must fail on missing behavior. Use a typed null/empty shell if module-resolution failure would obscure the behavioral RED.
 
-Change the old Today completed-programmed omission test into a routed recovery regression: use its existing real-library-derived monitor fixture, render Today with the actual review route, select Review & save, assert retained title and PM5 summary, no manual form and no POST. Run the focused case before changing production; the absent action must make it RED. Extend that same component harness one behavior at a time using the acceptance table below; each gets its own RED/GREEN cycle, not a later coverage-only sweep.
+Change the old Today completed-programmed omission test into a routed recovery regression: replace its minimal empty-interval/missing-seed fixture with real library → draft/buildRun → compiled program/buildLogSeed data, render Today with the actual review route, select Review & save, assert retained title and PM5 summary, no manual form and no POST. Run the focused case before changing production; the absent action must make it RED. Extend that same component harness one behavior at a time using the acceptance table below; each gets its own RED/GREEN cycle, not a later coverage-only sweep.
 
 - [ ] **Step 2: Add the source selector.**
 
@@ -174,21 +174,21 @@ At guard staging, count completed timer plus current monitor records for singula
 
 - [ ] **Step 6: Finish focused coverage and commit the implementation.**
 
-| Fixture / ordering | Independent observable |
-| --- | --- |
-| completed / interrupted programmed PM5 | visible Today row → PM5 summary, frozen actuals; closed completedAt unchanged |
-| cold hydrated or memory-only current monitor | same-process route works; durable cold mount works without visiting Today |
-| complete / live workout timer; Just Row timer | complete review uses selected record, live offers Resume without ending |
-| distinct timer and monitor Just Rows, each selected | that source's independently pinned duration/title; legacy newer-completion route unchanged |
-| library pending/error/deleted; null id | summary visible; missing type required; chosen AT posts AT even after late library O2 |
-| missing/invalid seed or malformed nested summary input | full selected JSON shown; no summary/manual fallback or POST; copy success/failure keeps recording |
-| source/key absent, empty, duplicate, replaced before mount or changed query | Recording unavailable or newly selected source, never previous/other snapshot |
-| direct URL to open programmed/Just Row monitor; refused Today close | unavailable, no summary claim/POST/automatic close; retained entry intact |
-| every unrelated Today loading/error branch | same local recovery usable; Retry cannot reset discard arm |
-| each warning View; singular and both retained | Today reached; retained bytes unchanged; Connect staged authorization empty |
-| failed save then retry | error visible and record retained, success retires selected once; different-source and newer-key record survive |
-| two-tap row/read-only/summary discard | selected record only; no POST; first tap and blur never discard |
-| known/unknown global metadata and plan loading/error | existing plan semantics; no invented designated-test offer |
+| Fixture / ordering                                                          | Independent observable                                                                                          |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| completed / interrupted programmed PM5                                      | visible Today row → PM5 summary, frozen actuals; closed completedAt unchanged                                   |
+| cold hydrated or memory-only current monitor                                | same-process route works; durable cold mount works without visiting Today                                       |
+| complete / live workout timer; Just Row timer                               | complete review uses selected record, live offers Resume without ending                                         |
+| distinct timer and monitor Just Rows, each selected                         | that source's independently pinned duration/title; legacy newer-completion route unchanged                      |
+| library pending/error/deleted; null id                                      | summary visible; missing type required; chosen AT posts AT even after late library O2                           |
+| missing/invalid seed or malformed nested summary input                      | full selected JSON shown; no summary/manual fallback or POST; copy success/failure keeps recording              |
+| source/key absent, empty, duplicate, replaced before mount or changed query | Recording unavailable or newly selected source, never previous/other snapshot                                   |
+| direct URL to open programmed/Just Row monitor; refused Today close         | unavailable, no summary claim/POST/automatic close; retained entry intact                                       |
+| every unrelated Today loading/error branch                                  | same local recovery usable; Retry cannot reset discard arm                                                      |
+| each warning View; singular and both retained                               | Today reached; retained bytes unchanged; Connect staged authorization empty                                     |
+| failed save then retry                                                      | error visible and record retained, success retires selected once; different-source and newer-key record survive |
+| two-tap row/read-only/summary discard                                       | selected record only; no POST; first tap and blur never discard                                                 |
+| known/unknown global metadata and plan loading/error                        | existing plan semantics; no invented designated-test offer                                                      |
 
 Use real library → draft/compiled program fixtures; unsupported shapes are explicit variants of those fixtures. Query visible roles/names, assert independent payload literals, not expectations recomputed with the production summary builder. Per-file HTML coverage is authoritative. Every new behavioral test needs a targeted self-mutation recorded with failing and restored passing results. Commit real changes before temporary mutation probes; restore surgically with apply_patch, never reset/checkout/stash.
 
