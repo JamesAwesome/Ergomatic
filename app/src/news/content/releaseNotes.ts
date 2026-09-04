@@ -9,8 +9,9 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     // #292 is the item below. #290's Concept2 link/send surfaces stay dark
     // behind C2_LINK_ENABLED (set-but-empty in production at release), and
     // its stored completion timestamp has no standalone rower-facing change.
-    // #291 closes Wave F's native hardware evidence in docs only. This
-    // notes/capture PR adds no behavior.
+    // #293 further gates those dark surfaces to named accounts, so it is not
+    // independently visible either. #291 closes Wave F's native hardware
+    // evidence in docs only. This notes/capture PR adds no behavior.
     version: "v0.37.0",
     date: "2026-09-04",
     items: [
