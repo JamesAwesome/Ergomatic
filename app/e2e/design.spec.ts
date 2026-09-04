@@ -10006,7 +10006,11 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
  *
  *  Null for a selector that matches nothing OR an element with a zero box,
  *  which is `boundingBox()`'s own contract ("null if the element is not
- *  visible") — the callers' "did the fixture render" throws still bite. */
+ *  visible") — the callers' "did the fixture render" throws still bite. And
+ *  it THROWS on more than one match, because that is the other half of what
+ *  a Locator was giving these callers for free: Playwright's strict mode
+ *  fails a `boundingBox()` whose selector resolves to two elements, and a
+ *  bare `querySelector` would have silently measured the first. */
 interface DesignBox {
   x: number;
   y: number;
@@ -10021,8 +10025,15 @@ async function boxesOf(
   return page.evaluate(
     (sels) =>
       sels.map((sel) => {
-        const el = document.querySelector(sel);
-        if (el === null) return null;
+        const found = document.querySelectorAll(sel);
+        if (found.length > 1) {
+          throw new Error(
+            `boxesOf: "${sel}" matched ${String(found.length)} elements — ` +
+              `strict mode, same as a Playwright locator`,
+          );
+        }
+        const el = found[0];
+        if (el === undefined) return null;
         const r = el.getBoundingClientRect();
         if (r.width === 0 && r.height === 0) return null;
         return { x: r.x, y: r.y, width: r.width, height: r.height };
