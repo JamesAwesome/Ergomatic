@@ -172,6 +172,7 @@ afterEach(async () => {
   await act(async () => {});
   native.reset();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   sessionStorage.clear();
 });
@@ -283,6 +284,55 @@ async function activate() {
 }
 
 describe("GateMinusOneProbe", () => {
+  it("prefills the approved device metadata and arms the sample without operator typing", async () => {
+    vi.stubEnv(
+      "VITE_NFC_GATE_MINUS_ONE_PREFILL",
+      JSON.stringify({
+        iphone: { model: "iPhone 17 Pro", iosVersion: "26.6.1" },
+        pm5: {
+          model: "D/E",
+          firmware: "459.069",
+          advertisedNameShown: "PM5 432331249 Row",
+        },
+      }),
+    );
+    const { default: GateMinusOneProbe } = await import("./GateMinusOneProbe");
+
+    render(<GateMinusOneProbe />);
+
+    expect(screen.getByLabelText("iPhone model")).toHaveValue("iPhone 17 Pro");
+    expect(screen.getByLabelText("iOS version")).toHaveValue("26.6.1");
+    expect(screen.getByLabelText("PM5 model")).toHaveValue("D/E");
+    expect(screen.getByLabelText("PM5 firmware")).toHaveValue("459.069");
+    expect(screen.getByLabelText("PM5 advertised name")).toHaveValue(
+      "PM5 432331249 Row",
+    );
+    expect(runButton()).toBeEnabled();
+  });
+
+  it.each([
+    ["malformed", "{"],
+    [
+      "partial",
+      JSON.stringify({
+        iphone: { model: "iPhone 17 Pro", iosVersion: "26.6.1" },
+        pm5: { model: "D/E", firmware: "459.069" },
+      }),
+    ],
+  ])("ignores %s diagnostic prefill data", async (_label, value) => {
+    vi.stubEnv("VITE_NFC_GATE_MINUS_ONE_PREFILL", value);
+    const { default: GateMinusOneProbe } = await import("./GateMinusOneProbe");
+
+    render(<GateMinusOneProbe />);
+
+    expect(screen.getByLabelText("iPhone model")).toHaveValue("");
+    expect(screen.getByLabelText("iOS version")).toHaveValue("");
+    expect(screen.getByLabelText("PM5 model")).toHaveValue("");
+    expect(screen.getByLabelText("PM5 firmware")).toHaveValue("");
+    expect(screen.getByLabelText("PM5 advertised name")).toHaveValue("");
+    expect(runButton()).toBeDisabled();
+  });
+
   it("retains the radio lease until a cancelled activity query settles", async () => {
     const user = await renderReadyProbe();
     await user.click(runButton());

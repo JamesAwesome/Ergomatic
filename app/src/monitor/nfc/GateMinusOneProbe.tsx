@@ -91,6 +91,39 @@ const object = (value: unknown): Record<string, unknown> | null =>
     : null;
 const nonempty = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
+function readPrefill(): Metadata | null {
+  const raw = import.meta.env.VITE_NFC_GATE_MINUS_ONE_PREFILL;
+  if (!nonempty(raw)) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const value = object(parsed);
+    const iphone = object(value?.iphone);
+    const pm5 = object(value?.pm5);
+    if (
+      !iphone ||
+      !pm5 ||
+      !nonempty(iphone.model) ||
+      !nonempty(iphone.iosVersion) ||
+      !nonempty(pm5.model) ||
+      !nonempty(pm5.firmware) ||
+      !nonempty(pm5.advertisedNameShown)
+    )
+      return null;
+    return {
+      iphone: {
+        model: iphone.model.trim(),
+        iosVersion: iphone.iosVersion.trim(),
+      },
+      pm5: {
+        model: pm5.model.trim(),
+        firmware: pm5.firmware.trim(),
+        advertisedNameShown: pm5.advertisedNameShown.trim(),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
 function readReload(): ReloadMetadata | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -159,18 +192,20 @@ function newReceipt(metadata: Metadata): Omit<NfcGateReceiptV1, "verdict"> {
 
 export default function GateMinusOneProbe() {
   const [initialReload] = useState(readReload);
+  const [prefill] = useState(readPrefill);
+  const initialMetadata = initialReload ?? prefill;
   const [iphoneModel, setIphoneModel] = useState(
-    initialReload?.iphone.model ?? "",
+    initialMetadata?.iphone.model ?? "",
   );
   const [iosVersion, setIosVersion] = useState(
-    initialReload?.iphone.iosVersion ?? "",
+    initialMetadata?.iphone.iosVersion ?? "",
   );
-  const [pm5Model, setPm5Model] = useState(initialReload?.pm5.model ?? "");
+  const [pm5Model, setPm5Model] = useState(initialMetadata?.pm5.model ?? "");
   const [pm5Firmware, setPm5Firmware] = useState(
-    initialReload?.pm5.firmware ?? "",
+    initialMetadata?.pm5.firmware ?? "",
   );
   const [advertisedName, setAdvertisedName] = useState(
-    initialReload?.pm5.advertisedNameShown ?? "",
+    initialMetadata?.pm5.advertisedNameShown ?? "",
   );
   const [receipt, setReceipt] = useState<Omit<
     NfcGateReceiptV1,
