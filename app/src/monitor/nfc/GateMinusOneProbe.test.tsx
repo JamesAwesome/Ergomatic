@@ -1080,8 +1080,12 @@ describe("GateMinusOneProbe", () => {
     await user.click(
       screen.getByRole("button", { name: "Export partial receipt" }),
     );
+    const firstSnapshotFrames = logger.mock.calls.length;
+    let automaticFrames = 0;
     logger.mockImplementation(() => {
-      throw new Error("console unavailable");
+      automaticFrames += 1;
+      if (automaticFrames > firstSnapshotFrames)
+        throw new Error("console unavailable");
     });
     await user.click(screen.getByRole("button", { name: "Reload WebView" }));
     await waitFor(() =>
@@ -1093,6 +1097,32 @@ describe("GateMinusOneProbe", () => {
     );
     expect(reload).not.toHaveBeenCalled();
     expect(native.calls).toContain("nfc-stop:attempt-a");
+    logger.mockRestore();
+  });
+
+  it("blocks a stopped-A reload when its entry snapshot cannot be framed", async () => {
+    const user = await renderReadyProbe();
+    const reload = vi.fn();
+    vi.stubGlobal("location", { reload });
+    await user.click(
+      screen.getByRole("button", { name: "Run stop-during-connect sample" }),
+    );
+    await act(async () =>
+      native.progress!({ attemptId: "attempt-a", stage: "connect" }),
+    );
+    await screen.findByRole("button", { name: "Export partial receipt" });
+    const logger = vi.spyOn(console, "info").mockImplementation(() => {});
+    await user.click(
+      screen.getByRole("button", { name: "Export partial receipt" }),
+    );
+    logger.mockImplementation(() => {
+      throw new Error("console unavailable");
+    });
+    await user.click(screen.getByRole("button", { name: "Reload WebView" }));
+    await screen.findByText(
+      "Receipt validation failed; raw or malformed evidence was not exported.",
+    );
+    expect(reload).not.toHaveBeenCalled();
     logger.mockRestore();
   });
 

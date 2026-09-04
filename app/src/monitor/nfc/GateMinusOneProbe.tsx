@@ -207,13 +207,14 @@ export default function GateMinusOneProbe() {
     restartRef.current = true;
     if (mounted.current) setRestart(true);
   }
-  function automaticExport(active: Active): boolean {
+  function automaticExport(active: Active | null): boolean {
     if (!receiptRef.current) return true;
     try {
       emitGateReceipt(receiptRef.current);
       return true;
     } catch {
-      active.automaticExportFailed = true;
+      if (active) active.automaticExportFailed = true;
+      else if (mounted.current) setStatus(EXPORT_FAILED);
       return false;
     }
   }
@@ -790,8 +791,8 @@ export default function GateMinusOneProbe() {
       restartRef.current
     )
       return;
-    if (active && !automaticExport(active)) {
-      await drain(active);
+    if (!automaticExport(active)) {
+      if (active) await drain(active);
       return;
     }
     if (active) {
@@ -809,9 +810,9 @@ export default function GateMinusOneProbe() {
     }
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(reloadReady));
-      if (active && !automaticExport(active)) {
+      if (!automaticExport(active)) {
         sessionStorage.removeItem(STORAGE_KEY);
-        await drain(active);
+        if (active) await drain(active);
         return;
       }
       if (active) activeRef.current = null;
