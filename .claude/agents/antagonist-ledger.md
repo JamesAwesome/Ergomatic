@@ -7314,3 +7314,18 @@ the two that changed the design are first, and both are mirrors.**
   enumerate the actual call chain including every refresh-and-retry arm, and
   check whether anything upstream caps the total; a per-call number is not a
   worst case.**
+
+## 2026-09-04 — Wave F exit: causal evidence beats the banner
+
+- **A live screenshot and `liveness-silence` do not prove a radio drop.**
+  The Drop ring's 7.23 s resume gap recovered before its later typed native
+  Bluetooth-disabled event. **Technique:** grade the ordered ring receipts
+  (`record-actual` → `disconnected` → `partial-written` → saved commit)
+  separately from the saved-door screenshot. The [exit walk](../../docs/monitor/sessions/walk-2026-09-04-wave-f/README.md)
+  passes for this phone and these runs; its pre-pull lock did not recover the
+  unreceived 21.1-second trace head.
+- **Zero programmed rest does not mean no `resting` status frame.** The
+  2×100 m run emitted workoutState 7 for one transition despite compiled
+  rest 0. **Technique:** prove partial eligibility from its own ordered
+  evidence—accepted prior actual, then the new interval's rowing reading,
+  then `partial-written`—not from the workout grammar.
