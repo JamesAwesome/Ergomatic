@@ -122,13 +122,15 @@ Notes:
 ## Concept2 logbook (optional, currently dark)
 
 The broker is wired on every deploy and refuses everything until the host
-`.env` says otherwise. Four variables turn it on, and a fifth says who for:
+`.env` says otherwise. Three variables turn it on, a fourth says who for, and
+a fifth picks which Concept2 it talks to:
 
 - `C2_CLIENT_ID` / `C2_CLIENT_SECRET` — the OAuth app registered at Concept2.
 - `C2_LINK_ENABLED=1` — the literal `1`, nothing else counts.
-- `C2_BASE_URL` — which Concept2 this deploy talks to. Defaults to the
-  sandbox (`https://log-dev.concept2.com`); the live logbook is
-  `https://log.concept2.com` and needs write approval first.
+- `C2_BASE_URL` — which Concept2 this deploy talks to. Does NOT turn
+  anything on: it defaults to the sandbox (`https://log-dev.concept2.com`),
+  so it is never absent. The live logbook is `https://log.concept2.com` and
+  needs write approval first.
 - `C2_ALLOWED_EMAILS` — a comma-separated list, same shape and same parser
   as `ALLOWED_EMAILS` (case-insensitive, whitespace trimmed).
   **Unset or empty means NOBODY can link, not everybody**: it is the per-user
@@ -145,9 +147,25 @@ Notes:
   (`{available:false}`), so the card is simply absent — there is no error to
   explain.
 - Like the sign-in allowlist, changes take effect on container recreate.
-- Boot warns if `C2_LINK_ENABLED=1` while the C2 list is empty — a fully
-  configured broker nobody can use is the state most likely to read as
-  working software.
+- **Removing an email DOES take the surface away**, unlike `ALLOWED_EMAILS`
+  (which gates admission only): that rower's card disappears and their sends
+  are refused at the next recreate. Their stored link and its Concept2 tokens
+  are NOT deleted by the removal — but they can still disconnect it
+  themselves, because unlink is deliberately not per-user gated (a capability
+  gate closes use, not a rower's way out). To revoke it FOR them, delete the
+  row; the account and its rows are untouched:
+  `docker exec -it ergomatic-postgres psql -U ergomatic -c "delete from concept2_links where user_id=(select id from users where email='x@y.com')"`.
+  The same container-name caveat as the sign-in section applies — run
+  `docker ps` first anywhere but the production host. Revoking Ergomatic's
+  access at Concept2's end is the rower's own action, in their Concept2
+  account settings; we have no revocation endpoint (spec V5).
+- **Read the boot log after any change to the list.** With the flag on, the
+  app prints `Concept2 per-user gate: N allowed email(s) configured`, or
+  warns that the list is empty. It never prints the addresses. `N` is the
+  number that reached the container after parsing, so it separates "the
+  variable never arrived" from "it arrived and I typo'd an address" — the
+  two failures that otherwise look identical from the outside, since both
+  end in an absent card.
 
 ## TestFlight releases
 

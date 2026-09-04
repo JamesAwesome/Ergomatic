@@ -664,15 +664,37 @@ describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
     expect(allowed.body).toMatchObject({ available: true, linked: false });
   });
 
-  it("DELETE /link: an off-list user gets 403 and their link survives", async () => {
+  // F4 ruling (fix round 1) — the ONE authed route that stays on the global
+  // check, and the reason is a product one: a capability gate closes USE,
+  // not revocation. Gating this meant an off-list rower could not disconnect
+  // their own Concept2 account, so the row and its LIVE TOKENS persisted
+  // with no self-service exit — the gate would have created the hazard it
+  // exists to bound. Reading is still gated (`GET /link` answers
+  // `{available:false}`), so the card is absent; the door out is not.
+  it("DELETE /link: an off-list user can still disconnect, and the row is really gone", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userB.id, freshLink());
     const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
 
-    const denied = await asB(request(app).delete("/api/concept2/link"));
-    expect(denied.status).toBe(403);
-    expect(denied.body).toStrictEqual({ error: "unavailable" });
-    expect(await store.getLink(userB.id)).not.toBeNull();
+    const res = await asB(request(app).delete("/api/concept2/link"));
+    expect(res.status).toBe(204);
+    expect(await store.getLink(userB.id)).toBeNull();
+  });
+
+  // The global gate still closes it: "revocation is not per-user gated" is
+  // not "revocation is ungated".
+  it("DELETE /link: the global gate still refuses when the surface is off entirely", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({
+      c2AllowedEmails: ONLY_A,
+      available: false,
+      store,
+    });
+
+    const res = await asA(request(app).delete("/api/concept2/link"));
+    expect(res.status).toBe(403);
+    expect(await store.getLink(userA.id)).not.toBeNull();
   });
 
   it("upload: an off-list user gets 403 and nothing is sent to Concept2", async () => {
@@ -698,23 +720,28 @@ describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
   // The fail-closed direction, at the ROUTE layer rather than the pure
   // function's: an empty list must mean nobody, including the user the
   // sign-in allowlist already admits.
+  // F6 (fix round 1): `NATIVE_MINT`, not `{}`. A bearer mint with an empty
+  // body answers 409 `update_required` on its own, so posting `{}` here
+  // would discriminate one refusal from another rather than admission from
+  // refusal — and would still pass if the body check ever moved above the
+  // availability check. With `NATIVE_MINT` the only reason for a non-200 is
+  // the gate.
   it("an empty C2_ALLOWED_EMAILS denies everyone, on a flag that is fully ON", async () => {
     const { app } = buildApp({ c2AllowedEmails: "" });
     expect(
-      (await asA(request(app).post("/api/concept2/connect").send({}))).status,
+      (await asA(request(app).post("/api/concept2/connect").send(NATIVE_MINT)))
+        .status,
     ).toBe(403);
     expect(
       (await asA(request(app).get("/api/concept2/link"))).body,
     ).toStrictEqual({ available: false });
-    expect((await asB(request(app).delete("/api/concept2/link"))).status).toBe(
-      403,
-    );
   });
 
   it("a list of only separators denies everyone", async () => {
     const { app } = buildApp({ c2AllowedEmails: " , ," });
     expect(
-      (await asA(request(app).post("/api/concept2/connect").send({}))).status,
+      (await asA(request(app).post("/api/concept2/connect").send(NATIVE_MINT)))
+        .status,
     ).toBe(403);
   });
 
@@ -743,18 +770,24 @@ describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
     expect(res.status).toBe(200);
   });
 
-  // DELIBERATE, and the one route that keeps the global check: the callback
-  // is unauthenticated by design (PR1.75a deleted its last unauthenticated
-  // write), so it has no user to check. It cannot leak the capability
-  // because it can only ever complete an attempt a GATED user already
-  // minted — which is exactly what this test arranges, by seeding the
-  // attempt the mint would have refused. If the callback ever grew a
-  // per-user check it would have to invent a principal, and this test says
-  // what the design chose instead.
-  it("callback: still answers on the global check alone — it completes an attempt for a user the list would refuse", async () => {
+  // F2 ruling (fix round 1). This test used to assert the OPPOSITE, on a
+  // comment claiming a per-user check here "would mean inventing a
+  // principal". The same handler falsifies that: step 3 resolves a full
+  // cookie `SessionUser` and step 8 already reads its email to render the
+  // Linked page. The residue the claim hid is what this test now closes —
+  // an attempt lives for 15 minutes (`ATTEMPT_MAX_AGE_MS`), so a rower
+  // removed from the list mid-window would otherwise complete the callback
+  // and walk away with a link row holding LIVE TOKENS.
+  //
+  // The attempt is seeded directly because the mint would refuse it: the
+  // arrangement is deliberately the one where the two hops disagree, which
+  // is the only state the per-callback check is for.
+  it("callback: an off-list principal is refused AFTER the principal is resolved — no exchange, no link, and the attempt survives", async () => {
     const store = makeFakeConcept2Store();
     const client = makeStubClient();
     stubHappyExchange(client);
+    const peekSpy = vi.spyOn(store, "peekAttempt");
+    const consumeSpy = vi.spyOn(store, "consumeAttemptFor");
     const { app } = buildApp({ c2AllowedEmails: "", store, client });
     await store.createAttempt({
       nonce: "seeded-nonce",
@@ -765,8 +798,53 @@ describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
     const res = await asACookie(
       request(app).get("/api/concept2/callback?state=seeded-nonce&code=abc123"),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
     expect(res.type).toBe("text/html");
+    expect(res.text).toContain("CONCEPT2 LINK · UNAVAILABLE · HTTP 403");
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+    expect(await store.getLink(userA.id)).toBeNull();
+    // Consumes NOTHING, exactly like the global check above it: the refusal
+    // is read-only, so the same state completes once the rower is added
+    // back to the list.
+    expect(peekSpy).not.toHaveBeenCalled();
+    expect(consumeSpy).not.toHaveBeenCalled();
+    expect(await store.peekAttempt("seeded-nonce")).not.toBeNull();
+  });
+
+  // The ORDER the ruling asked for, pinned independently of the refusal
+  // itself: the per-user check sits AFTER step 3, so a caller carrying no
+  // session still reads "not signed in" rather than a capability answer.
+  // Signing in is the action that page asks for, and telling an anonymous
+  // browser the surface is unavailable would send them to fix the wrong
+  // thing.
+  it("callback: a signed-OUT caller still reads notSignedIn, not unavailable, even off the list", async () => {
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ c2AllowedEmails: "", store });
+    await store.createAttempt({
+      nonce: "seeded-nonce",
+      userId: userA.id,
+      surface: "web",
+    });
+
+    const res = await request(app).get(
+      "/api/concept2/callback?state=seeded-nonce&code=abc123",
+    );
+    expect(res.text).toContain("NOT SIGNED IN");
+  });
+
+  // The allow direction of the same hop, so the refusal above is not the
+  // only thing this route is pinned on: an ON-list principal completes.
+  it("callback: an on-list principal still completes the link", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store, client });
+
+    const state = await mintAndGetState(app);
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(200);
     expect(res.text).toContain("CONCEPT2 LINK · LINKED · HTTP 200");
     expect(await store.getLink(userA.id)).not.toBeNull();
   });

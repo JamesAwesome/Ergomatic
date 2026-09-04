@@ -5,11 +5,7 @@ import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
 import { createNativeVerifier } from "./auth/nativeVerify.js";
 import { createSessionStore } from "./auth/sessions.js";
 import { createUserStore } from "./auth/users.js";
-import {
-  c2Warnings,
-  computeAvailable,
-  computeAvailableFor,
-} from "./concept2/availability.js";
+import { c2Gate } from "./concept2/availability.js";
 import { createC2Client } from "./concept2/client.js";
 import { createDb } from "./db/index.js";
 import { checkDb } from "./db/pool.js";
@@ -113,8 +109,9 @@ const stores: Stores = {
 };
 
 // Wave E PR1 Task 7 (task-7-brief.md): the concept2 broker is wired ALWAYS
-// (never behind a runtime `if`) — `computeAvailable` gates BEHAVIOR (every
-// concept2 route re-checks `available()`), never mounting. With
+// (never behind a runtime `if`) — the gate below governs BEHAVIOR (every
+// concept2 route re-checks `available()` or `availableFor()`), never
+// mounting. With
 // `C2_LINK_ENABLED` unset in production: no new capability; `GET /api/logs`
 // rows carry four always-null fields (`c2ResultId`, `c2UserId`,
 // `completedAt`, `tz`); one new unauthenticated route
@@ -128,25 +125,30 @@ const c2BaseUrl = process.env.C2_BASE_URL || "https://log-dev.concept2.com";
 const c2ClientId = process.env.C2_CLIENT_ID ?? "";
 const c2ClientSecret = process.env.C2_CLIENT_SECRET ?? "";
 const c2LinkEnabled = process.env.C2_LINK_ENABLED;
-const c2Available = computeAvailable(c2LinkEnabled, c2ClientId, c2ClientSecret);
 // Wave E per-user gate: a SECOND, per-request check on top of the boot-time
 // one, so the Concept2 surface can be live for one account (a real link, a
 // real row, the logbook read back) while the rest of `ALLOWED_EMAILS` never
 // meets it. Same primitive as the sign-in allowlist, deliberately — it is
 // already tested, case-insensitive and comma-separated. Unset or empty
-// means NOBODY; `parseAllowlist` gives that for free (no entries match no
-// email), which is why there is no default written here to get backwards.
-const c2Allowlist = parseAllowlist(process.env.C2_ALLOWED_EMAILS);
-// Decided by a pure function so the composition is unit-tested rather than
-// asserted about a file that cannot be imported without a live Postgres;
-// this loop prints and decides nothing.
-for (const warning of c2Warnings(
-  c2LinkEnabled,
-  c2ClientId,
-  c2ClientSecret,
-  c2Allowlist,
-)) {
-  console.warn(warning);
+// means NOBODY.
+//
+// This file COMPOSES NOTHING (F1, fix round 1). It used to parse
+// `C2_ALLOWED_EMAILS` into a `Set<string>` and build `availableFor` here,
+// which put two identically-typed Sets in one scope: replacing the C2 one
+// with the SIGN-IN one typechecked clean and left every test green while
+// opening the Concept2 surface to every signed-in user. Nothing in this
+// file can be tested (it opens a real Postgres at import time), so nothing
+// could have caught it. `c2Gate` takes the raw strings and returns the
+// finished gate, and what is left here is four env var names.
+const c2 = c2Gate({
+  linkEnabledFlag: c2LinkEnabled,
+  clientId: c2ClientId,
+  clientSecret: c2ClientSecret,
+  allowedEmails: process.env.C2_ALLOWED_EMAILS,
+});
+for (const line of c2.bootLines) {
+  if (line.level === "warn") console.warn(line.message);
+  else console.log(line.message);
 }
 // Google precedent (index.ts:69, above): the WEB callback path is fixed and
 // derived from the same siteUrl every other redirect uses. The NATIVE
@@ -155,9 +157,8 @@ for (const warning of c2Warnings(
 // portal: a cutover step beside write approval).
 const c2WebRedirectUri = new URL("/api/concept2/callback", siteUrl).href;
 const concept2 = {
-  available: () => c2Available,
-  availableFor: (email: string) =>
-    computeAvailableFor(c2Available, c2Allowlist, email),
+  available: c2.available,
+  availableFor: c2.availableFor,
   store: createConcept2Store(db),
   client: createC2Client({
     baseUrl: c2BaseUrl,

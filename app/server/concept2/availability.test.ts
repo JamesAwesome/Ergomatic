@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { parseAllowlist } from "../auth/allowlist.js";
 import {
+  c2Gate,
   computeAvailable,
   computeAvailableFor,
-  c2Warnings,
 } from "./availability.js";
 
 // Wave E PR1 Task 7 (task-7-brief.md, owed M3 from Task 6's review): Task
@@ -106,45 +106,170 @@ describe("computeAvailableFor: the per-user C2 gate", () => {
   });
 });
 
-describe("c2Warnings: what the operator is told at boot", () => {
-  const EMPTY_LIST =
-    "WARNING: C2_ALLOWED_EMAILS is empty — nobody can link a Concept2 account";
-  const CREDS =
-    "WARNING: C2_LINK_ENABLED=1 but C2_CLIENT_ID / C2_CLIENT_SECRET not fully set — Concept2 linking is DISABLED";
-  const FLAG_OFF =
-    "WARNING: C2_CLIENT_ID / C2_CLIENT_SECRET are set but C2_LINK_ENABLED is not '1' — Concept2 linking stays DISABLED";
+// F1 (fix round 1). The reviewer replaced `c2Allowlist` with `allowlist` in
+// `server/index.ts` — the SIGN-IN list, same type, same scope, two
+// characters away — and got a clean typecheck with every one of 6842 tests
+// green: the Concept2 surface open to every signed-in user, with nothing
+// red anywhere. That mutation was reachable because `index.ts` held two
+// identically-typed `Set<string>`s and did the composing itself, and
+// `index.ts` cannot be imported by a test (it opens a real Postgres at
+// import time).
+//
+// `c2Gate` takes RAW env strings and returns the finished gate, so the
+// composing happens HERE, under test, and the untestable residue in
+// `index.ts` shrinks to the env var NAMES — the same residue
+// `C2_LINK_ENABLED` and the two credentials already carry, and one no
+// same-scope neighbour can be confused with.
+describe("c2Gate: the whole gate, composed from raw env", () => {
+  const LIVE = {
+    linkEnabledFlag: "1",
+    clientId: "id",
+    clientSecret: "secret",
+  };
+  const warnings = (g: ReturnType<typeof c2Gate>) =>
+    g.bootLines.filter((l) => l.level === "warn").map((l) => l.message);
+  const infos = (g: ReturnType<typeof c2Gate>) =>
+    g.bootLines.filter((l) => l.level === "info").map((l) => l.message);
 
-  it("flag on, creds set, but the C2 allowlist is empty -> the empty-list warning", () => {
-    expect(
-      c2Warnings("1", "id", "secret", parseAllowlist(undefined)),
-    ).toStrictEqual([EMPTY_LIST]);
+  // THE F1 REGRESSION TEST, and the reason it names two lists: the mutation
+  // that survived everything swapped one Set for another that was populated
+  // with DIFFERENT addresses. A test whose two lists are equal cannot tell
+  // the two apart, so this one gives the rower an Ergomatic account and
+  // withholds the Concept2 surface — the exact state a one-account rollout
+  // puts every other rower in.
+  it("a rower on ALLOWED_EMAILS but NOT on C2_ALLOWED_EMAILS is refused", () => {
+    const gate = c2Gate({ ...LIVE, allowedEmails: "james@x.com" });
+    expect(gate.available()).toBe(true);
+    expect(gate.availableFor("james@x.com")).toBe(true);
+    // `signed-in@x.com` is the shape of a rower the SIGN-IN allowlist
+    // admits; this gate has never heard of them.
+    expect(gate.availableFor("signed-in@x.com")).toBe(false);
   });
 
-  it("flag on with a populated C2 allowlist -> silence", () => {
-    expect(
-      c2Warnings("1", "id", "secret", parseAllowlist("james@x.com")),
-    ).toStrictEqual([]);
+  it("raw env of undefined denies everyone, with the flag and creds fully on", () => {
+    const gate = c2Gate({ ...LIVE, allowedEmails: undefined });
+    expect(gate.available()).toBe(true);
+    expect(gate.availableFor("james@x.com")).toBe(false);
   });
 
-  it("flag on, creds missing -> both the creds warning and the empty-list one", () => {
-    expect(c2Warnings("1", "id", "", parseAllowlist(undefined))).toStrictEqual([
-      CREDS,
-      EMPTY_LIST,
-    ]);
+  it("raw env of an empty string denies everyone", () => {
+    expect(c2Gate({ ...LIVE, allowedEmails: "" }).availableFor("a@x.com")).toBe(
+      false,
+    );
   });
 
-  // The pre-existing pair, pinned here because this function now owns them:
-  // the flag-off warning is mutually exclusive with the creds one, and
-  // neither fires on a wholly unconfigured deployment.
-  it("flag off with creds set -> the flag-off warning alone, no allowlist noise", () => {
-    expect(
-      c2Warnings(undefined, "id", "secret", parseAllowlist(undefined)),
-    ).toStrictEqual([FLAG_OFF]);
+  it("parses the raw list the way the sign-in allowlist does: split, trim, lower-case, drop blanks", () => {
+    const gate = c2Gate({
+      ...LIVE,
+      allowedEmails: "  James@X.com , ,other@x.com,",
+    });
+    expect(gate.availableFor("JAMES@X.COM")).toBe(true);
+    expect(gate.availableFor(" other@x.com ")).toBe(true);
+    expect(gate.availableFor("nobody@x.com")).toBe(false);
   });
 
-  it("nothing configured at all -> silence", () => {
-    expect(
-      c2Warnings(undefined, "", "", parseAllowlist(undefined)),
-    ).toStrictEqual([]);
+  it("the global gate still governs: flag off denies a listed rower", () => {
+    const gate = c2Gate({
+      linkEnabledFlag: undefined,
+      clientId: "id",
+      clientSecret: "secret",
+      allowedEmails: "james@x.com",
+    });
+    expect(gate.available()).toBe(false);
+    expect(gate.availableFor("james@x.com")).toBe(false);
+  });
+
+  it("credentials still govern: a missing secret denies a listed rower", () => {
+    const gate = c2Gate({
+      linkEnabledFlag: "1",
+      clientId: "id",
+      clientSecret: "",
+      allowedEmails: "james@x.com",
+    });
+    expect(gate.available()).toBe(false);
+    expect(gate.availableFor("james@x.com")).toBe(false);
+  });
+
+  describe("boot lines: what the operator is told", () => {
+    const EMPTY_LIST =
+      "WARNING: C2_ALLOWED_EMAILS is empty — nobody can link a Concept2 account";
+    const CREDS =
+      "WARNING: C2_LINK_ENABLED=1 but C2_CLIENT_ID / C2_CLIENT_SECRET not fully set — Concept2 linking is DISABLED";
+    const FLAG_OFF =
+      "WARNING: C2_CLIENT_ID / C2_CLIENT_SECRET are set but C2_LINK_ENABLED is not '1' — Concept2 linking stays DISABLED";
+
+    it("flag on, creds set, empty list -> the empty-list warning and no count", () => {
+      const gate = c2Gate({ ...LIVE, allowedEmails: undefined });
+      expect(warnings(gate)).toStrictEqual([EMPTY_LIST]);
+      expect(infos(gate)).toStrictEqual([]);
+    });
+
+    // F5: the empty-list warning was the ONLY signal, so a TYPO'D address
+    // booted silently and produced an absent card — indistinguishable from
+    // correct configuration on the exact walk this gate exists for. The
+    // count separates "the variable never reached the container" (0, and a
+    // warning) from "it arrived and parsed to N" (the operator then knows
+    // to suspect the address itself, not the plumbing).
+    it("flag on with a populated list -> no warning, and a COUNT that never names an address", () => {
+      const gate = c2Gate({
+        ...LIVE,
+        allowedEmails: "james@x.com,other@x.com",
+      });
+      expect(warnings(gate)).toStrictEqual([]);
+      expect(infos(gate)).toStrictEqual([
+        "Concept2 per-user gate: 2 allowed email(s) configured",
+      ]);
+      // The addresses themselves never reach a log line — the whole point
+      // of printing a count. Asserted over EVERY boot line, so a future
+      // line that helpfully echoed the list would redden here.
+      for (const line of gate.bootLines) {
+        expect(line.message).not.toContain("james@x.com");
+        expect(line.message).not.toContain("other@x.com");
+      }
+    });
+
+    it("the count is the PARSED size, not the raw comma count", () => {
+      const gate = c2Gate({
+        ...LIVE,
+        // Six commas, one duplicate, blanks and padding: five separators
+        // and three real addresses.
+        allowedEmails: " a@x.com ,, b@x.com,A@X.COM , ,c@x.com,",
+      });
+      expect(infos(gate)).toStrictEqual([
+        "Concept2 per-user gate: 3 allowed email(s) configured",
+      ]);
+    });
+
+    it("flag on, creds missing -> the creds warning AND the empty-list one", () => {
+      const gate = c2Gate({
+        linkEnabledFlag: "1",
+        clientId: "id",
+        clientSecret: "",
+        allowedEmails: undefined,
+      });
+      expect(warnings(gate)).toStrictEqual([CREDS, EMPTY_LIST]);
+    });
+
+    it("flag off with creds set -> the flag-off warning alone, no allowlist noise and no count", () => {
+      const gate = c2Gate({
+        linkEnabledFlag: undefined,
+        clientId: "id",
+        clientSecret: "secret",
+        allowedEmails: "james@x.com",
+      });
+      expect(warnings(gate)).toStrictEqual([FLAG_OFF]);
+      expect(infos(gate)).toStrictEqual([]);
+    });
+
+    it("nothing configured at all -> silence", () => {
+      expect(
+        c2Gate({
+          linkEnabledFlag: undefined,
+          clientId: "",
+          clientSecret: "",
+          allowedEmails: undefined,
+        }).bootLines,
+      ).toStrictEqual([]);
+    });
   });
 });
