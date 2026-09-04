@@ -1,3 +1,15 @@
+diff --git a/Package.swift b/Package.swift
+index 845aca9c9de05f0cf384ccc2c07c4279f5cdb544..dc1b06c6b08a5e57975061b9aad94a4feb7a5277 100644
+--- a/Package.swift
++++ b/Package.swift
+@@ -23,6 +23,7 @@ let package = Package(
+         .testTarget(
+             name: "NfcPluginTests",
+             dependencies: ["NfcPlugin"],
++            // This binding keeps the installed package-root XCTest command reproducible.
+             path: "ios/Tests/NfcPluginTests")
+     ]
+ )
 diff --git a/dist/esm/definitions.d.ts b/dist/esm/definitions.d.ts
 index 0e326d1079f35737268a6989032177a19b4e7df0..bd5007666d436b1e53af86a41d5d07d7d69f42d5 100644
 --- a/dist/esm/definitions.d.ts
