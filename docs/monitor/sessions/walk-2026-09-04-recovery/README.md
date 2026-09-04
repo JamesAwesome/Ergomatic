@@ -46,7 +46,10 @@ he recovered and saved the workout successfully, he answered "the latter".
 This is explicit operator confirmation of successful native recovery and Save
 on this candidate, not merely a launch check. The exact navigation sequence,
 landscape warning visibility and absence of a later warning were not separately
-reported. Three phone screenshots subsequently arrived, transcribed below.
+reported. Asked whether Recovery Door disappeared from Today's Unsaved workout
+section after saving, James answered "Yes". This separately confirms visible
+retirement after Save, not a later Start/Connect warning check. Three phone
+screenshots arrived, transcribed below.
 They do not contain saved history or an identified original/recovered summary
 pair, so successful saving is supported by James's explicit confirmation and
 numerical preservation is not independently verified. Do not repeat rowing
