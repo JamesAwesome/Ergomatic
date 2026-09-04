@@ -1012,26 +1012,22 @@ button:disabled {
      sibling — review fix I-1: it once wasn't, on Library, see that rule's
      own comment.
 
-     Fix round (whole-branch review comment, not a finding): this dependency
-     is CURRENTLY satisfied on both screens, by two different mechanisms —
-     Library's own `.type-word-row` is unconditionally mounted (I-1, below),
-     Today's is conditional on `effectiveType !== null` (Today.tsx) but that
-     condition is always true whenever the chip row itself renders (a plan
-     being active implies an effective type). If a future Today change ever
-     makes that condition possibly false while the chip row still renders,
-     this 4px will silently reproduce the exact ~34px jump I-1 fixed on
-     Library — the fix would be the SAME one Library already got (mount
-     `.type-word-row` unconditionally there too), not a change to this rule. */
+     Both screens now satisfy it the same way: Library's `.type-word-row`
+     is unconditionally mounted (I-1, below), and since the freestyle chips
+     (2026-09-04) so is Today's — it reads ANY TYPE while no chip is lit
+     rather than unmounting, which is exactly the fix this comment used to
+     prescribe for the day Today's `effectiveType` could be null while the
+     chip row still rendered. That day arrived with freestyle chips. */
   margin-bottom: 4px;
 }
 
 /* The effective type's descriptor word (James's request, 2026-08-08 round)
    — same reserved-line-box fix as `.classification-type-label-row`
-   (index.css, above). On Today a type is ALWAYS selected whenever this
-   renders, so the word never toggles in and out the way it would if it
-   could — the reserved box was originally kept here for parity with that
-   established pattern alone, not because Today's own row could shift
-   height in practice.
+   (index.css, above). On Today the row is always mounted — a type's word
+   with a plan or a lit freestyle chip, ANY TYPE otherwise (freestyle
+   chips, 2026-09-04) — so the word never toggles in and out; the reserved
+   box was originally kept here for parity with that established pattern
+   alone, not because Today's own row could shift height in practice.
 
    Extracted to this screen-neutral name (library-filter-unification round,
    Task 2, spec finding 2 — was `.today-type-word-row`): Library's own
