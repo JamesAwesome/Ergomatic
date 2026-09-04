@@ -150,8 +150,9 @@ const verdict = criteriaKeys.every((key) => receipt.criteria[key] === true)
 Unobserved measurements on stopped/failed attempts stay `null`; unverified
 signed entitlements stay empty. All metadata, enum, byte, boolean and numeric
 fields are validated before explicit-field serialization. Unknown keys cannot
-change the verdict. Padding and signed-reader claims require Task 3 observations,
-not a payload-length check or the entitlement source file. `staleAttemptSettlementCount`
+change the verdict. Padding, signed-reader, and reader-ending semantics require
+Task 3 controller evidence, not a payload-length check, entitlement source file,
+or selected action plus a generic ending reason. `staleAttemptSettlementCount`
 is null in the disposable probe: no instrumentation measures that count. Never
 coerce null to zero or cite it as an observed pass. B completion, rejected stale
 IDs, and the native held-continuation ownership-guard observation are separate
@@ -1152,7 +1153,7 @@ underlying WebView after the system reader sheet opens. The probe never calls
 2. `no-tag-timeout`: present no tag and let Core NFC end the sheet; expect `sessionTimeout`.
 3. `forced-invalidation`: first establish that the second tag is independently readable by this NDEF reader; an arbitrary payment card is not evidence of an NDEF tag. Then present the PM5 and that known-readable second NDEF tag together. Require the native singleton-guard message **Present exactly one NFC tag.** as positive evidence that this path ran, and retain its actual mapped ending reason. If the message is not observed, this leg is unproven even if a generic ending arrives.
 
-Set `readerEndingSemanticsObserved` true only when all three actions ran and their actual reasons were retained. Distinct reasons are not required for that criterion: if two actions collapse to the same reason, record the exact collapse and mark the current user-visible copy as requiring a new design approval before a product plan can execute. Do not label guessed causes.
+The probe preserves every selected action and actual reason but leaves `readerEndingSemanticsObserved` false in every export. Only Task 3 controller assembly may set it true, after independently observing all three actions, retaining their actual reasons, and positively observing **Present exactly one NFC tag.** for the known-readable multiple-tag leg. Neither `userCancelled` nor `invalidated` alone identifies that producer. Distinct reasons are not required: if two actions collapse to the same reason, record the exact collapse and mark the current user-visible copy as requiring a new design approval before a product plan can execute. Do not label guessed causes or infer producer evidence from button selection.
 
 - [ ] **Step 7: Exercise background on the exact package**
 

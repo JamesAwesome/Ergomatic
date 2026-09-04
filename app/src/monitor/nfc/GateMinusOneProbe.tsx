@@ -68,11 +68,6 @@ const SCENARIOS: GateScenario[] = [
   "background",
   "webview-reload",
 ];
-const ENDINGS: ReaderEndingAction[] = [
-  "sheet-cancel",
-  "no-tag-timeout",
-  "forced-invalidation",
-];
 const stageFor = (scenario: GateScenario): GateNfcStage | undefined =>
   scenario === "stop-during-query"
     ? "query"
@@ -606,14 +601,9 @@ export default function GateMinusOneProbe() {
                 action: active.selectedEnding,
                 observedReason: event.reason as ReaderEndingReason,
               });
-              current.criteria.readerEndingSemanticsObserved = ENDINGS.every(
-                (action) =>
-                  current.readerEndings.some(
-                    (ending) =>
-                      ending.action === action &&
-                      ending.observedReason !== null,
-                  ),
-              );
+              // Selection plus a generic ending cannot prove the singleton
+              // native producer. Only Task 3 controller assembly may certify
+              // this criterion after all three actions and the native message.
               publish();
             }
             void drain(active, "NFC reader session ended.");

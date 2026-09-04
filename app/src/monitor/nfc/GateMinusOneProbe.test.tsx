@@ -851,57 +851,60 @@ describe("GateMinusOneProbe", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("retains failures and repeated attempts and records only the selected genuine ending", async () => {
-    const user = await renderReadyProbe();
-    native.supported = false;
-    await user.click(runButton());
-    native.supported = true;
-    await user.click(screen.getByRole("button", { name: "Sheet cancel" }));
-    expect(native.calls).toContain("nfc-start:attempt-b");
-    const staleEnd = native.nfcSessionEnd!;
-    expect(native.calls).not.toContain("nfc-stop:attempt-b");
-    await act(async () => {
-      native.nfcSessionEnd!({
-        attemptId: "attempt-b",
-        reason: "userCancelled",
+  it.each(["userCancelled", "invalidated"] as const)(
+    "retains all selected ending observations including forced %s without certifying its native producer",
+    async (forcedReason) => {
+      const user = await renderReadyProbe();
+      native.supported = false;
+      await user.click(runButton());
+      native.supported = true;
+      await user.click(screen.getByRole("button", { name: "Sheet cancel" }));
+      expect(native.calls).toContain("nfc-start:attempt-b");
+      const staleEnd = native.nfcSessionEnd!;
+      expect(native.calls).not.toContain("nfc-stop:attempt-b");
+      await act(async () => {
+        native.nfcSessionEnd!({
+          attemptId: "attempt-b",
+          reason: "userCancelled",
+        });
       });
-    });
-    await user.click(screen.getByRole("button", { name: "No-tag timeout" }));
-    await act(async () => {
-      staleEnd({ attemptId: "attempt-b", reason: "invalidated" });
-      native.nfcSessionEnd!({
-        attemptId: "attempt-c",
-        reason: { deviceId: "private" },
+      await user.click(screen.getByRole("button", { name: "No-tag timeout" }));
+      await act(async () => {
+        staleEnd({ attemptId: "attempt-b", reason: "invalidated" });
+        native.nfcSessionEnd!({
+          attemptId: "attempt-c",
+          reason: { deviceId: "private" },
+        });
       });
-    });
-    expect(runButton()).toBeDisabled();
-    await act(async () => {
-      native.nfcSessionEnd!({
-        attemptId: "attempt-c",
-        reason: "sessionTimeout",
+      expect(runButton()).toBeDisabled();
+      await act(async () => {
+        native.nfcSessionEnd!({
+          attemptId: "attempt-c",
+          reason: "sessionTimeout",
+        });
       });
-    });
-    await user.click(
-      screen.getByRole("button", { name: "Forced invalidation" }),
-    );
-    await act(async () => {
-      native.nfcSessionEnd!({
-        attemptId: "attempt-d",
-        reason: "userCancelled",
+      await user.click(
+        screen.getByRole("button", { name: "Forced invalidation" }),
+      );
+      await act(async () => {
+        native.nfcSessionEnd!({
+          attemptId: "attempt-d",
+          reason: forcedReason,
+        });
       });
-    });
-    const result = await exported(user);
-    expect(result.attempts).toHaveLength(4);
-    expect(result.attempts[0]!.records).toStrictEqual([]);
-    expect(result.readerEndings).toStrictEqual([
-      { action: "sheet-cancel", observedReason: "userCancelled" },
-      { action: "no-tag-timeout", observedReason: "sessionTimeout" },
-      { action: "forced-invalidation", observedReason: "userCancelled" },
-    ]);
-    expect(result.criteria.readerEndingSemanticsObserved).toBe(true);
-    expect(result.criteria.paddingRuleObserved).toBe(false);
-    expect(result.signedEntitlement).toStrictEqual([]);
-  });
+      const result = await exported(user);
+      expect(result.attempts).toHaveLength(4);
+      expect(result.attempts[0]!.records).toStrictEqual([]);
+      expect(result.readerEndings).toStrictEqual([
+        { action: "sheet-cancel", observedReason: "userCancelled" },
+        { action: "no-tag-timeout", observedReason: "sessionTimeout" },
+        { action: "forced-invalidation", observedReason: forcedReason },
+      ]);
+      expect(result.criteria.readerEndingSemanticsObserved).toBe(false);
+      expect(result.criteria.paddingRuleObserved).toBe(false);
+      expect(result.signedEntitlement).toStrictEqual([]);
+    },
+  );
   it("arms native NFC before BLE and connects only after two exact local-name advertisements", async () => {
     const user = await renderReadyProbe();
     await beginThroughBle(user);
