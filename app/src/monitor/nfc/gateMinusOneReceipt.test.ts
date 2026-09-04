@@ -14,6 +14,133 @@ const PM5_TYPE = Array.from(
 );
 
 describe("Gate -1 receipt", () => {
+  it.each([
+    [
+      "blank metadata",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        r.iphone.model = " ";
+      },
+    ],
+    [
+      "unknown scenario",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r.attempts[0]!, { scenario: "attempt-private" });
+      },
+    ],
+    [
+      "unknown action",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r.readerEndings[0]!, { action: "device-private" });
+      },
+    ],
+    [
+      "unknown reason",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r.readerEndings[0]!, {
+          observedReason: "device-private",
+        });
+      },
+    ],
+    [
+      "object metadata",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r.pm5, { firmware: { deviceId: "private" } });
+      },
+    ],
+    [
+      "nonfinite timing",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        r.attempts[0]!.capabilityLatencyMs = Infinity;
+      },
+    ],
+    [
+      "nonboolean connection",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r.attempts[0]!, { connected: "yes" });
+      },
+    ],
+    [
+      "invalid record byte",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        r.attempts[0]!.records[0]!.payload = [999];
+      },
+    ],
+    [
+      "unverified entitlement value",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        r.signedEntitlement = ["private"];
+      },
+    ],
+  ] as const)(
+    "refuses %s instead of exporting malformed or identity-bearing values",
+    (_name, corrupt) => {
+      const receipt = makeCompleteReceipt();
+      corrupt(receipt);
+      expect(() => serializeGateReceipt(receipt)).toThrow();
+    },
+  );
+
+  it("requires exactly the named nine boolean criteria regardless of unknown keys", () => {
+    const receipt = makeCompleteReceipt();
+    Object.assign(receipt.criteria, { extra: false });
+    expect(JSON.parse(serializeGateReceipt(receipt)).verdict).toBe("GO");
+    Object.assign(receipt.criteria, { signedReader: "true" });
+    expect(() => serializeGateReceipt(receipt)).toThrow();
+  });
+
+  it("keeps a complete native-shaped multi-record message with only PM5 address bytes changed", () => {
+    const records = [
+      {
+        tnf: 4,
+        type: PM5_TYPE,
+        id: [8],
+        payload: [1, 2, 3, 4, 5, 6, 1, 80, 0],
+      },
+      {
+        tnf: 4,
+        type: Array.from(new TextEncoder().encode("android.com:pkg")),
+        id: [],
+        payload: [65, 66],
+      },
+    ];
+    const receipt = makeCompleteReceipt();
+    receipt.attempts[0]!.records = decodeNfcEvent({
+      attemptId: "private",
+      tag: { ndefMessage: records },
+    }).records;
+    expect(
+      JSON.parse(serializeGateReceipt(receipt)).attempts[0].records,
+    ).toStrictEqual([
+      {
+        tnf: 4,
+        type: PM5_TYPE,
+        id: [8],
+        payload: [0, 0, 0, 0, 0, 0, 1, 80, 0],
+      },
+      records[1],
+    ]);
+  });
+
+  it("rejects truncated fragments even when every index and end marker survives", () => {
+    const frames = frameGateReceipt(
+      serializeGateReceipt(makeCompleteReceipt()),
+    );
+    frames[0] = frames[0]!.slice(0, -4);
+    expect(() => reassembleGateReceiptFrames(frames)).toThrow();
+  });
+
+  it("does not combine fragments from separate exports or accept fragments after end", () => {
+    const first = frameGateReceipt(serializeGateReceipt(makeCompleteReceipt()));
+    const other = makeCompleteReceipt();
+    other.pm5.model = "XYZ";
+    const second = frameGateReceipt(serializeGateReceipt(other));
+    expect(() =>
+      reassembleGateReceiptFrames([first[0]!, ...second.slice(1)]),
+    ).toThrow();
+    expect(() =>
+      reassembleGateReceiptFrames([first.at(-1)!, ...first.slice(0, -1)]),
+    ).toThrow();
+  });
   it("rejects malformed bridge bytes", () => {
     expect(() =>
       decodeNfcEvent({

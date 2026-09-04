@@ -73,7 +73,7 @@ function bytes(value: unknown, field: string): number[] {
   if (!Array.isArray(value)) {
     throw new Error(`Invalid ${field}`);
   }
-  const values = value as unknown[];
+  const values: unknown[] = Array.from(value);
   if (
     values.some(
       (item) =>
@@ -218,11 +218,107 @@ function requireReceiptShape(receipt: Omit<NfcGateReceiptV1, "verdict">): void {
   }
   for (const ending of receipt.readerEndings) {
     if (
+      !["sheet-cancel", "no-tag-timeout", "forced-invalidation"].includes(
+        ending.action,
+      )
+    ) {
+      throw new Error("Invalid reader ending action");
+    }
+    if (
       ending.observedReason !== null &&
       !ENDING_REASONS.has(ending.observedReason)
     ) {
       throw new Error("Invalid reader ending reason");
     }
+  }
+  const text = (value: unknown) => {
+    if (
+      typeof value !== "string" ||
+      !value.trim() ||
+      Array.from(value).some((character) => character.charCodeAt(0) < 32)
+    )
+      throw new Error("Invalid receipt text");
+  };
+  const timestamp = (value: unknown) => {
+    text(value);
+    if (
+      typeof value !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T.*Z$/.test(value) ||
+      !Number.isFinite(Date.parse(value))
+    )
+      throw new Error("Invalid receipt timestamp");
+  };
+  const number = (value: unknown, integer = false) => {
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value < 0 ||
+      (integer && !Number.isSafeInteger(value))
+    )
+      throw new Error("Invalid receipt measurement");
+  };
+  const boolean = (value: unknown) => {
+    if (typeof value !== "boolean") throw new Error("Invalid receipt boolean");
+  };
+  timestamp(receipt.capturedAtUtc);
+  for (const value of [
+    receipt.iphone.model,
+    receipt.iphone.iosVersion,
+    receipt.pm5.model,
+    receipt.pm5.firmware,
+    receipt.pm5.advertisedNameShown,
+  ])
+    text(value);
+  if (
+    !Array.isArray(receipt.signedEntitlement) ||
+    receipt.signedEntitlement.length > 1 ||
+    (receipt.signedEntitlement.length === 1 &&
+      receipt.signedEntitlement[0] !== "TAG")
+  )
+    throw new Error("Invalid signed entitlement");
+  if (
+    receipt.package !== "@capgo/capacitor-nfc@8.2.5" ||
+    receipt.usageDescription !==
+      "Scan a PM5 to connect and program your workout."
+  )
+    throw new Error("Invalid receipt build identity");
+  for (const entry of receipt.attempts) {
+    if (
+      ![
+        "normal",
+        "stop-during-connect",
+        "stop-during-query",
+        "stop-during-read",
+        "background",
+        "webview-reload",
+      ].includes(entry.scenario)
+    )
+      throw new Error("Invalid receipt scenario");
+    timestamp(entry.atUtc);
+    for (const value of [
+      entry.capabilityLatencyMs,
+      entry.firstMatchingAdvertisementMs,
+    ])
+      if (value !== null) number(value);
+    for (const value of [entry.decodedName, entry.liveLocalName])
+      if (value !== null) text(value);
+    for (const value of [
+      entry.matchingDeviceCount,
+      entry.staleIdDroppedCount,
+      entry.staleAttemptSettlementCount,
+    ])
+      number(value, true);
+    boolean(entry.connected);
+    boolean(entry.disconnected);
+    bytes(entry.trailingPayloadBytes, "trailing payload");
+    if (!Array.isArray(entry.matchingAdvertisementIntervalsMs))
+      throw new Error("Invalid receipt intervals");
+    for (const interval of entry.matchingAdvertisementIntervalsMs)
+      number(interval);
+    decodeNfcEvent({
+      attemptId: "validation",
+      tag: { ndefMessage: entry.records },
+    });
   }
 }
 
@@ -304,15 +400,22 @@ function base64Decode(value: string): string {
 /** Bounded console messages survive Capacitor's per-argument 4068-char cap. */
 export function frameGateReceipt(serialized: string): string[] {
   const encoded = base64Encode(serialized);
+  // Independent framing identity: never an NFC attempt or device identifier.
+  const exportId = Array.from(
+    crypto.getRandomValues(new Uint32Array(4)),
+    (value) => value.toString(16).padStart(8, "0"),
+  ).join("");
   const total = Math.max(1, Math.ceil(encoded.length / FRAME_CHUNK_SIZE));
   const frames = Array.from({ length: total }, (_, index) => {
     const chunk = encoded.slice(
       index * FRAME_CHUNK_SIZE,
       (index + 1) * FRAME_CHUNK_SIZE,
     );
-    return `${FRAME_PREFIX} ${FRAME_VERSION} fragment ${index + 1}/${total} ${chunk}`;
+    return `${FRAME_PREFIX} ${FRAME_VERSION} ${exportId} fragment ${index + 1}/${total} ${encoded.length} ${chunk}`;
   });
-  frames.push(`${FRAME_PREFIX} ${FRAME_VERSION} end ${total}`);
+  frames.push(
+    `${FRAME_PREFIX} ${FRAME_VERSION} ${exportId} end ${total} ${encoded.length}`,
+  );
   return frames;
 }
 
@@ -320,15 +423,29 @@ export function reassembleGateReceiptFrames(frames: readonly string[]): string {
   const chunks = new Map<number, string>();
   let total: number | null = null;
   let ended = false;
+  let exportId: string | null = null;
+  let length: number | null = null;
   for (const frame of frames) {
     const fragment =
-      /^NFC_GATE_RECEIPT v1 fragment (\d+)\/(\d+) ([A-Za-z0-9+/=]+)$/.exec(
+      /^NFC_GATE_RECEIPT v1 ([a-z0-9.-]+) fragment (\d+)\/(\d+) (\d+) ([A-Za-z0-9+/=]+)$/.exec(
         frame,
       );
     if (fragment !== null) {
-      const index = Number(fragment[1]);
-      const declaredTotal = Number(fragment[2]);
+      const index = Number(fragment[2]);
+      const declaredTotal = Number(fragment[3]);
+      const declaredLength = Number(fragment[4]);
       if (
+        ended ||
+        (exportId !== null && exportId !== fragment[1]) ||
+        (length !== null && length !== declaredLength) ||
+        !Number.isSafeInteger(declaredLength) ||
+        declaredLength < 1 ||
+        Math.ceil(declaredLength / FRAME_CHUNK_SIZE) !== declaredTotal ||
+        fragment[5]!.length !==
+          Math.min(
+            FRAME_CHUNK_SIZE,
+            declaredLength - (index - 1) * FRAME_CHUNK_SIZE,
+          ) ||
         !Number.isSafeInteger(index) ||
         !Number.isSafeInteger(declaredTotal) ||
         index < 1 ||
@@ -339,15 +456,28 @@ export function reassembleGateReceiptFrames(frames: readonly string[]): string {
         throw new Error("Invalid receipt fragment");
       }
       total = declaredTotal;
-      chunks.set(index, fragment[3]!);
+      exportId = fragment[1]!;
+      length = declaredLength;
+      chunks.set(index, fragment[5]!);
       continue;
     }
-    const end = /^NFC_GATE_RECEIPT v1 end (\d+)$/.exec(frame);
+    const end = /^NFC_GATE_RECEIPT v1 ([a-z0-9.-]+) end (\d+) (\d+)$/.exec(
+      frame,
+    );
     if (end !== null) {
-      if (ended || total === null || Number(end[1]) !== total) {
+      if (
+        ended ||
+        total === null ||
+        end[1] !== exportId ||
+        Number(end[2]) !== total ||
+        Number(end[3]) !== length ||
+        chunks.size !== total
+      ) {
         throw new Error("Invalid receipt end frame");
       }
       ended = true;
+    } else if (frame.startsWith(FRAME_PREFIX)) {
+      throw new Error("Invalid receipt frame");
     }
   }
   if (!ended || total === null || chunks.size !== total) {

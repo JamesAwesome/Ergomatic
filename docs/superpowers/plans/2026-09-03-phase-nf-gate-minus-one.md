@@ -88,12 +88,12 @@ interface RedactedNfcRecord {
 interface GateAttemptReceipt {
   scenario: GateScenario;
   atUtc: string;
-  capabilityLatencyMs: number;
+  capabilityLatencyMs: number | null;
   records: RedactedNfcRecord[];
-  decodedName: string;
-  liveLocalName: string;
+  decodedName: string | null;
+  liveLocalName: string | null;
   trailingPayloadBytes: number[];
-  firstMatchingAdvertisementMs: number;
+  firstMatchingAdvertisementMs: number | null;
   matchingAdvertisementIntervalsMs: number[];
   matchingDeviceCount: number;
   connected: boolean;
@@ -104,7 +104,7 @@ interface GateAttemptReceipt {
 
 interface ReaderEndingReceipt {
   action: ReaderEndingAction;
-  observedReason: "userCancelled" | "sessionTimeout" | "invalidated";
+  observedReason: "userCancelled" | "sessionTimeout" | "invalidated" | null;
 }
 
 export interface NfcGateReceiptV1 {
@@ -112,7 +112,7 @@ export interface NfcGateReceiptV1 {
   capturedAtUtc: string;
   iphone: { model: string; iosVersion: string };
   pm5: { model: string; firmware: string; advertisedNameShown: string };
-  signedEntitlement: ["TAG"];
+  signedEntitlement: [] | ["TAG"];
   usageDescription: "Scan a PM5 to connect and program your workout.";
   package: "@capgo/capacitor-nfc@8.2.5";
   attempts: GateAttemptReceipt[];
@@ -135,9 +135,55 @@ export interface NfcGateReceiptV1 {
 The serializer computes `verdict`; it does not accept a caller-provided verdict:
 
 ```ts
-const criteriaValues = Object.values(receipt.criteria);
-const verdict = criteriaValues.every((value) => value) ? "GO" : "NO-GO";
+const criteriaKeys = [
+  "rawNdefShape", "exactType", "paddingRuleObserved",
+  "exactLocalNameBridge", "pickerFreeBleConnect", "signedReader",
+  "readerEndingSemanticsObserved", "nativeIdentityAndDrain", "staleACannotAffectB",
+] as const;
+for (const key of criteriaKeys) {
+  if (typeof receipt.criteria[key] !== "boolean") throw new Error("Invalid criterion");
+}
+const verdict = criteriaKeys.every((key) => receipt.criteria[key] === true)
+  ? "GO" : "NO-GO";
 ```
+
+Unobserved measurements on stopped/failed attempts stay `null`; unverified
+signed entitlements stay empty. All metadata, enum, byte, boolean and numeric
+fields are validated before explicit-field serialization. Unknown keys cannot
+change the verdict. Padding and signed-reader claims require Task 3 observations,
+not a payload-length check or the entitlement source file.
+
+### Disposable probe lifetime contract
+
+One attempt owns the radio until its cancellation/drain and all pending native
+operations settle. Terminal is claimed synchronously; a late start is stopped,
+a late connection disconnected, and a late listener handle removed before re-arm.
+Any uncertain release requires an app restart, never a WebView-only reset.
+The implementation/test owners are Task 2's `Active`, `pending`, `listen`,
+`drain`, `runScenario`, and the arranged-promise component regressions.
+
+| State | Mint | Clear | Teardown / reload / re-arm |
+|---|---|---|---|
+| `activeRef`, `Active.attemptId`, `entry`, `metadata` | `runScenario` | completed drain | radio lease survives teardown until drain; entry retained in document receipt; fresh attempt on re-arm |
+| `pending`, listener remover arrays, `nfcActive`, `bleActive`, `connectedDevice` | same `Active` construction; updated at each native primitive | settled native calls and resource release | teardown waits; no B while nonempty/uncertain; never persisted |
+| `terminal`, `drainPromise`, `cleanupFailed` | same `Active` construction | never reset on an old attempt | first terminal wins; failed cleanup sets document restart latch |
+| `reading`, `finalizing`, `nfcReady`, `earlyNfcEvent`, `scanReady`, `holdStage`, `priorReleased` | same `Active` construction | discarded after drain; early event consumed after start acknowledgment | stop duplicate continuations and premature success; B gets no hold stage |
+| `payload`, matching IDs/counts/times, first ID, scan start, selected ending | same `Active` construction | discarded after drain | receipt keeps only allowed measurements/records; raw IDs remain memory-only |
+| `receiptRef`, rendered receipt | first scenario | document end | every failed/repeated entry retained; no persistence; partial export before reload |
+| `reloadReady`, `exportedPartial`, `prior` | exact matching held-stage event after drain / validated reload metadata | consumed by reload or B start/release | only scenario, reloadPending, opaque prior ID/stage and operator metadata cross reload; no records or receipt |
+| mounted/restart refs and UI state | document mount | unmount / process restart | old handlers cannot mutate receipts; uncertain cleanup blocks re-arm |
+| console export ID | each export via `crypto.getRandomValues` | end of export | fragment/end envelopes carry independent random framing ID and declared length; no NFC identity or module-level mutable state |
+
+`crypto.getRandomValues` is available in Safari/iOS 5 (MDN's primary
+[compatibility dataset](https://github.com/mdn/browser-compat-data/blob/main/api/Crypto.json),
+`getRandomValues.__compat.support.safari_ios.version_added = "5"`). The prescribed
+`crypto.randomUUID` requires 15.4 ([dataset](https://github.com/mdn/browser-compat-data/blob/main/api/Crypto.json),
+`randomUUID.__compat.support.safari.version_added = "15.4"`), above the target's
+15.0 floor (`app/ios/App/App.xcodeproj/project.pbxproj`, target build settings).
+The probe therefore feature-detects secure UUID generation and retains an
+unarmed failed sample when absent; no fallback identity or deployment-target
+change. The boundary remains diagnostic: host tests prove arranged
+conditional ordering; only Task 3 can establish device producer reachability.
 
 ### Task 1: Pin and harden the native NFC session contract
 
@@ -614,13 +660,13 @@ describe("Gate -1 receipt", () => {
     expect(
       redactNfcRecord({
         tnf: 4,
-        type: [99],
+        type: Array.from(new TextEncoder().encode("concept2.com:bleconnectinfo")),
         id: [8],
         payload: [1, 2, 3, 4, 5, 6, 1, 80, 77, 53],
       }),
     ).toStrictEqual({
       tnf: 4,
-      type: [99],
+      type: Array.from(new TextEncoder().encode("concept2.com:bleconnectinfo")),
       id: [8],
       payload: [0, 0, 0, 0, 0, 0, 1, 80, 77, 53],
     });
@@ -664,7 +710,7 @@ function makeCompleteReceipt(
         atUtc: "2026-09-03T20:00:00.000Z",
         capabilityLatencyMs: 12,
         records: [
-          { tnf: 4, type: [99], id: [], payload: [1, 2, 3, 4, 5, 6, 1, 80, 0] },
+          { tnf: 4, type: Array.from(new TextEncoder().encode("concept2.com:bleconnectinfo")), id: [], payload: [1, 2, 3, 4, 5, 6, 1, 80, 0] },
         ],
         decodedName: "P",
         liveLocalName: "P",
@@ -763,12 +809,15 @@ export function matchAdvertisedName(
 }
 
 export function redactNfcRecord(record: RedactedNfcRecord): RedactedNfcRecord {
-  if (record.payload.length < 7) throw new Error("NFC payload is too short");
+  const isPm5 = record.tnf === 4 &&
+    record.type.length === PM5_NFC_TYPE_BYTES.length &&
+    record.type.every((byte, index) => byte === PM5_NFC_TYPE_BYTES[index]);
+  if (isPm5 && record.payload.length < 7) throw new Error("PM5 NFC payload is too short");
   return {
     tnf: record.tnf,
     type: [...record.type],
     id: [...record.id],
-    payload: [0, 0, 0, 0, 0, 0, ...record.payload.slice(6)],
+    payload: isPm5 ? [0, 0, 0, 0, 0, 0, ...record.payload.slice(6)] : [...record.payload],
   };
 }
 ```
@@ -781,7 +830,7 @@ Run the focused test and require PASS. Then, one mutation at a time, use `apply_
 
 1. Change `payload.slice(6)` to `payload.slice(5)`; `zeros only six address bytes` must fail.
 2. Replace the exact byte-mismatch predicate with `false`; `matches only byte-exact printable ASCII` must fail.
-3. Replace `.every((value) => value)` with `.some((value) => value)`; the NO-GO test must fail.
+3. Replace the named-criterion `.every((key) => criteria[key] === true)` with `.some((key) => criteria[key] === true)`; the NO-GO test must fail.
 4. Replace the redactor's explicit four-field object with `{ ...record, payload: [0, 0, 0, 0, 0, 0, ...record.payload.slice(6)] }`; `strips untrusted identity fields` must fail on the injected record-level `deviceId`.
 
 - [ ] **Step 5: Write the failing component test for native-before-radio ordering**
@@ -929,14 +978,14 @@ No other event name or plugin method is accepted.
 2. Mint one UUID per scenario and never serialize it.
 3. Await the app-state handle and both `gateNativePort` NFC listener handles before native start; a registration rejection removes every handle that did resolve and starts no session.
 4. Call `gateNativePort.startNfc({ attemptId, alertMessage: "Hold your iPhone near the PM5.", gateMinusOneHoldStage })`; omit the last field for ordinary scenarios and map `stop-during-connect`, `stop-during-query`, and `stop-during-read` to `connect`, `query`, and `read`. The native adapter adds `iosSessionType: "ndef"` and `invalidateAfterFirstRead: false` exactly.
-5. On an exact-ID NDEF event, decode every record, call and await `gateNativePort.stopNfc(attemptId)`, then remove both NFC listeners.
+5. On an exact-ID NDEF event, await the native-start acknowledgment before consuming an early record, decode every record, call and await `gateNativePort.stopNfc(attemptId)`, then remove both NFC listeners. The stop-induced ending is not an operator cancellation: installed `NfcPlugin.swift`'s `didInvalidateWithError` calls `notifySessionEnd` before `resolveNdefStopCalls`. Suppress that same-attempt ending during the record handoff, but still reject/count other attempt IDs.
 6. Find the one record whose TNF is `4` and whose type bytes exactly equal the literal external type.
 7. Call `gateNativePort.initializeBle()`, require `await gateNativePort.isBleEnabled()` to be true, and call `gateNativePort.startUnfilteredBleScan(callback)`. The adapter translates that call only to `BleClient.requestLEScan({ allowDuplicates: true }, callback)`, with no `services`, `namePrefix`, or display options.
-8. For each callback, read `result.localName` only. A result matches only when `result.localName` exactly equals the operator-recorded name shown by this PM5 and `matchAdvertisedName(payload, result.localName)` returns non-null. Store the first matching `deviceId` only in component memory; the receipt stores only elapsed times and the count of distinct matching IDs.
+8. For each callback, read `result.localName` only for the name and `result.device.deviceId` for identity (installed BLE `ScanResult.device` contract). A result matches only when `result.localName` exactly equals the operator-recorded name shown by this PM5 and `matchAdvertisedName(payload, result.localName)` returns non-null. Store the first matching `deviceId` only in component memory; the receipt stores only elapsed times and the count of distinct matching IDs.
 9. Stop after the same matching device produces a second callback. Await `stopLEScan`; if more than one distinct matching device was observed, do not connect. Otherwise connect to the retained ID, then disconnect it, recording both outcomes.
 10. Expose **Cancel sample** for a scan that never reaches a second match; it awaits `stopLEScan` and records a failed criterion rather than inventing a timeout.
-11. Render raw bytes only on the device screen. **Copy redacted receipt** calls `serializeGateReceipt`, writes it to the clipboard, and also emits one `console.info("NFC_GATE_RECEIPT " + json)` line for Xcode-console recovery.
-12. Provide **Reload WebView** only for reload/stress scenarios. Before `location.reload()`, store `{ scenario, reloadPending: true, priorAttemptId, iphone, pm5 }` under session-storage key `ergomatic:nfc-gate-minus-one`; never store a device ID or raw record. The next mount copies the opaque prior attempt ID into memory, immediately clears session storage, uses the ID only to release/drain A, and never serializes or logs it.
+11. Render raw bytes only on the device screen. **Copy redacted receipt** strictly serializes, writes the redacted JSON to the clipboard, and emits bounded `NFC_GATE_RECEIPT` fragment/end messages. Each export has its own sequence identity and declared base64 length; incomplete, truncated, mixed, duplicate or post-end fragments cannot complete an export. Every native console message remains below Capacitor's installed 4068-character argument cap.
+12. For `webview-reload` and each `stop-during-*` scenario, wait for A's exact held stage, stop/drain A, then expose **Export partial receipt**. Only after that export does **Reload WebView** become available; the controller verifies the complete attached-console export before asking the operator to reload. Store only `{ scenario, reloadPending: true, priorAttemptId, priorStage, iphone, pm5 }` under `ergomatic:nfc-gate-minus-one`. The next mount validates that metadata and immediately clears storage. **Start B** starts an unheld reader with fresh identity and installs the overlay progress listener, then releases only A's held stage. No mount-time release. All old-record, ending, and progress IDs are rejected; B's complete connect/disconnect is required before its conditional stale-A criterion can become true. The controller combines every captured document, retaining failed attempts, and establishes the whole-matrix criterion externally.
 13. Abort and drain the current NFC or BLE operation on unmount and on the port's foreground-loss callback; call `gateNativePort.currentAppState()` immediately before NFC start and again before BLE initialization so an already-backgrounded app cannot arm either radio operation.
 
 The probe records capability-call start/finish with `performance.now()`. It records each matching-advertisement timestamp relative to `requestLEScan` invocation, so the receipt carries first-match latency and repeat intervals without choosing a product deadline or collision window.
@@ -1100,6 +1149,15 @@ Apply a local, uncommitted DEBUG-only overlay to installed `NfcPlugin.swift` tha
 
 The overlay's complete state and release mechanism is:
 
+All DEBUG dictionaries and held closures share `ndefState.queue`, the current
+`NfcSessionCoordinator` queue (installed `NfcPlugin.swift`'s `ndefState` and
+`sessionQueue` alias). Invoke `holdGateCallback` only inside that coordinator
+context, and assert `ndefState.assertCurrentContext()` there. Dispatch the
+connect/query/read completion wrapper onto that same queue before consulting
+the hold dictionary or executing the production ownership guard. The release
+bridge and start-option registration below also dispatch to `ndefState.queue`;
+do not add an independent diagnostic queue.
+
 ```swift
 #if DEBUG
 private var gateHoldStageByAttempt: [String: String] = [:]
@@ -1110,6 +1168,7 @@ private func holdGateCallback(
     stage: String,
     callback: @escaping () -> Void
 ) -> Bool {
+    ndefState.assertCurrentContext()
     guard gateHoldStageByAttempt[attemptId] == stage else { return false }
     gateHeldCallbacks["\(attemptId):\(stage)"] = callback
     DispatchQueue.main.async {
@@ -1129,7 +1188,7 @@ private func holdGateCallback(
         call.reject("No held Gate -1 callback.")
         return
     }
-    sessionQueue.async {
+    self.ndefState.queue.async {
         guard let callback = self.gateHeldCallbacks.removeValue(
             forKey: "\(attemptId):\(stage)"
         ) else {
@@ -1152,7 +1211,7 @@ Under `#if DEBUG`, `startScanning` reads `gateMinusOneHoldStage` and accepts onl
 #if DEBUG
 if let gateStage = call.getString("gateMinusOneHoldStage"),
    ["connect", "query", "read"].contains(gateStage) {
-    sessionQueue.async {
+    self.ndefState.queue.async {
         self.gateHoldStageByAttempt[attemptId] = gateStage
     }
 }
