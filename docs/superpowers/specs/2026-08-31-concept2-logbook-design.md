@@ -40,7 +40,13 @@ exercises them.
   ruling now is, verbatim: **"I don't want that set in our app. I want it
   to be set on Concept2's side."** The app asks nothing about weight class
   anywhere — not at onboarding, not at link, not at send, not on the dev
-  probe — and stores nothing about it. Concept2's API leaves us no choice
+  probe — and stores nothing about it. **A second ruling, 2026-09-04,
+  verbatim: "Stop talking about the weight class."** The app does not
+  MENTION it either: the You card's helper line and the SENT state's
+  provenance sub-line are both withdrawn. The one rendered exception is the
+  send refusal (surface 2's `no_weight_class` state), where Concept2 has
+  refused the row for that reason and a refusal that will not say why is
+  worse than the words. Concept2's API leaves us no choice
   about SENDING one: a result POSTed without the field is refused, measured
   2026-09-03 against log-dev (user 2211, PR0 harness token), verbatim body
   `{"message":"Could not create new result.","status_code":422,"errors":{"weight_class":["The weight class field is required."]}}`,
@@ -653,10 +659,13 @@ which is also the dedup experiment.
 2. **Log row: "Send to Concept2".** idle → sending → sent / duplicate
    ("Concept2 already has this row") / failed (retryable) / no weight class
    (repairable on Concept2, with a link-out and a Send again). **Sent state
-   includes a "View on Concept2" link-out** built from `c2_result_id`, and
-   names the weight class that was sent and which producer supplied it
-   (session-scoped: nothing about the class is stored, so a later mount
-   renders SENT without that line).
+   includes a "View on Concept2" link-out** built from `c2_result_id`, plus
+   the result id, and nothing else. **A 2026-09-03 revision had it also name
+   the class that was sent and which producer supplied it; that line is
+   WITHDRAWN by the 2026-09-04 ruling above, and this sentence replaces the
+   one that described it.** The class and its producer stay on the route's
+   200 and in the send's log line for an operator; no rower-facing surface
+   renders them.
    (PM open gate: the one thing that closes the rower's loop — "did it
    actually land?"). Sent renders only when the row's `c2_user_id`
    matches the live link. Non-qualifying and not-linked treatments are

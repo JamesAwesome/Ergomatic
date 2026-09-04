@@ -549,7 +549,17 @@
     <p class="lede">
       <strong>2026-09-03 · Wave E PR2 · amends the board approved 2026-08-31</strong>
       (<code>docs/design/handoffs/2026-08-31-concept2-connect/README.md</code>,
-      <code>Concept2 connect.dc.html</code>). Every frame below is at real
+      <code>Concept2 connect.dc.html</code>).
+      <strong>Revised 2026-09-04: the app says nothing about the weight
+      class.</strong> James, 2026-09-04 &mdash; &quot;Stop talking about the
+      weight class.&quot; He has now ruled twice: first that the app must not
+      ASK for it (ruling i, 2026-09-03), now that it must not TALK about it.
+      Both places this page had the app volunteer it &mdash; 1a's helper line
+      and 2c's provenance sub-line &mdash; are withdrawn below, in the sections
+      that argued for them rather than in an appendix. <strong>2i is
+      untouched</strong>: it draws only when Concept2 has REFUSED the send for
+      that reason, and a refusal that will not say why is worse than the words.
+      Every frame below is at real
       proportions: 390&times;844 portrait, 844&times;390 landscape. Colour values
       are <code>app/src/theme/tokens.css</code>'s, verbatim; contrast is computed
       (WCAG relative luminance) and printed in the last section.
@@ -583,12 +593,16 @@
         <td class="num">1</td>
         <td>1a's weight-class ask is <em>conditional</em>: "do NOT ask H/L if
           Concept2 already has a weight class on the account."</td>
-        <td><strong>There is no ask at all.</strong> The WEIGHT CLASS section,
-          its segmented control and its helper are gone; Connect is live on
-          first paint. One helper line replaces them: &quot;Your weight class
-          comes from Concept2.&quot; It names CONCEPT2 rather than the profile,
-          because the profile is only the fallback producer and this card cannot
-          open it.</td>
+        <td><strong>There is no ask at all, and since 2026-09-04 no mention
+          either.</strong> The WEIGHT CLASS section, its segmented control and
+          its helper are gone; Connect is live on first paint. <strong>Nothing
+          replaces them.</strong> An earlier revision of this row put one helper
+          line in their place &mdash; &quot;Your weight class comes from
+          Concept2.&quot; &mdash; and that line is WITHDRAWN, not merely
+          reworded: a rower who is never asked has no question outstanding, so
+          an unprompted answer is the app raising a Concept2 concept nobody put
+          to it. 1a is now the explanation, the hairline, Connect and its
+          footnote.</td>
         <td><strong>James, 2026-09-03:</strong> &quot;I don't want that set in
           our app. I want it to be set on Concept2's side.&quot; Measured the
           same day on log-dev: a result POSTed without
@@ -602,9 +616,14 @@
           &quot;derived&quot;, which named the wrong producer. Concept2's own
           help says the rower <em>designates</em> the class per piece, so the
           server reads their most recent declaration first and derives from
-          the profile only as a fallback (see 2i and 2c). Supersedes both the
+          the profile only as a fallback (see 2i). Supersedes both the
           board's conditional ask and this amendment's earlier
-          &quot;unconditional&quot; answer.</td>
+          &quot;unconditional&quot; answer. <strong>Extended 2026-09-04</strong>
+          (James: &quot;Stop talking about the weight class&quot;): the same
+          ruling that removed the question now removes the sentence that
+          answered it. What the server does is unchanged &mdash; declaration
+          first, profile as fallback &mdash; and the rower hears about it in
+          exactly one place, 2i, and only when Concept2 refuses the send.</td>
       </tr>
       <tr>
         <td class="num">2</td>
@@ -652,30 +671,43 @@
       <tr>
         <td class="num">7</td>
         <td>2c Sent shows the result id and nothing about the class.</td>
-        <td><strong>A second mono sub-line naming the class that was sent and
-          which producer supplied it</strong> &mdash; &quot;WEIGHT CLASS H
-          &middot; FROM YOUR LAST CONCEPT2 ROW&quot; or &quot;&hellip; FROM
-          YOUR CONCEPT2 WEIGHT&quot;. Session-scoped: nothing about the class
-          is stored, so a later visit renders 2c without it.</td>
-        <td>Concept2's help makes the class the rower's declaration, so a class
-          we DERIVED is a guess written to a permanent third-party record.
-          Concept2 permits per-result editing, so a guess the rower can see is
-          one they can fix. A guess nobody sees is one nothing can catch
-          (RF11).</td>
+        <td><strong>The board's answer STANDS, and this row is
+          WITHDRAWN.</strong> A revision of this page proposed a second mono
+          sub-line naming the class that was sent and which producer supplied
+          it (&quot;WEIGHT CLASS H &middot; FROM YOUR LAST CONCEPT2 ROW&quot; /
+          &quot;&hellip; FROM YOUR CONCEPT2 WEIGHT&quot;). It is withdrawn:
+          <strong>2c is the result id and nothing else</strong>, on the send
+          that just happened and on every later visit alike.</td>
+        <td><strong>James, 2026-09-04:</strong> &quot;Stop talking about the
+          weight class.&quot; The argument this row used to carry &mdash; that
+          a DERIVED class is a guess written to a third-party record, and that
+          Concept2's per-result editing makes a visible guess a fixable one
+          &mdash; names a real cost, and the ruling accepts it. Where it lands
+          instead: the class and its producer stay on the route's 200 and in
+          the send's log line, so an operator can still answer &quot;which
+          producer answered&quot; for a disputed row; the rower is not shown a
+          category they were never asked about, and the correction, if it is
+          ever wanted, belongs on Concept2's own per-result editor rather than
+          on a line here that can only name the problem.</td>
       </tr>
       <tr>
         <td class="num">9</td>
         <td>The declaration is read from Concept2's results list as it comes.</td>
         <td><strong>The read excludes every result id this app wrote, and a page
-          whose only rows are ours counts as NO declaration</strong> &mdash; so
-          row 7's line cannot relabel our own guess as the rower's
-          declaration.</td>
+          whose only rows are ours counts as NO declaration.</strong> This row
+          STANDS after 2026-09-04, with a different justification: it was argued
+          as protecting row 7's line, and row 7 is withdrawn.</td>
         <td>Concept2's list contains the rows we posted, its 201 echoes the class
-          we sent, and nothing on the row marks it as ours. Send 1 derives and
-          says so; send 2 would have read that same class back and said &quot;FROM
-          YOUR LAST CONCEPT2 ROW&quot;, silencing the one line that makes the
-          guess correctable. Reading our own writes back as an oracle is RF11 one
-          level up.</td>
+          we sent, and nothing on the row marks it as ours. Reading our own
+          writes back as an oracle is RF11 one level up. <strong>Restated
+          2026-09-04, now that no line is at stake:</strong> without the
+          exclusion, one derived guess becomes permanent. Send 1 derives H from
+          the profile and posts it; send 2 reads that H back as the rower's own
+          declaration and stops consulting the profile at all &mdash; so a rower
+          who later corrects their Concept2 weight keeps getting the old class
+          forever, and no screen would now say a word about it. The exclusion is
+          about what we SEND, not about what we say, which is why the withdrawal
+          of row 7 does not touch it.</td>
       </tr>
       <tr>
         <td class="num">10</td>
@@ -778,21 +810,39 @@
 
     <h3>1a Unlinked, asking nothing <span class="badge b-changed">CHANGED</span></h3>
     <p class="lede">
-      Copy is the board's, verbatim, minus what the 2026-09-03 ruling removed.
-      The WEIGHT CLASS section, its two-column segmented control, its
+      Copy is the board's, verbatim, minus what the two 2026-09 rulings
+      removed. The WEIGHT CLASS section, its two-column segmented control, its
       &quot;Concept2 requires a weight class. Asked once, at connect.&quot; ask
       and its 61.5/75&nbsp;kg helper are all GONE, and so is the rule that kept
       Connect inert until a class was picked. <strong>Connect is live on first
-      paint.</strong> In their place, one helper line above the button:
-      &quot;Your weight class comes from Concept2.&quot;
-      (12px <code>--ink-3</code>).
+      paint.</strong>
     </p>
     <p class="lede">
-      <strong>The card now collects nothing at all</strong> &mdash; no
-      radiogroup, no input, no draft state. That is the ruling's whole visible
-      effect on this surface, and it is why the two frames below are one frame:
-      there is no &quot;nothing picked&quot; and &quot;picked&quot; pair any
-      more, because there is nothing to pick.
+      <strong>Nothing stands in their place. Revised 2026-09-04, replacing
+      this paragraph rather than appending to it:</strong> the revision that
+      removed the ask put one helper line above the button in its stead
+      (&quot;Your weight class comes from Concept2.&quot;, 12px
+      <code>--ink-3</code>). That line is WITHDRAWN &mdash; James, 2026-09-04:
+      &quot;Stop talking about the weight class.&quot; It was written to stop a
+      rower wondering where the question went, and a rower who was never asked
+      is not wondering; all it does is raise a Concept2 category on a card that
+      neither collects it, shows it, nor can open the page that holds it.
+    </p>
+    <p class="lede">
+      <strong>The card now collects nothing at all, and says nothing about the
+      class either</strong> &mdash; no radiogroup, no input, no draft state, no
+      helper. That is the two rulings' whole visible effect on this surface, and
+      it is why the two frames below are one frame: there is no &quot;nothing
+      picked&quot; and &quot;picked&quot; pair any more, because there is
+      nothing to pick.
+    </p>
+    <p class="lede">
+      <strong>The hairline STAYS, and the frames are what say so.</strong> 1a
+      still draws a rule between the explanation and the action, which is where
+      1c, 1f, 1f-b and 1j draw theirs; only the landscape frames drop it,
+      because the 20px column gap has taken the job over
+      (<code>.c2-card-body-split .c2-card-hair { display: none }</code>). What
+      changed is what sits under it: the button, directly.
     </p>
     <div class="boards">
       <div class="board">
@@ -818,9 +868,6 @@
               Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.
             </p>
             <div class="hair"></div>
-            <p class="c2helper">
-              Your weight class comes from Concept2.
-            </p>
             <div class="btn-primary">CONNECT TO CONCEPT2</div>
             <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER</p>
           </div>
@@ -848,9 +895,6 @@
               <div style="display: flex; flex-direction: column; gap: 10px">
                 <p class="c2explain">
                   Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.
-                </p>
-                <p class="c2helper">
-                  Your weight class comes from Concept2.
                 </p>
               </div>
               <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center">
@@ -952,9 +996,9 @@
       who saw that page recognises the card. 12px <code>--ink-3</code>,
       <code>overflow-wrap: anywhere</code> (a long address must not push the card
       a line taller — the same fix <code>.you-identity</code> already carries,
-      <code>src/You.tsx:58-61</code>). No weight class is shown &mdash; and as
-      of the 2026-09-03 ruling there is none to show, on this card or any
-      other.
+      <code>src/You.tsx:58-61</code>). No weight class is shown &mdash; as of
+      the 2026-09-03 ruling there is none to show, on this card or any other,
+      and as of 2026-09-04 no card mentions one either.
     </p>
     <div class="callout">
       <p><strong>The username is only renderable if ruling (ii) lands on B.</strong>
@@ -2000,50 +2044,47 @@
       </div>
     </div>
 
-    <h3>2c Sent <span class="badge b-changed">CHANGED</span> <span class="badge b-new">NEW LINE 2026-09-03</span></h3>
+    <h3>2c Sent <span class="badge b-changed">CHANGED</span></h3>
     <p class="lede">
-      <strong>A second sub-line, and it is the whole answer to a real
-      defect.</strong> Concept2's own help makes the weight class the rower's
-      <em>declaration</em> (&quot;you must designate L or H for every piece that
-      you enter&quot;), so when we cannot read one and DERIVE it from their
-      profile weight instead, we are guessing at a competition category and
-      writing it to a permanent third-party record. The first drawing of this
-      surface showed that guess to nobody. Concept2 permits per-result editing,
-      so a guess the rower can SEE is a guess the rower can fix; a guess they
-      never see is one nothing can ever catch.
+      <strong>2c is the result id and nothing else. Revised 2026-09-04, and
+      this paragraph REPLACES the four that argued the other way</strong>
+      &mdash; they are not kept below as history, because a withdrawn argument
+      left standing beside its withdrawal is read as the design. A revision of
+      this page added a second mono sub-line beside <code>RESULT 339</code>
+      naming the class that had just been sent and which producer supplied it
+      (<strong>WEIGHT CLASS H &middot; FROM YOUR LAST CONCEPT2 ROW</strong>, or
+      <strong>&hellip; FROM YOUR CONCEPT2 WEIGHT</strong> when we derived it).
+      <strong>That line is withdrawn.</strong> James, 2026-09-04: &quot;Stop
+      talking about the weight class.&quot;
     </p>
     <p class="lede">
-      So the SENT state names the class and where it came from, in one mono
-      sub-line beside the result id, in the same
-      <code>--ink-4</code> as <code>RESULT 339</code>
-      (5.29:1 on <code>--surface</code>, already a &sect;4 row):
-      <strong>WEIGHT CLASS H &middot; FROM YOUR LAST CONCEPT2 ROW</strong> when
-      the rower's own declaration supplied it, or
-      <strong>WEIGHT CLASS H &middot; FROM YOUR CONCEPT2 WEIGHT</strong> when we
-      derived it. No em-dash; uppercase mono, the same idiom as every other
-      sub-line on this card.
+      <strong>What the withdrawn line was FOR, stated plainly, because the
+      ruling accepts its cost rather than denying it.</strong> Concept2's own
+      help makes the class the rower's <em>declaration</em> (&quot;you must
+      designate L or H for every piece that you enter&quot;), so when we cannot
+      read one and derive it from their profile weight instead, we are guessing
+      at a competition category and writing it to a permanent third-party
+      record. The line existed so that guess was visible at the moment it was
+      written, while Concept2's own per-result editor could still repair it.
+      Removing it means a derived class is now written and never shown.
     </p>
     <p class="lede">
-      <strong>&quot;FROM YOUR LAST CONCEPT2 ROW&quot; is only true because the
-      read ignores our own writes, and that rule was missing when this line was
-      first drawn.</strong> Concept2's results list contains the rows Ergomatic
-      itself posted, its 201 echoes back the very class we sent, and no field on
-      the row marks it as ours. So a DERIVED guess on the first send would have
-      been read back as the rower's own declaration on the second &mdash; the
-      guess laundered into a declaration, and this line, the one thing that makes
-      the guess correctable, going silent exactly when it started being wrong. The
-      declaration read now excludes every result id this app wrote, and a page
-      whose only rows are ours counts as no declaration at all: the rower keeps
-      seeing <strong>FROM YOUR CONCEPT2 WEIGHT</strong> for as long as that is
-      what it is.
+      <strong>Where the provenance went instead.</strong> The route's 200 still
+      carries <code>weightClass</code> and <code>weightClassSource</code>, and
+      the send's log line still records which producer answered &mdash; so
+      &quot;which class did we send for that row, and who decided it&quot; is
+      still answerable, by an operator, off the record rather than off the
+      screen. And the guess cannot compound: the declaration read excludes every
+      result id this app wrote (&sect;0 row 9), so one derived class does not
+      come back as the rower's own declaration on the next send. That rule was
+      argued as protecting this line; it stands on its own, because what it
+      really protects is the class we SEND.
     </p>
     <p class="lede">
-      <strong>It is session-scoped by construction, and that is correct rather
-      than a shortfall.</strong> Nothing about the class is stored by us, so the
-      line renders on the response of the send that just happened and is absent
-      on every later visit &mdash; where 2c reads exactly as it does below the
-      strike-through. The moment the line matters is the moment the row lands,
-      which is the moment the disagreement is created.
+      The result id is the whole of the state either way. Nothing about the
+      class was ever stored by us, so the withdrawn line only ever drew on the
+      response of the send that had just happened; every later visit already
+      rendered 2c exactly as the frames below now draw it, on every visit.
     </p>
     <p class="lede">
       The timestamp is removed. Nothing stores when Concept2 accepted the row:
@@ -2077,16 +2118,13 @@
             <p class="c2foot" style="text-align: left">
               RESULT 339
             </p>
-            <p class="c2foot" style="text-align: left">
-              WEIGHT CLASS H &middot; FROM YOUR LAST CONCEPT2 ROW
-            </p>
           </div>
           <div class="btn-l4" style="margin-top: 10px">Delete session</div>
           <span class="frame-dim">390 &times; 844</span>
         </div>
       </div>
       <div class="board">
-        <p class="board-cap">2c &middot; the withdrawn line, struck, for comparison</p>
+        <p class="board-cap">2c &middot; the withdrawn TIMESTAMP, struck, for comparison</p>
         <div class="frame">
           <p class="board-cap">BOARD (approved 2026-08-31)</p>
           <div class="sendcard">
@@ -2133,9 +2171,6 @@
             <div class="send-linkrow">View on Concept2 &rarr;</div>
             <p class="c2foot" style="text-align: left">
               RESULT 339
-            </p>
-            <p class="c2foot" style="text-align: left">
-              WEIGHT CLASS H &middot; FROM YOUR CONCEPT2 WEIGHT
             </p>
           </div>
           <span class="frame-dim">844 &times; 390</span>
@@ -3066,17 +3101,28 @@
       <li><strong>Ruling (i) is already ANSWERED and is here for the record,
         not for a decision (James, 2026-09-03):</strong> &quot;I don't want that
         set in our app. I want it to be set on Concept2's side.&quot; What this
-        gate asks about it is the RENDERED consequence &mdash; §1a with no ask,
-        2i (redrawn), and <strong>2c's new provenance line</strong>.</li>
-      <li><strong>The two frames this revision REDREW, and why each was wrong
-        rather than merely thin:</strong> <strong>2i</strong> told the rower to
+        gate asks about it is the RENDERED consequence &mdash; §1a with no
+        ask, and 2i (redrawn). <strong>Extended 2026-09-04</strong> (James:
+        &quot;Stop talking about the weight class&quot;), and this bullet is
+        rewritten rather than annotated: a revision of this page also asked
+        about a new provenance sub-line on 2c and a helper line on 1a, and both
+        are WITHDRAWN. The rendered consequence is now 1a with no ask and no
+        mention, 2c as the board drew it (the result id alone), and 2i
+        unchanged &mdash; the one surface where the phrase survives, because
+        there Concept2 has refused the send for that reason.</li>
+      <li><strong>The frame this revision REDREW, and why it was wrong rather
+        than merely thin:</strong> <strong>2i</strong> told the rower to
         &quot;send this row again&quot; and offered no way to, pointed at a page
         measured to be a public read-only card, and gave one sentence to four
         server reasons including one where the rower's weight is not the broken
-        thing; <strong>2c</strong> wrote a weight class we may have GUESSED onto
-        a permanent Concept2 record and showed it to nobody, on a surface whose
-        vendor permits per-result editing. Both are copy-and-control changes on
-        chrome that already exists; neither introduces a new idiom.</li>
+        thing. It is a copy-and-control change on chrome that already exists and
+        introduces no new idiom. <em>This bullet named TWO frames until
+        2026-09-04.</em> The second was 2c, redrawn to name the class we may
+        have guessed; that redraw is withdrawn by the ruling above and 2c is
+        back to the board's own shape, so the cost it named &mdash; a guess
+        written to a permanent Concept2 record and shown to nobody &mdash; is
+        accepted rather than answered on screen (&sect;2c says where the
+        provenance went instead).</li>
       <li>Ruling (ii): identity line variant A (numeric) or B (stored username).
         B is rendered as the recommendation and costs one nullable column.</li>
       <li>Ruling (iii): the reworded 401/403 callback lines (§3).</li>

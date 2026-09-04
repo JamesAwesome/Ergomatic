@@ -18,10 +18,21 @@ own most recent DECLARATION first — Concept2's help says *"you must
 designate L or H for every piece that you enter"*, so the declaration is
 the vendor's own producer — and our derivation from the profile's `weight`
 + `gender` only as a fallback. **An earlier revision of this note said
-"derived", which named the wrong producer; that wording is withdrawn.** The
-SENT state names the class that was sent and which producer supplied it
-(amendment change 7), because a DERIVED class is a guess and Concept2
-permits per-result editing. Every 1a detail below
+"derived", which named the wrong producer; that wording is withdrawn.**
+
+**And the app does not TALK about it either. James, 2026-09-04: "Stop
+talking about the weight class."** A second ruling, on top of the one
+above: the two places the app volunteered the class are gone — 1a's helper
+line "Your weight class comes from Concept2." and the SENT state's
+provenance sub-line "WEIGHT CLASS H · FROM YOUR LAST CONCEPT2 ROW" /
+"· FROM YOUR CONCEPT2 WEIGHT" (amendment change 7, now WITHDRAWN). **This
+replaces the sentence that used to stand here saying the SENT state names
+the class and its producer.** The class and its producer stay on the
+route's 200 and in the send's log line, so an operator can still say which
+producer answered; the rower is shown neither. The one surface that still
+says the words is amendment 2i, where Concept2 has REFUSED the send for
+that reason — a refusal that will not say why is worse than the words.
+Every 1a detail below
 describing a WEIGHT CLASS section, its segmented control, its helper line,
 or a dimmed Connect is a record of a rendered board that is no longer
 built — see `amendment-2026-09-03.html` for what replaces it, and the
@@ -93,10 +104,15 @@ this file still quotes an older one, the amendment wins.
   sent, and nothing on the row marks it as ours — so without the exclusion a
   derived guess would return as the rower's own declaration on the next send,
   and the SENT line that makes the guess correctable would go silent.
-- **The SENT state names the class and its source** (amendment change 7,
-  2026-09-03): "WEIGHT CLASS H · FROM YOUR LAST CONCEPT2 ROW", or "· FROM
-  YOUR CONCEPT2 WEIGHT" when we derived it. Session-scoped — nothing about
-  the class is stored, so a later visit renders 2c without the line.
+- **~~The SENT state names the class and its source~~ — WITHDRAWN
+  2026-09-04** (James: "Stop talking about the weight class"). Amendment
+  change 7 added a sub-line reading "WEIGHT CLASS H · FROM YOUR LAST
+  CONCEPT2 ROW", or "· FROM YOUR CONCEPT2 WEIGHT" when we derived it. **2c
+  is the result id and nothing else**, on the send that just happened and on
+  every later visit alike. What the line was for — a derived class is a
+  guess, and Concept2 permits per-result editing, so a visible guess is a
+  fixable one — is a cost the ruling accepts; the provenance stays on the
+  route's 200 and in the send's log line for an operator.
 - **2i's link-out targets the ID-LESS `{origin}/profile`** (2026-09-03).
   The id-bearing path was measured to render a public read-only card with
   no weight and no form, while the id-less one 302s to login. The target is
@@ -138,7 +154,10 @@ WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
   Asked once, at connect." ask, its 61.5/75 kg helper, and the dimmed-
   Connect-until-picked rule are all GONE. The ruling removed the question,
   so the control, its explanation and the state it gated no longer exist.
-  In their place: one helper line, "Your weight class comes from Concept2." (12px `#57544c`).]** · primary CONNECT TO CONCEPT2
+  Nothing stands in their place: a 2026-09-03 revision put one helper line
+  there ("Your weight class comes from Concept2.", 12px `#57544c`) and that
+  line is WITHDRAWN too (James, 2026-09-04). 1a is the explainer, the
+  hairline, Connect and its footnote.]** · primary CONNECT TO CONCEPT2
   button (48px, `#1b1a17` fill, `#fffdf7` mono 12px 600 0.16em), **live on
   first paint** · footnote "OPENS CONCEPT2 IN YOUR BROWSER" (11px mono `#6f6a5f`, centered).
 - **1b Waiting / just returned**: sunken panel (`#efeade`,
@@ -148,8 +167,9 @@ WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
   CONFIRMING THE LINK: "Checking the link with Concept2." (no Cancel).
 - **1c Linked**: LINKED ✓ status; helper "Finished monitor rows can be sent from the log." (12px `#57544c`); hairline;
   **Unlink Concept2** button (52px, outline `1px solid #b5341f`, text
-  `#b5341f` 16px 600). No weight class shown — and as of 2026-09-03 none
-  exists to show, on this card or any other. **Gate 0 amendment,
+  `#b5341f` 16px 600). No weight class shown — as of 2026-09-03 none
+  exists to show, on this card or any other, and as of 2026-09-04 no card
+  mentions one either. **Gate 0 amendment,
   callback pages: APPROVED 2026-09-02 and BUILT at PR1.75a — the shared
   callback template (`2026-09-02-concept2-pr175-app-bind-design.md` §7)
   now covers 401 Not signed in, 403 Wrong account, 409 Already linked
