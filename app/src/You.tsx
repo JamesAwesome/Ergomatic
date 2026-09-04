@@ -93,7 +93,11 @@ export default function You({
           the server reports `available: true` — a capability gate, not a
           cosmetic hide (spec §Architecture 8), so You looks exactly as it
           does today on any deployment with `C2_LINK_ENABLED` unset, which
-          is every deployment until the flag flip.
+          is every deployment until the flag flip. Since the per-user gate
+          the server answers `available` per REQUEST, not per deployment
+          (`availableFor(email)`, gated on `C2_ALLOWED_EMAILS` as well), so
+          after the flip this is also how You looks for a rower who is not
+          on that list — an absent card, no error to explain.
           ABOVE the dev-only probe and the DIAGNOSTICS row, both of which
           keep their own positions (the probe is a walk instrument, not a
           product surface; the row's own comment requires it stay last).

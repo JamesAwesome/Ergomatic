@@ -15,7 +15,11 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
  * enforces that darkness rather than merely observing it
  * (`scripts/compose-env.test.sh`, the "e2e stack stays dark" check, run by
  * CI's `scripts` job), so lighting the flag here is not an option and would
- * not be one even if it were convenient.
+ * not be one even if it were convenient. The per-user gate added a SECOND
+ * lock on the same door and the same check now covers it: `C2_ALLOWED_EMAILS`
+ * is empty here too, and the authed routes answer on `availableFor(email)`,
+ * so even a stack that lit the flag by accident would still refuse every
+ * rower.
  *
  * So every case below fakes the SERVER'S ANSWERS at the client boundary with
  * `page.route` — the precedent is `e2e/onboarding.spec.ts`'s PUT-body

@@ -931,6 +931,19 @@ closed with zero Concept2 contact.
         They will always upload with their SAVE clock as Concept2's date.
         There is no backfill and there cannot be one — the close instant was
         never recorded. A known property of pre-PR2 rows, not a bug.
+- [x] **The per-user gate — `C2_ALLOWED_EMAILS`.** The Concept2 surface can
+      now be live for ONE account while the rest of `ALLOWED_EMAILS` never
+      meets it: the five AUTHED routes answer on `availableFor(email)`
+      (`available()` AND the email is on a second allowlist, parsed with the
+      same `parseAllowlist`/`isAllowed` pair as sign-in). Unset or empty
+      means NOBODY. The unauthenticated web callback keeps the global check
+      — it has no credential to gate on and can only complete an attempt a
+      gated user already minted. **This CHANGES THE SHAPE OF THE CUTOVER
+      named above:** `C2_LINK_ENABLED=1` no longer admits a cohort by
+      itself, so James can walk a real link and a real send on his own
+      account against log-dev before Concept2's write approval lands, and
+      the live flip becomes "widen the list" rather than "flip a flag for
+      everyone at once". `docs/deploy.md` carries the operator half. **S**
 - [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open and
       RE-RULED 2026-09-03: the `weight_class` gate is answered by Concept2,
       not by the link flow. James: "I don't want that set in our app. I want
