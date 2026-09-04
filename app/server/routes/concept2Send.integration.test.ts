@@ -29,6 +29,7 @@ import { createWorkoutsStore } from "../stores/workouts.js";
 import { createConcept2Store } from "../stores/concept2.js";
 import { createC2Client } from "../concept2/client.js";
 import { eligibilityFailure } from "../concept2/mapping.js";
+import { computeAvailableFor } from "../concept2/availability.js";
 import type { Stores } from "./data.js";
 // The CLIENT's own predicates and its own wire PARSER, imported across the
 // tree boundary — the precedent is `routes/partial.integration.test.ts`,
@@ -117,6 +118,18 @@ function declarationListBody(declared: "H" | "L") {
   };
 }
 
+// Every user this file signs in — BOTH the sign-in allowlist and the Wave E
+// per-user C2 list, so each test exercises the send rather than the gate.
+const SEND_EMAILS = new Set([
+  "send-eligibility@c2send.test",
+  "send-sent@c2send.test",
+  "send-declared@c2send.test",
+  "send-weight@c2send.test",
+  "send-noweight@c2send.test",
+  "send-dup@c2send.test",
+  "send-relink@c2send.test",
+]);
+
 const WEB_REDIRECT_URI = "https://ergomatic.example/api/concept2/callback";
 const LOGBOOK_BASE_URL = "https://log-dev.concept2.test";
 
@@ -198,15 +211,7 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
       baseDeps({
         sessions,
         users: createUserStore(db),
-        allowlist: new Set([
-          "send-eligibility@c2send.test",
-          "send-sent@c2send.test",
-          "send-declared@c2send.test",
-          "send-weight@c2send.test",
-          "send-noweight@c2send.test",
-          "send-dup@c2send.test",
-          "send-relink@c2send.test",
-        ]),
+        allowlist: SEND_EMAILS,
         nativeVerifier: async (idToken: string) => ({
           sub: idToken,
           email: `${idToken}@c2send.test`,
@@ -216,6 +221,11 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
         stores,
         concept2: {
           available: () => true,
+          // Wave E per-user gate, through the REAL `computeAvailableFor`
+          // (see the seam file's twin comment). Every user here is on both
+          // lists.
+          availableFor: (email: string) =>
+            computeAvailableFor(true, SEND_EMAILS, email),
           store: createConcept2Store(db),
           client,
           webRedirectUri: WEB_REDIRECT_URI,

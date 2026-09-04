@@ -3,7 +3,9 @@ import express from "express";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { SESSION_COOKIE } from "../auth/cookies.js";
+import { parseAllowlist } from "../auth/allowlist.js";
 import { requireUser } from "../auth/middleware.js";
+import { computeAvailableFor } from "../concept2/availability.js";
 import { baseDeps } from "../testDeps.js";
 import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import { makeFakeConcept2Store, makeFakeStores } from "../testing/fakes.js";
@@ -129,6 +131,13 @@ interface Harness {
 function buildApp(
   overrides: {
     available?: boolean;
+    // The RAW `C2_ALLOWED_EMAILS` string, not a Set: the harness runs it
+    // through the production `parseAllowlist` so every test in this file
+    // reaches `availableFor` through the real composition rather than a
+    // hand-set boolean. The default admits both fake users, which keeps the
+    // pre-existing tests here describing what they always described (the
+    // GLOBAL gate) instead of tripping over the new per-user one.
+    c2AllowedEmails?: string;
     store?: Concept2Store;
     logs?: LogsStore;
     client?: C2Client;
@@ -138,10 +147,17 @@ function buildApp(
   const store = overrides.store ?? makeFakeConcept2Store();
   const logs = overrides.logs ?? makeFakeStores().logs;
   const client = overrides.client ?? makeStubClient();
-  const state = { available: overrides.available ?? true };
+  const state = {
+    available: overrides.available ?? true,
+    allowedEmails: parseAllowlist(
+      overrides.c2AllowedEmails ?? `${userA.email},${userB.email}`,
+    ),
+  };
   const sessions = fakeSessionStore();
   const deps: Concept2RouterDeps = {
     available: () => state.available,
+    availableFor: (email: string) =>
+      computeAvailableFor(state.available, state.allowedEmails, email),
     store,
     logs,
     client,
@@ -567,6 +583,180 @@ describe("availability matrix (spec §Architecture 8)", () => {
     );
     expect(uploadRes.status).toBe(403);
     expect(await store.getLink(userA.id)).not.toBeNull();
+  });
+});
+
+// Wave E per-user gate (.superpowers/c2-user-gate-brief.md). The matrix
+// above moves ONE boolean and watches every route follow it; this describe
+// holds that boolean TRUE and moves the identity instead, because the
+// failure that matters here is a gate that opens for the wrong person, and
+// no amount of "flag off -> 403" can see it. Every test below runs userA
+// (on the list) and userB (off it) against the SAME app, so a route that
+// silently kept `available()` answers identically for both and reddens.
+//
+// The allowlist is passed as the raw env string and parsed by the
+// production `parseAllowlist` (buildApp), so "unset means nobody" is
+// asserted about the real parse rather than about a `new Set()` written
+// here.
+describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
+  const ONLY_A = userA.email;
+
+  it("mint: an off-list user gets 403 and no attempt is created; the on-list user still mints", async () => {
+    const store = makeFakeConcept2Store();
+    const createAttemptSpy = vi.spyOn(store, "createAttempt");
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const denied = await asB(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body).toStrictEqual({ error: "unavailable" });
+    expect(createAttemptSpy).not.toHaveBeenCalled();
+
+    const allowed = await asA(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(allowed.status).toBe(200);
+    expect(createAttemptSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("exchange: an off-list user gets 403 before any attempt is peeked", async () => {
+    const store = makeFakeConcept2Store();
+    const peekSpy = vi.spyOn(store, "peekAttempt");
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const denied = await asB(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "c", state: "s" }),
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body).toStrictEqual({ error: "unavailable" });
+    expect(peekSpy).not.toHaveBeenCalled();
+  });
+
+  // The one non-403 row of the matrix, and the reason the client needs no
+  // change: an off-list rower reads the SAME `{available:false}` a flag-off
+  // server sends, which both surfaces already render as "no card".
+  // Deliberately asserted on a user who HAS a link row: the response must
+  // be the capability answer, not "not linked", and it must leak neither
+  // the account id nor the origin.
+  it("GET /link: an off-list user reads {available:false} even holding a link row", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink({ c2UserId: 4477 }));
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const denied = await asB(request(app).get("/api/concept2/link"));
+    expect(denied.status).toBe(200);
+    expect(denied.body).toStrictEqual({ available: false });
+
+    const allowed = await asA(request(app).get("/api/concept2/link"));
+    expect(allowed.status).toBe(200);
+    expect(allowed.body).toMatchObject({ available: true, linked: false });
+  });
+
+  it("DELETE /link: an off-list user gets 403 and their link survives", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink());
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const denied = await asB(request(app).delete("/api/concept2/link"));
+    expect(denied.status).toBe(403);
+    expect(denied.body).toStrictEqual({ error: "unavailable" });
+    expect(await store.getLink(userB.id)).not.toBeNull();
+  });
+
+  it("upload: an off-list user gets 403 and nothing is sent to Concept2", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+    const { app, logs } = buildApp({
+      c2AllowedEmails: ONLY_A,
+      store,
+      client,
+    });
+    const id = await seedEligibleLog(logs, userB.id);
+
+    const denied = await asB(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body).toStrictEqual({ error: "unavailable" });
+    expect(client.postResult).not.toHaveBeenCalled();
+  });
+
+  // The fail-closed direction, at the ROUTE layer rather than the pure
+  // function's: an empty list must mean nobody, including the user the
+  // sign-in allowlist already admits.
+  it("an empty C2_ALLOWED_EMAILS denies everyone, on a flag that is fully ON", async () => {
+    const { app } = buildApp({ c2AllowedEmails: "" });
+    expect(
+      (await asA(request(app).post("/api/concept2/connect").send({}))).status,
+    ).toBe(403);
+    expect(
+      (await asA(request(app).get("/api/concept2/link"))).body,
+    ).toStrictEqual({ available: false });
+    expect((await asB(request(app).delete("/api/concept2/link"))).status).toBe(
+      403,
+    );
+  });
+
+  it("a list of only separators denies everyone", async () => {
+    const { app } = buildApp({ c2AllowedEmails: " , ," });
+    expect(
+      (await asA(request(app).post("/api/concept2/connect").send({}))).status,
+    ).toBe(403);
+  });
+
+  // `parseAllowlist` lower-cases and trims both sides; the entry a human
+  // types into a host `.env` is not the string Google hands us.
+  it("an entry that differs only in case and padding still admits the rower", async () => {
+    const { app } = buildApp({
+      c2AllowedEmails: `  ${userA.email.toUpperCase()} , `,
+    });
+    const res = await asA(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  // DELIBERATE, and the one route that keeps the global check: the callback
+  // is unauthenticated by design (PR1.75a deleted its last unauthenticated
+  // write), so it has no user to check. It cannot leak the capability
+  // because it can only ever complete an attempt a GATED user already
+  // minted — which is exactly what this test arranges, by seeding the
+  // attempt the mint would have refused. If the callback ever grew a
+  // per-user check it would have to invent a principal, and this test says
+  // what the design chose instead.
+  it("callback: still answers on the global check alone — it completes an attempt for a user the list would refuse", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ c2AllowedEmails: "", store, client });
+    await store.createAttempt({
+      nonce: "seeded-nonce",
+      userId: userA.id,
+      surface: "web",
+    });
+
+    const res = await asACookie(
+      request(app).get("/api/concept2/callback?state=seeded-nonce&code=abc123"),
+    );
+    expect(res.status).toBe(200);
+    expect(res.type).toBe("text/html");
+    expect(res.text).toContain("CONCEPT2 LINK · LINKED · HTTP 200");
+    expect(await store.getLink(userA.id)).not.toBeNull();
+  });
+
+  // The conjunct, at the route layer: being on the C2 list never opens a
+  // surface the flag has closed.
+  it("on the list but the global gate is off -> still refused", async () => {
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, available: false });
+    const res = await asA(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(res.status).toBe(403);
   });
 });
 
@@ -1480,6 +1670,8 @@ describe("createApp wiring (RF24: the seam the router-level tests skip)", () => 
         stores: makeFakeStores(),
         concept2: {
           available: () => true,
+          availableFor: (email: string) =>
+            computeAvailableFor(true, parseAllowlist(userA.email), email),
           store,
           client,
           webRedirectUri: WEB_REDIRECT_URI,
@@ -1502,6 +1694,43 @@ describe("createApp wiring (RF24: the seam the router-level tests skip)", () => 
       WEB_REDIRECT_URI,
     );
     expect((await store.getLink(userA.id))?.c2UserId).toBe(2211);
+  });
+
+  // Wave E per-user gate, at the ONE layer that can see a wiring mistake:
+  // `app.ts` passes `availableFor` from its own deps, and TypeScript's
+  // parameter-bivariance means a typo'd `availableFor: concept2Deps
+  // .available` COMPILES — a zero-arg function is assignable to a one-arg
+  // type. Every other test in this file constructs the router directly and
+  // would stay green through exactly that mistake, with the gate wide open
+  // for everyone the flag admits. This one enters through `createApp`, with
+  // an `availableFor` that admits userA alone, and moves the identity.
+  it("createApp threads availableFor: userB is refused where userA is served", async () => {
+    const app = createApp(
+      baseDeps({
+        sessions: fakeSessionStore(),
+        stores: makeFakeStores(),
+        concept2: {
+          available: () => true,
+          availableFor: (email: string) =>
+            computeAvailableFor(true, parseAllowlist(userA.email), email),
+          store: makeFakeConcept2Store(),
+          client: makeStubClient(),
+          webRedirectUri: WEB_REDIRECT_URI,
+          logbookBaseUrl: LOGBOOK_BASE_URL,
+        },
+      }),
+    );
+
+    const allowed = await asA(request(app).get("/api/concept2/link"));
+    expect(allowed.body).toStrictEqual({ available: true, linked: false });
+
+    const denied = await asB(request(app).get("/api/concept2/link"));
+    expect(denied.body).toStrictEqual({ available: false });
+
+    const deniedMint = await asB(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(deniedMint.status).toBe(403);
   });
 });
 

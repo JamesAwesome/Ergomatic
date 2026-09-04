@@ -62,6 +62,13 @@ services:
       C2_CLIENT_ID: ${C2_CLIENT_ID:-}
       C2_CLIENT_SECRET: ${C2_CLIENT_SECRET:-}
       C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}
+      # Wave E per-user gate: WHO the Concept2 surface is live for, once the
+      # flag and credentials say it exists at all. Same empty default as the
+      # rest — and here empty means NOBODY (server/index.ts parses it with
+      # the same `parseAllowlist` as ALLOWED_EMAILS, and an empty list
+      # matches no email), so an unset value leaves the surface dark for
+      # every rower rather than open to all of them.
+      C2_ALLOWED_EMAILS: ${C2_ALLOWED_EMAILS:-}
     depends_on:
       postgres:
         condition: service_healthy

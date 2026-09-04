@@ -5,7 +5,11 @@ import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
 import { createNativeVerifier } from "./auth/nativeVerify.js";
 import { createSessionStore } from "./auth/sessions.js";
 import { createUserStore } from "./auth/users.js";
-import { computeAvailable } from "./concept2/availability.js";
+import {
+  c2Warnings,
+  computeAvailable,
+  computeAvailableFor,
+} from "./concept2/availability.js";
 import { createC2Client } from "./concept2/client.js";
 import { createDb } from "./db/index.js";
 import { checkDb } from "./db/pool.js";
@@ -125,14 +129,24 @@ const c2ClientId = process.env.C2_CLIENT_ID ?? "";
 const c2ClientSecret = process.env.C2_CLIENT_SECRET ?? "";
 const c2LinkEnabled = process.env.C2_LINK_ENABLED;
 const c2Available = computeAvailable(c2LinkEnabled, c2ClientId, c2ClientSecret);
-if (c2LinkEnabled === "1" && !c2Available) {
-  console.warn(
-    "WARNING: C2_LINK_ENABLED=1 but C2_CLIENT_ID / C2_CLIENT_SECRET not fully set — Concept2 linking is DISABLED",
-  );
-} else if (c2LinkEnabled !== "1" && c2ClientId && c2ClientSecret) {
-  console.warn(
-    "WARNING: C2_CLIENT_ID / C2_CLIENT_SECRET are set but C2_LINK_ENABLED is not '1' — Concept2 linking stays DISABLED",
-  );
+// Wave E per-user gate: a SECOND, per-request check on top of the boot-time
+// one, so the Concept2 surface can be live for one account (a real link, a
+// real row, the logbook read back) while the rest of `ALLOWED_EMAILS` never
+// meets it. Same primitive as the sign-in allowlist, deliberately — it is
+// already tested, case-insensitive and comma-separated. Unset or empty
+// means NOBODY; `parseAllowlist` gives that for free (no entries match no
+// email), which is why there is no default written here to get backwards.
+const c2Allowlist = parseAllowlist(process.env.C2_ALLOWED_EMAILS);
+// Decided by a pure function so the composition is unit-tested rather than
+// asserted about a file that cannot be imported without a live Postgres;
+// this loop prints and decides nothing.
+for (const warning of c2Warnings(
+  c2LinkEnabled,
+  c2ClientId,
+  c2ClientSecret,
+  c2Allowlist,
+)) {
+  console.warn(warning);
 }
 // Google precedent (index.ts:69, above): the WEB callback path is fixed and
 // derived from the same siteUrl every other redirect uses. The NATIVE
@@ -142,6 +156,8 @@ if (c2LinkEnabled === "1" && !c2Available) {
 const c2WebRedirectUri = new URL("/api/concept2/callback", siteUrl).href;
 const concept2 = {
   available: () => c2Available,
+  availableFor: (email: string) =>
+    computeAvailableFor(c2Available, c2Allowlist, email),
   store: createConcept2Store(db),
   client: createC2Client({
     baseUrl: c2BaseUrl,

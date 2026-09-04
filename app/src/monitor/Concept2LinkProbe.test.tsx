@@ -64,14 +64,22 @@ describe("Concept2LinkProbe", () => {
     );
   });
 
-  it("reads the link status on mount and distinguishes a flag-off server from an unlinked account", async () => {
+  it("reads the link status on mount, distinguishes an unavailable server from an unlinked account, and names BOTH causes", async () => {
     mockLink({ available: false });
     vi.resetModules();
     const { default: Concept2LinkProbe } = await import("./Concept2LinkProbe");
     render(<Concept2LinkProbe />);
 
+    // Both variables, by name. `{available:false}` cannot say which one
+    // refused, and since the Wave E per-user gate there are two: naming
+    // `C2_LINK_ENABLED` alone would send a walk at the wrong one on the
+    // exact walk the per-user gate exists for. A loose
+    // /Link status: not available/ would pass through that regression, so
+    // the causes are asserted, not just the state.
     expect(
-      await screen.findByText(/Link status: not available/i),
+      await screen.findByText(
+        "Link status: not available (C2_LINK_ENABLED off, or not on C2_ALLOWED_EMAILS)",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/not linked/i)).not.toBeInTheDocument();
   });

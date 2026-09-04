@@ -45,7 +45,22 @@ export interface Concept2RouterDeps {
   // Flag AND both creds — computed at boot, closed over (plan's own
   // "Availability" line). A capability gate: every route re-checks it,
   // never just the client's rendering.
+  //
+  // Wave E per-user gate: this is now the GLOBAL half, and only the
+  // unauthenticated web callback still decides on it alone. Every AUTHED
+  // route uses `availableFor` below.
   available: () => boolean;
+  // Wave E per-user gate (.superpowers/c2-user-gate-brief.md):
+  // `available()` AND the email is on `C2_ALLOWED_EMAILS`
+  // (`concept2/availability.ts`'s `computeAvailableFor`, wired in
+  // `index.ts`). Unset or empty means NOBODY — the surface goes live for
+  // one account first, and widening the list is what the eventual live
+  // cutover does.
+  //
+  // A separate dep rather than a parameter on `available` because the six
+  // call sites do not all have a user: the callback is unauthenticated by
+  // design, so there is no email to pass it.
+  availableFor: (email: string) => boolean;
   store: Concept2Store;
   logs: LogsStore;
   client: C2Client;
@@ -215,6 +230,7 @@ function toMappingRow(row: {
 
 export function createConcept2Router({
   available,
+  availableFor,
   store,
   logs,
   client,
@@ -269,7 +285,7 @@ export function createConcept2Router({
     requireUser,
     refuseAmbiguousAuth,
     async (req, res) => {
-      if (!available()) {
+      if (!availableFor(req.user!.email)) {
         unavailableJson(res);
         return;
       }
@@ -337,6 +353,15 @@ export function createConcept2Router({
     // 1. availability — consumes NOTHING. PR1's flag-off consume was the
     //    route's last unauthenticated write, an attempt-destruction
     //    primitive that bought nothing; deleted at PR1.75a.
+    //    THE ONLY ROUTE STILL ON `available()`, and deliberately so: this
+    //    hop is unauthenticated by design (it is Concept2's redirect, and
+    //    the principal it acts for comes from the STORED attempt, not from
+    //    a credential on the request), so there is no email to gate on
+    //    before the state is read. It cannot leak the capability either —
+    //    it can only ever complete an attempt that a gated user already
+    //    minted, and the mint is on `availableFor`. Gating it on the
+    //    per-user list would mean inventing a principal, or refusing a
+    //    link the previous hop already authorised.
     if (!available()) {
       sendPage(res, renderCallbackPage("unavailable"));
       return;
@@ -474,7 +499,7 @@ export function createConcept2Router({
     refuseAmbiguousAuth,
     async (req, res) => {
       // 1. availability
-      if (!available()) {
+      if (!availableFor(req.user!.email)) {
         unavailableJson(res);
         return;
       }
@@ -580,7 +605,7 @@ export function createConcept2Router({
     requireUser,
     refuseAmbiguousAuth,
     async (req, res) => {
-      if (!available()) {
+      if (!availableFor(req.user!.email)) {
         // 200 on purpose (the matrix's one non-403 row) — this is a
         // capability read, not an action.
         res.json({ available: false });
@@ -630,7 +655,7 @@ export function createConcept2Router({
     requireUser,
     refuseAmbiguousAuth,
     async (req, res) => {
-      if (!available()) {
+      if (!availableFor(req.user!.email)) {
         unavailableJson(res);
         return;
       }
@@ -649,7 +674,7 @@ export function createConcept2Router({
     requireUser,
     refuseAmbiguousAuth,
     async (req, res) => {
-      if (!available()) {
+      if (!availableFor(req.user!.email)) {
         unavailableJson(res);
         return;
       }

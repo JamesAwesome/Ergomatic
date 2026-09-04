@@ -119,6 +119,36 @@ Notes:
 - If sign-in breaks after a deploy, check the app logs for the boot warning
   about missing Google env before debugging anything else.
 
+## Concept2 logbook (optional, currently dark)
+
+The broker is wired on every deploy and refuses everything until the host
+`.env` says otherwise. Four variables turn it on, and a fifth says who for:
+
+- `C2_CLIENT_ID` / `C2_CLIENT_SECRET` — the OAuth app registered at Concept2.
+- `C2_LINK_ENABLED=1` — the literal `1`, nothing else counts.
+- `C2_BASE_URL` — which Concept2 this deploy talks to. Defaults to the
+  sandbox (`https://log-dev.concept2.com`); the live logbook is
+  `https://log.concept2.com` and needs write approval first.
+- `C2_ALLOWED_EMAILS` — a comma-separated list, same shape and same parser
+  as `ALLOWED_EMAILS` (case-insensitive, whitespace trimmed).
+  **Unset or empty means NOBODY can link, not everybody**: it is the per-user
+  gate that lets the surface go live for one account before it goes live for
+  the whole sign-in allowlist. Widening this list is what a real cutover
+  does; nothing else has to change.
+
+Notes:
+- The two lists are independent, and both must admit a rower: `ALLOWED_EMAILS`
+  decides who gets an Ergomatic account at all, `C2_ALLOWED_EMAILS` who sees
+  the Concept2 card once they have one. Being on the second alone gets you
+  nowhere.
+- A rower off the C2 list reads exactly what a flag-off server sends
+  (`{available:false}`), so the card is simply absent — there is no error to
+  explain.
+- Like the sign-in allowlist, changes take effect on container recreate.
+- Boot warns if `C2_LINK_ENABLED=1` while the C2 list is empty — a fully
+  configured broker nobody can use is the state most likely to read as
+  working software.
+
 ## TestFlight releases
 
 See `docs/RELEASING.md` for the complete process: when to release, versioning

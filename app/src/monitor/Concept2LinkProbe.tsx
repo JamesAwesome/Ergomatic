@@ -40,13 +40,20 @@ import { startLink, type LinkOutcome } from "../adapters/linkFlow";
  * finishing. The server's `auth_via` log lines are the authority on what
  * actually happened if this pairing appears.
  *
- * `Link status` also distinguishes a FLAG-OFF server from an unlinked
+ * `Link status` also distinguishes an UNAVAILABLE server from an unlinked
  * account: `GET /api/concept2/link` answers `{available:false}` with HTTP 200
- * (`routes/concept2.ts:518-523`), so `describeStatus` names that case
+ * (the handler's own capability read), so `describeStatus` names that case
  * explicitly rather than letting it read as "not linked". It names a THIRD
  * case for the same reason: when the read itself throws, the line says
  * `unreadable`, because a walk over a quick tunnel drops requests and a stale
  * status line is how an operator records a server state nobody observed.
+ *
+ * That line names TWO causes since the Wave E per-user gate, and naming only
+ * one would send the walk at the wrong variable: the authed routes answer on
+ * `availableFor(email)` — the flag AND the credentials AND
+ * `C2_ALLOWED_EMAILS` — so a correctly-flagged server refuses a rower who is
+ * simply not on the C2 list, and reading `C2_LINK_ENABLED is off` off that
+ * would be a false diagnostic on the exact walk this gate exists for.
  *
  * Build-time flag gated (`VITE_ENABLE_C2_LINK_PROBE`), same shape as
  * `AppRoutes.tsx`'s `VITE_ENABLE_FAKE_MONITOR` seam: mounted behind a dynamic
@@ -127,9 +134,12 @@ function describeStatus(
   // resolves and never says why.
   if (statusError) return "unreadable (the request failed)";
   if (status === null) return "reading...";
-  // `{available:false}` comes back with HTTP 200 (routes/concept2.ts:518-523),
-  // so a flag-off server would otherwise read exactly like an unlinked one.
-  if (!status.available) return "not available (C2_LINK_ENABLED is off)";
+  // `{available:false}` comes back with HTTP 200, so an unavailable server
+  // would otherwise read exactly like an unlinked one. Both causes are named
+  // because the response cannot tell them apart and the operator has two
+  // different variables to check.
+  if (!status.available)
+    return "not available (C2_LINK_ENABLED off, or not on C2_ALLOWED_EMAILS)";
   if (!status.linked) return "not linked";
   // `needsReauth` is the row's `needs_reauth_at` (routes/concept2.ts:537). A
   // link that needs re-auth is still a link -- the row exists, the account id
