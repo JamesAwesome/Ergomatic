@@ -4,12 +4,15 @@ import userEvent from "@testing-library/user-event";
 
 type NfcListener = (event: unknown) => void;
 type BleListener = (event: unknown) => void;
+type AppListener = (state: { isActive: boolean }) => void;
 
 const native = vi.hoisted(() => ({
   calls: [] as string[],
   nfcEvent: undefined as NfcListener | undefined,
   nfcSessionEnd: undefined as NfcListener | undefined,
   bleResult: undefined as BleListener | undefined,
+  appState: undefined as AppListener | undefined,
+  appPause: undefined as AppListener | undefined,
   stoppedBle: false,
   matchingIds: new Set<string>(),
   reset() {
@@ -17,6 +20,8 @@ const native = vi.hoisted(() => ({
     this.nfcEvent = undefined;
     this.nfcSessionEnd = undefined;
     this.bleResult = undefined;
+    this.appState = undefined;
+    this.appPause = undefined;
     this.stoppedBle = false;
     this.matchingIds.clear();
   },
@@ -77,9 +82,11 @@ vi.mock("@capacitor-community/bluetooth-le", () => ({
 
 vi.mock("@capacitor/app", () => ({
   App: {
-    addListener: async (_name: string, _listener: () => void) => {
+    addListener: async (name: string, listener: AppListener) => {
       if (!native.calls.includes("app-listener"))
         native.calls.push("app-listener");
+      if (name === "pause") native.appPause = listener;
+      else native.appState = listener;
       return { remove: async () => undefined };
     },
     getState: async () => {
@@ -236,6 +243,31 @@ describe("GateMinusOneProbe", () => {
       expect(stopBleScan).toHaveBeenCalledOnce();
       expect(screen.getByText(/BLE scan\/connect failed/)).toBeInTheDocument();
       expect(native.calls).not.toContain("ble-connect:device-a");
+    });
+  });
+
+  it("drains on foreground loss and ignores BLE callbacks that arrive after stop", async () => {
+    const user = await renderReadyProbe();
+    await beginThroughBle(user);
+    await act(async () => {
+      native.appPause!({ isActive: false });
+    });
+    await act(async () => {
+      native.bleResult!({
+        device: { deviceId: "device-a" },
+        localName: "PM5 A",
+      });
+      native.bleResult!({
+        device: { deviceId: "device-a" },
+        localName: "PM5 A",
+      });
+    });
+    await waitFor(() => {
+      expect(native.calls).toContain("ble-stopLEScan");
+      expect(native.calls).not.toContain("ble-connect:device-a");
+      expect(
+        screen.getByText(/App backgrounded; radio operations drained/),
+      ).toBeInTheDocument();
     });
   });
 });
