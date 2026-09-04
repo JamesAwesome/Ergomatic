@@ -116,10 +116,11 @@ describe("computeAvailableFor: the per-user C2 gate", () => {
 // import time).
 //
 // `c2Gate` takes RAW env strings and returns the finished gate, so the
-// composing happens HERE, under test, and the untestable residue in
-// `index.ts` shrinks to the env var NAMES — the same residue
-// `C2_LINK_ENABLED` and the two credentials already carry, and one no
-// same-scope neighbour can be confused with.
+// composing happens HERE, under test. It does not reduce `index.ts` to
+// nothing: what still survives there, and which of it fails OPEN, is
+// enumerated with its measurements on `c2Gate` itself
+// (`concept2/availability.ts`). These tests cover the composition; they
+// cover none of that residue, and saying so is the point of the pointer.
 describe("c2Gate: the whole gate, composed from raw env", () => {
   const LIVE = {
     linkEnabledFlag: "1",

@@ -132,14 +132,19 @@ const c2LinkEnabled = process.env.C2_LINK_ENABLED;
 // already tested, case-insensitive and comma-separated. Unset or empty
 // means NOBODY.
 //
-// This file COMPOSES NOTHING (F1, fix round 1). It used to parse
+// This file COMPOSES NOTHING (F1, fix rounds 1 and 2). It used to parse
 // `C2_ALLOWED_EMAILS` into a `Set<string>` and build `availableFor` here,
-// which put two identically-typed Sets in one scope: replacing the C2 one
-// with the SIGN-IN one typechecked clean and left every test green while
-// opening the Concept2 surface to every signed-in user. Nothing in this
-// file can be tested (it opens a real Postgres at import time), so nothing
-// could have caught it. `c2Gate` takes the raw strings and returns the
-// finished gate, and what is left here is four env var names.
+// which put two identically-typed Sets in one scope; and after that it
+// still hand-wired the two finished checks, where `availableFor:
+// c2.available` typechecked clean and left 1878 unit tests green with every
+// gated route open to every signed-in user. Nothing in this file can be
+// tested (it opens a real Postgres at import time), so nothing could have
+// caught either.
+//
+// `c2Gate` takes the raw strings and returns the finished gate. What is
+// STILL untested here is NOT "four env var names" — the honest census, with
+// each claim's measurement, is the numbered list on `c2Gate` in
+// `concept2/availability.ts`. Read it before trusting this file.
 const c2 = c2Gate({
   linkEnabledFlag: c2LinkEnabled,
   clientId: c2ClientId,

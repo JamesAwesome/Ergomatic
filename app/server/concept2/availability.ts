@@ -165,10 +165,46 @@ export interface C2Gate {
 // so no gate could ever have caught that.
 //
 // Taking RAW env and returning the FINISHED gate moves the parse and the
-// composition here, where they are tested. What is left untestable in
-// `index.ts` is four env var NAMES — the same residue `C2_LINK_ENABLED`
-// and the credentials already carried, and one with no same-typed
-// neighbour to be confused with.
+// composition here, where they are tested.
+//
+// WHAT IS ACTUALLY LEFT UNTESTED IN `index.ts` — the canonical statement;
+// two other comments point here rather than restating it, because an
+// over-stated version of this paragraph is the thing this work has got
+// wrong four times. It is not "four env var names". Every claim below was
+// measured on 2026-09-04 against the tree at `f76ac07a`, by making the edit
+// and running `pnpm typecheck` and `pnpm test --project unit`:
+//
+//  1. FOUR `process.env` NAMES at the `c2Gate({...})` call. Exactly one of
+//     the four fails OPEN when misnamed: `allowedEmails` pointed at
+//     `ALLOWED_EMAILS` — the sign-in list — typechecks clean, leaves every
+//     unit test green, and admits every signed-in rower. The other three
+//     deny or break loudly.
+//  2. FOUR FIELD LITERALS of `C2GateEnv`, several of them mutually
+//     assignable: `clientId`/`clientSecret` are both `string`,
+//     `linkEnabledFlag`/`allowedEmails` are both `string | undefined`, and
+//     a `string` satisfies `string | undefined` too. Measured: feeding
+//     `allowedEmails` from `c2ClientId` typechecks clean and stays green,
+//     and DENIES (a client id is not an email); swapping the two
+//     credentials typechecks clean and stays green and leaves this gate
+//     untouched — it breaks the Concept2 API calls instead. One such swap
+//     did fail `pnpm typecheck`, but on `TS6133 'c2LinkEnabled' is declared
+//     but its value is never read`, i.e. `noUnusedLocals` and not the type
+//     system catching a confusion; do not read that as protection.
+//  3. The `bootLines` dispatch (`warn` vs `log`). Cosmetic.
+//  4. THE SPREAD ITSELF IS A CONVENTION, NOT A GUARANTEE. Returning the
+//     pair nested means `index.ts` writes neither field name, so the
+//     one-token swap that opened every gated route
+//     (`availableFor: c2.available`) is no longer expressible. It does NOT
+//     make a bypass impossible: measured, deleting `...c2.gate` and
+//     hand-writing the two named assignments back — with the per-user slot
+//     fed the global check — typechecks clean and leaves all 1878 unit
+//     tests green. What was bought is that the bypass now costs a
+//     deliberate two-line rewrite against a comment that says not to,
+//     rather than one word.
+//
+// `app.ts` keeps its NAMED wiring deliberately: the same mutation reddens a
+// test there (`concept2.test.ts`, "createApp threads availableFor"),
+// because that hop is reachable from a test and this one is not.
 export function c2Gate(env: C2GateEnv): C2Gate {
   const allowedEmails = parseAllowlist(env.allowedEmails);
   const available = computeAvailable(

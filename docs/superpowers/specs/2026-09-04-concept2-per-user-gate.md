@@ -105,12 +105,27 @@ anywhere.
 Your report calls this narrowed as far as possible. The same commit disproves
 that: you extracted `c2Warnings` out of `index.ts` for precisely this reason.
 
-**Fix: extract the composition too.** `c2Gate(env) -> { available, availableFor }`
-in `server/concept2/availability.ts`, with a test where the rower is on
-`ALLOWED_EMAILS` but NOT on `C2_ALLOWED_EMAILS`. That shrinks the untestable
-residue from "two identically-typed Sets in one scope" to "one env var name" —
-the same residue the flag and the credentials already carry. Then re-run the
-reviewer's mutation and confirm it now reddens.
+**Fix: extract the composition too.** `c2Gate(env)` in
+`server/concept2/availability.ts`, with a test where the rower is on
+`ALLOWED_EMAILS` but NOT on `C2_ALLOWED_EMAILS`.
+
+**Round 2 amended this, and the amendment is the current statement.** The
+extraction above was real but insufficient: `index.ts` still hand-wired the
+two finished checks, and `availableFor: c2.available` typechecked clean with
+1878 unit tests green — the same bivariance hole one line further along, and
+a total per-user bypass. `c2Gate` now returns
+`{ gate: { available, availableFor }, bootLines }` and `index.ts` spreads
+`...c2.gate`, so it names neither function.
+
+**Round 2 also struck this paragraph's own residue claim.** It said the
+residue shrinks to "one env var name"; the round-1 comments repeated it as
+"four env var names". Both were false and both over-sold in the author's
+favour. The measured census — four env var names, four mutually-assignable
+field literals, the boot-line dispatch, and the fact that the spread is a
+convention rather than a guarantee (hand-writing the two assignments back
+still typechecks green) — lives on `c2Gate` in `concept2/availability.ts`,
+with the command that measured each claim. Nothing should restate it; point
+at it.
 
 ## F2 — the callback's comment claims something the same function falsifies
 

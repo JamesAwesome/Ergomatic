@@ -722,10 +722,19 @@ describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
   // sign-in allowlist already admits.
   // F6 (fix round 1): `NATIVE_MINT`, not `{}`. A bearer mint with an empty
   // body answers 409 `update_required` on its own, so posting `{}` here
-  // would discriminate one refusal from another rather than admission from
-  // refusal — and would still pass if the body check ever moved above the
-  // availability check. With `NATIVE_MINT` the only reason for a non-200 is
-  // the gate.
+  // discriminated one refusal from another rather than admission from
+  // refusal: with the gate broken open these tests failed at 409, never
+  // reaching the 200 that says a rower was ADMITTED. With `NATIVE_MINT` the
+  // only reason for a non-200 is the gate, and the probe reads
+  // `expected 200 to be 403`.
+  //
+  // An earlier version of this comment also claimed the `{}` form "would
+  // still pass if the body check moved above the availability check".
+  // STRUCK — it was measured false in both directions (2026-09-04): hoisting
+  // the body check over the old form gives 3 red, all
+  // `expected 409 to be 403`, one of them a pre-existing test. The old form's
+  // defect was never that it could not fail; it was that it could not fail
+  // for the right reason.
   it("an empty C2_ALLOWED_EMAILS denies everyone, on a flag that is fully ON", async () => {
     const { app } = buildApp({ c2AllowedEmails: "" });
     expect(
