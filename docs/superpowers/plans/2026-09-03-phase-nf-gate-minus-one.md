@@ -984,7 +984,7 @@ No other event name or plugin method is accepted.
 
 `GateMinusOneProbe.tsx` must:
 
-1. Require nonempty operator fields for iPhone model, iOS version, PM5 model, PM5 firmware, and the advertised name shown by that PM5's **Connect Device** screen before enabling a scenario.
+1. Require nonempty operator fields for iPhone model, iOS version, PM5 model, PM5 firmware, and the full advertising name independently observed in a fresh live BLE preflight before enabling a scenario. The PM5's displayed ID is provenance, not necessarily its full BLE name. Preserve the entered-name equality guard; the unknown padding boundary means removing it could admit a shorter live-name prefix.
 2. Mint one UUID per scenario and never serialize it.
 3. Await the app-state handle and both `gateNativePort` NFC listener handles before native start; a registration rejection removes every handle that did resolve and starts no session.
 4. Call `gateNativePort.startNfc({ attemptId, alertMessage: "Hold your iPhone near the PM5.", gateMinusOneHoldStage })`; omit the last field for ordinary scenarios and map `stop-during-connect`, `stop-during-query`, and `stop-during-read` to `connect`, `query`, and `read`. The native adapter adds `iosSessionType: "ndef"` and `invalidateAfterFirstRead: false` exactly.
@@ -1118,9 +1118,52 @@ printf '%s\n' "$derived_path/Build/Products/Debug-iphoneos/App.app"
 
 Expected: build succeeds; usage-description output is exactly `Scan a PM5 to connect and program your workout.`; signed entitlements contain `com.apple.developer.nfc.readersession.formats` with exactly `TAG`. Install that exact `.app` through Xcode/devicectl before walking.
 
-- [ ] **Step 3: Record device metadata from authoritative device screens**
+- [ ] **Step 3: Record device metadata and independently observe the full BLE name**
 
-On iPhone, copy model and iOS version from Settings > General > About. On the PM5, follow displayed labels through More Utilities if necessary to **Product ID**; that screen displays both model and firmware. Then copy the advertised name shown on **Connect Device**. Enter all five values into the probe before starting a scenario; the serializer refuses blanks.
+On iPhone, copy model and iOS version from Settings > General > About. On the PM5, follow displayed labels through More Utilities if necessary to **Product ID**; that screen displays both model and firmware. Record the physical monitor ID on **Connect Device** separately as provenance. That screen may not show the full advertising name: this walk's PM5 displays `PM5 ID 432331249`, while its independently observed live `localName` is `PM5 432331249 Row`.
+
+Before any NFC scenario, attach the native console and Safari Web Inspector
+to the installed app as in Step 8, and positively verify the probe document
+and host console delivery. Initialize the existing BluetoothLe bridge and
+require its enabled state. With the PM5 ready for app connection, run a
+separate unfiltered duplicate BLE preflight, recording only the live
+`localName` strings associated with the photographed monitor ID. Stop the
+scan and remove its listener before proceeding. The ID association is
+provenance correlation only: it must not select or connect a device, nor
+replace the NFC scenario's exact expected-name/payload match. Do not use
+cached `device.name` or a historical name as current evidence. Retain the
+actual current preflight output as the source of `advertisedNameShown`.
+
+The following preflight was source-checked against the installed BLE8.3.0
+bridge, checked for success and cleanup-failure paths, and run through this
+app's Inspector. The console delivered the full name above only after scan
+stop and listener removal. The serial literal is this photographed PM5's ID;
+a different monitor requires its independently captured ID, not this one.
+
+```js
+(async () => {
+  const ble = Capacitor.Plugins.BluetoothLe;
+  const names = new Set();
+  const listener = await ble.addListener('onScanResult', r => {
+    if (typeof r?.localName === 'string' && r.localName.includes('432331249'))
+      names.add(r.localName);
+  });
+  try {
+    await ble.requestLEScan({ allowDuplicates: true });
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  } finally {
+    try { await ble.stopLEScan(); }
+    finally { await listener.remove(); }
+  }
+  console.info('NFC_PREFLIGHT_NAMES', JSON.stringify([...names]));
+})().catch(() => console.info('NFC_PREFLIGHT_FAILED'));
+```
+
+An empty result, multiple distinct names or any failure leaves the expected
+name unproved; do not start an NFC scenario with a guessed value. The five
+seconds are only this preflight's observation window, not a product timeout
+or proof that no other advertiser exists. Enter all five verified values
+into the probe before starting a scenario; the serializer refuses blanks.
 
 - [ ] **Step 4: Run the exact-package normal NDEF-to-BLE-connect leg**
 
